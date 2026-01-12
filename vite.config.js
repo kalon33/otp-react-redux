@@ -130,7 +130,9 @@ export default defineConfig({
     react()
   ],
   server: {
-    port: 9966,
+    allowedHosts: ['tre.hopto.org'],
+    host: '0.0.0.0',
+    port: 9967,
     strictPort: true
   }
 })

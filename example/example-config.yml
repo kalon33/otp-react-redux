@@ -8,14 +8,16 @@
 # All locally relevant modes of transport in the 'modes: transitModes' section;
 # If needed, any language codes and names in the 'language' section.
 api:
-  host: http://localhost
+  # Use the server's network IP instead of localhost for network access
+  # Change this to your server's IP address or hostname
+  host: https://tre.hopto.org
   # Path will be deprecated once the REST API is deprecated, which will be soon.
   # If the OTP server is hosted at /otp, then no path needs to be configured
   path: /otp/routers/default
   # If your OTP server is at a path other than "/otp" (usually due to a proxy)
   # Then you can set the OPTIONAL property basePath. The default is "/otp"
   basePath: /otp
-  port: 8080
+  port: 9966
   v2: true
 
 # Determines if the header brand should be clickable or not. If set to true, 
@@ -120,8 +122,8 @@ dateTime:
   dateFormat: MM/dd/yyyy
 
 map:
-  initLat: 45.52
-  initLon: -122.682
+  initLat: 44.986
+  initLon: -93.258
   # autoFlyOnTripFormUpdate: false
   # navigationControlPosition: "bottom-right"
 
@@ -187,53 +189,52 @@ map:
 # Example config for a Pelias geocoder (https://pelias.io/).
 # Until you have deployed or subscribed to a geocoder service, a short-term temporary
 # geocoder test account can be obtained from the Pelias maintainers at geocode.earth.
-geocoder:
-  apiKey: PELIAS_API_KEY
-  # Pass an array of geocoder result types to control the order in which they are displayed.
-  # The default order is ['STATIONS', 'STOPS', 'OTHER'].
-  geocoderResultsOrder: ['STATIONS', 'STOPS', 'OTHER']
-  boundary:
-    rect:
-      minLon: -123.2034
-      maxLon: -122.135
-      minLat: 45.273
-      maxLat: 45.7445
-  focusPoint:
-    lat: 45.5223452
-    lon: -122.6821804
-  # Custom fetch options to pass to geocoder resource.
-  # options:
-  #   headers:
-  #     x-custom-header: abc123
-  # required geocoder type.
-  type: PELIAS
-  # This base URL is required as the libraries will default to using now-defunct
-  # mapzen urls
-  baseUrl: https://geocoder.example.com/pelias/v1
-  # This allows the location field dropdown headers to be colored based on Pelias layer
-  #resultsColors:
-  #  stops: "#007fae"
-  # Override the default number (3) of suggestions returned per category
-  #resultsCount: 5
-
-# example config for an ArcGIS geocoder
-# (https://developers.arcgis.com/rest/geocode/api-reference/overview-world-geocoding-service.htm)
-# WARNING: using the ArcGIS geocoder with a persistence strategy of
-#   `localStorage` will result in an error being thrown because ArcGIS
-#   requires the use of a paid account to store geocode results.
-#   See https://developers.arcgis.com/rest/geocode/api-reference/geocoding-free-vs-paid.htm
 # geocoder:
+#   apiKey: ge-64bcdb176a8c7ca1
+#   # Pass an array of geocoder result types to control the order in which they are displayed.
+#   # The default order is ['STATIONS', 'STOPS', 'OTHER'].
+#   geocoderResultsOrder: ['STATIONS', 'STOPS', 'OTHER']
 #   boundary:
 #     rect:
-#       minLon: -123.2034
-#       maxLon: -122.135
-#       minLat: 45.273
-#       maxLat: 45.7445
+#       minLon: -93.549271
+#       maxLon: -92.894211
+#       minLat: 44.767699
+#       maxLat: 45.173808
 #   focusPoint:
-#     lat: 45.5223452
-#     lon: -122.6821804
+#     lat: 44.986656
+#     lon: -93.258133
+#   # Custom fetch options to pass to geocoder resource.
+#   # options:
+#   #   headers:
+#   #     x-custom-header: abc123
 #   # required geocoder type.
-#   type: ARCGIS
+#   type: PELIAS
+#   # This base URL is required as the libraries will default to using now-defunct
+#   # mapzen urls
+#   baseUrl: https://api.geocode.earth/v1
+#   # This allows the location field dropdown headers to be colored based on Pelias layer
+#   #resultsColors:
+#   #  stops: "#007fae"
+#   # Override the default number (3) of suggestions returned per category
+#   #resultsCount: 5
+
+# ArcGIS geocoder configuration
+# (https://developers.arcgis.com/rest/geocode/api-reference/overview-world-geocoding-service.htm)
+# NOTE: ArcGIS free tier does not allow storing geocode results with localStorage.
+# If you need to use persistence with localStorage, you'll need a paid ArcGIS account
+# or switch back to Pelias. See: https://developers.arcgis.com/rest/geocode/api-reference/geocoding-free-vs-paid.htm
+geocoder:
+  boundary:
+    rect:
+      minLon: -93.549271
+      maxLon: -92.894211
+      minLat: 44.767699
+      maxLat: 45.173808
+  focusPoint:
+    lat: 44.986656
+    lon: -93.258133
+  # required geocoder type.
+  type: PHOTON
 
 # Use this mode config for the enhanced Transit+ config
 modes:
@@ -276,29 +277,25 @@ modes:
       iconName: wheelchair
       type: CHECKBOX # Possible options: CHECKBOX, SUBMODE, SLIDER, DROPDOWN
   transitModes:
-      # Mode can be a string or an array of strings.
-    - mode: ["TROLLEYBUS", "BUS"]
-      # When mode is an array an overrideMode must be provided.
-      # This specifies the displayed mode used for icon and URL param.
-      overrideMode: BUS
+    ## Metro Transit (Twin Cities) modes
+    - mode: BUS
       label: Bus
-      # A mode color can be added, used throughout the application,
-      # most notably in the enhanced stop viewer bubble
-      color: blue
+      # Metro Transit blue color
+      color: "#0054A6"
     - mode: TRAM
-      # For each GTFS mode, you can customize the label displayed in the UI.
-      label: MAX & Streetcar
+      # Metro Blue Line & Green Line
+      label: Light Rail
+      color: "#009ADC"
     - mode: RAIL
-      label: WES
-    - mode: GONDOLA
-      label: Aerial Tram
-    ## Additional modes added here will be visible in the mode selector in the UI.
-    ## Modes that are not configured here will never be enabled in requests, so if
-    ## your network has subways or ferries be sure they are present here.
-    - mode: SUBWAY
-      label: Subway
-    - mode: FERRY
-      label: Ferry
+      # Northstar Commuter Rail
+      label: Northstar
+      color: "#00A652"
+    ## Additional modes can be added if Metro Transit expands service
+    ## Keeping these commented out for potential future use:
+    # - mode: SUBWAY
+    #   label: Subway
+    # - mode: FERRY
+    #   label: Ferry
 
   # Potentially deprecated
   accessModes:
@@ -359,8 +356,8 @@ itinerary:
     ['WALK', 'TRANSIT'],
     ['WALK', 'TRANSIT', 'PERSONAL'],
     ['WALK', 'TRANSIT', 'CAR'],
-    ['CAR'] 
-  ]
+    ['CAR']
+    ]
   # Show fares for each transit leg (false if omitted).
   # (Requires using LineItinerary.)
   showRouteFares: false
