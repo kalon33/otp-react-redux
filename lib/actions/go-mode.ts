@@ -1,4 +1,5 @@
 import { createAction } from 'redux-actions'
+import polyline from '@mapbox/polyline'
 import type { Itinerary, LatLngArray, Leg } from '@opentripplanner/types'
 
 import { calculateTripProgress } from '../util/go-mode/progress-calculator'
@@ -16,6 +17,12 @@ import type { TripProgress } from '../util/go-mode/progress-calculator'
 
 // Module-scoped GPS polling interval ID (replaces window.__goModeIntervalId)
 let gpsPollingIntervalId: ReturnType<typeof setInterval> | null = null
+
+// Module-scoped visibilitychange handler for cleanup
+let visibilityChangeHandler: (() => void) | null = null
+
+// GPS simulation state
+let gpsSimulationIntervalId: ReturnType<typeof setInterval> | null = null
 
 // Action types
 export const START_GO_MODE = 'START_GO_MODE'
@@ -124,6 +131,18 @@ export function endGoMode() {
       gpsPollingIntervalId = null
     }
 
+    // Clean up visibilitychange listener
+    if (visibilityChangeHandler) {
+      document.removeEventListener('visibilitychange', visibilityChangeHandler)
+      visibilityChangeHandler = null
+    }
+
+    // Clean up GPS simulation interval
+    if (gpsSimulationIntervalId) {
+      clearInterval(gpsSimulationIntervalId)
+      gpsSimulationIntervalId = null
+    }
+
     dispatch(stopGoMode())
   }
 }
@@ -202,6 +221,17 @@ export function startPositionTracking() {
 
     // Store interval ID in module-scoped variable for cleanup
     gpsPollingIntervalId = intervalId
+
+    // Re-acquire position when tab regains focus (background tab suspension recovery)
+    if (!visibilityChangeHandler) {
+      visibilityChangeHandler = () => {
+        if (document.visibilityState === 'visible' && gpsPollingIntervalId) {
+          // Immediately poll position when returning from background
+          pollPosition()
+        }
+      }
+      document.addEventListener('visibilitychange', visibilityChangeHandler)
+    }
   }
 }
 
@@ -321,5 +351,105 @@ export function updateNotificationSettings(config: {
 }) {
   return function (dispatch: any) {
     dispatch(setNotificationConfig(config))
+  }
+}
+
+/**
+ * Extract all coordinates from an itinerary's leg geometries as [lat, lng] pairs.
+ */
+function extractItineraryCoordinates(
+  itinerary: Itinerary
+): Array<[number, number]> {
+  const coords: Array<[number, number]> = []
+  for (const leg of itinerary.legs) {
+    if (leg.legGeometry?.points) {
+      try {
+        const decoded = polyline.decode(leg.legGeometry.points)
+        coords.push(...decoded)
+      } catch {
+        // Skip legs with invalid geometry
+      }
+    }
+  }
+  return coords
+}
+
+/**
+ * Create a mock GeolocationPosition from lat/lng coordinates.
+ */
+function createMockPosition(lat: number, lng: number): GeolocationPosition {
+  return {
+    coords: {
+      accuracy: 10,
+      altitude: null,
+      altitudeAccuracy: null,
+      heading: null,
+      latitude: lat,
+      longitude: lng,
+      speed: null
+    },
+    timestamp: Date.now()
+  } as GeolocationPosition
+}
+
+/**
+ * Start GPS simulation mode for development.
+ * Replays positions along the itinerary's leg geometries at a configurable speed.
+ * Activate by calling from browser console: window.__startGpsSimulation()
+ */
+export function startGpsSimulation(speedMultiplier = 1) {
+  return function (dispatch: any, getState: any) {
+    const state = getState()
+    const itinerary = state.otp?.goMode?.activeItinerary
+
+    if (!itinerary) {
+      console.warn('[Go Mode] No active itinerary for GPS simulation')
+      return
+    }
+
+    const coords = extractItineraryCoordinates(itinerary)
+    if (coords.length === 0) {
+      console.warn('[Go Mode] No coordinates found in itinerary')
+      return
+    }
+
+    // Clean up any existing simulation
+    if (gpsSimulationIntervalId) {
+      clearInterval(gpsSimulationIntervalId)
+    }
+
+    // Clean up real GPS tracking if running
+    if (gpsPollingIntervalId) {
+      clearInterval(gpsPollingIntervalId)
+      gpsPollingIntervalId = null
+    }
+
+    let pointIndex = 0
+    const intervalMs = Math.max(500, 2000 / speedMultiplier)
+
+    console.info(
+      `[Go Mode] Starting GPS simulation: ${coords.length} points, ` +
+        `interval ${intervalMs}ms, speed ${speedMultiplier}x`
+    )
+
+    // Dispatch the first point immediately
+    const [firstLat, firstLng] = coords[0]
+    dispatch(handlePositionUpdate(createMockPosition(firstLat, firstLng)))
+    pointIndex = 1
+
+    gpsSimulationIntervalId = setInterval(() => {
+      if (pointIndex >= coords.length) {
+        console.info('[Go Mode] GPS simulation complete')
+        if (gpsSimulationIntervalId) {
+          clearInterval(gpsSimulationIntervalId)
+          gpsSimulationIntervalId = null
+        }
+        return
+      }
+
+      const [lat, lng] = coords[pointIndex]
+      dispatch(handlePositionUpdate(createMockPosition(lat, lng)))
+      pointIndex++
+    }, intervalMs)
   }
 }

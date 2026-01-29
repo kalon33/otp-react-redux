@@ -1,6 +1,6 @@
 import { Layer, Marker, Source, useMap } from 'react-map-gl/maplibre'
 import polyline from '@mapbox/polyline'
-import React, { useEffect, useMemo } from 'react'
+import React, { useEffect, useMemo, useRef } from 'react'
 import styled, { keyframes } from 'styled-components'
 import type { Itinerary } from '@opentripplanner/types'
 
@@ -43,7 +43,7 @@ interface Props {
  * Get a line color for a given leg mode, with optional route color.
  */
 function getLegColor(leg: { mode: string; routeColor?: string }): string {
-  if (leg.routeColor) return `#${leg.routeColor}`
+  if (leg.routeColor) return `#${leg.routeColor.replace(/^#/, '')}`
   switch (leg.mode) {
     case 'BUS':
       return '#1565C0'
@@ -83,6 +83,42 @@ const GoModeMapOverlay = ({
   routeGeoJson: GeoJSON.FeatureCollection | null
 }) => {
   const { current: map } = useMap()
+  const hasFitBounds = useRef(false)
+
+  // Fit map to itinerary bounds on initial load
+  useEffect(() => {
+    if (hasFitBounds.current || !map || !routeGeoJson) return
+
+    // Compute bounding box from all GeoJSON coordinates
+    let minLng = Infinity
+    let minLat = Infinity
+    let maxLng = -Infinity
+    let maxLat = -Infinity
+
+    for (const feature of routeGeoJson.features) {
+      const geom = feature.geometry
+      if (geom.type === 'LineString') {
+        for (const coord of geom.coordinates) {
+          const [lng, lat] = coord
+          if (lng < minLng) minLng = lng
+          if (lng > maxLng) maxLng = lng
+          if (lat < minLat) minLat = lat
+          if (lat > maxLat) maxLat = lat
+        }
+      }
+    }
+
+    if (minLng !== Infinity) {
+      map.fitBounds(
+        [
+          [minLng, minLat],
+          [maxLng, maxLat]
+        ],
+        { duration: 600, padding: 40 }
+      )
+      hasFitBounds.current = true
+    }
+  }, [map, routeGeoJson])
 
   // Center map on user position when followUser is enabled
   useEffect(() => {
@@ -177,15 +213,15 @@ const GoModeMap = ({
 
   return (
     <MapContainer>
-      <DefaultMap />
-
-      {/* Map overlays rendered in the map's react-map-gl context */}
-      <GoModeMapOverlay
-        currentLegIndex={currentLegIndex}
-        currentPosition={currentPosition}
-        followUser={followUser}
-        routeGeoJson={routeGeoJson}
-      />
+      <DefaultMap>
+        {/* Map overlays rendered inside BaseMap's react-map-gl context */}
+        <GoModeMapOverlay
+          currentLegIndex={currentLegIndex}
+          currentPosition={currentPosition}
+          followUser={followUser}
+          routeGeoJson={routeGeoJson}
+        />
+      </DefaultMap>
 
       {/* Deviation Warning */}
       {routeMatch && !routeMatch.isOnRoute && (

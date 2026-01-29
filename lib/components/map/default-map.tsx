@@ -161,6 +161,7 @@ interface DefaultMapProps {
   bikeRentalStations: VehicleRentalStation[]
   carRentalQuery: () => void
   carRentalStations: VehicleRentalStation[]
+  children?: React.ReactNode
   config: AppConfig
   getCurrentPosition: GetCurrentPositionFunction
   intl: IntlShape
@@ -348,6 +349,7 @@ class DefaultMap extends Component<DefaultMapProps> {
       bikeRentalStations,
       carRentalQuery,
       carRentalStations,
+      children,
       config,
       feeds,
       getCurrentPosition,
@@ -542,6 +544,7 @@ class DefaultMap extends Component<DefaultMapProps> {
           <NavigationControl
             position={navigationControlPosition || 'bottom-right'}
           />
+          {children}
         </BaseMap>
       </MapContainer>
     )

@@ -1,11 +1,14 @@
-import React, { useCallback, useEffect, useState } from 'react'
+import { connect } from 'react-redux'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import styled, { keyframes } from 'styled-components'
+
+import type { NotificationEvent } from '../../util/go-mode/notification-service'
 
 interface ToastNotification {
   id: string
   message: string
   priority: 'high' | 'medium' | 'low'
-  timestamp: number
+  timestamp: Date
 }
 
 const slideIn = keyframes`
@@ -64,9 +67,14 @@ const Toast = styled.div<{ $dismissing: boolean; $priority: string }>`
 
 const AUTO_DISMISS_MS = 5000
 
-const GoModeNotifications = () => {
+interface Props {
+  recentNotifications: NotificationEvent[]
+}
+
+const GoModeNotifications = ({ recentNotifications }: Props) => {
   const [toasts, setToasts] = useState<ToastNotification[]>([])
   const [dismissing, setDismissing] = useState<Set<string>>(new Set())
+  const seenIdsRef = useRef<Set<string>>(new Set())
 
   const dismissToast = useCallback((id: string) => {
     setDismissing((prev) => new Set(prev).add(id))
@@ -80,25 +88,27 @@ const GoModeNotifications = () => {
     }, 300)
   }, [])
 
+  // Watch Redux state for new notifications
   useEffect(() => {
-    const handler = (event: CustomEvent<ToastNotification>) => {
-      const notification = event.detail
-      setToasts((prev) => [notification, ...prev])
+    if (!recentNotifications || recentNotifications.length === 0) return
 
-      // Auto-dismiss after 5s
-      setTimeout(() => {
-        dismissToast(notification.id)
-      }, AUTO_DISMISS_MS)
-    }
+    const newest = recentNotifications[0]
+    if (seenIdsRef.current.has(newest.id)) return
 
-    window.addEventListener('go-mode-notification', handler as EventListener)
-    return () => {
-      window.removeEventListener(
-        'go-mode-notification',
-        handler as EventListener
-      )
+    seenIdsRef.current.add(newest.id)
+    const toast: ToastNotification = {
+      id: newest.id,
+      message: newest.message,
+      priority: newest.priority,
+      timestamp: newest.timestamp
     }
-  }, [dismissToast])
+    setToasts((prev) => [toast, ...prev])
+
+    // Auto-dismiss after 5s
+    setTimeout(() => {
+      dismissToast(toast.id)
+    }, AUTO_DISMISS_MS)
+  }, [recentNotifications, dismissToast])
 
   if (toasts.length === 0) return null
 
@@ -118,4 +128,9 @@ const GoModeNotifications = () => {
   )
 }
 
-export default GoModeNotifications
+const mapStateToProps = (state: any) => ({
+  recentNotifications:
+    state.otp?.goMode?.notifications?.recentNotifications || []
+})
+
+export default connect(mapStateToProps)(GoModeNotifications)
