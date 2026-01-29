@@ -39,12 +39,10 @@ export interface GoModeState {
     interval: number
     isTracking: boolean
     lastPosition: GeolocationPosition | null
-    trackingId?: number
   }
 
   ui: {
     mapFollowUser: boolean
-    showDetailedView: boolean
   }
 }
 
@@ -71,8 +69,7 @@ const defaultState: GoModeState = {
   },
 
   ui: {
-    mapFollowUser: true,
-    showDetailedView: false
+    mapFollowUser: true
   }
 }
 
@@ -150,16 +147,7 @@ const goMode = handleActions<GoModeState, any>(
       }
     },
 
-    [STOP_GO_MODE]: (state) => {
-      // Clean up interval if exists
-      if (typeof window !== 'undefined') {
-        const intervalId = (window as any).__goModeIntervalId
-        if (intervalId) {
-          clearInterval(intervalId)
-          delete (window as any).__goModeIntervalId
-        }
-      }
-
+    [STOP_GO_MODE]: () => {
       return {
         ...defaultState
       }

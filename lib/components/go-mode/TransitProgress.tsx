@@ -4,6 +4,20 @@ import type { Leg } from '@opentripplanner/types'
 
 import type { TripProgress } from '../../util/go-mode/progress-calculator'
 
+import {
+  AlertBanner,
+  InfoCard,
+  InfoCardLabel,
+  InfoCardValue,
+  ModeIcon,
+  RouteDirection,
+  RouteHeader,
+  RouteName,
+  StopsCount,
+  StopsLabel,
+  TransitContainer
+} from './styled'
+
 interface Props {
   leg: Leg
   progress: TripProgress
@@ -22,8 +36,10 @@ const TransitProgress = ({ leg, progress }: Props) => {
         return '🚇'
       case 'TRAM':
         return '🚊'
+      case 'FERRY':
+        return '⛴️'
       default:
-        return '🚌'
+        return '🚍'
     }
   }
 
@@ -31,19 +47,13 @@ const TransitProgress = ({ leg, progress }: Props) => {
     progress.stopsRemaining === 2 || progress.stopsRemaining === 1
 
   return (
-    <div style={{ padding: '16px' }}>
+    <TransitContainer>
       {/* Route Header */}
-      <div
-        style={{ alignItems: 'center', display: 'flex', marginBottom: '16px' }}
-      >
-        <span style={{ fontSize: '32px', marginRight: '12px' }}>
-          {getModeIcon(leg.mode)}
-        </span>
+      <RouteHeader>
+        <ModeIcon>{getModeIcon(leg.mode)}</ModeIcon>
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: '18px', fontWeight: 'bold' }}>
-            {leg.routeShortName || leg.routeLongName}
-          </div>
-          <div style={{ color: '#666', fontSize: '14px' }}>
+          <RouteName>{leg.routeShortName || leg.routeLongName}</RouteName>
+          <RouteDirection>
             {intl.formatMessage(
               {
                 defaultMessage: 'to {destination}',
@@ -51,25 +61,14 @@ const TransitProgress = ({ leg, progress }: Props) => {
               },
               { destination: leg.to.name }
             )}
-          </div>
+          </RouteDirection>
         </div>
-      </div>
+      </RouteHeader>
 
       {/* Get Ready Alert */}
       {shouldShowAlert && (
-        <div
-          style={{
-            animation: 'pulse 1s ease-in-out infinite',
-            backgroundColor:
-              progress.stopsRemaining === 1 ? '#F44336' : '#FF9800',
-            borderRadius: '8px',
-            color: 'white',
-            fontSize: '16px',
-            fontWeight: 'bold',
-            marginBottom: '16px',
-            padding: '16px',
-            textAlign: 'center'
-          }}
+        <AlertBanner
+          $severity={progress.stopsRemaining === 1 ? 'urgent' : 'warning'}
         >
           {progress.stopsRemaining === 1
             ? intl.formatMessage({
@@ -80,29 +79,16 @@ const TransitProgress = ({ leg, progress }: Props) => {
                 defaultMessage: '⚠️ Get Ready - 2 stops away',
                 id: 'components.GoMode.getReady'
               })}
-        </div>
+        </AlertBanner>
       )}
 
       {/* Stops Progress */}
       {progress.stopsRemaining !== undefined && progress.stopsRemaining > 0 && (
         <div style={{ marginBottom: '16px' }}>
-          <div
-            style={{
-              color: shouldShowAlert ? '#F44336' : '#2196F3',
-              fontSize: '32px',
-              fontWeight: 'bold',
-              textAlign: 'center'
-            }}
-          >
+          <StopsCount $alert={shouldShowAlert}>
             {progress.stopsRemaining}
-          </div>
-          <div
-            style={{
-              color: '#666',
-              fontSize: '14px',
-              textAlign: 'center'
-            }}
-          >
+          </StopsCount>
+          <StopsLabel>
             {intl.formatMessage(
               {
                 defaultMessage:
@@ -111,66 +97,34 @@ const TransitProgress = ({ leg, progress }: Props) => {
               },
               { count: progress.stopsRemaining }
             )}
-          </div>
+          </StopsLabel>
         </div>
       )}
 
       {/* Next Stop */}
       {progress.nextStopName && (
-        <div
-          style={{
-            backgroundColor: '#f5f5f5',
-            borderRadius: '4px',
-            marginBottom: '12px',
-            padding: '12px'
-          }}
-        >
-          <div style={{ color: '#666', fontSize: '12px', marginBottom: '4px' }}>
+        <InfoCard>
+          <InfoCardLabel>
             {intl.formatMessage({
               defaultMessage: 'Next Stop',
               id: 'components.GoMode.nextStop'
             })}
-          </div>
-          <div style={{ fontSize: '16px', fontWeight: '500' }}>
-            {progress.nextStopName}
-          </div>
-        </div>
+          </InfoCardLabel>
+          <InfoCardValue>{progress.nextStopName}</InfoCardValue>
+        </InfoCard>
       )}
 
       {/* Destination */}
-      <div
-        style={{
-          backgroundColor: '#e3f2fd',
-          borderRadius: '4px',
-          padding: '12px'
-        }}
-      >
-        <div
-          style={{ color: '#1976d2', fontSize: '12px', marginBottom: '4px' }}
-        >
+      <InfoCard $bgColor="#e3f2fd">
+        <InfoCardLabel $color="#1976d2">
           {intl.formatMessage({
             defaultMessage: 'Your Stop',
             id: 'components.GoMode.yourStop'
           })}
-        </div>
-        <div style={{ color: '#1976d2', fontSize: '16px', fontWeight: '500' }}>
-          {leg.to.name}
-        </div>
-      </div>
-
-      <style>
-        {`
-        @keyframes pulse {
-          0%, 100% {
-            opacity: 1;
-          }
-          50% {
-            opacity: 0.8;
-          }
-        }
-      `}
-      </style>
-    </div>
+        </InfoCardLabel>
+        <InfoCardValue $color="#1976d2">{leg.to.name}</InfoCardValue>
+      </InfoCard>
+    </TransitContainer>
   )
 }
 

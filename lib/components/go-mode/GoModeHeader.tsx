@@ -4,6 +4,17 @@ import type { Itinerary } from '@opentripplanner/types'
 
 import type { TripProgress } from '../../util/go-mode/progress-calculator'
 
+import {
+  ETALabel,
+  ETAValue,
+  HeaderContainer,
+  HeaderRow,
+  ProgressBarFill,
+  ProgressBarTrack,
+  StatusBadge,
+  TimeRemainingValue
+} from './styled'
+
 interface Props {
   itinerary: Itinerary
   onExit: () => void
@@ -65,80 +76,43 @@ const GoModeHeader = ({ itinerary, onExit, progress }: Props) => {
   }
 
   return (
-    <div
-      style={{
-        backgroundColor: '#fff',
-        borderBottom: '1px solid #e0e0e0',
-        padding: '12px 16px'
-      }}
-    >
+    <HeaderContainer>
       {/* Progress Bar */}
-      <div
-        style={{
-          backgroundColor: '#E0E0E0',
-          borderRadius: '4px',
-          height: '8px',
-          marginBottom: '12px',
-          overflow: 'hidden',
-          width: '100%'
-        }}
-      >
-        <div
-          style={{
-            backgroundColor: getStatusColor(progress.status),
-            height: '100%',
-            transition: 'width 0.3s ease',
-            width: `${progress.overallProgress}%`
-          }}
+      <ProgressBarTrack>
+        <ProgressBarFill
+          $color={getStatusColor(progress.status)}
+          $width={progress.overallProgress}
         />
-      </div>
+      </ProgressBarTrack>
 
       {/* ETA and Time Remaining */}
-      <div
-        style={{
-          alignItems: 'center',
-          display: 'flex',
-          justifyContent: 'space-between'
-        }}
-      >
+      <HeaderRow>
         <div>
-          <div style={{ fontSize: '24px', fontWeight: 'bold' }}>
-            {formatETA(progress.estimatedArrival)}
-          </div>
-          <div style={{ color: '#666', fontSize: '12px' }}>
+          <ETAValue>{formatETA(progress.estimatedArrival)}</ETAValue>
+          <ETALabel>
             {intl.formatMessage({
               defaultMessage: 'Estimated Arrival',
               id: 'components.GoMode.estimatedArrival'
             })}
-          </div>
+          </ETALabel>
         </div>
 
         <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: '18px', fontWeight: '500' }}>
+          <TimeRemainingValue>
             {formatTimeRemaining(progress.timeRemaining)}
-          </div>
-          <div style={{ color: '#666', fontSize: '12px' }}>
+          </TimeRemainingValue>
+          <ETALabel>
             {intl.formatMessage({
               defaultMessage: 'remaining',
               id: 'components.GoMode.remaining'
             })}
-          </div>
+          </ETALabel>
         </div>
-      </div>
+      </HeaderRow>
 
       {/* Status Indicator */}
       {progress.status !== 'on_track' && (
-        <div
-          style={{
-            backgroundColor: getStatusColor(progress.status),
-            borderRadius: '4px',
-            color: '#fff',
-            fontSize: '12px',
-            marginTop: '8px',
-            padding: '6px 12px',
-            textAlign: 'center'
-          }}
-        >
+        <StatusBadge $color={getStatusColor(progress.status)}>
           {progress.status === 'ahead' &&
             intl.formatMessage({
               defaultMessage: 'Ahead of schedule',
@@ -159,9 +133,9 @@ const GoModeHeader = ({ itinerary, onExit, progress }: Props) => {
               defaultMessage: 'Trip completed!',
               id: 'components.GoMode.statusCompleted'
             })}
-        </div>
+        </StatusBadge>
       )}
-    </div>
+    </HeaderContainer>
   )
 }
 

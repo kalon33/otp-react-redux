@@ -1,8 +1,35 @@
-import React, { useEffect, useRef } from 'react'
+import { Layer, Marker, Source, useMap } from 'react-map-gl/maplibre'
+import polyline from '@mapbox/polyline'
+import React, { useEffect, useMemo } from 'react'
+import styled, { keyframes } from 'styled-components'
 import type { Itinerary } from '@opentripplanner/types'
 
 import DefaultMap from '../map/default-map'
 import type { RouteMatchResult } from '../../util/go-mode/position-matching'
+
+import { DeviationWarning, MapContainer } from './styled'
+
+const pulseGlow = keyframes`
+  0% {
+    box-shadow: 0 0 0 0 rgba(33, 150, 243, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 15px rgba(33, 150, 243, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(33, 150, 243, 0);
+  }
+`
+
+const UserDot = styled.div`
+  animation: ${pulseGlow} 2s infinite;
+  background-color: #2196f3;
+  border: 3px solid white;
+  border-radius: 50%;
+  box-shadow: 0 0 10px rgba(33, 150, 243, 0.5);
+  height: 20px;
+  width: 20px;
+`
 
 interface Props {
   currentLegIndex: number
@@ -12,6 +39,113 @@ interface Props {
   routeMatch: RouteMatchResult | null
 }
 
+/**
+ * Get a line color for a given leg mode, with optional route color.
+ */
+function getLegColor(leg: { mode: string; routeColor?: string }): string {
+  if (leg.routeColor) return `#${leg.routeColor}`
+  switch (leg.mode) {
+    case 'BUS':
+      return '#1565C0'
+    case 'RAIL':
+    case 'SUBWAY':
+      return '#B71C1C'
+    case 'TRAM':
+      return '#00695C'
+    case 'FERRY':
+      return '#0277BD'
+    case 'BICYCLE':
+      return '#2E7D32'
+    case 'WALK':
+    default:
+      return '#757575'
+  }
+}
+
+function isWalkLike(mode: string): boolean {
+  return mode === 'WALK' || mode === 'BICYCLE'
+}
+
+/**
+ * Overlay component rendered inside the map context.
+ * Uses useMap() hook to access the map for panning and renders
+ * Source/Layer/Marker as map children via the react-map-gl context.
+ */
+const GoModeMapOverlay = ({
+  currentLegIndex,
+  currentPosition,
+  followUser,
+  routeGeoJson
+}: {
+  currentLegIndex: number
+  currentPosition: GeolocationPosition | null
+  followUser: boolean
+  routeGeoJson: GeoJSON.FeatureCollection | null
+}) => {
+  const { current: map } = useMap()
+
+  // Center map on user position when followUser is enabled
+  useEffect(() => {
+    if (followUser && currentPosition && map) {
+      map.panTo([
+        currentPosition.coords.longitude,
+        currentPosition.coords.latitude
+      ])
+    }
+  }, [currentPosition, followUser, map])
+
+  return (
+    <>
+      {/* Route Overlay */}
+      {routeGeoJson && (
+        <Source data={routeGeoJson} id="go-mode-route" type="geojson">
+          {/* Solid transit legs */}
+          <Layer
+            filter={['!', ['get', 'isWalk']]}
+            id="go-mode-route-transit"
+            layout={{
+              'line-cap': 'round',
+              'line-join': 'round'
+            }}
+            paint={{
+              'line-color': ['get', 'color'],
+              'line-opacity': ['case', ['get', 'isCompleted'], 0.3, 0.9],
+              'line-width': 5
+            }}
+            type="line"
+          />
+          {/* Dashed walk/bike legs */}
+          <Layer
+            filter={['get', 'isWalk']}
+            id="go-mode-route-walk"
+            layout={{
+              'line-cap': 'round',
+              'line-join': 'round'
+            }}
+            paint={{
+              'line-color': ['get', 'color'],
+              'line-dasharray': [2, 2],
+              'line-opacity': ['case', ['get', 'isCompleted'], 0.3, 0.8],
+              'line-width': 4
+            }}
+            type="line"
+          />
+        </Source>
+      )}
+
+      {/* User Position Marker */}
+      {currentPosition && (
+        <Marker
+          latitude={currentPosition.coords.latitude}
+          longitude={currentPosition.coords.longitude}
+        >
+          <UserDot />
+        </Marker>
+      )}
+    </>
+  )
+}
+
 const GoModeMap = ({
   currentLegIndex,
   currentPosition,
@@ -19,95 +153,47 @@ const GoModeMap = ({
   itinerary,
   routeMatch
 }: Props) => {
-  const mapRef = useRef<any>(null)
-
-  // Center map on user position when followUser is enabled
-  useEffect(() => {
-    if (
-      followUser &&
-      currentPosition &&
-      mapRef.current &&
-      mapRef.current.getMap
-    ) {
-      const map = mapRef.current.getMap()
-      if (map) {
-        map.panTo([
-          currentPosition.coords.longitude,
-          currentPosition.coords.latitude
-        ])
-      }
+  // Build GeoJSON for route overlay, with per-leg styling properties
+  const routeGeoJson = useMemo((): GeoJSON.FeatureCollection | null => {
+    if (!itinerary?.legs) return null
+    try {
+      const features: GeoJSON.Feature[] = itinerary.legs
+        .filter((leg) => leg.legGeometry?.points)
+        .map((leg, index) => ({
+          geometry: polyline.toGeoJSON(leg.legGeometry.points),
+          properties: {
+            color: getLegColor(leg),
+            index,
+            isCompleted: index < currentLegIndex,
+            isWalk: isWalkLike(leg.mode)
+          },
+          type: 'Feature' as const
+        }))
+      return { features, type: 'FeatureCollection' }
+    } catch {
+      return null
     }
-  }, [currentPosition, followUser])
+  }, [itinerary, currentLegIndex])
 
   return (
-    <div
-      style={{
-        flex: '1 1 40%',
-        minHeight: '250px',
-        position: 'relative'
-      }}
-    >
-      <DefaultMap ref={mapRef} />
+    <MapContainer>
+      <DefaultMap />
 
-      {/* User Position Marker */}
-      {currentPosition && (
-        <div
-          style={{
-            animation: 'pulse 2s infinite',
-            backgroundColor: '#2196F3',
-            border: '3px solid white',
-            borderRadius: '50%',
-            boxShadow: '0 0 10px rgba(33, 150, 243, 0.5)',
-            height: '20px',
-            left: '50%',
-            position: 'absolute',
-            top: '50%',
-            transform: 'translate(-50%, -50%)',
-            width: '20px',
-            zIndex: 1000
-          }}
-        />
-      )}
+      {/* Map overlays rendered in the map's react-map-gl context */}
+      <GoModeMapOverlay
+        currentLegIndex={currentLegIndex}
+        currentPosition={currentPosition}
+        followUser={followUser}
+        routeGeoJson={routeGeoJson}
+      />
 
       {/* Deviation Warning */}
       {routeMatch && !routeMatch.isOnRoute && (
-        <div
-          style={{
-            backgroundColor: '#FF9800',
-            borderRadius: '4px',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
-            color: 'white',
-            fontSize: '14px',
-            fontWeight: '500',
-            left: '50%',
-            padding: '8px 16px',
-            position: 'absolute',
-            top: '10px',
-            transform: 'translateX(-50%)',
-            zIndex: 1001
-          }}
-        >
+        <DeviationWarning>
           {Math.round(routeMatch.distanceFromRoute)}m from route
-        </div>
+        </DeviationWarning>
       )}
-
-      {/* CSS for pulse animation */}
-      <style>
-        {`
-        @keyframes pulse {
-          0% {
-            box-shadow: 0 0 0 0 rgba(33, 150, 243, 0.7);
-          }
-          70% {
-            box-shadow: 0 0 0 15px rgba(33, 150, 243, 0);
-          }
-          100% {
-            box-shadow: 0 0 0 0 rgba(33, 150, 243, 0);
-          }
-        }
-      `}
-      </style>
-    </div>
+    </MapContainer>
   )
 }
 

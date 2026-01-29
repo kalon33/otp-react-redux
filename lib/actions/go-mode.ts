@@ -14,6 +14,9 @@ import type { NotificationEvent } from '../util/go-mode/notification-service'
 import type { RouteMatchResult } from '../util/go-mode/position-matching'
 import type { TripProgress } from '../util/go-mode/progress-calculator'
 
+// Module-scoped GPS polling interval ID (replaces window.__goModeIntervalId)
+let gpsPollingIntervalId: ReturnType<typeof setInterval> | null = null
+
 // Action types
 export const START_GO_MODE = 'START_GO_MODE'
 export const STOP_GO_MODE = 'STOP_GO_MODE'
@@ -74,7 +77,31 @@ function getTrackingIntervalForLeg(leg: Leg | undefined): number {
  * Start Go Mode tracking for an itinerary
  */
 export function beginGoMode(itinerary: Itinerary) {
-  return function (dispatch: any, getState: any) {
+  return async function (dispatch: any) {
+    // Check geolocation permission before starting
+    if ('permissions' in navigator) {
+      try {
+        const result = await navigator.permissions.query({
+          name: 'geolocation'
+        })
+        if (result.state === 'denied') {
+          dispatch(
+            setTrackingError({
+              code: 1,
+              message: 'Geolocation permission denied',
+              PERMISSION_DENIED: 1,
+              POSITION_UNAVAILABLE: 2,
+              TIMEOUT: 3
+            } as GeolocationPositionError)
+          )
+          dispatch(startGoMode({ itinerary }))
+          return
+        }
+      } catch {
+        // permissions API not supported, continue anyway
+      }
+    }
+
     dispatch(startGoMode({ itinerary }))
 
     // Set initial tracking interval based on first leg
@@ -90,12 +117,11 @@ export function beginGoMode(itinerary: Itinerary) {
  * Stop Go Mode and clean up
  */
 export function endGoMode() {
-  return function (dispatch: any, getState: any) {
-    const state = getState()
-    const trackingId = state.otp?.goMode?.tracking?.trackingId
-
-    if (trackingId) {
-      navigator.geolocation.clearWatch(trackingId)
+  return function (dispatch: any) {
+    // Clean up GPS polling interval
+    if (gpsPollingIntervalId) {
+      clearInterval(gpsPollingIntervalId)
+      gpsPollingIntervalId = null
     }
 
     dispatch(stopGoMode())
@@ -139,21 +165,43 @@ export function startPositionTracking() {
       )
     }
 
-    // Initial position
-    pollPosition()
+    // Initial position with 15s timeout
+    let initialResolved = false
+    const initialTimeout = setTimeout(() => {
+      if (!initialResolved) {
+        dispatch(
+          setTrackingError({
+            code: 3,
+            message: 'Initial GPS acquisition timed out',
+            PERMISSION_DENIED: 1,
+            POSITION_UNAVAILABLE: 2,
+            TIMEOUT: 3
+          } as GeolocationPositionError)
+        )
+      }
+    }, 15000)
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        initialResolved = true
+        clearTimeout(initialTimeout)
+        dispatch(handlePositionUpdate(position))
+      },
+      (error) => {
+        initialResolved = true
+        clearTimeout(initialTimeout)
+        dispatch(setTrackingError(error))
+      },
+      { ...options, timeout: 15000 }
+    )
 
     // Set up polling interval
     const state = getState()
     const interval = state.otp?.goMode?.tracking?.interval || 8000
     const intervalId = setInterval(pollPosition, interval)
 
-    // Store interval ID in a way we can clear it later
-    // Note: This is a workaround - ideally we'd store this in Redux
-    // but for now we'll use a module-level variable
-    if (typeof window !== 'undefined') {
-      // eslint-disable-next-line @typescript-eslint/no-extra-semi
-      ;(window as any).__goModeIntervalId = intervalId
-    }
+    // Store interval ID in module-scoped variable for cleanup
+    gpsPollingIntervalId = intervalId
   }
 }
 
@@ -205,11 +253,9 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       dispatch(updateTrackingInterval({ interval: newInterval }))
 
       // Restart tracking with new interval
-      if (typeof window !== 'undefined') {
-        const oldIntervalId = (window as any).__goModeIntervalId
-        if (oldIntervalId) {
-          clearInterval(oldIntervalId)
-        }
+      if (gpsPollingIntervalId) {
+        clearInterval(gpsPollingIntervalId)
+        gpsPollingIntervalId = null
       }
       dispatch(startPositionTracking())
     }

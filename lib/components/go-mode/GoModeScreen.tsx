@@ -9,17 +9,31 @@ import MobileContainer from '../mobile/container'
 import MobileNavigationBar from '../mobile/navigation-bar'
 import type { GoModeState } from '../../reducers/go-mode'
 
+import {
+  ErrorMessage,
+  GpsWarningBanner,
+  LoadingMessage,
+  RetryButton,
+  ScreenMain
+} from './styled'
 import CurrentLegPanel from './CurrentLegPanel'
 import GoModeHeader from './GoModeHeader'
 import GoModeMap from './GoModeMap'
+import GoModeNotifications from './GoModeNotifications'
 
 interface Props {
+  beginGoMode: (itinerary: any) => void
   endGoMode: () => void
   goMode: GoModeState
   setMobileScreen: (screen: number) => void
 }
 
-const GoModeScreen = ({ endGoMode, goMode, setMobileScreen }: Props) => {
+const GoModeScreen = ({
+  beginGoMode,
+  endGoMode,
+  goMode,
+  setMobileScreen
+}: Props) => {
   const intl = useIntl()
 
   useEffect(() => {
@@ -52,6 +66,23 @@ const GoModeScreen = ({ endGoMode, goMode, setMobileScreen }: Props) => {
     }
   }, [goMode.isActive])
 
+  // Navigation exit protection: warn on page unload and cleanup on unmount
+  useEffect(() => {
+    if (!goMode.isActive) return
+
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      e.returnValue = ''
+    }
+
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+      // Clean up tracking if component unmounts while active
+      endGoMode()
+    }
+  }, [goMode.isActive, endGoMode])
+
   const handleExit = () => {
     if (
       window.confirm(
@@ -66,6 +97,60 @@ const GoModeScreen = ({ endGoMode, goMode, setMobileScreen }: Props) => {
     }
   }
 
+  const handleRetry = () => {
+    if (goMode.activeItinerary) {
+      endGoMode()
+      beginGoMode(goMode.activeItinerary)
+    }
+  }
+
+  // GPS error state with specific messages and retry
+  if (goMode.tracking.error && !goMode.progress) {
+    const error = goMode.tracking.error
+    let errorMessage: string
+    if (error.code === 1) {
+      errorMessage = intl.formatMessage({
+        defaultMessage:
+          'Location permission denied. Please enable location access in your browser settings.',
+        id: 'components.GoMode.errorPermissionDenied'
+      })
+    } else if (error.code === 3) {
+      errorMessage = intl.formatMessage({
+        defaultMessage:
+          'GPS signal timed out. Please ensure you are in an area with GPS coverage.',
+        id: 'components.GoMode.errorTimeout'
+      })
+    } else {
+      errorMessage = intl.formatMessage({
+        defaultMessage:
+          'Unable to determine your location. Please check your device settings.',
+        id: 'components.GoMode.errorUnavailable'
+      })
+    }
+
+    return (
+      <MobileContainer>
+        <MobileNavigationBar
+          headerText={intl.formatMessage({
+            defaultMessage: 'GPS Error',
+            id: 'components.GoMode.gpsErrorTitle'
+          })}
+          onBackClicked={handleExit}
+          showBackButton
+        />
+        <LoadingMessage>
+          <ErrorMessage>{errorMessage}</ErrorMessage>
+          <RetryButton onClick={handleRetry} type="button">
+            {intl.formatMessage({
+              defaultMessage: 'Retry',
+              id: 'components.GoMode.retry'
+            })}
+          </RetryButton>
+        </LoadingMessage>
+      </MobileContainer>
+    )
+  }
+
   if (!goMode.activeItinerary || !goMode.progress) {
     return (
       <MobileContainer>
@@ -77,14 +162,14 @@ const GoModeScreen = ({ endGoMode, goMode, setMobileScreen }: Props) => {
           onBackClicked={handleExit}
           showBackButton
         />
-        <main style={{ padding: '20px', textAlign: 'center' }}>
+        <LoadingMessage>
           <p>
             {intl.formatMessage({
               defaultMessage: 'Acquiring GPS signal...',
               id: 'components.GoMode.waitingGPS'
             })}
           </p>
-        </main>
+        </LoadingMessage>
       </MobileContainer>
     )
   }
@@ -102,9 +187,8 @@ const GoModeScreen = ({ endGoMode, goMode, setMobileScreen }: Props) => {
         onBackClicked={handleExit}
         showBackButton
       />
-      <main
-        style={{ display: 'flex', flexDirection: 'column', height: '100%' }}
-      >
+      <ScreenMain>
+        <GoModeNotifications />
         <GoModeHeader
           itinerary={goMode.activeItinerary}
           onExit={handleExit}
@@ -131,21 +215,14 @@ const GoModeScreen = ({ endGoMode, goMode, setMobileScreen }: Props) => {
         />
 
         {goMode.tracking.error && (
-          <div
-            style={{
-              background: '#ff9800',
-              color: 'white',
-              padding: '10px',
-              textAlign: 'center'
-            }}
-          >
+          <GpsWarningBanner>
             {intl.formatMessage({
               defaultMessage: 'GPS signal lost. Trying to reconnect...',
               id: 'components.GoMode.gpsError'
             })}
-          </div>
+          </GpsWarningBanner>
         )}
-      </main>
+      </ScreenMain>
     </MobileContainer>
   )
 }
@@ -157,6 +234,7 @@ const mapStateToProps = (state: any) => {
 }
 
 const mapDispatchToProps = {
+  beginGoMode: goModeActions.beginGoMode,
   endGoMode: goModeActions.endGoMode,
   setMobileScreen: uiActions.setMobileScreen
 }
