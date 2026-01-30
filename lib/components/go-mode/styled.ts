@@ -236,7 +236,8 @@ export const DeviationWarning = styled.div`
 export const ScreenMain = styled.main`
   display: flex;
   flex-direction: column;
-  height: 100%;
+  height: calc(100vh - 50px);
+  overflow: hidden;
   position: relative;
 `
 
