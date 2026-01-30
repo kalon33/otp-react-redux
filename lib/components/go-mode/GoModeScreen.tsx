@@ -26,13 +26,15 @@ interface Props {
   endGoMode: () => void
   goMode: GoModeState
   setMobileScreen: (screen: number) => void
+  startGpsSimulation: (speedMultiplier?: number) => void
 }
 
 const GoModeScreen = ({
   beginGoMode,
   endGoMode,
   goMode,
-  setMobileScreen
+  setMobileScreen,
+  startGpsSimulation
 }: Props) => {
   const intl = useIntl()
 
@@ -65,6 +67,19 @@ const GoModeScreen = ({
       }
     }
   }, [goMode.isActive])
+
+  // Expose GPS simulation to browser console for development
+  useEffect(() => {
+    if (goMode.isActive) {
+      const w = window as any
+      w.__startGpsSimulation = (speedMultiplier?: number) => {
+        startGpsSimulation(speedMultiplier)
+      }
+      return () => {
+        delete w.__startGpsSimulation
+      }
+    }
+  }, [goMode.isActive, startGpsSimulation])
 
   // Navigation exit protection: warn on page unload and cleanup on unmount
   useEffect(() => {
@@ -236,7 +251,8 @@ const mapStateToProps = (state: any) => {
 const mapDispatchToProps = {
   beginGoMode: goModeActions.beginGoMode,
   endGoMode: goModeActions.endGoMode,
-  setMobileScreen: uiActions.setMobileScreen
+  setMobileScreen: uiActions.setMobileScreen,
+  startGpsSimulation: goModeActions.startGpsSimulation
 }
 
 export default connect(mapStateToProps, mapDispatchToProps)(GoModeScreen)
