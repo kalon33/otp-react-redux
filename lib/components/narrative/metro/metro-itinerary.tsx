@@ -545,11 +545,10 @@ class MetroItinerary extends NarrativeItinerary {
               RouteDescriptionOverride={RouteBlock}
               setActiveLeg={setActiveLeg}
             />
-            {beginGoMode && setMobileScreen && (
+            {beginGoMode && (
               <StartTripButton
                 onClick={() => {
                   beginGoMode(itinerary)
-                  setMobileScreen(MobileScreens.GO_MODE)
                 }}
               >
                 <FormattedMessage

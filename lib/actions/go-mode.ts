@@ -11,6 +11,9 @@ import {
   matchPositionToRoute,
   shouldTransitionToNextLeg
 } from '../util/go-mode/position-matching'
+
+import { MobileScreens } from './ui-constants'
+import { setMobileScreen } from './ui'
 import type { NotificationEvent } from '../util/go-mode/notification-service'
 import type { RouteMatchResult } from '../util/go-mode/position-matching'
 import type { TripProgress } from '../util/go-mode/progress-calculator'
@@ -85,7 +88,13 @@ function getTrackingIntervalForLeg(leg: Leg | undefined): number {
  */
 export function beginGoMode(itinerary: Itinerary) {
   return async function (dispatch: any) {
-    // Check geolocation permission before starting
+    // Set state and navigate to Go Mode screen synchronously first,
+    // before any async work, to avoid race with the GoModeScreen useEffect
+    // that redirects away when isActive is false.
+    dispatch(startGoMode({ itinerary }))
+    dispatch(setMobileScreen(MobileScreens.GO_MODE))
+
+    // Check geolocation permission
     if ('permissions' in navigator) {
       try {
         const result = await navigator.permissions.query({
@@ -101,15 +110,12 @@ export function beginGoMode(itinerary: Itinerary) {
               TIMEOUT: 3
             } as GeolocationPositionError)
           )
-          dispatch(startGoMode({ itinerary }))
           return
         }
       } catch {
         // permissions API not supported, continue anyway
       }
     }
-
-    dispatch(startGoMode({ itinerary }))
 
     // Set initial tracking interval based on first leg
     const interval = getTrackingIntervalForLeg(itinerary.legs[0])
