@@ -1,6 +1,6 @@
 import { connect } from 'react-redux'
 import { useIntl } from 'react-intl'
-import React, { useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
 
 import * as goModeActions from '../../actions/go-mode'
 import * as uiActions from '../../actions/ui'
@@ -14,7 +14,12 @@ import {
   GpsWarningBanner,
   LoadingMessage,
   RetryButton,
-  ScreenMain
+  ScreenMain,
+  SimButton,
+  SimProgress,
+  SimSpeedSelect,
+  SimToggle,
+  SimToolbar
 } from './styled'
 import CurrentLegPanel from './CurrentLegPanel'
 import GoModeHeader from './GoModeHeader'
@@ -25,16 +30,26 @@ interface Props {
   beginGoMode: (itinerary: any) => void
   endGoMode: () => void
   goMode: GoModeState
+  pauseGpsSimulation: () => void
+  resumeGpsSimulation: () => void
   setMobileScreen: (screen: number) => void
+  startGpsSimulation: (speedMultiplier?: number) => void
+  stopGpsSimulation: () => void
 }
 
 const GoModeScreen = ({
   beginGoMode,
   endGoMode,
   goMode,
-  setMobileScreen
+  pauseGpsSimulation,
+  resumeGpsSimulation,
+  setMobileScreen,
+  startGpsSimulation,
+  stopGpsSimulation
 }: Props) => {
   const intl = useIntl()
+  const [simSpeed, setSimSpeed] = useState(2)
+  const [simToolbarOpen, setSimToolbarOpen] = useState(true)
 
   useEffect(() => {
     // If Go Mode is not active, redirect back to results
@@ -222,6 +237,86 @@ const GoModeScreen = ({
             })}
           </GpsWarningBanner>
         )}
+
+        {process.env.NODE_ENV !== 'production' && (
+          <>
+            <SimToggle
+              aria-label="Toggle simulation toolbar"
+              onClick={() => setSimToolbarOpen(!simToolbarOpen)}
+            >
+              {simToolbarOpen ? 'DEV ▼' : 'DEV ▲'}
+            </SimToggle>
+            {simToolbarOpen && (
+              <SimToolbar aria-label="GPS simulation controls" role="toolbar">
+                {goMode.simulation.status === 'idle' && (
+                  <>
+                    <SimSpeedSelect
+                      aria-label="Simulation speed"
+                      onChange={(e) => setSimSpeed(Number(e.target.value))}
+                      value={simSpeed}
+                    >
+                      <option value={1}>1x</option>
+                      <option value={2}>2x</option>
+                      <option value={5}>5x</option>
+                    </SimSpeedSelect>
+                    <SimButton
+                      $variant="start"
+                      aria-label="Start GPS simulation"
+                      onClick={() => startGpsSimulation(simSpeed)}
+                    >
+                      Simulate GPS
+                    </SimButton>
+                  </>
+                )}
+                {goMode.simulation.status === 'running' && (
+                  <>
+                    <SimButton
+                      $variant="pause"
+                      aria-label="Pause GPS simulation"
+                      onClick={pauseGpsSimulation}
+                    >
+                      Pause
+                    </SimButton>
+                    <SimButton
+                      $variant="stop"
+                      aria-label="Stop GPS simulation"
+                      onClick={stopGpsSimulation}
+                    >
+                      Stop
+                    </SimButton>
+                    <SimProgress>
+                      point {goMode.simulation.pointIndex}/
+                      {goMode.simulation.totalPoints} (
+                      {goMode.simulation.speedMultiplier}x)
+                    </SimProgress>
+                  </>
+                )}
+                {goMode.simulation.status === 'paused' && (
+                  <>
+                    <SimButton
+                      $variant="resume"
+                      aria-label="Resume GPS simulation"
+                      onClick={resumeGpsSimulation}
+                    >
+                      Resume
+                    </SimButton>
+                    <SimButton
+                      $variant="stop"
+                      aria-label="Stop GPS simulation"
+                      onClick={stopGpsSimulation}
+                    >
+                      Stop
+                    </SimButton>
+                    <SimProgress>
+                      paused at {goMode.simulation.pointIndex}/
+                      {goMode.simulation.totalPoints}
+                    </SimProgress>
+                  </>
+                )}
+              </SimToolbar>
+            )}
+          </>
+        )}
       </ScreenMain>
     </MobileContainer>
   )
@@ -236,7 +331,11 @@ const mapStateToProps = (state: any) => {
 const mapDispatchToProps = {
   beginGoMode: goModeActions.beginGoMode,
   endGoMode: goModeActions.endGoMode,
-  setMobileScreen: uiActions.setMobileScreen
+  pauseGpsSimulation: goModeActions.pauseGpsSimulation,
+  resumeGpsSimulation: goModeActions.resumeGpsSimulation,
+  setMobileScreen: uiActions.setMobileScreen,
+  startGpsSimulation: goModeActions.startGpsSimulation,
+  stopGpsSimulation: goModeActions.stopGpsSimulation
 }
 
 export default connect(mapStateToProps, mapDispatchToProps)(GoModeScreen)

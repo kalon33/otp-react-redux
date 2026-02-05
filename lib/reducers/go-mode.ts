@@ -3,20 +3,32 @@ import type { Itinerary } from '@opentripplanner/types'
 
 import {
   ADD_NOTIFICATION,
+  PAUSE_GPS_SIMULATION,
+  RESUME_GPS_SIMULATION,
   SET_NOTIFICATION_CONFIG,
   SET_TRACKING_ERROR,
   START_GO_MODE,
+  START_GPS_SIMULATION,
   STOP_GO_MODE,
+  STOP_GPS_SIMULATION,
   TOGGLE_MAP_FOLLOW,
   TRANSITION_LEG,
   UPDATE_POSITION,
   UPDATE_PROGRESS,
   UPDATE_ROUTE_MATCH,
+  UPDATE_SIMULATION_PROGRESS,
   UPDATE_TRACKING_INTERVAL
 } from '../actions/go-mode'
 import type { NotificationEvent } from '../util/go-mode/notification-service'
 import type { RouteMatchResult } from '../util/go-mode/position-matching'
 import type { TripProgress } from '../util/go-mode/progress-calculator'
+
+export interface SimulationState {
+  pointIndex: number
+  speedMultiplier: number
+  status: 'idle' | 'running' | 'paused'
+  totalPoints: number
+}
 
 export interface GoModeState {
   activeItinerary: Itinerary | null
@@ -33,6 +45,8 @@ export interface GoModeState {
   progress: TripProgress | null
 
   routeMatch: RouteMatchResult | null
+
+  simulation: SimulationState
 
   tracking: {
     error: GeolocationPositionError | null
@@ -60,6 +74,13 @@ const defaultState: GoModeState = {
 
   progress: null,
   routeMatch: null,
+
+  simulation: {
+    pointIndex: 0,
+    speedMultiplier: 1,
+    status: 'idle',
+    totalPoints: 0
+  },
 
   tracking: {
     error: null,
@@ -105,6 +126,22 @@ const goMode = handleActions<GoModeState, any>(
       }
     },
 
+    [PAUSE_GPS_SIMULATION]: (state) => ({
+      ...state,
+      simulation: {
+        ...state.simulation,
+        status: 'paused' as const
+      }
+    }),
+
+    [RESUME_GPS_SIMULATION]: (state) => ({
+      ...state,
+      simulation: {
+        ...state.simulation,
+        status: 'running' as const
+      }
+    }),
+
     [SET_NOTIFICATION_CONFIG]: (state, action) => {
       return {
         ...state,
@@ -147,11 +184,29 @@ const goMode = handleActions<GoModeState, any>(
       }
     },
 
-    [STOP_GO_MODE]: () => {
-      return {
-        ...defaultState
+    [START_GPS_SIMULATION]: (state, action) => ({
+      ...state,
+      simulation: {
+        pointIndex: 0,
+        speedMultiplier: action.payload.speedMultiplier,
+        status: 'running' as const,
+        totalPoints: action.payload.totalPoints
       }
-    },
+    }),
+
+    [STOP_GO_MODE]: () => ({
+      ...defaultState
+    }),
+
+    [STOP_GPS_SIMULATION]: (state) => ({
+      ...state,
+      simulation: {
+        pointIndex: 0,
+        speedMultiplier: 1,
+        status: 'idle' as const,
+        totalPoints: 0
+      }
+    }),
 
     [TOGGLE_MAP_FOLLOW]: (state) => {
       return {
@@ -201,6 +256,14 @@ const goMode = handleActions<GoModeState, any>(
         routeMatch: action.payload
       }
     },
+
+    [UPDATE_SIMULATION_PROGRESS]: (state, action) => ({
+      ...state,
+      simulation: {
+        ...state.simulation,
+        pointIndex: action.payload.pointIndex
+      }
+    }),
 
     [UPDATE_TRACKING_INTERVAL]: (state, action) => {
       const { interval } = action.payload

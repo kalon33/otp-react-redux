@@ -267,3 +267,84 @@ export const GpsWarningBanner = styled.div`
   padding: 10px;
   text-align: center;
 `
+
+// Dev simulation toolbar styles
+export const SimToolbar = styled.div`
+  background: #263238;
+  border-top: 2px solid #37474f;
+  bottom: 0;
+  color: #eceff1;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 12px;
+  gap: 6px;
+  left: 0;
+  padding: 8px 12px;
+  position: absolute;
+  right: 0;
+  z-index: 2000;
+`
+
+export const SimButton = styled.button<{
+  $variant?: 'start' | 'stop' | 'pause' | 'resume'
+}>`
+  background-color: ${(props) => {
+    switch (props.$variant) {
+      case 'start':
+        return '#4CAF50'
+      case 'stop':
+        return '#F44336'
+      case 'pause':
+        return '#FF9800'
+      case 'resume':
+        return '#2196F3'
+      default:
+        return '#607D8B'
+    }
+  }};
+  border: none;
+  border-radius: 4px;
+  color: white;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 12px;
+
+  &:active {
+    opacity: 0.8;
+  }
+`
+
+export const SimSpeedSelect = styled.select`
+  background: #37474f;
+  border: 1px solid #546e7a;
+  border-radius: 4px;
+  color: #eceff1;
+  font-size: 12px;
+  padding: 4px 6px;
+`
+
+export const SimProgress = styled.span`
+  align-items: center;
+  color: #90a4ae;
+  display: flex;
+  font-size: 11px;
+  margin-left: auto;
+`
+
+export const SimToggle = styled.button`
+  background: none;
+  border: none;
+  color: #90a4ae;
+  cursor: pointer;
+  font-size: 10px;
+  padding: 2px 6px;
+  position: absolute;
+  right: 4px;
+  top: -18px;
+  z-index: 2001;
+
+  &:hover {
+    color: #eceff1;
+  }
+`

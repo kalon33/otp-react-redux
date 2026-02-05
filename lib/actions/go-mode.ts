@@ -26,6 +26,8 @@ let visibilityChangeHandler: (() => void) | null = null
 
 // GPS simulation state
 let gpsSimulationIntervalId: ReturnType<typeof setInterval> | null = null
+let simulationPointIndex = 0
+let simulationCoords: Array<[number, number]> = []
 
 // Action types
 export const START_GO_MODE = 'START_GO_MODE'
@@ -39,6 +41,11 @@ export const SET_TRACKING_ERROR = 'SET_TRACKING_ERROR'
 export const TOGGLE_MAP_FOLLOW = 'TOGGLE_MAP_FOLLOW'
 export const UPDATE_TRACKING_INTERVAL = 'UPDATE_TRACKING_INTERVAL'
 export const SET_NOTIFICATION_CONFIG = 'SET_NOTIFICATION_CONFIG'
+export const START_GPS_SIMULATION = 'START_GPS_SIMULATION'
+export const STOP_GPS_SIMULATION = 'STOP_GPS_SIMULATION'
+export const PAUSE_GPS_SIMULATION = 'PAUSE_GPS_SIMULATION'
+export const RESUME_GPS_SIMULATION = 'RESUME_GPS_SIMULATION'
+export const UPDATE_SIMULATION_PROGRESS = 'UPDATE_SIMULATION_PROGRESS'
 
 // Simple action creators
 export const startGoMode = createAction<{ itinerary: Itinerary }>(START_GO_MODE)
@@ -99,6 +106,15 @@ export function beginGoMode(itinerary: Itinerary) {
     w.__startGpsSimulation = (speedMultiplier?: number) => {
       dispatch(startGpsSimulation(speedMultiplier))
     }
+    w.__stopGpsSimulation = () => {
+      dispatch(stopGpsSimulation())
+    }
+    w.__pauseGpsSimulation = () => {
+      dispatch(pauseGpsSimulation())
+    }
+    w.__resumeGpsSimulation = () => {
+      dispatch(resumeGpsSimulation())
+    }
 
     // Check geolocation permission
     if ('permissions' in navigator) {
@@ -149,14 +165,20 @@ export function endGoMode() {
       visibilityChangeHandler = null
     }
 
-    // Clean up GPS simulation interval
+    // Clean up GPS simulation interval and state
     if (gpsSimulationIntervalId) {
       clearInterval(gpsSimulationIntervalId)
       gpsSimulationIntervalId = null
     }
+    simulationPointIndex = 0
+    simulationCoords = []
 
-    // Remove console simulation helper
-    delete (window as any).__startGpsSimulation
+    // Remove console simulation helpers
+    const w = window as any
+    delete w.__startGpsSimulation
+    delete w.__stopGpsSimulation
+    delete w.__pauseGpsSimulation
+    delete w.__resumeGpsSimulation
 
     dispatch(stopGoMode())
   }
@@ -410,7 +432,6 @@ function createMockPosition(lat: number, lng: number): GeolocationPosition {
 /**
  * Start GPS simulation mode for development.
  * Replays positions along the itinerary's leg geometries at a configurable speed.
- * Activate by calling from browser console: window.__startGpsSimulation()
  */
 export function startGpsSimulation(speedMultiplier = 1) {
   return function (dispatch: any, getState: any) {
@@ -439,7 +460,10 @@ export function startGpsSimulation(speedMultiplier = 1) {
       gpsPollingIntervalId = null
     }
 
-    let pointIndex = 0
+    // Store coords in module scope for pause/resume
+    simulationCoords = coords
+    simulationPointIndex = 0
+
     const intervalMs = Math.max(500, 2000 / speedMultiplier)
 
     console.info(
@@ -447,24 +471,129 @@ export function startGpsSimulation(speedMultiplier = 1) {
         `interval ${intervalMs}ms, speed ${speedMultiplier}x`
     )
 
+    dispatch({
+      payload: { speedMultiplier, totalPoints: coords.length },
+      type: START_GPS_SIMULATION
+    })
+
     // Dispatch the first point immediately
     const [firstLat, firstLng] = coords[0]
     dispatch(handlePositionUpdate(createMockPosition(firstLat, firstLng)))
-    pointIndex = 1
+    simulationPointIndex = 1
+    dispatch({
+      payload: { pointIndex: simulationPointIndex },
+      type: UPDATE_SIMULATION_PROGRESS
+    })
 
     gpsSimulationIntervalId = setInterval(() => {
-      if (pointIndex >= coords.length) {
+      if (simulationPointIndex >= simulationCoords.length) {
         console.info('[Go Mode] GPS simulation complete')
         if (gpsSimulationIntervalId) {
           clearInterval(gpsSimulationIntervalId)
           gpsSimulationIntervalId = null
         }
+        dispatch({ type: STOP_GPS_SIMULATION })
         return
       }
 
-      const [lat, lng] = coords[pointIndex]
+      const [lat, lng] = simulationCoords[simulationPointIndex]
       dispatch(handlePositionUpdate(createMockPosition(lat, lng)))
-      pointIndex++
+      simulationPointIndex++
+      dispatch({
+        payload: { pointIndex: simulationPointIndex },
+        type: UPDATE_SIMULATION_PROGRESS
+      })
+    }, intervalMs)
+  }
+}
+
+/**
+ * Stop GPS simulation and optionally resume real GPS tracking.
+ */
+export function stopGpsSimulation() {
+  return function (dispatch: any, getState: any) {
+    if (gpsSimulationIntervalId) {
+      clearInterval(gpsSimulationIntervalId)
+      gpsSimulationIntervalId = null
+    }
+
+    simulationPointIndex = 0
+    simulationCoords = []
+
+    dispatch({ type: STOP_GPS_SIMULATION })
+
+    // Resume real GPS polling if Go Mode is still active
+    const state = getState()
+    if (state.otp?.goMode?.isActive) {
+      dispatch(startPositionTracking())
+    }
+
+    console.info('[Go Mode] GPS simulation stopped')
+  }
+}
+
+/**
+ * Pause GPS simulation — preserves current position index.
+ */
+export function pauseGpsSimulation() {
+  return function (dispatch: any) {
+    if (gpsSimulationIntervalId) {
+      clearInterval(gpsSimulationIntervalId)
+      gpsSimulationIntervalId = null
+    }
+
+    dispatch({ type: PAUSE_GPS_SIMULATION })
+    console.info(
+      `[Go Mode] GPS simulation paused at point ${simulationPointIndex}/${simulationCoords.length}`
+    )
+  }
+}
+
+/**
+ * Resume GPS simulation from where it was paused.
+ */
+export function resumeGpsSimulation() {
+  return function (dispatch: any, getState: any) {
+    const state = getState()
+    const sim = state.otp?.goMode?.simulation
+
+    if (!sim || sim.status !== 'paused') {
+      console.warn('[Go Mode] Cannot resume — simulation is not paused')
+      return
+    }
+
+    if (simulationPointIndex >= simulationCoords.length) {
+      console.warn('[Go Mode] Cannot resume — simulation already complete')
+      dispatch({ type: STOP_GPS_SIMULATION })
+      return
+    }
+
+    const intervalMs = Math.max(500, 2000 / sim.speedMultiplier)
+
+    dispatch({ type: RESUME_GPS_SIMULATION })
+
+    console.info(
+      `[Go Mode] GPS simulation resumed at point ${simulationPointIndex}/${simulationCoords.length}`
+    )
+
+    gpsSimulationIntervalId = setInterval(() => {
+      if (simulationPointIndex >= simulationCoords.length) {
+        console.info('[Go Mode] GPS simulation complete')
+        if (gpsSimulationIntervalId) {
+          clearInterval(gpsSimulationIntervalId)
+          gpsSimulationIntervalId = null
+        }
+        dispatch({ type: STOP_GPS_SIMULATION })
+        return
+      }
+
+      const [lat, lng] = simulationCoords[simulationPointIndex]
+      dispatch(handlePositionUpdate(createMockPosition(lat, lng)))
+      simulationPointIndex++
+      dispatch({
+        payload: { pointIndex: simulationPointIndex },
+        type: UPDATE_SIMULATION_PROGRESS
+      })
     }, intervalMs)
   }
 }
