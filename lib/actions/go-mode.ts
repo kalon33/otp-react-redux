@@ -94,6 +94,12 @@ export function beginGoMode(itinerary: Itinerary) {
     dispatch(startGoMode({ itinerary }))
     dispatch(setMobileScreen(MobileScreens.GO_MODE))
 
+    // Expose GPS simulation on window for dev console access
+    const w = window as any
+    w.__startGpsSimulation = (speedMultiplier?: number) => {
+      dispatch(startGpsSimulation(speedMultiplier))
+    }
+
     // Check geolocation permission
     if ('permissions' in navigator) {
       try {
@@ -148,6 +154,9 @@ export function endGoMode() {
       clearInterval(gpsSimulationIntervalId)
       gpsSimulationIntervalId = null
     }
+
+    // Remove console simulation helper
+    delete (window as any).__startGpsSimulation
 
     dispatch(stopGoMode())
   }
