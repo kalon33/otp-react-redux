@@ -35,6 +35,19 @@ let simulationPointIndex = 0
 let simulationCoords: TimedSimulationPoint[] = []
 let simulationSpeedMultiplier = 1
 let simulationActive = false
+let simulatedTimeMs = 0 // epoch ms — the "current time" in simulation-land
+
+/**
+ * Get the current time for Go Mode calculations.
+ * During simulation, returns the simulated clock time (accumulated from schedule delays).
+ * During live GPS tracking, returns real wall-clock time.
+ */
+function getCurrentTime(): Date {
+  if (simulationActive && simulatedTimeMs > 0) {
+    return new Date(simulatedTimeMs)
+  }
+  return new Date()
+}
 
 // Action types
 export const START_GO_MODE = 'START_GO_MODE'
@@ -180,6 +193,7 @@ export function endGoMode() {
     simulationActive = false
     simulationPointIndex = 0
     simulationCoords = []
+    simulatedTimeMs = 0
 
     // Remove console simulation helpers
     const w = window as any
@@ -345,8 +359,8 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       }
     }
 
-    // Calculate progress
-    const currentTime = new Date()
+    // Calculate progress — use simulated clock during simulation, real time for live GPS
+    const currentTime = getCurrentTime()
     const progress = calculateTripProgress(currentTime, itinerary, routeMatch)
 
     dispatch(updateProgress(progress))
@@ -614,7 +628,8 @@ function createMockPosition(lat: number, lng: number): GeolocationPosition {
       longitude: lng,
       speed: null
     },
-    timestamp: Date.now()
+    timestamp:
+      simulationActive && simulatedTimeMs > 0 ? simulatedTimeMs : Date.now()
   } as GeolocationPosition
 }
 
@@ -636,6 +651,9 @@ function scheduleNextSimulationPoint(dispatch: any) {
 
   gpsSimulationTimeoutId = setTimeout(() => {
     if (!simulationActive) return
+
+    // Advance the simulated clock by the un-scaled delay (actual schedule time)
+    simulatedTimeMs += point.delayMs
 
     const { coord } = simulationCoords[simulationPointIndex]
     dispatch(handlePositionUpdate(createMockPosition(coord[0], coord[1])))
@@ -687,6 +705,7 @@ export function startGpsSimulation(speedMultiplier = 1) {
     simulationPointIndex = 0
     simulationSpeedMultiplier = speedMultiplier
     simulationActive = true
+    simulatedTimeMs = itinerary.startTime // begin simulated clock at itinerary start
 
     console.info(
       `[Go Mode] Starting schedule-aware GPS simulation: ${timedPoints.length} points, ` +
@@ -727,6 +746,7 @@ export function stopGpsSimulation() {
 
     simulationPointIndex = 0
     simulationCoords = []
+    simulatedTimeMs = 0
 
     dispatch({ type: STOP_GPS_SIMULATION })
 
