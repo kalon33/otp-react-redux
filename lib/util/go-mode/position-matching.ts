@@ -194,11 +194,14 @@ export function matchPositionToRoute(
           y1 + t * (y2 - y1)
         ]
 
+        // Use wider threshold for transit legs (sparser polylines)
+        const isTransitLeg = leg.mode !== 'WALK' && leg.mode !== 'BICYCLE'
+        const onRouteThreshold = isTransitLeg ? 250 : 100
+
         bestMatch = {
           distanceFromRoute: perpDistance,
-          isOnRoute: perpDistance < 100,
+          isOnRoute: perpDistance < onRouteThreshold,
           legIndex,
-          // Within 100m considered on route
           nearestPoint,
 
           progressAlongLeg:
