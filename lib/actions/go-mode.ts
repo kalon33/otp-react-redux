@@ -25,9 +25,16 @@ let gpsPollingIntervalId: ReturnType<typeof setInterval> | null = null
 let visibilityChangeHandler: (() => void) | null = null
 
 // GPS simulation state
-let gpsSimulationIntervalId: ReturnType<typeof setInterval> | null = null
+interface TimedSimulationPoint {
+  coord: [number, number]
+  delayMs: number // ms before advancing to next point (at 1x speed)
+}
+
+let gpsSimulationTimeoutId: ReturnType<typeof setTimeout> | null = null
 let simulationPointIndex = 0
-let simulationCoords: Array<[number, number]> = []
+let simulationCoords: TimedSimulationPoint[] = []
+let simulationSpeedMultiplier = 1
+let simulationActive = false
 
 // Action types
 export const START_GO_MODE = 'START_GO_MODE'
@@ -165,11 +172,12 @@ export function endGoMode() {
       visibilityChangeHandler = null
     }
 
-    // Clean up GPS simulation interval and state
-    if (gpsSimulationIntervalId) {
-      clearInterval(gpsSimulationIntervalId)
-      gpsSimulationIntervalId = null
+    // Clean up GPS simulation state
+    if (gpsSimulationTimeoutId) {
+      clearTimeout(gpsSimulationTimeoutId)
+      gpsSimulationTimeoutId = null
     }
+    simulationActive = false
     simulationPointIndex = 0
     simulationCoords = []
 
@@ -210,11 +218,16 @@ export function startPositionTracking() {
 
     // Use polling instead of watchPosition to avoid conflicts with react-map-gl
     const pollPosition = () => {
+      // Skip real GPS updates while simulation is running
+      if (simulationActive) return
       navigator.geolocation.getCurrentPosition(
         (position) => {
+          // Double-check: simulation may have started while getCurrentPosition was pending
+          if (simulationActive) return
           dispatch(handlePositionUpdate(position))
         },
         (error) => {
+          if (simulationActive) return
           dispatch(setTrackingError(error))
         },
         options
@@ -241,11 +254,14 @@ export function startPositionTracking() {
       (position) => {
         initialResolved = true
         clearTimeout(initialTimeout)
+        // Skip if simulation started while waiting for initial GPS fix
+        if (simulationActive) return
         dispatch(handlePositionUpdate(position))
       },
       (error) => {
         initialResolved = true
         clearTimeout(initialTimeout)
+        if (simulationActive) return
         dispatch(setTrackingError(error))
       },
       { ...options, timeout: 15000 }
@@ -319,12 +335,14 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       const newInterval = getTrackingIntervalForLeg(newLeg)
       dispatch(updateTrackingInterval({ interval: newInterval }))
 
-      // Restart tracking with new interval
-      if (gpsPollingIntervalId) {
-        clearInterval(gpsPollingIntervalId)
-        gpsPollingIntervalId = null
+      // Restart tracking with new interval (but not during simulation)
+      if (!simulationActive) {
+        if (gpsPollingIntervalId) {
+          clearInterval(gpsPollingIntervalId)
+          gpsPollingIntervalId = null
+        }
+        dispatch(startPositionTracking())
       }
-      dispatch(startPositionTracking())
     }
 
     // Calculate progress
@@ -392,23 +410,194 @@ export function updateNotificationSettings(config: {
 }
 
 /**
- * Extract all coordinates from an itinerary's leg geometries as [lat, lng] pairs.
+ * Haversine distance in meters between two [lat, lng] points.
  */
-function extractItineraryCoordinates(
-  itinerary: Itinerary
-): Array<[number, number]> {
-  const coords: Array<[number, number]> = []
-  for (const leg of itinerary.legs) {
-    if (leg.legGeometry?.points) {
-      try {
-        const decoded = polyline.decode(leg.legGeometry.points)
-        coords.push(...decoded)
-      } catch {
-        // Skip legs with invalid geometry
+function haversineDistance(a: [number, number], b: [number, number]): number {
+  const toRad = (deg: number) => (deg * Math.PI) / 180
+  const R = 6371000
+  const dLat = toRad(b[0] - a[0])
+  const dLon = toRad(b[1] - a[1])
+  const sinLat = Math.sin(dLat / 2)
+  const sinLon = Math.sin(dLon / 2)
+  const h =
+    sinLat * sinLat +
+    Math.cos(toRad(a[0])) * Math.cos(toRad(b[0])) * sinLon * sinLon
+  return 2 * R * Math.asin(Math.sqrt(h))
+}
+
+/**
+ * Find the index of the polyline point closest to a given [lat, lng],
+ * searching from startIdx onward.
+ */
+function findClosestPolylineIndex(
+  decoded: Array<[number, number]>,
+  lat: number,
+  lon: number,
+  startIdx: number
+): number {
+  let bestIdx = startIdx
+  let bestDist = Infinity
+  for (let i = startIdx; i < decoded.length; i++) {
+    const d = haversineDistance(decoded[i], [lat, lon])
+    if (d < bestDist) {
+      bestDist = d
+      bestIdx = i
+    }
+  }
+  return bestIdx
+}
+
+interface IntermediatePlace {
+  arrivalTime: number
+  departureTime: number
+  lat: number
+  lon: number
+  name: string
+  stop?: { code: string; gtfsId: string; id: string }
+}
+
+/**
+ * Build timed simulation points for a transit leg using stop schedule data.
+ * Each polyline segment between stops gets timing derived from the timetable.
+ */
+function buildTransitTimedPoints(
+  leg: Leg,
+  decoded: Array<[number, number]>,
+  places: IntermediatePlace[]
+): TimedSimulationPoint[] {
+  const points: TimedSimulationPoint[] = []
+
+  // Build stop sequence: leg origin, intermediate places, leg destination
+  const stops: Array<{
+    arrivalTime: number
+    departureTime: number
+    lat: number
+    lon: number
+    name: string
+  }> = []
+
+  // Origin
+  const legFrom = (leg as any).from
+  stops.push({
+    arrivalTime: leg.startTime,
+    departureTime: leg.startTime,
+    lat: legFrom?.lat ?? decoded[0][0],
+    lon: legFrom?.lon ?? decoded[0][1],
+    name: legFrom?.name ?? 'Origin'
+  })
+
+  // Intermediate places
+  for (const p of places) {
+    stops.push({
+      arrivalTime: p.arrivalTime,
+      departureTime: p.departureTime,
+      lat: p.lat,
+      lon: p.lon,
+      name: p.name
+    })
+  }
+
+  // Destination
+  const legTo = (leg as any).to
+  stops.push({
+    arrivalTime: leg.endTime,
+    departureTime: leg.endTime,
+    lat: legTo?.lat ?? decoded[decoded.length - 1][0],
+    lon: legTo?.lon ?? decoded[decoded.length - 1][1],
+    name: legTo?.name ?? 'Destination'
+  })
+
+  // Map each stop to its nearest polyline index
+  const stopPolyIndices: number[] = []
+  let searchFrom = 0
+  for (const stop of stops) {
+    const idx = findClosestPolylineIndex(
+      decoded,
+      stop.lat,
+      stop.lon,
+      searchFrom
+    )
+    stopPolyIndices.push(idx)
+    searchFrom = idx
+  }
+
+  // Build timed points for each segment between consecutive stops
+  for (let s = 0; s < stops.length - 1; s++) {
+    const fromIdx = stopPolyIndices[s]
+    const toIdx = stopPolyIndices[s + 1]
+    const travelTimeMs = stops[s + 1].arrivalTime - stops[s].departureTime
+    const segmentPointCount = Math.max(1, toIdx - fromIdx)
+    const delayPerPoint = Math.max(50, travelTimeMs / segmentPointCount)
+
+    // Add travel points for this segment
+    const endIdx = s < stops.length - 2 ? toIdx : toIdx + 1 // include final point on last segment
+    for (let i = fromIdx; i < endIdx && i < decoded.length; i++) {
+      // Skip duplicate of previous segment's last point
+      if (s > 0 && i === fromIdx) continue
+      points.push({ coord: decoded[i], delayMs: delayPerPoint })
+    }
+
+    // Add dwell time at the arrival stop (except for the final destination)
+    if (s < stops.length - 2) {
+      const dwellMs = stops[s + 1].departureTime - stops[s + 1].arrivalTime
+      if (dwellMs > 0) {
+        // Add a dwell point at the stop location
+        points.push({ coord: decoded[toIdx], delayMs: dwellMs })
       }
     }
   }
-  return coords
+
+  // Handle edge case: if no points were generated, fall back to even distribution
+  if (points.length === 0) {
+    const delayMs = (leg.duration * 1000) / decoded.length
+    for (const coord of decoded) {
+      points.push({ coord, delayMs: Math.max(50, delayMs) })
+    }
+  }
+
+  console.info(
+    `[Go Mode] Transit leg "${stops[0].name}" → "${
+      stops[stops.length - 1].name
+    }": ` +
+      `${stops.length} stops, ${points.length} simulation points, ` +
+      `${Math.round((leg.duration * 1000) / 1000)}s scheduled duration`
+  )
+
+  return points
+}
+
+/**
+ * Extract timed simulation points from an itinerary.
+ * Transit legs with intermediatePlaces use schedule-aware timing.
+ * Walk/bike legs use even time distribution.
+ */
+function extractItineraryTimedPoints(
+  itinerary: Itinerary
+): TimedSimulationPoint[] {
+  const points: TimedSimulationPoint[] = []
+  for (const leg of itinerary.legs) {
+    if (!leg.legGeometry?.points) continue
+    try {
+      const decoded = polyline.decode(leg.legGeometry.points)
+      if (decoded.length === 0) continue
+
+      const places = (leg as any).intermediatePlaces as
+        | IntermediatePlace[]
+        | undefined
+      if (leg.transitLeg && places && places.length > 0) {
+        points.push(...buildTransitTimedPoints(leg, decoded, places))
+      } else {
+        // Non-transit or no schedule data: even distribution
+        const delayMs = Math.max(50, (leg.duration * 1000) / decoded.length)
+        for (const coord of decoded) {
+          points.push({ coord, delayMs })
+        }
+      }
+    } catch {
+      // Skip legs with invalid geometry
+    }
+  }
+  return points
 }
 
 /**
@@ -430,8 +619,40 @@ function createMockPosition(lat: number, lng: number): GeolocationPosition {
 }
 
 /**
+ * Schedule the next simulation point using setTimeout.
+ * Each point has its own delay (derived from schedule or even distribution).
+ */
+function scheduleNextSimulationPoint(dispatch: any) {
+  if (!simulationActive || simulationPointIndex >= simulationCoords.length) {
+    simulationActive = false
+    gpsSimulationTimeoutId = null
+    dispatch({ type: STOP_GPS_SIMULATION })
+    console.info('[Go Mode] GPS simulation complete')
+    return
+  }
+
+  const point = simulationCoords[simulationPointIndex]
+  const delay = Math.max(50, point.delayMs / simulationSpeedMultiplier)
+
+  gpsSimulationTimeoutId = setTimeout(() => {
+    if (!simulationActive) return
+
+    const { coord } = simulationCoords[simulationPointIndex]
+    dispatch(handlePositionUpdate(createMockPosition(coord[0], coord[1])))
+    simulationPointIndex++
+    dispatch({
+      payload: { pointIndex: simulationPointIndex },
+      type: UPDATE_SIMULATION_PROGRESS
+    })
+
+    scheduleNextSimulationPoint(dispatch)
+  }, delay)
+}
+
+/**
  * Start GPS simulation mode for development.
- * Replays positions along the itinerary's leg geometries at a configurable speed.
+ * For transit legs with schedule data, timing follows the bus timetable.
+ * For walk/bike legs, positions are evenly distributed over leg duration.
  */
 export function startGpsSimulation(speedMultiplier = 1) {
   return function (dispatch: any, getState: any) {
@@ -443,15 +664,16 @@ export function startGpsSimulation(speedMultiplier = 1) {
       return
     }
 
-    const coords = extractItineraryCoordinates(itinerary)
-    if (coords.length === 0) {
+    const timedPoints = extractItineraryTimedPoints(itinerary)
+    if (timedPoints.length === 0) {
       console.warn('[Go Mode] No coordinates found in itinerary')
       return
     }
 
     // Clean up any existing simulation
-    if (gpsSimulationIntervalId) {
-      clearInterval(gpsSimulationIntervalId)
+    if (gpsSimulationTimeoutId) {
+      clearTimeout(gpsSimulationTimeoutId)
+      gpsSimulationTimeoutId = null
     }
 
     // Clean up real GPS tracking if running
@@ -460,50 +682,35 @@ export function startGpsSimulation(speedMultiplier = 1) {
       gpsPollingIntervalId = null
     }
 
-    // Store coords in module scope for pause/resume
-    simulationCoords = coords
+    // Store in module scope for pause/resume
+    simulationCoords = timedPoints
     simulationPointIndex = 0
-
-    const intervalMs = Math.max(500, 2000 / speedMultiplier)
+    simulationSpeedMultiplier = speedMultiplier
+    simulationActive = true
 
     console.info(
-      `[Go Mode] Starting GPS simulation: ${coords.length} points, ` +
-        `interval ${intervalMs}ms, speed ${speedMultiplier}x`
+      `[Go Mode] Starting schedule-aware GPS simulation: ${timedPoints.length} points, ` +
+        `speed ${speedMultiplier}x`
     )
 
     dispatch({
-      payload: { speedMultiplier, totalPoints: coords.length },
+      payload: { speedMultiplier, totalPoints: timedPoints.length },
       type: START_GPS_SIMULATION
     })
 
     // Dispatch the first point immediately
-    const [firstLat, firstLng] = coords[0]
-    dispatch(handlePositionUpdate(createMockPosition(firstLat, firstLng)))
+    const first = timedPoints[0]
+    dispatch(
+      handlePositionUpdate(createMockPosition(first.coord[0], first.coord[1]))
+    )
     simulationPointIndex = 1
     dispatch({
       payload: { pointIndex: simulationPointIndex },
       type: UPDATE_SIMULATION_PROGRESS
     })
 
-    gpsSimulationIntervalId = setInterval(() => {
-      if (simulationPointIndex >= simulationCoords.length) {
-        console.info('[Go Mode] GPS simulation complete')
-        if (gpsSimulationIntervalId) {
-          clearInterval(gpsSimulationIntervalId)
-          gpsSimulationIntervalId = null
-        }
-        dispatch({ type: STOP_GPS_SIMULATION })
-        return
-      }
-
-      const [lat, lng] = simulationCoords[simulationPointIndex]
-      dispatch(handlePositionUpdate(createMockPosition(lat, lng)))
-      simulationPointIndex++
-      dispatch({
-        payload: { pointIndex: simulationPointIndex },
-        type: UPDATE_SIMULATION_PROGRESS
-      })
-    }, intervalMs)
+    // Start the setTimeout chain
+    scheduleNextSimulationPoint(dispatch)
   }
 }
 
@@ -512,10 +719,11 @@ export function startGpsSimulation(speedMultiplier = 1) {
  */
 export function stopGpsSimulation() {
   return function (dispatch: any, getState: any) {
-    if (gpsSimulationIntervalId) {
-      clearInterval(gpsSimulationIntervalId)
-      gpsSimulationIntervalId = null
+    if (gpsSimulationTimeoutId) {
+      clearTimeout(gpsSimulationTimeoutId)
+      gpsSimulationTimeoutId = null
     }
+    simulationActive = false
 
     simulationPointIndex = 0
     simulationCoords = []
@@ -537,10 +745,11 @@ export function stopGpsSimulation() {
  */
 export function pauseGpsSimulation() {
   return function (dispatch: any) {
-    if (gpsSimulationIntervalId) {
-      clearInterval(gpsSimulationIntervalId)
-      gpsSimulationIntervalId = null
+    if (gpsSimulationTimeoutId) {
+      clearTimeout(gpsSimulationTimeoutId)
+      gpsSimulationTimeoutId = null
     }
+    simulationActive = false
 
     dispatch({ type: PAUSE_GPS_SIMULATION })
     console.info(
@@ -568,7 +777,8 @@ export function resumeGpsSimulation() {
       return
     }
 
-    const intervalMs = Math.max(500, 2000 / sim.speedMultiplier)
+    simulationSpeedMultiplier = sim.speedMultiplier
+    simulationActive = true
 
     dispatch({ type: RESUME_GPS_SIMULATION })
 
@@ -576,24 +786,6 @@ export function resumeGpsSimulation() {
       `[Go Mode] GPS simulation resumed at point ${simulationPointIndex}/${simulationCoords.length}`
     )
 
-    gpsSimulationIntervalId = setInterval(() => {
-      if (simulationPointIndex >= simulationCoords.length) {
-        console.info('[Go Mode] GPS simulation complete')
-        if (gpsSimulationIntervalId) {
-          clearInterval(gpsSimulationIntervalId)
-          gpsSimulationIntervalId = null
-        }
-        dispatch({ type: STOP_GPS_SIMULATION })
-        return
-      }
-
-      const [lat, lng] = simulationCoords[simulationPointIndex]
-      dispatch(handlePositionUpdate(createMockPosition(lat, lng)))
-      simulationPointIndex++
-      dispatch({
-        payload: { pointIndex: simulationPointIndex },
-        type: UPDATE_SIMULATION_PROGRESS
-      })
-    }, intervalMs)
+    scheduleNextSimulationPoint(dispatch)
   }
 }

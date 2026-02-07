@@ -1,0 +1,23 @@
+diff --git a/node_modules/@opentripplanner/core-utils/src/planQuery.graphql b/node_modules/@opentripplanner/core-utils/src/planQuery.graphql
+index 813a4b6..26cdf22 100644
+--- a/node_modules/@opentripplanner/core-utils/src/planQuery.graphql
++++ b/node_modules/@opentripplanner/core-utils/src/planQuery.graphql
+@@ -154,6 +154,18 @@ query Plan(
+           stopCode: code
+           stopId: id
+         }
++        intermediatePlaces {
++          arrivalTime
++          departureTime
++          lat
++          lon
++          name
++          stop {
++            code
++            gtfsId
++            id
++          }
++        }
+         legGeometry {
+           length
+           points
