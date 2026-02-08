@@ -114,7 +114,18 @@ const TransitProgress = ({ leg, progress }: Props) => {
         </InfoCard>
       )}
 
-      {/* Arrival Time */}
+      {/* Destination */}
+      <InfoCard $bgColor="#e3f2fd">
+        <InfoCardLabel $color="#1976d2">
+          {intl.formatMessage({
+            defaultMessage: 'Your Stop',
+            id: 'components.GoMode.yourStop'
+          })}
+        </InfoCardLabel>
+        <InfoCardValue $color="#1976d2">{leg.to.name}</InfoCardValue>
+      </InfoCard>
+
+      {/* Arrival Time - moved to bottom */}
       {progress.destinationArrivalTime && (
         <InfoCard $bgColor="#f3e5f5">
           <InfoCardLabel $color="#7b1fa2">
@@ -131,17 +142,6 @@ const TransitProgress = ({ leg, progress }: Props) => {
           </InfoCardValue>
         </InfoCard>
       )}
-
-      {/* Destination */}
-      <InfoCard $bgColor="#e3f2fd">
-        <InfoCardLabel $color="#1976d2">
-          {intl.formatMessage({
-            defaultMessage: 'Your Stop',
-            id: 'components.GoMode.yourStop'
-          })}
-        </InfoCardLabel>
-        <InfoCardValue $color="#1976d2">{leg.to.name}</InfoCardValue>
-      </InfoCard>
     </TransitContainer>
   )
 }

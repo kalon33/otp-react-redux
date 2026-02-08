@@ -114,19 +114,7 @@ const WalkingNavigation = ({ leg, nextLeg, progress }: Props) => {
         </div>
       </RouteHeader>
 
-      {/* Navigation Instruction */}
-      {progress.nextInstruction && (
-        <NavigationInstruction $highlight={isNearDestination}>
-          <InstructionText>{progress.nextInstruction}</InstructionText>
-          {progress.distanceToNextTurn !== undefined && (
-            <DistanceDisplay>
-              {formatDistance(progress.distanceToNextTurn)}
-            </DistanceDisplay>
-          )}
-        </NavigationInstruction>
-      )}
-
-      {/* Transit Departure Countdown */}
+      {/* Transit Departure Countdown - MOST IMPORTANT */}
       {isNextLegTransit && progress.timeUntilNextDeparture !== undefined && (
         <CountdownCard
           $urgency={getUrgency(
@@ -166,6 +154,18 @@ const WalkingNavigation = ({ leg, nextLeg, progress }: Props) => {
             </div>
           )}
         </CountdownCard>
+      )}
+
+      {/* Navigation Instruction */}
+      {progress.nextInstruction && (
+        <NavigationInstruction $highlight={isNearDestination}>
+          <InstructionText>{progress.nextInstruction}</InstructionText>
+          {progress.distanceToNextTurn !== undefined && (
+            <DistanceDisplay>
+              {formatDistance(progress.distanceToNextTurn)}
+            </DistanceDisplay>
+          )}
+        </NavigationInstruction>
       )}
 
       {/* Next Leg Preview */}
