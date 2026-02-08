@@ -13,7 +13,11 @@ export interface TripProgress {
   // 0-100%
   currentLegIndex: number
   currentLegProgress: number
+  // Time used for calculations (simulated or real)
+  currentTime: Date
   delay?: number
+  // Epoch ms — arrival at current transit leg's destination
+  destinationArrivalTime?: number
   distanceToNextTurn?: number
   // 0-100%
   estimatedArrival: Date
@@ -29,6 +33,10 @@ export interface TripProgress {
   // Transit-specific
   stopsRemaining?: number
   timeRemaining: number
+  // Seconds until next transit leg departs (walking legs only)
+  timeUntilNextDeparture?: number
+  // Seconds of estimated wait at next stop (walking legs only)
+  waitTimeAtStop?: number
 }
 
 /**
@@ -213,6 +221,50 @@ export function getWalkingInstruction(
 }
 
 /**
+ * Get timing info for upcoming transit connections.
+ * On walking legs approaching transit: departure countdown + wait time.
+ * On transit legs: destination arrival time.
+ */
+export function getUpcomingTransitTiming(
+  currentTime: Date,
+  currentLeg: Leg,
+  nextLeg: Leg | undefined,
+  progressInLeg: number
+): {
+  destinationArrivalTime?: number
+  timeUntilNextDeparture?: number
+  waitTimeAtStop?: number
+} {
+  const mode = currentLeg.mode
+  const isWalkOrBike = mode === 'WALK' || mode === 'BICYCLE'
+  const isTransit =
+    mode === 'BUS' || mode === 'RAIL' || mode === 'SUBWAY' || mode === 'TRAM'
+
+  if (
+    isWalkOrBike &&
+    nextLeg &&
+    (nextLeg.mode === 'BUS' ||
+      nextLeg.mode === 'RAIL' ||
+      nextLeg.mode === 'SUBWAY' ||
+      nextLeg.mode === 'TRAM')
+  ) {
+    const remainingWalkSeconds =
+      (currentLeg.duration || 0) * (1 - progressInLeg)
+    const timeUntilNextDeparture =
+      (nextLeg.startTime - currentTime.getTime()) / 1000
+    const waitTimeAtStop = timeUntilNextDeparture - remainingWalkSeconds
+
+    return { timeUntilNextDeparture, waitTimeAtStop }
+  }
+
+  if (isTransit) {
+    return { destinationArrivalTime: currentLeg.endTime }
+  }
+
+  return {}
+}
+
+/**
  * Calculate comprehensive trip progress
  */
 export function calculateTripProgress(
@@ -262,15 +314,27 @@ export function calculateTripProgress(
   const transitInfo = getTransitProgress(currentLeg, progressInCurrentLeg)
   const walkingInfo = getWalkingInstruction(currentLeg, progressInCurrentLeg)
 
+  // Get upcoming transit timing
+  const nextLeg =
+    currentLegIndex < legs.length - 1 ? legs[currentLegIndex + 1] : undefined
+  const timingInfo = getUpcomingTransitTiming(
+    currentTime,
+    currentLeg,
+    nextLeg,
+    progressInCurrentLeg
+  )
+
   return {
     currentLegIndex,
     currentLegProgress,
+    currentTime,
     estimatedArrival,
     overallProgress,
     status,
     timeRemaining,
     ...transitInfo,
-    ...walkingInfo
+    ...walkingInfo,
+    ...timingInfo
   }
 }
 

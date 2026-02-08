@@ -5,6 +5,9 @@ import type { Leg } from '@opentripplanner/types'
 import type { TripProgress } from '../../util/go-mode/progress-calculator'
 
 import {
+  CountdownCard,
+  CountdownLabel,
+  CountdownValue,
   DistanceDisplay,
   ETALabel,
   InfoCardLabel,
@@ -63,6 +66,25 @@ const WalkingNavigation = ({ leg, nextLeg, progress }: Props) => {
 
   const isNearDestination = progress.currentLegProgress > 90
 
+  const isNextLegTransit =
+    nextLeg &&
+    (nextLeg.mode === 'BUS' ||
+      nextLeg.mode === 'RAIL' ||
+      nextLeg.mode === 'SUBWAY' ||
+      nextLeg.mode === 'TRAM')
+
+  const getUrgency = (waitSeconds: number): 'ok' | 'tight' | 'late' => {
+    if (waitSeconds < 0) return 'late'
+    if (waitSeconds < 300) return 'tight'
+    return 'ok'
+  }
+
+  const formatMinutes = (seconds: number): string => {
+    const mins = Math.round(seconds / 60)
+    if (mins <= 0) return '<1 min'
+    return `${mins} min`
+  }
+
   return (
     <WalkingContainer>
       {/* Mode Header */}
@@ -102,6 +124,48 @@ const WalkingNavigation = ({ leg, nextLeg, progress }: Props) => {
             </DistanceDisplay>
           )}
         </NavigationInstruction>
+      )}
+
+      {/* Transit Departure Countdown */}
+      {isNextLegTransit && progress.timeUntilNextDeparture !== undefined && (
+        <CountdownCard
+          $urgency={getUrgency(
+            progress.waitTimeAtStop ?? progress.timeUntilNextDeparture
+          )}
+        >
+          <CountdownLabel>
+            {nextLeg.routeShortName || nextLeg.routeLongName}
+          </CountdownLabel>
+          <CountdownValue
+            $urgency={getUrgency(
+              progress.waitTimeAtStop ?? progress.timeUntilNextDeparture
+            )}
+          >
+            {intl.formatMessage(
+              {
+                defaultMessage: 'Departs in {time}',
+                id: 'components.GoMode.departsIn'
+              },
+              { time: formatMinutes(progress.timeUntilNextDeparture) }
+            )}
+          </CountdownValue>
+          {progress.waitTimeAtStop !== undefined && (
+            <div style={{ fontSize: '13px', marginTop: '4px' }}>
+              {progress.waitTimeAtStop < 0
+                ? intl.formatMessage({
+                    defaultMessage: 'Hurry! You may miss the bus',
+                    id: 'components.GoMode.hurryWarning'
+                  })
+                : intl.formatMessage(
+                    {
+                      defaultMessage: '~{time} wait at stop',
+                      id: 'components.GoMode.waitAtStop'
+                    },
+                    { time: formatMinutes(progress.waitTimeAtStop) }
+                  )}
+            </div>
+          )}
+        </CountdownCard>
       )}
 
       {/* Next Leg Preview */}

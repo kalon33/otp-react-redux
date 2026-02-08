@@ -289,6 +289,12 @@ const GoModeScreen = ({
                       {goMode.simulation.totalPoints} (
                       {goMode.simulation.speedMultiplier}x)
                     </SimProgress>
+                    {goMode.progress?.currentTime && (
+                      <SimProgress aria-label="Simulated clock">
+                        {'\u{1F550}'}{' '}
+                        {goMode.progress.currentTime.toLocaleTimeString()}
+                      </SimProgress>
+                    )}
                   </>
                 )}
                 {goMode.simulation.status === 'paused' && (
@@ -311,6 +317,12 @@ const GoModeScreen = ({
                       paused at {goMode.simulation.pointIndex}/
                       {goMode.simulation.totalPoints}
                     </SimProgress>
+                    {goMode.progress?.currentTime && (
+                      <SimProgress aria-label="Simulated clock">
+                        {'\u{1F550}'}{' '}
+                        {goMode.progress.currentTime.toLocaleTimeString()}
+                      </SimProgress>
+                    )}
                   </>
                 )}
               </SimToolbar>

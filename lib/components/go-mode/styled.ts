@@ -195,6 +195,54 @@ export const NextLegPreview = styled.div`
   padding: 12px;
 `
 
+export const CountdownCard = styled.div<{ $urgency: 'ok' | 'tight' | 'late' }>`
+  background-color: ${(props) => {
+    switch (props.$urgency) {
+      case 'ok':
+        return '#e8f5e9'
+      case 'tight':
+        return '#fff8e1'
+      case 'late':
+        return '#ffebee'
+    }
+  }};
+  border-left: 4px solid
+    ${(props) => {
+      switch (props.$urgency) {
+        case 'ok':
+          return '#4caf50'
+        case 'tight':
+          return '#ff9800'
+        case 'late':
+          return '#f44336'
+      }
+    }};
+  border-radius: 4px;
+  margin-bottom: 12px;
+  padding: 12px;
+`
+
+export const CountdownValue = styled.div<{ $urgency: 'ok' | 'tight' | 'late' }>`
+  color: ${(props) => {
+    switch (props.$urgency) {
+      case 'ok':
+        return '#2e7d32'
+      case 'tight':
+        return '#e65100'
+      case 'late':
+        return '#c62828'
+    }
+  }};
+  font-size: 18px;
+  font-weight: bold;
+`
+
+export const CountdownLabel = styled.div`
+  color: #666;
+  font-size: 12px;
+  margin-bottom: 2px;
+`
+
 export const SmallProgressTrack = styled.div`
   background-color: #e0e0e0;
   border-radius: 3px;

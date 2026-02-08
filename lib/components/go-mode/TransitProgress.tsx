@@ -114,6 +114,24 @@ const TransitProgress = ({ leg, progress }: Props) => {
         </InfoCard>
       )}
 
+      {/* Arrival Time */}
+      {progress.destinationArrivalTime && (
+        <InfoCard $bgColor="#f3e5f5">
+          <InfoCardLabel $color="#7b1fa2">
+            {intl.formatMessage({
+              defaultMessage: 'Arriving at',
+              id: 'components.GoMode.arrivingAt'
+            })}
+          </InfoCardLabel>
+          <InfoCardValue $color="#7b1fa2">
+            {intl.formatTime(new Date(progress.destinationArrivalTime), {
+              hour: 'numeric',
+              minute: '2-digit'
+            })}
+          </InfoCardValue>
+        </InfoCard>
+      )}
+
       {/* Destination */}
       <InfoCard $bgColor="#e3f2fd">
         <InfoCardLabel $color="#1976d2">
