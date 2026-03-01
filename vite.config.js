@@ -131,8 +131,15 @@ export default defineConfig({
   ],
   server: {
     allowedHosts: ['tre.hopto.org'],
-    host: '0.0.0.0',
+    host: '127.0.0.1',
     port: 9967,
+    proxy: {
+      '/pelias': {
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/pelias/, ''),
+        target: 'http://localhost:4000/v1'
+      }
+    },
     strictPort: true
   }
 })
