@@ -61,8 +61,10 @@ const Toast = styled.div<{ $dismissing: boolean; $priority: string }>`
   font-size: 14px;
   font-weight: 500;
   margin: 0 8px 8px;
+  overflow-wrap: break-word;
   padding: 12px 16px;
   pointer-events: auto;
+  word-wrap: break-word;
 `
 
 const AUTO_DISMISS_MS = 5000

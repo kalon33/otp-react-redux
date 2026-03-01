@@ -1,68 +1,41 @@
 import { useIntl } from 'react-intl'
-import React from 'react'
+import React, { useMemo } from 'react'
 import type { Leg } from '@opentripplanner/types'
 
+import { mergeAndSortStopTimes } from '../../util/stop-times'
 import type { TripProgress } from '../../util/go-mode/progress-calculator'
 
 import {
+  AlternativeDeparture,
   CountdownCard,
   CountdownLabel,
   CountdownValue,
-  DistanceDisplay,
-  ETALabel,
   InfoCardLabel,
   InfoCardValue,
-  InstructionText,
-  ModeIcon,
-  NavigationInstruction,
   NextLegPreview,
-  RouteDirection,
-  RouteHeader,
-  RouteName,
-  SmallProgressFill,
-  SmallProgressTrack,
+  ResetButton,
+  UseNextButton,
   WalkingContainer
 } from './styled'
 
 interface Props {
+  boardingStopData?: any
+  departureOverride?: number | null
   leg: Leg
   nextLeg?: Leg
+  onSelectDeparture?: (epochMs: number | null) => void
   progress: TripProgress
 }
 
-const WalkingNavigation = ({ leg, nextLeg, progress }: Props) => {
+const WalkingNavigation = ({
+  boardingStopData,
+  departureOverride,
+  leg,
+  nextLeg,
+  onSelectDeparture,
+  progress
+}: Props) => {
   const intl = useIntl()
-
-  const getModeIcon = (mode: string): string => {
-    switch (mode) {
-      case 'WALK':
-        return '🚶'
-      case 'BICYCLE':
-        return '🚴'
-      default:
-        return '🚶'
-    }
-  }
-
-  const formatDistance = (meters: number): string => {
-    if (meters < 100) {
-      return intl.formatMessage(
-        {
-          defaultMessage: '{meters}m',
-          id: 'components.GoMode.distanceMeters'
-        },
-        { meters: Math.round(meters) }
-      )
-    }
-    const km = (meters / 1000).toFixed(1)
-    return intl.formatMessage(
-      {
-        defaultMessage: '{km}km',
-        id: 'components.GoMode.distanceKilometers'
-      },
-      { km }
-    )
-  }
 
   const isNearDestination = progress.currentLegProgress > 90
 
@@ -85,36 +58,113 @@ const WalkingNavigation = ({ leg, nextLeg, progress }: Props) => {
     return `${mins} min`
   }
 
+  const formatClockTime = (epochMs: number): string => {
+    return new Date(epochMs).toLocaleTimeString([], {
+      hour: 'numeric',
+      minute: '2-digit'
+    })
+  }
+
+  const walkSecondsRemaining = Math.max(
+    0,
+    (leg.duration || 0) * (1 - progress.currentLegProgress / 100)
+  )
+
+  // Determine the effective departure time for display
+  const effectiveDepartureMs =
+    departureOverride || progress.plannedDepartureTime
+
+  // Filter upcoming alternative departures for the same route at the boarding stop
+  const alternativeDepartures = useMemo(() => {
+    if (!boardingStopData || !isNextLegTransit || !nextLeg) return []
+
+    try {
+      const allStopTimes = mergeAndSortStopTimes(boardingStopData)
+      const nowMs = progress.currentTime.getTime()
+      const targetedDepartureMs = effectiveDepartureMs || nextLeg.startTime
+
+      // Match by route GTFS ID
+      const nextLegRouteId = (nextLeg as any).routeId || nextLeg.routeId
+      return allStopTimes
+        .filter((st: any) => {
+          // Match route
+          const stRouteId = st.route?.gtfsId || st.trip?.route?.gtfsId
+          if (!stRouteId || !nextLegRouteId) return false
+          if (stRouteId !== nextLegRouteId) return false
+
+          // Calculate actual departure epoch ms
+          const depSeconds = st.realtimeDeparture ?? st.scheduledDeparture
+          const depMs = (st.serviceDay + depSeconds) * 1000
+
+          // Must be in the future
+          if (depMs <= nowMs) return false
+
+          // Exclude the currently-targeted departure (within 60s tolerance)
+          if (Math.abs(depMs - targetedDepartureMs) < 60000) return false
+
+          return true
+        })
+        .slice(0, 3)
+        .map((st: any) => {
+          const depSeconds = st.realtimeDeparture ?? st.scheduledDeparture
+          const depMs = (st.serviceDay + depSeconds) * 1000
+          return { departureMs: depMs }
+        })
+    } catch {
+      return []
+    }
+  }, [
+    boardingStopData,
+    isNextLegTransit,
+    nextLeg,
+    progress.currentTime,
+    effectiveDepartureMs
+  ])
+
+  // Show alternatives when timing is tight (wait < 60s) or late
+  const showAlternatives =
+    isNextLegTransit &&
+    alternativeDepartures.length > 0 &&
+    progress.waitTimeAtStop !== undefined &&
+    progress.waitTimeAtStop < 60
+
   return (
     <WalkingContainer>
-      {/* Mode Header */}
-      <RouteHeader>
-        <ModeIcon>{getModeIcon(leg.mode)}</ModeIcon>
-        <div style={{ flex: 1 }}>
-          <RouteName>
-            {leg.mode === 'WALK'
-              ? intl.formatMessage({
-                  defaultMessage: 'Walking',
-                  id: 'components.GoMode.walking'
-                })
-              : intl.formatMessage({
-                  defaultMessage: 'Biking',
-                  id: 'components.GoMode.biking'
-                })}
-          </RouteName>
-          <RouteDirection>
-            {intl.formatMessage(
-              {
-                defaultMessage: 'to {destination}',
-                id: 'components.GoMode.walkingTo'
-              },
-              { destination: leg.to.name }
-            )}
-          </RouteDirection>
-        </div>
-      </RouteHeader>
+      {/* Navigation instruction with time remaining -- compact inline */}
+      <div
+        style={{
+          alignItems: 'center',
+          display: 'flex',
+          justifyContent: 'space-between'
+        }}
+      >
+        <span
+          style={{
+            fontSize: '15px',
+            fontWeight: 500,
+            minWidth: 0,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap' as const
+          }}
+        >
+          {progress.nextInstruction || `Walk to ${leg.to.name}`}
+        </span>
+        <span
+          style={{
+            color: '#2196f3',
+            flexShrink: 0,
+            fontSize: '15px',
+            fontWeight: 'bold',
+            marginLeft: '12px',
+            whiteSpace: 'nowrap'
+          }}
+        >
+          {formatMinutes(walkSecondsRemaining)}
+        </span>
+      </div>
 
-      {/* Transit Departure Countdown - MOST IMPORTANT */}
+      {/* Transit Departure Countdown */}
       {isNextLegTransit && progress.timeUntilNextDeparture !== undefined && (
         <CountdownCard
           $urgency={getUrgency(
@@ -129,13 +179,19 @@ const WalkingNavigation = ({ leg, nextLeg, progress }: Props) => {
               progress.waitTimeAtStop ?? progress.timeUntilNextDeparture
             )}
           >
-            {intl.formatMessage(
-              {
-                defaultMessage: 'Departs in {time}',
-                id: 'components.GoMode.departsIn'
-              },
-              { time: formatMinutes(progress.timeUntilNextDeparture) }
-            )}
+            {effectiveDepartureMs
+              ? `${formatClockTime(
+                  effectiveDepartureMs
+                )} \u2014 ${formatMinutes(
+                  progress.timeUntilNextDeparture
+                )} away`
+              : intl.formatMessage(
+                  {
+                    defaultMessage: 'Departs in {time}',
+                    id: 'components.GoMode.departsIn'
+                  },
+                  { time: formatMinutes(progress.timeUntilNextDeparture) }
+                )}
           </CountdownValue>
           {progress.waitTimeAtStop !== undefined && (
             <div style={{ fontSize: '13px', marginTop: '4px' }}>
@@ -153,19 +209,66 @@ const WalkingNavigation = ({ leg, nextLeg, progress }: Props) => {
                   )}
             </div>
           )}
-        </CountdownCard>
-      )}
 
-      {/* Navigation Instruction */}
-      {progress.nextInstruction && (
-        <NavigationInstruction $highlight={isNearDestination}>
-          <InstructionText>{progress.nextInstruction}</InstructionText>
-          {progress.distanceToNextTurn !== undefined && (
-            <DistanceDisplay>
-              {formatDistance(progress.distanceToNextTurn)}
-            </DistanceDisplay>
+          {/* Override reset link */}
+          {progress.departureIsOverridden && onSelectDeparture && (
+            <div style={{ marginTop: '6px' }}>
+              <ResetButton
+                onClick={() => onSelectDeparture(null)}
+                type="button"
+              >
+                {intl.formatMessage({
+                  defaultMessage: 'Reset to planned',
+                  id: 'components.GoMode.resetToPlanned'
+                })}
+              </ResetButton>
+            </div>
           )}
-        </NavigationInstruction>
+
+          {/* Alternative departures */}
+          {showAlternatives &&
+            onSelectDeparture &&
+            alternativeDepartures.map(
+              (alt: { departureMs: number }, idx: number) => {
+                const minsAway = Math.round(
+                  (alt.departureMs - progress.currentTime.getTime()) / 60000
+                )
+                return (
+                  <AlternativeDeparture key={idx}>
+                    <span
+                      style={{
+                        fontSize: '13px',
+                        minWidth: 0,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap' as const
+                      }}
+                    >
+                      {intl.formatMessage(
+                        {
+                          defaultMessage: 'Next: {time} ({mins} min away)',
+                          id: 'components.GoMode.nextDeparture'
+                        },
+                        {
+                          mins: minsAway,
+                          time: formatClockTime(alt.departureMs)
+                        }
+                      )}
+                    </span>
+                    <UseNextButton
+                      onClick={() => onSelectDeparture(alt.departureMs)}
+                      type="button"
+                    >
+                      {intl.formatMessage({
+                        defaultMessage: 'Use this',
+                        id: 'components.GoMode.useThisDeparture'
+                      })}
+                    </UseNextButton>
+                  </AlternativeDeparture>
+                )
+              }
+            )}
+        </CountdownCard>
       )}
 
       {/* Next Leg Preview */}
@@ -196,29 +299,6 @@ const WalkingNavigation = ({ leg, nextLeg, progress }: Props) => {
           </InfoCardValue>
         </NextLegPreview>
       )}
-
-      {/* Progress Bar */}
-      <div style={{ marginTop: '16px' }}>
-        <ETALabel>
-          {intl.formatMessage({
-            defaultMessage: 'Progress',
-            id: 'components.GoMode.progress'
-          })}
-        </ETALabel>
-        <SmallProgressTrack>
-          <SmallProgressFill $width={progress.currentLegProgress} />
-        </SmallProgressTrack>
-        <div
-          style={{
-            color: '#666',
-            fontSize: '12px',
-            marginTop: '4px',
-            textAlign: 'right'
-          }}
-        >
-          {Math.round(progress.currentLegProgress)}%
-        </div>
-      </div>
     </WalkingContainer>
   )
 }

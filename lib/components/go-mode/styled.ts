@@ -40,16 +40,25 @@ export const HeaderRow = styled.div`
   align-items: center;
   display: flex;
   justify-content: space-between;
+  min-width: 0;
+  overflow: hidden;
 `
 
-export const ETAValue = styled.div`
+export const ETAValue = styled.div<{ $color?: string }>`
+  color: ${(props) => props.$color || 'inherit'};
   font-size: 24px;
   font-weight: bold;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 `
 
 export const ETALabel = styled.div`
   color: #666;
   font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 `
 
 export const TimeRemainingValue = styled.div`
@@ -70,7 +79,7 @@ export const StatusBadge = styled.div<{ $color: string }>`
 // CurrentLegPanel styles
 export const LegPanelContainer = styled.div`
   background-color: #fff;
-  border-top: 2px solid #e0e0e0;
+  border-bottom: 1px solid #e0e0e0;
   flex: 0 0 auto;
   max-height: 50%;
   overflow-y: auto;
@@ -78,13 +87,15 @@ export const LegPanelContainer = styled.div`
 
 // TransitProgress styles
 export const TransitContainer = styled.div`
-  padding: 16px;
+  padding: 8px 12px;
 `
 
 export const RouteHeader = styled.div`
   align-items: center;
   display: flex;
   margin-bottom: 16px;
+  min-width: 0;
+  overflow: hidden;
 `
 
 export const ModeIcon = styled.span`
@@ -95,11 +106,17 @@ export const ModeIcon = styled.span`
 export const RouteName = styled.div`
   font-size: 18px;
   font-weight: bold;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 `
 
 export const RouteDirection = styled.div`
   color: #666;
   font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 `
 
 export const AlertBanner = styled.div<{ $severity: 'urgent' | 'warning' }>`
@@ -111,8 +128,10 @@ export const AlertBanner = styled.div<{ $severity: 'urgent' | 'warning' }>`
   font-size: 16px;
   font-weight: bold;
   margin-bottom: 16px;
+  overflow-wrap: break-word;
   padding: 16px;
   text-align: center;
+  word-wrap: break-word;
 `
 
 export const StopsCount = styled.div<{ $alert: boolean }>`
@@ -155,6 +174,9 @@ export const InfoCardValue = styled.div<{
 }>`
   font-size: 16px;
   font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   ${(props) =>
     props.$color &&
     css`
@@ -164,7 +186,7 @@ export const InfoCardValue = styled.div<{
 
 // WalkingNavigation styles
 export const WalkingContainer = styled.div`
-  padding: 16px;
+  padding: 8px 12px;
 `
 
 export const NavigationInstruction = styled.div<{ $highlight: boolean }>`
@@ -180,6 +202,9 @@ export const InstructionText = styled.div`
   font-size: 16px;
   font-weight: 500;
   margin-bottom: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 `
 
 export const DistanceDisplay = styled.div`
@@ -218,8 +243,8 @@ export const CountdownCard = styled.div<{ $urgency: 'ok' | 'tight' | 'late' }>`
       }
     }};
   border-radius: 4px;
-  margin-bottom: 12px;
-  padding: 12px;
+  margin-top: 8px;
+  padding: 10px 12px;
 `
 
 export const CountdownValue = styled.div<{ $urgency: 'ok' | 'tight' | 'late' }>`
@@ -235,12 +260,18 @@ export const CountdownValue = styled.div<{ $urgency: 'ok' | 'tight' | 'late' }>`
   }};
   font-size: 18px;
   font-weight: bold;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 `
 
 export const CountdownLabel = styled.div`
   color: #666;
   font-size: 12px;
   margin-bottom: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 `
 
 export const SmallProgressTrack = styled.div`
@@ -258,6 +289,49 @@ export const SmallProgressFill = styled.div<{ $width: number }>`
   width: ${(props) => props.$width}%;
 `
 
+// Alternative departure styles
+export const AlternativeDeparture = styled.div`
+  align-items: center;
+  border-top: 1px dashed #ccc;
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  min-width: 0;
+  overflow: hidden;
+  padding-top: 8px;
+`
+
+export const UseNextButton = styled.button`
+  background-color: #2196f3;
+  border: none;
+  border-radius: 4px;
+  color: white;
+  cursor: pointer;
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 500;
+  margin-left: 8px;
+  padding: 6px 10px;
+
+  &:active {
+    opacity: 0.8;
+  }
+`
+
+export const ResetButton = styled.button`
+  background: none;
+  border: none;
+  color: #2196f3;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0;
+  text-decoration: underline;
+
+  &:active {
+    opacity: 0.7;
+  }
+`
+
 // GoModeMap styles
 export const MapContainer = styled.div`
   flex: 1 1 40%;
@@ -273,14 +347,27 @@ export const DeviationWarning = styled.div`
   font-size: 14px;
   font-weight: 500;
   left: 50%;
+  max-width: calc(100% - 20px);
+  overflow-wrap: break-word;
   padding: 8px 16px;
   position: absolute;
   top: 10px;
   transform: translateX(-50%);
+  word-wrap: break-word;
   z-index: 1001;
 `
 
 // GoModeScreen styles
+export const FullScreenWrapper = styled.div`
+  background: #fff;
+  bottom: 0;
+  left: 0;
+  position: fixed;
+  right: 0;
+  top: 0;
+  z-index: 1000;
+`
+
 export const ScreenMain = styled.main`
   display: flex;
   flex-direction: column;
@@ -312,8 +399,10 @@ export const RetryButton = styled.button`
 export const GpsWarningBanner = styled.div`
   background: #ff9800;
   color: white;
+  overflow-wrap: break-word;
   padding: 10px;
   text-align: center;
+  word-wrap: break-word;
 `
 
 // Dev simulation toolbar styles
