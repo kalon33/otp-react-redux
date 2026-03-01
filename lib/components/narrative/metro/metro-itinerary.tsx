@@ -495,6 +495,25 @@ class MetroItinerary extends NarrativeItinerary {
                     setActiveItinerary={setActiveItinerary}
                     showArrivals={arrivesAt}
                   />
+                  <span
+                    style={{
+                      color: '#666',
+                      fontSize: '90%',
+                      marginLeft: '0.5ch'
+                    }}
+                  >
+                    {arrivesAt ? (
+                      <>
+                        ({'departs '}
+                        <FormattedTime value={itinerary.startTime} />)
+                      </>
+                    ) : (
+                      <>
+                        ({'arrives '}
+                        <FormattedTime value={itinerary.endTime} />)
+                      </>
+                    )}
+                  </span>
                   {showInlineItinerarySummary && (
                     <>
                       {' '}
