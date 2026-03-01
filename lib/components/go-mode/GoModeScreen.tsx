@@ -5,12 +5,12 @@ import React, { useEffect, useState } from 'react'
 import * as goModeActions from '../../actions/go-mode'
 import * as uiActions from '../../actions/ui'
 import { MobileScreens } from '../../actions/ui-constants'
-import MobileContainer from '../mobile/container'
 import MobileNavigationBar from '../mobile/navigation-bar'
 import type { GoModeState } from '../../reducers/go-mode'
 
 import {
   ErrorMessage,
+  FullScreenWrapper,
   GpsWarningBanner,
   LoadingMessage,
   RetryButton,
@@ -22,16 +22,18 @@ import {
   SimToolbar
 } from './styled'
 import CurrentLegPanel from './CurrentLegPanel'
-import GoModeHeader from './GoModeHeader'
 import GoModeMap from './GoModeMap'
 import GoModeNotifications from './GoModeNotifications'
 
 interface Props {
   beginGoMode: (itinerary: any) => void
+  boardingStopData: any
+  departureOverride: number | null
   endGoMode: () => void
   goMode: GoModeState
   pauseGpsSimulation: () => void
   resumeGpsSimulation: () => void
+  setDepartureOverride: (epochMs: number | null) => void
   setMobileScreen: (screen: number) => void
   startGpsSimulation: (speedMultiplier?: number) => void
   stopGpsSimulation: () => void
@@ -39,10 +41,13 @@ interface Props {
 
 const GoModeScreen = ({
   beginGoMode,
+  boardingStopData,
+  departureOverride,
   endGoMode,
   goMode,
   pauseGpsSimulation,
   resumeGpsSimulation,
+  setDepartureOverride,
   setMobileScreen,
   startGpsSimulation,
   stopGpsSimulation
@@ -144,7 +149,7 @@ const GoModeScreen = ({
     }
 
     return (
-      <MobileContainer>
+      <FullScreenWrapper>
         <MobileNavigationBar
           headerText={intl.formatMessage({
             defaultMessage: 'GPS Error',
@@ -162,13 +167,13 @@ const GoModeScreen = ({
             })}
           </RetryButton>
         </LoadingMessage>
-      </MobileContainer>
+      </FullScreenWrapper>
     )
   }
 
   if (!goMode.activeItinerary || !goMode.progress) {
     return (
-      <MobileContainer>
+      <FullScreenWrapper>
         <MobileNavigationBar
           headerText={intl.formatMessage({
             defaultMessage: 'Starting Trip...',
@@ -185,28 +190,35 @@ const GoModeScreen = ({
             })}
           </p>
         </LoadingMessage>
-      </MobileContainer>
+      </FullScreenWrapper>
     )
   }
 
   const currentLeg =
     goMode.activeItinerary.legs[goMode.progress.currentLegIndex]
 
+  const TRANSIT_MODES = new Set(['BUS', 'FERRY', 'RAIL', 'SUBWAY', 'TRAM'])
+  const isTransit = TRANSIT_MODES.has(currentLeg.mode)
+
   return (
-    <MobileContainer>
+    <FullScreenWrapper>
       <MobileNavigationBar
-        headerText={intl.formatMessage({
-          defaultMessage: 'Trip in Progress',
-          id: 'components.GoMode.header'
-        })}
+        headerText={isTransit ? currentLeg.to.name : ''}
         onBackClicked={handleExit}
         showBackButton
       />
       <ScreenMain>
-        <GoModeNotifications />
-        <GoModeHeader
-          itinerary={goMode.activeItinerary}
-          onExit={handleExit}
+        <CurrentLegPanel
+          boardingStopData={boardingStopData}
+          departureOverride={departureOverride}
+          leg={currentLeg}
+          nextLeg={
+            goMode.progress.currentLegIndex <
+            goMode.activeItinerary.legs.length - 1
+              ? goMode.activeItinerary.legs[goMode.progress.currentLegIndex + 1]
+              : undefined
+          }
+          onSelectDeparture={setDepartureOverride}
           progress={goMode.progress}
         />
 
@@ -216,17 +228,6 @@ const GoModeScreen = ({
           followUser={goMode.ui.mapFollowUser}
           itinerary={goMode.activeItinerary}
           routeMatch={goMode.routeMatch}
-        />
-
-        <CurrentLegPanel
-          leg={currentLeg}
-          nextLeg={
-            goMode.progress.currentLegIndex <
-            goMode.activeItinerary.legs.length - 1
-              ? goMode.activeItinerary.legs[goMode.progress.currentLegIndex + 1]
-              : undefined
-          }
-          progress={goMode.progress}
         />
 
         {goMode.tracking.error && (
@@ -330,13 +331,37 @@ const GoModeScreen = ({
           </>
         )}
       </ScreenMain>
-    </MobileContainer>
+    </FullScreenWrapper>
   )
 }
 
 const mapStateToProps = (state: any) => {
+  const goMode = state.otp.goMode
+  let boardingStopData = null
+
+  // When on a walking/biking leg approaching transit, look up stop data
+  if (goMode?.isActive && goMode?.progress && goMode?.activeItinerary) {
+    const legs = goMode.activeItinerary.legs
+    const currentLegIndex = goMode.progress.currentLegIndex
+    const currentLeg = legs[currentLegIndex]
+    const nextLeg =
+      currentLegIndex < legs.length - 1 ? legs[currentLegIndex + 1] : undefined
+
+    if (
+      currentLeg &&
+      (currentLeg.mode === 'WALK' || currentLeg.mode === 'BICYCLE') &&
+      nextLeg?.transitLeg &&
+      (nextLeg as any).from?.stopId
+    ) {
+      const stopId = (nextLeg as any).from.stopId
+      boardingStopData = state.otp.transitIndex?.stops?.[stopId] || null
+    }
+  }
+
   return {
-    goMode: state.otp.goMode
+    boardingStopData,
+    departureOverride: goMode?.departureOverride ?? null,
+    goMode
   }
 }
 
@@ -345,6 +370,7 @@ const mapDispatchToProps = {
   endGoMode: goModeActions.endGoMode,
   pauseGpsSimulation: goModeActions.pauseGpsSimulation,
   resumeGpsSimulation: goModeActions.resumeGpsSimulation,
+  setDepartureOverride: goModeActions.setDepartureOverride,
   setMobileScreen: uiActions.setMobileScreen,
   startGpsSimulation: goModeActions.startGpsSimulation,
   stopGpsSimulation: goModeActions.stopGpsSimulation

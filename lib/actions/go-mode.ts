@@ -12,6 +12,7 @@ import {
   shouldTransitionToNextLeg
 } from '../util/go-mode/position-matching'
 
+import { findStopTimesForStop } from './apiV2'
 import { MobileScreens } from './ui-constants'
 import { setMobileScreen } from './ui'
 import type { NotificationEvent } from '../util/go-mode/notification-service'
@@ -65,6 +66,7 @@ export const START_GPS_SIMULATION = 'START_GPS_SIMULATION'
 export const STOP_GPS_SIMULATION = 'STOP_GPS_SIMULATION'
 export const PAUSE_GPS_SIMULATION = 'PAUSE_GPS_SIMULATION'
 export const RESUME_GPS_SIMULATION = 'RESUME_GPS_SIMULATION'
+export const SET_DEPARTURE_OVERRIDE = 'SET_DEPARTURE_OVERRIDE'
 export const UPDATE_SIMULATION_PROGRESS = 'UPDATE_SIMULATION_PROGRESS'
 
 // Simple action creators
@@ -83,6 +85,9 @@ export const setTrackingError = createAction<GeolocationPositionError | null>(
 export const toggleMapFollow = createAction(TOGGLE_MAP_FOLLOW)
 export const updateTrackingInterval = createAction<{ interval: number }>(
   UPDATE_TRACKING_INTERVAL
+)
+export const setDepartureOverride = createAction<number | null>(
+  SET_DEPARTURE_OVERRIDE
 )
 export const setNotificationConfig = createAction<{
   enabled?: boolean
@@ -114,12 +119,29 @@ function getTrackingIntervalForLeg(leg: Leg | undefined): number {
  * Start Go Mode tracking for an itinerary
  */
 export function beginGoMode(itinerary: Itinerary) {
-  return async function (dispatch: any) {
+  return async function (dispatch: any, getState: any) {
     // Set state and navigate to Go Mode screen synchronously first,
     // before any async work, to avoid race with the GoModeScreen useEffect
     // that redirects away when isActive is false.
     dispatch(startGoMode({ itinerary }))
     dispatch(setMobileScreen(MobileScreens.GO_MODE))
+
+    // Pre-fetch stop times for all transit boarding stops
+    const today = new Date().toISOString().split('T')[0]
+    for (const leg of itinerary.legs) {
+      if (leg.transitLeg && (leg as any).from?.stopId) {
+        try {
+          dispatch(
+            findStopTimesForStop({
+              date: today,
+              stopId: (leg as any).from.stopId
+            })
+          )
+        } catch {
+          // Silently ignore — departure display degrades gracefully
+        }
+      }
+    }
 
     // Expose GPS simulation on window for dev console access
     const w = window as any
@@ -361,7 +383,13 @@ export function handlePositionUpdate(position: GeolocationPosition) {
 
     // Calculate progress — use simulated clock during simulation, real time for live GPS
     const currentTime = getCurrentTime()
-    const progress = calculateTripProgress(currentTime, itinerary, routeMatch)
+    const departureOverride = goMode.departureOverride ?? null
+    const progress = calculateTripProgress(
+      currentTime,
+      itinerary,
+      routeMatch,
+      departureOverride
+    )
 
     dispatch(updateProgress(progress))
 

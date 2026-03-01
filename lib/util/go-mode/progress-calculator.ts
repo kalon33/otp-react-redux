@@ -16,6 +16,8 @@ export interface TripProgress {
   // Time used for calculations (simulated or real)
   currentTime: Date
   delay?: number
+  // True when departure override is active (user selected a later bus)
+  departureIsOverridden?: boolean
   // Epoch ms — arrival at current transit leg's destination
   destinationArrivalTime?: number
   distanceToNextTurn?: number
@@ -27,6 +29,8 @@ export interface TripProgress {
 
   nextStopName?: string
   overallProgress: number
+  // Epoch ms — the originally planned departure time from itinerary
+  plannedDepartureTime?: number
   // seconds
   status: TripStatus
 
@@ -229,9 +233,12 @@ export function getUpcomingTransitTiming(
   currentTime: Date,
   currentLeg: Leg,
   nextLeg: Leg | undefined,
-  progressInLeg: number
+  progressInLeg: number,
+  departureOverrideMs?: number | null
 ): {
+  departureIsOverridden?: boolean
   destinationArrivalTime?: number
+  plannedDepartureTime?: number
   timeUntilNextDeparture?: number
   waitTimeAtStop?: number
 } {
@@ -248,13 +255,20 @@ export function getUpcomingTransitTiming(
       nextLeg.mode === 'SUBWAY' ||
       nextLeg.mode === 'TRAM')
   ) {
+    const plannedDepartureTime = nextLeg.startTime
+    const effectiveDeparture = departureOverrideMs || nextLeg.startTime
     const remainingWalkSeconds =
       (currentLeg.duration || 0) * (1 - progressInLeg)
     const timeUntilNextDeparture =
-      (nextLeg.startTime - currentTime.getTime()) / 1000
+      (effectiveDeparture - currentTime.getTime()) / 1000
     const waitTimeAtStop = timeUntilNextDeparture - remainingWalkSeconds
 
-    return { timeUntilNextDeparture, waitTimeAtStop }
+    return {
+      departureIsOverridden: !!departureOverrideMs,
+      plannedDepartureTime,
+      timeUntilNextDeparture,
+      waitTimeAtStop
+    }
   }
 
   if (isTransit) {
@@ -270,7 +284,8 @@ export function getUpcomingTransitTiming(
 export function calculateTripProgress(
   currentTime: Date,
   itinerary: Itinerary,
-  routeMatch: RouteMatchResult | null
+  routeMatch: RouteMatchResult | null,
+  departureOverrideMs?: number | null
 ): TripProgress {
   const legs = itinerary.legs
   const currentLegIndex = routeMatch?.legIndex || 0
@@ -321,7 +336,8 @@ export function calculateTripProgress(
     currentTime,
     currentLeg,
     nextLeg,
-    progressInCurrentLeg
+    progressInCurrentLeg,
+    departureOverrideMs
   )
 
   return {

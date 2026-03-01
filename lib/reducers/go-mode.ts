@@ -5,6 +5,7 @@ import {
   ADD_NOTIFICATION,
   PAUSE_GPS_SIMULATION,
   RESUME_GPS_SIMULATION,
+  SET_DEPARTURE_OVERRIDE,
   SET_NOTIFICATION_CONFIG,
   SET_TRACKING_ERROR,
   START_GO_MODE,
@@ -32,6 +33,7 @@ export interface SimulationState {
 
 export interface GoModeState {
   activeItinerary: Itinerary | null
+  departureOverride: number | null
   isActive: boolean
 
   notifications: {
@@ -62,6 +64,7 @@ export interface GoModeState {
 
 const defaultState: GoModeState = {
   activeItinerary: null,
+  departureOverride: null,
   isActive: false,
 
   notifications: {
@@ -140,6 +143,11 @@ const goMode = handleActions<GoModeState, any>(
         ...state.simulation,
         status: 'running' as const
       }
+    }),
+
+    [SET_DEPARTURE_OVERRIDE]: (state, action) => ({
+      ...state,
+      departureOverride: action.payload
     }),
 
     [SET_NOTIFICATION_CONFIG]: (state, action) => {
@@ -223,6 +231,7 @@ const goMode = handleActions<GoModeState, any>(
 
       return {
         ...state,
+        departureOverride: null,
         routeMatch: state.routeMatch
           ? {
               ...state.routeMatch,
