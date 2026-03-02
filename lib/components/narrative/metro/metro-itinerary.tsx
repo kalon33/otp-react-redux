@@ -451,23 +451,47 @@ class MetroItinerary extends NarrativeItinerary {
                     <SecondaryInfo>{fareInfo}</SecondaryInfo>
                   )}
                   <SecondaryInfo>
-                    <FormattedMessage
-                      id="components.MetroUI.timeWalking"
-                      values={{
-                        time: (
-                          <FormattedDuration
-                            duration={
-                              /* If the walk time is truly zero, show 0. But if the walk time is just less 
-                              than a minute, round up to the nearest minute to avoid showing no walk time. */
-                              itinerary.walkTime > 0
-                                ? ensureAtLeastOneMinute(itinerary.walkTime)
-                                : itinerary.walkTime
-                            }
-                            includeSeconds={false}
+                    {(() => {
+                      const bikeTime = itinerary.legs
+                        .filter((leg: Leg) => leg.mode === 'BICYCLE')
+                        .reduce(
+                          (sum: number, leg: Leg) => sum + leg.duration,
+                          0
+                        )
+                      if (bikeTime > 0) {
+                        return (
+                          <FormattedMessage
+                            defaultMessage="{time} biking"
+                            id="components.MetroUI.timeBiking"
+                            values={{
+                              time: (
+                                <FormattedDuration
+                                  duration={ensureAtLeastOneMinute(bikeTime)}
+                                  includeSeconds={false}
+                                />
+                              )
+                            }}
                           />
                         )
-                      }}
-                    />
+                      }
+                      return (
+                        <FormattedMessage
+                          id="components.MetroUI.timeWalking"
+                          values={{
+                            time: (
+                              <FormattedDuration
+                                duration={
+                                  itinerary.walkTime > 0
+                                    ? ensureAtLeastOneMinute(itinerary.walkTime)
+                                    : itinerary.walkTime
+                                }
+                                includeSeconds={false}
+                              />
+                            )
+                          }}
+                        />
+                      )
+                    })()}
                   </SecondaryInfo>
                 </ItineraryDetails>
                 <DepartureTimes>
