@@ -158,35 +158,29 @@ export function beginGoMode(itinerary: Itinerary) {
       dispatch(resumeGpsSimulation())
     }
 
-    // Check geolocation permission
+    // Set initial tracking interval based on first leg
+    const interval = getTrackingIntervalForLeg(itinerary.legs[0])
+    dispatch(updateTrackingInterval({ interval }))
+
+    // Check geolocation permission — if denied, still allow simulation
+    let geoDenied = false
     if ('permissions' in navigator) {
       try {
         const result = await navigator.permissions.query({
           name: 'geolocation'
         })
         if (result.state === 'denied') {
-          dispatch(
-            setTrackingError({
-              code: 1,
-              message: 'Geolocation permission denied',
-              PERMISSION_DENIED: 1,
-              POSITION_UNAVAILABLE: 2,
-              TIMEOUT: 3
-            } as GeolocationPositionError)
-          )
-          return
+          geoDenied = true
         }
       } catch {
         // permissions API not supported, continue anyway
       }
     }
 
-    // Set initial tracking interval based on first leg
-    const interval = getTrackingIntervalForLeg(itinerary.legs[0])
-    dispatch(updateTrackingInterval({ interval }))
-
-    // Request location permission and start tracking
-    dispatch(startPositionTracking())
+    if (!geoDenied) {
+      // Request location permission and start tracking
+      dispatch(startPositionTracking())
+    }
   }
 }
 
