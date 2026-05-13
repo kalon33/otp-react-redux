@@ -1,6 +1,5 @@
 import { createAction } from 'redux-actions'
 import polyline from '@mapbox/polyline'
-import type { Itinerary, LatLngArray, Leg } from '@opentripplanner/types'
 
 import { calculateTripProgress } from '../util/go-mode/progress-calculator'
 import {
@@ -8,19 +7,29 @@ import {
   showNotification
 } from '../util/go-mode/notification-service'
 import {
+  findNearbyVehicles,
+  matchUserToVehicle,
+  shouldShowBoardingPrompt
+} from '../util/go-mode/vehicle-matching'
+import {
   matchPositionToRoute,
   shouldTransitionToNextLeg
 } from '../util/go-mode/position-matching'
+import type { Itinerary, LatLngArray, Leg } from '@opentripplanner/types'
 
-import { findStopTimesForStop } from './apiV2'
+import { findStopTimesForStop, getVehiclePositionsForRoute } from './apiV2'
 import { MobileScreens } from './ui-constants'
 import { setMobileScreen } from './ui'
 import type { NotificationEvent } from '../util/go-mode/notification-service'
+
 import type { RouteMatchResult } from '../util/go-mode/position-matching'
 import type { TripProgress } from '../util/go-mode/progress-calculator'
 
 // Module-scoped GPS polling interval ID (replaces window.__goModeIntervalId)
 let gpsPollingIntervalId: ReturnType<typeof setInterval> | null = null
+
+// Module-scoped vehicle position polling interval ID
+let vehiclePositionIntervalId: ReturnType<typeof setInterval> | null = null
 
 // Module-scoped visibilitychange handler for cleanup
 let visibilityChangeHandler: (() => void) | null = null
@@ -51,25 +60,35 @@ function getCurrentTime(): Date {
 }
 
 // Action types
-export const START_GO_MODE = 'START_GO_MODE'
-export const STOP_GO_MODE = 'STOP_GO_MODE'
-export const UPDATE_POSITION = 'UPDATE_POSITION'
-export const UPDATE_ROUTE_MATCH = 'UPDATE_ROUTE_MATCH'
-export const UPDATE_PROGRESS = 'UPDATE_PROGRESS'
-export const TRANSITION_LEG = 'TRANSITION_LEG'
 export const ADD_NOTIFICATION = 'ADD_NOTIFICATION'
-export const SET_TRACKING_ERROR = 'SET_TRACKING_ERROR'
-export const TOGGLE_MAP_FOLLOW = 'TOGGLE_MAP_FOLLOW'
-export const UPDATE_TRACKING_INTERVAL = 'UPDATE_TRACKING_INTERVAL'
-export const SET_NOTIFICATION_CONFIG = 'SET_NOTIFICATION_CONFIG'
-export const START_GPS_SIMULATION = 'START_GPS_SIMULATION'
-export const STOP_GPS_SIMULATION = 'STOP_GPS_SIMULATION'
+export const CLEAR_VEHICLE_MATCH = 'CLEAR_VEHICLE_MATCH'
+export const CONFIRM_VEHICLE = 'CONFIRM_VEHICLE'
+export const DISMISS_BOARDING_PROMPT = 'DISMISS_BOARDING_PROMPT'
 export const PAUSE_GPS_SIMULATION = 'PAUSE_GPS_SIMULATION'
 export const RESUME_GPS_SIMULATION = 'RESUME_GPS_SIMULATION'
 export const SET_DEPARTURE_OVERRIDE = 'SET_DEPARTURE_OVERRIDE'
+export const SET_NOTIFICATION_CONFIG = 'SET_NOTIFICATION_CONFIG'
+export const SET_TRACKING_ERROR = 'SET_TRACKING_ERROR'
+export const SET_TRANSIT_LEG_ENTERED = 'SET_TRANSIT_LEG_ENTERED'
+export const SHOW_BOARDING_PROMPT = 'SHOW_BOARDING_PROMPT'
+export const START_GO_MODE = 'START_GO_MODE'
+export const START_GPS_SIMULATION = 'START_GPS_SIMULATION'
+export const STOP_GO_MODE = 'STOP_GO_MODE'
+export const STOP_GPS_SIMULATION = 'STOP_GPS_SIMULATION'
+export const TOGGLE_MAP_FOLLOW = 'TOGGLE_MAP_FOLLOW'
+export const TRANSITION_LEG = 'TRANSITION_LEG'
+export const UPDATE_NEARBY_VEHICLES = 'UPDATE_NEARBY_VEHICLES'
+export const UPDATE_POSITION = 'UPDATE_POSITION'
+export const UPDATE_PROGRESS = 'UPDATE_PROGRESS'
+export const UPDATE_ROUTE_MATCH = 'UPDATE_ROUTE_MATCH'
 export const UPDATE_SIMULATION_PROGRESS = 'UPDATE_SIMULATION_PROGRESS'
+export const UPDATE_TRACKING_INTERVAL = 'UPDATE_TRACKING_INTERVAL'
+export const UPDATE_VEHICLE_MATCH = 'UPDATE_VEHICLE_MATCH'
 
 // Simple action creators
+export const clearVehicleMatch = createAction(CLEAR_VEHICLE_MATCH)
+export const dismissBoardingPrompt = createAction(DISMISS_BOARDING_PROMPT)
+export const showBoardingPromptAction = createAction(SHOW_BOARDING_PROMPT)
 export const startGoMode = createAction<{ itinerary: Itinerary }>(START_GO_MODE)
 export const stopGoMode = createAction(STOP_GO_MODE)
 export const updatePosition = createAction<GeolocationPosition>(UPDATE_POSITION)
@@ -162,6 +181,12 @@ export function beginGoMode(itinerary: Itinerary) {
     const interval = getTrackingIntervalForLeg(itinerary.legs[0])
     dispatch(updateTrackingInterval({ interval }))
 
+    // Start vehicle tracking if first leg is transit
+    const firstLeg = itinerary.legs[0]
+    if (firstLeg?.transitLeg && (firstLeg as any).routeId) {
+      dispatch(startVehicleTracking((firstLeg as any).routeId))
+    }
+
     // Check geolocation permission — if denied, still allow simulation
     let geoDenied = false
     if ('permissions' in navigator) {
@@ -193,6 +218,12 @@ export function endGoMode() {
     if (gpsPollingIntervalId) {
       clearInterval(gpsPollingIntervalId)
       gpsPollingIntervalId = null
+    }
+
+    // Clean up vehicle position polling
+    if (vehiclePositionIntervalId) {
+      clearInterval(vehiclePositionIntervalId)
+      vehiclePositionIntervalId = null
     }
 
     // Clean up visibilitychange listener
@@ -365,6 +396,15 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       const newInterval = getTrackingIntervalForLeg(newLeg)
       dispatch(updateTrackingInterval({ interval: newInterval }))
 
+      // Handle vehicle tracking on leg transitions
+      const previousLeg = itinerary.legs[previousLegIndex]
+      if (previousLeg?.transitLeg) {
+        dispatch(stopVehicleTracking())
+      }
+      if (newLeg?.transitLeg && (newLeg as any).routeId) {
+        dispatch(startVehicleTracking((newLeg as any).routeId))
+      }
+
       // Restart tracking with new interval (but not during simulation)
       if (!simulationActive) {
         if (gpsPollingIntervalId) {
@@ -386,6 +426,15 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     )
 
     dispatch(updateProgress(progress))
+
+    // Perform vehicle matching on transit legs
+    const currentLegForVehicle = itinerary.legs[routeMatch.legIndex]
+    if (
+      currentLegForVehicle?.transitLeg &&
+      (currentLegForVehicle as any).routeId
+    ) {
+      dispatch(performVehicleMatching((currentLegForVehicle as any).routeId))
+    }
 
     // Check for notifications
     const currentLeg = itinerary.legs[routeMatch.legIndex]
@@ -419,6 +468,140 @@ export function handlePositionUpdate(position: GeolocationPosition) {
           vibrationEnabled: true
         }
       )
+    })
+  }
+}
+
+/**
+ * Start polling vehicle positions for a transit route.
+ */
+export function startVehicleTracking(routeId: string) {
+  return function (dispatch: any) {
+    // Clean up any existing interval
+    if (vehiclePositionIntervalId) {
+      clearInterval(vehiclePositionIntervalId)
+      vehiclePositionIntervalId = null
+    }
+
+    // Fetch immediately, then every 15 seconds
+    dispatch(getVehiclePositionsForRoute(routeId))
+
+    vehiclePositionIntervalId = setInterval(() => {
+      dispatch(getVehiclePositionsForRoute(routeId))
+      dispatch(performVehicleMatching(routeId))
+    }, 15000)
+
+    dispatch({
+      payload: Date.now(),
+      type: SET_TRANSIT_LEG_ENTERED
+    })
+  }
+}
+
+/**
+ * Stop polling vehicle positions.
+ */
+export function stopVehicleTracking() {
+  return function (dispatch: any) {
+    if (vehiclePositionIntervalId) {
+      clearInterval(vehiclePositionIntervalId)
+      vehiclePositionIntervalId = null
+    }
+    dispatch(clearVehicleMatch())
+  }
+}
+
+/**
+ * Match user position against live vehicle positions.
+ */
+export function performVehicleMatching(routeId: string) {
+  return function (dispatch: any, getState: any) {
+    const state = getState()
+    const goMode = state.otp?.goMode
+    if (!goMode?.isActive) return
+
+    const userPos = goMode.tracking.lastPosition
+    if (!userPos) return
+
+    const vehicles = state.otp?.transitIndex?.routes?.[routeId]?.vehicles || []
+    if (vehicles.length === 0) return
+
+    const previousMatch = goMode.vehicleMatch?.match || null
+
+    // Skip matching if already user-confirmed
+    if (previousMatch?.confidence === 'confirmed') return
+
+    const matchResult = matchUserToVehicle(
+      userPos.coords.latitude,
+      userPos.coords.longitude,
+      userPos.coords.heading,
+      vehicles,
+      routeId,
+      previousMatch
+    )
+
+    // Track consecutive matches
+    const prevId = previousMatch?.vehicleId
+    let consecutiveMatches = goMode.vehicleMatch?.consecutiveMatches || 0
+    if (matchResult.vehicleId && matchResult.vehicleId === prevId) {
+      consecutiveMatches++
+      // Promote to 'high' after 2+ consecutive matches with same vehicle
+      if (consecutiveMatches >= 2 && matchResult.confidence === 'medium') {
+        matchResult.confidence = 'high'
+      }
+    } else {
+      consecutiveMatches = matchResult.vehicleId ? 1 : 0
+    }
+
+    dispatch({
+      payload: { consecutiveMatches, match: matchResult },
+      type: UPDATE_VEHICLE_MATCH
+    })
+
+    // Update nearby vehicles for boarding prompt
+    const nearby = findNearbyVehicles(
+      userPos.coords.latitude,
+      userPos.coords.longitude,
+      vehicles,
+      200
+    )
+    dispatch({ payload: nearby, type: UPDATE_NEARBY_VEHICLES })
+
+    // Check if boarding prompt should be shown
+    if (
+      !goMode.boardingPrompt?.shown &&
+      shouldShowBoardingPrompt(
+        matchResult,
+        goMode.boardingPrompt?.transitLegEnteredAt,
+        Date.now(),
+        goMode.boardingPrompt?.lastDismissedAt
+      )
+    ) {
+      dispatch(showBoardingPromptAction())
+    }
+  }
+}
+
+/**
+ * User selected a vehicle from the boarding prompt.
+ */
+export function confirmVehicleSelection(vehicleId: string) {
+  return function (dispatch: any, getState: any) {
+    const state = getState()
+    const nearby = state.otp?.goMode?.vehicleMatch?.nearbyVehicles || []
+    const selected = nearby.find(
+      (v: { vehicleId: string }) => v.vehicleId === vehicleId
+    )
+
+    dispatch({
+      payload: {
+        confidence: 'confirmed' as const,
+        distanceMeters: selected?.distanceMeters || null,
+        label: selected?.label || vehicleId,
+        lastSeen: Date.now(),
+        vehicleId
+      },
+      type: CONFIRM_VEHICLE
     })
   }
 }

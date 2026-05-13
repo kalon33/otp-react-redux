@@ -1,29 +1,34 @@
+import { connect } from 'react-redux'
 import { useIntl } from 'react-intl'
 import React from 'react'
 import type { Leg } from '@opentripplanner/types'
 
 import type { TripProgress } from '../../util/go-mode/progress-calculator'
+import type { VehicleMatchResult } from '../../util/go-mode/vehicle-matching'
 
 import {
   AlertBanner,
   InfoCard,
   InfoCardLabel,
   InfoCardValue,
+  LocatingIndicator,
   ModeIcon,
   RouteDirection,
   RouteHeader,
   RouteName,
   StopsCount,
   StopsLabel,
-  TransitContainer
+  TransitContainer,
+  VehicleTrackingBadge
 } from './styled'
 
 interface Props {
   leg: Leg
   progress: TripProgress
+  vehicleMatch?: VehicleMatchResult | null
 }
 
-const TransitProgress = ({ leg, progress }: Props) => {
+const TransitProgress = ({ leg, progress, vehicleMatch }: Props) => {
   const intl = useIntl()
 
   const getModeIcon = (mode: string): string => {
@@ -46,6 +51,10 @@ const TransitProgress = ({ leg, progress }: Props) => {
   const shouldShowAlert =
     progress.stopsRemaining === 2 || progress.stopsRemaining === 1
 
+  const isTracking =
+    vehicleMatch?.confidence === 'confirmed' ||
+    vehicleMatch?.confidence === 'high'
+
   return (
     <TransitContainer>
       {/* Route Header */}
@@ -66,6 +75,38 @@ const TransitProgress = ({ leg, progress }: Props) => {
                   { count: progress.stopsRemaining }
                 )}
               </RouteDirection>
+            )}
+          {/* Vehicle tracking status */}
+          {isTracking && vehicleMatch?.label && (
+            <VehicleTrackingBadge
+              $confirmed={vehicleMatch.confidence === 'confirmed'}
+            >
+              {vehicleMatch.confidence === 'confirmed'
+                ? intl.formatMessage(
+                    {
+                      defaultMessage: 'On Bus #{label}',
+                      id: 'components.GoMode.onBus'
+                    },
+                    { label: vehicleMatch.label }
+                  )
+                : intl.formatMessage(
+                    {
+                      defaultMessage: 'Tracking Bus #{label}',
+                      id: 'components.GoMode.trackingBus'
+                    },
+                    { label: vehicleMatch.label }
+                  )}
+            </VehicleTrackingBadge>
+          )}
+          {!isTracking &&
+            vehicleMatch?.confidence !== 'confirmed' &&
+            leg.transitLeg && (
+              <LocatingIndicator>
+                {intl.formatMessage({
+                  defaultMessage: 'Locating your bus...',
+                  id: 'components.GoMode.locatingBus'
+                })}
+              </LocatingIndicator>
             )}
         </div>
       </RouteHeader>
@@ -90,4 +131,8 @@ const TransitProgress = ({ leg, progress }: Props) => {
   )
 }
 
-export default TransitProgress
+const mapStateToProps = (state: any) => ({
+  vehicleMatch: state.otp?.goMode?.vehicleMatch?.match || null
+})
+
+export default connect(mapStateToProps)(TransitProgress)

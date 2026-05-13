@@ -366,6 +366,30 @@ export const FullScreenWrapper = styled.div`
   right: 0;
   top: 0;
   z-index: 1000;
+
+  /* MobileNavigationBar renders outside .otp context, so its CSS won't apply */
+  .navbar .mobile-header {
+    align-items: center;
+    display: flex;
+    flex: 1;
+    height: 100%;
+    justify-content: center;
+    overflow: hidden;
+    padding: 0 8px;
+    text-align: center;
+  }
+
+  .mobile-header-text {
+    color: #333;
+    font-size: 14px !important;
+    font-weight: 400;
+    line-height: 1.1;
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    width: 100%;
+  }
 `
 
 export const ScreenMain = styled.main`
@@ -484,4 +508,135 @@ export const SimToggle = styled.button`
   &:hover {
     color: #eceff1;
   }
+`
+
+// Boarding prompt styles
+const slideUp = keyframes`
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+`
+
+export const BoardingOverlay = styled.div`
+  background: rgba(0, 0, 0, 0.4);
+  bottom: 0;
+  left: 0;
+  position: fixed;
+  right: 0;
+  top: 0;
+  z-index: 3000;
+`
+
+export const BoardingSheet = styled.div`
+  animation: ${slideUp} 0.3s ease-out;
+  background: #fff;
+  border-radius: 16px 16px 0 0;
+  bottom: 0;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.15);
+  left: 0;
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: 20px 16px;
+  position: fixed;
+  right: 0;
+  z-index: 3001;
+`
+
+export const BoardingTitle = styled.h3`
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0 0 4px;
+`
+
+export const BoardingSubtitle = styled.p`
+  color: #666;
+  font-size: 14px;
+  margin: 0 0 16px;
+`
+
+export const VehicleOptionRow = styled.div`
+  align-items: center;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  padding: 12px;
+`
+
+export const VehicleInfo = styled.div`
+  flex: 1;
+  min-width: 0;
+`
+
+export const VehicleLabel = styled.div`
+  font-size: 16px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+`
+
+export const VehicleDetail = styled.div`
+  color: #666;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+`
+
+export const VehicleSelectButton = styled.button`
+  background-color: #4caf50;
+  border: none;
+  border-radius: 6px;
+  color: white;
+  cursor: pointer;
+  flex-shrink: 0;
+  font-size: 14px;
+  font-weight: 500;
+  margin-left: 12px;
+  padding: 8px 16px;
+
+  &:active {
+    opacity: 0.8;
+  }
+`
+
+export const BoardingDismissButton = styled.button`
+  background: none;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  color: #666;
+  cursor: pointer;
+  font-size: 14px;
+  margin-top: 8px;
+  padding: 10px;
+  width: 100%;
+
+  &:active {
+    background: #f5f5f5;
+  }
+`
+
+// Vehicle tracking badge for TransitProgress
+export const VehicleTrackingBadge = styled.div<{ $confirmed: boolean }>`
+  align-items: center;
+  background-color: ${(props) => (props.$confirmed ? '#e8f5e9' : '#e3f2fd')};
+  border-radius: 12px;
+  color: ${(props) => (props.$confirmed ? '#2e7d32' : '#1565c0')};
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 500;
+  margin-top: 4px;
+  padding: 2px 10px;
+`
+
+export const LocatingIndicator = styled.div`
+  animation: ${pulseOpacity} 1.5s ease-in-out infinite;
+  color: #999;
+  font-size: 13px;
+  margin-top: 4px;
 `

@@ -3,23 +3,34 @@ import type { Itinerary } from '@opentripplanner/types'
 
 import {
   ADD_NOTIFICATION,
+  CLEAR_VEHICLE_MATCH,
+  CONFIRM_VEHICLE,
+  DISMISS_BOARDING_PROMPT,
   PAUSE_GPS_SIMULATION,
   RESUME_GPS_SIMULATION,
   SET_DEPARTURE_OVERRIDE,
   SET_NOTIFICATION_CONFIG,
   SET_TRACKING_ERROR,
+  SET_TRANSIT_LEG_ENTERED,
+  SHOW_BOARDING_PROMPT,
   START_GO_MODE,
   START_GPS_SIMULATION,
   STOP_GO_MODE,
   STOP_GPS_SIMULATION,
   TOGGLE_MAP_FOLLOW,
   TRANSITION_LEG,
+  UPDATE_NEARBY_VEHICLES,
   UPDATE_POSITION,
   UPDATE_PROGRESS,
   UPDATE_ROUTE_MATCH,
   UPDATE_SIMULATION_PROGRESS,
-  UPDATE_TRACKING_INTERVAL
+  UPDATE_TRACKING_INTERVAL,
+  UPDATE_VEHICLE_MATCH
 } from '../actions/go-mode'
+import type {
+  NearbyVehicleOption,
+  VehicleMatchResult
+} from '../util/go-mode/vehicle-matching'
 import type { NotificationEvent } from '../util/go-mode/notification-service'
 import type { RouteMatchResult } from '../util/go-mode/position-matching'
 import type { TripProgress } from '../util/go-mode/progress-calculator'
@@ -33,6 +44,13 @@ export interface SimulationState {
 
 export interface GoModeState {
   activeItinerary: Itinerary | null
+
+  boardingPrompt: {
+    lastDismissedAt: number | null
+    shown: boolean
+    transitLegEnteredAt: number | null
+  }
+
   departureOverride: number | null
   isActive: boolean
 
@@ -60,10 +78,24 @@ export interface GoModeState {
   ui: {
     mapFollowUser: boolean
   }
+
+  vehicleMatch: {
+    consecutiveMatches: number
+    match: VehicleMatchResult | null
+    nearbyVehicles: NearbyVehicleOption[]
+    trackedRouteId: string | null
+  }
 }
 
 const defaultState: GoModeState = {
   activeItinerary: null,
+
+  boardingPrompt: {
+    lastDismissedAt: null,
+    shown: false,
+    transitLegEnteredAt: null
+  },
+
   departureOverride: null,
   isActive: false,
 
@@ -94,6 +126,13 @@ const defaultState: GoModeState = {
 
   ui: {
     mapFollowUser: true
+  },
+
+  vehicleMatch: {
+    consecutiveMatches: 0,
+    match: null,
+    nearbyVehicles: [],
+    trackedRouteId: null
   }
 }
 
@@ -128,6 +167,40 @@ const goMode = handleActions<GoModeState, any>(
         }
       }
     },
+
+    [CLEAR_VEHICLE_MATCH]: (state) => ({
+      ...state,
+      boardingPrompt: {
+        ...state.boardingPrompt,
+        shown: false,
+        transitLegEnteredAt: null
+      },
+      vehicleMatch: {
+        ...defaultState.vehicleMatch
+      }
+    }),
+
+    [CONFIRM_VEHICLE]: (state, action) => ({
+      ...state,
+      boardingPrompt: {
+        ...state.boardingPrompt,
+        shown: false
+      },
+      vehicleMatch: {
+        ...state.vehicleMatch,
+        consecutiveMatches: 0,
+        match: action.payload
+      }
+    }),
+
+    [DISMISS_BOARDING_PROMPT]: (state) => ({
+      ...state,
+      boardingPrompt: {
+        ...state.boardingPrompt,
+        lastDismissedAt: Date.now(),
+        shown: false
+      }
+    }),
 
     [PAUSE_GPS_SIMULATION]: (state) => ({
       ...state,
@@ -169,6 +242,22 @@ const goMode = handleActions<GoModeState, any>(
         }
       }
     },
+
+    [SET_TRANSIT_LEG_ENTERED]: (state, action) => ({
+      ...state,
+      boardingPrompt: {
+        ...state.boardingPrompt,
+        transitLegEnteredAt: action.payload
+      }
+    }),
+
+    [SHOW_BOARDING_PROMPT]: (state) => ({
+      ...state,
+      boardingPrompt: {
+        ...state.boardingPrompt,
+        shown: true
+      }
+    }),
 
     [START_GO_MODE]: (state, action) => {
       const { itinerary } = action.payload
@@ -241,6 +330,14 @@ const goMode = handleActions<GoModeState, any>(
       }
     },
 
+    [UPDATE_NEARBY_VEHICLES]: (state, action) => ({
+      ...state,
+      vehicleMatch: {
+        ...state.vehicleMatch,
+        nearbyVehicles: action.payload
+      }
+    }),
+
     [UPDATE_POSITION]: (state, action) => {
       return {
         ...state,
@@ -284,7 +381,16 @@ const goMode = handleActions<GoModeState, any>(
           interval
         }
       }
-    }
+    },
+
+    [UPDATE_VEHICLE_MATCH]: (state, action) => ({
+      ...state,
+      vehicleMatch: {
+        ...state.vehicleMatch,
+        consecutiveMatches: action.payload.consecutiveMatches,
+        match: action.payload.match
+      }
+    })
   },
   defaultState
 )

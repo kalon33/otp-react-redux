@@ -21,6 +21,7 @@ import {
   SimToggle,
   SimToolbar
 } from './styled'
+import BoardingPrompt from './BoardingPrompt'
 import CurrentLegPanel from './CurrentLegPanel'
 import GoModeMap from './GoModeMap'
 import GoModeNotifications from './GoModeNotifications'
@@ -331,6 +332,7 @@ const GoModeScreen = ({
           </>
         )}
       </ScreenMain>
+      <BoardingPrompt />
     </FullScreenWrapper>
   )
 }

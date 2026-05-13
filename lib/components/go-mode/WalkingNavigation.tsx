@@ -96,8 +96,9 @@ const WalkingNavigation = ({
           const depSeconds = st.realtimeDeparture ?? st.scheduledDeparture
           const depMs = (st.serviceDay + depSeconds) * 1000
 
-          // Must be in the future
+          // Must be in the future and within 2 hours
           if (depMs <= nowMs) return false
+          if (depMs > nowMs + 2 * 60 * 60 * 1000) return false
 
           // Exclude the currently-targeted departure (within 60s tolerance)
           if (Math.abs(depMs - targetedDepartureMs) < 60000) return false
