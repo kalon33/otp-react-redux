@@ -377,6 +377,46 @@ export function checkConnectionWarning(
   }
 }
 
+// Minimum lateness on the current leg before alerting the rider (seconds).
+const DELAY_ALERT_THRESHOLD_SECONDS = 180
+
+/**
+ * Check whether the transit leg the rider is currently on is running late
+ * enough to warrant a heads-up.
+ *
+ * Real-data only: uses `progress.delay`, the measured GPS-vs-schedule lag on
+ * the current leg. The alert id buckets the delay into 5-minute increments so
+ * worsening lateness re-alerts (3 min, then 8 min, ...) without spamming on
+ * small fluctuations within a bucket.
+ */
+export function checkDelayAlert(
+  progress: TripProgress,
+  currentLeg: Leg,
+  sentNotifications: string[]
+): NotificationEvent | null {
+  if (!isTransitMode(currentLeg.mode)) return null
+
+  const delaySeconds = progress.delay ?? 0
+  if (delaySeconds < DELAY_ALERT_THRESHOLD_SECONDS) return null
+
+  const routeName =
+    currentLeg.routeShortName || currentLeg.routeLongName || 'Your ride'
+  const lateMin = Math.max(1, Math.round(delaySeconds / 60))
+  const bucket = Math.floor(delaySeconds / 300)
+  const id = generateNotificationId('DELAY_ALERT', `${routeName}_${bucket}`)
+
+  if (wasRecentlySent(id, sentNotifications, 300000)) return null
+
+  return {
+    id,
+    message: `${routeName} is running about ${lateMin} min late.`,
+    priority: 'medium',
+    timestamp: new Date(),
+    title: 'Running late',
+    type: 'DELAY_ALERT'
+  }
+}
+
 /**
  * Check if should notify for trip completion
  */
@@ -403,6 +443,16 @@ export function checkTripComplete(
 }
 
 /**
+ * Append a notification to the list when one was produced.
+ */
+function pushIf(
+  notifications: NotificationEvent[],
+  event: NotificationEvent | null
+): void {
+  if (event) notifications.push(event)
+}
+
+/**
  * Process all notification checks and return any that should be triggered
  */
 export function checkForNotifications(
@@ -421,75 +471,57 @@ export function checkForNotifications(
 
   const notifications: NotificationEvent[] = []
 
-  // Check for approaching stop (highest priority)
-  const approachingStop = checkApproachingStop(
-    progress,
-    currentLeg,
-    sentNotifications
+  // Highest-priority, always-checked alerts.
+  pushIf(
+    notifications,
+    checkApproachingStop(progress, currentLeg, sentNotifications)
   )
-  if (approachingStop) {
-    notifications.push(approachingStop)
-  }
-
-  // Check for arriving at stop
-  const arrivingStop = checkArrivingStop(
-    progress,
-    currentLeg,
-    sentNotifications
+  pushIf(
+    notifications,
+    checkArrivingStop(progress, currentLeg, sentNotifications)
   )
-  if (arrivingStop) {
-    notifications.push(arrivingStop)
-  }
-
-  // Check for leg transition
-  const legTransition = checkLegTransition(
-    progress.currentLegIndex,
-    previousLegIndex,
-    nextLeg,
-    sentNotifications
-  )
-  if (legTransition) {
-    notifications.push(legTransition)
-  }
-
-  // Check for route deviation
-  const routeDeviation = checkRouteDeviation(
-    distanceFromRoute,
-    sentNotifications
-  )
-  if (routeDeviation) {
-    notifications.push(routeDeviation)
-  }
-
-  // Check for an at-risk downstream connection (needs full leg list)
-  if (legs) {
-    const connectionWarning = checkConnectionWarning(
-      progress,
-      legs,
+  pushIf(
+    notifications,
+    checkLegTransition(
       progress.currentLegIndex,
+      previousLegIndex,
+      nextLeg,
       sentNotifications
     )
-    if (connectionWarning) {
-      notifications.push(connectionWarning)
-    }
+  )
+  pushIf(
+    notifications,
+    checkRouteDeviation(distanceFromRoute, sentNotifications)
+  )
+
+  // At-risk downstream connection (needs the full leg list).
+  const connectionWarning = legs
+    ? checkConnectionWarning(
+        progress,
+        legs,
+        progress.currentLegIndex,
+        sentNotifications
+      )
+    : null
+  pushIf(notifications, connectionWarning)
+
+  // Running-late heads-up. Skipped when a connection warning already fired,
+  // since that message conveys the lateness.
+  if (!connectionWarning) {
+    pushIf(
+      notifications,
+      checkDelayAlert(progress, currentLeg, sentNotifications)
+    )
   }
 
-  // Check for trip completion
-  const tripComplete = checkTripComplete(progress, sentNotifications)
-  if (tripComplete) {
-    notifications.push(tripComplete)
-  }
+  pushIf(notifications, checkTripComplete(progress, sentNotifications))
 
-  // Check for upcoming turn (lower priority, only if no other notifications)
+  // Lower priority: only surface a turn when nothing else is showing.
   if (notifications.length === 0) {
-    const upcomingTurn = checkUpcomingTurn(
-      progress,
-      currentLeg,
-      sentNotifications
+    pushIf(
+      notifications,
+      checkUpcomingTurn(progress, currentLeg, sentNotifications)
     )
-    if (upcomingTurn) {
-      notifications.push(upcomingTurn)
-    }
   }
 
   return notifications

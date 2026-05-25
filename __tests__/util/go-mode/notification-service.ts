@@ -2,6 +2,7 @@ import {
   checkApproachingStop,
   checkArrivingStop,
   checkConnectionWarning,
+  checkDelayAlert,
   checkForNotifications,
   checkLegTransition,
   checkRouteDeviation,
@@ -368,6 +369,51 @@ describe('util > go-mode > notification-service', () => {
     })
   })
 
+  describe('checkDelayAlert', () => {
+    const transitLeg = {
+      mode: 'BUS',
+      routeShortName: '5',
+      to: { name: 'Downtown' }
+    } as any
+
+    it('should alert when the current leg is late beyond the threshold', () => {
+      const progress = makeProgress({ currentLegIndex: 0, delay: 240 })
+      const result = checkDelayAlert(progress, transitLeg, [])
+      expect(result).not.toBeNull()
+      expect(result!.type).toBe('DELAY_ALERT')
+      expect(result!.priority).toBe('medium')
+      expect(result!.title).toBe('Running late')
+      expect(result!.message).toContain('4 min late')
+      expect(result!.message).toContain('5')
+    })
+
+    it('should return null when delay is below the threshold', () => {
+      const progress = makeProgress({ currentLegIndex: 0, delay: 120 })
+      expect(checkDelayAlert(progress, transitLeg, [])).toBeNull()
+    })
+
+    it('should return null for a non-transit leg', () => {
+      const walkLeg = { mode: 'WALK', to: { name: 'Stop' } } as any
+      const progress = makeProgress({ currentLegIndex: 0, delay: 600 })
+      expect(checkDelayAlert(progress, walkLeg, [])).toBeNull()
+    })
+
+    it('should not re-alert within the same delay bucket', () => {
+      const progress = makeProgress({ currentLegIndex: 0, delay: 240 })
+      const recent = [`DELAY_ALERT_5_0_${Date.now() - 30000}`]
+      expect(checkDelayAlert(progress, transitLeg, recent)).toBeNull()
+    })
+
+    it('should re-alert when lateness escalates to a new bucket', () => {
+      // Previously alerted at bucket 0 (<5 min); now 10 min late -> bucket 2
+      const progress = makeProgress({ currentLegIndex: 0, delay: 600 })
+      const recent = [`DELAY_ALERT_5_0_${Date.now() - 30000}`]
+      const result = checkDelayAlert(progress, transitLeg, recent)
+      expect(result).not.toBeNull()
+      expect(result!.message).toContain('10 min late')
+    })
+  })
+
   describe('checkForNotifications', () => {
     it('should return empty array when notifications are disabled', () => {
       const progress = makeProgress({ stopsRemaining: 2 })
@@ -528,6 +574,66 @@ describe('util > go-mode > notification-service', () => {
         config
       )
       expect(result.some((n) => n.type === 'CONNECTION_WARNING')).toBe(false)
+    })
+
+    it('should include a delay alert when late with no connection at risk', () => {
+      const leg = {
+        endTime: 0,
+        mode: 'BUS',
+        routeShortName: '5',
+        startTime: 0,
+        to: { name: 'Downtown' }
+      } as any
+      const progress = makeProgress({ currentLegIndex: 0, delay: 300 })
+      const config = makeConfig()
+
+      const result = checkForNotifications(
+        progress,
+        leg,
+        0,
+        undefined,
+        10,
+        [],
+        config,
+        [leg] // single transit leg -> no onward connection
+      )
+      expect(result.some((n) => n.type === 'DELAY_ALERT')).toBe(true)
+      expect(result.some((n) => n.type === 'CONNECTION_WARNING')).toBe(false)
+    })
+
+    it('should suppress the delay alert when a connection warning fires', () => {
+      const T = new Date('2026-01-28T10:00:00').getTime()
+      const legs = [
+        {
+          endTime: T + 600000,
+          mode: 'BUS',
+          routeShortName: '5',
+          startTime: T,
+          to: { name: 'Transfer Center' }
+        },
+        { duration: 120, mode: 'WALK', to: { name: 'Bay 3' } },
+        {
+          from: { name: 'Transfer Center' },
+          mode: 'BUS',
+          routeShortName: '21',
+          startTime: T + 900000
+        }
+      ] as any[]
+      const progress = makeProgress({ currentLegIndex: 0, delay: 600 })
+      const config = makeConfig()
+
+      const result = checkForNotifications(
+        progress,
+        legs[0],
+        0,
+        legs[1],
+        10,
+        [],
+        config,
+        legs
+      )
+      expect(result.some((n) => n.type === 'CONNECTION_WARNING')).toBe(true)
+      expect(result.some((n) => n.type === 'DELAY_ALERT')).toBe(false)
     })
   })
 })
