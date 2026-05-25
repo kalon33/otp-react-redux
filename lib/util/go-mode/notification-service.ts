@@ -27,6 +27,26 @@ export interface NotificationEvent {
   type: NotificationType
 }
 
+// Notification types that warrant proactively offering a re-route.
+const AUTO_REROUTE_TRIGGER_TYPES: NotificationType[] = [
+  'CONNECTION_WARNING',
+  'ROUTE_DEVIATION'
+]
+
+/**
+ * Whether to kick off an automatic re-route suggestion this update: a
+ * connection-risk or off-route notification just fired and no re-route is
+ * already in progress or awaiting the rider's decision (status must be 'idle').
+ * The suggestion is surfaced as a Switch/Keep card — never an automatic swap.
+ */
+export function shouldAutoReroute(
+  notifications: NotificationEvent[],
+  reRouteStatus: string
+): boolean {
+  if (reRouteStatus !== 'idle') return false
+  return notifications.some((n) => AUTO_REROUTE_TRIGGER_TYPES.includes(n.type))
+}
+
 /**
  * Generate unique ID for notification to prevent duplicates
  */

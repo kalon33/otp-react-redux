@@ -8,6 +8,7 @@ import {
   checkRouteDeviation,
   checkTripComplete,
   checkUpcomingTurn,
+  shouldAutoReroute,
   triggerVibration,
   wasRecentlySent
 } from '../../../lib/util/go-mode/notification-service'
@@ -635,5 +636,40 @@ describe('util > go-mode > notification-service', () => {
       expect(result.some((n) => n.type === 'CONNECTION_WARNING')).toBe(true)
       expect(result.some((n) => n.type === 'DELAY_ALERT')).toBe(false)
     })
+  })
+})
+
+describe('shouldAutoReroute', () => {
+  const makeEvent = (type: any): any => ({
+    id: `${type}_1`,
+    message: 'm',
+    priority: 'high',
+    timestamp: new Date(),
+    title: 't',
+    type
+  })
+
+  it('fires for a connection warning when idle', () => {
+    expect(shouldAutoReroute([makeEvent('CONNECTION_WARNING')], 'idle')).toBe(
+      true
+    )
+  })
+
+  it('fires for an off-route deviation when idle', () => {
+    expect(shouldAutoReroute([makeEvent('ROUTE_DEVIATION')], 'idle')).toBe(true)
+  })
+
+  it('does not fire when a re-route is already in progress or shown', () => {
+    expect(
+      shouldAutoReroute([makeEvent('CONNECTION_WARNING')], 'searching')
+    ).toBe(false)
+    expect(shouldAutoReroute([makeEvent('ROUTE_DEVIATION')], 'found')).toBe(
+      false
+    )
+  })
+
+  it('ignores non-triggering notifications', () => {
+    expect(shouldAutoReroute([makeEvent('APPROACH_STOP')], 'idle')).toBe(false)
+    expect(shouldAutoReroute([], 'idle')).toBe(false)
   })
 })

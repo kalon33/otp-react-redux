@@ -6,6 +6,7 @@ import type { Itinerary, LatLngArray, Leg } from '@opentripplanner/types'
 import { calculateTripProgress } from '../util/go-mode/progress-calculator'
 import {
   checkForNotifications,
+  shouldAutoReroute,
   showNotification
 } from '../util/go-mode/notification-service'
 import {
@@ -557,6 +558,13 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         }
       )
     })
+
+    // Proactively offer a re-route when a connection is at risk or the rider
+    // has drifted off-route. Surfaced as a Switch/Keep card — never swapped
+    // automatically. The helper guards on reRoute.status === 'idle'.
+    if (shouldAutoReroute(notifications, goMode.reRoute?.status || 'idle')) {
+      dispatch(reRouteFromCurrentPosition())
+    }
   }
 }
 
