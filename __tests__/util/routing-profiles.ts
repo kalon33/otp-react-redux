@@ -2,6 +2,7 @@ import {
   applyRoutingPreferences,
   clampPreferences,
   DEFAULT_PROFILE_ID,
+  extendPlanQueryWithLevers,
   getRoutingProfile,
   LEVER_RANGES,
   NON_OTP_QUERY_KEYS,
@@ -114,6 +115,43 @@ describe('routing-profiles', () => {
         fromPlace: 'A',
         walkSpeed: 1.3
       })
+    })
+  })
+
+  describe('extendPlanQueryWithLevers', () => {
+    const baseQuery = [
+      'query Plan(',
+      '  $walkReluctance: Float',
+      '  $walkSpeed: Float',
+      '  $wheelchair: Boolean',
+      ') {',
+      '  plan(',
+      '    walkReluctance: $walkReluctance',
+      '    walkSpeed: $walkSpeed',
+      '    wheelchair: $wheelchair',
+      '  ) {',
+      '    itineraries { duration }',
+      '  }',
+      '}'
+    ].join('\n')
+
+    it('injects the new variable declarations and plan args', () => {
+      const out = extendPlanQueryWithLevers(baseQuery)
+      expect(out).toContain('$waitReluctance: Float')
+      expect(out).toContain('$transferPenalty: Int')
+      expect(out).toContain('$minTransferTime: Int')
+      expect(out).toContain('$bikeSpeed: Float')
+      expect(out).toContain('$walkBoardCost: Int')
+      expect(out).toContain('waitReluctance: $waitReluctance')
+      expect(out).toContain('transferPenalty: $transferPenalty')
+      // existing declarations/args are preserved
+      expect(out).toContain('walkSpeed: $walkSpeed')
+      expect(out).toContain('$wheelchair: Boolean')
+    })
+
+    it('returns the query unchanged when the walkSpeed anchors are absent', () => {
+      const odd = 'query Q { plan(fromPlace: $f) { itineraries { duration } } }'
+      expect(extendPlanQueryWithLevers(odd)).toBe(odd)
     })
   })
 })

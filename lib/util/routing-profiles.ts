@@ -137,3 +137,42 @@ export function applyRoutingPreferences(
   NON_OTP_QUERY_KEYS.forEach((key) => delete cleaned[key])
   return { ...cleaned, ...clampPreferences(prefs) }
 }
+
+// Variable declarations + plan() arguments for the levers the default
+// core-utils planQuery does not already declare. Verified against OTP's
+// (deprecated but functional) plan field: bikeSpeed/waitReluctance are Float,
+// transferPenalty/minTransferTime/walkBoardCost are Int.
+const EXTRA_VAR_DECLS =
+  '$walkSpeed: Float\n' +
+  '  $bikeSpeed: Float\n' +
+  '  $waitReluctance: Float\n' +
+  '  $transferPenalty: Int\n' +
+  '  $minTransferTime: Int\n' +
+  '  $walkBoardCost: Int'
+const EXTRA_PLAN_ARGS =
+  'walkSpeed: $walkSpeed\n' +
+  '    bikeSpeed: $bikeSpeed\n' +
+  '    waitReluctance: $waitReluctance\n' +
+  '    transferPenalty: $transferPenalty\n' +
+  '    minTransferTime: $minTransferTime\n' +
+  '    walkBoardCost: $walkBoardCost'
+
+/**
+ * The default OTP planQuery (from core-utils) declares only walk/bike/car
+ * reluctance, walkSpeed and wheelchair. Inject the remaining levers' variable
+ * declarations and plan() arguments so OTP actually receives them, anchoring on
+ * the walkSpeed lines the default query always contains. If those anchors are
+ * missing (unexpected query shape) the query is returned unchanged, and unset
+ * levers are simply passed as null (OTP falls back to its defaults).
+ */
+export function extendPlanQueryWithLevers(query: string): string {
+  if (
+    !query.includes('$walkSpeed: Float') ||
+    !query.includes('walkSpeed: $walkSpeed')
+  ) {
+    return query
+  }
+  return query
+    .replace('$walkSpeed: Float', () => EXTRA_VAR_DECLS)
+    .replace('walkSpeed: $walkSpeed', () => EXTRA_PLAN_ARGS)
+}
