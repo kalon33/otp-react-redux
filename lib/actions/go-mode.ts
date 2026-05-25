@@ -1,5 +1,7 @@
 import { createAction } from 'redux-actions'
+import coreUtils from '@opentripplanner/core-utils'
 import polyline from '@mapbox/polyline'
+import type { Itinerary, LatLngArray, Leg } from '@opentripplanner/types'
 
 import { calculateTripProgress } from '../util/go-mode/progress-calculator'
 import {
@@ -11,16 +13,18 @@ import {
   matchUserToVehicle,
   shouldShowBoardingPrompt
 } from '../util/go-mode/vehicle-matching'
+import { getRoutingProfile } from '../util/routing-profiles'
 import {
   matchPositionToRoute,
   shouldTransitionToNextLeg
 } from '../util/go-mode/position-matching'
-import type { Itinerary, LatLngArray, Leg } from '@opentripplanner/types'
 
-import { findStopTimesForStop, getVehiclePositionsForRoute } from './apiV2'
 import { MobileScreens } from './ui-constants'
 import { setMobileScreen } from './ui'
+import { setQueryParam } from './form'
 import type { NotificationEvent } from '../util/go-mode/notification-service'
+
+import { findStopTimesForStop, getVehiclePositionsForRoute } from './apiV2'
 
 import type { RouteMatchResult } from '../util/go-mode/position-matching'
 import type { TripProgress } from '../util/go-mode/progress-calculator'
@@ -59,6 +63,8 @@ function getCurrentTime(): Date {
   return new Date()
 }
 
+const { randId } = coreUtils.storage
+
 // Action types
 export const ADD_NOTIFICATION = 'ADD_NOTIFICATION'
 export const CLEAR_VEHICLE_MATCH = 'CLEAR_VEHICLE_MATCH'
@@ -84,6 +90,11 @@ export const UPDATE_ROUTE_MATCH = 'UPDATE_ROUTE_MATCH'
 export const UPDATE_SIMULATION_PROGRESS = 'UPDATE_SIMULATION_PROGRESS'
 export const UPDATE_TRACKING_INTERVAL = 'UPDATE_TRACKING_INTERVAL'
 export const UPDATE_VEHICLE_MATCH = 'UPDATE_VEHICLE_MATCH'
+
+// Live re-route action types
+export const CLEAR_REROUTE = 'CLEAR_REROUTE'
+export const SET_REROUTE_RESULT = 'SET_REROUTE_RESULT'
+export const START_REROUTE = 'START_REROUTE'
 
 // Simple action creators
 export const clearVehicleMatch = createAction(CLEAR_VEHICLE_MATCH)
@@ -113,6 +124,12 @@ export const setNotificationConfig = createAction<{
   soundEnabled?: boolean
   vibrationEnabled?: boolean
 }>(SET_NOTIFICATION_CONFIG)
+
+export const startReroute = createAction<{ searchId: string }>(START_REROUTE)
+export const setRerouteResult = createAction<Itinerary | null>(
+  SET_REROUTE_RESULT
+)
+export const clearReroute = createAction(CLEAR_REROUTE)
 
 /**
  * Derive the GTFS route id from an itinerary leg.
@@ -264,6 +281,63 @@ export function endGoMode() {
     delete w.__resumeGpsSimulation
 
     dispatch(stopGoMode())
+  }
+}
+
+/**
+ * Re-plan from the rider's current GPS position to the trip destination using
+ * the standard routing pipeline (real OTP results — no fabricated data). The
+ * resulting itineraries land in a dedicated search; GoModeScreen surfaces the
+ * best one as a Switch/Keep card. Optionally applies a routing profile.
+ */
+export function reRouteFromCurrentPosition(
+  options: { profileId?: string } = {}
+) {
+  return function (dispatch: any, getState: any) {
+    const state = getState()
+    const goMode = state.otp.goMode
+    const itinerary: Itinerary | null = goMode?.activeItinerary
+    const lastPosition: GeolocationPosition | null =
+      goMode?.tracking?.lastPosition
+    const legs = itinerary?.legs || []
+    const destLeg = legs[legs.length - 1]
+
+    // Need a real position and destination — never fabricate either.
+    if (!itinerary || !lastPosition || !destLeg) {
+      dispatch(setRerouteResult(null))
+      return
+    }
+
+    const { homeTimezone } = state.otp.config
+    const searchId = randId()
+    dispatch(startReroute({ searchId }))
+
+    const payload: any = {
+      date: coreUtils.time.getCurrentDate(homeTimezone),
+      departArrive: 'NOW',
+      from: {
+        lat: lastPosition.coords.latitude,
+        lon: lastPosition.coords.longitude,
+        name: 'Current location'
+      },
+      time: coreUtils.time.getCurrentTime(homeTimezone),
+      to: {
+        lat: destLeg.to.lat,
+        lon: destLeg.to.lon,
+        name: destLeg.to.name
+      }
+    }
+
+    const profile = options.profileId
+      ? getRoutingProfile(options.profileId)
+      : undefined
+    if (profile) {
+      payload.activeProfileId = profile.id
+      payload.routingPreferences = profile.prefs
+    }
+
+    // Reuse the normal search pipeline; results populate searches[searchId].
+    dispatch(setQueryParam(payload, searchId))
   }
 }
 

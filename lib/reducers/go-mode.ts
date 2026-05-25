@@ -3,6 +3,7 @@ import type { Itinerary } from '@opentripplanner/types'
 
 import {
   ADD_NOTIFICATION,
+  CLEAR_REROUTE,
   CLEAR_VEHICLE_MATCH,
   CONFIRM_VEHICLE,
   DISMISS_BOARDING_PROMPT,
@@ -10,11 +11,13 @@ import {
   RESUME_GPS_SIMULATION,
   SET_DEPARTURE_OVERRIDE,
   SET_NOTIFICATION_CONFIG,
+  SET_REROUTE_RESULT,
   SET_TRACKING_ERROR,
   SET_TRANSIT_LEG_ENTERED,
   SHOW_BOARDING_PROMPT,
   START_GO_MODE,
   START_GPS_SIMULATION,
+  START_REROUTE,
   STOP_GO_MODE,
   STOP_GPS_SIMULATION,
   TOGGLE_MAP_FOLLOW,
@@ -64,6 +67,12 @@ export interface GoModeState {
 
   progress: TripProgress | null
 
+  reRoute: {
+    candidate: Itinerary | null
+    searchId: string | null
+    status: 'idle' | 'searching' | 'found' | 'none' | 'error'
+  }
+
   routeMatch: RouteMatchResult | null
 
   simulation: SimulationState
@@ -108,6 +117,13 @@ const defaultState: GoModeState = {
   },
 
   progress: null,
+
+  reRoute: {
+    candidate: null,
+    searchId: null,
+    status: 'idle'
+  },
+
   routeMatch: null,
 
   simulation: {
@@ -167,6 +183,11 @@ const goMode = handleActions<GoModeState, any>(
         }
       }
     },
+
+    [CLEAR_REROUTE]: (state) => ({
+      ...state,
+      reRoute: { ...defaultState.reRoute }
+    }),
 
     [CLEAR_VEHICLE_MATCH]: (state) => ({
       ...state,
@@ -233,6 +254,15 @@ const goMode = handleActions<GoModeState, any>(
       }
     },
 
+    [SET_REROUTE_RESULT]: (state, action) => ({
+      ...state,
+      reRoute: {
+        ...state.reRoute,
+        candidate: action.payload || null,
+        status: action.payload ? ('found' as const) : ('none' as const)
+      }
+    }),
+
     [SET_TRACKING_ERROR]: (state, action) => {
       return {
         ...state,
@@ -272,6 +302,7 @@ const goMode = handleActions<GoModeState, any>(
           sentNotifications: []
         },
         progress: null,
+        reRoute: { ...defaultState.reRoute },
         routeMatch: null,
         tracking: {
           ...state.tracking,
@@ -288,6 +319,15 @@ const goMode = handleActions<GoModeState, any>(
         speedMultiplier: action.payload.speedMultiplier,
         status: 'running' as const,
         totalPoints: action.payload.totalPoints
+      }
+    }),
+
+    [START_REROUTE]: (state, action) => ({
+      ...state,
+      reRoute: {
+        candidate: null,
+        searchId: action.payload.searchId,
+        status: 'searching' as const
       }
     }),
 

@@ -429,6 +429,76 @@ export const GpsWarningBanner = styled.div`
   word-wrap: break-word;
 `
 
+// Live re-route (Go Mode) styles
+export const RerouteBar = styled.div`
+  bottom: 12px;
+  left: 12px;
+  position: absolute;
+  right: 12px;
+  z-index: 1100;
+`
+
+export const RerouteButton = styled.button`
+  background: #fff;
+  border: 1px solid #2196f3;
+  border-radius: 8px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  color: #2196f3;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 10px 16px;
+  width: 100%;
+`
+
+export const RerouteCard = styled.div`
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+  padding: 14px 16px;
+`
+
+export const RerouteCardTitle = styled.div`
+  color: #333;
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 4px;
+`
+
+export const RerouteSummary = styled.div`
+  color: #555;
+  font-size: 14px;
+  margin-bottom: 12px;
+`
+
+export const RerouteActions = styled.div`
+  display: flex;
+  gap: 8px;
+`
+
+export const RerouteSwitchButton = styled.button`
+  background: #2196f3;
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  cursor: pointer;
+  flex: 1;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 10px;
+`
+
+export const RerouteKeepButton = styled.button`
+  background: #f1f1f1;
+  border: none;
+  border-radius: 6px;
+  color: #333;
+  cursor: pointer;
+  flex: 1;
+  font-size: 14px;
+  padding: 10px;
+`
+
 // Dev simulation toolbar styles
 export const SimToolbar = styled.div`
   background: #263238;
