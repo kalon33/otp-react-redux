@@ -207,6 +207,8 @@ components:
     header: Plan Your Trip
     modeSelectorLabel: Select a travel mode
     moreOptions: More options
+    routingProfileHeader: Routing profile
+    routingProfileLabel: Optimize routing for
     saveAndReturn: Save and return
     saved: Saved
     submodeSelectorLabel: Select travel modes and submodes

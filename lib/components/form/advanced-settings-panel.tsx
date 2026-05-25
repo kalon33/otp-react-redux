@@ -27,10 +27,15 @@ import React, {
 import styled from 'styled-components'
 
 import * as formActions from '../../actions/form'
+import * as routingProfileActions from '../../actions/routing-profiles'
 import * as userActions from '../../actions/user'
 import { AppReduxState } from '../../util/state-types'
 import { blue, getBaseColor } from '../util/colors'
 import { ComponentContext } from '../../util/contexts'
+import {
+  DEFAULT_PROFILE_ID,
+  ROUTING_PROFILES
+} from '../../util/routing-profiles'
 import { generateModeSettingValues } from '../../util/api'
 import { getDependentName } from '../../util/user'
 import { invisibleCss } from '../util/invisible-a11y-label'
@@ -147,7 +152,19 @@ const MobilityProfileDropdown = styled(DropdownSelector)`
   }
 `
 
+const RoutingProfileContainer = styled.div`
+  margin: 2em 0;
+`
+
+const RoutingProfileDropdown = styled(DropdownSelector)`
+  margin: 20px 0px;
+  label {
+    padding-left: 0;
+  }
+`
+
 const AdvancedSettingsPanel = ({
+  applyRoutingProfile,
   autoPlan,
   closeAdvancedSettings,
   currentQuery,
@@ -164,6 +181,7 @@ const AdvancedSettingsPanel = ({
   setCloseAdvancedSettingsWithDelay,
   setQueryParam
 }: {
+  applyRoutingProfile: (profileId: string) => void
   autoPlan: boolean
   closeAdvancedSettings: () => void
   currentQuery: any
@@ -272,6 +290,13 @@ const AdvancedSettingsPanel = ({
     },
     [setSelectedMobilityProfile, setQueryParam]
   )
+
+  const onRoutingProfileChange = useCallback(
+    (evt: QueryParamChangeEvent) => {
+      applyRoutingProfile(evt.routingProfile as string)
+    },
+    [applyRoutingProfile]
+  )
   return (
     <PanelOverlay className="advanced-settings" ref={innerRef}>
       <HeaderContainer>
@@ -285,6 +310,23 @@ const AdvancedSettingsPanel = ({
       <DtSelectorContainer>
         <DateTimeModal departArriveDropdown />
       </DtSelectorContainer>
+      <RoutingProfileContainer>
+        <VisibleSubheader>
+          <FormattedMessage id="components.BatchSearchScreen.routingProfileHeader" />
+        </VisibleSubheader>
+        <RoutingProfileDropdown
+          label={intl.formatMessage({
+            id: 'components.BatchSearchScreen.routingProfileLabel'
+          })}
+          name="routingProfile"
+          onChange={onRoutingProfileChange}
+          options={ROUTING_PROFILES.map((profile) => ({
+            text: profile.label,
+            value: profile.id
+          }))}
+          value={currentQuery.activeProfileId || DEFAULT_PROFILE_ID}
+        />
+      </RoutingProfileContainer>
       {processedGlobalSettings.length > 0 && (
         <>
           <InvisibleSubheader>
@@ -387,6 +429,7 @@ const mapStateToProps = (state: AppReduxState) => {
 }
 
 const mapDispatchToProps = {
+  applyRoutingProfile: routingProfileActions.applyRoutingProfile,
   getDependentUserInfo: userActions.getDependentUserInfo,
   setQueryParam: formActions.setQueryParam
 }

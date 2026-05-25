@@ -54,6 +54,10 @@
       "none",
       "low-vision",
       "legally-blind"
+    ],
+    "components.BatchSearchScreen.*": [
+      "routingProfileHeader",
+      "routingProfileLabel"
     ]
   },
   "ignoredIds": [
