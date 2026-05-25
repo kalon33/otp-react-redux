@@ -279,6 +279,34 @@ export function getUpcomingTransitTiming(
 }
 
 /**
+ * Measure how far behind (or ahead of) schedule the rider is at their current
+ * position on the given leg, in seconds. Positive = running late.
+ *
+ * Uses only real data: the rider's GPS-derived progress along the leg
+ * (progressInLeg) mapped against the leg's scheduled start/end timestamps.
+ * Returns undefined when the leg has no scheduled times to compare against.
+ */
+export function computeCurrentDelay(
+  leg: Leg | undefined,
+  progressInLeg: number,
+  currentTime: Date
+): number | undefined {
+  if (!leg) return undefined
+
+  // Leg.startTime is typed number | string in @opentripplanner/types; coerce.
+  const start = Number(leg.startTime)
+  const end = Number(leg.endTime)
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+    return undefined
+  }
+
+  const clamped = Math.max(0, Math.min(1, progressInLeg))
+  const scheduledMsAtPosition = start + clamped * (end - start)
+
+  return (currentTime.getTime() - scheduledMsAtPosition) / 1000
+}
+
+/**
  * Calculate comprehensive trip progress
  */
 export function calculateTripProgress(
@@ -340,10 +368,19 @@ export function calculateTripProgress(
     departureOverrideMs
   )
 
+  // Measured schedule delay at the rider's current position (real GPS progress
+  // vs the current leg's scheduled timing). Feeds connection-risk detection.
+  const delay = computeCurrentDelay(
+    currentLeg,
+    progressInCurrentLeg,
+    currentTime
+  )
+
   return {
     currentLegIndex,
     currentLegProgress,
     currentTime,
+    delay,
     estimatedArrival,
     overallProgress,
     status,

@@ -257,6 +257,126 @@ export function checkRouteDeviation(
   return null
 }
 
+const TRANSIT_MODES = ['BUS', 'RAIL', 'SUBWAY', 'TRAM', 'FERRY']
+
+function isTransitMode(mode: string | undefined): boolean {
+  return mode != null && TRANSIT_MODES.includes(mode)
+}
+
+// Minimum lateness before a connection warning is worth raising (seconds).
+const CONNECTION_MIN_DELAY_SECONDS = 60
+// Warn once the projected slack to the connecting departure drops below this.
+const CONNECTION_SLACK_THRESHOLD_SECONDS = 120
+
+/**
+ * Find the next transit leg after the given index, summing any walk/transfer
+ * time on the legs in between. Returns null when no onward transit leg exists.
+ */
+function findNextTransitConnection(
+  legs: Leg[],
+  fromIndex: number
+): { leg: Leg; transferSeconds: number } | null {
+  let transferSeconds = 0
+  for (let i = fromIndex + 1; i < legs.length; i++) {
+    if (isTransitMode(legs[i].mode)) {
+      return { leg: legs[i], transferSeconds }
+    }
+    transferSeconds += legs[i].duration || 0
+  }
+  return null
+}
+
+/**
+ * Build the user-facing copy for a connection warning.
+ */
+function connectionWarningCopy(
+  routeName: string,
+  stopName: string,
+  delaySeconds: number,
+  slackSeconds: number
+): { message: string; title: string } {
+  const atStop = stopName ? ` at ${stopName}` : ''
+  if (slackSeconds < 0) {
+    const lateMin = Math.max(1, Math.round(delaySeconds / 60))
+    return {
+      message: `Running ${lateMin} min late — you may miss ${routeName}${atStop}.`,
+      title: 'Connection at risk'
+    }
+  }
+  return {
+    message: `Tight connection — about ${Math.round(
+      slackSeconds
+    )}s to catch ${routeName}${atStop}.`,
+    title: 'Tight connection'
+  }
+}
+
+/**
+ * Check whether a downstream transfer is at risk because the current transit
+ * leg is running late.
+ *
+ * Real-data only: `progress.delay` is the rider's measured GPS-vs-schedule lag
+ * on the current leg. We project that lag forward to the transfer stop and
+ * compare against the *planned* connecting departure (the connecting service's
+ * own real-time delay is not yet accounted for — the warning is therefore
+ * conservative and may over-warn if the connection is also late).
+ */
+export function checkConnectionWarning(
+  progress: TripProgress,
+  legs: Leg[],
+  currentLegIndex: number,
+  sentNotifications: string[]
+): NotificationEvent | null {
+  const currentLeg = legs[currentLegIndex]
+  if (!currentLeg || !isTransitMode(currentLeg.mode)) return null
+
+  // Only meaningful when the current leg is actually behind schedule.
+  const delaySeconds = progress.delay ?? 0
+  if (delaySeconds < CONNECTION_MIN_DELAY_SECONDS) return null
+
+  const connection = findNextTransitConnection(legs, currentLegIndex)
+  if (!connection) return null // no onward transit connection to miss
+  const { leg: nextTransitLeg, transferSeconds } = connection
+
+  // Project arrival at the transfer stop assuming the delay persists, then see
+  // whether the rider can still reach the connecting departure in time.
+  // Leg start/end times are typed number | string in @opentripplanner/types.
+  const projectedArrivalMs = Number(currentLeg.endTime) + delaySeconds * 1000
+  const slackSeconds =
+    (Number(nextTransitLeg.startTime) - projectedArrivalMs) / 1000 -
+    transferSeconds
+
+  if (slackSeconds >= CONNECTION_SLACK_THRESHOLD_SECONDS) return null
+
+  const routeName =
+    nextTransitLeg.routeShortName ||
+    nextTransitLeg.routeLongName ||
+    'your connection'
+  const stopName = nextTransitLeg.from?.name || currentLeg.to?.name || ''
+  const id = generateNotificationId(
+    'CONNECTION_WARNING',
+    `${routeName}_${stopName}`
+  )
+
+  if (wasRecentlySent(id, sentNotifications, 120000)) return null
+
+  const { message, title } = connectionWarningCopy(
+    routeName,
+    stopName,
+    delaySeconds,
+    slackSeconds
+  )
+
+  return {
+    id,
+    message,
+    priority: 'high',
+    timestamp: new Date(),
+    title,
+    type: 'CONNECTION_WARNING'
+  }
+}
+
 /**
  * Check if should notify for trip completion
  */
@@ -292,7 +412,8 @@ export function checkForNotifications(
   nextLeg: Leg | undefined,
   distanceFromRoute: number,
   sentNotifications: string[],
-  config: NotificationConfig
+  config: NotificationConfig,
+  legs?: Leg[]
 ): NotificationEvent[] {
   if (!config.enabled) {
     return []
@@ -338,6 +459,19 @@ export function checkForNotifications(
   )
   if (routeDeviation) {
     notifications.push(routeDeviation)
+  }
+
+  // Check for an at-risk downstream connection (needs full leg list)
+  if (legs) {
+    const connectionWarning = checkConnectionWarning(
+      progress,
+      legs,
+      progress.currentLegIndex,
+      sentNotifications
+    )
+    if (connectionWarning) {
+      notifications.push(connectionWarning)
+    }
   }
 
   // Check for trip completion

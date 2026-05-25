@@ -467,7 +467,8 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         enabled: true,
         soundEnabled: false,
         vibrationEnabled: true
-      }
+      },
+      itinerary.legs
     )
 
     // Show notifications

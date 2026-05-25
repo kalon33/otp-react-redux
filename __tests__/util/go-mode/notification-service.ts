@@ -1,6 +1,7 @@
 import {
   checkApproachingStop,
   checkArrivingStop,
+  checkConnectionWarning,
   checkForNotifications,
   checkLegTransition,
   checkRouteDeviation,
@@ -294,6 +295,79 @@ describe('util > go-mode > notification-service', () => {
     })
   })
 
+  describe('checkConnectionWarning', () => {
+    const T = new Date('2026-01-28T10:00:00').getTime()
+    // Bus 5 arrives the transfer stop at +10min, 2-min walk, bus 21 leaves +15min.
+    const connectionLegs = [
+      {
+        endTime: T + 600000,
+        mode: 'BUS',
+        routeShortName: '5',
+        startTime: T,
+        to: { name: 'Transfer Center' }
+      },
+      { duration: 120, mode: 'WALK', to: { name: 'Bay 3' } },
+      {
+        from: { name: 'Transfer Center' },
+        mode: 'BUS',
+        routeShortName: '21',
+        startTime: T + 900000
+      }
+    ] as any[]
+
+    it('should warn when the connection will be missed', () => {
+      // 10 min late: projected arrival (+20min) is past the +15min departure
+      const progress = makeProgress({ currentLegIndex: 0, delay: 600 })
+      const result = checkConnectionWarning(progress, connectionLegs, 0, [])
+      expect(result).not.toBeNull()
+      expect(result!.type).toBe('CONNECTION_WARNING')
+      expect(result!.priority).toBe('high')
+      expect(result!.title).toBe('Connection at risk')
+      expect(result!.message).toContain('21')
+    })
+
+    it('should warn (tight) when slack is small but positive', () => {
+      // 90s late -> ~90s slack to the connection
+      const progress = makeProgress({ currentLegIndex: 0, delay: 90 })
+      const result = checkConnectionWarning(progress, connectionLegs, 0, [])
+      expect(result).not.toBeNull()
+      expect(result!.title).toBe('Tight connection')
+      expect(result!.message).toContain('21')
+    })
+
+    it('should return null when there is ample slack', () => {
+      // 60s late -> 120s slack, at/above the warning threshold
+      const progress = makeProgress({ currentLegIndex: 0, delay: 60 })
+      expect(checkConnectionWarning(progress, connectionLegs, 0, [])).toBeNull()
+    })
+
+    it('should return null when delay is below the minimum', () => {
+      const progress = makeProgress({ currentLegIndex: 0, delay: 30 })
+      expect(checkConnectionWarning(progress, connectionLegs, 0, [])).toBeNull()
+    })
+
+    it('should return null when the current leg is not transit', () => {
+      const progress = makeProgress({ currentLegIndex: 1, delay: 600 })
+      expect(checkConnectionWarning(progress, connectionLegs, 1, [])).toBeNull()
+    })
+
+    it('should return null when there is no onward transit connection', () => {
+      const progress = makeProgress({ currentLegIndex: 0, delay: 600 })
+      const noConnection = connectionLegs.slice(0, 2)
+      expect(checkConnectionWarning(progress, noConnection, 0, [])).toBeNull()
+    })
+
+    it('should not re-warn within the dedup window', () => {
+      const progress = makeProgress({ currentLegIndex: 0, delay: 600 })
+      const recent = [
+        `CONNECTION_WARNING_21_Transfer Center_${Date.now() - 30000}`
+      ]
+      expect(
+        checkConnectionWarning(progress, connectionLegs, 0, recent)
+      ).toBeNull()
+    })
+  })
+
   describe('checkForNotifications', () => {
     it('should return empty array when notifications are disabled', () => {
       const progress = makeProgress({ stopsRemaining: 2 })
@@ -397,6 +471,63 @@ describe('util > go-mode > notification-service', () => {
       )
       // Should include upcoming turn since no higher priority notifications
       expect(result.some((n) => n.type === 'UPCOMING_TURN')).toBe(true)
+    })
+
+    it('should include a connection warning when legs are provided', () => {
+      const T = new Date('2026-01-28T10:00:00').getTime()
+      const legs = [
+        {
+          endTime: T + 600000,
+          mode: 'BUS',
+          routeShortName: '5',
+          startTime: T,
+          to: { name: 'Transfer Center' }
+        },
+        { duration: 120, mode: 'WALK', to: { name: 'Bay 3' } },
+        {
+          from: { name: 'Transfer Center' },
+          mode: 'BUS',
+          routeShortName: '21',
+          startTime: T + 900000
+        }
+      ] as any[]
+      const progress = makeProgress({ currentLegIndex: 0, delay: 600 })
+      const config = makeConfig()
+
+      const result = checkForNotifications(
+        progress,
+        legs[0],
+        0,
+        legs[1],
+        10,
+        [],
+        config,
+        legs
+      )
+      expect(result.some((n) => n.type === 'CONNECTION_WARNING')).toBe(true)
+    })
+
+    it('should not raise a connection warning when legs are omitted', () => {
+      const progress = makeProgress({ currentLegIndex: 0, delay: 600 })
+      const leg = {
+        endTime: 0,
+        mode: 'BUS',
+        routeShortName: '5',
+        startTime: 0,
+        to: { name: 'Transfer Center' }
+      } as any
+      const config = makeConfig()
+
+      const result = checkForNotifications(
+        progress,
+        leg,
+        0,
+        undefined,
+        10,
+        [],
+        config
+      )
+      expect(result.some((n) => n.type === 'CONNECTION_WARNING')).toBe(false)
     })
   })
 })

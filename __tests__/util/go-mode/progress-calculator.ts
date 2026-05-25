@@ -3,6 +3,7 @@ import {
   calculateOverallProgress,
   calculateTimeRemaining,
   calculateTripProgress,
+  computeCurrentDelay,
   determineTripStatus,
   estimateArrival,
   getTransitProgress,
@@ -336,6 +337,46 @@ describe('util > go-mode > progress-calculator', () => {
       const leg = { mode: 'WALK' } as any
       const previousLeg = { mode: 'BUS' } as any
       expect(shouldAlertForBoarding(leg, previousLeg, 0.95)).toBe(false)
+    })
+  })
+
+  describe('computeCurrentDelay', () => {
+    const start = new Date('2026-01-28T10:00:00').getTime()
+    const end = start + 600000 // 10-minute leg
+    const leg = { endTime: end, mode: 'BUS', startTime: start } as any
+
+    it('should return undefined for undefined leg', () => {
+      expect(
+        computeCurrentDelay(undefined, 0.5, new Date(start))
+      ).toBeUndefined()
+    })
+
+    it('should return undefined when leg lacks scheduled times', () => {
+      const noTimes = { mode: 'BUS' } as any
+      expect(computeCurrentDelay(noTimes, 0.5, new Date(start))).toBeUndefined()
+    })
+
+    it('should return ~0 when exactly on schedule', () => {
+      // Halfway along the leg, at the scheduled halfway time
+      const result = computeCurrentDelay(leg, 0.5, new Date(start + 300000))
+      expect(result).toBeCloseTo(0)
+    })
+
+    it('should return positive seconds when running late', () => {
+      // Only halfway along, but the scheduled halfway time passed 60s ago
+      const result = computeCurrentDelay(leg, 0.5, new Date(start + 360000))
+      expect(result).toBeCloseTo(60)
+    })
+
+    it('should return negative seconds when running ahead', () => {
+      const result = computeCurrentDelay(leg, 0.5, new Date(start + 240000))
+      expect(result).toBeCloseTo(-60)
+    })
+
+    it('should clamp progress outside [0, 1]', () => {
+      // progress > 1 is treated as end of leg
+      const result = computeCurrentDelay(leg, 1.5, new Date(end))
+      expect(result).toBeCloseTo(0)
     })
   })
 
