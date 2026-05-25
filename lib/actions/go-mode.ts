@@ -115,6 +115,18 @@ export const setNotificationConfig = createAction<{
 }>(SET_NOTIFICATION_CONFIG)
 
 /**
+ * Derive the GTFS route id from an itinerary leg.
+ * OTP2 returns the route as an object (leg.route.id, aliased to gtfsId);
+ * legacy responses use a top-level leg.routeId. Mirrors lib/util/itinerary.tsx.
+ */
+function getLegRouteId(leg: Leg | undefined): string | null {
+  if (!leg) return null
+  const route = (leg as any).route
+  if (route && typeof route === 'object') return route.id ?? null
+  return (leg as any).routeId ?? null
+}
+
+/**
  * Determine appropriate GPS tracking interval based on current leg mode
  */
 function getTrackingIntervalForLeg(leg: Leg | undefined): number {
@@ -148,12 +160,13 @@ export function beginGoMode(itinerary: Itinerary) {
     // Pre-fetch stop times for all transit boarding stops
     const today = new Date().toISOString().split('T')[0]
     for (const leg of itinerary.legs) {
-      if (leg.transitLeg && (leg as any).from?.stopId) {
+      const stopId = (leg as any).from?.stop?.gtfsId
+      if (leg.transitLeg && stopId) {
         try {
           dispatch(
             findStopTimesForStop({
               date: today,
-              stopId: (leg as any).from.stopId
+              stopId
             })
           )
         } catch {
@@ -183,8 +196,9 @@ export function beginGoMode(itinerary: Itinerary) {
 
     // Start vehicle tracking if first leg is transit
     const firstLeg = itinerary.legs[0]
-    if (firstLeg?.transitLeg && (firstLeg as any).routeId) {
-      dispatch(startVehicleTracking((firstLeg as any).routeId))
+    const firstLegRouteId = getLegRouteId(firstLeg)
+    if (firstLeg?.transitLeg && firstLegRouteId) {
+      dispatch(startVehicleTracking(firstLegRouteId))
     }
 
     // Check geolocation permission — if denied, still allow simulation
@@ -401,8 +415,9 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       if (previousLeg?.transitLeg) {
         dispatch(stopVehicleTracking())
       }
-      if (newLeg?.transitLeg && (newLeg as any).routeId) {
-        dispatch(startVehicleTracking((newLeg as any).routeId))
+      const newLegRouteId = getLegRouteId(newLeg)
+      if (newLeg?.transitLeg && newLegRouteId) {
+        dispatch(startVehicleTracking(newLegRouteId))
       }
 
       // Restart tracking with new interval (but not during simulation)
@@ -429,11 +444,9 @@ export function handlePositionUpdate(position: GeolocationPosition) {
 
     // Perform vehicle matching on transit legs
     const currentLegForVehicle = itinerary.legs[routeMatch.legIndex]
-    if (
-      currentLegForVehicle?.transitLeg &&
-      (currentLegForVehicle as any).routeId
-    ) {
-      dispatch(performVehicleMatching((currentLegForVehicle as any).routeId))
+    const currentLegRouteId = getLegRouteId(currentLegForVehicle)
+    if (currentLegForVehicle?.transitLeg && currentLegRouteId) {
+      dispatch(performVehicleMatching(currentLegRouteId))
     }
 
     // Check for notifications
