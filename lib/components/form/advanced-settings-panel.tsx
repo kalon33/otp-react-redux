@@ -163,7 +163,42 @@ const RoutingProfileDropdown = styled(DropdownSelector)`
   }
 `
 
+const NlPreferencesContainer = styled.div`
+  margin: 2em 0;
+`
+
+const NlTextarea = styled.textarea`
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font: inherit;
+  min-height: 60px;
+  padding: 8px;
+  resize: vertical;
+  width: 100%;
+`
+
+const NlApplyButton = styled.button`
+  background-color: var(--main-base-color, ${blue[900]});
+  border: 0;
+  border-radius: 6px;
+  color: white;
+  cursor: pointer;
+  font-weight: 600;
+  margin-top: 8px;
+  padding: 8px 16px;
+
+  &:disabled {
+    opacity: 0.6;
+  }
+`
+
+const NlStatus = styled.div`
+  font-size: 13px;
+  margin-top: 8px;
+`
+
 const AdvancedSettingsPanel = ({
+  applyPreferencesFromText,
   applyRoutingProfile,
   autoPlan,
   closeAdvancedSettings,
@@ -181,6 +216,7 @@ const AdvancedSettingsPanel = ({
   setCloseAdvancedSettingsWithDelay,
   setQueryParam
 }: {
+  applyPreferencesFromText: (text: string) => Promise<any>
   applyRoutingProfile: (profileId: string) => void
   autoPlan: boolean
   closeAdvancedSettings: () => void
@@ -202,6 +238,11 @@ const AdvancedSettingsPanel = ({
   const [closingBySave, setClosingBySave] = useState(false)
   const [selectedMobilityProfile, setSelectedMobilityProfile] =
     useState<string>(currentQuery.forEmail || loggedInUser?.email)
+  const [nlText, setNlText] = useState('')
+  const [nlStatus, setNlStatus] = useState<
+    'idle' | 'loading' | 'applied' | 'error'
+  >('idle')
+  const [nlSummary, setNlSummary] = useState('')
   const dependents = useMemo(
     () => loggedInUser?.dependents || [],
     [loggedInUser]
@@ -297,6 +338,23 @@ const AdvancedSettingsPanel = ({
     },
     [applyRoutingProfile]
   )
+
+  const onApplyNlPreferences = useCallback(async () => {
+    const text = nlText.trim()
+    if (!text) return
+    setNlStatus('loading')
+    try {
+      const prefs = await applyPreferencesFromText(text)
+      setNlSummary(
+        Object.entries(prefs)
+          .map(([key, value]) => `${key}: ${value}`)
+          .join(', ')
+      )
+      setNlStatus('applied')
+    } catch {
+      setNlStatus('error')
+    }
+  }, [applyPreferencesFromText, nlText])
   return (
     <PanelOverlay className="advanced-settings" ref={innerRef}>
       <HeaderContainer>
@@ -327,6 +385,50 @@ const AdvancedSettingsPanel = ({
           value={currentQuery.activeProfileId || DEFAULT_PROFILE_ID}
         />
       </RoutingProfileContainer>
+      <NlPreferencesContainer>
+        <VisibleSubheader>
+          <FormattedMessage id="components.BatchSearchScreen.nlPreferencesHeader" />
+        </VisibleSubheader>
+        <NlTextarea
+          aria-label={intl.formatMessage({
+            id: 'components.BatchSearchScreen.nlPreferencesHeader'
+          })}
+          onChange={(e) => {
+            setNlText(e.target.value)
+            if (nlStatus !== 'idle') setNlStatus('idle')
+          }}
+          placeholder={intl.formatMessage({
+            id: 'components.BatchSearchScreen.nlPreferencesPlaceholder'
+          })}
+          value={nlText}
+        />
+        <NlApplyButton
+          disabled={nlStatus === 'loading' || !nlText.trim()}
+          onClick={onApplyNlPreferences}
+          type="button"
+        >
+          <FormattedMessage
+            id={
+              nlStatus === 'loading'
+                ? 'components.BatchSearchScreen.nlPreferencesLoading'
+                : 'components.BatchSearchScreen.nlPreferencesApply'
+            }
+          />
+        </NlApplyButton>
+        {nlStatus === 'applied' && (
+          <NlStatus>
+            <FormattedMessage
+              id="components.BatchSearchScreen.nlPreferencesApplied"
+              values={{ summary: nlSummary }}
+            />
+          </NlStatus>
+        )}
+        {nlStatus === 'error' && (
+          <NlStatus>
+            <FormattedMessage id="components.BatchSearchScreen.nlPreferencesError" />
+          </NlStatus>
+        )}
+      </NlPreferencesContainer>
       {processedGlobalSettings.length > 0 && (
         <>
           <InvisibleSubheader>
@@ -429,6 +531,7 @@ const mapStateToProps = (state: AppReduxState) => {
 }
 
 const mapDispatchToProps = {
+  applyPreferencesFromText: routingProfileActions.applyPreferencesFromText,
   applyRoutingProfile: routingProfileActions.applyRoutingProfile,
   getDependentUserInfo: userActions.getDependentUserInfo,
   setQueryParam: formActions.setQueryParam

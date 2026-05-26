@@ -57,7 +57,13 @@
     ],
     "components.BatchSearchScreen.*": [
       "routingProfileHeader",
-      "routingProfileLabel"
+      "routingProfileLabel",
+      "nlPreferencesApplied",
+      "nlPreferencesApply",
+      "nlPreferencesError",
+      "nlPreferencesHeader",
+      "nlPreferencesLoading",
+      "nlPreferencesPlaceholder"
     ]
   },
   "ignoredIds": [
