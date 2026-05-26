@@ -710,3 +710,55 @@ export const LocatingIndicator = styled.div`
   font-size: 13px;
   margin-top: 4px;
 `
+
+// Mid-trip re-route quick chips + typed message
+export const RerouteChips = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0;
+`
+
+export const RerouteChip = styled.button`
+  background: #f1f1f1;
+  border: 1px solid #ccc;
+  border-radius: 999px;
+  color: #333;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 6px 12px;
+`
+
+export const RerouteNlRow = styled.div`
+  display: flex;
+  gap: 6px;
+`
+
+export const RerouteNlInput = styled.input`
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  flex: 1;
+  font: inherit;
+  min-width: 0;
+  padding: 8px;
+`
+
+export const RerouteSendButton = styled.button`
+  background: #2196f3;
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  cursor: pointer;
+  font-weight: 600;
+  padding: 8px 14px;
+
+  &:disabled {
+    opacity: 0.6;
+  }
+`
+
+export const RerouteNlError = styled.div`
+  color: #d32f2f;
+  font-size: 12px;
+  margin-top: 6px;
+`

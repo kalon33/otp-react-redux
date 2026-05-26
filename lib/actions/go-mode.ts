@@ -1,3 +1,6 @@
+/* eslint-disable sort-imports-es6-autofix/sort-imports-es6 -- the autofixer is
+   non-convergent for this file's mix of value + type relative imports (it keeps
+   hoisting a type import above sibling value imports); order is hand-maintained. */
 import { createAction } from 'redux-actions'
 import coreUtils from '@opentripplanner/core-utils'
 import polyline from '@mapbox/polyline'
@@ -19,16 +22,14 @@ import {
   matchPositionToRoute,
   shouldTransitionToNextLeg
 } from '../util/go-mode/position-matching'
+import type { NotificationEvent } from '../util/go-mode/notification-service'
+import type { RouteMatchResult } from '../util/go-mode/position-matching'
+import type { TripProgress } from '../util/go-mode/progress-calculator'
 
+import { findStopTimesForStop, getVehiclePositionsForRoute } from './apiV2'
 import { MobileScreens } from './ui-constants'
 import { setMobileScreen } from './ui'
 import { setQueryParam } from './form'
-import type { NotificationEvent } from '../util/go-mode/notification-service'
-
-import { findStopTimesForStop, getVehiclePositionsForRoute } from './apiV2'
-
-import type { RouteMatchResult } from '../util/go-mode/position-matching'
-import type { TripProgress } from '../util/go-mode/progress-calculator'
 
 // Module-scoped GPS polling interval ID (replaces window.__goModeIntervalId)
 let gpsPollingIntervalId: ReturnType<typeof setInterval> | null = null
@@ -292,7 +293,7 @@ export function endGoMode() {
  * best one as a Switch/Keep card. Optionally applies a routing profile.
  */
 export function reRouteFromCurrentPosition(
-  options: { profileId?: string } = {}
+  options: { preferences?: any; profileId?: string } = {}
 ) {
   return function (dispatch: any, getState: any) {
     const state = getState()
@@ -335,6 +336,8 @@ export function reRouteFromCurrentPosition(
     if (profile) {
       payload.activeProfileId = profile.id
       payload.routingPreferences = profile.prefs
+    } else if (options.preferences) {
+      payload.routingPreferences = options.preferences
     }
 
     // Reuse the normal search pipeline; results populate searches[searchId].

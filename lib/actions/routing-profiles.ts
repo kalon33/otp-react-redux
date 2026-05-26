@@ -1,6 +1,10 @@
 import coreUtils from '@opentripplanner/core-utils'
 
-import { clampPreferences, getRoutingProfile } from '../util/routing-profiles'
+import {
+  getRoutingProfile,
+  postPreferences,
+  PREFERENCES_API_PATH
+} from '../util/routing-profiles'
 import { queryIsValid } from '../util/state'
 import type { RoutingPreferences } from '../util/routing-profiles'
 
@@ -40,38 +44,32 @@ export function applyRoutingProfile(profileId: string) {
   }
 }
 
-/** Path of the login-gated preferences endpoint (same origin, proxied by nginx). */
-export const PREFERENCES_API_PATH = '/api/preferences'
-
 /**
- * Send a plain-language description to the preferences endpoint and apply the
- * routing levers it returns. The endpoint is gated by the same nginx Basic Auth
- * as the rest of the app, so this same-origin fetch carries the credential
- * automatically. Returned levers are re-clamped client-side (defense in depth)
- * before being applied. Throws on failure so the caller can surface an error;
- * the current settings are left untouched in that case.
+ * Resolve plain-language text to levers and apply them to the current query
+ * (search-form box). Throws on failure so the caller can surface an error; the
+ * current settings are left untouched in that case.
  */
 export function applyPreferencesFromText(text: string) {
   return async function (
     dispatch: any,
     getState: any
   ): Promise<RoutingPreferences> {
-    const config = getState().otp.config
-    const url = config?.routingPreferencesApiUrl || PREFERENCES_API_PATH
-    const response = await fetch(url, {
-      body: JSON.stringify({ text }),
-      headers: { 'Content-Type': 'application/json' },
-      method: 'POST'
-    })
-    if (!response.ok) {
-      throw new Error(`Preferences API returned ${response.status}`)
-    }
-    const data = await response.json()
-    const prefs = clampPreferences(data?.preferences)
-    if (Object.keys(prefs).length === 0) {
-      throw new Error('No usable preferences returned')
-    }
+    const url =
+      getState().otp.config?.routingPreferencesApiUrl || PREFERENCES_API_PATH
+    const prefs = await postPreferences(url, text)
     dispatch(setRoutingPreferences(prefs))
     return prefs
+  }
+}
+
+/**
+ * Resolve plain-language text to clamped levers WITHOUT applying them (used by
+ * the Go Mode mid-trip re-route, which feeds the result into a re-route).
+ */
+export function fetchPreferencesFromText(text: string) {
+  return function (dispatch: any, getState: any): Promise<RoutingPreferences> {
+    const url =
+      getState().otp.config?.routingPreferencesApiUrl || PREFERENCES_API_PATH
+    return postPreferences(url, text)
   }
 }

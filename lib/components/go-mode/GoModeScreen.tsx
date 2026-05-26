@@ -3,6 +3,7 @@ import { useIntl } from 'react-intl'
 import React, { useEffect, useState } from 'react'
 
 import * as goModeActions from '../../actions/go-mode'
+import * as routingProfileActions from '../../actions/routing-profiles'
 import * as uiActions from '../../actions/ui'
 import { getRerouteCandidate, isRerouteSearchSettled } from '../../util/state'
 import { MobileScreens } from '../../actions/ui-constants'
@@ -19,7 +20,13 @@ import {
   RerouteButton,
   RerouteCard,
   RerouteCardTitle,
+  RerouteChip,
+  RerouteChips,
   RerouteKeepButton,
+  RerouteNlError,
+  RerouteNlInput,
+  RerouteNlRow,
+  RerouteSendButton,
   RerouteSummary,
   RerouteSwitchButton,
   RetryButton,
@@ -35,16 +42,28 @@ import CurrentLegPanel from './CurrentLegPanel'
 import GoModeMap from './GoModeMap'
 import GoModeNotifications from './GoModeNotifications'
 
+// Quick mid-trip re-route options; each maps to a pre-built routing profile.
+const REROUTE_CHIPS = [
+  { label: 'Less walking', profileId: 'minimize-walking' },
+  { label: 'Fewer transfers', profileId: 'stay-seated' },
+  { label: 'Avoid biking', profileId: 'avoid-biking' },
+  { label: 'Fastest', profileId: 'fastest' }
+]
+
 interface Props {
   beginGoMode: (itinerary: any) => void
   boardingStopData: any
   clearReroute: () => void
   departureOverride: number | null
   endGoMode: () => void
+  fetchPreferencesFromText: (text: string) => Promise<any>
   goMode: GoModeState
   pauseGpsSimulation: () => void
   reRouteCandidate: any
-  reRouteFromCurrentPosition: () => void
+  reRouteFromCurrentPosition: (options?: {
+    preferences?: any
+    profileId?: string
+  }) => void
   reRouteSettled: boolean
   resumeGpsSimulation: () => void
   setDepartureOverride: (epochMs: number | null) => void
@@ -60,6 +79,7 @@ const GoModeScreen = ({
   clearReroute,
   departureOverride,
   endGoMode,
+  fetchPreferencesFromText,
   goMode,
   pauseGpsSimulation,
   reRouteCandidate,
@@ -75,6 +95,9 @@ const GoModeScreen = ({
   const intl = useIntl()
   const [simSpeed, setSimSpeed] = useState(2)
   const [simToolbarOpen, setSimToolbarOpen] = useState(true)
+  const [rerouteText, setRerouteText] = useState('')
+  const [nlBusy, setNlBusy] = useState(false)
+  const [nlError, setNlError] = useState(false)
 
   useEffect(() => {
     // If Go Mode is not active, redirect back to results
@@ -174,6 +197,26 @@ const GoModeScreen = ({
 
   const handleKeepRoute = () => {
     clearReroute()
+  }
+
+  const handleRerouteChip = (profileId: string) => {
+    reRouteFromCurrentPosition({ profileId })
+  }
+
+  const handleSendRerouteMessage = async () => {
+    const text = rerouteText.trim()
+    if (!text) return
+    setNlBusy(true)
+    setNlError(false)
+    try {
+      const prefs = await fetchPreferencesFromText(text)
+      reRouteFromCurrentPosition({ preferences: prefs })
+      setRerouteText('')
+    } catch {
+      setNlError(true)
+    } finally {
+      setNlBusy(false)
+    }
   }
 
   // GPS error state with specific messages and retry
@@ -295,12 +338,66 @@ const GoModeScreen = ({
 
         {goMode.reRoute.status === 'idle' && (
           <RerouteBar>
-            <RerouteButton onClick={handleFindAnotherWay} type="button">
-              {intl.formatMessage({
-                defaultMessage: 'Find another way',
-                id: 'components.GoMode.findAnotherWay'
-              })}
-            </RerouteButton>
+            <RerouteCard>
+              <RerouteButton onClick={handleFindAnotherWay} type="button">
+                {intl.formatMessage({
+                  defaultMessage: 'Find another way',
+                  id: 'components.GoMode.findAnotherWay'
+                })}
+              </RerouteButton>
+              <RerouteChips>
+                {REROUTE_CHIPS.map((chip) => (
+                  <RerouteChip
+                    key={chip.profileId}
+                    onClick={() => handleRerouteChip(chip.profileId)}
+                    type="button"
+                  >
+                    {chip.label}
+                  </RerouteChip>
+                ))}
+              </RerouteChips>
+              <RerouteNlRow>
+                <RerouteNlInput
+                  aria-label={intl.formatMessage({
+                    defaultMessage: 'Describe what you need',
+                    id: 'components.GoMode.rerouteNlLabel'
+                  })}
+                  disabled={nlBusy}
+                  onChange={(e) => {
+                    setRerouteText(e.target.value)
+                    if (nlError) setNlError(false)
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleSendRerouteMessage()
+                  }}
+                  placeholder={intl.formatMessage({
+                    defaultMessage: 'e.g. avoid stairs today',
+                    id: 'components.GoMode.rerouteNlPlaceholder'
+                  })}
+                  value={rerouteText}
+                />
+                <RerouteSendButton
+                  disabled={nlBusy || !rerouteText.trim()}
+                  onClick={handleSendRerouteMessage}
+                  type="button"
+                >
+                  {nlBusy
+                    ? '…'
+                    : intl.formatMessage({
+                        defaultMessage: 'Go',
+                        id: 'components.GoMode.rerouteNlSend'
+                      })}
+                </RerouteSendButton>
+              </RerouteNlRow>
+              {nlError && (
+                <RerouteNlError>
+                  {intl.formatMessage({
+                    defaultMessage: "Couldn't read that — try again.",
+                    id: 'components.GoMode.rerouteNlError'
+                  })}
+                </RerouteNlError>
+              )}
+            </RerouteCard>
           </RerouteBar>
         )}
         {goMode.reRoute.status === 'searching' && (
@@ -508,6 +605,7 @@ const mapDispatchToProps = {
   beginGoMode: goModeActions.beginGoMode,
   clearReroute: goModeActions.clearReroute,
   endGoMode: goModeActions.endGoMode,
+  fetchPreferencesFromText: routingProfileActions.fetchPreferencesFromText,
   pauseGpsSimulation: goModeActions.pauseGpsSimulation,
   reRouteFromCurrentPosition: goModeActions.reRouteFromCurrentPosition,
   resumeGpsSimulation: goModeActions.resumeGpsSimulation,

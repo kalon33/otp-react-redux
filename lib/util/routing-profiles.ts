@@ -176,3 +176,33 @@ export function extendPlanQueryWithLevers(query: string): string {
     .replace('$walkSpeed: Float', () => EXTRA_VAR_DECLS)
     .replace('walkSpeed: $walkSpeed', () => EXTRA_PLAN_ARGS)
 }
+
+/** Path of the login-gated preferences endpoint (same origin, proxied by nginx). */
+export const PREFERENCES_API_PATH = '/api/preferences'
+
+/**
+ * POST a plain-language description to the (login-gated) preferences endpoint
+ * and return the clamped routing levers. Same-origin fetch, so the nginx Basic
+ * Auth credential rides along automatically; levers are re-clamped client-side
+ * (defense in depth). Throws on failure. Shared by the search-form box and the
+ * Go Mode mid-trip re-route.
+ */
+export async function postPreferences(
+  url: string,
+  text: string
+): Promise<RoutingPreferences> {
+  const response = await fetch(url, {
+    body: JSON.stringify({ text }),
+    headers: { 'Content-Type': 'application/json' },
+    method: 'POST'
+  })
+  if (!response.ok) {
+    throw new Error(`Preferences API returned ${response.status}`)
+  }
+  const data = await response.json()
+  const prefs = clampPreferences(data?.preferences)
+  if (Object.keys(prefs).length === 0) {
+    throw new Error('No usable preferences returned')
+  }
+  return prefs
+}
