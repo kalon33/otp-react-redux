@@ -55,8 +55,8 @@ export interface GoModeState {
   }
 
   departureOverride: number | null
-  isActive: boolean
 
+  isActive: boolean
   notifications: {
     enabled: boolean
     recentNotifications: NotificationEvent[]
@@ -64,6 +64,13 @@ export interface GoModeState {
     soundEnabled: boolean
     vibrationEnabled: boolean
   }
+
+  /**
+   * The trip origin captured when Go Mode began. A mid-trip re-route replaces
+   * currentQuery.from with the rider's GPS position ("Current location"); this
+   * lets endGoMode restore the origin the rider started with on exit.
+   */
+  originalFrom: any
 
   progress: TripProgress | null
 
@@ -106,8 +113,8 @@ const defaultState: GoModeState = {
   },
 
   departureOverride: null,
-  isActive: false,
 
+  isActive: false,
   notifications: {
     enabled: true,
     recentNotifications: [],
@@ -115,6 +122,8 @@ const defaultState: GoModeState = {
     soundEnabled: false,
     vibrationEnabled: true
   },
+
+  originalFrom: null,
 
   progress: null,
 
@@ -290,7 +299,7 @@ const goMode = handleActions<GoModeState, any>(
     }),
 
     [START_GO_MODE]: (state, action) => {
-      const { itinerary } = action.payload
+      const { itinerary, originalFrom } = action.payload
 
       return {
         ...state,
@@ -301,6 +310,7 @@ const goMode = handleActions<GoModeState, any>(
           recentNotifications: [],
           sentNotifications: []
         },
+        originalFrom: originalFrom ?? null,
         progress: null,
         reRoute: { ...defaultState.reRoute },
         routeMatch: null,

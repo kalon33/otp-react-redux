@@ -102,7 +102,10 @@ export const START_REROUTE = 'START_REROUTE'
 export const clearVehicleMatch = createAction(CLEAR_VEHICLE_MATCH)
 export const dismissBoardingPrompt = createAction(DISMISS_BOARDING_PROMPT)
 export const showBoardingPromptAction = createAction(SHOW_BOARDING_PROMPT)
-export const startGoMode = createAction<{ itinerary: Itinerary }>(START_GO_MODE)
+export const startGoMode = createAction<{
+  itinerary: Itinerary
+  originalFrom?: any
+}>(START_GO_MODE)
 export const stopGoMode = createAction(STOP_GO_MODE)
 export const updatePosition = createAction<GeolocationPosition>(UPDATE_POSITION)
 export const updateRouteMatch = createAction<RouteMatchResult | null>(
@@ -173,7 +176,10 @@ export function beginGoMode(itinerary: Itinerary) {
     // Set state and navigate to Go Mode screen synchronously first,
     // before any async work, to avoid race with the GoModeScreen useEffect
     // that redirects away when isActive is false.
-    dispatch(startGoMode({ itinerary }))
+    // Capture the origin so it can be restored on exit if a mid-trip re-route
+    // replaces it with the rider's GPS position.
+    const originalFrom = getState().otp.currentQuery?.from || null
+    dispatch(startGoMode({ itinerary, originalFrom }))
     dispatch(setMobileScreen(MobileScreens.GO_MODE))
 
     // Pre-fetch stop times for all transit boarding stops
@@ -246,7 +252,12 @@ export function beginGoMode(itinerary: Itinerary) {
  * Stop Go Mode and clean up
  */
 export function endGoMode() {
-  return function (dispatch: any) {
+  return function (dispatch: any, getState: any) {
+    // Capture origin state before stopGoMode wipes the goMode slice.
+    const { currentQuery, goMode } = getState().otp
+    const originalFrom = goMode?.originalFrom
+    const currentFrom = currentQuery?.from
+
     // Clean up GPS polling interval
     if (gpsPollingIntervalId) {
       clearInterval(gpsPollingIntervalId)
@@ -283,6 +294,18 @@ export function endGoMode() {
     delete w.__resumeGpsSimulation
 
     dispatch(stopGoMode())
+
+    // If a mid-trip re-route replaced the origin with the rider's GPS position,
+    // restore the origin they started with so the trip planner isn't left
+    // showing "Current location".
+    if (
+      originalFrom &&
+      currentFrom &&
+      (currentFrom.lat !== originalFrom.lat ||
+        currentFrom.lon !== originalFrom.lon)
+    ) {
+      dispatch(setQueryParam({ from: originalFrom }))
+    }
   }
 }
 

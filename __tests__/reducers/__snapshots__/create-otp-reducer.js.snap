@@ -36,6 +36,52 @@ Object {
       "type": "BEST",
     },
   },
+  "goMode": Object {
+    "activeItinerary": null,
+    "boardingPrompt": Object {
+      "lastDismissedAt": null,
+      "shown": false,
+      "transitLegEnteredAt": null,
+    },
+    "departureOverride": null,
+    "isActive": false,
+    "notifications": Object {
+      "enabled": true,
+      "recentNotifications": Array [],
+      "sentNotifications": Array [],
+      "soundEnabled": false,
+      "vibrationEnabled": true,
+    },
+    "originalFrom": null,
+    "progress": null,
+    "reRoute": Object {
+      "candidate": null,
+      "searchId": null,
+      "status": "idle",
+    },
+    "routeMatch": null,
+    "simulation": Object {
+      "pointIndex": 0,
+      "speedMultiplier": 1,
+      "status": "idle",
+      "totalPoints": 0,
+    },
+    "tracking": Object {
+      "error": null,
+      "interval": 8000,
+      "isTracking": false,
+      "lastPosition": null,
+    },
+    "ui": Object {
+      "mapFollowUser": true,
+    },
+    "vehicleMatch": Object {
+      "consecutiveMatches": 0,
+      "match": null,
+      "nearbyVehicles": Array [],
+      "trackedRouteId": null,
+    },
+  },
   "initialUrl": "/",
   "lastActionMillis": 0,
   "location": Object {
