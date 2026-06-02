@@ -28,7 +28,11 @@ import {
   matchPositionToRoute,
   shouldTransitionToNextLeg
 } from '../util/go-mode/position-matching'
-import type { NotificationEvent } from '../util/go-mode/notification-service'
+import { sendPush } from '../util/go-mode/push-service'
+import type {
+  NotificationEvent,
+  NotificationType
+} from '../util/go-mode/notification-service'
 import type { RouteMatchResult } from '../util/go-mode/position-matching'
 import type { TripProgress } from '../util/go-mode/progress-calculator'
 
@@ -875,6 +879,14 @@ export function startPositionTracking() {
 /**
  * Handle a position update from GPS
  */
+// Notification types worth a real phone push (vs in-app toast only). Kept tight
+// so the rider's phone only buzzes for time-critical, act-now moments.
+const PUSH_NOTIFICATION_TYPES = new Set<NotificationType>([
+  'LEAVE_SOON',
+  'CONNECTION_WARNING',
+  'ARRIVING_STOP'
+])
+
 export function handlePositionUpdate(position: GeolocationPosition) {
   return function (dispatch: any, getState: any) {
     const state = getState()
@@ -999,6 +1011,16 @@ export function handlePositionUpdate(position: GeolocationPosition) {
           vibrationEnabled: true
         }
       )
+      // Forward the highest-value alerts to the phone as a real push (Pushover).
+      // Dedup is already guaranteed upstream by checkForNotifications, so each
+      // fires at most once. Limited to a few types to avoid push spam.
+      if (PUSH_NOTIFICATION_TYPES.has(notification.type)) {
+        sendPush({
+          message: notification.message,
+          priority: notification.priority === 'high' ? 1 : 0,
+          title: notification.title
+        })
+      }
     })
 
     // Proactively offer a re-route when a connection is at risk or the rider

@@ -10,6 +10,7 @@ export type NotificationType =
   | 'DELAY_ALERT'
   | 'ROUTE_DEVIATION'
   | 'CONNECTION_WARNING'
+  | 'LEAVE_SOON'
   | 'TRIP_COMPLETE'
 
 export interface NotificationConfig {
@@ -203,6 +204,69 @@ export function checkUpcomingTurn(
   }
 
   return null
+}
+
+// Lead time for the "time to go" alert: warn when the rider has this many
+// seconds (or fewer) of slack left before they must leave to catch the bus.
+const LEAVE_SOON_THRESHOLD_SECONDS = 120
+// Don't keep firing once they're well past the deadline; a single late nudge
+// (down to -60s) still lands if a GPS tick skipped over the exact crossing.
+const LEAVE_SOON_FLOOR_SECONDS = -60
+
+/**
+ * Check whether it's time to leave: the rider is on the access (walk/bike) leg
+ * before a transit leg and the slack until they must depart — to still reach the
+ * stop before the bus — has dropped to ~2 minutes. `progress.waitTimeAtStop` is
+ * exactly that slack (departure time minus remaining access-leg time).
+ *
+ * Fires once per trip (long dedup window); high priority so it vibrates and is
+ * forwarded to the phone as a real push.
+ */
+export function checkLeaveSoon(
+  progress: TripProgress,
+  currentLeg: Leg,
+  nextLeg: Leg | undefined,
+  sentNotifications: string[]
+): NotificationEvent | null {
+  const onAccessLeg =
+    currentLeg.mode === 'WALK' || currentLeg.mode === 'BICYCLE'
+  if (!onAccessLeg || !nextLeg || !isTransitMode(nextLeg.mode)) return null
+  if (progress.waitTimeAtStop === undefined) return null
+
+  const leaveInSeconds = progress.waitTimeAtStop
+  if (
+    leaveInSeconds > LEAVE_SOON_THRESHOLD_SECONDS ||
+    leaveInSeconds <= LEAVE_SOON_FLOOR_SECONDS
+  ) {
+    return null
+  }
+
+  const routeName =
+    nextLeg.routeShortName || nextLeg.routeLongName || 'your bus'
+  const stopName = nextLeg.from?.name || currentLeg.to?.name || 'the stop'
+  const verb = currentLeg.mode === 'BICYCLE' ? 'bike' : 'walk'
+  const busAwayMin = Math.max(
+    1,
+    Math.round((progress.timeUntilNextDeparture ?? 0) / 60)
+  )
+
+  const id = generateNotificationId('LEAVE_SOON', `${routeName}_${stopName}`)
+  // Long window so it fires once for this connection, not every GPS tick.
+  if (wasRecentlySent(id, sentNotifications, 30 * 60 * 1000)) return null
+
+  const message =
+    leaveInSeconds <= 0
+      ? `Leave now — ${verb} to ${stopName} to catch ${routeName} (${busAwayMin} min away).`
+      : `Time to go: ${verb} to ${stopName} now to catch ${routeName} (${busAwayMin} min away).`
+
+  return {
+    id,
+    message,
+    priority: 'high',
+    timestamp: new Date(),
+    title: 'Time to go',
+    type: 'LEAVE_SOON'
+  }
 }
 
 /**
@@ -499,6 +563,10 @@ export function checkForNotifications(
   pushIf(
     notifications,
     checkArrivingStop(progress, currentLeg, sentNotifications)
+  )
+  pushIf(
+    notifications,
+    checkLeaveSoon(progress, currentLeg, nextLeg, sentNotifications)
   )
   pushIf(
     notifications,

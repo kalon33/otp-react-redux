@@ -274,6 +274,61 @@ export const CountdownLabel = styled.div`
   white-space: nowrap;
 `
 
+// Prominent "leave by" banner shown at the top of the access (walk/bike) leg
+// before a transit connection: states bike time + bus ETA and counts down to
+// the moment the rider must leave to catch the bus.
+export const LeaveByCard = styled.div<{ $urgency: 'ok' | 'tight' | 'late' }>`
+  background-color: ${(props) => {
+    switch (props.$urgency) {
+      case 'ok':
+        return '#e8f5e9'
+      case 'tight':
+        return '#fff8e1'
+      case 'late':
+        return '#ffebee'
+    }
+  }};
+  border: 2px solid
+    ${(props) => {
+      switch (props.$urgency) {
+        case 'ok':
+          return '#4caf50'
+        case 'tight':
+          return '#ff9800'
+        case 'late':
+          return '#f44336'
+      }
+    }};
+  border-radius: 8px;
+  margin-bottom: 10px;
+  padding: 12px 14px;
+`
+
+export const LeaveByHeader = styled.div`
+  color: #333;
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 6px;
+`
+
+export const LeaveByCountdown = styled.div<{
+  $urgency: 'ok' | 'tight' | 'late'
+}>`
+  color: ${(props) => {
+    switch (props.$urgency) {
+      case 'ok':
+        return '#2e7d32'
+      case 'tight':
+        return '#e65100'
+      case 'late':
+        return '#c62828'
+    }
+  }};
+  font-size: 22px;
+  font-weight: bold;
+  line-height: 1.2;
+`
+
 export const SmallProgressTrack = styled.div`
   background-color: #e0e0e0;
   border-radius: 3px;

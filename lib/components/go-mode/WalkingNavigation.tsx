@@ -1,5 +1,5 @@
 import { useIntl } from 'react-intl'
-import React, { useMemo } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import type { Leg } from '@opentripplanner/types'
 
 import { mergeAndSortStopTimes } from '../../util/stop-times'
@@ -12,6 +12,9 @@ import {
   CountdownValue,
   InfoCardLabel,
   InfoCardValue,
+  LeaveByCard,
+  LeaveByCountdown,
+  LeaveByHeader,
   NextLegPreview,
   ResetButton,
   UseNextButton,
@@ -65,6 +68,13 @@ const WalkingNavigation = ({
     })
   }
 
+  const formatCountdown = (seconds: number): string => {
+    const total = Math.max(0, Math.round(seconds))
+    const mins = Math.floor(total / 60)
+    const secs = total % 60
+    return `${mins}:${secs.toString().padStart(2, '0')}`
+  }
+
   const walkSecondsRemaining = Math.max(
     0,
     (leg.duration || 0) * (1 - progress.currentLegProgress / 100)
@@ -73,6 +83,36 @@ const WalkingNavigation = ({
   // Determine the effective departure time for display
   const effectiveDepartureMs =
     departureOverride || progress.plannedDepartureTime
+
+  // Live 1s tick so the leave-by countdown advances smoothly between GPS polls
+  // (which arrive only every few seconds).
+  const [nowMs, setNowMs] = useState(() => Date.now())
+  useEffect(() => {
+    const id = setInterval(() => setNowMs(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [])
+
+  // Deadline to leave to still catch the bus = bus departure − remaining
+  // bike/walk time. While stationary at the start this is the full leg duration,
+  // so it reads as "the latest you can set off."
+  const leaveByMs =
+    isNextLegTransit && effectiveDepartureMs
+      ? effectiveDepartureMs - walkSecondsRemaining * 1000
+      : null
+  const leaveInSeconds = leaveByMs !== null ? (leaveByMs - nowMs) / 1000 : 0
+  const leaveUrgency: 'ok' | 'tight' | 'late' =
+    leaveInSeconds <= 120 ? 'late' : leaveInSeconds <= 300 ? 'tight' : 'ok'
+  const accessEmoji = leg.mode === 'BICYCLE' ? '🚲' : '🚶'
+  const accessVerb =
+    leg.mode === 'BICYCLE'
+      ? intl.formatMessage({
+          defaultMessage: 'bike',
+          id: 'components.GoMode.modeBike'
+        })
+      : intl.formatMessage({
+          defaultMessage: 'walk',
+          id: 'components.GoMode.modeWalk'
+        })
 
   // Filter upcoming alternative departures for the same route at the boarding stop
   const alternativeDepartures = useMemo(() => {
@@ -131,6 +171,51 @@ const WalkingNavigation = ({
 
   return (
     <WalkingContainer>
+      {/* Leave-by banner: bike time + bus ETA, with a live countdown to the
+          moment the rider must set off to catch the bus. */}
+      {isNextLegTransit && leaveByMs !== null && nextLeg && (
+        <LeaveByCard $urgency={leaveUrgency}>
+          <LeaveByHeader>
+            {intl.formatMessage(
+              {
+                defaultMessage:
+                  '{emoji} ~{bikeTime} to {stop} · 🚌 {route} {busTime} away',
+                id: 'components.GoMode.leaveByHeader'
+              },
+              {
+                bikeTime: formatMinutes(walkSecondsRemaining),
+                busTime: formatMinutes(progress.timeUntilNextDeparture ?? 0),
+                emoji: accessEmoji,
+                route: nextLeg.routeShortName || nextLeg.routeLongName,
+                stop: nextLeg.from?.name || leg.to.name
+              }
+            )}
+          </LeaveByHeader>
+          <LeaveByCountdown $urgency={leaveUrgency}>
+            {leaveInSeconds > 0
+              ? intl.formatMessage(
+                  {
+                    defaultMessage: 'Leave in {time}',
+                    id: 'components.GoMode.leaveIn'
+                  },
+                  { time: formatCountdown(leaveInSeconds) }
+                )
+              : leaveInSeconds > -60
+              ? intl.formatMessage(
+                  {
+                    defaultMessage: 'Leave now to {verb}!',
+                    id: 'components.GoMode.leaveNow'
+                  },
+                  { verb: accessVerb }
+                )
+              : intl.formatMessage({
+                  defaultMessage: 'Hurry — you may miss it',
+                  id: 'components.GoMode.leaveHurry'
+                })}
+          </LeaveByCountdown>
+        </LeaveByCard>
+      )}
+
       {/* Navigation instruction with time remaining -- compact inline */}
       <div
         style={{
