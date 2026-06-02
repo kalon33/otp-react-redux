@@ -2,10 +2,16 @@
    non-convergent for this file's mix of value + type relative imports (it keeps
    hoisting a type import above sibling value imports); order is hand-maintained. */
 import { createAction } from 'redux-actions'
+import { format, utcToZonedTime } from 'date-fns-tz'
 import coreUtils from '@opentripplanner/core-utils'
 import polyline from '@mapbox/polyline'
 import type { Itinerary, LatLngArray, Leg } from '@opentripplanner/types'
 
+import {
+  getDownstreamStops,
+  scoreAlightOption,
+  selectCandidateStops
+} from '../util/go-mode/alight-optimizer'
 import { calculateTripProgress } from '../util/go-mode/progress-calculator'
 import {
   checkForNotifications,
@@ -26,7 +32,12 @@ import type { NotificationEvent } from '../util/go-mode/notification-service'
 import type { RouteMatchResult } from '../util/go-mode/position-matching'
 import type { TripProgress } from '../util/go-mode/progress-calculator'
 
-import { findStopTimesForStop, getVehiclePositionsForRoute } from './apiV2'
+import {
+  findRoutesNearby,
+  findStopTimesForStop,
+  findTrip,
+  getVehiclePositionsForRoute
+} from './apiV2'
 import { MobileScreens } from './ui-constants'
 import { setMobileScreen } from './ui'
 import { setQueryParam } from './form'
@@ -98,6 +109,15 @@ export const CLEAR_REROUTE = 'CLEAR_REROUTE'
 export const SET_REROUTE_RESULT = 'SET_REROUTE_RESULT'
 export const START_REROUTE = 'START_REROUTE'
 
+// "I'm already on the bus" onboard-flow action types
+export const BEGIN_ONBOARD_FLOW = 'BEGIN_ONBOARD_FLOW'
+export const CLEAR_ONBOARD = 'CLEAR_ONBOARD'
+export const SET_ONBOARD_RESULT = 'SET_ONBOARD_RESULT'
+export const SET_ONBOARD_STATUS = 'SET_ONBOARD_STATUS'
+export const SET_ONBOARD_TRIP = 'SET_ONBOARD_TRIP'
+export const SET_ONBOARD_VEHICLE = 'SET_ONBOARD_VEHICLE'
+export const START_ONBOARD_OPTIMIZE = 'START_ONBOARD_OPTIMIZE'
+
 // Simple action creators
 export const clearVehicleMatch = createAction(CLEAR_VEHICLE_MATCH)
 export const dismissBoardingPrompt = createAction(DISMISS_BOARDING_PROMPT)
@@ -135,6 +155,28 @@ export const setRerouteResult = createAction<Itinerary | null>(
   SET_REROUTE_RESULT
 )
 export const clearReroute = createAction(CLEAR_REROUTE)
+
+export const beginOnboardFlowAction =
+  createAction<{ originalFrom?: any }>(BEGIN_ONBOARD_FLOW)
+export const clearOnboard = createAction(CLEAR_ONBOARD)
+export const setOnboardStatus = createAction<string>(SET_ONBOARD_STATUS)
+export const setOnboardVehicle = createAction<{
+  label: string | null
+  nextStopId: string | null
+  routeId: string | null
+  tripId: string | null
+  vehicleId: string
+}>(SET_ONBOARD_VEHICLE)
+export const setOnboardTrip = createAction<any>(SET_ONBOARD_TRIP)
+export const startOnboardOptimize = createAction<{
+  candidateSearches: Array<{
+    busArrivalEpoch: number
+    searchId: string
+    stopId: string
+    stopName: string
+  }>
+}>(START_ONBOARD_OPTIMIZE)
+export const setOnboardResult = createAction<any>(SET_ONBOARD_RESULT)
 
 /**
  * Derive the GTFS route id from an itinerary leg.
@@ -369,6 +411,372 @@ export function reRouteFromCurrentPosition(
 }
 
 /**
+ * Map a GTFS route_type to an OTP leg mode string, for synthesizing the bus leg
+ * when the route's `mode` field is unavailable.
+ */
+function gtfsTypeToMode(type: number | undefined): string {
+  switch (type) {
+    case 0:
+      return 'TRAM'
+    case 1:
+      return 'SUBWAY'
+    case 2:
+      return 'RAIL'
+    case 4:
+      return 'FERRY'
+    case 3:
+    default:
+      return 'BUS'
+  }
+}
+
+/**
+ * "I'm already on the bus" — entry point. Captures the rider's trip origin,
+ * navigates to the Go Mode screen, starts GPS, and kicks off discovery of the
+ * live vehicle they are aboard. A destination must already be set on the query.
+ */
+export function beginOnboardFlow() {
+  return function (dispatch: any, getState: any) {
+    const originalFrom = getState().otp.currentQuery?.from || null
+    dispatch(beginOnboardFlowAction({ originalFrom }))
+    dispatch(setMobileScreen(MobileScreens.GO_MODE))
+    dispatch(updateTrackingInterval({ interval: 5000 }))
+    dispatch(startPositionTracking())
+    dispatch(discoverNearbyVehicles())
+  }
+}
+
+/**
+ * Discover the live transit vehicles near the rider so they can pick the one
+ * they are on. Scans every route serving a nearby stop for vehicle positions,
+ * then surfaces those within 200m via the boarding prompt. Retries while the
+ * initial GPS fix is still being acquired; falls back to manual selection.
+ */
+export function discoverNearbyVehicles(attempt = 0) {
+  return async function (dispatch: any, getState: any) {
+    const goMode = getState().otp?.goMode
+    if (!goMode?.isActive || goMode.onboard?.status === 'idle') return
+
+    const pos = goMode.tracking?.lastPosition
+    if (!pos) {
+      if (attempt < 10) {
+        setTimeout(() => dispatch(discoverNearbyVehicles(attempt + 1)), 1000)
+      } else {
+        // No GPS fix — let the rider pick their route manually.
+        dispatch(setOnboardStatus('awaiting-selection'))
+        dispatch(showBoardingPromptAction())
+      }
+      return
+    }
+
+    const lat = pos.coords.latitude
+    const lon = pos.coords.longitude
+
+    // 1. Routes serving nearby stops.
+    await dispatch(findRoutesNearby({ lat, lon, radius: 250 }))
+    const routes = getState().otp?.transitIndex?.nearbyRoutes || []
+
+    // 2. Live vehicles for each nearby route.
+    await Promise.all(
+      routes.map((r: { id: string }) =>
+        dispatch(getVehiclePositionsForRoute(r.id))
+      )
+    )
+
+    // 3. Vehicles within 200m of the rider, across all those routes.
+    const routesIndex = getState().otp?.transitIndex?.routes || {}
+    const allVehicles = routes.flatMap(
+      (r: { id: string }) => routesIndex[r.id]?.vehicles || []
+    )
+    const nearby = findNearbyVehicles(lat, lon, allVehicles, 200)
+
+    dispatch({ payload: nearby, type: UPDATE_NEARBY_VEHICLES })
+    dispatch(setOnboardStatus('awaiting-selection'))
+    dispatch(showBoardingPromptAction())
+  }
+}
+
+/**
+ * Reset the onboard flow back to vehicle discovery (e.g. the rider picked the
+ * wrong bus, or no good alight stop was found).
+ */
+export function rediscoverOnboardVehicles() {
+  return function (dispatch: any) {
+    dispatch(setOnboardStatus('discovering'))
+    dispatch(clearVehicleMatch())
+    dispatch(discoverNearbyVehicles())
+  }
+}
+
+/**
+ * Fetch the confirmed vehicle's trip schedule, then optimize the alight stop.
+ */
+export function loadOnboardScheduleAndOptimize(tripId: string) {
+  return async function (dispatch: any, getState: any) {
+    await dispatch(findTrip({ tripId }))
+    const trip = getState().otp?.transitIndex?.trips?.[tripId]
+    if (!trip || !(trip.stopTimes?.length > 0)) {
+      dispatch(setOnboardStatus('error'))
+      return
+    }
+    dispatch(setOnboardTrip(trip))
+    dispatch(planFromOnboardBus())
+  }
+}
+
+/**
+ * Plan the remaining journey from each candidate alight stop to the rider's
+ * destination, anchored to the bus's scheduled arrival at that stop. Searches
+ * are issued sequentially (each routingQuery captures currentQuery before the
+ * next mutates it). Results are resolved into a best option by GoModeScreen via
+ * the getBestAlightOption selector.
+ */
+export function planFromOnboardBus() {
+  return async function (dispatch: any, getState: any) {
+    const state = getState()
+    const goMode = state.otp?.goMode
+    const trip = goMode?.onboard?.trip
+    const vehicle = goMode?.onboard?.vehicle
+    const to = state.otp.currentQuery?.to
+    const lastPosition = goMode?.tracking?.lastPosition
+
+    if (!trip || !to || to.lat == null || to.lon == null) {
+      dispatch(setOnboardResult(null))
+      return
+    }
+
+    const { homeTimezone } = state.otp.config
+    const userPos = lastPosition
+      ? {
+          lat: lastPosition.coords.latitude,
+          lon: lastPosition.coords.longitude
+        }
+      : null
+    const nowMs = Date.now()
+
+    const downstream = getDownstreamStops(
+      trip,
+      vehicle,
+      userPos,
+      { lat: to.lat, lon: to.lon },
+      nowMs
+    )
+    const candidates = selectCandidateStops(downstream, 5)
+    if (candidates.length === 0) {
+      dispatch(setOnboardResult(null))
+      return
+    }
+
+    const candidateSearches = candidates.map((c) => ({
+      busArrivalEpoch: c.busArrivalEpoch,
+      searchId: randId(),
+      stopId: c.stop.id,
+      stopName: c.stop.name
+    }))
+    dispatch(startOnboardOptimize({ candidateSearches }))
+
+    for (let i = 0; i < candidates.length; i++) {
+      const c = candidates[i]
+      const zoned = utcToZonedTime(c.busArrivalEpoch, homeTimezone)
+      const payload = {
+        date: format(zoned, coreUtils.time.OTP_API_DATE_FORMAT),
+        departArrive: 'DEPART',
+        from: { lat: c.stop.lat, lon: c.stop.lon, name: c.stop.name },
+        time: format(zoned, coreUtils.time.OTP_API_TIME_FORMAT),
+        to: { lat: to.lat, lon: to.lon, name: to.name }
+      }
+      dispatch(setQueryParam(payload, candidateSearches[i].searchId))
+      // Let routingQuery synchronously capture these params before the next
+      // setQueryParam mutates the shared currentQuery.
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    }
+  }
+}
+
+/**
+ * Build a Go Mode itinerary that keeps the rider on their current bus to the
+ * chosen alight stop, then continues with the onward plan. The bus leg is
+ * synthesized from the trip schedule (geometry sliced between boarding and
+ * alight stops, intermediate stops, schedule-anchored times).
+ */
+function buildOnboardItinerary(
+  trip: any,
+  vehicle: any,
+  best: { busArrivalEpoch: number; itinerary: Itinerary; stopId: string },
+  lastPosition: GeolocationPosition | null
+): Itinerary {
+  const stopTimes = trip.stopTimes || []
+  const onward = best.itinerary
+
+  // Boarding stop: the bus's next stop, else the stop nearest the rider.
+  let boardIdx = 0
+  if (vehicle?.nextStopId) {
+    const i = stopTimes.findIndex(
+      (st: any) => st.stop?.id === vehicle.nextStopId
+    )
+    if (i >= 0) boardIdx = i
+  } else if (lastPosition) {
+    let bestDist = Infinity
+    stopTimes.forEach((st: any, i: number) => {
+      const d = haversineDistance(
+        [lastPosition.coords.latitude, lastPosition.coords.longitude],
+        [st.stop.lat, st.stop.lon]
+      )
+      if (d < bestDist) {
+        bestDist = d
+        boardIdx = i
+      }
+    })
+  }
+
+  let alightIdx = stopTimes.findIndex((st: any) => st.stop?.id === best.stopId)
+  if (alightIdx < 0 || alightIdx <= boardIdx) {
+    alightIdx = Math.min(boardIdx + 1, stopTimes.length - 1)
+  }
+
+  const boardStop = stopTimes[boardIdx].stop
+  const alightStop = stopTimes[alightIdx].stop
+  const anchorSd = stopTimes[boardIdx].scheduledDeparture
+  const busLegStart = Date.now()
+  const stopEpoch = (i: number) =>
+    busLegStart + (stopTimes[i].scheduledDeparture - anchorSd) * 1000
+
+  // Slice the trip geometry between boarding and alight stops.
+  let geomPoints = trip.geometry?.points || ''
+  try {
+    const decoded = trip.geometry?.points
+      ? polyline.decode(trip.geometry.points)
+      : []
+    if (decoded.length) {
+      const startGeo = findClosestPolylineIndex(
+        decoded,
+        boardStop.lat,
+        boardStop.lon,
+        0
+      )
+      const endGeo = findClosestPolylineIndex(
+        decoded,
+        alightStop.lat,
+        alightStop.lon,
+        startGeo
+      )
+      geomPoints = polyline.encode(decoded.slice(startGeo, endGeo + 1))
+    }
+  } catch {
+    // Keep the full geometry on failure — guidance still works.
+  }
+
+  const intermediatePlaces = []
+  for (let i = boardIdx + 1; i < alightIdx; i++) {
+    const st = stopTimes[i]
+    const t = stopEpoch(i)
+    intermediatePlaces.push({
+      arrivalTime: t,
+      departureTime: t,
+      lat: st.stop.lat,
+      lon: st.stop.lon,
+      name: st.stop.name,
+      stop: { code: st.stop.code, gtfsId: st.stop.id, id: st.stop.id }
+    })
+  }
+
+  const routeId = vehicle?.routeId || trip.route?.id || null
+  const mode = trip.route?.mode || gtfsTypeToMode(trip.route?.type)
+
+  const busLeg: any = {
+    distance: 0,
+    duration: (best.busArrivalEpoch - busLegStart) / 1000,
+    endTime: best.busArrivalEpoch,
+    from: {
+      lat: boardStop.lat,
+      lon: boardStop.lon,
+      name: boardStop.name,
+      stop: { code: boardStop.code, gtfsId: boardStop.id, id: boardStop.id },
+      stopId: boardStop.id
+    },
+    headsign: trip.tripHeadsign,
+    intermediatePlaces,
+    legGeometry: { length: geomPoints.length, points: geomPoints },
+    mode,
+    route: {
+      color: trip.route?.color,
+      id: routeId,
+      longName: trip.route?.longName,
+      shortName: trip.route?.shortName
+    },
+    routeLongName: trip.route?.longName,
+    routeShortName: trip.route?.shortName,
+    startTime: busLegStart,
+    to: {
+      lat: alightStop.lat,
+      lon: alightStop.lon,
+      name: alightStop.name,
+      stop: { code: alightStop.code, gtfsId: alightStop.id, id: alightStop.id },
+      stopId: alightStop.id
+    },
+    transitLeg: true
+  }
+
+  const legs = [busLeg, ...(onward.legs || [])]
+  const transitLegCount = legs.filter((l: any) => l.transitLeg).length
+
+  return {
+    ...onward,
+    duration: (onward.endTime - busLegStart) / 1000,
+    endTime: onward.endTime,
+    legs,
+    startTime: busLegStart,
+    transfers: Math.max(0, transitLegCount - 1)
+  } as Itinerary
+}
+
+/**
+ * Commit to the recommended alight stop: synthesize the full itinerary and hand
+ * off into live Go Mode tracking, keeping the same bus confirmed as the vehicle.
+ */
+export function confirmOnboardAlightStop() {
+  return function (dispatch: any, getState: any) {
+    const goMode = getState().otp?.goMode
+    const best = goMode?.onboard?.bestAlightStop
+    const trip = goMode?.onboard?.trip
+    const vehicle = goMode?.onboard?.vehicle
+    if (!best || !trip) return
+
+    const itinerary = buildOnboardItinerary(
+      trip,
+      vehicle,
+      best,
+      goMode.tracking?.lastPosition || null
+    )
+
+    // Restore the rider's original origin before beginGoMode captures it (the
+    // candidate fan-out left currentQuery.from pointing at a stop).
+    if (goMode.originalFrom) {
+      dispatch(setQueryParam({ from: goMode.originalFrom }))
+    }
+    dispatch(clearOnboard())
+    dispatch(beginGoMode(itinerary))
+
+    // beginGoMode resets the vehicle match; re-confirm this bus so tracking
+    // stays locked to the vehicle the rider is already aboard.
+    if (vehicle?.vehicleId) {
+      setTimeout(() => {
+        dispatch({
+          payload: {
+            confidence: 'confirmed' as const,
+            distanceMeters: null,
+            label: vehicle.label || vehicle.vehicleId,
+            lastSeen: Date.now(),
+            vehicleId: vehicle.vehicleId
+          },
+          type: CONFIRM_VEHICLE
+        })
+      }, 0)
+    }
+  }
+}
+
+/**
  * Start GPS position tracking
  */
 export function startPositionTracking() {
@@ -472,7 +880,15 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     const state = getState()
     const goMode = state.otp?.goMode
 
-    if (!goMode?.isActive || !goMode?.activeItinerary) {
+    if (!goMode?.isActive) {
+      return
+    }
+
+    // During the "I'm on the bus" onboard flow there is no active itinerary
+    // yet; still record position so vehicle discovery and schedule anchoring
+    // (alight-optimizer) can use the rider's location.
+    if (!goMode.activeItinerary) {
+      dispatch(updatePosition(position))
       return
     }
 
@@ -710,7 +1126,8 @@ export function performVehicleMatching(routeId: string) {
 export function confirmVehicleSelection(vehicleId: string) {
   return function (dispatch: any, getState: any) {
     const state = getState()
-    const nearby = state.otp?.goMode?.vehicleMatch?.nearbyVehicles || []
+    const goMode = state.otp?.goMode
+    const nearby = goMode?.vehicleMatch?.nearbyVehicles || []
     const selected = nearby.find(
       (v: { vehicleId: string }) => v.vehicleId === vehicleId
     )
@@ -725,6 +1142,27 @@ export function confirmVehicleSelection(vehicleId: string) {
       },
       type: CONFIRM_VEHICLE
     })
+
+    // In the "I'm on the bus" onboard flow (no itinerary yet), use the selected
+    // vehicle's trip to fetch the schedule and optimize the alight stop.
+    const onboardStatus = goMode?.onboard?.status
+    if (onboardStatus && onboardStatus !== 'idle' && !goMode.activeItinerary) {
+      if (selected?.tripId) {
+        dispatch(
+          setOnboardVehicle({
+            label: selected.label || vehicleId,
+            nextStopId: selected.nextStopId || null,
+            routeId: selected.routeId || null,
+            tripId: selected.tripId,
+            vehicleId
+          })
+        )
+        dispatch(loadOnboardScheduleAndOptimize(selected.tripId))
+      } else {
+        // No trip id on the realtime feed — can't anchor to this vehicle.
+        dispatch(setOnboardStatus('error'))
+      }
+    }
   }
 }
 

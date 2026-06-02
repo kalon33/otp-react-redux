@@ -10,9 +10,12 @@ export interface VehiclePosition {
   nextStopId: string
   nextStopName: string
   patternId: string
+  routeId?: string
   seconds: number // lastUpdated epoch seconds
   speed: number
   stopStatus: string
+  tripHeadsign?: string
+  tripId?: string
   vehicleId: string
 }
 
@@ -30,8 +33,12 @@ export interface NearbyVehicleOption {
   distanceMeters: number
   heading: number
   label: string
+  nextStopId: string
   nextStopName: string
+  routeId?: string
   speed: number
+  tripHeadsign?: string
+  tripId?: string
   vehicleId: string
 }
 
@@ -51,8 +58,12 @@ export function findNearbyVehicles(
       distanceMeters: calculateDistance(userLat, userLon, v.lat, v.lon),
       heading: v.heading,
       label: v.label,
+      nextStopId: v.nextStopId,
       nextStopName: v.nextStopName,
+      routeId: v.routeId,
       speed: v.speed,
+      tripHeadsign: v.tripHeadsign,
+      tripId: v.tripId,
       vehicleId: v.vehicleId
     }))
     .filter((v) => v.distanceMeters <= maxDistanceMeters)

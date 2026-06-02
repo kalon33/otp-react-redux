@@ -6,6 +6,7 @@ import styled from 'styled-components'
 
 import * as apiActions from '../../actions/api'
 import * as formActions from '../../actions/form'
+import * as goModeActions from '../../actions/go-mode'
 import * as uiActions from '../../actions/ui'
 import {
   advancedPanelClassName,
@@ -46,7 +47,20 @@ const MobileSearchSettings = styled.div<{
   z-index: 9;
 `
 
+const OnBusButton = styled.button`
+  background: #fff;
+  border: 2px solid #0b6ea8;
+  border-radius: 8px;
+  color: #0b6ea8;
+  cursor: pointer;
+  font-weight: 600;
+  margin-top: 10px;
+  padding: 12px;
+  width: 100%;
+`
+
 interface Props {
+  beginOnboardFlow: () => void
   currentQuery: any
   intl: IntlShape
   map: React.ReactElement
@@ -65,6 +79,18 @@ class BatchSearchScreen extends Component<Props> {
   _fromFieldClicked = () => this.props.setMobileScreen(SET_FROM_LOCATION)
 
   _toFieldClicked = () => this.props.setMobileScreen(SET_TO_LOCATION)
+
+  _onBusClicked = () => {
+    const { beginOnboardFlow, currentQuery, setMobileScreen } = this.props
+    const to = currentQuery?.to
+    // A destination is required to optimize where to get off; if it's missing,
+    // send the rider to set it first.
+    if (!to || to.lat == null) {
+      setMobileScreen(SET_TO_LOCATION)
+      return
+    }
+    beginOnboardFlow()
+  }
 
   _mainPanelContentRef = React.createRef<HTMLDivElement>()
   _advancedSettingRef = React.createRef<HTMLDivElement>()
@@ -159,6 +185,12 @@ class BatchSearchScreen extends Component<Props> {
                         onPlanTripClick={this.handlePlanTripClick}
                         openAdvancedSettings={this.openAdvancedSettings}
                       />
+                      <OnBusButton onClick={this._onBusClicked} type="button">
+                        {intl.formatMessage({
+                          defaultMessage: "I'm already on the bus",
+                          id: 'components.GoMode.onBusButton'
+                        })}
+                      </OnBusButton>
                     </div>
                   </CSSTransition>
                 )}
@@ -207,6 +239,7 @@ const mapStateToProps = (state: any) => {
 }
 
 const mapDispatchToProps = {
+  beginOnboardFlow: goModeActions.beginOnboardFlow,
   routingQuery: apiActions.routingQuery,
   setMobileScreen: uiActions.setMobileScreen,
   updateQueryTimeIfLeavingNow: formActions.updateQueryTimeIfLeavingNow

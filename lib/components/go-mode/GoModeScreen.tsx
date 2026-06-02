@@ -5,7 +5,12 @@ import React, { useEffect, useState } from 'react'
 import * as goModeActions from '../../actions/go-mode'
 import * as routingProfileActions from '../../actions/routing-profiles'
 import * as uiActions from '../../actions/ui'
-import { getRerouteCandidate, isRerouteSearchSettled } from '../../util/state'
+import {
+  getBestAlightOption,
+  getRerouteCandidate,
+  isOnboardSearchSettled,
+  isRerouteSearchSettled
+} from '../../util/state'
 import { MobileScreens } from '../../actions/ui-constants'
 import MobileNavigationBar from '../mobile/navigation-bar'
 import type { GoModeState } from '../../reducers/go-mode'
@@ -37,6 +42,7 @@ import {
   SimToggle,
   SimToolbar
 } from './styled'
+import AlightRecommendation from './AlightRecommendation'
 import BoardingPrompt from './BoardingPrompt'
 import CurrentLegPanel from './CurrentLegPanel'
 import GoModeMap from './GoModeMap'
@@ -58,6 +64,8 @@ interface Props {
   endGoMode: () => void
   fetchPreferencesFromText: (text: string) => Promise<any>
   goMode: GoModeState
+  onboardBest: any
+  onboardSettled: boolean
   pauseGpsSimulation: () => void
   reRouteCandidate: any
   reRouteFromCurrentPosition: (options?: {
@@ -68,6 +76,7 @@ interface Props {
   resumeGpsSimulation: () => void
   setDepartureOverride: (epochMs: number | null) => void
   setMobileScreen: (screen: number) => void
+  setOnboardResult: (result: any) => void
   setRerouteResult: (itinerary: any) => void
   startGpsSimulation: (speedMultiplier?: number) => void
   stopGpsSimulation: () => void
@@ -81,6 +90,8 @@ const GoModeScreen = ({
   endGoMode,
   fetchPreferencesFromText,
   goMode,
+  onboardBest,
+  onboardSettled,
   pauseGpsSimulation,
   reRouteCandidate,
   reRouteFromCurrentPosition,
@@ -88,6 +99,7 @@ const GoModeScreen = ({
   resumeGpsSimulation,
   setDepartureOverride,
   setMobileScreen,
+  setOnboardResult,
   setRerouteResult,
   startGpsSimulation,
   stopGpsSimulation
@@ -99,12 +111,27 @@ const GoModeScreen = ({
   const [nlBusy, setNlBusy] = useState(false)
   const [nlError, setNlError] = useState(false)
 
+  const onboardActive = goMode.onboard.status !== 'idle'
+
   useEffect(() => {
-    // If Go Mode is not active, redirect back to results
-    if (!goMode.isActive || !goMode.activeItinerary) {
+    // If Go Mode is not active, redirect back to results. The onboard
+    // ("I'm on the bus") flow has no itinerary yet, so don't redirect while it
+    // is running.
+    if (!goMode.isActive || (!goMode.activeItinerary && !onboardActive)) {
       setMobileScreen(MobileScreens.RESULTS_SUMMARY)
     }
-  }, [goMode.isActive, goMode.activeItinerary, setMobileScreen])
+  }, [goMode.isActive, goMode.activeItinerary, onboardActive, setMobileScreen])
+
+  // Resolve the alight-stop optimization into a best recommendation once the
+  // candidate searches settle (mirrors the re-route resolution below).
+  useEffect(() => {
+    if (goMode.onboard.status !== 'optimizing') return
+    if (onboardBest) {
+      setOnboardResult(onboardBest)
+    } else if (onboardSettled) {
+      setOnboardResult(null)
+    }
+  }, [goMode.onboard.status, onboardBest, onboardSettled, setOnboardResult])
 
   useEffect(() => {
     // Request wake lock to keep screen on
@@ -217,6 +244,32 @@ const GoModeScreen = ({
     } finally {
       setNlBusy(false)
     }
+  }
+
+  const handleOnboardExit = () => {
+    endGoMode()
+    setMobileScreen(MobileScreens.SEARCH_FORM)
+  }
+
+  // "I'm on the bus" onboard flow: no itinerary yet — show discovery, the bus
+  // picker, and the alight-stop recommendation.
+  if (onboardActive && !goMode.activeItinerary) {
+    return (
+      <FullScreenWrapper>
+        <MobileNavigationBar
+          headerText={intl.formatMessage({
+            defaultMessage: 'On the bus',
+            id: 'components.GoMode.onboardTitle'
+          })}
+          onBackClicked={handleOnboardExit}
+          showBackButton
+        />
+        <ScreenMain>
+          <AlightRecommendation />
+        </ScreenMain>
+        <BoardingPrompt />
+      </FullScreenWrapper>
+    )
   }
 
   // GPS error state with specific messages and retry
@@ -596,6 +649,8 @@ const mapStateToProps = (state: any) => {
     boardingStopData,
     departureOverride: goMode?.departureOverride ?? null,
     goMode,
+    onboardBest: getBestAlightOption(state),
+    onboardSettled: isOnboardSearchSettled(state),
     reRouteCandidate: getRerouteCandidate(state),
     reRouteSettled: isRerouteSearchSettled(state)
   }
@@ -611,6 +666,7 @@ const mapDispatchToProps = {
   resumeGpsSimulation: goModeActions.resumeGpsSimulation,
   setDepartureOverride: goModeActions.setDepartureOverride,
   setMobileScreen: uiActions.setMobileScreen,
+  setOnboardResult: goModeActions.setOnboardResult,
   setRerouteResult: goModeActions.setRerouteResult,
   startGpsSimulation: goModeActions.startGpsSimulation,
   stopGpsSimulation: goModeActions.stopGpsSimulation

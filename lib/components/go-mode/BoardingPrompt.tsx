@@ -68,13 +68,24 @@ const BoardingPrompt = ({
             <VehicleOptionRow key={vehicle.vehicleId}>
               <VehicleInfo>
                 <VehicleLabel>
-                  {intl.formatMessage(
-                    {
-                      defaultMessage: 'Bus #{label}',
-                      id: 'components.GoMode.busLabel'
-                    },
-                    { label: vehicle.label || vehicle.vehicleId }
-                  )}
+                  {vehicle.tripHeadsign
+                    ? intl.formatMessage(
+                        {
+                          defaultMessage: 'Bus #{label} → {headsign}',
+                          id: 'components.GoMode.busLabelHeadsign'
+                        },
+                        {
+                          headsign: vehicle.tripHeadsign,
+                          label: vehicle.label || vehicle.vehicleId
+                        }
+                      )
+                    : intl.formatMessage(
+                        {
+                          defaultMessage: 'Bus #{label}',
+                          id: 'components.GoMode.busLabel'
+                        },
+                        { label: vehicle.label || vehicle.vehicleId }
+                      )}
                 </VehicleLabel>
                 <VehicleDetail>
                   {vehicle.nextStopName

@@ -3,6 +3,8 @@ import type { Itinerary } from '@opentripplanner/types'
 
 import {
   ADD_NOTIFICATION,
+  BEGIN_ONBOARD_FLOW,
+  CLEAR_ONBOARD,
   CLEAR_REROUTE,
   CLEAR_VEHICLE_MATCH,
   CONFIRM_VEHICLE,
@@ -11,12 +13,17 @@ import {
   RESUME_GPS_SIMULATION,
   SET_DEPARTURE_OVERRIDE,
   SET_NOTIFICATION_CONFIG,
+  SET_ONBOARD_RESULT,
+  SET_ONBOARD_STATUS,
+  SET_ONBOARD_TRIP,
+  SET_ONBOARD_VEHICLE,
   SET_REROUTE_RESULT,
   SET_TRACKING_ERROR,
   SET_TRANSIT_LEG_ENTERED,
   SHOW_BOARDING_PROMPT,
   START_GO_MODE,
   START_GPS_SIMULATION,
+  START_ONBOARD_OPTIMIZE,
   START_REROUTE,
   STOP_GO_MODE,
   STOP_GPS_SIMULATION,
@@ -45,6 +52,51 @@ export interface SimulationState {
   totalPoints: number
 }
 
+/** The live vehicle the rider confirmed they are already aboard. */
+export interface OnboardVehicle {
+  label: string | null
+  nextStopId: string | null
+  routeId: string | null
+  tripId: string | null
+  vehicleId: string
+}
+
+/** One candidate alight stop whose stop→destination plan is in flight. */
+export interface OnboardCandidateSearch {
+  busArrivalEpoch: number
+  searchId: string
+  stopId: string
+  stopName: string
+}
+
+/** The chosen best stop to get off, with its remaining-journey itinerary. */
+export interface OnboardAlightOption {
+  busArrivalEpoch: number
+  itinerary: Itinerary
+  stopId: string
+  stopName: string
+}
+
+/**
+ * "I'm already on the bus" flow: discover the live vehicle the rider is on,
+ * fetch its schedule, and find the best stop to alight to finish the trip.
+ * Distinct from reRoute (a mid-trip swap of an already-active itinerary).
+ */
+export interface OnboardState {
+  bestAlightStop: OnboardAlightOption | null
+  candidateSearches: OnboardCandidateSearch[]
+  status:
+    | 'idle'
+    | 'discovering'
+    | 'awaiting-selection'
+    | 'fetching-schedule'
+    | 'optimizing'
+    | 'ready'
+    | 'error'
+  trip: any | null
+  vehicle: OnboardVehicle | null
+}
+
 export interface GoModeState {
   activeItinerary: Itinerary | null
 
@@ -64,6 +116,8 @@ export interface GoModeState {
     soundEnabled: boolean
     vibrationEnabled: boolean
   }
+
+  onboard: OnboardState
 
   /**
    * The trip origin captured when Go Mode began. A mid-trip re-route replaces
@@ -121,6 +175,14 @@ const defaultState: GoModeState = {
     sentNotifications: [],
     soundEnabled: false,
     vibrationEnabled: true
+  },
+
+  onboard: {
+    bestAlightStop: null,
+    candidateSearches: [],
+    status: 'idle',
+    trip: null,
+    vehicle: null
   },
 
   originalFrom: null,
@@ -193,6 +255,32 @@ const goMode = handleActions<GoModeState, any>(
       }
     },
 
+    [BEGIN_ONBOARD_FLOW]: (state, action) => ({
+      ...state,
+      activeItinerary: null,
+      boardingPrompt: { ...defaultState.boardingPrompt },
+      isActive: true,
+      onboard: {
+        ...defaultState.onboard,
+        status: 'discovering' as const
+      },
+      originalFrom: action.payload?.originalFrom ?? null,
+      progress: null,
+      reRoute: { ...defaultState.reRoute },
+      routeMatch: null,
+      tracking: {
+        ...state.tracking,
+        error: null,
+        isTracking: true
+      },
+      vehicleMatch: { ...defaultState.vehicleMatch }
+    }),
+
+    [CLEAR_ONBOARD]: (state) => ({
+      ...state,
+      onboard: { ...defaultState.onboard }
+    }),
+
     [CLEAR_REROUTE]: (state) => ({
       ...state,
       reRoute: { ...defaultState.reRoute }
@@ -263,6 +351,40 @@ const goMode = handleActions<GoModeState, any>(
       }
     },
 
+    [SET_ONBOARD_RESULT]: (state, action) => ({
+      ...state,
+      onboard: {
+        ...state.onboard,
+        bestAlightStop: action.payload || null,
+        status: action.payload ? ('ready' as const) : ('error' as const)
+      }
+    }),
+
+    [SET_ONBOARD_STATUS]: (state, action) => ({
+      ...state,
+      onboard: {
+        ...state.onboard,
+        status: action.payload
+      }
+    }),
+
+    [SET_ONBOARD_TRIP]: (state, action) => ({
+      ...state,
+      onboard: {
+        ...state.onboard,
+        trip: action.payload
+      }
+    }),
+
+    [SET_ONBOARD_VEHICLE]: (state, action) => ({
+      ...state,
+      onboard: {
+        ...state.onboard,
+        status: 'fetching-schedule' as const,
+        vehicle: action.payload
+      }
+    }),
+
     [SET_REROUTE_RESULT]: (state, action) => ({
       ...state,
       reRoute: {
@@ -329,6 +451,16 @@ const goMode = handleActions<GoModeState, any>(
         speedMultiplier: action.payload.speedMultiplier,
         status: 'running' as const,
         totalPoints: action.payload.totalPoints
+      }
+    }),
+
+    [START_ONBOARD_OPTIMIZE]: (state, action) => ({
+      ...state,
+      onboard: {
+        ...state.onboard,
+        bestAlightStop: null,
+        candidateSearches: action.payload.candidateSearches,
+        status: 'optimizing' as const
       }
     }),
 
