@@ -8,6 +8,7 @@ import type { TripProgress } from '../../util/go-mode/progress-calculator'
 import {
   AlternativeDeparture,
   CardBackButton,
+  LiveDot,
   NavCard,
   NavExtras,
   NavEyebrow,
@@ -16,9 +17,14 @@ import {
   NavHero,
   NavSub,
   ResetButton,
+  TimeKindBadge,
   UseNextButton,
   WalkingContainer
 } from './styled'
+
+// OTP realtimeState values that mean the time reflects live vehicle data
+// (as opposed to the static schedule).
+const LIVE_REALTIME_STATES = new Set(['UPDATED', 'ADDED', 'MODIFIED'])
 
 interface Props {
   boardingStopData?: any
@@ -110,12 +116,19 @@ const WalkingNavigation = ({
     if (!boardingStopData || !isNextLegTransit || !nextLegRouteId) return []
     try {
       return mergeAndSortStopTimes(boardingStopData)
-        .map((st: any) => ({
-          depMs:
-            (st.serviceDay + (st.realtimeDeparture ?? st.scheduledDeparture)) *
-            1000,
-          routeId: st.route?.gtfsId || st.trip?.route?.gtfsId
-        }))
+        .map((st: any) => {
+          // Prefer the live (realtime) departure when the feed reports one;
+          // fall back to the static schedule otherwise.
+          const live =
+            LIVE_REALTIME_STATES.has(st.realtimeState) &&
+            st.realtimeDeparture != null
+          const secs = live ? st.realtimeDeparture : st.scheduledDeparture
+          return {
+            depMs: (st.serviceDay + secs) * 1000,
+            realtime: live,
+            routeId: st.route?.gtfsId || st.trip?.route?.gtfsId
+          }
+        })
         .filter(
           (d: { depMs: number; routeId?: string }) =>
             d.routeId === nextLegRouteId
@@ -142,6 +155,18 @@ const WalkingNavigation = ({
   // OTP's planned departure only when we have no schedule data.
   const effectiveDepartureMs =
     departureOverride || soonestCatchableMs || progress.plannedDepartureTime
+
+  // Whether the departure time we're showing came from live (realtime) data.
+  // Override / soonest-catchable times originate from routeDepartures, so we
+  // match back to that list; a fall-back to OTP's planned time is "scheduled".
+  const departureIsLive = useMemo(
+    () =>
+      !!effectiveDepartureMs &&
+      routeDepartures.some(
+        (d) => d.depMs === effectiveDepartureMs && d.realtime
+      ),
+    [routeDepartures, effectiveDepartureMs]
+  )
 
   const busInSeconds = effectiveDepartureMs
     ? (effectiveDepartureMs - nowMs) / 1000
@@ -228,6 +253,24 @@ const WalkingNavigation = ({
             </CardBackButton>
           )}
           <NavEyebrow>{eyebrow}</NavEyebrow>
+          {isNextLegTransit && hero && (
+            <TimeKindBadge $live={departureIsLive}>
+              {departureIsLive ? (
+                <>
+                  <LiveDot />
+                  {intl.formatMessage({
+                    defaultMessage: 'Live',
+                    id: 'components.GoMode.liveTime'
+                  })}
+                </>
+              ) : (
+                intl.formatMessage({
+                  defaultMessage: 'Scheduled',
+                  id: 'components.GoMode.scheduledTime'
+                })
+              )}
+            </TimeKindBadge>
+          )}
         </NavEyebrowRow>
         {hero && <NavHero>{hero}</NavHero>}
         {sub && <NavSub>{sub}</NavSub>}

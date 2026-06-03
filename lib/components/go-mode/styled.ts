@@ -291,6 +291,31 @@ export const NavSub = styled.div`
   white-space: nowrap;
 `
 
+// "Live" (realtime) vs "Scheduled" pill shown next to the departure time, so
+// the rider knows whether the clock time reflects the bus's actual position.
+export const TimeKindBadge = styled.span<{ $live: boolean }>`
+  align-items: center;
+  background: ${(props) => (props.$live ? '#e8f5e9' : '#eee')};
+  border-radius: 999px;
+  color: ${(props) => (props.$live ? '#2e7d32' : '#777')};
+  display: inline-flex;
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 700;
+  gap: 4px;
+  letter-spacing: 0.3px;
+  padding: 2px 8px;
+  text-transform: uppercase;
+`
+
+export const LiveDot = styled.span`
+  animation: ${pulseOpacity} 1.2s ease-in-out infinite;
+  background: #2e7d32;
+  border-radius: 50%;
+  height: 7px;
+  width: 7px;
+`
+
 export const NavFoot = styled.div`
   color: #333;
   font-size: 16px;
