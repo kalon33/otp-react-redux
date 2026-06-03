@@ -7,9 +7,11 @@ import type { TripProgress } from '../../util/go-mode/progress-calculator'
 
 import {
   AlternativeDeparture,
+  CardBackButton,
   NavCard,
   NavExtras,
   NavEyebrow,
+  NavEyebrowRow,
   NavFoot,
   NavHero,
   NavSub,
@@ -23,6 +25,7 @@ interface Props {
   departureOverride?: number | null
   leg: Leg
   nextLeg?: Leg
+  onExit?: () => void
   onSelectDeparture?: (epochMs: number | null) => void
   progress: TripProgress
 }
@@ -43,6 +46,7 @@ const WalkingNavigation = ({
   departureOverride,
   leg,
   nextLeg,
+  onExit,
   onSelectDeparture,
   progress
 }: Props) => {
@@ -213,7 +217,18 @@ const WalkingNavigation = ({
   return (
     <WalkingContainer>
       <NavCard>
-        <NavEyebrow>{eyebrow}</NavEyebrow>
+        <NavEyebrowRow>
+          {onExit && (
+            <CardBackButton
+              aria-label={intl.formatMessage({ id: 'common.forms.back' })}
+              onClick={onExit}
+              type="button"
+            >
+              ←
+            </CardBackButton>
+          )}
+          <NavEyebrow>{eyebrow}</NavEyebrow>
+        </NavEyebrowRow>
         {hero && <NavHero>{hero}</NavHero>}
         {sub && <NavSub>{sub}</NavSub>}
         {foot && <NavFoot>{foot}</NavFoot>}

@@ -8,6 +8,7 @@ import type { VehicleMatchResult } from '../../util/go-mode/vehicle-matching'
 
 import {
   AlertBanner,
+  CardBackButton,
   InfoCard,
   InfoCardLabel,
   InfoCardValue,
@@ -24,11 +25,12 @@ import {
 
 interface Props {
   leg: Leg
+  onExit?: () => void
   progress: TripProgress
   vehicleMatch?: VehicleMatchResult | null
 }
 
-const TransitProgress = ({ leg, progress, vehicleMatch }: Props) => {
+const TransitProgress = ({ leg, onExit, progress, vehicleMatch }: Props) => {
   const intl = useIntl()
 
   const getModeIcon = (mode: string): string => {
@@ -59,6 +61,15 @@ const TransitProgress = ({ leg, progress, vehicleMatch }: Props) => {
     <TransitContainer>
       {/* Route Header */}
       <RouteHeader>
+        {onExit && (
+          <CardBackButton
+            aria-label={intl.formatMessage({ id: 'common.forms.back' })}
+            onClick={onExit}
+            type="button"
+          >
+            ←
+          </CardBackButton>
+        )}
         <ModeIcon>{getModeIcon(leg.mode)}</ModeIcon>
         <div style={{ flex: 1, minWidth: 0 }}>
           <RouteName>{leg.routeShortName || leg.routeLongName}</RouteName>

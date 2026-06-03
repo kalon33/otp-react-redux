@@ -87,13 +87,13 @@ export const LegPanelContainer = styled.div`
 
 // TransitProgress styles
 export const TransitContainer = styled.div`
-  padding: 8px 12px;
+  padding: 6px 12px;
 `
 
 export const RouteHeader = styled.div`
   align-items: center;
   display: flex;
-  margin-bottom: 16px;
+  margin-bottom: 8px;
   min-width: 0;
   overflow: hidden;
 `
@@ -186,7 +186,7 @@ export const InfoCardValue = styled.div<{
 
 // WalkingNavigation styles
 export const WalkingContainer = styled.div`
-  padding: 8px 12px;
+  padding: 6px 12px;
 `
 
 export const NavigationInstruction = styled.div<{ $highlight: boolean }>`
@@ -229,14 +229,43 @@ export const NavCard = styled.div`
   border: 1px solid #e0e0e0;
   border-radius: 10px;
   border-top: 4px solid #2196f3;
-  padding: 14px 16px;
+  padding: 10px 14px;
+`
+
+// Compact back arrow that lives inline inside the card header instead of a
+// dedicated nav-bar row above it.
+export const CardBackButton = styled.button`
+  align-items: center;
+  background: none;
+  border: none;
+  color: #555;
+  cursor: pointer;
+  display: inline-flex;
+  flex-shrink: 0;
+  font-size: 22px;
+  justify-content: center;
+  line-height: 1;
+  margin: -2px 4px -2px -4px;
+  padding: 2px 6px;
+
+  &:active {
+    opacity: 0.6;
+  }
+`
+
+// Row holding the back arrow + eyebrow on one line.
+export const NavEyebrowRow = styled.div`
+  align-items: center;
+  display: flex;
+  min-width: 0;
 `
 
 export const NavEyebrow = styled.div`
   color: #888;
+  flex: 1;
   font-size: 13px;
   font-weight: 600;
-  margin-bottom: 2px;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -244,9 +273,9 @@ export const NavEyebrow = styled.div`
 
 export const NavHero = styled.div`
   color: #111;
-  font-size: 34px;
+  font-size: 30px;
   font-weight: 700;
-  line-height: 1.1;
+  line-height: 1.15;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -367,6 +396,8 @@ export const DeviationWarning = styled.div`
 export const FullScreenWrapper = styled.div`
   background: #fff;
   bottom: 0;
+  display: flex;
+  flex-direction: column;
   left: 0;
   position: fixed;
   right: 0;
@@ -428,9 +459,11 @@ export const FullScreenWrapper = styled.div`
 
 export const ScreenMain = styled.main`
   display: flex;
+  flex: 1;
   flex-direction: column;
-  height: calc(100dvh - 38px);
+  min-height: 0;
   overflow: hidden;
+  padding-top: env(safe-area-inset-top, 0);
   position: relative;
 `
 

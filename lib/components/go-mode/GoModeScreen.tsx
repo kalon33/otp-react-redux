@@ -346,18 +346,11 @@ const GoModeScreen = ({
   const currentLeg =
     goMode.activeItinerary.legs[goMode.progress.currentLegIndex]
 
-  const TRANSIT_MODES = new Set(['BUS', 'FERRY', 'RAIL', 'SUBWAY', 'TRAM'])
-  const isTransit = TRANSIT_MODES.has(currentLeg.mode)
   const showNoReroute =
     goMode.reRoute.status === 'none' || goMode.reRoute.status === 'error'
 
   return (
     <FullScreenWrapper>
-      <MobileNavigationBar
-        headerText={isTransit ? currentLeg.to.name : ''}
-        onBackClicked={handleExit}
-        showBackButton
-      />
       <ScreenMain>
         <CurrentLegPanel
           boardingStopData={boardingStopData}
@@ -369,6 +362,7 @@ const GoModeScreen = ({
               ? goMode.activeItinerary.legs[goMode.progress.currentLegIndex + 1]
               : undefined
           }
+          onExit={handleExit}
           onSelectDeparture={setDepartureOverride}
           progress={goMode.progress}
         />

@@ -12,6 +12,7 @@ interface Props {
   departureOverride?: number | null
   leg: Leg
   nextLeg?: Leg
+  onExit?: () => void
   onSelectDeparture?: (epochMs: number | null) => void
   progress: TripProgress
 }
@@ -23,6 +24,7 @@ const CurrentLegPanel = ({
   departureOverride,
   leg,
   nextLeg,
+  onExit,
   onSelectDeparture,
   progress
 }: Props) => {
@@ -31,13 +33,16 @@ const CurrentLegPanel = ({
 
   return (
     <LegPanelContainer>
-      {isTransit && <TransitProgress leg={leg} progress={progress} />}
+      {isTransit && (
+        <TransitProgress leg={leg} onExit={onExit} progress={progress} />
+      )}
       {isWalking && (
         <WalkingNavigation
           boardingStopData={boardingStopData}
           departureOverride={departureOverride}
           leg={leg}
           nextLeg={nextLeg}
+          onExit={onExit}
           onSelectDeparture={onSelectDeparture}
           progress={progress}
         />
@@ -49,6 +54,7 @@ const CurrentLegPanel = ({
           departureOverride={departureOverride}
           leg={leg}
           nextLeg={nextLeg}
+          onExit={onExit}
           onSelectDeparture={onSelectDeparture}
           progress={progress}
         />
