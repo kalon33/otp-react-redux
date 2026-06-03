@@ -220,37 +220,30 @@ export const NextLegPreview = styled.div`
   padding: 12px;
 `
 
-// --- Single adaptive navigation card (access leg → transit) ---------------
-// One flat card replaces the old stacked banner + instruction row + countdown
-// box. Urgency is shown by the hero color + a thin top accent only — no nested
-// colored boxes. $urgency: ok (green) / tight (amber) / late (red).
-const urgencyAccent = (u: 'ok' | 'tight' | 'late') =>
-  u === 'late' ? '#f44336' : u === 'tight' ? '#ff9800' : '#4caf50'
-const urgencyText = (u: 'ok' | 'tight' | 'late') =>
-  u === 'late' ? '#c62828' : u === 'tight' ? '#e65100' : '#2e7d32'
-
-export const NavCard = styled.div<{ $urgency: 'ok' | 'tight' | 'late' }>`
+// --- Single navigation card (access leg → transit) ------------------------
+// One flat, neutral card that states the facts directly: when the bus arrives
+// and how long the ride to the stop is. No "leave in" computation — the rider
+// deduces that themselves.
+export const NavCard = styled.div`
   background: #fff;
   border: 1px solid #e0e0e0;
   border-radius: 10px;
-  border-top: 4px solid ${(props) => urgencyAccent(props.$urgency)};
+  border-top: 4px solid #2196f3;
   padding: 14px 16px;
 `
 
 export const NavEyebrow = styled.div`
   color: #888;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.04em;
   margin-bottom: 2px;
   overflow: hidden;
   text-overflow: ellipsis;
-  text-transform: uppercase;
   white-space: nowrap;
 `
 
-export const NavHero = styled.div<{ $urgency: 'ok' | 'tight' | 'late' }>`
-  color: ${(props) => urgencyText(props.$urgency)};
+export const NavHero = styled.div`
+  color: #111;
   font-size: 34px;
   font-weight: 700;
   line-height: 1.1;
@@ -260,19 +253,20 @@ export const NavHero = styled.div<{ $urgency: 'ok' | 'tight' | 'late' }>`
 `
 
 export const NavSub = styled.div`
-  color: #333;
+  color: #555;
   font-size: 15px;
   font-weight: 500;
-  margin-top: 4px;
+  margin-top: 2px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 `
 
 export const NavFoot = styled.div`
-  color: #666;
-  font-size: 13px;
-  margin-top: 6px;
+  color: #333;
+  font-size: 16px;
+  font-weight: 500;
+  margin-top: 10px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
