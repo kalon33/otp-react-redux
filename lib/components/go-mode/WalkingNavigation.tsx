@@ -121,15 +121,17 @@ const WalkingNavigation = ({
     }
   }, [boardingStopData, isNextLegTransit, nextLegRouteId])
 
-  // Soonest departure the rider can still reach: leaving now, they'd arrive at
-  // the stop in `rideSecondsRemaining`, so any departure at least that far out
-  // is catchable. A slim margin still counts.
+  // Soonest departure the rider has a chance at. Leaving now they'd reach the
+  // stop in ~`rideSecondsRemaining`, but OTP's bike-time estimate is
+  // conservative — so we also surface departures they'd reach by riding up to
+  // 25% faster (capped at 3 min). If there's a chance, you see it.
+  const optimismMs = Math.min(180000, rideSecondsRemaining * 1000 * 0.25)
   const soonestCatchableMs = useMemo(() => {
     const reachable = routeDepartures.find(
-      (d) => d.depMs - nowMs >= rideSecondsRemaining * 1000
+      (d) => d.depMs - nowMs >= rideSecondsRemaining * 1000 - optimismMs
     )
     return reachable?.depMs ?? null
-  }, [routeDepartures, nowMs, rideSecondsRemaining])
+  }, [routeDepartures, nowMs, rideSecondsRemaining, optimismMs])
 
   // Manual override wins; otherwise show the soonest reachable bus; fall back to
   // OTP's planned departure only when we have no schedule data.
