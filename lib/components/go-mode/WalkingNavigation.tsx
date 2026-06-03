@@ -182,7 +182,7 @@ const WalkingNavigation = ({
     return routeDepartures
       .filter((d) => d.depMs > effectiveDepartureMs + 30000)
       .slice(0, 3)
-      .map((d) => ({ departureMs: d.depMs }))
+      .map((d) => ({ departureMs: d.depMs, realtime: d.realtime }))
   }, [routeDepartures, effectiveDepartureMs])
 
   const showAlternatives = laterDepartures.length > 0 && waitAtStopSeconds < 120
@@ -291,29 +291,57 @@ const WalkingNavigation = ({
             )}
             {showAlternatives &&
               laterDepartures.map(
-                (alt: { departureMs: number }, idx: number) => {
+                (
+                  alt: { departureMs: number; realtime: boolean },
+                  idx: number
+                ) => {
                   const minsAway = Math.round((alt.departureMs - nowMs) / 60000)
                   return (
                     <AlternativeDeparture key={idx}>
                       <span
                         style={{
-                          fontSize: '13px',
-                          minWidth: 0,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap' as const
+                          alignItems: 'center',
+                          display: 'flex',
+                          gap: '6px',
+                          minWidth: 0
                         }}
                       >
-                        {intl.formatMessage(
-                          {
-                            defaultMessage: 'Next: {time} ({mins} min away)',
-                            id: 'components.GoMode.nextDeparture'
-                          },
-                          {
-                            mins: minsAway,
-                            time: formatClockTime(alt.departureMs)
-                          }
-                        )}
+                        <span
+                          style={{
+                            fontSize: '13px',
+                            minWidth: 0,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap' as const
+                          }}
+                        >
+                          {intl.formatMessage(
+                            {
+                              defaultMessage: 'Next: {time} ({mins} min away)',
+                              id: 'components.GoMode.nextDeparture'
+                            },
+                            {
+                              mins: minsAway,
+                              time: formatClockTime(alt.departureMs)
+                            }
+                          )}
+                        </span>
+                        <TimeKindBadge $live={alt.realtime}>
+                          {alt.realtime ? (
+                            <>
+                              <LiveDot />
+                              {intl.formatMessage({
+                                defaultMessage: 'Live',
+                                id: 'components.GoMode.liveTime'
+                              })}
+                            </>
+                          ) : (
+                            intl.formatMessage({
+                              defaultMessage: 'Scheduled',
+                              id: 'components.GoMode.scheduledTime'
+                            })
+                          )}
+                        </TimeKindBadge>
                       </span>
                       <UseNextButton
                         onClick={() => onSelectDeparture?.(alt.departureMs)}
