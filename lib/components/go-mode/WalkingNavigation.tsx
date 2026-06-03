@@ -87,7 +87,8 @@ const WalkingNavigation = ({
 
   const route = nextLeg?.routeShortName || nextLeg?.routeLongName || ''
   const stopName = nextLeg?.from?.name || leg.to.name
-  const accessEmoji = leg.mode === 'BICYCLE' ? '🚲' : '🚶'
+  const isBike = leg.mode === 'BICYCLE'
+  const accessEmoji = isBike ? '🚲' : '🚶'
 
   // OTP2 returns the route as an object (leg.route.id, aliased to gtfsId);
   // legacy responses use a top-level leg.routeId. Match the stop-time gtfsId.
@@ -176,17 +177,29 @@ const WalkingNavigation = ({
       },
       { time: formatMinutes(busInSeconds) }
     )
-    foot = intl.formatMessage(
-      {
-        defaultMessage: '{emoji} {time} ride to {stop}',
-        id: 'components.GoMode.rideToStop'
-      },
-      {
-        emoji: accessEmoji,
-        stop: stopName,
-        time: formatMinutes(rideSecondsRemaining)
-      }
-    )
+    foot = isBike
+      ? intl.formatMessage(
+          {
+            defaultMessage: '{emoji} {time} ride to {stop}',
+            id: 'components.GoMode.rideToStop'
+          },
+          {
+            emoji: accessEmoji,
+            stop: stopName,
+            time: formatMinutes(rideSecondsRemaining)
+          }
+        )
+      : intl.formatMessage(
+          {
+            defaultMessage: '{emoji} {time} walk to {stop}',
+            id: 'components.GoMode.walkToStop'
+          },
+          {
+            emoji: accessEmoji,
+            stop: stopName,
+            time: formatMinutes(rideSecondsRemaining)
+          }
+        )
   } else {
     // Plain walk/bike leg with no transit connection next.
     eyebrow = intl.formatMessage(

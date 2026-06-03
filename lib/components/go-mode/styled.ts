@@ -373,22 +373,50 @@ export const FullScreenWrapper = styled.div`
   top: 0;
   z-index: 1000;
 
-  /* MobileNavigationBar renders outside .otp context, so its CSS won't apply */
+  /* MobileNavigationBar renders outside .otp context, so its CSS won't apply.
+     Slim it into a compact, transparent strip with the back arrow inline at the
+     left (next to the optional header text) instead of a tall gray bar. */
+  > header {
+    height: 38px !important;
+  }
+
+  .mobile-navbar-container {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    margin: 0;
+    min-height: 38px;
+  }
+
+  /* Strip the heavy default button chrome so the arrow reads as just an arrow. */
+  .mobile-back {
+    background: none;
+    border: none;
+    box-shadow: none;
+    height: 38px;
+    padding: 0 12px;
+  }
+
+  /* Account/locale controls are noise during turn-by-turn navigation. */
+  .locale-selector-and-login {
+    display: none;
+  }
+
   .navbar .mobile-header {
     align-items: center;
     display: flex;
     flex: 1;
-    height: 100%;
-    justify-content: center;
+    height: 38px;
+    justify-content: flex-start;
     overflow: hidden;
-    padding: 0 8px;
-    text-align: center;
+    padding: 0;
+    text-align: left;
   }
 
   .mobile-header-text {
     color: #333;
-    font-size: 14px !important;
-    font-weight: 400;
+    font-size: 15px !important;
+    font-weight: 600;
     line-height: 1.1;
     margin: 0;
     overflow: hidden;
@@ -401,7 +429,7 @@ export const FullScreenWrapper = styled.div`
 export const ScreenMain = styled.main`
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 50px);
+  height: calc(100dvh - 38px);
   overflow: hidden;
   position: relative;
 `
