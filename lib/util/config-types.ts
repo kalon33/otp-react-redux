@@ -293,6 +293,7 @@ export interface ItineraryConfig {
   groupByMode?: boolean
   groupTransitModes?: boolean
   hideSkeletons?: boolean
+  mergeByRouteSignature?: boolean
   mergeItineraries?: boolean
   mutedErrors?: string[]
   onlyShowCountdownForRealtime?: boolean
