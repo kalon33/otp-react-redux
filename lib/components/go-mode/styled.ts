@@ -220,113 +220,70 @@ export const NextLegPreview = styled.div`
   padding: 12px;
 `
 
-export const CountdownCard = styled.div<{ $urgency: 'ok' | 'tight' | 'late' }>`
-  background-color: ${(props) => {
-    switch (props.$urgency) {
-      case 'ok':
-        return '#e8f5e9'
-      case 'tight':
-        return '#fff8e1'
-      case 'late':
-        return '#ffebee'
-    }
-  }};
-  border-left: 4px solid
-    ${(props) => {
-      switch (props.$urgency) {
-        case 'ok':
-          return '#4caf50'
-        case 'tight':
-          return '#ff9800'
-        case 'late':
-          return '#f44336'
-      }
-    }};
-  border-radius: 4px;
-  margin-top: 8px;
-  padding: 10px 12px;
+// --- Single adaptive navigation card (access leg → transit) ---------------
+// One flat card replaces the old stacked banner + instruction row + countdown
+// box. Urgency is shown by the hero color + a thin top accent only — no nested
+// colored boxes. $urgency: ok (green) / tight (amber) / late (red).
+const urgencyAccent = (u: 'ok' | 'tight' | 'late') =>
+  u === 'late' ? '#f44336' : u === 'tight' ? '#ff9800' : '#4caf50'
+const urgencyText = (u: 'ok' | 'tight' | 'late') =>
+  u === 'late' ? '#c62828' : u === 'tight' ? '#e65100' : '#2e7d32'
+
+export const NavCard = styled.div<{ $urgency: 'ok' | 'tight' | 'late' }>`
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  border-top: 4px solid ${(props) => urgencyAccent(props.$urgency)};
+  padding: 14px 16px;
 `
 
-export const CountdownValue = styled.div<{ $urgency: 'ok' | 'tight' | 'late' }>`
-  color: ${(props) => {
-    switch (props.$urgency) {
-      case 'ok':
-        return '#2e7d32'
-      case 'tight':
-        return '#e65100'
-      case 'late':
-        return '#c62828'
-    }
-  }};
-  font-size: 18px;
-  font-weight: bold;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-`
-
-export const CountdownLabel = styled.div`
-  color: #666;
+export const NavEyebrow = styled.div`
+  color: #888;
   font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
   margin-bottom: 2px;
   overflow: hidden;
   text-overflow: ellipsis;
+  text-transform: uppercase;
   white-space: nowrap;
 `
 
-// Prominent "leave by" banner shown at the top of the access (walk/bike) leg
-// before a transit connection: states bike time + bus ETA and counts down to
-// the moment the rider must leave to catch the bus.
-export const LeaveByCard = styled.div<{ $urgency: 'ok' | 'tight' | 'late' }>`
-  background-color: ${(props) => {
-    switch (props.$urgency) {
-      case 'ok':
-        return '#e8f5e9'
-      case 'tight':
-        return '#fff8e1'
-      case 'late':
-        return '#ffebee'
-    }
-  }};
-  border: 2px solid
-    ${(props) => {
-      switch (props.$urgency) {
-        case 'ok':
-          return '#4caf50'
-        case 'tight':
-          return '#ff9800'
-        case 'late':
-          return '#f44336'
-      }
-    }};
-  border-radius: 8px;
-  margin-bottom: 10px;
-  padding: 12px 14px;
+export const NavHero = styled.div<{ $urgency: 'ok' | 'tight' | 'late' }>`
+  color: ${(props) => urgencyText(props.$urgency)};
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1.1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 `
 
-export const LeaveByHeader = styled.div`
+export const NavSub = styled.div`
   color: #333;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 500;
-  margin-bottom: 6px;
+  margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 `
 
-export const LeaveByCountdown = styled.div<{
-  $urgency: 'ok' | 'tight' | 'late'
-}>`
-  color: ${(props) => {
-    switch (props.$urgency) {
-      case 'ok':
-        return '#2e7d32'
-      case 'tight':
-        return '#e65100'
-      case 'late':
-        return '#c62828'
-    }
-  }};
-  font-size: 22px;
-  font-weight: bold;
-  line-height: 1.2;
+export const NavFoot = styled.div`
+  color: #666;
+  font-size: 13px;
+  margin-top: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+`
+
+// Secondary strip at the card bottom for rare controls (alternate departures,
+// reset-to-planned). Only rendered when relevant.
+export const NavExtras = styled.div`
+  border-top: 1px solid #eee;
+  margin-top: 10px;
+  padding-top: 8px;
 `
 
 export const SmallProgressTrack = styled.div`

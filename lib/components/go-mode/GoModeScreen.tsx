@@ -110,6 +110,7 @@ const GoModeScreen = ({
   const [rerouteText, setRerouteText] = useState('')
   const [nlBusy, setNlBusy] = useState(false)
   const [nlError, setNlError] = useState(false)
+  const [rerouteOpen, setRerouteOpen] = useState(false)
 
   const onboardActive = goMode.onboard.status !== 'idle'
 
@@ -389,7 +390,17 @@ const GoModeScreen = ({
           </GpsWarningBanner>
         )}
 
-        {goMode.reRoute.status === 'idle' && (
+        {goMode.reRoute.status === 'idle' && !rerouteOpen && (
+          <RerouteBar>
+            <RerouteButton onClick={() => setRerouteOpen(true)} type="button">
+              {intl.formatMessage({
+                defaultMessage: 'Find another way ▾',
+                id: 'components.GoMode.findAnotherWayToggle'
+              })}
+            </RerouteButton>
+          </RerouteBar>
+        )}
+        {goMode.reRoute.status === 'idle' && rerouteOpen && (
           <RerouteBar>
             <RerouteCard>
               <RerouteButton onClick={handleFindAnotherWay} type="button">
