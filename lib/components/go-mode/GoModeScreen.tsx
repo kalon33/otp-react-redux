@@ -114,6 +114,15 @@ const GoModeScreen = ({
 
   const onboardActive = goMode.onboard.status !== 'idle'
 
+  // The dev GPS-simulation toolbar overlays the bottom controls, so keep it
+  // opt-in even in dev builds. Enable it with ?sim=1 in the URL (or set
+  // localStorage.goModeSim = '1'); otherwise it stays hidden.
+  const simToolsEnabled =
+    process.env.NODE_ENV !== 'production' &&
+    typeof window !== 'undefined' &&
+    (window.location.search.includes('sim=1') ||
+      window.localStorage?.getItem('goModeSim') === '1')
+
   useEffect(() => {
     // If Go Mode is not active, redirect back to results. The onboard
     // ("I'm on the bus") flow has no itinerary yet, so don't redirect while it
@@ -530,7 +539,7 @@ const GoModeScreen = ({
             </RerouteCard>
           </RerouteBar>
         )}
-        {process.env.NODE_ENV !== 'production' && (
+        {simToolsEnabled && (
           <>
             <SimToggle
               aria-label="Toggle simulation toolbar"
