@@ -31,7 +31,12 @@ interface Props {
  * Access (walk/bike) leg view: state the facts directly and let the rider
  * decide when to leave. The card shows when the bus arrives at the boarding
  * stop (clock time + minutes away) and how long the ride to that stop is.
- * No "leave in" countdown — the rider deduces that themselves.
+ *
+ * Crucially it targets the *soonest bus the rider can physically reach* — the
+ * earliest departure of the route at the boarding stop whose time is at least
+ * the remaining ride away — rather than the comfortably-padded departure OTP
+ * planned. A slim margin still counts: if you can bike there before it leaves,
+ * you see it.
  */
 const WalkingNavigation = ({
   boardingStopData,
@@ -74,63 +79,81 @@ const WalkingNavigation = ({
       minute: '2-digit'
     })
 
+  const nowMs = progress.currentTime.getTime()
   const rideSecondsRemaining = Math.max(
     0,
     (leg.duration || 0) * (1 - progress.currentLegProgress / 100)
   )
 
-  const effectiveDepartureMs =
-    departureOverride || progress.plannedDepartureTime
   const route = nextLeg?.routeShortName || nextLeg?.routeLongName || ''
   const stopName = nextLeg?.from?.name || leg.to.name
   const accessEmoji = leg.mode === 'BICYCLE' ? '🚲' : '🚶'
 
-  // Minutes until the bus reaches the boarding stop — from the trip clock
-  // (so it stays correct under GPS simulation too).
-  const busInSeconds = effectiveDepartureMs
-    ? (effectiveDepartureMs - progress.currentTime.getTime()) / 1000
-    : progress.timeUntilNextDeparture ?? 0
+  // OTP2 returns the route as an object (leg.route.id, aliased to gtfsId);
+  // legacy responses use a top-level leg.routeId. Match the stop-time gtfsId.
+  const nextLegRoute = (nextLeg as any)?.route
+  const nextLegRouteId =
+    (nextLegRoute && typeof nextLegRoute === 'object'
+      ? nextLegRoute.id || nextLegRoute.gtfsId
+      : null) ||
+    (nextLeg as any)?.routeId ||
+    null
 
-  // Upcoming alternative departures for the same route (only surfaced when tight).
-  const alternativeDepartures = useMemo(() => {
-    if (!boardingStopData || !isNextLegTransit || !nextLeg) return []
+  // All upcoming departures of the boarding route at the boarding stop, from the
+  // live schedule pre-fetched when Go Mode started (sorted earliest first).
+  const routeDepartures = useMemo(() => {
+    if (!boardingStopData || !isNextLegTransit || !nextLegRouteId) return []
     try {
-      const allStopTimes = mergeAndSortStopTimes(boardingStopData)
-      const now = progress.currentTime.getTime()
-      const targetedDepartureMs = effectiveDepartureMs || nextLeg.startTime
-      const nextLegRouteId = nextLeg.routeId
-      return allStopTimes
-        .filter((st: any) => {
-          const stRouteId = st.route?.gtfsId || st.trip?.route?.gtfsId
-          if (!stRouteId || !nextLegRouteId) return false
-          if (stRouteId !== nextLegRouteId) return false
-          const depSeconds = st.realtimeDeparture ?? st.scheduledDeparture
-          const depMs = (st.serviceDay + depSeconds) * 1000
-          if (depMs <= now) return false
-          if (depMs > now + 2 * 60 * 60 * 1000) return false
-          if (Math.abs(depMs - targetedDepartureMs) < 60000) return false
-          return true
-        })
-        .slice(0, 3)
-        .map((st: any) => {
-          const depSeconds = st.realtimeDeparture ?? st.scheduledDeparture
-          return { departureMs: (st.serviceDay + depSeconds) * 1000 }
-        })
+      return mergeAndSortStopTimes(boardingStopData)
+        .map((st: any) => ({
+          depMs:
+            (st.serviceDay + (st.realtimeDeparture ?? st.scheduledDeparture)) *
+            1000,
+          routeId: st.route?.gtfsId || st.trip?.route?.gtfsId
+        }))
+        .filter(
+          (d: { depMs: number; routeId?: string }) =>
+            d.routeId === nextLegRouteId
+        )
+        .sort((a: { depMs: number }, b: { depMs: number }) => a.depMs - b.depMs)
     } catch {
       return []
     }
-  }, [
-    boardingStopData,
-    isNextLegTransit,
-    nextLeg,
-    progress.currentTime,
-    effectiveDepartureMs
-  ])
+  }, [boardingStopData, isNextLegTransit, nextLegRouteId])
 
-  const showAlternatives =
-    alternativeDepartures.length > 0 &&
-    progress.waitTimeAtStop !== undefined &&
-    progress.waitTimeAtStop < 60
+  // Soonest departure the rider can still reach: leaving now, they'd arrive at
+  // the stop in `rideSecondsRemaining`, so any departure at least that far out
+  // is catchable. A slim margin still counts.
+  const soonestCatchableMs = useMemo(() => {
+    const reachable = routeDepartures.find(
+      (d) => d.depMs - nowMs >= rideSecondsRemaining * 1000
+    )
+    return reachable?.depMs ?? null
+  }, [routeDepartures, nowMs, rideSecondsRemaining])
+
+  // Manual override wins; otherwise show the soonest reachable bus; fall back to
+  // OTP's planned departure only when we have no schedule data.
+  const effectiveDepartureMs =
+    departureOverride || soonestCatchableMs || progress.plannedDepartureTime
+
+  const busInSeconds = effectiveDepartureMs
+    ? (effectiveDepartureMs - nowMs) / 1000
+    : progress.timeUntilNextDeparture ?? 0
+  // Slack between reaching the stop and the bus leaving — negative if you can't
+  // quite make it.
+  const waitAtStopSeconds = busInSeconds - rideSecondsRemaining
+
+  // Later departures of the same route, offered as safer fallbacks when the
+  // targeted bus is tight (or the rider just wants the next one).
+  const laterDepartures = useMemo(() => {
+    if (!effectiveDepartureMs) return []
+    return routeDepartures
+      .filter((d) => d.depMs > effectiveDepartureMs + 30000)
+      .slice(0, 3)
+      .map((d) => ({ departureMs: d.depMs }))
+  }, [routeDepartures, effectiveDepartureMs])
+
+  const showAlternatives = laterDepartures.length > 0 && waitAtStopSeconds < 120
   const showReset = !!progress.departureIsOverridden && !!onSelectDeparture
   const showExtras = (showAlternatives || showReset) && !!onSelectDeparture
 
@@ -194,11 +217,9 @@ const WalkingNavigation = ({
               </ResetButton>
             )}
             {showAlternatives &&
-              alternativeDepartures.map(
+              laterDepartures.map(
                 (alt: { departureMs: number }, idx: number) => {
-                  const minsAway = Math.round(
-                    (alt.departureMs - progress.currentTime.getTime()) / 60000
-                  )
+                  const minsAway = Math.round((alt.departureMs - nowMs) / 60000)
                   return (
                     <AlternativeDeparture key={idx}>
                       <span
