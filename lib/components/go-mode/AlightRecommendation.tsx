@@ -14,7 +14,7 @@ import {
   RerouteSummary,
   RerouteSwitchButton
 } from './styled'
-import LiveIndicator from './LiveIndicator'
+import RealtimeTime from './RealtimeTime'
 
 interface Props {
   changeBus: () => void
@@ -134,15 +134,18 @@ const AlightRecommendation = ({
               id: 'components.GoMode.alightSummary'
             },
             {
-              arrival: arrivalTime.toLocaleTimeString([], {
-                hour: 'numeric',
-                minute: '2-digit'
-              }),
+              arrival: (
+                <RealtimeTime live={best.realtime}>
+                  {arrivalTime.toLocaleTimeString([], {
+                    hour: 'numeric',
+                    minute: '2-digit'
+                  })}
+                </RealtimeTime>
+              ),
               transfers: best.itinerary.transfers ?? 0,
               walk: Math.round(best.itinerary.walkDistance ?? 0)
             }
           )}
-          <LiveIndicator live={best.realtime} />
         </RerouteSummary>
         <RerouteActions>
           <RerouteSwitchButton onClick={confirmOnboardAlightStop} type="button">

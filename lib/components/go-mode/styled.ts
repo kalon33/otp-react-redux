@@ -291,23 +291,38 @@ export const NavSub = styled.div`
   white-space: nowrap;
 `
 
-// The app-wide realtime indicator: a pulsing pair of radiating "waves" shown
-// next to a time when it reflects the vehicle's live position. This reuses the
-// exact glyph (clip-path) and pulse the rest of the UI uses for realtime times
-// (see lib/components/narrative/default/itinerary.css ".realtime::before"), so
-// Go Mode matches the convention — icon == live, no icon == scheduled.
-export const LiveWaves = styled.span`
-  animation: ${pulseOpacity} 2s ease-in-out infinite;
-  background: rgb(0, 180, 0);
-  clip-path: path(
-    'M3.7,4.1C3.1,4.9,3,6,3.4,7.2c0.1,0.3,0.5,0.6,0.8,0.6c0.3,0,0.5-0.2,0.4-0.5C4.3,6.4,4.4,5.5,4.9,4.9s1.2-1,2.2-1 c0.1,0,0.3-0.1,0.3-0.1c0.1-0.1,0.1-0.3,0-0.4C7.3,3,6.9,2.8,6.6,2.8C5.3,2.8,4.3,3.2,3.7,4.1z M5.6,0C3.5-0.1,1.8,0.7,0.8,2 s-1.1,3.2-0.3,5.2C0.6,7.5,1,7.8,1.3,7.8c0.3,0,0.5-0.2,0.4-0.5C1,5.6,1.1,4,2,2.8s2.3-1.8,4.1-1.7c0.2,0,0.3-0.1,0.3-0.1 c0.1-0.1,0.1-0.2,0-0.4C6.3,0.3,5.9,0,5.6,0z'
-  );
-  display: inline-block;
-  flex-shrink: 0;
-  height: 14px;
-  margin-left: 6px;
-  vertical-align: middle;
-  width: 7px;
+// Realtime cue, copied verbatim from the search UI so Go Mode matches it
+// exactly: a pulsing pair of radiating "waves" rendered as a ::before glyph
+// immediately to the LEFT of the time, green, 7x14, no margin, dipping to 0.5
+// opacity on a 2s pulse. See lib/components/narrative/default/itinerary.css
+// ".realtime::before" — this is the same mechanism, glyph, size, and timing.
+// Convention: glyph == live, no glyph == scheduled (the time itself is not
+// recolored, just as in search).
+const pulseRealtime = keyframes`
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+`
+
+export const RealtimeTimeBox = styled.span<{ $live?: boolean }>`
+  ${(props) =>
+    props.$live &&
+    css`
+      &::before {
+        animation: ${pulseRealtime} 2s ease-in-out infinite;
+        background: rgb(0, 180, 0);
+        clip-path: path(
+          'M3.7,4.1C3.1,4.9,3,6,3.4,7.2c0.1,0.3,0.5,0.6,0.8,0.6c0.3,0,0.5-0.2,0.4-0.5C4.3,6.4,4.4,5.5,4.9,4.9s1.2-1,2.2-1 c0.1,0,0.3-0.1,0.3-0.1c0.1-0.1,0.1-0.3,0-0.4C7.3,3,6.9,2.8,6.6,2.8C5.3,2.8,4.3,3.2,3.7,4.1z M5.6,0C3.5-0.1,1.8,0.7,0.8,2 s-1.1,3.2-0.3,5.2C0.6,7.5,1,7.8,1.3,7.8c0.3,0,0.5-0.2,0.4-0.5C1,5.6,1.1,4,2,2.8s2.3-1.8,4.1-1.7c0.2,0,0.3-0.1,0.3-0.1 c0.1-0.1,0.1-0.2,0-0.4C6.3,0.3,5.9,0,5.6,0z'
+        );
+        content: '';
+        display: inline-block;
+        height: 14px;
+        width: 7px;
+      }
+    `}
 `
 
 export const NavFoot = styled.div`

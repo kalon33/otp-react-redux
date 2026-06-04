@@ -19,7 +19,7 @@ import {
   UseNextButton,
   WalkingContainer
 } from './styled'
-import LiveIndicator from './LiveIndicator'
+import RealtimeTime from './RealtimeTime'
 
 // OTP realtimeState values that mean the time reflects live vehicle data
 // (as opposed to the static schedule).
@@ -255,8 +255,11 @@ const WalkingNavigation = ({
         </NavEyebrowRow>
         {hero && (
           <NavHero>
-            {hero}
-            {isNextLegTransit && <LiveIndicator live={departureIsLive} />}
+            {isNextLegTransit ? (
+              <RealtimeTime live={departureIsLive}>{hero}</RealtimeTime>
+            ) : (
+              hero
+            )}
           </NavHero>
         )}
         {sub && <NavSub>{sub}</NavSub>}
@@ -286,33 +289,27 @@ const WalkingNavigation = ({
                     <AlternativeDeparture key={idx}>
                       <span
                         style={{
-                          alignItems: 'center',
-                          display: 'flex',
-                          gap: '6px',
-                          minWidth: 0
+                          fontSize: '13px',
+                          minWidth: 0,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap' as const
                         }}
                       >
-                        <span
-                          style={{
-                            fontSize: '13px',
-                            minWidth: 0,
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap' as const
-                          }}
-                        >
-                          {intl.formatMessage(
-                            {
-                              defaultMessage: 'Next: {time} ({mins} min away)',
-                              id: 'components.GoMode.nextDeparture'
-                            },
-                            {
-                              mins: minsAway,
-                              time: formatClockTime(alt.departureMs)
-                            }
-                          )}
-                        </span>
-                        <LiveIndicator live={alt.realtime} />
+                        {intl.formatMessage(
+                          {
+                            defaultMessage: 'Next: {time} ({mins} min away)',
+                            id: 'components.GoMode.nextDeparture'
+                          },
+                          {
+                            mins: minsAway,
+                            time: (
+                              <RealtimeTime live={alt.realtime}>
+                                {formatClockTime(alt.departureMs)}
+                              </RealtimeTime>
+                            )
+                          }
+                        )}
                       </span>
                       <UseNextButton
                         onClick={() => onSelectDeparture?.(alt.departureMs)}
