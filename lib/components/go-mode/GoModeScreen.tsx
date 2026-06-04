@@ -1,6 +1,6 @@
 import { connect } from 'react-redux'
 import { useIntl } from 'react-intl'
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 
 import * as goModeActions from '../../actions/go-mode'
 import * as routingProfileActions from '../../actions/routing-profiles'
@@ -123,11 +123,20 @@ const GoModeScreen = ({
     (window.location.search.includes('sim=1') ||
       window.localStorage?.getItem('goModeSim') === '1')
 
+  // Only leave Go Mode once a trip has genuinely ended — never during the entry
+  // transition. Bouncing on the first render was kicking riders straight back to
+  // results the instant they hit "Start Trip".
+  const hasBeenActiveRef = useRef(false)
   useEffect(() => {
-    // If Go Mode is not active, redirect back to results. The onboard
-    // ("I'm on the bus") flow has no itinerary yet, so don't redirect while it
-    // is running.
-    if (!goMode.isActive || (!goMode.activeItinerary && !onboardActive)) {
+    const active =
+      goMode.isActive || goMode.activeItinerary != null || onboardActive
+    if (active) {
+      hasBeenActiveRef.current = true
+      return
+    }
+    // Inactive: redirect back to results only if we were previously in a trip
+    // (i.e. it actually ended), not on a spurious early/transient render.
+    if (hasBeenActiveRef.current) {
       setMobileScreen(MobileScreens.RESULTS_SUMMARY)
     }
   }, [goMode.isActive, goMode.activeItinerary, onboardActive, setMobileScreen])
@@ -178,10 +187,12 @@ const GoModeScreen = ({
     window.addEventListener('beforeunload', handleBeforeUnload)
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload)
-      // Clean up tracking if component unmounts while active
-      endGoMode()
+      // Do NOT tear down Go Mode here. Unmounting (navigating away, a transient
+      // remount) must leave the trip intact so it survives navigation and can be
+      // resumed; tracking is torn down only on an explicit exit or completion
+      // (handleExit / handleOnboardExit -> endGoMode).
     }
-  }, [goMode.isActive, endGoMode])
+  }, [goMode.isActive])
 
   // Resolve the re-route search into a best candidate (or "none") once results
   // arrive. getRerouteCandidate reads the dedicated re-route search directly.

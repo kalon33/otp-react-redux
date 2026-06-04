@@ -230,6 +230,18 @@ export function beginGoMode(itinerary: Itinerary) {
     dispatch(startGoMode({ itinerary, originalFrom }))
     dispatch(setMobileScreen(MobileScreens.GO_MODE))
 
+    await dispatch(startGoModeTracking(itinerary))
+  }
+}
+
+/**
+ * Start the live-tracking machinery for an already-active Go Mode trip: stop-time
+ * prefetch, dev GPS-simulation hooks, vehicle tracking, and GPS polling. Split out
+ * of beginGoMode so a trip restored from storage on reload (see
+ * session-persistence) can resume tracking without resetting the restored state.
+ */
+export function startGoModeTracking(itinerary: Itinerary) {
+  return async function (dispatch: any) {
     // Pre-fetch stop times for all transit boarding stops
     const today = new Date().toISOString().split('T')[0]
     for (const leg of itinerary.legs) {
@@ -625,6 +637,7 @@ function buildOnboardItinerary(
   } else if (lastPosition) {
     let bestDist = Infinity
     stopTimes.forEach((st: any, i: number) => {
+      if (st.stop?.lat == null || st.stop?.lon == null) return
       const d = haversineDistance(
         [lastPosition.coords.latitude, lastPosition.coords.longitude],
         [st.stop.lat, st.stop.lon]
@@ -641,8 +654,14 @@ function buildOnboardItinerary(
     alightIdx = Math.min(boardIdx + 1, stopTimes.length - 1)
   }
 
-  const boardStop = stopTimes[boardIdx].stop
-  const alightStop = stopTimes[alightIdx].stop
+  const boardStop = stopTimes[boardIdx]?.stop
+  const alightStop = stopTimes[alightIdx]?.stop
+  // If the trip schedule lacks usable board/alight stop data we can't synthesize
+  // the bus leg — fall back to the onward plan so the rider still gets guidance
+  // to their destination rather than crashing.
+  if (!boardStop || !alightStop) {
+    return onward
+  }
   const anchorSd = stopTimes[boardIdx].scheduledDeparture
   const busLegStart = Date.now()
   // Prefer the live (GPS-fed) realtime arrival per stop; otherwise anchor the
@@ -683,6 +702,7 @@ function buildOnboardItinerary(
   const intermediatePlaces = []
   for (let i = boardIdx + 1; i < alightIdx; i++) {
     const st = stopTimes[i]
+    if (!st?.stop) continue
     const t = stopEpoch(i)
     intermediatePlaces.push({
       arrivalTime: t,
