@@ -8,7 +8,6 @@ import type { TripProgress } from '../../util/go-mode/progress-calculator'
 import {
   AlternativeDeparture,
   CardBackButton,
-  LiveDot,
   NavCard,
   NavExtras,
   NavEyebrow,
@@ -17,10 +16,10 @@ import {
   NavHero,
   NavSub,
   ResetButton,
-  TimeKindBadge,
   UseNextButton,
   WalkingContainer
 } from './styled'
+import LiveIndicator from './LiveIndicator'
 
 // OTP realtimeState values that mean the time reflects live vehicle data
 // (as opposed to the static schedule).
@@ -253,26 +252,13 @@ const WalkingNavigation = ({
             </CardBackButton>
           )}
           <NavEyebrow>{eyebrow}</NavEyebrow>
-          {isNextLegTransit && hero && (
-            <TimeKindBadge $live={departureIsLive}>
-              {departureIsLive ? (
-                <>
-                  <LiveDot />
-                  {intl.formatMessage({
-                    defaultMessage: 'Live',
-                    id: 'components.GoMode.liveTime'
-                  })}
-                </>
-              ) : (
-                intl.formatMessage({
-                  defaultMessage: 'Scheduled',
-                  id: 'components.GoMode.scheduledTime'
-                })
-              )}
-            </TimeKindBadge>
-          )}
         </NavEyebrowRow>
-        {hero && <NavHero>{hero}</NavHero>}
+        {hero && (
+          <NavHero>
+            {hero}
+            {isNextLegTransit && <LiveIndicator live={departureIsLive} />}
+          </NavHero>
+        )}
         {sub && <NavSub>{sub}</NavSub>}
         {foot && <NavFoot>{foot}</NavFoot>}
 
@@ -326,22 +312,7 @@ const WalkingNavigation = ({
                             }
                           )}
                         </span>
-                        <TimeKindBadge $live={alt.realtime}>
-                          {alt.realtime ? (
-                            <>
-                              <LiveDot />
-                              {intl.formatMessage({
-                                defaultMessage: 'Live',
-                                id: 'components.GoMode.liveTime'
-                              })}
-                            </>
-                          ) : (
-                            intl.formatMessage({
-                              defaultMessage: 'Scheduled',
-                              id: 'components.GoMode.scheduledTime'
-                            })
-                          )}
-                        </TimeKindBadge>
+                        <LiveIndicator live={alt.realtime} />
                       </span>
                       <UseNextButton
                         onClick={() => onSelectDeparture?.(alt.departureMs)}

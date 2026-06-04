@@ -291,28 +291,22 @@ export const NavSub = styled.div`
   white-space: nowrap;
 `
 
-// "Live" (realtime) vs "Scheduled" pill shown next to the departure time, so
-// the rider knows whether the clock time reflects the bus's actual position.
-export const TimeKindBadge = styled.span<{ $live: boolean }>`
-  align-items: center;
-  background: ${(props) => (props.$live ? '#e8f5e9' : '#eee')};
-  border-radius: 999px;
-  color: ${(props) => (props.$live ? '#2e7d32' : '#777')};
-  display: inline-flex;
+// The app-wide realtime indicator: a pulsing pair of radiating "waves" shown
+// next to a time when it reflects the vehicle's live position. This reuses the
+// exact glyph (clip-path) and pulse the rest of the UI uses for realtime times
+// (see lib/components/narrative/default/itinerary.css ".realtime::before"), so
+// Go Mode matches the convention — icon == live, no icon == scheduled.
+export const LiveWaves = styled.span`
+  animation: ${pulseOpacity} 2s ease-in-out infinite;
+  background: rgb(0, 180, 0);
+  clip-path: path(
+    'M3.7,4.1C3.1,4.9,3,6,3.4,7.2c0.1,0.3,0.5,0.6,0.8,0.6c0.3,0,0.5-0.2,0.4-0.5C4.3,6.4,4.4,5.5,4.9,4.9s1.2-1,2.2-1 c0.1,0,0.3-0.1,0.3-0.1c0.1-0.1,0.1-0.3,0-0.4C7.3,3,6.9,2.8,6.6,2.8C5.3,2.8,4.3,3.2,3.7,4.1z M5.6,0C3.5-0.1,1.8,0.7,0.8,2 s-1.1,3.2-0.3,5.2C0.6,7.5,1,7.8,1.3,7.8c0.3,0,0.5-0.2,0.4-0.5C1,5.6,1.1,4,2,2.8s2.3-1.8,4.1-1.7c0.2,0,0.3-0.1,0.3-0.1 c0.1-0.1,0.1-0.2,0-0.4C6.3,0.3,5.9,0,5.6,0z'
+  );
+  display: inline-block;
   flex-shrink: 0;
-  font-size: 11px;
-  font-weight: 700;
-  gap: 4px;
-  letter-spacing: 0.3px;
-  padding: 2px 8px;
-  text-transform: uppercase;
-`
-
-export const LiveDot = styled.span`
-  animation: ${pulseOpacity} 1.2s ease-in-out infinite;
-  background: #2e7d32;
-  border-radius: 50%;
-  height: 7px;
+  height: 14px;
+  margin-left: 6px;
+  vertical-align: middle;
   width: 7px;
 `
 
