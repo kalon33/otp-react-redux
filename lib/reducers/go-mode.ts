@@ -64,6 +64,7 @@ export interface OnboardVehicle {
 /** One candidate alight stop whose stop→destination plan is in flight. */
 export interface OnboardCandidateSearch {
   busArrivalEpoch: number
+  realtime: boolean
   searchId: string
   stopId: string
   stopName: string
@@ -73,6 +74,7 @@ export interface OnboardCandidateSearch {
 export interface OnboardAlightOption {
   busArrivalEpoch: number
   itinerary: Itinerary
+  realtime: boolean
   stopId: string
   stopName: string
 }

@@ -6,13 +6,15 @@ import * as goModeActions from '../../actions/go-mode'
 import type { GoModeState } from '../../reducers/go-mode'
 
 import {
+  LiveDot,
   RerouteActions,
   RerouteBar,
   RerouteCard,
   RerouteCardTitle,
   RerouteKeepButton,
   RerouteSummary,
-  RerouteSwitchButton
+  RerouteSwitchButton,
+  TimeKindBadge
 } from './styled'
 
 interface Props {
@@ -140,7 +142,23 @@ const AlightRecommendation = ({
               transfers: best.itinerary.transfers ?? 0,
               walk: Math.round(best.itinerary.walkDistance ?? 0)
             }
-          )}
+          )}{' '}
+          <TimeKindBadge $live={best.realtime}>
+            {best.realtime ? (
+              <>
+                <LiveDot />
+                {intl.formatMessage({
+                  defaultMessage: 'Live',
+                  id: 'components.GoMode.liveTime'
+                })}
+              </>
+            ) : (
+              intl.formatMessage({
+                defaultMessage: 'Scheduled',
+                id: 'components.GoMode.scheduledTime'
+              })
+            )}
+          </TimeKindBadge>
         </RerouteSummary>
         <RerouteActions>
           <RerouteSwitchButton onClick={confirmOnboardAlightStop} type="button">

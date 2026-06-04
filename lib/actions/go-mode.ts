@@ -9,6 +9,7 @@ import type { Itinerary, LatLngArray, Leg } from '@opentripplanner/types'
 
 import {
   getDownstreamStops,
+  hasLiveArrival,
   scoreAlightOption,
   selectCandidateStops
 } from '../util/go-mode/alight-optimizer'
@@ -175,6 +176,7 @@ export const setOnboardTrip = createAction<any>(SET_ONBOARD_TRIP)
 export const startOnboardOptimize = createAction<{
   candidateSearches: Array<{
     busArrivalEpoch: number
+    realtime: boolean
     searchId: string
     stopId: string
     stopName: string
@@ -573,6 +575,7 @@ export function planFromOnboardBus() {
 
     const candidateSearches = candidates.map((c) => ({
       busArrivalEpoch: c.busArrivalEpoch,
+      realtime: c.realtime,
       searchId: randId(),
       stopId: c.stop.id,
       stopName: c.stop.name
@@ -642,8 +645,15 @@ function buildOnboardItinerary(
   const alightStop = stopTimes[alightIdx].stop
   const anchorSd = stopTimes[boardIdx].scheduledDeparture
   const busLegStart = Date.now()
-  const stopEpoch = (i: number) =>
-    busLegStart + (stopTimes[i].scheduledDeparture - anchorSd) * 1000
+  // Prefer the live (GPS-fed) realtime arrival per stop; otherwise anchor the
+  // scheduled spacing to the start of the bus leg.
+  const stopEpoch = (i: number) => {
+    const st = stopTimes[i]
+    if (hasLiveArrival(st)) {
+      return (st.serviceDay + st.realtimeArrival) * 1000
+    }
+    return busLegStart + (st.scheduledDeparture - anchorSd) * 1000
+  }
 
   // Slice the trip geometry between boarding and alight stops.
   let geomPoints = trip.geometry?.points || ''

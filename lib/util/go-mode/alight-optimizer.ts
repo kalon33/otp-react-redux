@@ -13,8 +13,29 @@ export interface TripStop {
 }
 
 export interface TripStopTime {
+  arrivalDelay?: number
+  realtimeArrival?: number // GTFS seconds-after-midnight (live, GPS-fed)
+  realtimeState?: string
+  scheduledArrival?: number
   scheduledDeparture: number // GTFS seconds-after-midnight
+  serviceDay?: number // epoch seconds at the service day's start
   stop: TripStop
+}
+
+/**
+ * OTP realtimeState values where the time reflects live (GPS-derived) vehicle
+ * data rather than the static schedule.
+ */
+export const LIVE_REALTIME_STATES = new Set(['UPDATED', 'ADDED', 'MODIFIED'])
+
+/** Whether a trip stop time carries a usable live arrival prediction. */
+export function hasLiveArrival(st: TripStopTime): boolean {
+  return (
+    !!st.realtimeState &&
+    LIVE_REALTIME_STATES.has(st.realtimeState) &&
+    st.realtimeArrival != null &&
+    st.serviceDay != null
+  )
 }
 
 /** Shape of a findTrip() response (lib/actions/apiV2.js findTrip). */
@@ -31,6 +52,8 @@ export interface DownstreamStop {
   busArrivalEpoch: number
   /** Straight-line meters from this stop to the rider's destination. */
   distanceToDest: number
+  /** True when busArrivalEpoch came from live (GPS-fed) realtime data. */
+  realtime: boolean
   scheduledDeparture: number
   stop: TripStop
   /** Index of this stop within trip.stopTimes. */
@@ -80,9 +103,14 @@ function findAnchorIndex(
 /**
  * Compute the stops still ahead of the rider on the current trip, each tagged
  * with the absolute time the bus is expected to reach it and its distance to
- * the destination. Times are anchored to `nowMs` at the bus's next stop, so the
- * estimate self-corrects for any delay already accrued (rather than relying on
- * absolute GTFS service-day times that may have drifted).
+ * the destination.
+ *
+ * Per stop we prefer OTP's live realtimeArrival (which the agency derives from
+ * the vehicle's GPS via GTFS-RT) — that is the actual GPS-based arrival
+ * prediction. When a stop has no realtime data we fall back to the schedule,
+ * anchored to `nowMs` at the bus's next stop so the estimate still self-corrects
+ * for delay already accrued (rather than relying on absolute GTFS service-day
+ * times that may have drifted).
  */
 export function getDownstreamStops(
   trip: TripSchedule | null,
@@ -101,14 +129,19 @@ export function getDownstreamStops(
   for (let i = anchorIdx; i < stopTimes.length; i++) {
     const st = stopTimes[i]
     if (!st.stop || st.stop.lat == null || st.stop.lon == null) continue
+    const live = hasLiveArrival(st)
+    const busArrivalEpoch = live
+      ? ((st.serviceDay as number) + (st.realtimeArrival as number)) * 1000
+      : nowMs + (st.scheduledDeparture - anchorDeparture) * 1000
     downstream.push({
-      busArrivalEpoch: nowMs + (st.scheduledDeparture - anchorDeparture) * 1000,
+      busArrivalEpoch,
       distanceToDest: calculateDistance(
         st.stop.lat,
         st.stop.lon,
         dest.lat,
         dest.lon
       ),
+      realtime: live,
       scheduledDeparture: st.scheduledDeparture,
       stop: st.stop,
       stopIndexInTrip: i
