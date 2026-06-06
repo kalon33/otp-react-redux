@@ -217,6 +217,9 @@ components:
     networkConnectionRestored: Connexion réseau restaurée
     openMenu: Ouvrir le menu
     skipNavigation: Sauter la navigation
+  ActiveRoutingPreferences:
+    clear: Effacer
+    label: "Préférences :"
   BackToTripPlanner:
     backToTripPlanner: Retour au planificateur de trajets
   BatchResultsScreen:

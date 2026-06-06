@@ -174,6 +174,9 @@ components:
     message: >-
       Your changes have been saved. You are ready to start planning trips. Click
       the "Finish" button to return to trip planner.
+  ActiveRoutingPreferences:
+    clear: Clear
+    label: "Preferences:"
   AddPlaceButton:
     addPlace: Add place
     needOriginDestination: Define origin/destination to add intermediate places
