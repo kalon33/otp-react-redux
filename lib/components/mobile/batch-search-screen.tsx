@@ -16,6 +16,7 @@ import {
 } from '../form/styled'
 import { alertUserTripPlan } from '../form/util'
 import { MobileScreens } from '../../actions/ui-constants'
+import ActiveRoutingPreferences from '../form/active-routing-preferences'
 import AdvancedSettingsPanel from '../form/advanced-settings-panel'
 import BatchSettings from '../form/batch-settings'
 import DefaultMap from '../map/default-map'
@@ -185,6 +186,7 @@ class BatchSearchScreen extends Component<Props> {
                         onPlanTripClick={this.handlePlanTripClick}
                         openAdvancedSettings={this.openAdvancedSettings}
                       />
+                      <ActiveRoutingPreferences />
                       <OnBusButton onClick={this._onBusClicked} type="button">
                         {intl.formatMessage({
                           defaultMessage: "I'm already on the bus",
