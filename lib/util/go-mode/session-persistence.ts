@@ -34,6 +34,27 @@ export interface GoModeSession {
 let sessionStartedAt: number | null = null
 
 /**
+ * Return a JSON-safe deep copy with any circular references dropped. Real OTP
+ * itineraries can contain cycles (enriched leg/route back-references), which
+ * make a naive JSON.stringify throw — "cannot serialize cyclic structures" on
+ * Safari. Since this serialization runs from the redux store subscriber during
+ * dispatch, that throw used to abort trip start entirely (Start Trip appeared to
+ * do nothing). Dropping the cyclic edges keeps the durable trip data intact.
+ */
+function stripCycles<T>(value: T): T {
+  const seen = new WeakSet()
+  return JSON.parse(
+    JSON.stringify(value, (_key, val) => {
+      if (val && typeof val === 'object') {
+        if (seen.has(val)) return undefined
+        seen.add(val)
+      }
+      return val
+    })
+  )
+}
+
+/**
  * Persist the in-progress trip. No-op unless Go Mode is genuinely active with a
  * locked-in itinerary (the onboard "I'm on the bus" discovery state has no
  * itinerary yet and is not worth resuming).
@@ -53,7 +74,13 @@ export function saveGoModeSession(goMode: GoModeState): void {
     startedAt: sessionStartedAt,
     vehicleMatch: goMode.vehicleMatch?.match ?? null
   }
-  storeItem(GO_MODE_SESSION_KEY, session)
+  // Persistence is best-effort and runs from the store subscriber mid-dispatch:
+  // it must NEVER throw, or it would abort the action that started the trip.
+  try {
+    storeItem(GO_MODE_SESSION_KEY, stripCycles(session))
+  } catch {
+    // Resume-on-reload is a nicety; a save failure must not disrupt the live trip.
+  }
 }
 
 /**
