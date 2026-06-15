@@ -26,6 +26,7 @@ import {
 } from '../util/go-mode/vehicle-matching'
 import { getRoutingProfile } from '../util/routing-profiles'
 import {
+  calculateDistance,
   matchPositionToRoute,
   shouldTransitionToNextLeg
 } from '../util/go-mode/position-matching'
@@ -41,7 +42,8 @@ import {
   findRoutesNearby,
   findStopTimesForStop,
   findTrip,
-  getVehiclePositionsForRoute
+  getVehiclePositionsForRoute,
+  onboardGraphQLQuery
 } from './apiV2'
 import { MobileScreens } from './ui-constants'
 import { setMobileScreen } from './ui'
@@ -1222,15 +1224,135 @@ export function confirmVehicleSelection(vehicleId: string) {
 }
 
 /**
+ * Trust the rider when they tap a route: infer the specific GTFS trip they are
+ * most likely on from the STATIC schedule. Uses the two facts we already have —
+ * the rider's GPS (which direction's stops are near them) and their destination
+ * (which direction heads toward it) — then picks, at the nearest stop, the trip
+ * whose departure is closest to now. Returns { tripId, headsign } or null.
+ */
+export function resolveOnboardTripFromSchedule(routeId: string) {
+  return async function (dispatch: any, getState: any) {
+    const state = getState()
+    const pos = state.otp?.goMode?.tracking?.lastPosition
+    if (!pos) return null
+    const userLat = pos.coords.latitude
+    const userLon = pos.coords.longitude
+    const to = state.otp.currentQuery?.to
+
+    // 1. Route directions (patterns) with their ordered stops.
+    const routeResp: any = await dispatch(
+      onboardGraphQLQuery(
+        `{ route(id: "${routeId}") { patterns {
+            code
+            headsign
+            stops { gtfsId lat lon }
+          } } }`
+      )
+    )
+    const patterns = routeResp?.data?.route?.patterns || []
+    if (!patterns.length) return null
+
+    // For each direction: the stop nearest the rider, and whether the
+    // destination lies downstream of it (i.e. this is the way they're heading).
+    const nearestIdx = (stops: any[], lat: number, lon: number) => {
+      let idx = -1
+      let best = Infinity
+      stops.forEach((s, i) => {
+        if (s?.lat == null || s?.lon == null) return
+        const d = calculateDistance(lat, lon, s.lat, s.lon)
+        if (d < best) {
+          best = d
+          idx = i
+        }
+      })
+      return { dist: best, idx }
+    }
+
+    const scored = patterns
+      .map((p: any) => {
+        const stops = p.stops || []
+        const rider = nearestIdx(stops, userLat, userLon)
+        const dest =
+          to?.lat != null && to?.lon != null
+            ? nearestIdx(stops, to.lat, to.lon)
+            : { dist: Infinity, idx: -1 }
+        return {
+          headedToDest: dest.idx > rider.idx,
+          nearestStop: stops[rider.idx],
+          pattern: p,
+          riderDist: rider.dist
+        }
+      })
+      .filter((s: any) => s.nearestStop)
+
+    if (!scored.length) return null
+    const towardDest = scored.filter((s: any) => s.headedToDest)
+    const pool = towardDest.length ? towardDest : scored
+    pool.sort((a: any, b: any) => a.riderDist - b.riderDist)
+    const best = pool[0]
+
+    // 2. Today's departures at that stop; pick the trip on the chosen direction
+    // whose departure is closest to now — the bus the rider just boarded.
+    const startOfToday = (() => {
+      const d = new Date()
+      d.setHours(0, 0, 0, 0)
+      return Math.floor(d.getTime() / 1000)
+    })()
+    const schedResp: any = await dispatch(
+      onboardGraphQLQuery(
+        `{ stop(id: "${best.nearestStop.gtfsId}") {
+            stoptimesForPatterns(startTime: ${startOfToday}, numberOfDepartures: 1000, omitNonPickups: false, omitCanceled: false) {
+              pattern { code route { gtfsId } }
+              stoptimes {
+                serviceDay
+                scheduledDeparture
+                realtimeDeparture
+                realtimeState
+                trip { gtfsId tripHeadsign pattern { code } }
+              }
+            }
+          } }`
+      )
+    )
+    const groups = schedResp?.data?.stop?.stoptimesForPatterns || []
+    const now = Date.now()
+    let chosen: { headsign?: string; tripId: string } | null = null
+    let bestDelta = Infinity
+    groups.forEach((g: any) => {
+      if (g?.pattern?.route?.gtfsId !== routeId) return
+      const samePattern = g?.pattern?.code === best.pattern.code
+      ;(g.stoptimes || []).forEach((st: any) => {
+        const live =
+          st.realtimeState === 'UPDATED' && st.realtimeDeparture != null
+        const secs = live ? st.realtimeDeparture : st.scheduledDeparture
+        if (secs == null || st.serviceDay == null || !st.trip?.gtfsId) return
+        const epoch = (st.serviceDay + secs) * 1000
+        // Strongly prefer the direction we resolved; only fall back to the other
+        // direction if it is dramatically closer in time.
+        const delta = Math.abs(epoch - now) + (samePattern ? 0 : 60 * 60 * 1000)
+        if (delta < bestDelta) {
+          bestDelta = delta
+          chosen = { headsign: st.trip.tripHeadsign, tripId: st.trip.gtfsId }
+        }
+      })
+    })
+
+    return chosen
+  }
+}
+
+/**
  * Onboard fallback: the rider taps a nearby route ("I'm on the 546") when no
  * live vehicle was matched within range. Anchor to the nearest live vehicle on
- * that route — no radius cap, since the rider has told us they are aboard — then
- * run the same schedule fetch + alight optimization as a direct vehicle pick.
+ * that route if there is one (no radius cap — the rider says they're aboard);
+ * otherwise infer the trip from the static schedule. Then run the same schedule
+ * fetch + alight optimization as a direct vehicle pick.
  */
 export function confirmOnboardRoute(routeId: string) {
-  return function (dispatch: any, getState: any) {
+  return async function (dispatch: any, getState: any) {
     const state = getState()
     const goMode = state.otp?.goMode
+    const onboardStatus = goMode?.onboard?.status
     const pos = goMode?.tracking?.lastPosition
     const routesIndex = state.otp?.transitIndex?.routes || {}
     const vehicles = (routesIndex[routeId]?.vehicles || []).filter(
@@ -1249,32 +1371,47 @@ export function confirmOnboardRoute(routeId: string) {
       chosen = vehicles[0]
     }
 
-    if (!chosen?.tripId) {
-      // No realtime trip to anchor to (route not running now, or a feed gap).
+    let tripId: string | null = chosen?.tripId || null
+    let label: string | null = chosen?.label || chosen?.vehicleId || null
+
+    // No realtime vehicle on this route — infer the rider's trip from the
+    // static schedule (their direction + the trip closest to now).
+    if (!tripId) {
+      const resolved: any = await dispatch(
+        resolveOnboardTripFromSchedule(routeId)
+      )
+      if (resolved?.tripId) {
+        tripId = resolved.tripId
+        label = resolved.headsign || label
+      }
+    }
+
+    if (!tripId || !onboardStatus || onboardStatus === 'idle') {
       dispatch(setOnboardStatus('error'))
       return
     }
 
+    const vehicleId = chosen?.vehicleId || `route:${routeId}`
     dispatch({
       payload: {
         confidence: 'confirmed' as const,
-        distanceMeters: chosen.distanceMeters ?? null,
-        label: chosen.label || chosen.vehicleId,
+        distanceMeters: chosen?.distanceMeters ?? null,
+        label: label || routeId,
         lastSeen: Date.now(),
-        vehicleId: chosen.vehicleId
+        vehicleId
       },
       type: CONFIRM_VEHICLE
     })
     dispatch(
       setOnboardVehicle({
-        label: chosen.label || chosen.vehicleId,
-        nextStopId: chosen.nextStopId || null,
+        label: label || routeId,
+        nextStopId: chosen?.nextStopId || null,
         routeId,
-        tripId: chosen.tripId,
-        vehicleId: chosen.vehicleId
+        tripId,
+        vehicleId
       })
     )
-    dispatch(loadOnboardScheduleAndOptimize(chosen.tripId))
+    dispatch(loadOnboardScheduleAndOptimize(tripId))
   }
 }
 
