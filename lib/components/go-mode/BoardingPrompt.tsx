@@ -18,17 +18,27 @@ import {
   VehicleSelectButton
 } from './styled'
 
+interface NearbyRoute {
+  id: string
+  longName?: string | null
+  shortName?: string | null
+}
+
 interface Props {
+  confirmOnboardRoute: (routeId: string) => void
   confirmVehicleSelection: (vehicleId: string) => void
   dismissBoardingPrompt: () => void
   goMode: GoModeState
+  nearbyRoutes: NearbyRoute[]
   routeName: string
 }
 
 const BoardingPrompt = ({
+  confirmOnboardRoute,
   confirmVehicleSelection,
   dismissBoardingPrompt,
   goMode,
+  nearbyRoutes,
   routeName
 }: Props) => {
   const intl = useIntl()
@@ -119,6 +129,38 @@ const BoardingPrompt = ({
               </VehicleSelectButton>
             </VehicleOptionRow>
           ))
+        ) : nearbyRoutes.length > 0 ? (
+          <>
+            <VehicleDetail style={{ marginBottom: 8, textAlign: 'center' }}>
+              {intl.formatMessage({
+                defaultMessage: 'No live bus detected — pick your route:',
+                id: 'components.GoMode.pickYourRoute'
+              })}
+            </VehicleDetail>
+            {nearbyRoutes.map((route) => (
+              <VehicleOptionRow key={route.id}>
+                <VehicleInfo>
+                  <VehicleLabel>
+                    {intl.formatMessage(
+                      {
+                        defaultMessage: 'Route {route}',
+                        id: 'components.GoMode.routeOption'
+                      },
+                      { route: route.shortName || route.longName || route.id }
+                    )}
+                  </VehicleLabel>
+                </VehicleInfo>
+                <VehicleSelectButton
+                  onClick={() => confirmOnboardRoute(route.id)}
+                >
+                  {intl.formatMessage({
+                    defaultMessage: 'This one',
+                    id: 'components.GoMode.selectVehicle'
+                  })}
+                </VehicleSelectButton>
+              </VehicleOptionRow>
+            ))}
+          </>
         ) : (
           <VehicleDetail style={{ marginBottom: 12, textAlign: 'center' }}>
             {intl.formatMessage({
@@ -148,11 +190,13 @@ const mapStateToProps = (state: any) => {
 
   return {
     goMode,
+    nearbyRoutes: state.otp?.transitIndex?.nearbyRoutes || [],
     routeName
   }
 }
 
 const mapDispatchToProps = {
+  confirmOnboardRoute: goModeActions.confirmOnboardRoute,
   confirmVehicleSelection: goModeActions.confirmVehicleSelection,
   dismissBoardingPrompt: goModeActions.dismissBoardingPrompt
 }

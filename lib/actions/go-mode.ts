@@ -501,12 +501,15 @@ export function discoverNearbyVehicles(attempt = 0) {
       )
     )
 
-    // 3. Vehicles within 200m of the rider, across all those routes.
+    // 3. Vehicles within range of the rider, across all those routes. The radius
+    // is generous (750m): the rider is on a moving bus and GTFS-RT positions lag
+    // and are sparse, so a tight radius silently matched nothing. When still none
+    // are detected, the prompt offers manual route selection (confirmOnboardRoute).
     const routesIndex = getState().otp?.transitIndex?.routes || {}
     const allVehicles = routes.flatMap(
       (r: { id: string }) => routesIndex[r.id]?.vehicles || []
     )
-    const nearby = findNearbyVehicles(lat, lon, allVehicles, 200)
+    const nearby = findNearbyVehicles(lat, lon, allVehicles, 750)
 
     dispatch({ payload: nearby, type: UPDATE_NEARBY_VEHICLES })
     dispatch(setOnboardStatus('awaiting-selection'))
@@ -1215,6 +1218,63 @@ export function confirmVehicleSelection(vehicleId: string) {
         dispatch(setOnboardStatus('error'))
       }
     }
+  }
+}
+
+/**
+ * Onboard fallback: the rider taps a nearby route ("I'm on the 546") when no
+ * live vehicle was matched within range. Anchor to the nearest live vehicle on
+ * that route — no radius cap, since the rider has told us they are aboard — then
+ * run the same schedule fetch + alight optimization as a direct vehicle pick.
+ */
+export function confirmOnboardRoute(routeId: string) {
+  return function (dispatch: any, getState: any) {
+    const state = getState()
+    const goMode = state.otp?.goMode
+    const pos = goMode?.tracking?.lastPosition
+    const routesIndex = state.otp?.transitIndex?.routes || {}
+    const vehicles = (routesIndex[routeId]?.vehicles || []).filter(
+      (v: { lat: number; lon: number }) => v.lat && v.lon
+    )
+
+    let chosen: any = null
+    if (pos && vehicles.length) {
+      chosen = findNearbyVehicles(
+        pos.coords.latitude,
+        pos.coords.longitude,
+        vehicles,
+        Infinity
+      )[0]
+    } else if (vehicles.length) {
+      chosen = vehicles[0]
+    }
+
+    if (!chosen?.tripId) {
+      // No realtime trip to anchor to (route not running now, or a feed gap).
+      dispatch(setOnboardStatus('error'))
+      return
+    }
+
+    dispatch({
+      payload: {
+        confidence: 'confirmed' as const,
+        distanceMeters: chosen.distanceMeters ?? null,
+        label: chosen.label || chosen.vehicleId,
+        lastSeen: Date.now(),
+        vehicleId: chosen.vehicleId
+      },
+      type: CONFIRM_VEHICLE
+    })
+    dispatch(
+      setOnboardVehicle({
+        label: chosen.label || chosen.vehicleId,
+        nextStopId: chosen.nextStopId || null,
+        routeId,
+        tripId: chosen.tripId,
+        vehicleId: chosen.vehicleId
+      })
+    )
+    dispatch(loadOnboardScheduleAndOptimize(chosen.tripId))
   }
 }
 
