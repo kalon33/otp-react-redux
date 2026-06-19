@@ -43,7 +43,6 @@ import {
   DEFAULT_PROFILE_ID,
   ROUTING_PROFILES
 } from '../../util/routing-profiles'
-import { generateModeSettingValues } from '../../util/api'
 import { getDependentName } from '../../util/user'
 import { IconWithText } from '../util/styledIcon'
 import { invisibleCss } from '../util/invisible-a11y-label'
