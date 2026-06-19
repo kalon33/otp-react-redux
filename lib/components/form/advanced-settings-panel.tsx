@@ -60,6 +60,7 @@ import {
   setModeButton,
   tripPlannerValidationErrors
 } from './util'
+import DateTimeModal from './date-time-modal'
 import { setModeButtonEnabled } from './batch-settings'
 import { styledCheckboxCss } from './styled'
 import { StyledTransparentButton } from './advanced-settings-button'
@@ -128,7 +129,25 @@ const ReturnToTripPlanButton = styled.button`
     margin-bottom: 7px;
   }
 `
+const DtSelectorContainer = styled.div`
+  margin: 2em 0;
 
+  .date-time-modal {
+    padding: 0;
+
+    .main-panel {
+      margin: 0;
+
+      button {
+        padding: 6px 0;
+      }
+
+      .date-time-selector {
+        margin: 15px 0;
+      }
+    }
+  }
+`
 const MobilityProfileContainer = styled.div`
   margin: 60px 0 60px 5px;
 `
