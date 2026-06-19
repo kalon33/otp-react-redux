@@ -20,22 +20,29 @@
 .otp .navbar .mobile-header {
   align-items: center;
   display: flex;
+  flex: 1;
   height: 100%;
   justify-content: center;
-  max-width: 90%;
+  overflow: hidden;
+  padding: 0 8px;
   text-align: center;
 }
 
 .otp .navbar .mobile-header-text {
   color: white;
-  display: inline-block;
-  font-size: 18px;
+  font-size: 11px !important;
+  font-weight: 400;
+  line-height: 1.1;
   margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 100%;
 }
 
 @media (max-width: 768px) {
   .otp .navbar .mobile-header-text {
-    word-break: break-all;
+    font-size: 10px !important;
   }
 }
 

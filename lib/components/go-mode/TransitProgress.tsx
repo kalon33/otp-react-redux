@@ -1,0 +1,138 @@
+import { connect } from 'react-redux'
+import { useIntl } from 'react-intl'
+import React from 'react'
+import type { Leg } from '@opentripplanner/types'
+
+import type { TripProgress } from '../../util/go-mode/progress-calculator'
+import type { VehicleMatchResult } from '../../util/go-mode/vehicle-matching'
+
+import {
+  AlertBanner,
+  InfoCard,
+  InfoCardLabel,
+  InfoCardValue,
+  LocatingIndicator,
+  ModeIcon,
+  RouteDirection,
+  RouteHeader,
+  RouteName,
+  StopsCount,
+  StopsLabel,
+  TransitContainer,
+  VehicleTrackingBadge
+} from './styled'
+
+interface Props {
+  leg: Leg
+  progress: TripProgress
+  vehicleMatch?: VehicleMatchResult | null
+}
+
+const TransitProgress = ({ leg, progress, vehicleMatch }: Props) => {
+  const intl = useIntl()
+
+  const getModeIcon = (mode: string): string => {
+    switch (mode) {
+      case 'BUS':
+        return '🚌'
+      case 'RAIL':
+        return '🚆'
+      case 'SUBWAY':
+        return '🚇'
+      case 'TRAM':
+        return '🚊'
+      case 'FERRY':
+        return '⛴️'
+      default:
+        return '🚍'
+    }
+  }
+
+  const shouldShowAlert =
+    progress.stopsRemaining === 2 || progress.stopsRemaining === 1
+
+  const isTracking =
+    vehicleMatch?.confidence === 'confirmed' ||
+    vehicleMatch?.confidence === 'high'
+
+  return (
+    <TransitContainer>
+      {/* Route Header */}
+      <RouteHeader>
+        <ModeIcon>{getModeIcon(leg.mode)}</ModeIcon>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <RouteName>{leg.routeShortName || leg.routeLongName}</RouteName>
+          {/* Compact stops remaining */}
+          {progress.stopsRemaining !== undefined &&
+            progress.stopsRemaining > 0 && (
+              <RouteDirection>
+                {intl.formatMessage(
+                  {
+                    defaultMessage:
+                      '{count, plural, one {1 stop} other {# stops}} remaining',
+                    id: 'components.GoMode.stopsRemainingCompact'
+                  },
+                  { count: progress.stopsRemaining }
+                )}
+              </RouteDirection>
+            )}
+          {/* Vehicle tracking status */}
+          {isTracking && vehicleMatch?.label && (
+            <VehicleTrackingBadge
+              $confirmed={vehicleMatch.confidence === 'confirmed'}
+            >
+              {vehicleMatch.confidence === 'confirmed'
+                ? intl.formatMessage(
+                    {
+                      defaultMessage: 'On Bus #{label}',
+                      id: 'components.GoMode.onBus'
+                    },
+                    { label: vehicleMatch.label }
+                  )
+                : intl.formatMessage(
+                    {
+                      defaultMessage: 'Tracking Bus #{label}',
+                      id: 'components.GoMode.trackingBus'
+                    },
+                    { label: vehicleMatch.label }
+                  )}
+            </VehicleTrackingBadge>
+          )}
+          {!isTracking &&
+            vehicleMatch?.confidence !== 'confirmed' &&
+            leg.transitLeg && (
+              <LocatingIndicator>
+                {intl.formatMessage({
+                  defaultMessage: 'Locating your bus...',
+                  id: 'components.GoMode.locatingBus'
+                })}
+              </LocatingIndicator>
+            )}
+        </div>
+      </RouteHeader>
+
+      {/* Get Ready Alert */}
+      {shouldShowAlert && (
+        <AlertBanner
+          $severity={progress.stopsRemaining === 1 ? 'urgent' : 'warning'}
+        >
+          {progress.stopsRemaining === 1
+            ? intl.formatMessage({
+                defaultMessage: '🔔 GET READY! Next stop is yours!',
+                id: 'components.GoMode.getReadyNow'
+              })
+            : intl.formatMessage({
+                defaultMessage: '⚠️ Get Ready - 2 stops away',
+                id: 'components.GoMode.getReady'
+              })}
+        </AlertBanner>
+      )}
+    </TransitContainer>
+  )
+}
+
+const mapStateToProps = (state: any) => ({
+  vehicleMatch: state.otp?.goMode?.vehicleMatch?.match || null
+})
+
+export default connect(mapStateToProps)(TransitProgress)

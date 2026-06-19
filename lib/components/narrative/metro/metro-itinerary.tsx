@@ -13,6 +13,7 @@ import coreUtils from '@opentripplanner/core-utils'
 import React from 'react'
 import styled, { keyframes } from 'styled-components'
 
+import * as goModeActions from '../../../actions/go-mode'
 import * as uiActions from '../../../actions/ui'
 import { AppReduxState } from '../../../util/state-types'
 import { ComponentContext } from '../../../util/contexts'
@@ -25,6 +26,7 @@ import { ItineraryDescription } from '../default/itinerary-description'
 import { itineraryHasAccessibilityScore } from '../../../util/accessibility-routing'
 import { ItineraryView } from '../../../util/ui'
 import { localizeGradationMap } from '../utils'
+import { MobileScreens } from '../../../actions/ui-constants'
 import FormattedDuration from '../../util/formatted-duration'
 import ItineraryBody from '../line-itin/connected-itinerary-body'
 import NarrativeItinerary from '../narrative-itinerary'
@@ -188,10 +190,33 @@ const LoadingBlurred = styled.span<{ loading: boolean }>`
   transition: all 0.2s ease-in-out;
 `
 
+const StartTripButton = styled.button`
+  background-color: #4caf50;
+  border: none;
+  border-radius: 8px;
+  color: white;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 600;
+  margin: 16px;
+  padding: 16px 24px;
+  width: calc(100% - 32px);
+  transition: background-color 0.2s ease;
+
+  &:hover {
+    background-color: #45a049;
+  }
+
+  &:active {
+    background-color: #3d8b40;
+  }
+`
+
 type Props = {
   LegIcon: React.ReactNode
   accessibilityScoreGradationMap: { [value: number]: string }
   active: boolean
+  beginGoMode?: (itinerary: Itinerary) => void
   defaultFareType: FareProductSelector
   /** This is true when there is only one itinerary being shown and the itinerary-body is visible */
   expanded: boolean
@@ -201,6 +226,7 @@ type Props = {
   setActiveItinerary: SetActiveItineraryHandler
   setActiveLeg: (leg: Leg) => void
   setItineraryView: (view: string) => void
+  setMobileScreen?: (screen: number) => void
   showRealtimeAnnotation: () => void
 }
 
@@ -255,6 +281,7 @@ class MetroItinerary extends NarrativeItinerary {
       accessibilityScoreGradationMap,
       active,
       arrivesAt,
+      beginGoMode,
       co2Config,
       defaultFareType,
       expanded,
@@ -266,6 +293,7 @@ class MetroItinerary extends NarrativeItinerary {
       setActiveItinerary,
       setActiveLeg,
       setItineraryView,
+      setMobileScreen,
       showInlineItinerarySummary,
       showLegDurations,
       showRealtimeAnnotation
@@ -423,23 +451,47 @@ class MetroItinerary extends NarrativeItinerary {
                     <SecondaryInfo>{fareInfo}</SecondaryInfo>
                   )}
                   <SecondaryInfo>
-                    <FormattedMessage
-                      id="components.MetroUI.timeWalking"
-                      values={{
-                        time: (
-                          <FormattedDuration
-                            duration={
-                              /* If the walk time is truly zero, show 0. But if the walk time is just less 
-                              than a minute, round up to the nearest minute to avoid showing no walk time. */
-                              itinerary.walkTime > 0
-                                ? ensureAtLeastOneMinute(itinerary.walkTime)
-                                : itinerary.walkTime
-                            }
-                            includeSeconds={false}
+                    {(() => {
+                      const bikeTime = itinerary.legs
+                        .filter((leg: Leg) => leg.mode === 'BICYCLE')
+                        .reduce(
+                          (sum: number, leg: Leg) => sum + leg.duration,
+                          0
+                        )
+                      if (bikeTime > 0) {
+                        return (
+                          <FormattedMessage
+                            defaultMessage="{time} biking"
+                            id="components.MetroUI.timeBiking"
+                            values={{
+                              time: (
+                                <FormattedDuration
+                                  duration={ensureAtLeastOneMinute(bikeTime)}
+                                  includeSeconds={false}
+                                />
+                              )
+                            }}
                           />
                         )
-                      }}
-                    />
+                      }
+                      return (
+                        <FormattedMessage
+                          id="components.MetroUI.timeWalking"
+                          values={{
+                            time: (
+                              <FormattedDuration
+                                duration={
+                                  itinerary.walkTime > 0
+                                    ? ensureAtLeastOneMinute(itinerary.walkTime)
+                                    : itinerary.walkTime
+                                }
+                                includeSeconds={false}
+                              />
+                            )
+                          }}
+                        />
+                      )
+                    })()}
                   </SecondaryInfo>
                 </ItineraryDetails>
                 <DepartureTimes>
@@ -467,6 +519,25 @@ class MetroItinerary extends NarrativeItinerary {
                     setActiveItinerary={setActiveItinerary}
                     showArrivals={arrivesAt}
                   />
+                  <span
+                    style={{
+                      color: '#666',
+                      fontSize: '90%',
+                      marginLeft: '0.5ch'
+                    }}
+                  >
+                    {arrivesAt ? (
+                      <>
+                        ({'departs '}
+                        <FormattedTime value={itinerary.startTime} />)
+                      </>
+                    ) : (
+                      <>
+                        ({'arrives '}
+                        <FormattedTime value={itinerary.endTime} />)
+                      </>
+                    )}
+                  </span>
                   {showInlineItinerarySummary && (
                     <>
                       {' '}
@@ -517,6 +588,18 @@ class MetroItinerary extends NarrativeItinerary {
               RouteDescriptionOverride={RouteBlock}
               setActiveLeg={setActiveLeg}
             />
+            {beginGoMode && (
+              <StartTripButton
+                onClick={() => {
+                  beginGoMode(itinerary)
+                }}
+              >
+                <FormattedMessage
+                  defaultMessage="Start Trip"
+                  id="components.MetroUI.startTrip"
+                />
+              </StartTripButton>
+            )}
           </>
         )}
       </div>
@@ -546,7 +629,9 @@ const mapStateToProps = (state: AppReduxState, ownProps: Props) => {
 
 // TS TODO: correct redux types
 const mapDispatchToProps = {
-  setItineraryView: uiActions.setItineraryView
+  beginGoMode: goModeActions.beginGoMode,
+  setItineraryView: uiActions.setItineraryView,
+  setMobileScreen: uiActions.setMobileScreen
 }
 
 export default injectIntl(

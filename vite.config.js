@@ -107,7 +107,9 @@ export default defineConfig({
     {
       name: 'treat-js-files-as-jsx',
       async transform(code, id) {
-        if (!id.match(/(lib|tmp)\/.*\.js$/)) return null
+        // Strip any URL query (e.g. HMR's ?t=, Vite's ?import) before matching,
+        // otherwise HMR-stamped .js files skip the JSX transform and 500.
+        if (!id.split('?')[0].match(/(lib|tmp)\/.*\.js$/)) return null
 
         // Use the exposed transform from Vite, instead of directly transforming with esbuild.
         // This is needed in addition to the esbuild js loader option above.
@@ -131,7 +133,16 @@ export default defineConfig({
     react()
   ],
   server: {
-    port: 9966,
+    allowedHosts: ['tre.hopto.org'],
+    host: '0.0.0.0',
+    port: 9967,
+    proxy: {
+      '/pelias': {
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/pelias/, ''),
+        target: 'http://localhost:4000/v1'
+      }
+    },
     strictPort: true
   }
 })

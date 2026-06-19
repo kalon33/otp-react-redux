@@ -56,6 +56,16 @@
       "none",
       "low-vision",
       "legally-blind"
+    ],
+    "components.BatchSearchScreen.*": [
+      "routingProfileHeader",
+      "routingProfileLabel",
+      "nlPreferencesApplied",
+      "nlPreferencesApply",
+      "nlPreferencesError",
+      "nlPreferencesHeader",
+      "nlPreferencesLoading",
+      "nlPreferencesPlaceholder"
     ]
   },
   "ignoredIds": [
