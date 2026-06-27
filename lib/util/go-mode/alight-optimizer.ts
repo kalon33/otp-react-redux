@@ -201,3 +201,106 @@ export function scoreAlightOption(
 ): number {
   return busArrivalEpoch + (itinerary.duration || 0) * 1000
 }
+
+/** Result of planning the onward trip from one candidate alight stop. */
+export interface AlightCandidateResult {
+  busArrivalEpoch: number
+  error?: boolean
+  itineraries: Itinerary[]
+  realtime: boolean
+  stopId: string
+  stopName: string
+}
+
+/** The chosen best stop to get off, with its remaining-journey itinerary. */
+export interface AlightOption {
+  busArrivalEpoch: number
+  itinerary: Itinerary
+  realtime: boolean
+  stopId: string
+  stopName: string
+}
+
+/** Within this window two alight stops count as tied (see pickBestAlightOption). */
+const TIE_MS = 180000
+
+/**
+ * Whether an onward itinerary is worth offering. A plan with a transit leg
+ * always is. A walk-only plan is kept only when the walk is short — OTP returns
+ * a walk-the-whole-way itinerary as a fallback even from a far stop, which we
+ * don't want to recommend; but a short final walk (alight stop ~at the
+ * destination) is legitimate.
+ */
+function isUsableItinerary(itin: Itinerary, walkOnlyMax: number): boolean {
+  const hasTransit = (itin.legs || []).some((leg) => leg.transitLeg)
+  if (hasTransit) return true
+  return (itin.walkDistance ?? Infinity) <= walkOnlyMax
+}
+
+/**
+ * Across the candidate alight stops whose onward plans came back, pick the stop
+ * whose total arrival time (bus arrival at the stop + remaining-journey
+ * duration) is earliest. Ties (within TIE_MS) break on fewer transfers, then
+ * less walking, then earlier arrival — biasing toward staying on the current bus
+ * to a convenient stop rather than getting off early to shave a few seconds.
+ * Returns null when no candidate produced a usable itinerary.
+ */
+export function pickBestAlightOption(
+  results: AlightCandidateResult[],
+  { walkOnlyMax = 1200 }: { walkOnlyMax?: number } = {}
+): AlightOption | null {
+  // Reduce each candidate to its quickest usable onward itinerary, scored by
+  // total arrival time.
+  const scored: Array<AlightOption & { arrival: number }> = []
+  results.forEach((r) => {
+    if (!r || r.error) return
+    const usable = (r.itineraries || []).filter((itin) =>
+      isUsableItinerary(itin, walkOnlyMax)
+    )
+    if (usable.length === 0) return
+
+    const bestForStop = usable.reduce((b, itin) =>
+      itin.duration < b.duration ? itin : b
+    )
+    scored.push({
+      arrival: scoreAlightOption(r.busArrivalEpoch, bestForStop),
+      busArrivalEpoch: r.busArrivalEpoch,
+      itinerary: bestForStop,
+      realtime: r.realtime,
+      stopId: r.stopId,
+      stopName: r.stopName
+    })
+  })
+
+  let best: (AlightOption & { arrival: number }) | null = null
+  for (const option of scored) {
+    if (!best) {
+      best = option
+      continue
+    }
+    let better
+    if (Math.abs(option.arrival - best.arrival) <= TIE_MS) {
+      const dT =
+        (option.itinerary.transfers ?? 0) - (best.itinerary.transfers ?? 0)
+      const dW =
+        (option.itinerary.walkDistance ?? 0) -
+        (best.itinerary.walkDistance ?? 0)
+      better =
+        dT < 0 ||
+        (dT === 0 && dW < 0) ||
+        (dT === 0 && dW === 0 && option.arrival < best.arrival)
+    } else {
+      better = option.arrival < best.arrival
+    }
+    if (better) best = option
+  }
+
+  if (!best) return null
+  return {
+    busArrivalEpoch: best.busArrivalEpoch,
+    itinerary: best.itinerary,
+    realtime: best.realtime,
+    stopId: best.stopId,
+    stopName: best.stopName
+  }
+}

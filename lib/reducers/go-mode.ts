@@ -61,11 +61,10 @@ export interface OnboardVehicle {
   vehicleId: string
 }
 
-/** One candidate alight stop whose stop→destination plan is in flight. */
-export interface OnboardCandidateSearch {
+/** One candidate alight stop being evaluated by the onboard optimizer. */
+export interface OnboardCandidate {
   busArrivalEpoch: number
   realtime: boolean
-  searchId: string
   stopId: string
   stopName: string
 }
@@ -86,7 +85,7 @@ export interface OnboardAlightOption {
  */
 export interface OnboardState {
   bestAlightStop: OnboardAlightOption | null
-  candidateSearches: OnboardCandidateSearch[]
+  candidates: OnboardCandidate[]
   status:
     | 'idle'
     | 'discovering'
@@ -181,7 +180,7 @@ const defaultState: GoModeState = {
 
   onboard: {
     bestAlightStop: null,
-    candidateSearches: [],
+    candidates: [],
     status: 'idle',
     trip: null,
     vehicle: null
@@ -461,7 +460,7 @@ const goMode = handleActions<GoModeState, any>(
       onboard: {
         ...state.onboard,
         bestAlightStop: null,
-        candidateSearches: action.payload.candidateSearches,
+        candidates: action.payload.candidates,
         status: 'optimizing' as const
       }
     }),

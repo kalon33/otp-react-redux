@@ -10,9 +10,10 @@ import type { Itinerary, LatLngArray, Leg } from '@opentripplanner/types'
 import {
   getDownstreamStops,
   hasLiveArrival,
-  scoreAlightOption,
+  pickBestAlightOption,
   selectCandidateStops
 } from '../util/go-mode/alight-optimizer'
+import type { AlightCandidateResult } from '../util/go-mode/alight-optimizer'
 import { calculateTripProgress } from '../util/go-mode/progress-calculator'
 import {
   checkForNotifications,
@@ -39,9 +40,11 @@ import type { RouteMatchResult } from '../util/go-mode/position-matching'
 import type { TripProgress } from '../util/go-mode/progress-calculator'
 
 import {
+  fetchOnboardCandidatePlan,
   findRoutesNearby,
   findStopTimesForStop,
   findTrip,
+  getBasePlanParts,
   getVehiclePositionsForRoute,
   onboardGraphQLQuery
 } from './apiV2'
@@ -176,10 +179,9 @@ export const setOnboardVehicle = createAction<{
 }>(SET_ONBOARD_VEHICLE)
 export const setOnboardTrip = createAction<any>(SET_ONBOARD_TRIP)
 export const startOnboardOptimize = createAction<{
-  candidateSearches: Array<{
+  candidates: Array<{
     busArrivalEpoch: number
     realtime: boolean
-    searchId: string
     stopId: string
     stopName: string
   }>
@@ -548,11 +550,59 @@ export function loadOnboardScheduleAndOptimize(tripId: string) {
 }
 
 /**
+ * Plan the onward trip from one candidate alight stop to the destination,
+ * anchored to the bus's expected arrival at that stop. Issues an ISOLATED
+ * background plan (see fetchOnboardCandidatePlan) — no shared currentQuery, no
+ * URL change, no active-search churn — and resolves to an AlightCandidateResult.
+ */
+function fetchCandidatePlan(
+  candidate: {
+    busArrivalEpoch: number
+    realtime: boolean
+    stop: { id: string; lat: number; lon: number; name: string }
+  },
+  ctx: {
+    homeTimezone: string
+    modeSettings: any
+    modes: any
+    numItineraries: number
+    routingPreferences: any
+    to: { lat: number; lon: number; name: string }
+  }
+) {
+  return async function (dispatch: any): Promise<AlightCandidateResult> {
+    const { busArrivalEpoch, realtime, stop } = candidate
+    const zoned = utcToZonedTime(busArrivalEpoch, ctx.homeTimezone)
+    const combo = {
+      arriveBy: false,
+      date: format(zoned, coreUtils.time.OTP_API_DATE_FORMAT),
+      from: { lat: stop.lat, lon: stop.lon, name: stop.name },
+      modes: ctx.modes,
+      modeSettings: ctx.modeSettings,
+      numItineraries: ctx.numItineraries,
+      routingPreferences: ctx.routingPreferences,
+      time: format(zoned, coreUtils.time.OTP_API_TIME_FORMAT),
+      to: { lat: ctx.to.lat, lon: ctx.to.lon, name: ctx.to.name }
+    }
+    const { error, itineraries } = await dispatch(
+      fetchOnboardCandidatePlan(combo)
+    )
+    return {
+      busArrivalEpoch,
+      error,
+      itineraries,
+      realtime,
+      stopId: stop.id,
+      stopName: stop.name
+    }
+  }
+}
+
+/**
  * Plan the remaining journey from each candidate alight stop to the rider's
- * destination, anchored to the bus's scheduled arrival at that stop. Searches
- * are issued sequentially (each routingQuery captures currentQuery before the
- * next mutates it). Results are resolved into a best option by GoModeScreen via
- * the getBestAlightOption selector.
+ * destination, anchored to each stop's expected bus arrival. All candidates are
+ * fetched in parallel as isolated background plans, then the best is scored and
+ * dispatched here (deterministic — no selector polling / completion race).
  */
 export function planFromOnboardBus() {
   return async function (dispatch: any, getState: any) {
@@ -590,30 +640,33 @@ export function planFromOnboardBus() {
       return
     }
 
-    const candidateSearches = candidates.map((c) => ({
-      busArrivalEpoch: c.busArrivalEpoch,
-      realtime: c.realtime,
-      searchId: randId(),
-      stopId: c.stop.id,
-      stopName: c.stop.name
-    }))
-    dispatch(startOnboardOptimize({ candidateSearches }))
+    dispatch(
+      startOnboardOptimize({
+        candidates: candidates.map((c) => ({
+          busArrivalEpoch: c.busArrivalEpoch,
+          realtime: c.realtime,
+          stopId: c.stop.id,
+          stopName: c.stop.name
+        }))
+      })
+    )
 
-    for (let i = 0; i < candidates.length; i++) {
-      const c = candidates[i]
-      const zoned = utcToZonedTime(c.busArrivalEpoch, homeTimezone)
-      const payload = {
-        date: format(zoned, coreUtils.time.OTP_API_DATE_FORMAT),
-        departArrive: 'DEPART',
-        from: { lat: c.stop.lat, lon: c.stop.lon, name: c.stop.name },
-        time: format(zoned, coreUtils.time.OTP_API_TIME_FORMAT),
-        to: { lat: to.lat, lon: to.lon, name: to.name }
-      }
-      dispatch(setQueryParam(payload, candidateSearches[i].searchId))
-      // Let routingQuery synchronously capture these params before the next
-      // setQueryParam mutates the shared currentQuery.
-      await new Promise((resolve) => setTimeout(resolve, 50))
+    const { modes, modeSettings, numItineraries } = getBasePlanParts(state)
+    const walkOnlyMax = state.otp.config?.itinerary?.maxWalkDistance ?? 1200
+    const ctx = {
+      homeTimezone,
+      modes,
+      modeSettings,
+      numItineraries,
+      routingPreferences: state.otp.currentQuery?.routingPreferences,
+      to: { lat: to.lat, lon: to.lon, name: to.name }
     }
+
+    const results = await Promise.all(
+      candidates.map((c) => dispatch(fetchCandidatePlan(c, ctx)))
+    )
+
+    dispatch(setOnboardResult(pickBestAlightOption(results, { walkOnlyMax })))
   }
 }
 
@@ -788,11 +841,6 @@ export function confirmOnboardAlightStop() {
       goMode.tracking?.lastPosition || null
     )
 
-    // Restore the rider's original origin before beginGoMode captures it (the
-    // candidate fan-out left currentQuery.from pointing at a stop).
-    if (goMode.originalFrom) {
-      dispatch(setQueryParam({ from: goMode.originalFrom }))
-    }
     dispatch(clearOnboard())
     dispatch(beginGoMode(itinerary))
 

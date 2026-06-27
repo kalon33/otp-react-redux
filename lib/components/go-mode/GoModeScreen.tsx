@@ -5,12 +5,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import * as goModeActions from '../../actions/go-mode'
 import * as routingProfileActions from '../../actions/routing-profiles'
 import * as uiActions from '../../actions/ui'
-import {
-  getBestAlightOption,
-  getRerouteCandidate,
-  isOnboardSearchSettled,
-  isRerouteSearchSettled
-} from '../../util/state'
+import { getRerouteCandidate, isRerouteSearchSettled } from '../../util/state'
 import { MobileScreens } from '../../actions/ui-constants'
 import MobileNavigationBar from '../mobile/navigation-bar'
 import type { GoModeState } from '../../reducers/go-mode'
@@ -64,8 +59,6 @@ interface Props {
   endGoMode: () => void
   fetchPreferencesFromText: (text: string) => Promise<any>
   goMode: GoModeState
-  onboardBest: any
-  onboardSettled: boolean
   pauseGpsSimulation: () => void
   reRouteCandidate: any
   reRouteFromCurrentPosition: (options?: {
@@ -76,7 +69,6 @@ interface Props {
   resumeGpsSimulation: () => void
   setDepartureOverride: (epochMs: number | null) => void
   setMobileScreen: (screen: number) => void
-  setOnboardResult: (result: any) => void
   setRerouteResult: (itinerary: any) => void
   startGpsSimulation: (speedMultiplier?: number) => void
   stopGpsSimulation: () => void
@@ -90,8 +82,6 @@ const GoModeScreen = ({
   endGoMode,
   fetchPreferencesFromText,
   goMode,
-  onboardBest,
-  onboardSettled,
   pauseGpsSimulation,
   reRouteCandidate,
   reRouteFromCurrentPosition,
@@ -99,7 +89,6 @@ const GoModeScreen = ({
   resumeGpsSimulation,
   setDepartureOverride,
   setMobileScreen,
-  setOnboardResult,
   setRerouteResult,
   startGpsSimulation,
   stopGpsSimulation
@@ -140,17 +129,6 @@ const GoModeScreen = ({
       setMobileScreen(MobileScreens.RESULTS_SUMMARY)
     }
   }, [goMode.isActive, goMode.activeItinerary, onboardActive, setMobileScreen])
-
-  // Resolve the alight-stop optimization into a best recommendation once the
-  // candidate searches settle (mirrors the re-route resolution below).
-  useEffect(() => {
-    if (goMode.onboard.status !== 'optimizing') return
-    if (onboardBest) {
-      setOnboardResult(onboardBest)
-    } else if (onboardSettled) {
-      setOnboardResult(null)
-    }
-  }, [goMode.onboard.status, onboardBest, onboardSettled, setOnboardResult])
 
   useEffect(() => {
     // Request wake lock to keep screen on
@@ -680,8 +658,6 @@ const mapStateToProps = (state: any) => {
     boardingStopData,
     departureOverride: goMode?.departureOverride ?? null,
     goMode,
-    onboardBest: getBestAlightOption(state),
-    onboardSettled: isOnboardSearchSettled(state),
     reRouteCandidate: getRerouteCandidate(state),
     reRouteSettled: isRerouteSearchSettled(state)
   }
@@ -697,7 +673,6 @@ const mapDispatchToProps = {
   resumeGpsSimulation: goModeActions.resumeGpsSimulation,
   setDepartureOverride: goModeActions.setDepartureOverride,
   setMobileScreen: uiActions.setMobileScreen,
-  setOnboardResult: goModeActions.setOnboardResult,
   setRerouteResult: goModeActions.setRerouteResult,
   startGpsSimulation: goModeActions.startGpsSimulation,
   stopGpsSimulation: goModeActions.stopGpsSimulation

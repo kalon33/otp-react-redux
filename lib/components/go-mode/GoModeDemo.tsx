@@ -123,7 +123,7 @@ const readyOnboard = (realtime: boolean) => ({
     stopId: '1:9',
     stopName: 'Nicollet Mall'
   },
-  candidateSearches: [],
+  candidates: [],
   status: 'ready',
   trip: null,
   vehicle: null
@@ -257,7 +257,7 @@ const GoModeDemo = (): JSX.Element => (
         <Provider
           store={mockStore({
             bestAlightStop: null,
-            candidateSearches: [],
+            candidates: [],
             status: 'discovering',
             trip: null,
             vehicle: null
