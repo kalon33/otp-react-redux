@@ -3,6 +3,7 @@ import { useIntl } from 'react-intl'
 import React from 'react'
 import type { Leg } from '@opentripplanner/types'
 
+import { getModeIcon } from '../../util/go-mode/mode-icon'
 import type { TripProgress } from '../../util/go-mode/progress-calculator'
 import type { VehicleMatchResult } from '../../util/go-mode/vehicle-matching'
 
@@ -32,23 +33,6 @@ interface Props {
 
 const TransitProgress = ({ leg, onExit, progress, vehicleMatch }: Props) => {
   const intl = useIntl()
-
-  const getModeIcon = (mode: string): string => {
-    switch (mode) {
-      case 'BUS':
-        return '🚌'
-      case 'RAIL':
-        return '🚆'
-      case 'SUBWAY':
-        return '🚇'
-      case 'TRAM':
-        return '🚊'
-      case 'FERRY':
-        return '⛴️'
-      default:
-        return '🚍'
-    }
-  }
 
   const shouldShowAlert =
     progress.stopsRemaining === 2 || progress.stopsRemaining === 1

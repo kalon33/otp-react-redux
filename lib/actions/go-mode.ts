@@ -161,7 +161,9 @@ export const setNotificationConfig = createAction<{
 }>(SET_NOTIFICATION_CONFIG)
 
 export const startReroute = createAction<{ searchId: string }>(START_REROUTE)
-export const setRerouteResult = createAction<Itinerary | null>(
+// Accepts the full list of alternatives (preferred), or a single itinerary /
+// null for the legacy "best candidate only" callers. The reducer normalizes.
+export const setRerouteResult = createAction<Itinerary[] | Itinerary | null>(
   SET_REROUTE_RESULT
 )
 export const clearReroute = createAction(CLEAR_REROUTE)

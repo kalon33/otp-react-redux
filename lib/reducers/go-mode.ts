@@ -130,7 +130,10 @@ export interface GoModeState {
   progress: TripProgress | null
 
   reRoute: {
+    // The single best candidate (kept for callers that only need one).
     candidate: Itinerary | null
+    // All browsable alternatives, shortest-duration first.
+    candidates: Itinerary[]
     searchId: string | null
     status: 'idle' | 'searching' | 'found' | 'none' | 'error'
   }
@@ -192,6 +195,7 @@ const defaultState: GoModeState = {
 
   reRoute: {
     candidate: null,
+    candidates: [],
     searchId: null,
     status: 'idle'
   },
@@ -386,14 +390,23 @@ const goMode = handleActions<GoModeState, any>(
       }
     }),
 
-    [SET_REROUTE_RESULT]: (state, action) => ({
-      ...state,
-      reRoute: {
-        ...state.reRoute,
-        candidate: action.payload || null,
-        status: action.payload ? ('found' as const) : ('none' as const)
+    [SET_REROUTE_RESULT]: (state, action) => {
+      // Payload is the full list of alternatives (or null/[] for "none").
+      const candidates: Itinerary[] = Array.isArray(action.payload)
+        ? action.payload
+        : action.payload
+        ? [action.payload]
+        : []
+      return {
+        ...state,
+        reRoute: {
+          ...state.reRoute,
+          candidate: candidates[0] ?? null,
+          candidates,
+          status: candidates.length > 0 ? ('found' as const) : ('none' as const)
+        }
       }
-    }),
+    },
 
     [SET_TRACKING_ERROR]: (state, action) => {
       return {
@@ -469,6 +482,7 @@ const goMode = handleActions<GoModeState, any>(
       ...state,
       reRoute: {
         candidate: null,
+        candidates: [],
         searchId: action.payload.searchId,
         status: 'searching' as const
       }

@@ -863,3 +863,152 @@ export const RerouteNlError = styled.div`
   font-size: 12px;
   margin-top: 6px;
 `
+
+// In-trip overview sheet: swipe-up handle + rest-of-trip list + alternatives.
+// Reuses BoardingOverlay/BoardingSheet (above) so the live map keeps running
+// underneath while the rider browses without leaving their route.
+export const SheetHandle = styled.button`
+  align-items: center;
+  background: #fff;
+  border: none;
+  border-radius: 14px 14px 0 0;
+  bottom: 0;
+  box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  left: 50%;
+  padding: 7px 32px 10px;
+  position: absolute;
+  transform: translateX(-50%);
+  z-index: 1100;
+
+  &::before {
+    background: #ccc;
+    border-radius: 999px;
+    content: '';
+    height: 4px;
+    width: 38px;
+  }
+
+  &:active {
+    background: #f7f7f7;
+  }
+`
+
+export const SheetHandleLabel = styled.span`
+  color: #2196f3;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+`
+
+export const SheetHeader = styled.div`
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4px;
+`
+
+export const SheetCloseButton = styled.button`
+  background: none;
+  border: none;
+  color: #666;
+  cursor: pointer;
+  font-size: 26px;
+  line-height: 1;
+  padding: 0 6px;
+
+  &:active {
+    color: #000;
+  }
+`
+
+export const SheetSectionTitle = styled.h4`
+  color: #333;
+  font-size: 15px;
+  font-weight: 700;
+  margin: 20px 0 8px;
+`
+
+export const LegRow = styled.div<{ $current?: boolean; $dim?: boolean }>`
+  align-items: flex-start;
+  border-left: 3px solid ${(p) => (p.$current ? '#2196f3' : 'transparent')};
+  display: flex;
+  gap: 10px;
+  opacity: ${(p) => (p.$dim ? 0.45 : 1)};
+  padding: 8px 0 8px 10px;
+`
+
+export const LegIcon = styled.div`
+  font-size: 22px;
+  line-height: 1.3;
+`
+
+export const LegInfo = styled.div`
+  flex: 1;
+  min-width: 0;
+`
+
+export const LegTitle = styled.div`
+  color: #222;
+  font-size: 15px;
+  font-weight: 600;
+`
+
+export const LegSubtitle = styled.div`
+  color: #666;
+  font-size: 13px;
+`
+
+export const StopList = styled.ul`
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+`
+
+export const StopRow = styled.li<{ $next?: boolean; $passed?: boolean }>`
+  align-items: center;
+  color: ${(p) => (p.$passed ? '#aaa' : p.$next ? '#1565c0' : '#444')};
+  display: flex;
+  font-size: 13px;
+  font-weight: ${(p) => (p.$next ? 700 : 400)};
+  gap: 8px;
+  padding: 3px 0;
+`
+
+export const StopDot = styled.span<{ $next?: boolean; $passed?: boolean }>`
+  background: ${(p) => (p.$next ? '#1565c0' : p.$passed ? '#ddd' : '#bbb')};
+  border-radius: 50%;
+  flex-shrink: 0;
+  height: ${(p) => (p.$next ? 10 : 7)}px;
+  width: ${(p) => (p.$next ? 10 : 7)}px;
+`
+
+export const AltRow = styled.div`
+  align-items: center;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  padding: 12px;
+`
+
+export const AltSwitchButton = styled.button`
+  background: #2196f3;
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  cursor: pointer;
+  flex-shrink: 0;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 8px 16px;
+
+  &:active {
+    opacity: 0.8;
+  }
+`

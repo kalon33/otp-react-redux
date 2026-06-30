@@ -3,9 +3,8 @@ import { useIntl } from 'react-intl'
 import React, { useEffect, useRef, useState } from 'react'
 
 import * as goModeActions from '../../actions/go-mode'
-import * as routingProfileActions from '../../actions/routing-profiles'
 import * as uiActions from '../../actions/ui'
-import { getRerouteCandidate, isRerouteSearchSettled } from '../../util/state'
+import { getRerouteCandidates, isRerouteSearchSettled } from '../../util/state'
 import { MobileScreens } from '../../actions/ui-constants'
 import MobileNavigationBar from '../mobile/navigation-bar'
 import type { GoModeState } from '../../reducers/go-mode'
@@ -15,22 +14,10 @@ import {
   FullScreenWrapper,
   GpsWarningBanner,
   LoadingMessage,
-  RerouteActions,
-  RerouteBar,
-  RerouteButton,
-  RerouteCard,
-  RerouteCardTitle,
-  RerouteChip,
-  RerouteChips,
-  RerouteKeepButton,
-  RerouteNlError,
-  RerouteNlInput,
-  RerouteNlRow,
-  RerouteSendButton,
-  RerouteSummary,
-  RerouteSwitchButton,
   RetryButton,
   ScreenMain,
+  SheetHandle,
+  SheetHandleLabel,
   SimButton,
   SimProgress,
   SimSpeedSelect,
@@ -42,34 +29,21 @@ import BoardingPrompt from './BoardingPrompt'
 import CurrentLegPanel from './CurrentLegPanel'
 import GoModeMap from './GoModeMap'
 import GoModeNotifications from './GoModeNotifications'
-
-// Quick mid-trip re-route options; each maps to a pre-built routing profile.
-const REROUTE_CHIPS = [
-  { label: 'Less walking', profileId: 'minimize-walking' },
-  { label: 'Fewer transfers', profileId: 'stay-seated' },
-  { label: 'Avoid biking', profileId: 'avoid-biking' },
-  { label: 'Fastest', profileId: 'fastest' }
-]
+import TripSheet from './TripSheet'
 
 interface Props {
   beginGoMode: (itinerary: any) => void
   boardingStopData: any
-  clearReroute: () => void
   departureOverride: number | null
   endGoMode: () => void
-  fetchPreferencesFromText: (text: string) => Promise<any>
   goMode: GoModeState
   pauseGpsSimulation: () => void
-  reRouteCandidate: any
-  reRouteFromCurrentPosition: (options?: {
-    preferences?: any
-    profileId?: string
-  }) => void
+  reRouteCandidates: any[]
   reRouteSettled: boolean
   resumeGpsSimulation: () => void
   setDepartureOverride: (epochMs: number | null) => void
   setMobileScreen: (screen: number) => void
-  setRerouteResult: (itinerary: any) => void
+  setRerouteResult: (itineraries: any) => void
   startGpsSimulation: (speedMultiplier?: number) => void
   stopGpsSimulation: () => void
 }
@@ -77,14 +51,11 @@ interface Props {
 const GoModeScreen = ({
   beginGoMode,
   boardingStopData,
-  clearReroute,
   departureOverride,
   endGoMode,
-  fetchPreferencesFromText,
   goMode,
   pauseGpsSimulation,
-  reRouteCandidate,
-  reRouteFromCurrentPosition,
+  reRouteCandidates,
   reRouteSettled,
   resumeGpsSimulation,
   setDepartureOverride,
@@ -96,10 +67,7 @@ const GoModeScreen = ({
   const intl = useIntl()
   const [simSpeed, setSimSpeed] = useState(2)
   const [simToolbarOpen, setSimToolbarOpen] = useState(true)
-  const [rerouteText, setRerouteText] = useState('')
-  const [nlBusy, setNlBusy] = useState(false)
-  const [nlError, setNlError] = useState(false)
-  const [rerouteOpen, setRerouteOpen] = useState(false)
+  const [sheetOpen, setSheetOpen] = useState(false)
 
   const onboardActive = goMode.onboard.status !== 'idle'
 
@@ -172,18 +140,19 @@ const GoModeScreen = ({
     }
   }, [goMode.isActive])
 
-  // Resolve the re-route search into a best candidate (or "none") once results
-  // arrive. getRerouteCandidate reads the dedicated re-route search directly.
+  // Resolve the re-route search into a browsable list of alternatives (or
+  // "none") once results arrive. getRerouteCandidates reads the dedicated
+  // re-route search directly.
   useEffect(() => {
     if (goMode.reRoute.status !== 'searching') return
-    if (reRouteCandidate) {
-      setRerouteResult(reRouteCandidate)
+    if (reRouteCandidates.length > 0) {
+      setRerouteResult(reRouteCandidates)
     } else if (reRouteSettled) {
       setRerouteResult(null)
     }
   }, [
     goMode.reRoute.status,
-    reRouteCandidate,
+    reRouteCandidates,
     reRouteSettled,
     setRerouteResult
   ])
@@ -206,42 +175,6 @@ const GoModeScreen = ({
     if (goMode.activeItinerary) {
       endGoMode()
       beginGoMode(goMode.activeItinerary)
-    }
-  }
-
-  const handleFindAnotherWay = () => {
-    reRouteFromCurrentPosition()
-  }
-
-  const handleSwitchRoute = () => {
-    const candidate = goMode.reRoute.candidate
-    if (candidate) {
-      // beginGoMode restarts tracking and resets re-route state.
-      beginGoMode(candidate)
-    }
-  }
-
-  const handleKeepRoute = () => {
-    clearReroute()
-  }
-
-  const handleRerouteChip = (profileId: string) => {
-    reRouteFromCurrentPosition({ profileId })
-  }
-
-  const handleSendRerouteMessage = async () => {
-    const text = rerouteText.trim()
-    if (!text) return
-    setNlBusy(true)
-    setNlError(false)
-    try {
-      const prefs = await fetchPreferencesFromText(text)
-      reRouteFromCurrentPosition({ preferences: prefs })
-      setRerouteText('')
-    } catch {
-      setNlError(true)
-    } finally {
-      setNlBusy(false)
     }
   }
 
@@ -344,9 +277,6 @@ const GoModeScreen = ({
   const currentLeg =
     goMode.activeItinerary.legs[goMode.progress.currentLegIndex]
 
-  const showNoReroute =
-    goMode.reRoute.status === 'none' || goMode.reRoute.status === 'error'
-
   return (
     <FullScreenWrapper>
       <ScreenMain>
@@ -382,152 +312,24 @@ const GoModeScreen = ({
           </GpsWarningBanner>
         )}
 
-        {goMode.reRoute.status === 'idle' && !rerouteOpen && (
-          <RerouteBar>
-            <RerouteButton onClick={() => setRerouteOpen(true)} type="button">
+        {!sheetOpen && (
+          <SheetHandle
+            aria-label={intl.formatMessage({
+              defaultMessage: 'Open trip overview',
+              id: 'components.GoMode.openTripSheet'
+            })}
+            onClick={() => setSheetOpen(true)}
+            type="button"
+          >
+            <SheetHandleLabel>
               {intl.formatMessage({
-                defaultMessage: 'Find another way ▾',
-                id: 'components.GoMode.findAnotherWayToggle'
+                defaultMessage: 'View trip & other ways',
+                id: 'components.GoMode.sheetHandleLabel'
               })}
-            </RerouteButton>
-          </RerouteBar>
+            </SheetHandleLabel>
+          </SheetHandle>
         )}
-        {goMode.reRoute.status === 'idle' && rerouteOpen && (
-          <RerouteBar>
-            <RerouteCard>
-              <RerouteButton onClick={handleFindAnotherWay} type="button">
-                {intl.formatMessage({
-                  defaultMessage: 'Find another way',
-                  id: 'components.GoMode.findAnotherWay'
-                })}
-              </RerouteButton>
-              <RerouteChips>
-                {REROUTE_CHIPS.map((chip) => (
-                  <RerouteChip
-                    key={chip.profileId}
-                    onClick={() => handleRerouteChip(chip.profileId)}
-                    type="button"
-                  >
-                    {chip.label}
-                  </RerouteChip>
-                ))}
-              </RerouteChips>
-              <RerouteNlRow>
-                <RerouteNlInput
-                  aria-label={intl.formatMessage({
-                    defaultMessage: 'Describe what you need',
-                    id: 'components.GoMode.rerouteNlLabel'
-                  })}
-                  disabled={nlBusy}
-                  onChange={(e) => {
-                    setRerouteText(e.target.value)
-                    if (nlError) setNlError(false)
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleSendRerouteMessage()
-                  }}
-                  placeholder={intl.formatMessage({
-                    defaultMessage: 'e.g. avoid stairs today',
-                    id: 'components.GoMode.rerouteNlPlaceholder'
-                  })}
-                  value={rerouteText}
-                />
-                <RerouteSendButton
-                  disabled={nlBusy || !rerouteText.trim()}
-                  onClick={handleSendRerouteMessage}
-                  type="button"
-                >
-                  {nlBusy
-                    ? '…'
-                    : intl.formatMessage({
-                        defaultMessage: 'Go',
-                        id: 'components.GoMode.rerouteNlSend'
-                      })}
-                </RerouteSendButton>
-              </RerouteNlRow>
-              {nlError && (
-                <RerouteNlError>
-                  {intl.formatMessage({
-                    defaultMessage: "Couldn't read that — try again.",
-                    id: 'components.GoMode.rerouteNlError'
-                  })}
-                </RerouteNlError>
-              )}
-            </RerouteCard>
-          </RerouteBar>
-        )}
-        {goMode.reRoute.status === 'searching' && (
-          <RerouteBar>
-            <RerouteCard>
-              <RerouteCardTitle>
-                {intl.formatMessage({
-                  defaultMessage: 'Finding a better route…',
-                  id: 'components.GoMode.rerouteSearching'
-                })}
-              </RerouteCardTitle>
-            </RerouteCard>
-          </RerouteBar>
-        )}
-        {goMode.reRoute.status === 'found' && goMode.reRoute.candidate && (
-          <RerouteBar>
-            <RerouteCard>
-              <RerouteCardTitle>
-                {intl.formatMessage({
-                  defaultMessage: 'Alternative route',
-                  id: 'components.GoMode.rerouteFound'
-                })}
-              </RerouteCardTitle>
-              <RerouteSummary>
-                {intl.formatMessage(
-                  {
-                    defaultMessage:
-                      '{minutes} min · {transfers, plural, one {# transfer} other {# transfers}} · {walk} m walk',
-                    id: 'components.GoMode.rerouteSummary'
-                  },
-                  {
-                    minutes: Math.round(goMode.reRoute.candidate.duration / 60),
-                    transfers: goMode.reRoute.candidate.transfers ?? 0,
-                    walk: Math.round(goMode.reRoute.candidate.walkDistance ?? 0)
-                  }
-                )}
-              </RerouteSummary>
-              <RerouteActions>
-                <RerouteSwitchButton onClick={handleSwitchRoute} type="button">
-                  {intl.formatMessage({
-                    defaultMessage: 'Switch',
-                    id: 'components.GoMode.rerouteSwitch'
-                  })}
-                </RerouteSwitchButton>
-                <RerouteKeepButton onClick={handleKeepRoute} type="button">
-                  {intl.formatMessage({
-                    defaultMessage: 'Keep current',
-                    id: 'components.GoMode.rerouteKeep'
-                  })}
-                </RerouteKeepButton>
-              </RerouteActions>
-            </RerouteCard>
-          </RerouteBar>
-        )}
-        {showNoReroute && (
-          <RerouteBar>
-            <RerouteCard>
-              <RerouteCardTitle>
-                {intl.formatMessage({
-                  defaultMessage: 'No better route right now',
-                  id: 'components.GoMode.rerouteNone'
-                })}
-              </RerouteCardTitle>
-              <RerouteActions>
-                <RerouteKeepButton onClick={handleKeepRoute} type="button">
-                  {intl.formatMessage({
-                    defaultMessage: 'OK',
-                    id: 'components.GoMode.rerouteOk'
-                  })}
-                </RerouteKeepButton>
-              </RerouteActions>
-            </RerouteCard>
-          </RerouteBar>
-        )}
+        {sheetOpen && <TripSheet onClose={() => setSheetOpen(false)} />}
         {simToolsEnabled && (
           <>
             <SimToggle
@@ -658,18 +460,15 @@ const mapStateToProps = (state: any) => {
     boardingStopData,
     departureOverride: goMode?.departureOverride ?? null,
     goMode,
-    reRouteCandidate: getRerouteCandidate(state),
+    reRouteCandidates: getRerouteCandidates(state),
     reRouteSettled: isRerouteSearchSettled(state)
   }
 }
 
 const mapDispatchToProps = {
   beginGoMode: goModeActions.beginGoMode,
-  clearReroute: goModeActions.clearReroute,
   endGoMode: goModeActions.endGoMode,
-  fetchPreferencesFromText: routingProfileActions.fetchPreferencesFromText,
   pauseGpsSimulation: goModeActions.pauseGpsSimulation,
-  reRouteFromCurrentPosition: goModeActions.reRouteFromCurrentPosition,
   resumeGpsSimulation: goModeActions.resumeGpsSimulation,
   setDepartureOverride: goModeActions.setDepartureOverride,
   setMobileScreen: uiActions.setMobileScreen,

@@ -6,6 +6,7 @@ import type { TripProgress } from '../../util/go-mode/progress-calculator'
 
 import AlightRecommendation from './AlightRecommendation'
 import TransitProgress from './TransitProgress'
+import TripSheet from './TripSheet'
 import WalkingNavigation from './WalkingNavigation'
 
 /**
@@ -128,6 +129,73 @@ const readyOnboard = (realtime: boolean) => ({
   trip: null,
   vehicle: null
 })
+
+// Multi-leg journey for the trip-overview sheet: walk → METRO Orange Line
+// (mid-ride, 3 stops remaining) → walk. Mirrors the screenshot scenario.
+const demoSheetItinerary = {
+  endTime: NOW + 25 * 60000,
+  legs: [
+    {
+      duration: 300,
+      from: { name: 'Your location' },
+      intermediateStops: [],
+      mode: 'WALK',
+      to: { name: 'I-35W & Lake St Station' }
+    },
+    {
+      duration: 900,
+      endTime: NOW + 15 * 60000,
+      from: { name: 'I-35W & Lake St Station' },
+      intermediateStops: [
+        { name: 'I-35W & 46th St Station' },
+        { name: 'I-35W & 66th St Station' }
+      ],
+      mode: 'BUS',
+      routeShortName: 'METRO Orange Line',
+      startTime: NOW - 5 * 60000,
+      to: { name: 'I-35W & 82nd St Station' },
+      transitLeg: true
+    },
+    {
+      duration: 240,
+      from: { name: 'I-35W & 82nd St Station' },
+      intermediateStops: [],
+      mode: 'WALK',
+      to: { name: 'Your destination' }
+    }
+  ],
+  startTime: NOW - 8 * 60000
+} as any
+
+const demoSheetAlternatives = [
+  { duration: 1380, transfers: 0, walkDistance: 210 },
+  { duration: 1620, transfers: 1, walkDistance: 95 },
+  { duration: 1800, transfers: 0, walkDistance: 540 }
+] as any[]
+
+const demoSheetStore = {
+  dispatch: () => undefined,
+  getState: () => ({
+    otp: {
+      config: {},
+      goMode: {
+        activeItinerary: demoSheetItinerary,
+        progress: {
+          ...transitProgress,
+          currentLegIndex: 1,
+          stopsRemaining: 3
+        },
+        reRoute: {
+          candidate: demoSheetAlternatives[0],
+          candidates: demoSheetAlternatives,
+          searchId: 'demo',
+          status: 'found'
+        }
+      }
+    }
+  }),
+  subscribe: () => () => undefined
+} as any
 
 const Frame = ({
   children,
@@ -265,6 +333,17 @@ const GoModeDemo = (): JSX.Element => (
         >
           <AlightRecommendation />
         </Provider>
+      </Frame>
+
+      <Frame
+        note="Swipe-up sheet: rest-of-trip list (current leg's stops highlighted) + browsable alternatives, each with Switch. Overlay is confined to this frame via a transform containing-block."
+        title="Trip sheet (overview + alternatives)"
+      >
+        <div style={{ height: 600, transform: 'translateZ(0)', width: '100%' }}>
+          <Provider store={demoSheetStore}>
+            <TripSheet onClose={() => undefined} />
+          </Provider>
+        </div>
       </Frame>
     </div>
   </IntlProvider>
