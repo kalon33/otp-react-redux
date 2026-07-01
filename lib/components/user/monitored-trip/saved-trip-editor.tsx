@@ -16,6 +16,7 @@ interface Props {
   hasMobilityProfile: boolean
   isCreating: boolean
   isReadOnly: boolean
+  isSubmitting?: boolean
   onCancel: () => void
   panes: Record<string, ComponentType>
   values: MonitoredTrip
@@ -86,8 +87,14 @@ const SavedTripEditor = (props: Props): JSX.Element => {
               : undefined
           }
           isReadOnly={props.isReadOnly}
+          isSubmitting={props.isSubmitting}
           onCancel={onCancel}
           panes={paneSequence}
+          subtitle={
+            !props.isReadOnly ? (
+              <FormattedMessage id="components.TripBasicsPane.indicatesRequiredFields" />
+            ) : undefined
+          }
           title={title}
         />
       </>

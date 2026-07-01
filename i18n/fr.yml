@@ -41,6 +41,7 @@ actions:
     setGroupSizeError: "Erreur sur la taille du groupe :"
     setPaymentError: "Erreur sur les coordonnées de paiement :"
     setRequestStatusError: "Erreur sur l'état de la requête :"
+    setTimeError: "Error setting time:"
   location:
     deniedAccessAlert: >
       L'accès à votre position est refusé.
@@ -83,7 +84,7 @@ actions:
       Votre numéro de téléphone n'a pas pu être vérifié. Le code que vous avez
       entré a peut-être expiré. Veuillez demander un nouveau code, puis
       réessayez.
-    tripDeleted: Votre trajet a été supprimé
+    tripDeleted: Votre trajet a été supprimé.
 common:
   coordinates: "{lat}; {lon}"
   currentlySelected: " (actuellement sélectionné)"
@@ -230,10 +231,12 @@ components:
   BatchSearchScreen:
     advancedHeader: Préférences avancées
     header: Votre trajet
+    logInToSetDefault: Connectez-vous pour définir ces options par défaut
     modeSelectorLabel: Sélectionnez un mode de déplacement
     moreOptions: Plus d'options
     saveAndReturn: Enregistrer et fermer
     saved: Enregistré
+    setAsDefault: Définir ces options par défaut
     submodeSelectorLabel: Sélectionnez vos modes et sous-modes de déplacement
     tripOptions: Options concernant le trajet
   BatchSettings:
@@ -406,6 +409,7 @@ components:
     selectCost: Prix
     selectDepartureTime: Heure de départ
     selectDuration: Durée
+    selectEmissions: Émissions de CO₂
     selectFare: Prix du trajet
     selectWalkTime: Temps de marche
     sortResults: Trier les résultats
@@ -491,6 +495,11 @@ components:
         Vous pouvez effectuer ce trajet plus rapidement sans prendre les
         transports.
       header: Moins rapide en transports
+    NO_DIRECT_MODE_CONNECTION:
+      body: >-
+        The origin and destination may be too far apart or not directly
+        connected by the requested mode of transport.
+      header: No direct trip found.
     inputFields:
       FROM: point de départ
       TO: destination
@@ -555,6 +564,7 @@ components:
   ResultsError:
     backToSearch: Retour à la recherche
   RouteDetails:
+    headsignFrom: "{headsign} (depuis {firstStop})"
     headsignTo: "{headsign} ({lastStop})"
     moreDetails: Plus d'infos
     operatedBy: Exploité par {agencyName}
@@ -696,8 +706,11 @@ components:
     travelingAt: "Vitesse : {milesPerHour}"
     vehicleName: Véhicule {vehicleNumber}
   TripBasicsPane:
+    checkAgain: Revérifier
     checkingItineraryExistence: Vérification du trajet pour chaque jour de la 
       semaine...
+    indicatesRequiredFields: Les champs marqués d'une astérisque (*) sont 
+      obligatoires.
     onlyOnDate: "{date, date, ::eeeee yyyyMMdd} uniquement"
     recurringEachWeek: Certains jours chaque semaine
     tripDaysPrompt: Quels jours effectuez-vous ce trajet ?
@@ -754,7 +767,7 @@ components:
       untogglePause: Reprendre
     inactive:
       description: Reprendre et recevoir les notifications.
-      heading: Suivi suspendu
+      heading: Suivi suspendu.
     nextTripNotPossible:
       description: >
         Votre trajet étant introuvable après plusieurs tentatives, le suivi a

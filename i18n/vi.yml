@@ -73,6 +73,7 @@ actions:
     smsVerificationFailed: >-
       Điện thoại của bạn không thể được xác minh. Có lẽ mã bạn đã nhập đã hết
       hạn. Vui lòng yêu cầu một mã mới và thử lại.
+    tripDeleted: Chuyến đi của bạn đã bị xóa.
 common:
   coordinates: "{lat}, {lon}"
   dateExpressions:
@@ -216,6 +217,8 @@ components:
     saved: Đã lưu
     submodeSelectorLabel: Chọn phương thức di chuyển và phương thức phụ
     tripOptions: Tùy Chọn Chuyến Đi
+    setAsDefault: Đặt làm mặc định
+    logInToSetDefault: Đăng nhập để đặt làm mặc định
   BatchSettings:
     destination: điểm đến
     invalidModeSelection: >-
@@ -291,6 +294,9 @@ components:
     placeNotFound: Không tìm thấy địa điểm
     placeNotFoundDescription: Xin lỗi, địa điểm được yêu cầu không được tìm 
       thấy.
+    charactersOverLimit: '{chars, plural, one {# vượt # ký tự so với giới hạn} other
+      {# vượt # ký tự so với giới hạn} }'
+    nameTooLong: Tên phải dưới {char} ký tự.
   FormNavigationButtons:
     ariaLabel: Điều hướng hình thức
   ItinerarySummary:
@@ -398,6 +404,7 @@ components:
     nothingNearby: Không có nơi nào gần đây.
     searchNearby: Tìm kiếm gần đây...
     spacesAvailable: "{spacesAvailable} chỗ trống có sẵn"
+    nothingNearbyHeader: Ngoài phạm vi
   NewAccountWizard:
     createNewAccount: Tạo tài khoản mới
     finish: Hoàn tất việc thiết lập tài khoản!
@@ -461,6 +468,9 @@ components:
     inputFields:
       FROM: Nguồn gốc
       TO: Điểm đến
+    OTP_RR_TRIP_IN_PAST:
+      header: Chuyến đi đã diễn ra
+      body: Một hoặc nhiều hành trình trong số này đã kết thúc.
   PhoneNumberEditor:
     changeNumber: Thay đổi số điện thoại
     invalidCode: Vui lòng nhập 6 chữ số cho mã xác thực.
@@ -702,7 +712,7 @@ components:
   TripStatusRenderers:
     active:
       delayedHeading: Chuyến đi đang được tiến hành và bị trì hoãn 
-        {formattedDuration}!
+        {formattedDuration}.
       description: Chuyến đi sẽ đến đích lúc {arrivalTime, time, short}.
       earlyHeading: >-
         Chuyến đi đang diễn ra và sẽ đến sớm hơn {formattedDuration} so với dự
@@ -720,7 +730,7 @@ components:
       untogglePause: Tiếp tục
     inactive:
       description: Tiếp tục cho để nhận lại thông báo
-      heading: Tạm dừng việc giám sát chuyến đi
+      heading: Tạm dừng việc giám sát chuyến đi.
     nextTripNotPossible:
       description: >
         Người lập kế hoạch chuyến đi đã không thể tìm thấy chuyến đi của bạn
@@ -744,7 +754,7 @@ components:
       description: >-
         Thông báo chuyến đi sẽ bắt đầu lại ngày chọn tiếp theo. Bấm Tiếp tục cho
         để nhận lại thông báo hôm nay.
-      heading: Thông báo đã tạm dừng trong ngày hôm nay
+      heading: Thông báo đã tạm dừng trong ngày hôm nay.
     upcoming:
       nextTripBegins: >-
         Chuyến tiếp theo bắt đầu vào {tripDatetime, date, ::eeeee yyyyMMdd} lúc
@@ -767,7 +777,7 @@ components:
     monitoredTripDays: Số ngày theo dõi chuyến đi
     notifications: "{leadTimeInMinutes} phút trước khi khởi hành theo lịch trình"
     notificationsPaused: Thông báo đã tắt
-    notificationsSnoozed: Thông báo đã tạm dừng trong ngày hôm nay
+    notificationsSnoozed: Thông báo đã tạm dừng trong ngày hôm nay.
     timeAndDuration: Thời gian và thời lượng chuyến đi
   TripTools:
     copyLink: Sao chép URL
@@ -835,6 +845,8 @@ components:
       lập tài khoản của bạn.
     instructions2: Khi bạn đã được xác minh, nhấp vào nút bên dưới để tiếp tục.
     resendVerification: Gửi lại email xác minh
+    instructions3: Bạn có thể lên kế hoạch cho các chuyến đi và quay lại trang 
+      này vào bất cứ lúc nào để tiếp tục thiết lập tài khoản.
   ViewSwitcher:
     nearby: Xem Gần Đây
     switcher: Nút bật tắt

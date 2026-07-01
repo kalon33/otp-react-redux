@@ -7,7 +7,7 @@ import Link from '../util/link'
 const baseColor = getBaseColor()
 
 export const PageHeading = styled.h2`
-  margin: 10px 0px 45px 0px;
+  margin: 10px 0px 5px;
 `
 
 export const SequentialPaneContainer = styled.div`
@@ -115,12 +115,16 @@ export const ControlStrip = styled.span`
   & > * {
     margin-right: 4px;
   }
+
+  button {
+    text-wrap: wrap;
+    margin-top: 5px;
+  }
 `
 /** Styles for phone editing fields */
 export const phoneFieldStyle = css`
   display: inline-block;
   vertical-align: middle;
-  width: 14em;
 `
 
 export const UnstyledLink = styled(Link)`

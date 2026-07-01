@@ -73,6 +73,7 @@ actions:
     smsVerificationFailed: >-
       Не удалось подтвердить ваш телефон. Возможно, истек срок действия кода,
       который вы ввели. Запросите новый код и попробуйте еще раз.
+    tripDeleted: Ваша поездка была удалена.
 common:
   coordinates: "{lat}; {lon}"
   dateExpressions:
@@ -217,6 +218,8 @@ components:
     saved: Сохранено
     submodeSelectorLabel: Выбор режимов и подрежимов путешествия
     tripOptions: Варианты поездок
+    setAsDefault: Установить по умолчанию
+    logInToSetDefault: Войти, чтобы установить по умолчанию
   BatchSettings:
     destination: место назначения
     invalidModeSelection: >-
@@ -294,6 +297,9 @@ components:
       имя.
     placeNotFound: Место не найдено
     placeNotFoundDescription: Не удалось найти требуемое место.
+    charactersOverLimit: '{chars, plural, one {Лимит символов превышен на #} other
+      {Лимит символов превышен на #} }'
+    nameTooLong: В имени может быть максимум {char} символов.
   FormNavigationButtons:
     ariaLabel: Навигационная форма
   ItinerarySummary:
@@ -409,6 +415,7 @@ components:
     nothingNearby: Поблизости нет мест.
     searchNearby: Искать поблизости...
     spacesAvailable: "{spacesAvailable} есть свободные места"
+    nothingNearbyHeader: Вне диапазона
   NewAccountWizard:
     createNewAccount: Создайте учетную запись
     finish: Настройка учетной записи завершена!
@@ -469,6 +476,9 @@ components:
     inputFields:
       FROM: Mесто отправления
       TO: Mесто назначения
+    OTP_RR_TRIP_IN_PAST:
+      header: Поездка уже произошла
+      body: Одна или больше из выбранных поездок заканчивается в прошлом.
   PhoneNumberEditor:
     changeNumber: Изменить номер
     invalidCode: "Введите проверочный код из 6 цифр."
@@ -705,7 +715,7 @@ components:
     planNewTrip: Запланировать поездку
   TripStatusRenderers:
     active:
-      delayedHeading: "Поездка выполняется. Задержка: {formattedDuration}!"
+      delayedHeading: "Поездка выполняется. Задержка: {formattedDuration}."
       description: Прибытие к месту назначения в {arrivalTime, time, short}.
       earlyHeading: >-
         Поездка выполняется. Прибытие к месту назначения на {formattedDuration}
@@ -724,7 +734,7 @@ components:
     inactive:
       description: >-
         Возобновите отслеживание поездки, чтобы просматривать изменение ее статуса
-      heading: Отслеживание поездки приостановлено
+      heading: Отслеживание поездки приостановлено.
     nextTripNotPossible:
       description: >
         Планировщику не удалось найти вашу поездку на выбранные дни недели.
@@ -745,7 +755,7 @@ components:
     snoozed:
       description: >-
         Восстановите отслеживание поездки, чтобы просматривать изменение ее статуса
-      heading: На сегодня отслеживание поездки отложено
+      heading: На сегодня отслеживание поездки отложено.
     upcoming:
       nextTripBegins: >-
         Начало следующей поездки: {tripDatetime, date, ::eeeee yyyyMMdd} в
@@ -768,6 +778,7 @@ components:
     notifications: за {leadTimeInMinutes} мин до запланированного времени 
       отправления
     timeAndDuration: Время и продолжительность поездки
+    notificationsSnoozed: На сегодня отслеживание поездки отложено.
   TripTools:
     copyLink: Скопировать ссылку
     header: Инструменты маршрута
@@ -832,6 +843,8 @@ components:
       почты.
     instructions2: После подтверждения нажмите кнопку ниже, чтобы продолжить.
     resendVerification: Отправить письмо с подтверждением еще раз
+    instructions3: Вы можете планировать поездки и в любое время вернуться к 
+      этой странице, чтобы продолжить настройку вашего аккаунта.
   ViewSwitcher:
     nearby: Посмотреть рядом
     switcher: Переключатель

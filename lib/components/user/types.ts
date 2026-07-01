@@ -43,6 +43,13 @@ export interface DependentInfo {
   userId: string
 }
 
+export const notificationChannels: ReadonlyArray<string> = [
+  'email',
+  'sms',
+  'push'
+]
+
+export type NotificationChannel = typeof notificationChannels[number]
 /**
  * Type definition for an OTP-middleware (OTP-personas) user.
  */
@@ -63,6 +70,7 @@ export interface User {
   relatedUsers?: CompanionInfo[]
   savedLocations?: UserSavedLocation[]
   storeTripHistory?: boolean
+  userSavedTripDefaults?: string
 }
 
 export type EditedUser = Omit<User, 'notificationChannel'> & {
@@ -84,6 +92,7 @@ export type MonitoredTrip = Record<DaysOfWeek, boolean> & {
   companion?: CompanionInfo
   departureVarianceMinutesThreshold: number
   excludeFederalHolidays?: boolean
+  from?: Place
   id: string
   isActive: boolean
   itinerary: Itinerary
@@ -94,6 +103,7 @@ export type MonitoredTrip = Record<DaysOfWeek, boolean> & {
   otp2QueryParams: Record<string, unknown>
   primary?: DependentInfo
   secondary?: CompanionInfo
+  to?: Place
   tripName: string
   userId: string
 }

@@ -10,6 +10,7 @@ import {
   ModeSetting,
   ModeSettingValues,
   TransitOperator,
+  UnitSystem,
   VehicleRentalMapOverlaySymbol
 } from '@opentripplanner/types'
 import { ControlPosition } from 'react-map-gl/maplibre'
@@ -140,6 +141,7 @@ export type PersistenceConfig = (
 /** Popup target settings */
 export interface PopupTargetConfig {
   appendLocale?: boolean
+  appendParams?: boolean
   modal?: boolean
   url?: string
 }
@@ -254,6 +256,7 @@ export interface MapConfig {
 /** Settings for reporting issues */
 export interface ReportIssueConfig {
   mailto: string
+  subject?: string
 }
 
 export interface ItineraryCostConfig {
@@ -270,6 +273,7 @@ export type ItinerarySortOption =
   | 'COST'
   | 'DEPARTURETIME'
   | 'FARE'
+  | 'EMISSIONS'
 
 export interface ItineraryCostWeights {
   driveReluctance: number
@@ -376,6 +380,13 @@ export interface RouteViewerConfig {
   sortRoutePatternsByVehicleCount?: boolean
   /** Whether to use the route color as the background color in the pattern viewer */
   useRouteColorAsBackground?: boolean
+  /** Configure the caret on the realtime vehicle bubble (settings from OTP-UI props) */
+  vehicleIconCaret?: {
+    height?: number
+    offset?: number
+    position?: 'inner' | 'outer'
+    width?: number
+  }
   /** Disable vehicle highlight if necessary (e.g. custom or inverted icons) */
   vehicleIconHighlight?: boolean
   /** Customize vehicle icon padding (the default iconPadding is 2px in otp-ui) */
@@ -442,6 +453,7 @@ export interface AppConfig {
   title?: string
   transitOperators?: TransitOperatorConfig[]
   translateExternalLinks?: boolean
+  units?: UnitSystem
 
   // Add other config items as needed.
 }

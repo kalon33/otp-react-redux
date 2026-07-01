@@ -1,7 +1,6 @@
 # To use OTP-RR with your own OTP deployment, at a minimum you will need to set the
 # host and port under the api section (for example to http://localhost and 8080).
-# The v2 configuration item here refers to OTP 2.x, not a versioned API with base URLs
-# ending in v2. OTP v1 is no longer supported by OTP-RR, so leave this v2 item enabled.
+# OTP v2.x is assumed. OTP v1 is no longer supported by OTP-RR.
 # The bare minimum additional things to configure in sections below are:
 # The initLat, initLon, and  baseLayers in the 'map' section;
 # The apiKey, boundary, focus point, and baseUrl in the 'geocoder' section;
@@ -17,8 +16,10 @@ api:
   # If your OTP server is at a path other than "/otp" (usually due to a proxy)
   # Then you can set the OPTIONAL property basePath. The default is "/otp"
   basePath: /otp
-  port: 9966
-  v2: true
+  port: 8080
+
+### This setting makes the UI display metric units.
+# units: metric
 
 # Determines if the header brand should be clickable or not. If set to true, 
 # clicking the header brand will go back to the main trip planner page and wipe out any
@@ -302,9 +303,8 @@ modes:
     - mode: BICYCLE
       label: Transit + Bike
 
-# # The following modules require the datastoreUrl and trinetReDirect properties
-# # to be set. Note: Most of these components are currently only configured for
-# # TriMet.
+# # The following modules require the datastoreUrl to be set.
+# # trinetReDirect is optional, however omitting it requires pre-configured sessions.
 # datastoreUrl: https://localhost:9000
 # trinetReDirect: https://localhost:9001
 # modules:
@@ -370,9 +370,6 @@ itinerary:
   showAlertEffectiveDateTimeText: true
   # Show all walking legs regardless of distance
   showAllWalkLegs: false
-  # Filters out trips returned by OTP by default, unless specifically requested.
-  # e.g. filters out walk-only itineraries if user has not explicitly asked for them.
-  strictItineraryFiltering: false
   # Whether to render route names and colors in the blocks inside
   # the batch ui rows
   renderRouteNamesInBlocks: true
