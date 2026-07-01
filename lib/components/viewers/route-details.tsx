@@ -8,7 +8,11 @@ import styled from 'styled-components'
 import * as uiActions from '../../actions/ui'
 import { AppReduxState } from '../../util/state-types'
 import { DEFAULT_ROUTE_COLOR } from '../util/colors'
-import { extractMainHeadsigns, PatternSummary } from '../../util/pattern-viewer'
+import {
+  extractMainHeadsigns,
+  HeadsignGenerator,
+  PatternSummary
+} from '../../util/pattern-viewer'
 import { getOperatorName } from '../../util/state'
 import { getPatternViewerColors } from '../../util/viewer'
 import { LinkOpensNewWindow } from '../util/externalLink'
@@ -22,6 +26,7 @@ import OperatorLogo from '../util/operator-logo'
 
 import {
   Container,
+  HeadsignLabel,
   HeadsignSelectLabel,
   LogoLinkContainer,
   PatternContainer,
@@ -86,9 +91,22 @@ class RouteDetails extends Component<Props> {
     setViewedStop(stop)
   }
 
-  _editHeadsign = (pattern: PatternSummary) => {
-    pattern.headsign = this.props.intl.formatMessage(
-      { id: 'components.RouteDetails.headsignTo' },
+  _getHeadsignWithLastStop: HeadsignGenerator = (pattern) => {
+    return this.props.intl.formatMessage(
+      {
+        defaultMessage: '{headsign} ({lastStop})',
+        id: 'components.RouteDetails.headsignTo'
+      },
+      { ...pattern }
+    ) as string
+  }
+
+  _getHeadsignWithFirstStop: HeadsignGenerator = (pattern) => {
+    return this.props.intl.formatMessage(
+      {
+        defaultMessage: '{headsign} (from {firstStop})',
+        id: 'components.RouteDetails.headsignFrom'
+      },
       { ...pattern }
     ) as string
   }
@@ -117,7 +135,8 @@ class RouteDetails extends Component<Props> {
     const headsigns = extractMainHeadsigns(
       patterns,
       shortName,
-      this._editHeadsign
+      this._getHeadsignWithLastStop,
+      this._getHeadsignWithFirstStop
     ).sort((a, b) => {
       if (!sortPatternsByVehicleCount) return 0
       // sort by number of vehicles on that pattern
@@ -147,26 +166,37 @@ class RouteDetails extends Component<Props> {
       <Container backgroundColor={backgroundColor} full={pattern != null}>
         {headsigns && headsigns.length > 0 && (
           <PatternContainer className="pattern-picker">
-            <HeadsignSelectLabel htmlFor="headsign-selector-label">
-              <FormattedMessage id="components.RouteDetails.stopsTo" />
-            </HeadsignSelectLabel>
-            <PatternSelectDropdown
-              id="headsign-selector"
-              label={patternSelectLabel}
-              style={{ color: 'black' }}
-              text={patternSelectName}
-            >
-              {headsigns.map((h: PatternSummary) => (
-                <li key={h.id}>
-                  <PatternSelectButton
-                    onClick={() => this._headSignButtonClicked(h.id)}
-                    value={h.id}
-                  >
-                    <span>{h.headsign}</span>
-                  </PatternSelectButton>
-                </li>
-              ))}
-            </PatternSelectDropdown>
+            {headsigns.length > 1 ? (
+              <>
+                <HeadsignSelectLabel htmlFor="headsign-selector-label">
+                  <FormattedMessage id="components.RouteDetails.stopsTo" />
+                </HeadsignSelectLabel>
+                <PatternSelectDropdown
+                  id="headsign-selector"
+                  label={patternSelectLabel}
+                  style={{ color: 'black' }}
+                  text={patternSelectName}
+                >
+                  {headsigns.map((h: PatternSummary) => (
+                    <li key={h.id}>
+                      <PatternSelectButton
+                        onClick={() => this._headSignButtonClicked(h.id)}
+                        value={h.id}
+                      >
+                        <span>{h.headsign}</span>
+                      </PatternSelectButton>
+                    </li>
+                  ))}
+                </PatternSelectDropdown>
+              </>
+            ) : (
+              <>
+                <HeadsignLabel>
+                  <FormattedMessage id="components.RouteDetails.stopsTo" />
+                </HeadsignLabel>
+                <span>{patternSelectName}</span>
+              </>
+            )}
           </PatternContainer>
         )}
         {pattern && (

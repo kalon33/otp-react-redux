@@ -34,6 +34,7 @@ type Props = {
 }
 
 type State = {
+  attributionHTML?: string
   mapVisible?: boolean
 }
 
@@ -54,6 +55,7 @@ class TripPreviewLayoutBase extends Component<Props, State> {
   constructor(props: Props) {
     super(props)
     this.state = {
+      attributionHTML: ' ',
       mapVisible: true
     }
   }
@@ -66,10 +68,30 @@ class TripPreviewLayoutBase extends Component<Props, State> {
     window.print()
   }
 
+  _updateAttributionContent = () => {
+    const innerAttributionContent = document.querySelector(
+      '.maplibregl-ctrl-attrib-inner'
+    )?.innerHTML
+
+    if (
+      innerAttributionContent &&
+      innerAttributionContent !== this.state.attributionHTML
+    ) {
+      this.setState({ attributionHTML: innerAttributionContent })
+    }
+  }
+
+  componentDidMount() {
+    // Allow the attribution to fully render before we grab and set the state.
+    setTimeout(() => this._updateAttributionContent(), 200)
+  }
+
   componentDidUpdate() {
     // Add print-view class to html tag to ensure that iOS scroll fix only applies
     // to non-print views.
     addPrintViewClassToRootHtml()
+    // Sometimes moving the map can change the attribution.
+    this._updateAttributionContent()
   }
 
   componentWillUnmount() {
@@ -87,11 +109,6 @@ class TripPreviewLayoutBase extends Component<Props, State> {
       title
     } = this.props
     const { LegIcon } = this.context
-
-    // The maplibre attribution can interfere with the map visually when printing, so we'll copy the map attribution and inject it instead below the map container.
-    const attributionHTML = document.querySelector(
-      '.maplibregl-ctrl-attrib-inner'
-    )?.innerHTML
 
     return (
       <div className="otp print-layout">
@@ -131,10 +148,12 @@ class TripPreviewLayoutBase extends Component<Props, State> {
         {/* The map, if visible */}
         {this.state.mapVisible && mapElement}
 
-        {attributionHTML && (
-          <CustomAttribution>
-            <div dangerouslySetInnerHTML={{ __html: attributionHTML }} />
-          </CustomAttribution>
+        {this.state.attributionHTML && this.state.mapVisible && (
+          <CustomAttribution
+            dangerouslySetInnerHTML={{
+              __html: this.state.attributionHTML
+            }}
+          />
         )}
 
         {/* The main itinerary body */}

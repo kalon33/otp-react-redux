@@ -33,6 +33,7 @@ actions:
     setGroupSizeError: "Error setting group size:"
     setPaymentError: "Error setting payment info:"
     setRequestStatusError: "Error setting request status:"
+    setTimeError: "Error setting time:"
   location:
     deniedAccessAlert: >
       Access to your location is blocked.
@@ -205,6 +206,7 @@ components:
   BatchSearchScreen:
     advancedHeader: Advanced Preferences
     header: Plan Your Trip
+    logInToSetDefault: Log in to set as default
     modeSelectorLabel: Select a travel mode
     moreOptions: More options
     nlPreferencesApplied: "Applied: {summary}"
@@ -217,6 +219,7 @@ components:
     routingProfileLabel: Optimize routing for
     saveAndReturn: Save and return
     saved: Saved
+    setAsDefault: Set as default
     submodeSelectorLabel: Select travel modes and submodes
     tripOptions: Trip Options
   BatchSettings:
@@ -387,6 +390,7 @@ components:
     selectCost: Cost
     selectDepartureTime: Departure time
     selectDuration: Duration
+    selectEmissions: CO₂ emissions
     selectFare: Transit fare
     selectWalkTime: Walk time
     sortResults: Sort results
@@ -431,6 +435,11 @@ components:
         {inputFields} {inputFieldsCount, plural, =0 {} one {location is} other
         {locations are}} not near any streets.
       header: Location not accessible
+    NO_DIRECT_MODE_CONNECTION:
+      body: >-
+        The origin and destination may be too far apart or not directly
+        connected by the requested mode of transport.
+      header: No direct trip found.
     NO_STOPS_IN_RANGE:
       body: >-
         {inputFields} {inputFieldsCount, plural, =0 {} one {location is} other
@@ -529,6 +538,7 @@ components:
   ResultsError:
     backToSearch: Back to Search
   RouteDetails:
+    headsignFrom: "{headsign} (from {firstStop})"
     headsignTo: "{headsign} ({lastStop})"
     moreDetails: More Details
     operatedBy: Operated by {agencyName}
@@ -661,7 +671,9 @@ components:
     travelingAt: Traveling at {milesPerHour}
     vehicleName: Vehicle {vehicleNumber}
   TripBasicsPane:
+    checkAgain: Check again
     checkingItineraryExistence: Checking itinerary existence for each day of the week...
+    indicatesRequiredFields: Fields marked with an asterisk (*) are required.
     onlyOnDate: Only on {date, date, ::eeeee yyyyMMdd}
     recurringEachWeek: On certain days each week
     tripDaysPrompt: What days do you take this trip?
@@ -690,16 +702,16 @@ components:
   TripPreviewLayout:
     previewTrip: Preview Trip
   TripStatus:
-    alerts: "{alerts, plural, one {# alert!} other {# alerts!}}"
+    alerts: "There {alerts, plural, one {is # alert} other {are # alerts}} on your trip"
     deleteTrip: Delete Trip
     planNewTrip: Plan New Trip
   TripStatusRenderers:
     active:
-      delayedHeading: Trip is in progress and is delayed {formattedDuration}!
+      delayedHeading: Trip is in progress and is delayed {formattedDuration}
       description: Trip is due to arrive at the destination at {arrivalTime, time, short}.
       earlyHeading: >-
         Trip is in progress and is arriving {formattedDuration} earlier than
-        expected!
+        expected.
       noDataHeading: Trip is in progress (no realtime updates available).
       onTimeHeading: Trip is in progress and is about on time.
     base:

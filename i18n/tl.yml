@@ -78,6 +78,7 @@ actions:
     smsVerificationFailed: >-
       Hindi ma-verify ang iyong telepono. Posibleng nag-expire na ang inilagay
       mong code. Humiling ng bagong code at subukan ulit.
+    tripDeleted: Binura ang biyahe mo.
 common:
   coordinates: "{lat}, {lon}"
   dateExpressions:
@@ -224,6 +225,8 @@ components:
     saved: Na-save na
     submodeSelectorLabel: Piliin ang mga mode at submode ng pagbiyahe
     tripOptions: Mga Opsyon sa Biyahe
+    setAsDefault: Itakda bilang default
+    logInToSetDefault: Mag log-in upang itakda bilang default
   BatchSettings:
     destination: patutunguhan
     invalidModeSelection: >-
@@ -305,6 +308,9 @@ components:
       pangalan.
     placeNotFound: Hindi nakita ang lugar
     placeNotFoundDescription: Pasensya na, hindi nakita ang hiniling na lugar.
+    charactersOverLimit: '{chars, plural, one {# karakter ang lampas sa limitasyon}
+      other {# karakter ang lampas sa limitasyon} }'
+    nameTooLong: Dapat na mas kaunti sa {char} karakter ang pangalan.
   FormNavigationButtons:
     ariaLabel: Pag-navigate sa form
   ItinerarySummary:
@@ -416,6 +422,7 @@ components:
     nothingNearby: There are no places nearby.
     searchNearby: Maghanap sa malapit...
     spacesAvailable: "{spacesAvailable} mga available na bakanteng espasyo"
+    nothingNearbyHeader: Lampas sa Saklaw
   NewAccountWizard:
     createNewAccount: Gumawa ng bagong account
     finish: Tapos nang i-set up ang account!
@@ -481,6 +488,9 @@ components:
     inputFields:
       FROM: Pinagmulan
       TO: Patutunguhan
+    OTP_RR_TRIP_IN_PAST:
+      header: May ganito nang biyahe dati
+      body: Natapos na dati ang isa o higit pa sa mga itinerary na ito.
   PhoneNumberEditor:
     changeNumber: Baguhin ang numero
     invalidCode: Maglagay ng 6 na digit para sa code sa pag-validate.
@@ -585,7 +595,8 @@ components:
     tripNotFoundDescription: Pasensya na, hindi nakita ang hiniling na biyahe.
     tripNotifications: Mga notification sa biyahe
   SavedTripList:
-    alertTag: "{alert, plural, one {View one alert} other {View # alerts}}"
+    alertTag: "{alert, plural, one {Tingnan ang isang babala} other {Tingnan ang #
+      ng babala}}"
     fromTo: Mula sa {from} papuntang {to}
     myTrips: Aking mga biyahe
     noSavedTrips: Wala kang naka-save na biyahe
@@ -720,13 +731,13 @@ components:
   TripPreviewLayout:
     previewTrip: I-preview ang Biyahe
   TripStatus:
-    alerts: "{alerts, plural, one {# alert!} other {# alerts!}}"
+    alerts: "{alerts, plural, one {# ng babala!} other {# babala!}}"
     deleteTrip: I-delete ang Biyahe
     planNewTrip: Magplano ng Bagong Biyahe
   TripStatusRenderers:
     active:
       delayedHeading: Nasa biyahe sa kasalukuyan at naantala ito nang 
-        {formattedDuration}!
+        {formattedDuration}.
       description: Darating sa patutunguhan nang {arrivalTime, time, short}.
       earlyHeading: >-
         Nasa biyahe sa kasalukuyan at darating nang {formattedDuration} na mas
@@ -745,7 +756,7 @@ components:
     inactive:
       description: Ipagpatuloy ang pagsubaybay sa biyahe para makita ang updated
         na status
-      heading: Naka-pause ang pagsubaybay sa biyahe
+      heading: Naka-pause ang pagsubaybay sa biyahe.
     nextTripNotPossible:
       description: >
         Hindi nakita ng planner ng biyahe ang iyong biyahe sa anumang napiling
@@ -768,7 +779,7 @@ components:
     snoozed:
       description: I-unsnooze ang pagsubaybay sa biyahe para makita ang updated 
         na status.
-      heading: Naka-snooze ang pagsubaybay sa biyahe ngayong araw
+      heading: Naka-snooze ang pagsubaybay sa biyahe ngayong araw.
     upcoming:
       nextTripBegins: >-
         Magsisimula ang susunod na biyahe sa {tripDatetime, date, ::eeeee
@@ -793,6 +804,7 @@ components:
     notifications: "{leadTimeInMinutes} (na) minuto bago ang nakaiskedyul na pag-alis"
     notificationsPaused: "Mga Notification: Naka-disable"
     timeAndDuration: Oras at tagal ng biyahe
+    notificationsSnoozed: Naka-snooze ang pagsubaybay sa biyahe ngayong araw.
   TripTools:
     copyLink: Kopyahin ang Link
     header: Mga Tool sa Biyahe
@@ -859,6 +871,8 @@ components:
     instructions2: Kapag na-verify ka na, i-click ang button sa ibaba para 
       magpatuloy.
     resendVerification: Ipadala ulit ang email ng pag-verify
+    instructions3: Puwede kang magplano ng mga biyahe at bumalik sa pahinang ito
+      anumang oras para ipagpatuloy ang pag-set up mo ng account.
   ViewSwitcher:
     nearby: Tingnan ang Malapit
     switcher: Switcher

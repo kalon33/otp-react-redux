@@ -30,6 +30,7 @@ import {
 } from '../../../util/state-types'
 import { GeocoderConfig, NearbyFilterConfig } from '../../../util/config-types'
 import { getCurrentServiceWeek } from '../../../util/current-service-week'
+import { grey } from '../../util/colors'
 import { IconMessageContainer } from '../../narrative/metro/metro-error-renderer'
 import {
   PatternStopTime,
@@ -44,14 +45,18 @@ import PageTitle from '../../util/page-title'
 import VehiclePositionRetriever from '../vehicle-position-retriever'
 
 import { FilterCheckboxes } from './nearby-filter'
-import { FullHeightContainer, NearbySidebarContainer } from './styled'
+import {
+  FullHeightContainer,
+  LocationWrapper,
+  NearbySidebarContainer
+} from './styled'
 import FromToPicker from './from-to-picker'
 import RentalStation from './rental-station'
 import Stop, { fullTimestamp, patternArrayforStops } from './stop'
 import Vehicle from './vehicle-rent'
 import VehicleParking from './vehicle-parking'
 
-const AUTO_REFRESH_INTERVAL = 15000000
+const AUTO_REFRESH_INTERVAL = 15000
 
 // TODO: use lonlat package
 type CurrentPosition = { coords?: { latitude: number; longitude: number } }
@@ -80,6 +85,8 @@ type Props = {
   nearbyFilters?: Array<NearbyFilterConfig>
   nearbyViewCoords?: LatLonObj
   nearbyViewError?: any
+  onLocationFieldBlur?: () => void
+  onLocationFieldFocus?: () => void
   radius?: number
   routeSortComparator: (a: PatternStopTime, b: PatternStopTime) => number
   sessionSearches: any
@@ -174,6 +181,8 @@ function NearbyView({
   nearbyFilters,
   nearbyViewCoords,
   nearbyViewError,
+  onLocationFieldBlur,
+  onLocationFieldFocus,
   radius,
   routeSortComparator,
   sessionSearches,
@@ -187,6 +196,7 @@ function NearbyView({
   const intl = useIntl()
   const [loading, setLoading] = useState(true)
   const [reversedPoint, setReversedPoint] = useState('')
+  const [locationInputFocused, setLocationInputFocused] = useState(false)
 
   const nearbyContainerRef = useRef<HTMLOListElement>(null)
   const finalNearbyCoords = useMemo(
@@ -275,7 +285,7 @@ function NearbyView({
 
   useEffect(() => {
     scrollToTop()
-    if (finalNearbyCoords) {
+    if (finalNearbyCoords && !locationInputFocused) {
       fetchNearby(finalNearbyCoords, radius, currentServiceWeek)
       setLoading(true)
       const interval = setInterval(() => {
@@ -286,7 +296,7 @@ function NearbyView({
         clearInterval(interval)
       }
     }
-  }, [finalNearbyCoords, fetchNearby, radius])
+  }, [finalNearbyCoords, fetchNearby, locationInputFocused, radius])
 
   useEffect(() => {
     if (nearbyViewError) {
@@ -409,7 +419,7 @@ function NearbyView({
           />
         </InvisibleA11yLabel>
       )}
-      <div style={{ padding: nearbyFilters ? '1em 1em .75em' : '1em' }}>
+      <LocationWrapper nearbyFilters={!!nearbyFilters}>
         <LocationField
           className="nearby-view-location-field"
           // TODO: why does this cause the jump to the trip planner when selecting location
@@ -429,9 +439,17 @@ function NearbyView({
             name: reversedPoint
           }}
           LocationIconComponent={() => (
-            <Search style={{ marginRight: 5, padding: 5 }} />
+            <Search size={12} style={{ color: grey[700], marginTop: -2 }} />
           )}
           locationType="to"
+          onBlur={() => {
+            onLocationFieldBlur && onLocationFieldBlur()
+            setLocationInputFocused(false)
+          }}
+          onFocus={() => {
+            onLocationFieldFocus && onLocationFieldFocus()
+            setLocationInputFocused(true)
+          }}
           onLocationSelected={(selection) => {
             const { location } = selection
             setViewedNearbyCoords(location)
@@ -466,7 +484,7 @@ function NearbyView({
             })}
           </fieldset>
         )}
-      </div>
+      </LocationWrapper>
 
       {loading && <Loading extraSmall />}
       {/* This is used to scroll to top */}
@@ -532,7 +550,6 @@ const mapStateToProps = (state: AppReduxState) => {
   if (nearbyViewConfig?.useRouteViewSort) {
     routeSortComparator = (a: PatternStopTime, b: PatternStopTime) =>
       coreUtils.route.makeRouteComparator(transitOperators)(
-        // @ts-expect-error core-utils types are wrong!
         a.pattern.route,
         b.pattern.route
       )

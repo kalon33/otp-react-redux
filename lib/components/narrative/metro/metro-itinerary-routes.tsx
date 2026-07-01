@@ -79,9 +79,9 @@ const MetroItineraryRoutes = ({
   showLegDurations
 }: Props): JSX.Element => {
   const intl = useIntl()
-  const routeLegs = showAllWalkLegs
-    ? itinerary.legs
-    : itinerary.legs.filter(removeInsignificantWalkLegs)
+  const routeLegs = itinerary.legs
+    .filter(showAllWalkLegs ? () => true : removeInsignificantWalkLegs)
+    .filter((leg) => !leg.interlineWithPreviousLeg)
   const transitRoutes = getItineraryRoutes(itinerary, intl)
 
   return (
@@ -105,7 +105,7 @@ const MetroItineraryRoutes = ({
           />
         )}
       </InvisibleHeader>
-      <Routes aria-hidden enableDot={enableDot}>
+      <Routes aria-hidden className="routes-container" enableDot={enableDot}>
         {routeLegs.map((leg: Leg, index: number, filteredLegs: Leg[]) => {
           const previousLegMode =
             (index > 0 && filteredLegs[index - 1].mode) || undefined

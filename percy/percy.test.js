@@ -1,9 +1,8 @@
 // Percy screenshot is not an assertion, but that's ok
 /* eslint-disable jest/expect-expect */
 import execa from 'execa'
+import percySnapshot from '@percy/puppeteer'
 import puppeteer from 'puppeteer'
-
-const percySnapshot = require('@percy/puppeteer')
 
 const OTP_RR_UI_MODE = process.env.OTP_RR_UI_MODE || 'normal'
 
@@ -24,9 +23,6 @@ const percySnapshotWithWait = async (page, name, enableJavaScript) => {
 }
 
 let browser
-const serveAbortController = new AbortController()
-const harAbortController = new AbortController()
-const geocoderAbortController = new AbortController()
 
 /**
  * Loads a path
@@ -51,29 +47,22 @@ const openEditIfNeeded = async (page, isMobile) => {
 beforeAll(async () => {
   try {
     // Launch OTP-RR vite preview server
-    execa('yarn', ['percy-preview', '--port', MOCK_SERVER_PORT], {
-      signal: serveAbortController.signal
-    }).stdout.pipe(process.stdout)
+    execa('yarn', ['percy-preview', '--port', MOCK_SERVER_PORT]).stdout.pipe(
+      process.stdout
+    )
 
     // Launch mock OTP server
     execa('yarn', ['percy-combined-mock-server'], {
-      env: { HAR: './percy/mock.har', PORT: '9999' },
-      signal: harAbortController.signal
+      env: { HAR: './percy/mock.har', PORT: '9999' }
     }).stdout.pipe(process.stdout)
 
     // Launch mock geocoder server
-    execa(
-      'yarn',
-      [
-        'percy-har-express',
-        `percy/geocoder-mock-${OTP_RR_UI_MODE}.har`,
-        '-p',
-        '9977'
-      ],
-      {
-        signal: geocoderAbortController.signal
-      }
-    ).stdout.pipe(process.stdout)
+    execa('yarn', [
+      'percy-har-express',
+      `percy/geocoder-mock-${OTP_RR_UI_MODE}.har`,
+      '-p',
+      '9977'
+    ]).stdout.pipe(process.stdout)
 
     // Web security is disabled to allow requests to the mock OTP server
     browser = await puppeteer.launch({
@@ -90,9 +79,6 @@ beforeAll(async () => {
 
 afterAll(async () => {
   try {
-    serveAbortController.abort()
-    harAbortController.abort()
-    geocoderAbortController.abort()
     await browser.close()
   } catch (error) {
     console.log(error)
@@ -386,6 +372,7 @@ async function executeTest(page, isMobile, isCallTaker) {
     await page.goto(
       `http://localhost:${MOCK_SERVER_PORT}/#/?ui_activeSearch=fg33svlbf&ui_activeItinerary=-1&fromPlace=TestLocation%2C%20Atlanta%2C%20GA%2C%20USA%3A%3A34.78946214120528%2C-86.37663414886111&toPlace=1%20TestLocation2%20Avenue%20NE%2C%20Atlanta%2C%20GA%2C%20USA%3A%3A35.767060728439574%2C-86.35749390533111&date=2023-08-09&time=17%3A56&arriveBy=false&mode=BICYCLE&walkSpeed=1.34&numItineraries=3&modeButtons=car_transit`
     )
+    await page.waitForTimeout(500)
     await openEditIfNeeded(page, isMobile)
     await page.click('#plan-trip')
     // FIXME: Network idle condition seems never met after navigating to above link.
@@ -403,19 +390,27 @@ test('OTP-RR Desktop', async () => {
     width: 1920
   })
   page.on('console', async (msg) => {
-    const args = await msg.args()
-    args.forEach(async (arg) => {
-      const val = await arg.jsonValue()
-      // value is serializable
-      if (JSON.stringify(val) !== JSON.stringify({})) console.log(val)
-      // value is unserializable (or an empty oject)
-      else {
-        const { description, subtype, type } = arg._remoteObject
-        console.log(
-          `type: ${type}, subtype: ${subtype}, description:\n ${description}`
-        )
+    try {
+      const args = await msg.args()
+      for (const arg of args) {
+        try {
+          const val = await arg.jsonValue()
+          // value is serializable
+          if (JSON.stringify(val) !== JSON.stringify({})) console.log(val)
+          // value is unserializable (or an empty oject)
+          else {
+            const { description, subtype, type } = arg._remoteObject
+            console.log(
+              `type: ${type}, subtype: ${subtype}, description:\n ${description}`
+            )
+          }
+        } catch {
+          // Browser closed, ignore
+        }
       }
-    })
+    } catch {
+      // Browser closed, ignore
+    }
   })
   // log all errors that were logged to the browser console
   page.on('warn', (warn) => {

@@ -54,6 +54,7 @@ actions:
     smsInvalidCode: 您輸入的代碼無效。請再試一次。
     smsResendThrottled: 驗證簡訊已在不到一分鐘前傳送到指定的電話號碼。請稍後再試一次。
     smsVerificationFailed: 您的電話無法驗證。您輸入的代碼可能已失效。請要求新的代碼，然後再試一次。
+    tripDeleted: 您的行程已刪除。
 common:
   coordinates: "{lat}; {lon}"
   dateExpressions:
@@ -188,6 +189,8 @@ components:
     moreOptions: 更多選擇
     saveAndReturn: 儲存並返回
     tripOptions: 行程選擇
+    setAsDefault: 設為預設值
+    logInToSetDefault: 登入以設為預設值
   BatchSettings:
     destination: 目的地
     invalidModeSelection: 無法使用所選模式規劃行程。嘗試將公共交通納入您的模式選取內容。
@@ -244,6 +247,8 @@ components:
     nameAlreadyUsed: 您已經對其他地點使用此名稱。請輸入其他名稱。
     placeNotFound: 找不到地點
     placeNotFoundDescription: 很抱歉，找不到請求的地點。
+    charactersOverLimit: '{chars, plural, one {# 已超過 # 個字元} other {# 已超過 # 個字元} }'
+    nameTooLong: 名稱長度須少於 {char} 個字元。
   FormNavigationButtons:
     ariaLabel: 表單導航
   ItinerarySummary:
@@ -303,6 +308,8 @@ components:
     headsign: "{destination}"
     searchNearby: 搜尋附近...
     spacesAvailable: "{spacesAvailable} 有未佔用的空間"
+    nothingNearbyHeader: 超出範圍
+    nothingNearby: 附近無相關地點.
   NewAccountWizard:
     createNewAccount: 建立新帳戶
     finish: 帳戶設定完成！
@@ -344,6 +351,9 @@ components:
     inputFields:
       FROM: 起點
       TO: 目的地
+    OTP_RR_TRIP_IN_PAST:
+      header: 行程時間已過
+      body: 其中一項或多項行程方案的結束時間已過.
   PhoneNumberEditor:
     changeNumber: 變更號碼
     invalidCode: 請輸入6位數的驗證碼。
@@ -433,6 +443,7 @@ components:
     noSavedTripsInstructions: 請先從地圖進行行程搜尋。
     pause: 暫停
     resume: 繼續
+    alertTag: '檢視 {alert} 則警示'
   SavedTripScreen:
     itineraryLoaded: 路線已載入
     itineraryLoading: 正在載入路線
@@ -526,12 +537,12 @@ components:
   TripPreviewLayout:
     previewTrip: 預覽行程
   TripStatus:
-    alerts: "{alerts}個警示！"
+    alerts: "{alerts} 則警示!"
     deleteTrip: 刪除行程
     planNewTrip: 規劃新行程
   TripStatusRenderers:
     active:
-      delayedHeading: 行程正在進行中，而且已延誤{formattedDuration}！
+      delayedHeading: 行程正在進行中，而且已延誤{formattedDuration}
       description: 行程預計在{arrivalTime, time, short}抵達目的地。
       earlyHeading: 行程正在進行中，而且將比預期提早{formattedDuration}抵達！
       noDataHeading: 行程正在進行中 (沒有可用的即時更新)。
@@ -546,7 +557,7 @@ components:
       untogglePause: 繼續
     inactive:
       description: 繼續行程監控，以查看更新的狀態
-      heading: 行程監控已暫停
+      heading: 行程監控已暫停.
     nextTripNotPossible:
       description: |
         行程規劃器無法找到您今天的行程。請嘗試重新規劃預定行程，以尋找替代路線。
@@ -561,7 +572,7 @@ components:
       heading: 行程尚未計算
     snoozed:
       description: 取消延遲行程監控，以查看更新的狀態。
-      heading: 已為今天延遲行程監控
+      heading: 已為今天延遲行程監控.
     upcoming:
       nextTripBegins: >-
         下一個行程將在{tripDatetime, date, ::eeeee yyyyMMdd}的{tripDatetime, time,
@@ -573,6 +584,8 @@ components:
       tripStartIsEarly: 行程開始時間比預期提早{duration}！
       tripStartsSoonNoUpdates: 行程即將開始 (沒有可用的即時更新)。
       tripStartsSoonOnTime: 行程即將開始且大約準時。
+    past:
+      heading: 此為過去行程
   TripSummary:
     arriveAt: "抵達 "
     leaveAt: "離開點 "
@@ -580,6 +593,7 @@ components:
     happensOnDays: 發生於：{days}
     notifications: 預定出發前{leadTimeInMinutes}分鐘
     notificationsPaused: 通知已停用
+    notificationsSnoozed: 已為今天延遲行程監控.
   TripTools:
     copyLink: 複製連結
     header: 行程工具

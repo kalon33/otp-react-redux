@@ -5,17 +5,18 @@ import {
   ModeSettingRenderer,
   populateSettingWithValue
 } from '@opentripplanner/trip-form'
-import { ArrowLeft } from '@styled-icons/fa-solid/ArrowLeft'
 import { Check } from '@styled-icons/boxicons-regular'
 import { connect } from 'react-redux'
 import { decodeQueryParams, DelimitedArrayParam } from 'serialize-query-params'
 import { FormattedMessage, IntlShape, useIntl } from 'react-intl'
+import { Lock } from '@styled-icons/fa-solid/Lock'
 import {
   ModeButtonDefinition,
   ModeSetting,
   ModeSettingValues
 } from '@opentripplanner/types'
 import { QueryParamChangeEvent } from '@opentripplanner/trip-form/lib/types'
+import coreUtils from '@opentripplanner/core-utils'
 import React, {
   RefObject,
   useCallback,
@@ -30,15 +31,23 @@ import * as formActions from '../../actions/form'
 import * as routingProfileActions from '../../actions/routing-profiles'
 import * as userActions from '../../actions/user'
 import { AppReduxState } from '../../util/state-types'
-import { blue, getBaseColor } from '../util/colors'
+import { blue, getBaseColor, grey } from '../util/colors'
 import { ComponentContext } from '../../util/contexts'
+import {
+  generateModeSettingValues,
+  getDefaultModeButtons,
+  getDefaultModeSettingValues
+} from '../../util/api'
+import { getAuth0Config } from '../../util/auth'
 import {
   DEFAULT_PROFILE_ID,
   ROUTING_PROFILES
 } from '../../util/routing-profiles'
-import { generateModeSettingValues } from '../../util/api'
 import { getDependentName } from '../../util/user'
+import { IconWithText } from '../util/styledIcon'
 import { invisibleCss } from '../util/invisible-a11y-label'
+import { PersistenceConfig } from '../../util/config-types'
+import { toastPromise } from '../util/toasts'
 import { User } from '../user/types'
 import BackButton from '../util/back-button'
 
@@ -51,9 +60,10 @@ import {
   setModeButton,
   tripPlannerValidationErrors
 } from './util'
+import DateTimeModal from './date-time-modal'
 import { setModeButtonEnabled } from './batch-settings'
 import { styledCheckboxCss } from './styled'
-import DateTimeModal from './date-time-modal'
+import { StyledTransparentButton } from './advanced-settings-button'
 
 const PanelOverlay = styled.div`
   height: 100%;
@@ -64,6 +74,10 @@ const PanelOverlay = styled.div`
   top: 0;
   width: 100%;
   z-index: 100;
+
+  fieldset {
+    margin-bottom: 2em;
+  }
 
   @media (max-width: 768px) {
     padding: 1em;
@@ -79,16 +93,12 @@ const GlobalSettingsContainer = styled.div`
   ${styledCheckboxCss}
 `
 
-const CloseButton = styled.button`
-  background: transparent;
-  border: none;
-`
-
 const HeaderContainer = styled.div`
   align-items: center;
   display: flex;
   gap: 10px;
   height: 30px;
+  margin-bottom: 2em;
 `
 
 const InvisibleSubheader = styled.h2`
@@ -113,14 +123,12 @@ const ReturnToTripPlanButton = styled.button`
   gap: 5px;
   height: 51px;
   justify-content: center;
-  margin-top: 2em;
   width: 100%;
 
   svg {
     margin-bottom: 7px;
   }
 `
-
 const DtSelectorContainer = styled.div`
   margin: 2em 0;
 
@@ -140,7 +148,6 @@ const DtSelectorContainer = styled.div`
     }
   }
 `
-
 const MobilityProfileContainer = styled.div`
   margin: 60px 0 60px 5px;
 `
@@ -149,6 +156,26 @@ const MobilityProfileDropdown = styled(DropdownSelector)`
   margin: 20px 0px;
   label {
     padding-left: 0;
+  }
+`
+
+const UserSavedTripDefaultsButton = styled(StyledTransparentButton)`
+  color: ${getBaseColor()};
+  display: flex;
+  font-weight: bold;
+  justify-content: center;
+  margin: 1em 0;
+  text-decoration: underline;
+  width: 100%;
+
+  &:hover {
+    text-decoration: underline;
+  }
+
+  &[disabled] {
+    color: ${grey[800]};
+    cursor: not-allowed;
+    text-decoration: none;
   }
 `
 
@@ -202,6 +229,7 @@ const AdvancedSettingsPanel = ({
   applyRoutingProfile,
   autoPlan,
   closeAdvancedSettings,
+  createOrUpdateUser,
   currentQuery,
   enabledModeButtons,
   getDependentUserInfo,
@@ -212,14 +240,17 @@ const AdvancedSettingsPanel = ({
   modeButtonOptions,
   modeSettingDefinitions,
   modeSettingValues,
+  persistence,
   saveAndReturnButton,
   setCloseAdvancedSettingsWithDelay,
-  setQueryParam
+  setQueryParam,
+  user
 }: {
   applyPreferencesFromText: (text: string) => Promise<any>
   applyRoutingProfile: (profileId: string) => void
   autoPlan: boolean
   closeAdvancedSettings: () => void
+  createOrUpdateUser: (user: User, intl: IntlShape) => Promise<number>
   currentQuery: any
   enabledModeButtons: string[]
   getDependentUserInfo: (userIds: string[], intl: IntlShape) => void
@@ -230,9 +261,11 @@ const AdvancedSettingsPanel = ({
   modeButtonOptions: ModeButtonDefinition[]
   modeSettingDefinitions: ModeSetting[]
   modeSettingValues: ModeSettingValues
+  persistence?: PersistenceConfig
   saveAndReturnButton?: boolean
   setCloseAdvancedSettingsWithDelay: () => void
   setQueryParam: (evt: any) => void
+  user: User
 }): JSX.Element => {
   const intl = useIntl()
   const [closingBySave, setClosingBySave] = useState(false)
@@ -248,6 +281,8 @@ const AdvancedSettingsPanel = ({
     [loggedInUser]
   )
 
+  const usersCanSignIn = Boolean(getAuth0Config(persistence))
+
   useEffect(() => {
     if (mobilityProfile && dependents.length > 0) {
       getDependentUserInfo(dependents, intl)
@@ -256,6 +291,19 @@ const AdvancedSettingsPanel = ({
 
   const baseColor = getBaseColor()
   const accentColor = baseColor || blue[900]
+
+  const updateUserDefaultTripSettings = () => {
+    const { getTripOptionsFromQuery } = coreUtils.query
+    const updatedUser = user
+    const tripOptions = getTripOptionsFromQuery(currentQuery)
+    // Because some of these settings are custom route mode overrides, we'll store these as a string.
+    updatedUser.userSavedTripDefaults = JSON.stringify(tripOptions)
+    toastPromise(
+      createOrUpdateUser(updatedUser, intl),
+      intl.formatMessage({ id: 'actions.user.preferencesSaved' }),
+      intl
+    )
+  }
 
   const closeButtonText = intl.formatMessage({
     id: 'components.BatchSearchScreen.saveAndReturn'
@@ -494,6 +542,21 @@ const AdvancedSettingsPanel = ({
           )}
         </ReturnToTripPlanButton>
       )}
+
+      {usersCanSignIn && (
+        <UserSavedTripDefaultsButton
+          disabled={!user}
+          onClick={updateUserDefaultTripSettings}
+        >
+          {user ? (
+            <FormattedMessage id="components.BatchSearchScreen.setAsDefault" />
+          ) : (
+            <IconWithText Icon={Lock}>
+              <FormattedMessage id="components.BatchSearchScreen.logInToSetDefault" />
+            </IconWithText>
+          )}
+        </UserSavedTripDefaultsButton>
+      )}
     </PanelOverlay>
   )
 }
@@ -502,11 +565,15 @@ const queryParamConfig = { modeButtons: DelimitedArrayParam }
 const mapStateToProps = (state: AppReduxState) => {
   const urlSearchParams = new URLSearchParams(state.router.location.search)
   const { modes } = state.otp.config
+  const defaultModeSettingValues = getDefaultModeSettingValues(state)
+  const defaultModeButtons = getDefaultModeButtons(state)
+
   const modeSettingValues = generateModeSettingValues(
     urlSearchParams,
-    state.otp.modeSettingDefinitions || [],
-    modes?.initialState?.modeSettingValues || {}
+    state.otp.modeSettingDefinitions ?? [],
+    defaultModeSettingValues
   )
+  const user = state.user.loggedInUser
 
   const { autoPlan } = state.otp.config
   const saveAndReturnButton =
@@ -518,19 +585,21 @@ const mapStateToProps = (state: AppReduxState) => {
     enabledModeButtons:
       decodeQueryParams(queryParamConfig, {
         modeButtons: urlSearchParams.get('modeButtons')
-      })?.modeButtons?.filter((mb): mb is string => mb !== null) ||
-      modes?.initialState?.enabledModeButtons ||
-      [],
+      })?.modeButtons?.filter((mb): mb is string => mb !== null) ??
+      defaultModeButtons,
     loggedInUser: state.user.loggedInUser,
     mobilityProfile: state.otp.config?.mobilityProfile || false,
     modeButtonOptions: modes?.modeButtons || [],
     modeSettingDefinitions: state.otp?.modeSettingDefinitions || [],
     modeSettingValues,
-    saveAndReturnButton
+    persistence: state.otp.config?.persistence,
+    saveAndReturnButton,
+    user
   }
 }
 
 const mapDispatchToProps = {
+  createOrUpdateUser: userActions.createOrUpdateUser,
   applyPreferencesFromText: routingProfileActions.applyPreferencesFromText,
   applyRoutingProfile: routingProfileActions.applyRoutingProfile,
   getDependentUserInfo: userActions.getDependentUserInfo,
