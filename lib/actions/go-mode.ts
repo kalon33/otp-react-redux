@@ -38,6 +38,12 @@ import type {
 } from '../util/go-mode/notification-service'
 import type { RouteMatchResult } from '../util/go-mode/position-matching'
 import type { TripProgress } from '../util/go-mode/progress-calculator'
+import {
+  beginReplay,
+  endReplay,
+  isReplayActive,
+  setReplayClock
+} from '../util/go-mode/replay/replay-engine'
 
 import {
   fetchOnboardCandidatePlan,
@@ -61,10 +67,27 @@ let vehiclePositionIntervalId: ReturnType<typeof setInterval> | null = null
 // Module-scoped visibilitychange handler for cleanup
 let visibilityChangeHandler: (() => void) | null = null
 
+// A single recorded GPS fix from a replay fixture (see build-fixture.js).
+interface ReplayGpsFix {
+  accuracy?: number | null
+  heading?: number | null
+  lat: number
+  lon: number
+  speed?: number | null
+  tMs: number
+}
+
 // GPS simulation state
 interface TimedSimulationPoint {
+  // ms before advancing to next point (at 1x speed)
+  // Optional recorded fix metadata (trip replay only). When present these are
+  // played back verbatim so vehicle-matching heading/speed logic sees the real
+  // values instead of the synthetic defaults used for itinerary-derived sims.
+  accuracy?: number | null
   coord: [number, number]
-  delayMs: number // ms before advancing to next point (at 1x speed)
+  delayMs: number
+  heading?: number | null
+  speed?: number | null
 }
 
 let gpsSimulationTimeoutId: ReturnType<typeof setTimeout> | null = null
@@ -73,6 +96,12 @@ let simulationCoords: TimedSimulationPoint[] = []
 let simulationSpeedMultiplier = 1
 let simulationActive = false
 let simulatedTimeMs = 0 // epoch ms — the "current time" in simulation-land
+
+// Trip replay: the transit route currently being tracked. During replay the
+// wall-clock 15s vehicle poll is disabled; vehicle snapshots are instead
+// refreshed from this route on each simulated GPS tick (see
+// scheduleNextSimulationPoint) so the series stays aligned to the sim clock.
+let replayTrackedRouteId: string | null = null
 
 /**
  * Get the current time for Go Mode calculations.
@@ -246,7 +275,10 @@ export function beginGoMode(itinerary: Itinerary) {
  * of beginGoMode so a trip restored from storage on reload (see
  * session-persistence) can resume tracking without resetting the restored state.
  */
-export function startGoModeTracking(itinerary: Itinerary) {
+export function startGoModeTracking(
+  itinerary: Itinerary,
+  options: { replay?: boolean } = {}
+) {
   return async function (dispatch: any) {
     // Pre-fetch stop times for all transit boarding stops
     const today = new Date().toISOString().split('T')[0]
@@ -290,6 +322,12 @@ export function startGoModeTracking(itinerary: Itinerary) {
     const firstLegRouteId = getLegRouteId(firstLeg)
     if (firstLeg?.transitLeg && firstLegRouteId) {
       dispatch(startVehicleTracking(firstLegRouteId))
+    }
+
+    // Trip replay drives position from the recorded GPS track (startTrackReplay),
+    // not the device — skip the geolocation permission check and live polling.
+    if (options.replay) {
+      return
     }
 
     // Check geolocation permission — if denied, still allow simulation
@@ -1085,26 +1123,32 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       itinerary.legs
     )
 
-    // Show notifications
+    // Show notifications. Always record them in state (so replay assertions and
+    // the debug log see the sequence), but suppress the real-world side effects
+    // (browser notification/vibration and the Pushover relay) during replay so a
+    // fast offline replay loop doesn't buzz the phone.
+    const replaying = isReplayActive()
     notifications.forEach((notification) => {
       dispatch(addNotification(notification))
-      showNotification(
-        notification,
-        goMode.notifications || {
-          enabled: true,
-          soundEnabled: false,
-          vibrationEnabled: true
+      if (!replaying) {
+        showNotification(
+          notification,
+          goMode.notifications || {
+            enabled: true,
+            soundEnabled: false,
+            vibrationEnabled: true
+          }
+        )
+        // Forward the highest-value alerts to the phone as a real push (Pushover).
+        // Dedup is already guaranteed upstream by checkForNotifications, so each
+        // fires at most once. Limited to a few types to avoid push spam.
+        if (PUSH_NOTIFICATION_TYPES.has(notification.type)) {
+          sendPush({
+            message: notification.message,
+            priority: notification.priority === 'high' ? 1 : 0,
+            title: notification.title
+          })
         }
-      )
-      // Forward the highest-value alerts to the phone as a real push (Pushover).
-      // Dedup is already guaranteed upstream by checkForNotifications, so each
-      // fires at most once. Limited to a few types to avoid push spam.
-      if (PUSH_NOTIFICATION_TYPES.has(notification.type)) {
-        sendPush({
-          message: notification.message,
-          priority: notification.priority === 'high' ? 1 : 0,
-          title: notification.title
-        })
       }
     })
 
@@ -1131,13 +1175,20 @@ export function startVehicleTracking(routeId: string) {
     // Fetch immediately, then every 15 seconds
     dispatch(getVehiclePositionsForRoute(routeId))
 
-    vehiclePositionIntervalId = setInterval(() => {
-      dispatch(getVehiclePositionsForRoute(routeId))
-      dispatch(performVehicleMatching(routeId))
-    }, 15000)
+    if (isReplayActive()) {
+      // Replay drives vehicle refresh off the simulated clock (per GPS tick in
+      // scheduleNextSimulationPoint), not wall-clock — so fast/slow playback
+      // stays deterministic. Just remember which route to refresh.
+      replayTrackedRouteId = routeId
+    } else {
+      vehiclePositionIntervalId = setInterval(() => {
+        dispatch(getVehiclePositionsForRoute(routeId))
+        dispatch(performVehicleMatching(routeId))
+      }, 15000)
+    }
 
     dispatch({
-      payload: Date.now(),
+      payload: getCurrentTime().getTime(),
       type: SET_TRANSIT_LEG_ENTERED
     })
   }
@@ -1152,6 +1203,7 @@ export function stopVehicleTracking() {
       clearInterval(vehiclePositionIntervalId)
       vehiclePositionIntervalId = null
     }
+    replayTrackedRouteId = null
     dispatch(clearVehicleMatch())
   }
 }
@@ -1218,7 +1270,7 @@ export function performVehicleMatching(routeId: string) {
       shouldShowBoardingPrompt(
         matchResult,
         goMode.boardingPrompt?.transitLegEnteredAt,
-        Date.now(),
+        getCurrentTime().getTime(),
         goMode.boardingPrompt?.lastDismissedAt
       )
     ) {
@@ -1680,17 +1732,23 @@ function extractItineraryTimedPoints(
 
 /**
  * Create a mock GeolocationPosition from lat/lng coordinates.
+ * `fix` carries recorded accuracy/heading/speed during trip replay; when absent
+ * (itinerary-derived sim) synthetic defaults are used.
  */
-function createMockPosition(lat: number, lng: number): GeolocationPosition {
+function createMockPosition(
+  lat: number,
+  lng: number,
+  fix?: Pick<TimedSimulationPoint, 'accuracy' | 'heading' | 'speed'>
+): GeolocationPosition {
   return {
     coords: {
-      accuracy: 10,
+      accuracy: fix?.accuracy ?? 10,
       altitude: null,
       altitudeAccuracy: null,
-      heading: null,
+      heading: fix?.heading ?? null,
       latitude: lat,
       longitude: lng,
-      speed: null
+      speed: fix?.speed ?? null
     },
     timestamp:
       simulationActive && simulatedTimeMs > 0 ? simulatedTimeMs : Date.now()
@@ -1719,8 +1777,21 @@ function scheduleNextSimulationPoint(dispatch: any) {
     // Advance the simulated clock by the un-scaled delay (actual schedule time)
     simulatedTimeMs += point.delayMs
 
-    const { coord } = simulationCoords[simulationPointIndex]
-    dispatch(handlePositionUpdate(createMockPosition(coord[0], coord[1])))
+    // Replay: keep the fixture clock in step and refresh the recorded vehicle
+    // snapshot for the current sim time BEFORE matching runs in
+    // handlePositionUpdate, so vehicle matching sees sim-time-aligned positions
+    // (the wall-clock 15s poll is disabled during replay for determinism).
+    if (isReplayActive()) {
+      setReplayClock(simulatedTimeMs)
+      if (replayTrackedRouteId) {
+        dispatch(getVehiclePositionsForRoute(replayTrackedRouteId))
+      }
+    }
+
+    const cur = simulationCoords[simulationPointIndex]
+    dispatch(
+      handlePositionUpdate(createMockPosition(cur.coord[0], cur.coord[1], cur))
+    )
     simulationPointIndex++
     dispatch({
       payload: { pointIndex: simulationPointIndex },
@@ -1814,13 +1885,152 @@ export function stopGpsSimulation() {
 
     dispatch({ type: STOP_GPS_SIMULATION })
 
-    // Resume real GPS polling if Go Mode is still active
+    // Resume real GPS polling if Go Mode is still active (but not during replay —
+    // replay never wants live GPS).
     const state = getState()
-    if (state.otp?.goMode?.isActive) {
+    if (state.otp?.goMode?.isActive && !isReplayActive()) {
       dispatch(startPositionTracking())
     }
 
     console.info('[Go Mode] GPS simulation stopped')
+  }
+}
+
+/**
+ * Convert a recorded GPS track (from a replay fixture) into timed simulation
+ * points. delayMs between fixes is the recorded wall-clock gap, so playback
+ * preserves the trip's real pacing (scaled by speedMultiplier at run time).
+ */
+function trackToTimedPoints(track: ReplayGpsFix[]): TimedSimulationPoint[] {
+  return track.map((fix, i) => ({
+    accuracy: fix.accuracy,
+    coord: [fix.lat, fix.lon] as [number, number],
+    delayMs:
+      i < track.length - 1 ? Math.max(50, track[i + 1].tMs - fix.tMs) : 500,
+    heading: fix.heading,
+    speed: fix.speed
+  }))
+}
+
+/**
+ * Play back an explicit recorded GPS track (trip replay), as opposed to
+ * startGpsSimulation which derives points from itinerary geometry. Reuses the
+ * same setTimeout chain + handlePositionUpdate funnel; the only difference is the
+ * source of the points and that the simulated clock starts at the recorded trip
+ * start so progress/delay math lines up with the recorded schedule.
+ */
+export function startTrackReplay(
+  track: ReplayGpsFix[],
+  speedMultiplier = 1,
+  startMs?: number
+) {
+  return function (dispatch: any) {
+    if (!track || track.length === 0) {
+      console.warn('[Go Mode] startTrackReplay: empty track')
+      return
+    }
+
+    if (gpsSimulationTimeoutId) {
+      clearTimeout(gpsSimulationTimeoutId)
+      gpsSimulationTimeoutId = null
+    }
+    if (gpsPollingIntervalId) {
+      clearInterval(gpsPollingIntervalId)
+      gpsPollingIntervalId = null
+    }
+
+    simulationCoords = trackToTimedPoints(track)
+    simulationPointIndex = 0
+    simulationSpeedMultiplier = speedMultiplier
+    simulationActive = true
+    simulatedTimeMs = startMs ?? track[0].tMs
+    setReplayClock(simulatedTimeMs)
+
+    console.info(
+      `[Go Mode] Starting trip replay: ${simulationCoords.length} fixes, ` +
+        `speed ${speedMultiplier}x`
+    )
+
+    dispatch({
+      payload: { speedMultiplier, totalPoints: simulationCoords.length },
+      type: START_GPS_SIMULATION
+    })
+
+    const first = simulationCoords[0]
+    dispatch(
+      handlePositionUpdate(
+        createMockPosition(first.coord[0], first.coord[1], first)
+      )
+    )
+    simulationPointIndex = 1
+    dispatch({
+      payload: { pointIndex: simulationPointIndex },
+      type: UPDATE_SIMULATION_PROGRESS
+    })
+
+    scheduleNextSimulationPoint(dispatch)
+  }
+}
+
+/**
+ * Replay a recorded trip fixture fully offline & deterministically. Loads the
+ * recorded itinerary into Go Mode exactly as a live trip would, then plays the
+ * recorded GPS track; every OTP read (vehicle positions, stop times, reroute
+ * plans) is served from the fixture via the replay-engine interception. Exposed
+ * as window.__replayTrip (see main.js). See build-fixture.js for the producer.
+ */
+export function replayTrip(
+  fixture: any,
+  options: { speedMultiplier?: number } = {}
+) {
+  return async function (dispatch: any, getState: any) {
+    if (!fixture?.itinerary) {
+      console.warn('[Go Mode] replayTrip: fixture is missing an itinerary')
+      return
+    }
+    const speedMultiplier = options.speedMultiplier || 1
+
+    // Arm the replay engine BEFORE any dispatch, so startVehicleTracking and the
+    // OTP interception both see replay mode from the first action.
+    beginReplay(fixture)
+
+    const originalFrom =
+      fixture.itinerary.legs?.[0]?.from ||
+      getState().otp?.currentQuery?.from ||
+      null
+    dispatch(startGoMode({ itinerary: fixture.itinerary, originalFrom }))
+    dispatch(setMobileScreen(MobileScreens.GO_MODE))
+
+    // Set up tracking machinery (stop-time prefetch, vehicle tracking, window
+    // hooks) but skip live GPS — the recorded track drives the trip instead.
+    await dispatch(startGoModeTracking(fixture.itinerary, { replay: true }))
+
+    dispatch(
+      startTrackReplay(fixture.gpsTrack, speedMultiplier, fixture.meta?.startMs)
+    )
+  }
+}
+
+/**
+ * Stop an in-progress trip replay: halt track playback, exit Go Mode, and
+ * disarm the replay engine so live OTP requests resume. Exposed as
+ * window.__stopReplay.
+ */
+export function stopReplay() {
+  return function (dispatch: any) {
+    if (gpsSimulationTimeoutId) {
+      clearTimeout(gpsSimulationTimeoutId)
+      gpsSimulationTimeoutId = null
+    }
+    simulationActive = false
+    simulationPointIndex = 0
+    simulationCoords = []
+    simulatedTimeMs = 0
+    replayTrackedRouteId = null
+    dispatch({ type: STOP_GPS_SIMULATION })
+    dispatch(endGoMode())
+    endReplay()
+    console.info('[Go Mode] Trip replay stopped')
   }
 }
 
