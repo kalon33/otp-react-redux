@@ -4,6 +4,18 @@ import {
 } from '../../../lib/util/go-mode/alight-optimizer'
 
 /** Minimal itinerary with a transit leg. */
+
+// Minimal Itinerary interface for testing
+interface TestItinerary {
+  duration: number
+  legs: Array<{
+    mode: string
+    transitLeg: boolean
+  }>
+  transfers: number
+  walkDistance: number
+}
+
 const transitItin = (
   duration: number,
   { transfers = 0, walkDistance = 100 } = {}
@@ -16,7 +28,7 @@ const transitItin = (
     ],
     transfers,
     walkDistance
-  } as any)
+  } as TestItinerary)
 
 /** Walk-only itinerary (no transit leg) of a given walk distance. */
 const walkItin = (duration: number, walkDistance: number) =>
@@ -25,7 +37,7 @@ const walkItin = (duration: number, walkDistance: number) =>
     legs: [{ mode: 'WALK', transitLeg: false }],
     transfers: 0,
     walkDistance
-  } as any)
+  } as TestItinerary)
 
 const candidate = (
   busArrivalEpoch: number,
