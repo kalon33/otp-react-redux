@@ -45,6 +45,15 @@ import type { NotificationEvent } from '../util/go-mode/notification-service'
 import type { RouteMatchResult } from '../util/go-mode/position-matching'
 import type { TripProgress } from '../util/go-mode/progress-calculator'
 
+
+// Type declaration for redux-actions module
+declare module 'redux-actions' {
+  export function handleActions<T, P extends { [key: string]: any }>(
+    reducers: P,
+    defaultState: T
+  ): (state: T | undefined, action: { type: string; payload?: any }) => T
+}
+
 export interface SimulationState {
   pointIndex: number
   speedMultiplier: number
@@ -125,7 +134,7 @@ export interface GoModeState {
    * currentQuery.from with the rider's GPS position ("Current location"); this
    * lets endGoMode restore the origin the rider started with on exit.
    */
-  originalFrom: any
+  originalFrom: unknown
 
   progress: TripProgress | null
 
@@ -256,7 +265,7 @@ const goMode = handleActions<GoModeState, any>(
       }
     },
 
-    [BEGIN_ONBOARD_FLOW]: (state, action) => ({
+    [BEGIN_ONBOARD_FLOW]: (state: GoModeState, action: { payload: { originalFrom?: unknown } }) => ({
       ...state,
       activeItinerary: null,
       boardingPrompt: { ...defaultState.boardingPrompt },
@@ -277,17 +286,17 @@ const goMode = handleActions<GoModeState, any>(
       vehicleMatch: { ...defaultState.vehicleMatch }
     }),
 
-    [CLEAR_ONBOARD]: (state) => ({
+    [CLEAR_ONBOARD]: (state: GoModeState) => ({
       ...state,
       onboard: { ...defaultState.onboard }
     }),
 
-    [CLEAR_REROUTE]: (state) => ({
+    [CLEAR_REROUTE]: (state: GoModeState) => ({
       ...state,
       reRoute: { ...defaultState.reRoute }
     }),
 
-    [CLEAR_VEHICLE_MATCH]: (state) => ({
+    [CLEAR_VEHICLE_MATCH]: (state: GoModeState) => ({
       ...state,
       boardingPrompt: {
         ...state.boardingPrompt,
@@ -299,7 +308,7 @@ const goMode = handleActions<GoModeState, any>(
       }
     }),
 
-    [CONFIRM_VEHICLE]: (state, action) => ({
+    [CONFIRM_VEHICLE]: (state: GoModeState, action: { payload: VehicleMatchResult }) => ({
       ...state,
       boardingPrompt: {
         ...state.boardingPrompt,
@@ -312,7 +321,7 @@ const goMode = handleActions<GoModeState, any>(
       }
     }),
 
-    [DISMISS_BOARDING_PROMPT]: (state) => ({
+    [DISMISS_BOARDING_PROMPT]: (state: GoModeState) => ({
       ...state,
       boardingPrompt: {
         ...state.boardingPrompt,
@@ -321,7 +330,7 @@ const goMode = handleActions<GoModeState, any>(
       }
     }),
 
-    [PAUSE_GPS_SIMULATION]: (state) => ({
+    [PAUSE_GPS_SIMULATION]: (state: GoModeState) => ({
       ...state,
       simulation: {
         ...state.simulation,
@@ -329,7 +338,7 @@ const goMode = handleActions<GoModeState, any>(
       }
     }),
 
-    [RESUME_GPS_SIMULATION]: (state) => ({
+    [RESUME_GPS_SIMULATION]: (state: GoModeState) => ({
       ...state,
       simulation: {
         ...state.simulation,
@@ -337,7 +346,7 @@ const goMode = handleActions<GoModeState, any>(
       }
     }),
 
-    [SET_DEPARTURE_OVERRIDE]: (state, action) => ({
+    [SET_DEPARTURE_OVERRIDE]: (state: GoModeState, action: { payload: number }) => ({
       ...state,
       departureOverride: action.payload
     }),
@@ -352,7 +361,7 @@ const goMode = handleActions<GoModeState, any>(
       }
     },
 
-    [SET_ONBOARD_RESULT]: (state, action) => ({
+    [SET_ONBOARD_RESULT]: (state: GoModeState, action: { payload: OnboardAlightOption | null }) => ({
       ...state,
       onboard: {
         ...state.onboard,
@@ -361,7 +370,7 @@ const goMode = handleActions<GoModeState, any>(
       }
     }),
 
-    [SET_ONBOARD_STATUS]: (state, action) => ({
+    [SET_ONBOARD_STATUS]: (state: GoModeState, action: { payload: OnboardState[\'status\'] }) => ({
       ...state,
       onboard: {
         ...state.onboard,
@@ -369,7 +378,7 @@ const goMode = handleActions<GoModeState, any>(
       }
     }),
 
-    [SET_ONBOARD_TRIP]: (state, action) => ({
+    [SET_ONBOARD_TRIP]: (state: GoModeState, action: { payload: any }) => ({
       ...state,
       onboard: {
         ...state.onboard,
@@ -377,7 +386,7 @@ const goMode = handleActions<GoModeState, any>(
       }
     }),
 
-    [SET_ONBOARD_VEHICLE]: (state, action) => ({
+    [SET_ONBOARD_VEHICLE]: (state: GoModeState, action: { payload: OnboardVehicle }) => ({
       ...state,
       onboard: {
         ...state.onboard,
@@ -386,7 +395,7 @@ const goMode = handleActions<GoModeState, any>(
       }
     }),
 
-    [SET_REROUTE_RESULT]: (state, action) => ({
+    [SET_REROUTE_RESULT]: (state: GoModeState, action: { payload: Itinerary | null }) => ({
       ...state,
       reRoute: {
         ...state.reRoute,
@@ -395,7 +404,7 @@ const goMode = handleActions<GoModeState, any>(
       }
     }),
 
-    [SET_TRACKING_ERROR]: (state, action) => {
+    [SET_TRACKING_ERROR]: (state: GoModeState, action: { payload: GeolocationPositionError | null }) => {
       return {
         ...state,
         tracking: {
@@ -405,7 +414,7 @@ const goMode = handleActions<GoModeState, any>(
       }
     },
 
-    [SET_TRANSIT_LEG_ENTERED]: (state, action) => ({
+    [SET_TRANSIT_LEG_ENTERED]: (state: GoModeState, action: { payload: number }) => ({
       ...state,
       boardingPrompt: {
         ...state.boardingPrompt,
@@ -413,7 +422,7 @@ const goMode = handleActions<GoModeState, any>(
       }
     }),
 
-    [SHOW_BOARDING_PROMPT]: (state) => ({
+    [SHOW_BOARDING_PROMPT]: (state: GoModeState) => ({
       ...state,
       boardingPrompt: {
         ...state.boardingPrompt,
@@ -421,7 +430,7 @@ const goMode = handleActions<GoModeState, any>(
       }
     }),
 
-    [START_GO_MODE]: (state, action) => {
+    [START_GO_MODE]: (state: GoModeState, action: { payload: { itinerary: Itinerary; originalFrom?: unknown } }) => {
       const { itinerary, originalFrom } = action.payload
 
       return {
@@ -445,7 +454,7 @@ const goMode = handleActions<GoModeState, any>(
       }
     },
 
-    [START_GPS_SIMULATION]: (state, action) => ({
+    [START_GPS_SIMULATION]: (state: GoModeState, action: { payload: { speedMultiplier: number; totalPoints: number } }) => ({
       ...state,
       simulation: {
         pointIndex: 0,
@@ -455,7 +464,7 @@ const goMode = handleActions<GoModeState, any>(
       }
     }),
 
-    [START_ONBOARD_OPTIMIZE]: (state, action) => ({
+    [START_ONBOARD_OPTIMIZE]: (state: GoModeState, action: { payload: { candidates: OnboardCandidate[] } }) => ({
       ...state,
       onboard: {
         ...state.onboard,
@@ -465,7 +474,7 @@ const goMode = handleActions<GoModeState, any>(
       }
     }),
 
-    [START_REROUTE]: (state, action) => ({
+    [START_REROUTE]: (state: GoModeState, action: { payload: { searchId: string } }) => ({
       ...state,
       reRoute: {
         candidate: null,
@@ -478,7 +487,7 @@ const goMode = handleActions<GoModeState, any>(
       ...defaultState
     }),
 
-    [STOP_GPS_SIMULATION]: (state) => ({
+    [STOP_GPS_SIMULATION]: (state: GoModeState) => ({
       ...state,
       simulation: {
         pointIndex: 0,
@@ -488,7 +497,7 @@ const goMode = handleActions<GoModeState, any>(
       }
     }),
 
-    [TOGGLE_MAP_FOLLOW]: (state) => {
+    [TOGGLE_MAP_FOLLOW]: (state: GoModeState) => {
       return {
         ...state,
         ui: {
@@ -498,7 +507,7 @@ const goMode = handleActions<GoModeState, any>(
       }
     },
 
-    [TRANSITION_LEG]: (state, action) => {
+    [TRANSITION_LEG]: (state: GoModeState, action: { payload: { legIndex: number } }) => {
       const { legIndex } = action.payload
 
       return {
@@ -513,7 +522,7 @@ const goMode = handleActions<GoModeState, any>(
       }
     },
 
-    [UPDATE_NEARBY_VEHICLES]: (state, action) => ({
+    [UPDATE_NEARBY_VEHICLES]: (state: GoModeState, action: { payload: NearbyVehicleOption[] }) => ({
       ...state,
       vehicleMatch: {
         ...state.vehicleMatch,
@@ -521,7 +530,7 @@ const goMode = handleActions<GoModeState, any>(
       }
     }),
 
-    [UPDATE_POSITION]: (state, action) => {
+    [UPDATE_POSITION]: (state: GoModeState, action: { payload: GeolocationPosition }) => {
       return {
         ...state,
         tracking: {
@@ -532,21 +541,21 @@ const goMode = handleActions<GoModeState, any>(
       }
     },
 
-    [UPDATE_PROGRESS]: (state, action) => {
+    [UPDATE_PROGRESS]: (state: GoModeState, action: { payload: TripProgress }) => {
       return {
         ...state,
         progress: action.payload
       }
     },
 
-    [UPDATE_ROUTE_MATCH]: (state, action) => {
+    [UPDATE_ROUTE_MATCH]: (state: GoModeState, action: { payload: RouteMatchResult | null }) => {
       return {
         ...state,
         routeMatch: action.payload
       }
     },
 
-    [UPDATE_SIMULATION_PROGRESS]: (state, action) => ({
+    [UPDATE_SIMULATION_PROGRESS]: (state: GoModeState, action: { payload: { pointIndex: number } }) => ({
       ...state,
       simulation: {
         ...state.simulation,
@@ -554,7 +563,7 @@ const goMode = handleActions<GoModeState, any>(
       }
     }),
 
-    [UPDATE_TRACKING_INTERVAL]: (state, action) => {
+    [UPDATE_TRACKING_INTERVAL]: (state: GoModeState, action: { payload: { interval: number } }) => {
       const { interval } = action.payload
 
       return {
@@ -566,7 +575,7 @@ const goMode = handleActions<GoModeState, any>(
       }
     },
 
-    [UPDATE_VEHICLE_MATCH]: (state, action) => ({
+    [UPDATE_VEHICLE_MATCH]: (state: GoModeState, action: { payload: { consecutiveMatches: number; match: VehicleMatchResult | null } }) => ({
       ...state,
       vehicleMatch: {
         ...state.vehicleMatch,

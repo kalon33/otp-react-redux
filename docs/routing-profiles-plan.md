@@ -13,7 +13,7 @@ Make routing "levers" — `walkReluctance`, `bikeReluctance`, **`waitReluctance`
 - `apiV2.js routingQuery` builds `baseQuery` with `...currentQuery` spread (`apiV2.js:1168`), and `generateCombinations` preserves extra keys (`combo => ({ ...params, modes: combo })`). So any key set via `setQueryParam` reaches `generateOtp2Query`.
 - **But** `generateOtp2Query` re-destructures the 5 named levers from `modeSettingValues` and re-assigns them into `variables` — **shadowing** any `currentQuery` value for those 5. New (un-named) levers flow through `...otherOtpQueryParams` cleanly.
 - Runtime query-string override hook: `apiV2.js:1210` uses `config.api.planQuery || query.query`; `main.js:30` wires `config.api.planQuery` from `/tmp/config.js`.
-- GraphQL endpoint: relative `/gtfs/v1` (`apiV2.js:121`); OTP host `https://tre.hopto.org`, basePath `/otp` → `https://tre.hopto.org/otp/gtfs/v1`.
+- GraphQL endpoint: relative `/gtfs/v1` (`apiV2.js:121`); OTP host `https://tree.hopto.org`, basePath `/otp` → `https://tree.hopto.org/otp/gtfs/v1`.
 
 ## Step 0 — Verify OTP server accepts the new args
 Introspect the OTP2 GTFS GraphQL schema to confirm exact top-level `plan(...)` arg names for `waitReluctance`, `transferPenalty`, `minTransferTime`, `bikeSpeed`, `walkBoardCost`. Gate for Step A.

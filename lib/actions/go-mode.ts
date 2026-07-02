@@ -1,6 +1,13 @@
 /* eslint-disable sort-imports-es6-autofix/sort-imports-es6 -- the autofixer is
    non-convergent for this file's mix of value + type relative imports (it keeps
    hoisting a type import above sibling value imports); order is hand-maintained. */
+
+// Type declaration for redux-actions module
+declare module 'redux-actions' {
+  export function createAction<P = any, T extends string = string>(type: T): (payload: P) => { type: T; payload: P }
+  export function createAction<P = any, T extends string = string>(type: T, payloadCreator: (...args: any[]) => P): (...args: any[]) => { type: T; payload: P }
+}
+
 import { createAction } from 'redux-actions'
 import { format, utcToZonedTime } from 'date-fns-tz'
 import coreUtils from '@opentripplanner/core-utils'

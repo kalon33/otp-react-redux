@@ -9,7 +9,7 @@
 api:
   # Use the server's network IP instead of localhost for network access
   # Change this to your server's IP address or hostname
-  host: https://tre.hopto.org
+  host: https://tree.hopto.org
   # Path will be deprecated once the REST API is deprecated, which will be soon.
   # If the OTP server is hosted at /otp, then no path needs to be configured
   path: /otp/routers/default
