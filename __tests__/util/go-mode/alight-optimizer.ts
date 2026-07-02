@@ -41,7 +41,7 @@ const walkItin = (duration: number, walkDistance: number) =>
 
 const candidate = (
   busArrivalEpoch: number,
-  itineraries: any[],
+  itineraries: TestItinerary[],
   extra: { error?: boolean; stopId?: string; stopName?: string } = {}
 ) => ({
   busArrivalEpoch,
