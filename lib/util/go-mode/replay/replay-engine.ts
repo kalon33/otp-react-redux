@@ -37,6 +37,9 @@ interface ReplayFixture {
   }>
   itinerary: any
   meta: { [k: string]: any; endMs: number; startMs: number }
+  // Periodic "alternatives to finish the trip" captured during recording, served
+  // by nearest sim-time so a reroute at moment T yields the alternatives real at T.
+  rerouteSnapshots?: Array<{ request?: any; response: any; tMs: number }>
   routingResponses: Snapshot[]
   schemaVersion: number
   stopTimeSnapshots: Snapshot[]
@@ -47,9 +50,6 @@ interface ReplayFixture {
 let active = false
 let fixture: ReplayFixture | null = null
 let clockMs = 0
-// Reroute responses are consumed in order: each intercepted plan() query serves
-// the next unconsumed ROUTING_RESPONSE captured during the real trip.
-let rerouteCursor = 0
 
 export function isReplayActive(): boolean {
   return active
@@ -72,14 +72,12 @@ export function beginReplay(fx: ReplayFixture): void {
   active = true
   fixture = fx
   clockMs = fx?.meta?.startMs || 0
-  rerouteCursor = 0
 }
 
 export function endReplay(): void {
   active = false
   fixture = null
   clockMs = 0
-  rerouteCursor = 0
 }
 
 /**
@@ -106,6 +104,23 @@ function pickByTime(
   return best
 }
 
+/** Snapshot whose tMs is closest to `now` (before or after). */
+function nearestByTime<T extends { tMs: number }>(
+  arr: T[] | undefined,
+  now: number
+): T | null {
+  let best: T | null = null
+  let bestDist = Infinity
+  for (const s of arr || []) {
+    const d = Math.abs(s.tMs - now)
+    if (d < bestDist) {
+      bestDist = d
+      best = s
+    }
+  }
+  return best
+}
+
 /** Extract the routeId embedded in a vehiclePositions query string. */
 function routeIdFromQuery(query: string): string | null {
   const m = query.match(/route\(\s*id:\s*"([^"]+)"/)
@@ -118,76 +133,78 @@ function tripIdFromQuery(query: string): string | null {
 }
 
 /**
- * Redux thunk that replaces a live OTP GraphQL request during replay. Classifies
- * the query, selects the recorded snapshot for the current sim clock, and
- * dispatches the same responseAction the live path would have. Never throws.
+ * A recorded OTP read resolved for replay. `direct` payloads are already
+ * post-rewrite and are dispatched straight to the responseAction (vehicle
+ * positions / stop times / trip). A `raw` payload is a raw plan response that
+ * must run through the caller's real rewritePayload (so this reroute's own
+ * searchId/combo are stamped in) — see createQueryAction's replayRawResponse.
  */
-export function replayGraphQLResponse({
-  errorAction,
+export type ReplayResolution =
+  | { mode: 'direct'; payload: any }
+  | { mode: 'raw'; payload: any }
+  | { message: string; mode: 'error' }
+
+/**
+ * Classify a replayed OTP GraphQL request and select the recorded data for the
+ * current sim clock. Pure (no dispatch) — the caller acts on the mode.
+ */
+export function resolveReplayQuery({
   query,
-  responseAction,
   variables
 }: {
-  errorAction?: (err: any) => any
   query: string
-  responseAction: (payload: any) => any
   variables: any
-}) {
-  return function (dispatch: any) {
-    const fail = (msg: string) =>
-      errorAction ? dispatch(errorAction(new Error(msg))) : undefined
-    try {
-      if (!fixture) return fail('replay: no fixture loaded')
-      const q = query || ''
+}): ReplayResolution {
+  if (!fixture) return { message: 'replay: no fixture loaded', mode: 'error' }
+  const q = query || ''
 
-      // Vehicle positions — keyed by routeId embedded in the query, chosen by clock.
-      if (q.includes('vehiclePositions')) {
-        const routeId = routeIdFromQuery(q)
-        const snap = pickByTime(
-          fixture.vehicleSnapshots,
-          clockMs,
-          (s) => s.routeId === routeId
-        )
-        // Empty (but well-formed) response if we have no snapshot for this route.
-        return dispatch(
-          responseAction(snap ? snap.payload : { routeId, vehicles: [] })
-        )
-      }
-
-      // Stop-time predictions — keyed by variables.stopId, chosen by clock.
-      if (q.includes('stoptimesForPatterns') || q.includes('StopTimes')) {
-        const stopId = variables?.stopId
-        const snap = pickByTime(
-          fixture.stopTimeSnapshots,
-          clockMs,
-          (s) => s.stopId === stopId
-        )
-        if (snap) return dispatch(responseAction(snap.payload))
-        return fail(`replay: no stop-time snapshot for ${stopId}`)
-      }
-
-      // Onboard "which trip am I on" — keyed by tripId in the query. Checked
-      // before the plan case since a trip query never contains a plan().
-      if (q.includes('trip(')) {
-        const tripId = tripIdFromQuery(q) || variables?.id
-        const snap =
-          (fixture.tripSnapshots || []).find((s) => s.tripId === tripId) ||
-          (fixture.tripSnapshots || [])[0]
-        if (snap) return dispatch(responseAction(snap.payload))
-        return fail(`replay: no trip snapshot for ${tripId}`)
-      }
-
-      // Reroute plan — serve captured ROUTING_RESPONSEs in order, one per
-      // request. During an active Go Mode replay the only remaining OTP reads
-      // (after vehicle/stop-time/trip above) are the reroute plan queries.
-      const next = (fixture.routingResponses || [])[rerouteCursor]
-      if (next) {
-        rerouteCursor++
-        return dispatch(responseAction(next.payload))
-      }
-      return fail('replay: no reroute snapshot available')
-    } catch (e) {
-      return fail(`replay: ${(e as Error).message}`)
+  // Vehicle positions — keyed by routeId embedded in the query, chosen by clock.
+  if (q.includes('vehiclePositions')) {
+    const routeId = routeIdFromQuery(q)
+    const snap = pickByTime(
+      fixture.vehicleSnapshots,
+      clockMs,
+      (s) => s.routeId === routeId
+    )
+    // Empty (but well-formed) response if we have no snapshot for this route.
+    return {
+      mode: 'direct',
+      payload: snap ? snap.payload : { routeId, vehicles: [] }
     }
   }
+
+  // Stop-time predictions — keyed by variables.stopId, chosen by clock.
+  if (q.includes('stoptimesForPatterns') || q.includes('StopTimes')) {
+    const stopId = variables?.stopId
+    const snap = pickByTime(
+      fixture.stopTimeSnapshots,
+      clockMs,
+      (s) => s.stopId === stopId
+    )
+    if (snap) return { mode: 'direct', payload: snap.payload }
+    return {
+      message: `replay: no stop-time snapshot for ${stopId}`,
+      mode: 'error'
+    }
+  }
+
+  // Onboard "which trip am I on" — keyed by tripId. Checked before the plan case
+  // since a trip query never contains a plan().
+  if (q.includes('trip(')) {
+    const tripId = tripIdFromQuery(q) || variables?.id
+    const snap =
+      (fixture.tripSnapshots || []).find((s) => s.tripId === tripId) ||
+      (fixture.tripSnapshots || [])[0]
+    if (snap) return { mode: 'direct', payload: snap.payload }
+    return { message: `replay: no trip snapshot for ${tripId}`, mode: 'error' }
+  }
+
+  // Reroute plan — the only remaining OTP read during an active replay. Serve
+  // the periodic reroute snapshot NEAREST the sim clock as a RAW response, so
+  // "Find another way" at moment T yields the alternatives captured nearest T,
+  // re-run through the caller's rewritePayload (which stamps this reroute's
+  // searchId — a direct dispatch would land under the wrong searchId).
+  const snap = nearestByTime(fixture.rerouteSnapshots, clockMs)
+  if (snap) return { mode: 'raw', payload: snap.response }
+  return { message: 'replay: no reroute snapshot available', mode: 'error' }
 }

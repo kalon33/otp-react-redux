@@ -44,9 +44,11 @@ import {
   isReplayActive,
   setReplayClock
 } from '../util/go-mode/replay/replay-engine'
+import { isTripRecordingEnabled } from '../util/debug-log'
 
 import {
   fetchOnboardCandidatePlan,
+  fetchRerouteSnapshotPlan,
   findRoutesNearby,
   findStopTimesForStop,
   findTrip,
@@ -63,6 +65,13 @@ let gpsPollingIntervalId: ReturnType<typeof setInterval> | null = null
 
 // Module-scoped vehicle position polling interval ID
 let vehiclePositionIntervalId: ReturnType<typeof setInterval> | null = null
+
+// Reroute-snapshot capture interval (recording only). Periodically records the
+// "alternatives to finish the trip" as a request/response pair so a replay can
+// surface them by timestamp for debugging. See captureRerouteSnapshot.
+let rerouteSnapshotIntervalId: ReturnType<typeof setInterval> | null = null
+// How often to capture; each tick is a real isolated plan() call.
+const REROUTE_SNAPSHOT_INTERVAL_MS = 90000
 
 // Module-scoped visibilitychange handler for cleanup
 let visibilityChangeHandler: (() => void) | null = null
@@ -123,6 +132,7 @@ export const CLEAR_VEHICLE_MATCH = 'CLEAR_VEHICLE_MATCH'
 export const CONFIRM_VEHICLE = 'CONFIRM_VEHICLE'
 export const DISMISS_BOARDING_PROMPT = 'DISMISS_BOARDING_PROMPT'
 export const PAUSE_GPS_SIMULATION = 'PAUSE_GPS_SIMULATION'
+export const REROUTE_SNAPSHOT = 'REROUTE_SNAPSHOT'
 export const RESUME_GPS_SIMULATION = 'RESUME_GPS_SIMULATION'
 export const SET_DEPARTURE_OVERRIDE = 'SET_DEPARTURE_OVERRIDE'
 export const SET_NOTIFICATION_CONFIG = 'SET_NOTIFICATION_CONFIG'
@@ -330,6 +340,12 @@ export function startGoModeTracking(
       return
     }
 
+    // Recording sessions only: periodically capture the "alternatives to finish
+    // the trip" as request/response pairs for later replay/debugging.
+    if (isTripRecordingEnabled()) {
+      startRerouteSnapshotCapture(dispatch)
+    }
+
     // Check geolocation permission — if denied, still allow simulation
     let geoDenied = false
     if ('permissions' in navigator) {
@@ -373,6 +389,9 @@ export function endGoMode() {
       clearInterval(vehiclePositionIntervalId)
       vehiclePositionIntervalId = null
     }
+
+    // Stop reroute-snapshot capture (recording sessions)
+    stopRerouteSnapshotCapture()
 
     // Clean up visibilitychange listener
     if (visibilityChangeHandler) {
@@ -469,6 +488,100 @@ export function reRouteFromCurrentPosition(
 
     // Reuse the normal search pipeline; results populate searches[searchId].
     dispatch(setQueryParam(payload, searchId))
+  }
+}
+
+/**
+ * Record the current "alternatives to finish the trip" as a self-contained
+ * request/response pair (recording only). Fires an ISOLATED plan from the rider's
+ * current position → final destination — no UI/currentQuery side effects, like
+ * the onboard alight optimizer — and dispatches REROUTE_SNAPSHOT, which the
+ * debug-log captures in full. On replay these are served by nearest timestamp, so
+ * "Find another way" at any moment yields the alternatives real at that moment.
+ * The recorded `request` (query+variables) is also what a future primed-OTP
+ * re-issues to reproduce the response. Best-effort; never disrupts the trip.
+ */
+export function captureRerouteSnapshot() {
+  return async function (dispatch: any, getState: any) {
+    const state = getState()
+    const goMode = state.otp?.goMode
+    const itinerary: Itinerary | null = goMode?.activeItinerary
+    const lastPosition: GeolocationPosition | null =
+      goMode?.tracking?.lastPosition
+    const legs = itinerary?.legs || []
+    const destLeg = legs[legs.length - 1]
+    // Need a real position and destination — never fabricate either.
+    if (!itinerary || !lastPosition || !destLeg) return
+
+    const { homeTimezone } = state.otp.config
+    const { modes, modeSettings, numItineraries } = getBasePlanParts(state)
+    const routingPreferences = state.otp.currentQuery?.routingPreferences
+    const zoned = utcToZonedTime(getCurrentTime().getTime(), homeTimezone)
+    const from = {
+      lat: lastPosition.coords.latitude,
+      lon: lastPosition.coords.longitude,
+      name: 'Current location'
+    }
+    const to = {
+      lat: destLeg.to.lat,
+      lon: destLeg.to.lon,
+      name: destLeg.to.name
+    }
+    const combo = {
+      arriveBy: false,
+      date: format(zoned, coreUtils.time.OTP_API_DATE_FORMAT),
+      from,
+      modes,
+      modeSettings,
+      numItineraries,
+      routingPreferences,
+      time: format(zoned, coreUtils.time.OTP_API_TIME_FORMAT),
+      to
+    }
+
+    try {
+      const { query, response, variables } = await dispatch(
+        fetchRerouteSnapshotPlan(combo)
+      )
+      dispatch({
+        payload: {
+          request: { departArrive: 'NOW', from, modes, query, to, variables },
+          response,
+          tMs: getCurrentTime().getTime()
+        },
+        type: REROUTE_SNAPSHOT
+      })
+    } catch {
+      // best-effort — never disrupt the trip
+    }
+  }
+}
+
+/**
+ * Start periodic reroute-snapshot capture (recording sessions only). Cadence is
+ * the knob (each tick is a real plan() call); overridable via
+ * localStorage.otpRerouteSnapshotMs for testing.
+ */
+function startRerouteSnapshotCapture(dispatch: any) {
+  if (rerouteSnapshotIntervalId) return
+  let intervalMs = REROUTE_SNAPSHOT_INTERVAL_MS
+  try {
+    const override = Number(
+      window.localStorage?.getItem('otpRerouteSnapshotMs')
+    )
+    if (override > 0) intervalMs = override
+  } catch {
+    // ignore
+  }
+  rerouteSnapshotIntervalId = setInterval(() => {
+    dispatch(captureRerouteSnapshot())
+  }, intervalMs)
+}
+
+function stopRerouteSnapshotCapture() {
+  if (rerouteSnapshotIntervalId) {
+    clearInterval(rerouteSnapshotIntervalId)
+    rerouteSnapshotIntervalId = null
   }
 }
 
