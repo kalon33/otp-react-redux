@@ -44,6 +44,28 @@ export interface NearbyVehicleOption {
 
 // --- Functions ---
 
+// How stale a GTFS-RT vehicle position is assumed to be, worst case. Feeds are
+// polled every 10-30s and carry their own reporting latency; a rider moving at
+// speed v can legitimately be up to v * LAG ahead of "their" vehicle's last
+// reported position.
+const FEED_LAG_SECONDS = 45
+// Never widen past this — beyond it "nearby" stops meaning anything.
+const MAX_ADJUSTED_RADIUS_METERS = 2500
+
+/**
+ * Widen a proximity radius by how far the rider outruns the realtime feed. A
+ * stationary rider keeps the tight base radius; on a moving bus (e.g. freeway
+ * BRT at ~27 m/s) the radius grows so the lagging vehicle position still
+ * matches. Speed comes from the GPS fix and may be null/NaN → base radius.
+ */
+export function speedAdjustedRadius(
+  baseMeters: number,
+  speedMps: number | null | undefined
+): number {
+  const v = typeof speedMps === 'number' && speedMps > 0 ? speedMps : 0
+  return Math.min(baseMeters + v * FEED_LAG_SECONDS, MAX_ADJUSTED_RADIUS_METERS)
+}
+
 /**
  * Find vehicles within a given radius of the user, sorted by distance.
  */
@@ -82,7 +104,8 @@ function headingDifference(h1: number, h2: number): number {
  * Attempt to match the user to a specific vehicle.
  *
  * Algorithm:
- * 1. Filter vehicles within 80m proximity
+ * 1. Filter vehicles within `proximityMeters` (default 80m; callers widen it
+ *    via speedAdjustedRadius when the rider is moving — see feed-lag note)
  * 2. Prefer vehicles on the expected route (patternId contains routeId)
  * 3. Use heading correlation as tiebreaker
  * 4. Boost confidence if same vehicle matched consecutively (via previousMatch)
@@ -93,7 +116,8 @@ export function matchUserToVehicle(
   userHeading: number | null,
   vehicles: VehiclePosition[],
   expectedRouteId: string | null,
-  previousMatch: VehicleMatchResult | null
+  previousMatch: VehicleMatchResult | null,
+  proximityMeters = 80
 ): VehicleMatchResult {
   const noMatch: VehicleMatchResult = {
     confidence: 'none',
@@ -105,13 +129,13 @@ export function matchUserToVehicle(
 
   if (!vehicles || vehicles.length === 0) return noMatch
 
-  // Phase 1: Proximity filter — 80m
+  // Phase 1: Proximity filter
   const nearby = vehicles
     .map((v) => ({
       distance: calculateDistance(userLat, userLon, v.lat, v.lon),
       vehicle: v
     }))
-    .filter((v) => v.distance <= 80)
+    .filter((v) => v.distance <= proximityMeters)
     .sort((a, b) => a.distance - b.distance)
 
   if (nearby.length === 0) return noMatch

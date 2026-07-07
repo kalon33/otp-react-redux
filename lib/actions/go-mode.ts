@@ -23,7 +23,8 @@ import {
 import {
   findNearbyVehicles,
   matchUserToVehicle,
-  shouldShowBoardingPrompt
+  shouldShowBoardingPrompt,
+  speedAdjustedRadius
 } from '../util/go-mode/vehicle-matching'
 import { getRoutingProfile } from '../util/routing-profiles'
 import {
@@ -666,7 +667,12 @@ export function discoverNearbyVehicles(attempt = 0) {
     const allVehicles = routes.flatMap(
       (r: { id: string }) => routesIndex[r.id]?.vehicles || []
     )
-    const nearby = findNearbyVehicles(lat, lon, allVehicles, 750)
+    const nearby = findNearbyVehicles(
+      lat,
+      lon,
+      allVehicles,
+      speedAdjustedRadius(750, pos.coords.speed)
+    )
 
     dispatch({ payload: nearby, type: UPDATE_NEARBY_VEHICLES })
     dispatch(setOnboardStatus('awaiting-selection'))
@@ -1341,13 +1347,18 @@ export function performVehicleMatching(routeId: string) {
     // Skip matching if already user-confirmed
     if (previousMatch?.confidence === 'confirmed') return
 
+    // Widen the match radius by rider speed: on a moving bus the GTFS-RT
+    // position lags behind the rider (freeway BRT can outrun the feed by
+    // several hundred meters), so fixed walking-scale radii never match.
+    const riderSpeed = userPos.coords.speed
     const matchResult = matchUserToVehicle(
       userPos.coords.latitude,
       userPos.coords.longitude,
       userPos.coords.heading,
       vehicles,
       routeId,
-      previousMatch
+      previousMatch,
+      speedAdjustedRadius(80, riderSpeed)
     )
 
     // Track consecutive matches
@@ -1368,12 +1379,12 @@ export function performVehicleMatching(routeId: string) {
       type: UPDATE_VEHICLE_MATCH
     })
 
-    // Update nearby vehicles for boarding prompt
+    // Update nearby vehicles for boarding prompt (same speed widening)
     const nearby = findNearbyVehicles(
       userPos.coords.latitude,
       userPos.coords.longitude,
       vehicles,
-      200
+      speedAdjustedRadius(200, riderSpeed)
     )
     dispatch({ payload: nearby, type: UPDATE_NEARBY_VEHICLES })
 
