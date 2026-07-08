@@ -852,6 +852,87 @@ components:
     switcher: Switcher
   WelcomeScreen:
     prompt: Where do you want to go?
+  GoMode:
+    alightSummary: "Get off at {stop} in {time}"
+    arrivesIn: "Arrives in {time}"
+    arrivingSoon: Arriving soon
+    boardingQuestion: Are you on the bus?
+    boardingSubtitle: Looking for {route} nearby
+    busLabel: "Bus #{label}"
+    busLabelHeadsign: "Bus #{label} → {headsign}"
+    changeBus: Change bus
+    confirmExit: Are you sure you want to stop tracking this trip?
+    couldNotWorkOutBus: "Couldn't work out your bus. Try again?"
+    departsIn: Departs in {time}
+    errorPermissionDenied: Location permission denied. Please enable location access in your browser settings.
+    errorTimeout: GPS signal timed out. Please ensure you are in an area with GPS coverage.
+    errorUnavailable: Unable to determine your location. Please check your device settings.
+    estimatedArrival: Estimated Arrival
+    findAnotherWay: Find another way
+    findAnotherWayToggle: "Find another way ▼"
+    findingBestStop: Finding the best stop to get off…
+    findingYourBus: Finding your bus…
+    getOffAt: Get off at {stop}
+    getOffAtTime: Off at {time}
+    getReady: "⚠️ Get Ready - 2 stops away"
+    getReadyNow: "🔴 GET READY! Next stop is yours!"
+    gpsError: GPS signal lost. Trying to reconnect...
+    gpsErrorTitle: GPS Error
+    header:
+      getOffAt: Get off at {stop}
+      getOffAtTime: Off at {time}
+      nextDeparture: Next Departure
+      routeDepartsIn: "{route} in {time}"
+    hurryWarning: Hurry! You may miss the bus
+    locatingBus: Locating your bus...
+    loading: Starting Trip...
+    loadingSchedule: Loading the schedule for your bus…
+    minutesRemaining: "{mins} min"
+    hoursMinutesRemaining: "{hours}h {mins}m"
+    nextDeparture: "Next: {time} ({mins} min away)"
+    nextLegTransit: Board {route}
+    nextLegWalk: Walk to {destination}
+    noBusesDetected: No buses detected nearby
+    noLiveBusDetected: "No live bus detected — pick your route:"
+    noBusesNearby: No buses detected nearby
+    notYet: Not yet
+    onTheBus: On the bus
+    onboardCancel: Cancel
+    onboardError: "Couldn't work out your bus. Try again?"
+    onboardTitle: Board Vehicle
+    onBus: On Bus #{label}
+    pickYourBus: "Which bus are you on? Pick it below."
+    pickYourRoute: Pick your route
+    remaining: remaining
+    rideToStop: "{emoji} {time} ride to {stop}"
+    routeOption: Route {route}
+    rerouteFound: Alternative route
+    rerouteKeep: Keep current
+    rerouteNone: No better route right now
+    rerouteNlError: "Couldn't read that — try again."
+    rerouteNlLabel: Describe what you need
+    rerouteNlPlaceholder: e.g. avoid stairs today
+    rerouteNlSend: Go
+    rerouteOk: OK
+    rerouteSearching: Finding a better route…
+    rerouteSummary: "{minutes} min · {transfers, plural, one {# transfer} other {# transfers}} · {walk} m walk"
+    rerouteSwitch: Switch
+    resetToPlanned: Reset to planned
+    retry: Retry
+    selectVehicle: This one
+    startGuidance: Start guidance
+    stayOnUntil: Stay on until {stop}
+    stopsRemainingCompact: "{count, plural, one {1 stop} other {# stops}} remaining"
+    theBus: the bus
+    toStop: "{emoji} To {stop}"
+    trackingBus: Tracking Bus #{label}
+    upNext: Up Next
+    useThisDeparture: Use this
+    vehicleDetail: "Next stop: {stop} - {distance}m away"
+    vehicleDistance: "{distance}m away"
+    walkToStop: "{emoji} {time} walk to {stop}"
+    waitingGPS: Acquiring GPS signal...
+    deviationWarning: "{distance}m from route"
 config:
   accessModes:
     car_hail: Ride Hail

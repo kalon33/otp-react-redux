@@ -897,6 +897,87 @@ components:
     switcher: Sélecteur de vues
   WelcomeScreen:
     prompt: Où désirez-vous aller ?
+  GoMode:
+    alightSummary: "Descendez à {stop} dans {time}"
+    arrivesIn: "Arrivée dans {time}"
+    arrivingSoon: Arrivée imminente
+    boardingQuestion: Êtes-vous dans le bus ?
+    boardingSubtitle: Recherche de {route} à proximité
+    busLabel: "Bus n°{label}"
+    busLabelHeadsign: "Bus n°{label} → {headsign}"
+    changeBus: Changer de bus
+    confirmExit: Êtes-vous sûr de vouloir arrêter le suivi de ce trajet ?
+    couldNotWorkOutBus: "Impossible de déterminer votre bus. Essayez à nouveau ?"
+    departsIn: Départ dans {time}
+    errorPermissionDenied: Permission de localisation refusée. Veuillez activer l'accès à la localisation dans les paramètres de votre navigateur.
+    errorTimeout: Le signal GPS a expiré. Veuillez vous assurer d'être dans une zone couverte par le GPS.
+    errorUnavailable: Impossible de déterminer votre position. Veuillez vérifier les paramètres de votre appareil.
+    estimatedArrival: Arrivée estimée
+    findAnotherWay: Trouver un autre itinéraire
+    findAnotherWayToggle: "Trouver un autre itinéraire ▼"
+    findingBestStop: Recherche du meilleur arrêt…
+    findingYourBus: Recherche de votre bus…
+    getOffAt: Descendez à {stop}
+    getOffAtTime: Descente à {time}
+    getReady: "⚠️ Préparez-vous - 2 arrêts plus loin"
+    getReadyNow: "🔴 PRÊT ! Le prochain arrêt est le vôtre !"
+    gpsError: Signal GPS perdu. Tentative de reconnexion...
+    gpsErrorTitle: Erreur GPS
+    header:
+      getOffAt: Descendez à {stop}
+      getOffAtTime: Descente à {time}
+      nextDeparture: Prochain départ
+      routeDepartsIn: "{route} dans {time}"
+    hurryWarning: Dépêchez-vous ! Vous pourriez rater le bus
+    locatingBus: Localisation de votre bus...
+    loading: Début du trajet...
+    loadingSchedule: Chargement de l'horaire…
+    minutesRemaining: "{mins} min"
+    hoursMinutesRemaining: "{hours}h {mins}m"
+    nextDeparture: "Prochain : {time} ({mins} min)"
+    nextLegTransit: Montez à bord de {route}
+    nextLegWalk: Marchez jusqu'à {destination}
+    noBusesDetected: Aucun bus détecté à proximité
+    noLiveBusDetected: "Aucun bus en direct détecté — choisissez votre itinéraire :"
+    noBusesNearby: Aucun bus détecté à proximité
+    notYet: Pas encore
+    onTheBus: Dans le bus
+    onboardCancel: Annuler
+    onboardError: "Impossible de déterminer votre bus. Essayez à nouveau ?"
+    onboardTitle: Monter dans le véhicule
+    onBus: Dans le bus n°{label}
+    pickYourBus: "Sur quel bus êtes-vous ? Sélectionnez-le ci-dessous."
+    pickYourRoute: Choisissez votre itinéraire
+    remaining: restant
+    rideToStop: "{emoji} {time} de trajet jusqu'à {stop}"
+    routeOption: Itinéraire {route}
+    rerouteFound: Itinéraire alternatif
+    rerouteKeep: Garder l'itinéraire actuel
+    rerouteNone: Aucun meilleur itinéraire pour le moment
+    rerouteNlError: "Impossible de comprendre — essayez à nouveau."
+    rerouteNlLabel: Décrivez ce dont vous avez besoin
+    rerouteNlPlaceholder: ex. éviter les escaliers aujourd'hui
+    rerouteNlSend: Aller
+    rerouteOk: OK
+    rerouteSearching: Recherche d'un meilleur itinéraire…
+    rerouteSummary: "{minutes} min · {transfers, plural, one {# correspondance} other {# correspondances}} · {walk} m à pied"
+    rerouteSwitch: Changer
+    resetToPlanned: Réinitialiser à l'itinéraire prévu
+    retry: Réessayer
+    selectVehicle: Celui-ci
+    startGuidance: Commencer le guidage
+    stayOnUntil: Restez jusqu'à {stop}
+    stopsRemainingCompact: "{count, plural, one {1 arrêt} other {# arrêts}} restant"
+    theBus: le bus
+    toStop: "{emoji} Jusqu'à {stop}"
+    trackingBus: Suivi du bus n°{label}
+    upNext: Prochaine étape
+    useThisDeparture: Utiliser celui-ci
+    vehicleDetail: "Prochain arrêt : {stop} - à {distance}m"
+    vehicleDistance: "à {distance}m"
+    walkToStop: "{emoji} {time} de marche jusqu'à {stop}"
+    waitingGPS: Acquisition du signal GPS…
+    deviationWarning: "à {distance}m de l'itinéraire"
 config:
   accessModes:
     car_hail: Course en voiture
