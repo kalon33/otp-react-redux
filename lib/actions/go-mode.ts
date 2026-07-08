@@ -46,6 +46,11 @@ import {
   setReplayClock
 } from '../util/go-mode/replay/replay-engine'
 import { isTripRecordingEnabled } from '../util/debug-log'
+import {
+  hasNativeGps,
+  startNativeGps,
+  stopNativeGps
+} from '../util/go-mode/native-gps'
 
 import {
   fetchOnboardCandidatePlan,
@@ -384,6 +389,10 @@ export function endGoMode() {
       clearInterval(gpsPollingIntervalId)
       gpsPollingIntervalId = null
     }
+
+    // Stop the native background-location stream (iOS shell) — ends the blue
+    // location indicator and the battery draw between trips.
+    stopNativeGps()
 
     // Clean up vehicle position polling
     if (vehiclePositionIntervalId) {
@@ -1027,6 +1036,21 @@ export function confirmOnboardAlightStop() {
  */
 export function startPositionTracking() {
   return function (dispatch: any, getState: any) {
+    // Native iOS shell: a continuous background-location stream replaces the
+    // browser poll entirely. It keeps delivering fixes with the screen locked
+    // (the whole reason the shell exists) at ~1/s — see native-gps.ts.
+    if (hasNativeGps()) {
+      startNativeGps(
+        (position) => {
+          if (!simulationActive) dispatch(handlePositionUpdate(position))
+        },
+        (error) => {
+          if (!simulationActive) dispatch(setTrackingError(error as any))
+        }
+      )
+      return
+    }
+
     if (!('geolocation' in navigator)) {
       dispatch(
         setTrackingError({

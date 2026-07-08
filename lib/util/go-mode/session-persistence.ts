@@ -15,6 +15,14 @@ const GO_MODE_SESSION_KEY = 'goModeSession'
 const MAX_SESSION_AGE_MS = 3 * 60 * 60 * 1000
 
 /**
+ * Grace past the itinerary's SCHEDULED end before a trip counts as over. Real
+ * trips outlive their schedule constantly (delays, boarding an earlier/later
+ * run of the same route) — dropping the saved session the moment scheduled
+ * endTime passed stranded a rider who reloaded while still riding.
+ */
+const END_TIME_GRACE_MS = 45 * 60 * 1000
+
+/**
  * The durable parts of a Go Mode trip — enough to drop the rider back into live
  * tracking after a reload. GPS-derived state (tracking/progress/simulation) is
  * intentionally omitted; it recomputes once location resumes.
@@ -97,7 +105,8 @@ export function loadGoModeSession(): GoModeSession | null {
     typeof session.startedAt !== 'number' ||
     now - session.startedAt > MAX_SESSION_AGE_MS
   const endTime = session.activeItinerary.endTime
-  const alreadyEnded = typeof endTime === 'number' && endTime < now
+  const alreadyEnded =
+    typeof endTime === 'number' && endTime + END_TIME_GRACE_MS < now
 
   if (tooOld || alreadyEnded) {
     clearGoModeSession()

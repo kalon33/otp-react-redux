@@ -97,10 +97,27 @@ const TransitProgress = ({ leg, onExit, progress, vehicleMatch }: Props) => {
             vehicleMatch?.confidence !== 'confirmed' &&
             leg.transitLeg && (
               <LocatingIndicator>
-                {intl.formatMessage({
-                  defaultMessage: 'Locating your bus...',
-                  id: 'components.GoMode.locatingBus'
-                })}
+                {typeof leg.startTime === 'number' && leg.startTime > Date.now()
+                  ? // Before the leg's scheduled start the vehicle usually is
+                    // not broadcasting AT ALL yet — an endless "Locating…"
+                    // reads as a bug. Say what is actually happening.
+                    intl.formatMessage(
+                      {
+                        defaultMessage:
+                          'Bus not broadcasting yet — scheduled {time}',
+                        id: 'components.GoMode.busNotBroadcasting'
+                      },
+                      {
+                        time: intl.formatTime(leg.startTime, {
+                          hour: 'numeric',
+                          minute: '2-digit'
+                        })
+                      }
+                    )
+                  : intl.formatMessage({
+                      defaultMessage: 'Locating your bus...',
+                      id: 'components.GoMode.locatingBus'
+                    })}
               </LocatingIndicator>
             )}
         </div>
