@@ -92,6 +92,7 @@ function BatchSettings({
   // @ts-expect-error Context not typed
   const { ModeIcon } = useContext(ComponentContext)
 
+  // Ensure each mode button has a unique key
   const processedModeButtons = modeButtonOptions.map(
     pipe(addModeButtonIcon(ModeIcon), setModeButtonEnabled(enabledModeButtons))
   )
@@ -192,9 +193,10 @@ const mapStateToProps = (state: any) => {
   const { homeTimezone, modes } = state.otp.config
   const { departArrive } = state.otp.currentQuery
   const { loggedInUser } = state.user
+  const activeSearch = getActiveSearch(state)
   const defaultEnabledModeButtons = getDefaultModeButtons(state)
   return {
-    activeSearch: getActiveSearch(state),
+    activeSearch,
     currentQuery: state.otp.currentQuery,
     departArrive,
     // TODO: Duplicated in apiv2.js
