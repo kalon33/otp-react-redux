@@ -403,6 +403,17 @@ const AdvancedSettingsPanel = ({
       setNlStatus('error')
     }
   }, [applyPreferencesFromText, nlText])
+
+  // Create dropdown options with translated labels
+  const routingProfileOptions = useMemo(
+    () =>
+      ROUTING_PROFILES.map((profile) => ({
+        text: intl.formatMessage({ id: profile.label }),
+        value: profile.id
+      })),
+    [intl]
+  )
+
   return (
     <PanelOverlay className="advanced-settings" ref={innerRef}>
       <HeaderContainer>
@@ -426,10 +437,7 @@ const AdvancedSettingsPanel = ({
           })}
           name="routingProfile"
           onChange={onRoutingProfileChange}
-          options={ROUTING_PROFILES.map((profile) => ({
-            text: profile.label,
-            value: profile.id
-          }))}
+          options={routingProfileOptions}
           value={currentQuery.activeProfileId || DEFAULT_PROFILE_ID}
         />
       </RoutingProfileContainer>

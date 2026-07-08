@@ -44,10 +44,10 @@ import GoModeNotifications from './GoModeNotifications'
 
 // Quick mid-trip re-route options; each maps to a pre-built routing profile.
 const REROUTE_CHIPS = [
-  { label: 'Less walking', profileId: 'minimize-walking' },
-  { label: 'Fewer transfers', profileId: 'stay-seated' },
-  { label: 'Avoid biking', profileId: 'avoid-biking' },
-  { label: 'Fastest', profileId: 'fastest' }
+  { labelId: 'config.routingProfiles.minimize-walking.label', profileId: 'minimize-walking' },
+  { labelId: 'config.routingProfiles.stay-seated.label', profileId: 'stay-seated' },
+  { labelId: 'config.routingProfiles.avoid-biking.label', profileId: 'avoid-biking' },
+  { labelId: 'config.routingProfiles.fastest.label', profileId: 'fastest' }
 ]
 
 interface Props {
@@ -352,7 +352,7 @@ const GoModeScreen = ({
                     onClick={() => handleRerouteChip(chip.profileId)}
                     type="button"
                   >
-                    {chip.label}
+                    {intl.formatMessage({ id: chip.labelId })}
                   </RerouteChip>
                 ))}
               </RerouteChips>

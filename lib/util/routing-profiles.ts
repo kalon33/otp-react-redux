@@ -5,7 +5,7 @@
  * (bike/walk reluctance + speeds, wheelchair) are already declared in the
  * default planQuery; the rest (waitReluctance, transferPenalty, minTransferTime,
  * walkBoardCost, bikeSpeed) require the extended planQuery to actually take
- * effect — until then OTP ignores them as undeclared variables.
+ * effect  until then OTP ignores them as undeclared variables.
  *
  * Values are always clamped to a sane range before reaching OTP so that a
  * profile, a manual override, or a Claude-generated suggestion can never send a
@@ -52,47 +52,49 @@ export interface RoutingProfile {
 export const DEFAULT_PROFILE_ID = 'fastest'
 
 /**
- * Pre-built profiles. Edit/extend these freely — switching or tuning a profile
+ * Pre-built profiles. Edit/extend these freely  switching or tuning a profile
  * is a runtime action (it sets currentQuery.routingPreferences), so changing
  * values here is the only part that needs a rebuild.
+ *
+ * The label and description strings are translation IDs that will be looked up
+ * from the i18n files under config.routingProfiles.{id}.label and
+ * config.routingProfiles.{id}.description
  */
 export const ROUTING_PROFILES: RoutingProfile[] = [
   {
-    description: 'Balanced — uses the routing engine defaults.',
+    description: 'config.routingProfiles.fastest.description',
     id: 'fastest',
-    label: 'Fastest',
+    label: 'config.routingProfiles.fastest.label',
     prefs: {}
   },
   {
-    description: 'Favors itineraries with the least walking.',
+    description: 'config.routingProfiles.minimize-walking.description',
     id: 'minimize-walking',
-    label: 'Minimize walking',
+    label: 'config.routingProfiles.minimize-walking.label',
     prefs: { walkReluctance: 8 }
   },
   {
-    description:
-      'Prefers staying on one vehicle over transferring or waiting at stops.',
+    description: 'config.routingProfiles.stay-seated.description',
     id: 'stay-seated',
-    label: 'Stay seated (fewest transfers)',
+    label: 'config.routingProfiles.stay-seated.label',
     prefs: { transferPenalty: 600, waitReluctance: 4 }
   },
   {
-    description: 'Leans on biking; favors bike + transit combinations.',
+    description: 'config.routingProfiles.bike-forward.description',
     id: 'bike-forward',
-    label: 'Bike-forward',
+    label: 'config.routingProfiles.bike-forward.label',
     prefs: { bikeReluctance: 0.6, bikeSpeed: 5.5 }
   },
   {
-    description: 'Avoids biking in favor of walking and transit.',
+    description: 'config.routingProfiles.avoid-biking.description',
     id: 'avoid-biking',
-    label: 'Avoid biking',
+    label: 'config.routingProfiles.avoid-biking.label',
     prefs: { bikeReluctance: 8 }
   },
   {
-    description:
-      'Builds in extra transfer buffer for more reliable connections.',
+    description: 'config.routingProfiles.reliable-transfers.description',
     id: 'reliable-transfers',
-    label: 'Reliable transfers',
+    label: 'config.routingProfiles.reliable-transfers.label',
     prefs: { minTransferTime: 300, transferPenalty: 180 }
   }
 ]

@@ -989,6 +989,25 @@ components:
 config:
   accessModes:
     car_hail: Course en voiture
+  routingProfiles:
+    fastest:
+      label: Plus rapide
+      description: Équilibré — utilise les paramètres par défaut du moteur d'itinéraire.
+    minimize-walking:
+      label: Minimiser la marche
+      description: Privilégie les itinéraires avec le moins de marche.
+    stay-seated:
+      label: Rester assis (moins de correspondances)
+      description: Préfère rester dans un même véhicule plutôt que de changer ou d'attendre aux arrêts.
+    bike-forward:
+      label: Privilégier le vélo
+      description: Favorise le vélo ; privilégie les combinaisons vélo + transports.
+    avoid-biking:
+      label: Éviter le vélo
+      description: Évite le vélo au profit de la marche et des transports.
+    reliable-transfers:
+      label: Correspondances fiables
+      description: Intègre une marge supplémentaire pour des correspondances plus fiables.
   flex:
     both: Plus de détails au bas de l'itinéraire
     call-ahead: Appelez pour réserver

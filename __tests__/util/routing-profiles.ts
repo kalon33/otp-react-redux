@@ -34,7 +34,7 @@ describe('routing-profiles', () => {
   describe('getRoutingProfile', () => {
     it('returns a known profile', () => {
       expect(getRoutingProfile('stay-seated')?.label).toBe(
-        'Stay seated (fewest transfers)'
+        'config.routingProfiles.stay-seated.label'
       )
     })
 

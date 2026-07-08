@@ -936,6 +936,25 @@ components:
 config:
   accessModes:
     car_hail: Ride Hail
+  routingProfiles:
+    fastest:
+      label: Fastest
+      description: Balanced — uses the routing engine defaults.
+    minimize-walking:
+      label: Minimize walking
+      description: Favors itineraries with the least walking.
+    stay-seated:
+      label: Stay seated (fewest transfers)
+      description: Prefers staying on one vehicle over transferring or waiting at stops.
+    bike-forward:
+      label: Bike-forward
+      description: Leans on biking; favors bike + transit combinations.
+    avoid-biking:
+      label: Avoid biking
+      description: Avoids biking in favor of walking and transit.
+    reliable-transfers:
+      label: Reliable transfers
+      description: Builds in extra transfer buffer for more reliable connections.
   flex:
     both: See bottom of itinerary for details
     call-ahead: Call to reserve
