@@ -358,6 +358,7 @@ components:
     originallyScheduledTime: (initialement {originalTime})
     singleModeItineraryDescription: Trajet de {time} {mode}
     timeWalking: "{time} de marche"
+    startTrip: Commencer le trajet
   MobilityProfile:
     DevicesPane:
       devices:

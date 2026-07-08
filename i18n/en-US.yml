@@ -334,6 +334,7 @@ components:
     originallyScheduledTime: (originally {originalTime})
     singleModeItineraryDescription: "{time} {mode} itinerary"
     timeWalking: "{time} walking"
+    startTrip: Start Trip
   MobilityProfile:
     DevicesPane:
       devices:
