@@ -231,6 +231,14 @@ components:
     logInToSetDefault: Connectez-vous pour définir ces options par défaut
     modeSelectorLabel: Sélectionnez un mode de déplacement
     moreOptions: Plus d'options
+    nlPreferencesApplied: "Appliqué : {summary}"
+    nlPreferencesApply: Appliquer
+    nlPreferencesError: "Impossible de comprendre cela — essayez de reformuler."
+    nlPreferencesHeader: Décrivez vos besoins
+    nlPreferencesLoading: Réflexion en cours…
+    nlPreferencesPlaceholder: ex. genou douloureux aujourd'hui, éviter les correspondances
+    routingProfileHeader: Profil d'itinéraire
+    routingProfileLabel: Optimiser l'itinéraire pour
     saveAndReturn: Enregistrer et fermer
     saved: Enregistré
     setAsDefault: Définir ces options par défaut
