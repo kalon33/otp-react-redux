@@ -67,7 +67,7 @@ const WalkingNavigation = ({
 
   const walkSecondsRemaining = Math.max(
     0,
-    (leg.duration || 0) * (1 - progress.currentLegProgress / 100)
+    Math.floor((leg.duration || 0) * (1 - progress.currentLegProgress / 100))
   )
 
   // Determine the effective departure time for display
@@ -146,7 +146,7 @@ const WalkingNavigation = ({
             minWidth: 0,
             overflow: 'hidden',
             textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap' as const
+            whiteSpace: 'nowrap'
           }}
         >
           {progress.nextInstruction || `Walk to ${leg.to.name}`}
@@ -242,7 +242,7 @@ const WalkingNavigation = ({
                         minWidth: 0,
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap' as const
+                        whiteSpace: 'nowrap'
                       }}
                     >
                       {intl.formatMessage(

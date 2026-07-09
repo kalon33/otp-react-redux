@@ -163,7 +163,7 @@ const defaultState: GoModeState = {
 
 const goMode = handleActions<GoModeState, any>(
   {
-    [ADD_NOTIFICATION]: (state, action) => {
+    [ADD_NOTIFICATION]: (state: GoModeState, action: any) => {
       const notification: NotificationEvent = action.payload
 
       // Add to sent notifications to prevent duplicates
@@ -193,12 +193,12 @@ const goMode = handleActions<GoModeState, any>(
       }
     },
 
-    [CLEAR_REROUTE]: (state) => ({
+    [CLEAR_REROUTE]: (state: GoModeState) => ({
       ...state,
       reRoute: { ...defaultState.reRoute }
     }),
 
-    [CLEAR_VEHICLE_MATCH]: (state) => ({
+    [CLEAR_VEHICLE_MATCH]: (state: GoModeState) => ({
       ...state,
       boardingPrompt: {
         ...state.boardingPrompt,
@@ -210,7 +210,7 @@ const goMode = handleActions<GoModeState, any>(
       }
     }),
 
-    [CONFIRM_VEHICLE]: (state, action) => ({
+    [CONFIRM_VEHICLE]: (state: GoModeState, action: any) => ({
       ...state,
       boardingPrompt: {
         ...state.boardingPrompt,
@@ -223,7 +223,7 @@ const goMode = handleActions<GoModeState, any>(
       }
     }),
 
-    [DISMISS_BOARDING_PROMPT]: (state) => ({
+    [DISMISS_BOARDING_PROMPT]: (state: GoModeState) => ({
       ...state,
       boardingPrompt: {
         ...state.boardingPrompt,
@@ -232,7 +232,7 @@ const goMode = handleActions<GoModeState, any>(
       }
     }),
 
-    [PAUSE_GPS_SIMULATION]: (state) => ({
+    [PAUSE_GPS_SIMULATION]: (state: GoModeState) => ({
       ...state,
       simulation: {
         ...state.simulation,
@@ -240,7 +240,7 @@ const goMode = handleActions<GoModeState, any>(
       }
     }),
 
-    [RESUME_GPS_SIMULATION]: (state) => ({
+    [RESUME_GPS_SIMULATION]: (state: GoModeState) => ({
       ...state,
       simulation: {
         ...state.simulation,
@@ -248,12 +248,12 @@ const goMode = handleActions<GoModeState, any>(
       }
     }),
 
-    [SET_DEPARTURE_OVERRIDE]: (state, action) => ({
+    [SET_DEPARTURE_OVERRIDE]: (state: GoModeState, action: any) => ({
       ...state,
       departureOverride: action.payload
     }),
 
-    [SET_NOTIFICATION_CONFIG]: (state, action) => {
+    [SET_NOTIFICATION_CONFIG]: (state: GoModeState, action: any) => {
       return {
         ...state,
         notifications: {
@@ -263,7 +263,7 @@ const goMode = handleActions<GoModeState, any>(
       }
     },
 
-    [SET_REROUTE_RESULT]: (state, action) => ({
+    [SET_REROUTE_RESULT]: (state: GoModeState, action: any) => ({
       ...state,
       reRoute: {
         ...state.reRoute,
@@ -272,7 +272,7 @@ const goMode = handleActions<GoModeState, any>(
       }
     }),
 
-    [SET_TRACKING_ERROR]: (state, action) => {
+    [SET_TRACKING_ERROR]: (state: GoModeState, action: any) => {
       return {
         ...state,
         tracking: {
@@ -282,7 +282,7 @@ const goMode = handleActions<GoModeState, any>(
       }
     },
 
-    [SET_TRANSIT_LEG_ENTERED]: (state, action) => ({
+    [SET_TRANSIT_LEG_ENTERED]: (state: GoModeState, action: any) => ({
       ...state,
       boardingPrompt: {
         ...state.boardingPrompt,
@@ -290,7 +290,7 @@ const goMode = handleActions<GoModeState, any>(
       }
     }),
 
-    [SHOW_BOARDING_PROMPT]: (state) => ({
+    [SHOW_BOARDING_PROMPT]: (state: GoModeState) => ({
       ...state,
       boardingPrompt: {
         ...state.boardingPrompt,
@@ -298,7 +298,7 @@ const goMode = handleActions<GoModeState, any>(
       }
     }),
 
-    [START_GO_MODE]: (state, action) => {
+    [START_GO_MODE]: (state: GoModeState, action: any) => {
       const { itinerary, originalFrom } = action.payload
 
       return {
@@ -322,7 +322,7 @@ const goMode = handleActions<GoModeState, any>(
       }
     },
 
-    [START_GPS_SIMULATION]: (state, action) => ({
+    [START_GPS_SIMULATION]: (state: GoModeState, action: any) => ({
       ...state,
       simulation: {
         pointIndex: 0,
@@ -332,7 +332,7 @@ const goMode = handleActions<GoModeState, any>(
       }
     }),
 
-    [START_REROUTE]: (state, action) => ({
+    [START_REROUTE]: (state: GoModeState, action: any) => ({
       ...state,
       reRoute: {
         candidate: null,
@@ -345,7 +345,7 @@ const goMode = handleActions<GoModeState, any>(
       ...defaultState
     }),
 
-    [STOP_GPS_SIMULATION]: (state) => ({
+    [STOP_GPS_SIMULATION]: (state: GoModeState) => ({
       ...state,
       simulation: {
         pointIndex: 0,
@@ -365,7 +365,7 @@ const goMode = handleActions<GoModeState, any>(
       }
     },
 
-    [TRANSITION_LEG]: (state, action) => {
+    [TRANSITION_LEG]: (state: GoModeState, action: any) => {
       const { legIndex } = action.payload
 
       return {
@@ -380,7 +380,7 @@ const goMode = handleActions<GoModeState, any>(
       }
     },
 
-    [UPDATE_NEARBY_VEHICLES]: (state, action) => ({
+    [UPDATE_NEARBY_VEHICLES]: (state: GoModeState, action: any) => ({
       ...state,
       vehicleMatch: {
         ...state.vehicleMatch,
@@ -388,7 +388,7 @@ const goMode = handleActions<GoModeState, any>(
       }
     }),
 
-    [UPDATE_POSITION]: (state, action) => {
+    [UPDATE_POSITION]: (state: GoModeState, action: any) => {
       return {
         ...state,
         tracking: {
@@ -399,21 +399,21 @@ const goMode = handleActions<GoModeState, any>(
       }
     },
 
-    [UPDATE_PROGRESS]: (state, action) => {
+    [UPDATE_PROGRESS]: (state: GoModeState, action: any) => {
       return {
         ...state,
         progress: action.payload
       }
     },
 
-    [UPDATE_ROUTE_MATCH]: (state, action) => {
+    [UPDATE_ROUTE_MATCH]: (state: GoModeState, action: any) => {
       return {
         ...state,
         routeMatch: action.payload
       }
     },
 
-    [UPDATE_SIMULATION_PROGRESS]: (state, action) => ({
+    [UPDATE_SIMULATION_PROGRESS]: (state: GoModeState, action: any) => ({
       ...state,
       simulation: {
         ...state.simulation,
@@ -421,7 +421,7 @@ const goMode = handleActions<GoModeState, any>(
       }
     }),
 
-    [UPDATE_TRACKING_INTERVAL]: (state, action) => {
+    [UPDATE_TRACKING_INTERVAL]: (state: GoModeState, action: any) => {
       const { interval } = action.payload
 
       return {
@@ -433,7 +433,7 @@ const goMode = handleActions<GoModeState, any>(
       }
     },
 
-    [UPDATE_VEHICLE_MATCH]: (state, action) => ({
+    [UPDATE_VEHICLE_MATCH]: (state: GoModeState, action: any) => ({
       ...state,
       vehicleMatch: {
         ...state.vehicleMatch,
