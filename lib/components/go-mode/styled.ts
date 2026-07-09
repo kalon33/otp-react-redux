@@ -962,6 +962,26 @@ export const LegSubtitle = styled.div`
   font-size: 13px;
 `
 
+export const LegTime = styled.div`
+  color: #444;
+  flex-shrink: 0;
+  font-size: 13px;
+  font-weight: 600;
+  padding-top: 1px;
+  text-align: right;
+  white-space: nowrap;
+`
+
+export const TripDestinationEta = styled.div`
+  align-items: baseline;
+  color: #1565c0;
+  display: flex;
+  font-size: 14px;
+  gap: 6px;
+  justify-content: space-between;
+  margin: 2px 0 4px;
+`
+
 export const StopList = styled.ul`
   list-style: none;
   margin: 6px 0 0;

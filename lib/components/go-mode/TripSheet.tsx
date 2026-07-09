@@ -19,6 +19,7 @@ import {
   LegInfo,
   LegRow,
   LegSubtitle,
+  LegTime,
   LegTitle,
   RerouteButton,
   RerouteCardTitle,
@@ -35,6 +36,7 @@ import {
   StopDot,
   StopList,
   StopRow,
+  TripDestinationEta,
   VehicleDetail,
   VehicleInfo,
   VehicleLabel
@@ -87,6 +89,21 @@ const TripSheet = ({
 
   const legs = activeItinerary?.legs || []
   const currentLegIndex = progress?.currentLegIndex ?? 0
+
+  // Leg start/end times are epoch ms (typed number | string); coerce and
+  // render as a short local clock time, e.g. "4:52 PM".
+  const formatClock = (value: number | string | undefined): string => {
+    const ms = Number(value)
+    if (!ms || Number.isNaN(ms)) return ''
+    return intl.formatTime(ms, { hour: 'numeric', minute: '2-digit' })
+  }
+
+  // Final destination arrival = end of the last leg (falls back to the
+  // itinerary's own endTime).
+  const destinationLeg = legs[legs.length - 1]
+  const destinationEta = formatClock(
+    destinationLeg?.endTime ?? activeItinerary?.endTime
+  )
 
   const legTitle = (leg: Leg): string => {
     if (TRANSIT_MODES.has(leg.mode)) {
@@ -207,6 +224,21 @@ const TripSheet = ({
           </SheetCloseButton>
         </SheetHeader>
 
+        {destinationEta && (
+          <TripDestinationEta>
+            <span>
+              {intl.formatMessage(
+                {
+                  defaultMessage: 'Arrive at {dest}',
+                  id: 'components.GoMode.arriveAtDest'
+                },
+                { dest: destinationLeg?.to?.name }
+              )}
+            </span>
+            <strong>{destinationEta}</strong>
+          </TripDestinationEta>
+        )}
+
         {/* Section A — rest of the trip */}
         <SheetSectionTitle>
           {intl.formatMessage({
@@ -243,6 +275,9 @@ const TripSheet = ({
                 </LegSubtitle>
                 {isCurrent && isTransit && renderCurrentStops(leg)}
               </LegInfo>
+              {formatClock(leg.endTime) && (
+                <LegTime>{formatClock(leg.endTime)}</LegTime>
+              )}
             </LegRow>
           )
         })}

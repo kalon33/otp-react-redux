@@ -137,9 +137,11 @@ const demoSheetItinerary = {
   legs: [
     {
       duration: 300,
+      endTime: NOW - 5 * 60000,
       from: { name: 'Your location' },
       intermediateStops: [],
       mode: 'WALK',
+      startTime: NOW - 8 * 60000,
       to: { name: 'I-35W & Lake St Station' }
     },
     {
@@ -158,9 +160,11 @@ const demoSheetItinerary = {
     },
     {
       duration: 240,
+      endTime: NOW + 25 * 60000,
       from: { name: 'I-35W & 82nd St Station' },
       intermediateStops: [],
       mode: 'WALK',
+      startTime: NOW + 15 * 60000,
       to: { name: 'Your destination' }
     }
   ],
