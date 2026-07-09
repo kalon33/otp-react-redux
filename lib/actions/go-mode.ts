@@ -1412,7 +1412,9 @@ export function performVehicleMatching(routeId: string) {
     )
     dispatch({ payload: nearby, type: UPDATE_NEARBY_VEHICLES })
 
-    // Check if boarding prompt should be shown
+    // Boarding confirmation. shouldShowBoardingPrompt fires only when the
+    // vehicle match is still low/medium confidence — i.e. we're unsure which
+    // bus the rider is on.
     if (
       !goMode.boardingPrompt?.shown &&
       shouldShowBoardingPrompt(
@@ -1422,7 +1424,22 @@ export function performVehicleMatching(routeId: string) {
         goMode.boardingPrompt?.lastDismissedAt
       )
     ) {
-      dispatch(showBoardingPromptAction())
+      // On a planned trip the route is already known from the itinerary, so we
+      // never ask the rider which bus they're on. When a clear vehicle on that
+      // route is matched (this matcher only ever considers `routeId`), auto-
+      // confirm it and keep guidance moving. 'low' confidence means several
+      // same-route buses are ambiguously near — binding one could pick the
+      // wrong bus, and confirming freezes further matching, so we stay silent
+      // and let the match keep refining rather than guessing. The manual prompt
+      // is reserved for the onboard ("I'm already on the bus") flow, which has
+      // no itinerary and genuinely needs the rider to identify their route.
+      if (goMode.activeItinerary) {
+        if (matchResult.vehicleId && matchResult.confidence !== 'low') {
+          dispatch(confirmVehicleSelection(matchResult.vehicleId))
+        }
+      } else {
+        dispatch(showBoardingPromptAction())
+      }
     }
   }
 }
