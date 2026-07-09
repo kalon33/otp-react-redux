@@ -972,6 +972,16 @@ export const LegTime = styled.div`
   white-space: nowrap;
 `
 
+export const WaitNote = styled.div`
+  align-items: center;
+  color: #8a5a00;
+  display: flex;
+  font-size: 12px;
+  font-weight: 600;
+  gap: 4px;
+  margin-top: 3px;
+`
+
 export const StopList = styled.ul`
   list-style: none;
   margin: 6px 0 0;

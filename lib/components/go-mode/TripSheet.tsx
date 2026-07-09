@@ -38,7 +38,8 @@ import {
   StopRow,
   VehicleDetail,
   VehicleInfo,
-  VehicleLabel
+  VehicleLabel,
+  WaitNote
 } from './styled'
 
 // Quick mid-trip re-route options; each maps to a pre-built routing profile.
@@ -97,21 +98,29 @@ const TripSheet = ({
     return intl.formatTime(ms, { hour: 'numeric', minute: '2-digit' })
   }
 
-  // The itinerary's absolute leg times come from the original plan and go
-  // stale the moment the rider departs later than planned (or the plan ages
-  // before they hit Go). progress.delay is the live schedule offset measured
-  // at the rider's current position — positive when behind. Shift the current
-  // and upcoming legs by it so their times reflect when the rider will
-  // actually reach each point; leave passed legs at their real historical
-  // times. Falls back to raw plan times when no offset is available.
-  const shiftMs = Number.isFinite(progress?.delay)
-    ? Math.round((progress?.delay as number) * 1000)
-    : 0
+  // Transit legs carry OTP's realtime-adjusted times — leg.startTime/endTime
+  // already reflect live GTFS-realtime when the agency is feeding it, and fall
+  // back to the schedule otherwise. So the bus's own times are shown as-is: a
+  // bus departs when it departs, regardless of how fast the rider walks. The
+  // rider's pace surfaces instead as the wait at the stop (below), not by
+  // smearing it across the bus times.
+  const legEndDisplay = (leg: Leg): string => formatClock(leg.endTime)
 
-  const legEndDisplay = (leg: Leg, i: number): string => {
-    const raw = Number(leg.endTime)
-    if (!raw || Number.isNaN(raw)) return ''
-    return formatClock(i >= currentLegIndex ? raw + shiftMs : raw)
+  // Wait at a transit leg's boarding stop: the gap between reaching the stop
+  // and the bus leaving. For the very next bus the rider is walking toward,
+  // progress.waitTimeAtStop is the live figure (actual pace vs live departure);
+  // for legs further out only the scheduled gap is known. Returns seconds, or
+  // null when there's no meaningful wait to show.
+  const waitSecondsBeforeLeg = (i: number): number | null => {
+    const leg = legs[i]
+    if (i === 0 || !leg || !TRANSIT_MODES.has(leg.mode)) return null
+    if (i === currentLegIndex + 1 && progress?.waitTimeAtStop != null) {
+      return progress.waitTimeAtStop
+    }
+    const board = Number(leg.startTime)
+    const prevEnd = Number(legs[i - 1]?.endTime)
+    if (!Number.isFinite(board) || !Number.isFinite(prevEnd)) return null
+    return (board - prevEnd) / 1000
   }
 
   const legTitle = (leg: Leg): string => {
@@ -244,11 +253,24 @@ const TripSheet = ({
           const isCurrent = i === currentLegIndex
           const isTransit = TRANSIT_MODES.has(leg.mode)
           const stopCount = (leg.intermediateStops?.length ?? 0) + 1
+          const waitSecs = waitSecondsBeforeLeg(i)
+          const waitMins = waitSecs != null ? Math.round(waitSecs / 60) : 0
           return (
             <LegRow $current={isCurrent} $dim={i < currentLegIndex} key={i}>
               <LegIcon>{getModeIcon(leg.mode)}</LegIcon>
               <LegInfo>
                 <LegTitle>{legTitle(leg)}</LegTitle>
+                {isTransit && waitMins >= 1 && (
+                  <WaitNote>
+                    {intl.formatMessage(
+                      {
+                        defaultMessage: '🕒 board {time} · {mins} min wait',
+                        id: 'components.GoMode.legWait'
+                      },
+                      { mins: waitMins, time: formatClock(leg.startTime) }
+                    )}
+                  </WaitNote>
+                )}
                 <LegSubtitle>
                   {isTransit
                     ? intl.formatMessage(
@@ -269,9 +291,7 @@ const TripSheet = ({
                 </LegSubtitle>
                 {isCurrent && isTransit && renderCurrentStops(leg)}
               </LegInfo>
-              {legEndDisplay(leg, i) && (
-                <LegTime>{legEndDisplay(leg, i)}</LegTime>
-              )}
+              {legEndDisplay(leg) && <LegTime>{legEndDisplay(leg)}</LegTime>}
             </LegRow>
           )
         })}

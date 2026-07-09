@@ -130,23 +130,25 @@ const readyOnboard = (realtime: boolean) => ({
   vehicle: null
 })
 
-// Multi-leg journey for the trip-overview sheet: walk → METRO Orange Line
-// (mid-ride, 3 stops remaining) → walk. Mirrors the screenshot scenario.
+// Multi-leg journey for the trip-overview sheet: walking to the stop → METRO
+// Orange Line → walk. The rider is on the first walk leg, so the bus row shows
+// a live wait before boarding.
 const demoSheetItinerary = {
-  endTime: NOW + 25 * 60000,
+  endTime: NOW + 28 * 60000,
   legs: [
     {
       duration: 300,
-      endTime: NOW - 5 * 60000,
+      endTime: NOW + 2 * 60000,
       from: { name: 'Your location' },
       intermediateStops: [],
       mode: 'WALK',
-      startTime: NOW - 8 * 60000,
+      startTime: NOW - 3 * 60000,
       to: { name: 'I-35W & Lake St Station' }
     },
     {
       duration: 900,
-      endTime: NOW + 15 * 60000,
+      // Bus departs 3 min after the rider reaches the stop.
+      endTime: NOW + 20 * 60000,
       from: { name: 'I-35W & Lake St Station' },
       intermediateStops: [
         { name: 'I-35W & 46th St Station' },
@@ -154,21 +156,21 @@ const demoSheetItinerary = {
       ],
       mode: 'BUS',
       routeShortName: 'METRO Orange Line',
-      startTime: NOW - 5 * 60000,
+      startTime: NOW + 5 * 60000,
       to: { name: 'I-35W & 82nd St Station' },
       transitLeg: true
     },
     {
       duration: 240,
-      endTime: NOW + 25 * 60000,
+      endTime: NOW + 28 * 60000,
       from: { name: 'I-35W & 82nd St Station' },
       intermediateStops: [],
       mode: 'WALK',
-      startTime: NOW + 15 * 60000,
+      startTime: NOW + 20 * 60000,
       to: { name: 'Your destination' }
     }
   ],
-  startTime: NOW - 8 * 60000
+  startTime: NOW - 3 * 60000
 } as any
 
 const demoSheetAlternatives = [
@@ -186,10 +188,9 @@ const demoSheetStore = {
         activeItinerary: demoSheetItinerary,
         progress: {
           ...transitProgress,
-          // Running ~3 min behind schedule: upcoming leg times shift later.
-          currentLegIndex: 1,
-          delay: 180,
-          stopsRemaining: 3
+          // Walking to the stop; the next bus has a live 3-min wait.
+          currentLegIndex: 0,
+          waitTimeAtStop: 180
         },
         reRoute: {
           candidate: demoSheetAlternatives[0],
