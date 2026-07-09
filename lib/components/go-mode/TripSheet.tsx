@@ -97,6 +97,23 @@ const TripSheet = ({
     return intl.formatTime(ms, { hour: 'numeric', minute: '2-digit' })
   }
 
+  // The itinerary's absolute leg times come from the original plan and go
+  // stale the moment the rider departs later than planned (or the plan ages
+  // before they hit Go). progress.delay is the live schedule offset measured
+  // at the rider's current position — positive when behind. Shift the current
+  // and upcoming legs by it so their times reflect when the rider will
+  // actually reach each point; leave passed legs at their real historical
+  // times. Falls back to raw plan times when no offset is available.
+  const shiftMs = Number.isFinite(progress?.delay)
+    ? Math.round((progress?.delay as number) * 1000)
+    : 0
+
+  const legEndDisplay = (leg: Leg, i: number): string => {
+    const raw = Number(leg.endTime)
+    if (!raw || Number.isNaN(raw)) return ''
+    return formatClock(i >= currentLegIndex ? raw + shiftMs : raw)
+  }
+
   const legTitle = (leg: Leg): string => {
     if (TRANSIT_MODES.has(leg.mode)) {
       return leg.routeShortName || leg.routeLongName || leg.mode
@@ -252,8 +269,8 @@ const TripSheet = ({
                 </LegSubtitle>
                 {isCurrent && isTransit && renderCurrentStops(leg)}
               </LegInfo>
-              {formatClock(leg.endTime) && (
-                <LegTime>{formatClock(leg.endTime)}</LegTime>
+              {legEndDisplay(leg, i) && (
+                <LegTime>{legEndDisplay(leg, i)}</LegTime>
               )}
             </LegRow>
           )

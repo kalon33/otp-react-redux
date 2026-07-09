@@ -186,7 +186,9 @@ const demoSheetStore = {
         activeItinerary: demoSheetItinerary,
         progress: {
           ...transitProgress,
+          // Running ~3 min behind schedule: upcoming leg times shift later.
           currentLegIndex: 1,
+          delay: 180,
           stopsRemaining: 3
         },
         reRoute: {
