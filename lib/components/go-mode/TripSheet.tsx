@@ -36,7 +36,6 @@ import {
   StopDot,
   StopList,
   StopRow,
-  TripDestinationEta,
   VehicleDetail,
   VehicleInfo,
   VehicleLabel
@@ -97,13 +96,6 @@ const TripSheet = ({
     if (!ms || Number.isNaN(ms)) return ''
     return intl.formatTime(ms, { hour: 'numeric', minute: '2-digit' })
   }
-
-  // Final destination arrival = end of the last leg (falls back to the
-  // itinerary's own endTime).
-  const destinationLeg = legs[legs.length - 1]
-  const destinationEta = formatClock(
-    destinationLeg?.endTime ?? activeItinerary?.endTime
-  )
 
   const legTitle = (leg: Leg): string => {
     if (TRANSIT_MODES.has(leg.mode)) {
@@ -223,21 +215,6 @@ const TripSheet = ({
             ×
           </SheetCloseButton>
         </SheetHeader>
-
-        {destinationEta && (
-          <TripDestinationEta>
-            <span>
-              {intl.formatMessage(
-                {
-                  defaultMessage: 'Arrive at {dest}',
-                  id: 'components.GoMode.arriveAtDest'
-                },
-                { dest: destinationLeg?.to?.name }
-              )}
-            </span>
-            <strong>{destinationEta}</strong>
-          </TripDestinationEta>
-        )}
 
         {/* Section A — rest of the trip */}
         <SheetSectionTitle>
