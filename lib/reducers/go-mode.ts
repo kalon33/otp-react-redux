@@ -217,7 +217,9 @@ const defaultState: GoModeState = {
   },
 
   ui: {
-    mapFollowUser: true
+    // Off by default: the map should stay where the user leaves it and only
+    // recenter on the live GPS point when the user asks (blue dot control).
+    mapFollowUser: false
   },
 
   vehicleMatch: {

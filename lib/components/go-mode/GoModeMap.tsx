@@ -84,6 +84,7 @@ const GoModeMapOverlay = ({
 }) => {
   const { current: map } = useMap()
   const hasFitBounds = useRef(false)
+  const prevFollowUser = useRef(followUser)
 
   // Fit map to itinerary bounds on initial load
   useEffect(() => {
@@ -120,9 +121,15 @@ const GoModeMapOverlay = ({
     }
   }, [map, routeGeoJson])
 
-  // Center map on user position when followUser is enabled
+  // Recenter on the user's position only as a one-shot when followUser is
+  // *newly* enabled (i.e. the user pressed the locate button). We intentionally
+  // do NOT pan on every position update — that made the map fight the user by
+  // constantly yanking the view back to the live GPS point. Ongoing recentering
+  // is handled by the map's built-in geolocate (blue dot) control.
   useEffect(() => {
-    if (followUser && currentPosition && map) {
+    const justEnabled = followUser && !prevFollowUser.current
+    prevFollowUser.current = followUser
+    if (justEnabled && currentPosition && map) {
       map.panTo([
         currentPosition.coords.longitude,
         currentPosition.coords.latitude
