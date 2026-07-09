@@ -258,10 +258,10 @@ export function getUpcomingTransitTiming(
     const plannedDepartureTime = nextLeg.startTime
     const effectiveDeparture = departureOverrideMs || nextLeg.startTime
     const remainingWalkSeconds =
-      (currentLeg.duration || 0) * (1 - progressInLeg)
+      Number(currentLeg.duration || 0) * (1 - progressInLeg)
     const timeUntilNextDeparture =
       (effectiveDeparture - currentTime.getTime()) / 1000
-    const waitTimeAtStop = timeUntilNextDeparture - remainingWalkSeconds
+    const waitTimeAtStop = timeUntilNextDeparture > 0 ? timeUntilNextDeparture - remainingWalkSeconds : undefined
 
     return {
       departureIsOverridden: !!departureOverrideMs,

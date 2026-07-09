@@ -94,7 +94,7 @@ const WalkingNavigation = ({
 
           // Calculate actual departure epoch ms
           const depSeconds = st.realtimeDeparture ?? st.scheduledDeparture
-          const depMs = (st.serviceDay + depSeconds) * 1000
+          const depMs = (st.serviceDay + Number(depSeconds)) * 1000
 
           // Must be in the future and within 2 hours
           if (depMs <= nowMs) return false
@@ -108,7 +108,7 @@ const WalkingNavigation = ({
         .slice(0, 3)
         .map((st: any) => {
           const depSeconds = st.realtimeDeparture ?? st.scheduledDeparture
-          const depMs = (st.serviceDay + depSeconds) * 1000
+          const depMs = (st.serviceDay + Number(depSeconds)) * 1000
           return { departureMs: depMs }
         })
     } catch {

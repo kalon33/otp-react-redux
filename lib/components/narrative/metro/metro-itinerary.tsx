@@ -183,7 +183,7 @@ const blurAnimation = keyframes`
 `
 
 const LoadingBlurred = styled.span.withConfig({
-  shouldForwardProp: (prop) => prop !== 'loading'
+  shouldForwardProp: (prop: string) => prop !== 'loading'
 })<{ loading: boolean }>`
   ${(props) => props.loading && `filter: blur(${BLUR_AMOUNT}px)`};
   animation-name: ${(props) => (props.loading ? blurAnimation : '')};
