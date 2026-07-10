@@ -10,6 +10,7 @@ import type { Itinerary, LatLngArray, Leg } from '@opentripplanner/types'
 import {
   getDownstreamStops,
   hasLiveArrival,
+  liveStopArrival,
   pickBestAlightOption,
   selectCandidateStops
 } from '../util/go-mode/alight-optimizer'
@@ -79,6 +80,14 @@ let rerouteSnapshotIntervalId: ReturnType<typeof setInterval> | null = null
 // How often to capture; each tick is a real isolated plan() call.
 const REROUTE_SNAPSHOT_INTERVAL_MS = 90000
 
+// Wall-clock throttle for re-polling live transit leg times off GTFS-realtime.
+// handlePositionUpdate fires on every GPS/simulation tick (as fast as ~1s), but
+// re-fetching each upcoming trip's schedule that often is wasteful — 20s keeps
+// the overview current without hammering OTP. Reset to 0 per trip so the first
+// tick fetches immediately.
+let lastLiveLegTimesAt = 0
+const LIVE_LEG_TIMES_INTERVAL_MS = 20000
+
 // Module-scoped visibilitychange handler for cleanup
 let visibilityChangeHandler: (() => void) | null = null
 
@@ -141,6 +150,7 @@ export const PAUSE_GPS_SIMULATION = 'PAUSE_GPS_SIMULATION'
 export const REROUTE_SNAPSHOT = 'REROUTE_SNAPSHOT'
 export const RESUME_GPS_SIMULATION = 'RESUME_GPS_SIMULATION'
 export const SET_DEPARTURE_OVERRIDE = 'SET_DEPARTURE_OVERRIDE'
+export const SET_LIVE_LEG_TIMES = 'SET_LIVE_LEG_TIMES'
 export const SET_NOTIFICATION_CONFIG = 'SET_NOTIFICATION_CONFIG'
 export const SET_TRACKING_ERROR = 'SET_TRACKING_ERROR'
 export const SET_TRANSIT_LEG_ENTERED = 'SET_TRANSIT_LEG_ENTERED'
@@ -188,6 +198,15 @@ export const updateRouteMatch = createAction<RouteMatchResult | null>(
 )
 export const updateProgress = createAction<TripProgress>(UPDATE_PROGRESS)
 export const transitionLeg = createAction<{ legIndex: number }>(TRANSITION_LEG)
+
+/** Live (or schedule-fallback) times for a transit leg, keyed by leg index. */
+export interface LiveLegTime {
+  alightEpoch: number | null
+  boardEpoch: number | null
+  realtime: boolean
+}
+export const setLiveLegTimes =
+  createAction<Record<number, LiveLegTime>>(SET_LIVE_LEG_TIMES)
 export const addNotification = createAction<NotificationEvent>(ADD_NOTIFICATION)
 export const setTrackingError = createAction<GeolocationPositionError | null>(
   SET_TRACKING_ERROR
@@ -402,6 +421,9 @@ export function endGoMode() {
 
     // Stop reroute-snapshot capture (recording sessions)
     stopRerouteSnapshotCapture()
+
+    // Reset the live-leg-times throttle so the next trip fetches immediately.
+    lastLiveLegTimesAt = 0
 
     // Clean up visibilitychange listener
     if (visibilityChangeHandler) {
@@ -1153,6 +1175,55 @@ const PUSH_NOTIFICATION_TYPES = new Set<NotificationType>([
   'ARRIVING_STOP'
 ])
 
+/**
+ * Re-poll GTFS-realtime for the trip's upcoming transit legs so the trip
+ * overview shows LIVE board/alight times mid-ride — not just the plan's
+ * realtime-as-of-planning snapshot. For each transit leg from the current one
+ * onward, fetch its trip schedule (findTrip carries per-stop realtimeArrival)
+ * and read the live-or-scheduled epoch at the leg's board and alight stops.
+ * Results are stored by leg index; TripSheet falls back to the plan's own leg
+ * times for any leg without a live figure, so this only ever improves accuracy.
+ */
+export function refreshLiveLegTimes() {
+  return async function (dispatch: any, getState: any) {
+    const goMode = getState().otp?.goMode
+    const itinerary: Itinerary | null = goMode?.activeItinerary
+    if (!goMode?.isActive || !itinerary) return
+
+    const legs = itinerary.legs || []
+    const currentLegIndex = goMode.routeMatch?.legIndex ?? 0
+    const liveTimes: Record<number, LiveLegTime> = {}
+
+    for (let i = currentLegIndex; i < legs.length; i++) {
+      const leg: any = legs[i]
+      if (!leg?.transitLeg) continue
+      // convertGraphQLResponseToLegacy keeps leg.trip.gtfsId and also adds a
+      // top-level leg.tripId; accept either.
+      const tripId = leg.trip?.gtfsId || leg.tripId
+      if (!tripId) continue
+
+      // findTrip is noThrottle and idempotent; it refreshes the cached trip
+      // (with current realtimeArrival) in transitIndex.trips[tripId].
+      await dispatch(findTrip({ tripId }))
+      const stopTimes =
+        getState().otp?.transitIndex?.trips?.[tripId]?.stopTimes || []
+      if (!stopTimes.length) continue
+
+      const alight = liveStopArrival(stopTimes, leg.to?.stop?.gtfsId)
+      const board = liveStopArrival(stopTimes, leg.from?.stop?.gtfsId)
+      if (alight || board) {
+        liveTimes[i] = {
+          alightEpoch: alight?.epoch ?? null,
+          boardEpoch: board?.epoch ?? null,
+          realtime: !!(alight?.realtime || board?.realtime)
+        }
+      }
+    }
+
+    dispatch(setLiveLegTimes(liveTimes))
+  }
+}
+
 export function handlePositionUpdate(position: GeolocationPosition) {
   return function (dispatch: any, getState: any) {
     const state = getState()
@@ -1236,6 +1307,18 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     )
 
     dispatch(updateProgress(progress))
+
+    // Keep the trip-overview transit rows current off GTFS-realtime, throttled
+    // to LIVE_LEG_TIMES_INTERVAL_MS regardless of tick rate. Skipped in replay,
+    // which reproduces recorded data rather than re-polling live feeds.
+    const nowMs = Date.now()
+    if (
+      !isReplayActive() &&
+      nowMs - lastLiveLegTimesAt > LIVE_LEG_TIMES_INTERVAL_MS
+    ) {
+      lastLiveLegTimesAt = nowMs
+      dispatch(refreshLiveLegTimes())
+    }
 
     // Perform vehicle matching on transit legs
     const currentLegForVehicle = itinerary.legs[routeMatch.legIndex]

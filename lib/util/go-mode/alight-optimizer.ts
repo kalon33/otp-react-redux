@@ -38,6 +38,35 @@ export function hasLiveArrival(st: TripStopTime): boolean {
   )
 }
 
+/**
+ * The absolute epoch (ms) a trip reaches a given stop, preferring OTP's live
+ * (GPS-fed) realtimeArrival and falling back to the schedule. Returns null when
+ * the stop isn't in this trip's stop times or has no usable time. Used to keep
+ * the trip-overview transit rows current mid-ride.
+ */
+export function liveStopArrival(
+  stopTimes: TripStopTime[],
+  stopGtfsId: string | null | undefined
+): { epoch: number; realtime: boolean } | null {
+  if (!stopGtfsId) return null
+  const st = stopTimes.find((s) => s.stop?.id === stopGtfsId)
+  if (!st || st.serviceDay == null) return null
+  if (hasLiveArrival(st)) {
+    return {
+      epoch:
+        ((st.serviceDay as number) + (st.realtimeArrival as number)) * 1000,
+      realtime: true
+    }
+  }
+  if (st.scheduledArrival != null) {
+    return {
+      epoch: (st.serviceDay + st.scheduledArrival) * 1000,
+      realtime: false
+    }
+  }
+  return null
+}
+
 /** Shape of a findTrip() response (lib/actions/apiV2.js findTrip). */
 export interface TripSchedule {
   geometry?: { length: number; points: string }

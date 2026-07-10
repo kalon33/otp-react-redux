@@ -12,6 +12,7 @@ import {
   PAUSE_GPS_SIMULATION,
   RESUME_GPS_SIMULATION,
   SET_DEPARTURE_OVERRIDE,
+  SET_LIVE_LEG_TIMES,
   SET_NOTIFICATION_CONFIG,
   SET_ONBOARD_RESULT,
   SET_ONBOARD_STATUS,
@@ -37,6 +38,7 @@ import {
   UPDATE_TRACKING_INTERVAL,
   UPDATE_VEHICLE_MATCH
 } from '../actions/go-mode'
+import type { LiveLegTime } from '../actions/go-mode'
 import type {
   NearbyVehicleOption,
   VehicleMatchResult
@@ -110,6 +112,11 @@ export interface GoModeState {
   departureOverride: number | null
 
   isActive: boolean
+
+  /** Live (or schedule-fallback) transit-leg times, keyed by leg index. Kept
+   * fresh mid-ride by refreshLiveLegTimes; consumed by the trip overview. */
+  liveLegTimes: Record<number, LiveLegTime>
+
   notifications: {
     enabled: boolean
     recentNotifications: NotificationEvent[]
@@ -173,6 +180,7 @@ const defaultState: GoModeState = {
   departureOverride: null,
 
   isActive: false,
+  liveLegTimes: {},
   notifications: {
     enabled: true,
     recentNotifications: [],
@@ -348,6 +356,11 @@ const goMode = handleActions<GoModeState, any>(
       departureOverride: action.payload
     }),
 
+    [SET_LIVE_LEG_TIMES]: (state, action) => ({
+      ...state,
+      liveLegTimes: action.payload
+    }),
+
     [SET_NOTIFICATION_CONFIG]: (state, action) => {
       return {
         ...state,
@@ -443,6 +456,7 @@ const goMode = handleActions<GoModeState, any>(
         ...state,
         activeItinerary: itinerary,
         isActive: true,
+        liveLegTimes: {},
         notifications: {
           ...state.notifications,
           recentNotifications: [],

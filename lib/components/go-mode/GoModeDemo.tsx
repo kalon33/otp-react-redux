@@ -186,6 +186,15 @@ const demoSheetStore = {
       config: {},
       goMode: {
         activeItinerary: demoSheetItinerary,
+        // Live GTFS-realtime for the upcoming bus leg (index 1): running a
+        // couple minutes late vs the plan, sourced by refreshLiveLegTimes.
+        liveLegTimes: {
+          1: {
+            alightEpoch: NOW + 23 * 60000,
+            boardEpoch: NOW + 6 * 60000,
+            realtime: true
+          }
+        },
         progress: {
           ...transitProgress,
           // Walking to the stop; the next bus has a live 3-min wait.

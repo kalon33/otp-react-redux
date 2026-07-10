@@ -7,6 +7,7 @@ import * as goModeActions from '../../actions/go-mode'
 import * as routingProfileActions from '../../actions/routing-profiles'
 import { getModeIcon } from '../../util/go-mode/mode-icon'
 import type { GoModeState } from '../../reducers/go-mode'
+import type { LiveLegTime } from '../../actions/go-mode'
 import type { TripProgress } from '../../util/go-mode/progress-calculator'
 
 import {
@@ -41,6 +42,7 @@ import {
   VehicleLabel,
   WaitNote
 } from './styled'
+import RealtimeTime from './RealtimeTime'
 
 // Quick mid-trip re-route options; each maps to a pre-built routing profile.
 const REROUTE_CHIPS = [
@@ -56,6 +58,7 @@ interface Props {
   activeItinerary: Itinerary | null
   beginGoMode: (itinerary: any) => void
   fetchPreferencesFromText: (text: string) => Promise<any>
+  liveLegTimes: Record<number, LiveLegTime>
   onClose: () => void
   progress: TripProgress | null
   reRouteCandidates: Itinerary[]
@@ -76,6 +79,7 @@ const TripSheet = ({
   activeItinerary,
   beginGoMode,
   fetchPreferencesFromText,
+  liveLegTimes,
   onClose,
   progress,
   reRouteCandidates,
@@ -98,13 +102,25 @@ const TripSheet = ({
     return intl.formatTime(ms, { hour: 'numeric', minute: '2-digit' })
   }
 
-  // Transit legs carry OTP's realtime-adjusted times — leg.startTime/endTime
-  // already reflect live GTFS-realtime when the agency is feeding it, and fall
-  // back to the schedule otherwise. So the bus's own times are shown as-is: a
-  // bus departs when it departs, regardless of how fast the rider walks. The
-  // rider's pace surfaces instead as the wait at the stop (below), not by
-  // smearing it across the bus times.
-  const legEndDisplay = (leg: Leg): string => formatClock(leg.endTime)
+  // The bus's own times are shown as-is: a bus departs when it departs,
+  // regardless of how fast the rider walks — the rider's pace surfaces instead
+  // as the wait at the stop (below). refreshLiveLegTimes re-polls GTFS-realtime
+  // mid-ride and stores a per-leg live arrival; prefer it, falling back to the
+  // plan leg's own endTime (itself realtime-as-of-planning, else schedule).
+  const legAlight = (
+    i: number,
+    leg: Leg
+  ): { epoch: number | string | undefined; realtime: boolean } => {
+    const live = liveLegTimes[i]
+    if (TRANSIT_MODES.has(leg.mode) && live?.alightEpoch) {
+      return { epoch: live.alightEpoch, realtime: live.realtime }
+    }
+    return { epoch: leg.endTime, realtime: false }
+  }
+
+  // Board time for the wait note: prefer the live figure, else the plan's.
+  const legBoardTime = (i: number, leg: Leg): string =>
+    formatClock(liveLegTimes[i]?.boardEpoch ?? leg.startTime)
 
   // Wait at a transit leg's boarding stop: the gap between reaching the stop
   // and the bus leaving. For the very next bus the rider is walking toward,
@@ -255,6 +271,8 @@ const TripSheet = ({
           const stopCount = (leg.intermediateStops?.length ?? 0) + 1
           const waitSecs = waitSecondsBeforeLeg(i)
           const waitMins = waitSecs != null ? Math.round(waitSecs / 60) : 0
+          const alight = legAlight(i, leg)
+          const alightText = formatClock(alight.epoch)
           return (
             <LegRow $current={isCurrent} $dim={i < currentLegIndex} key={i}>
               <LegIcon>{getModeIcon(leg.mode)}</LegIcon>
@@ -267,7 +285,7 @@ const TripSheet = ({
                         defaultMessage: '🕒 board {time} · {mins} min wait',
                         id: 'components.GoMode.legWait'
                       },
-                      { mins: waitMins, time: formatClock(leg.startTime) }
+                      { mins: waitMins, time: legBoardTime(i, leg) }
                     )}
                   </WaitNote>
                 )}
@@ -291,7 +309,17 @@ const TripSheet = ({
                 </LegSubtitle>
                 {isCurrent && isTransit && renderCurrentStops(leg)}
               </LegInfo>
-              {legEndDisplay(leg) && <LegTime>{legEndDisplay(leg)}</LegTime>}
+              {alightText && (
+                <LegTime>
+                  {isTransit ? (
+                    <RealtimeTime live={alight.realtime}>
+                      {alightText}
+                    </RealtimeTime>
+                  ) : (
+                    alightText
+                  )}
+                </LegTime>
+              )}
             </LegRow>
           )
         })}
@@ -415,6 +443,7 @@ const mapStateToProps = (state: any) => {
   const goMode = state.otp.goMode
   return {
     activeItinerary: goMode?.activeItinerary || null,
+    liveLegTimes: goMode?.liveLegTimes || {},
     progress: goMode?.progress || null,
     reRouteCandidates: goMode?.reRoute?.candidates || [],
     reRouteStatus: goMode?.reRoute?.status || 'idle'
