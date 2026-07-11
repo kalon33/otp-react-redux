@@ -56,6 +56,11 @@ import {
   stopNativeGps
 } from '../util/go-mode/native-gps'
 import {
+  AUTO_ANCHOR_MIN_GAIN_MS,
+  getRouteDepartures,
+  getSoonestCatchableMs
+} from '../util/go-mode/departure-anchor'
+import {
   ensureNativeNotifyPermission,
   hasNativeNotify,
   sendPush
@@ -95,6 +100,20 @@ const REROUTE_SNAPSHOT_INTERVAL_MS = 90000
 // tick fetches immediately.
 let lastLiveLegTimesAt = 0
 const LIVE_LEG_TIMES_INTERVAL_MS = 20000
+
+// Auto-anchor bookkeeping (see the throttled block in handlePositionUpdate).
+// The rider's explicit departure pick (or "Reset to planned") must never be
+// fought by the auto-anchor, so a manual selectDeparture locks auto-anchoring
+// off for the current boarding. lastAutoAnchorMs lets the anchor keep chasing
+// the live feed while the current override is its own. earlyBoardReplanKey
+// makes the boarded-earlier replan a one-shot per boarding.
+let manualDepartureLock = false
+let lastAutoAnchorMs: number | null = null
+let earlyBoardReplanKey: string | null = null
+
+// You can't be aboard a bus that hasn't left yet: riding this much before the
+// planned board time proves the rider caught an earlier departure.
+const EARLY_BOARD_MIN_MS = 120000
 
 // How long the rider must stay off-route before the sticky "riding" fact is
 // dropped. GPS noise and tunnels produce transient off-route ticks; only a
@@ -263,6 +282,18 @@ export const updateTrackingInterval = createAction<{ interval: number }>(
 export const setDepartureOverride = createAction<number | null>(
   SET_DEPARTURE_OVERRIDE
 )
+
+/**
+ * The rider explicitly picked a departure (or reset to planned). Routes
+ * through the same SET_DEPARTURE_OVERRIDE, but locks the auto-anchor off for
+ * this boarding so it never fights the rider's choice.
+ */
+export function selectDeparture(epochMs: number | null) {
+  return function (dispatch: any) {
+    manualDepartureLock = true
+    dispatch(setDepartureOverride(epochMs))
+  }
+}
 export const setNotificationConfig = createAction<{
   enabled?: boolean
   soundEnabled?: boolean
@@ -514,6 +545,11 @@ export function endGoMode() {
 
     // Reset the live-leg-times throttle so the next trip fetches immediately.
     lastLiveLegTimesAt = 0
+
+    // Reset auto-anchor bookkeeping — a new trip is a new decision.
+    manualDepartureLock = false
+    lastAutoAnchorMs = null
+    earlyBoardReplanKey = null
 
     // Clean up visibilitychange listener
     if (visibilityChangeHandler) {
@@ -1585,6 +1621,10 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     ) {
       dispatch(transitionLeg({ legIndex: routeMatch.legIndex }))
 
+      // New leg = new upcoming boarding = a fresh auto-anchor decision.
+      manualDepartureLock = false
+      lastAutoAnchorMs = null
+
       // Update tracking interval for new leg
       const newLeg = itinerary.legs[routeMatch.legIndex]
       const newInterval = getTrackingIntervalForLeg(newLeg)
@@ -1632,6 +1672,65 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     ) {
       lastLiveLegTimesAt = nowMs
       dispatch(refreshLiveLegTimes())
+
+      // Auto-anchor: while walking/biking toward a transit boarding, target
+      // the soonest same-route departure the rider can actually catch — the
+      // planned itinerary may board a much later trip (e.g. a later-departing
+      // itinerary was activated), and the wait/notification math must track
+      // the real bus. The header already displays this value; this writes it
+      // into departureOverride so progress + missed-bus agree with it. A
+      // manual pick or reset (selectDeparture) locks auto-anchoring off.
+      const anchorLeg = itinerary.legs[routeMatch.legIndex]
+      const anchorNextLeg = itinerary.legs[routeMatch.legIndex + 1]
+      if (
+        (anchorLeg?.mode === 'WALK' || anchorLeg?.mode === 'BICYCLE') &&
+        anchorNextLeg?.transitLeg
+      ) {
+        const boardingStopId = (anchorNextLeg as any)?.from?.stop?.gtfsId
+        if (boardingStopId) {
+          // Re-poll the boarding stop's departures — the trip-start snapshot
+          // goes stale, and an earlier bus only ever shows up here.
+          try {
+            dispatch(
+              findStopTimesForStop({
+                date: new Date().toISOString().split('T')[0],
+                forceFetch: true,
+                stopId: boardingStopId
+              })
+            )
+          } catch {
+            // Best-effort; the anchor below uses whatever is in the store.
+          }
+
+          if (
+            !manualDepartureLock &&
+            (departureOverride == null ||
+              departureOverride === lastAutoAnchorMs)
+          ) {
+            const stopData =
+              getState().otp.transitIndex?.stops?.[boardingStopId]
+            const rideSecondsRemaining = Math.max(
+              0,
+              (anchorLeg.duration || 0) *
+                (1 - (progress.currentLegProgress || 0) / 100)
+            )
+            const soonest = getSoonestCatchableMs(
+              getRouteDepartures(stopData, getLegRouteId(anchorNextLeg)),
+              currentTime.getTime(),
+              rideSecondsRemaining
+            )
+            if (
+              soonest != null &&
+              Number(anchorNextLeg.startTime) - soonest >=
+                AUTO_ANCHOR_MIN_GAIN_MS &&
+              soonest !== departureOverride
+            ) {
+              lastAutoAnchorMs = soonest
+              dispatch(setDepartureOverride(soonest))
+            }
+          }
+        }
+      }
     }
 
     // Perform vehicle matching on transit legs
@@ -1736,6 +1835,48 @@ export function handlePositionUpdate(position: GeolocationPosition) {
             itinerary.legs[missedCtx.boardLegIndex] as Leg
           ),
           reason: 'missed-bus'
+        })
+      )
+    } else if (
+      // Boarded an EARLIER same-route trip than the itinerary planned (the
+      // auto-anchor targets it while walking; this fixes the legs once the
+      // rider is verifiably aboard). Proof is either a confirmed vehicle
+      // match on a different tripId than planned, or simply being aboard
+      // before the planned bus could exist. Replanning with keepRouteId
+      // yields a same-route itinerary whose downstream transfers are real;
+      // beginGoMode (via the auto-apply path) then resets the override.
+      (() => {
+        if (reRouteStatus !== 'idle') return false
+        const riding = goMode.riding
+        if (!riding || riding.legIndex == null || riding.legIndex < 0)
+          return false
+        const ridingLeg = itinerary.legs[riding.legIndex]
+        if (!ridingLeg?.transitLeg) return false
+        const oneShotKey = `${riding.legIndex}:${riding.boardedAt ?? ''}`
+        if (earlyBoardReplanKey === oneShotKey) return false
+        const plannedTripId =
+          (ridingLeg as any)?.trip?.gtfsId || (ridingLeg as any)?.tripId
+        const matched = goMode.vehicleMatch?.match
+        const tripMismatch =
+          (matched?.confidence === 'confirmed' ||
+            matched?.confidence === 'high') &&
+          matched?.tripId != null &&
+          plannedTripId != null &&
+          matched.tripId !== plannedTripId
+        const aboardBeforePlanned =
+          currentTime.getTime() <
+          Number(ridingLeg.startTime) - EARLY_BOARD_MIN_MS
+        if (!tripMismatch && !aboardBeforePlanned) return false
+        earlyBoardReplanKey = oneShotKey
+        return true
+      })()
+    ) {
+      const ridingLegIndex = goMode.riding?.legIndex ?? -1
+      dispatch(
+        reRouteFromCurrentPosition({
+          autoApply: true,
+          keepRouteId: getLegRouteId(itinerary.legs[ridingLegIndex] as Leg),
+          reason: 'boarded-earlier'
         })
       )
     } else if (

@@ -494,7 +494,7 @@ const mapDispatchToProps = {
   endGoMode: goModeActions.endGoMode,
   pauseGpsSimulation: goModeActions.pauseGpsSimulation,
   resumeGpsSimulation: goModeActions.resumeGpsSimulation,
-  setDepartureOverride: goModeActions.setDepartureOverride,
+  setDepartureOverride: goModeActions.selectDeparture,
   setMobileScreen: uiActions.setMobileScreen,
   setRerouteResult: goModeActions.setRerouteResult,
   startGpsSimulation: goModeActions.startGpsSimulation,

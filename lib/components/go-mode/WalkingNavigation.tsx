@@ -2,7 +2,11 @@ import { useIntl } from 'react-intl'
 import React, { useMemo } from 'react'
 import type { Leg } from '@opentripplanner/types'
 
-import { mergeAndSortStopTimes } from '../../util/stop-times'
+import {
+  getLegRouteId,
+  getRouteDepartures,
+  getSoonestCatchableMs
+} from '../../util/go-mode/departure-anchor'
 import type { TripProgress } from '../../util/go-mode/progress-calculator'
 
 import {
@@ -20,10 +24,6 @@ import {
   WalkingContainer
 } from './styled'
 import RealtimeTime from './RealtimeTime'
-
-// OTP realtimeState values that mean the time reflects live vehicle data
-// (as opposed to the static schedule).
-const LIVE_REALTIME_STATES = new Set(['UPDATED', 'ADDED', 'MODIFIED'])
 
 interface Props {
   boardingStopData?: any
@@ -99,56 +99,22 @@ const WalkingNavigation = ({
   const isBike = leg.mode === 'BICYCLE'
   const accessEmoji = isBike ? '🚲' : '🚶'
 
-  // OTP2 returns the route as an object (leg.route.id, aliased to gtfsId);
-  // legacy responses use a top-level leg.routeId. Match the stop-time gtfsId.
-  const nextLegRoute = (nextLeg as any)?.route
-  const nextLegRouteId =
-    (nextLegRoute && typeof nextLegRoute === 'object'
-      ? nextLegRoute.id || nextLegRoute.gtfsId
-      : null) ||
-    (nextLeg as any)?.routeId ||
-    null
+  const nextLegRouteId = getLegRouteId(nextLeg)
 
-  // All upcoming departures of the boarding route at the boarding stop, from the
-  // live schedule pre-fetched when Go Mode started (sorted earliest first).
-  const routeDepartures = useMemo(() => {
-    if (!boardingStopData || !isNextLegTransit || !nextLegRouteId) return []
-    try {
-      return mergeAndSortStopTimes(boardingStopData)
-        .map((st: any) => {
-          // Prefer the live (realtime) departure when the feed reports one;
-          // fall back to the static schedule otherwise.
-          const live =
-            LIVE_REALTIME_STATES.has(st.realtimeState) &&
-            st.realtimeDeparture != null
-          const secs = live ? st.realtimeDeparture : st.scheduledDeparture
-          return {
-            depMs: (st.serviceDay + secs) * 1000,
-            realtime: live,
-            routeId: st.route?.gtfsId || st.trip?.route?.gtfsId
-          }
-        })
-        .filter(
-          (d: { depMs: number; routeId?: string }) =>
-            d.routeId === nextLegRouteId
-        )
-        .sort((a: { depMs: number }, b: { depMs: number }) => a.depMs - b.depMs)
-    } catch {
-      return []
-    }
-  }, [boardingStopData, isNextLegTransit, nextLegRouteId])
+  // All upcoming departures of the boarding route at the boarding stop, from
+  // the stop-times data (re-polled while walking; sorted earliest first).
+  const routeDepartures = useMemo(
+    () =>
+      isNextLegTransit
+        ? getRouteDepartures(boardingStopData, nextLegRouteId)
+        : [],
+    [boardingStopData, isNextLegTransit, nextLegRouteId]
+  )
 
-  // Soonest departure the rider has a chance at. Leaving now they'd reach the
-  // stop in ~`rideSecondsRemaining`, but OTP's bike-time estimate is
-  // conservative — so we also surface departures they'd reach by riding up to
-  // 25% faster (capped at 3 min). If there's a chance, you see it.
-  const optimismMs = Math.min(180000, rideSecondsRemaining * 1000 * 0.25)
-  const soonestCatchableMs = useMemo(() => {
-    const reachable = routeDepartures.find(
-      (d) => d.depMs - nowMs >= rideSecondsRemaining * 1000 - optimismMs
-    )
-    return reachable?.depMs ?? null
-  }, [routeDepartures, nowMs, rideSecondsRemaining, optimismMs])
+  const soonestCatchableMs = useMemo(
+    () => getSoonestCatchableMs(routeDepartures, nowMs, rideSecondsRemaining),
+    [routeDepartures, nowMs, rideSecondsRemaining]
+  )
 
   // Manual override wins; otherwise show the soonest reachable bus; fall back to
   // OTP's planned departure only when we have no schedule data.
