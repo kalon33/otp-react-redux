@@ -50,7 +50,9 @@ export function liveStopArrival(
 ): { epoch: number; realtime: boolean } | null {
   if (!stopGtfsId) return null
   const st = stopTimes.find((s) => s.stop?.id === stopGtfsId)
-  if (!st || st.serviceDay == null) return null
+  // serviceDay <= 0 means the stop times carry no service-date context (OTP's
+  // dateless trip.stoptimes returns -1) — an absolute epoch would be garbage.
+  if (!st || st.serviceDay == null || st.serviceDay <= 0) return null
   if (hasLiveArrival(st)) {
     return {
       epoch:
@@ -65,6 +67,48 @@ export function liveStopArrival(
     }
   }
   return null
+}
+
+/**
+ * Choose which service-date instance of a trip the rider is actually on.
+ * A trip id names a run on EVERY day it operates; findTrip fetches both
+ * today's and yesterday's instances (an after-midnight ride belongs to
+ * yesterday's service day). Preference: an instance with live (GPS-fed)
+ * realtime beats schedule-only; ties break on whose scheduled time window
+ * is closest to `nowMs`. Instances without service-date context
+ * (serviceDay <= 0) are unusable and dropped.
+ */
+export function pickTripServiceInstance(
+  instances: Array<TripStopTime[] | null | undefined>,
+  nowMs: number
+): TripStopTime[] {
+  const usable = instances
+    .map((sts) => sts || [])
+    .filter(
+      (sts) => sts.length > 0 && sts.every((st) => (st.serviceDay ?? 0) > 0)
+    )
+  if (usable.length <= 1) return usable[0] || []
+
+  const score = (sts: TripStopTime[]) => {
+    const live = sts.some((st) => hasLiveArrival(st))
+    const firstSt = sts[0]
+    const lastSt = sts[sts.length - 1]
+    const first =
+      ((firstSt.serviceDay as number) +
+        (firstSt.scheduledDeparture ?? firstSt.scheduledArrival ?? 0)) *
+      1000
+    const last =
+      ((lastSt.serviceDay as number) +
+        (lastSt.scheduledArrival ?? lastSt.scheduledDeparture ?? 0)) *
+      1000
+    const dist = nowMs < first ? first - nowMs : nowMs > last ? nowMs - last : 0
+    return { dist, live }
+  }
+  return usable
+    .map((sts) => ({ s: score(sts), sts }))
+    .sort((a, b) =>
+      a.s.live !== b.s.live ? (a.s.live ? -1 : 1) : a.s.dist - b.s.dist
+    )[0].sts
 }
 
 /** Shape of a findTrip() response (lib/actions/apiV2.js findTrip). */

@@ -1,5 +1,6 @@
 import {
   pickBestAlightOption,
+  pickTripServiceInstance,
   rankAlightOptions,
   scoreAlightOption
 } from '../../../lib/util/go-mode/alight-optimizer'
@@ -151,6 +152,51 @@ describe('rankAlightOptions', () => {
     const b = candidate(T0, [transitItin(1800)], { stopId: 'B' })
     const best = pickBestAlightOption([a, b])
     expect(rankAlightOptions([a, b])[0].stopId).toBe(best?.stopId)
+  })
+})
+
+describe('pickTripServiceInstance', () => {
+  // Service-day epochs (seconds): "yesterday" and "today", one day apart.
+  const DAY = 86_400
+  const SD_YDAY = 1_700_000_000
+  const SD_TODAY = SD_YDAY + DAY
+  /** Instance of a run: serviceDay + start (sec-of-day), 3 stops 10 min apart. */
+  const instance = (serviceDay: number, startSec: number, live = false) =>
+    [0, 600, 1200].map((off, i) => ({
+      realtimeArrival: live ? startSec + off + 30 : undefined,
+      realtimeState: live ? 'UPDATED' : 'SCHEDULED',
+      scheduledArrival: startSec + off,
+      scheduledDeparture: startSec + off,
+      serviceDay,
+      stop: { id: `1:s${i}`, lat: 0, lon: 0, name: `S${i}` }
+    })) as any
+
+  it('returns [] when no instance is usable', () => {
+    expect(pickTripServiceInstance([], 0)).toEqual([])
+    expect(pickTripServiceInstance([null, undefined], 0)).toEqual([])
+    // dateless stoptimes (serviceDay -1) are unusable
+    expect(pickTripServiceInstance([instance(-1, 600)], 0)).toEqual([])
+  })
+
+  it('prefers the instance with live realtime', () => {
+    // Rider just after midnight: yesterday's 24h+ run is live, today's
+    // morning run is schedule-only.
+    const now = (SD_TODAY + 900) * 1000
+    const yday = instance(SD_YDAY, DAY + 600, true) // 00:10 today, live
+    const today = instance(SD_TODAY, 37_000) // 10:16 today, scheduled
+    expect(pickTripServiceInstance([today, yday], now)).toBe(yday)
+  })
+
+  it('falls back to the instance whose window is nearest now', () => {
+    const now = (SD_TODAY + 900) * 1000 // 00:15 today
+    const yday = instance(SD_YDAY, DAY + 600) // spans 00:10-00:30 today
+    const today = instance(SD_TODAY, 37_000) // 10-hour-away morning run
+    expect(pickTripServiceInstance([today, yday], now)).toBe(yday)
+  })
+
+  it('keeps a single usable instance', () => {
+    const today = instance(SD_TODAY, 37_000)
+    expect(pickTripServiceInstance([today, null], 0)).toBe(today)
   })
 })
 

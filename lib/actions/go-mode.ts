@@ -1125,7 +1125,11 @@ function buildOnboardItinerary(
       stop: { code: alightStop.code, gtfsId: alightStop.id, id: alightStop.id },
       stopId: alightStop.id
     },
-    transitLeg: true
+    transitLeg: true,
+    // Carry the boarded trip's id so refreshLiveLegTimes can re-poll this
+    // leg's GTFS-RT mid-ride (it skips legs without a trip id).
+    trip: { gtfsId: trip.id },
+    tripId: trip.id
   }
 
   const legs = [busLeg, ...(onward.legs || [])]
