@@ -1021,8 +1021,14 @@ function buildOnboardItinerary(
   }
 
   let alightIdx = stopTimes.findIndex((st: any) => st.stop?.id === best.stopId)
-  if (alightIdx < 0 || alightIdx <= boardIdx) {
+  if (alightIdx < 0) {
     alightIdx = Math.min(boardIdx + 1, stopTimes.length - 1)
+  }
+  // Alighting at the bus's very next stop: the ride segment is the approach to
+  // that stop, not a leg starting there — anchor the board stop one back so
+  // the rider's chosen stop is honored instead of silently pushed one further.
+  if (alightIdx <= boardIdx) {
+    boardIdx = Math.max(0, alightIdx - 1)
   }
 
   const boardStop = stopTimes[boardIdx]?.stop
