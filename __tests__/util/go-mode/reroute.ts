@@ -17,6 +17,7 @@ describe('go-mode re-route reducer', () => {
   it('starts with an idle reRoute state', () => {
     expect(initial.reRoute).toEqual({
       candidate: null,
+      candidates: [],
       searchId: null,
       status: 'idle'
     })
@@ -26,6 +27,7 @@ describe('go-mode re-route reducer', () => {
     const state = goMode(initial, startReroute({ searchId: 'abc' }))
     expect(state.reRoute).toEqual({
       candidate: null,
+      candidates: [],
       searchId: 'abc',
       status: 'searching'
     })
@@ -56,6 +58,7 @@ describe('go-mode re-route reducer', () => {
     const state = goMode(found, clearReroute())
     expect(state.reRoute).toEqual({
       candidate: null,
+      candidates: [],
       searchId: null,
       status: 'idle'
     })

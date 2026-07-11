@@ -45,6 +45,7 @@ Object {
     },
     "departureOverride": null,
     "isActive": false,
+    "liveLegTimes": Object {},
     "notifications": Object {
       "enabled": true,
       "recentNotifications": Array [],
@@ -52,13 +53,22 @@ Object {
       "soundEnabled": false,
       "vibrationEnabled": true,
     },
+    "onboard": Object {
+      "bestAlightStop": null,
+      "candidates": Array [],
+      "status": "idle",
+      "trip": null,
+      "vehicle": null,
+    },
     "originalFrom": null,
     "progress": null,
     "reRoute": Object {
       "candidate": null,
+      "candidates": Array [],
       "searchId": null,
       "status": "idle",
     },
+    "riding": null,
     "routeMatch": null,
     "simulation": Object {
       "pointIndex": 0,
@@ -73,7 +83,7 @@ Object {
       "lastPosition": null,
     },
     "ui": Object {
-      "mapFollowUser": true,
+      "mapFollowUser": false,
     },
     "vehicleMatch": Object {
       "consecutiveMatches": 0,
