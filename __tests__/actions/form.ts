@@ -1,10 +1,34 @@
 import '../test-utils/mock-window-url'
 import {
+  allDeparturesPassed,
   checkShouldReplanTrip,
   syncCurrentLocationOrigin
 } from '../../lib/actions/form'
 
 describe('actions > form', () => {
+  describe('allDeparturesPassed', () => {
+    const NOW = 1783788000000
+
+    it('is stale only when every displayed departure is in the past', () => {
+      expect(
+        allDeparturesPassed(
+          [{ startTime: NOW - 60000 }, { startTime: NOW - 1000 }],
+          NOW
+        )
+      ).toBe(true)
+      expect(
+        allDeparturesPassed(
+          [{ startTime: NOW - 60000 }, { startTime: NOW + 300000 }],
+          NOW
+        )
+      ).toBe(false)
+    })
+
+    it('is never stale with no results', () => {
+      expect(allDeparturesPassed([], NOW)).toBe(false)
+    })
+  })
+
   describe('syncCurrentLocationOrigin', () => {
     const runThunk = (currentQuery: any, currentPosition: any) => {
       const dispatched: any[] = []
