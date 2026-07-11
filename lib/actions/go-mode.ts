@@ -36,6 +36,7 @@ import {
   shouldTransitionToNextLeg
 } from '../util/go-mode/position-matching'
 import { getNextStopOnRide } from '../util/go-mode/next-stop'
+import { getRerouteCandidates, pickSameRouteReroute } from '../util/state'
 import type {
   NotificationEvent,
   NotificationType
@@ -270,6 +271,7 @@ export const setNotificationConfig = createAction<{
 
 export const startReroute = createAction<{
   autoApply?: boolean
+  keepRouteId?: string | null
   reason?: string
   searchId: string
 }>(START_REROUTE)
@@ -566,6 +568,9 @@ export function reRouteFromCurrentPosition(
     // Switch/Keep card — used when the current itinerary is definitively dead
     // (missed bus) and there is nothing for the rider to decide.
     autoApply?: boolean
+    // Restrict an auto-applied result to itineraries boarding this route (the
+    // one the rider already chose). Never force a different route on them.
+    keepRouteId?: string | null
     preferences?: any
     profileId?: string
     reason?: string
@@ -591,6 +596,7 @@ export function reRouteFromCurrentPosition(
     dispatch(
       startReroute({
         autoApply: !!options.autoApply,
+        keepRouteId: options.keepRouteId ?? null,
         reason: options.reason,
         searchId
       })
@@ -636,6 +642,15 @@ export function reRouteFromCurrentPosition(
       }
     }
 
+    // Keeping the rider's chosen route (missed-bus auto-update): bias the
+    // search toward it so its next departure is in the result set.
+    if (options.keepRouteId && !payload.preferred) {
+      payload.preferred = {
+        otherThanPreferredRoutesPenalty: 900,
+        routes: options.keepRouteId
+      }
+    }
+
     const profile = options.profileId
       ? getRoutingProfile(options.profileId)
       : undefined
@@ -656,19 +671,32 @@ export function reRouteFromCurrentPosition(
 }
 
 /**
- * Apply the best re-route candidate without asking (missed-bus auto-update:
- * the old itinerary is dead, so there is no decision to put to the rider).
- * Falls back to the regular card resolution when nothing usable came back.
+ * Apply a re-route candidate without asking (missed-bus auto-update: the old
+ * itinerary is dead, so there is no decision to put to the rider) — but ONLY
+ * one that keeps the rider on the route they chose (same route, next
+ * departure). Auto-updating must never force a different route or mode; when
+ * nothing boards the same route, fall back to the Switch/Keep card so the
+ * rider decides. Full re-planning stays behind the explicit
+ * "Find another way" button.
  */
 export function applyAutoReroute(candidates: Itinerary[]) {
   return function (dispatch: any, getState: any) {
-    const goMode = getState().otp?.goMode
+    const state = getState()
+    const goMode = state.otp?.goMode
     if (!goMode?.isActive || !goMode.reRoute?.autoApply) return
 
-    const best = candidates[0]
+    // Search the FULL result set (the display list is capped at 5 by
+    // duration, which is exactly the ranking that buried the next bus under
+    // bike-the-whole-way options).
+    const best = pickSameRouteReroute(
+      getRerouteCandidates(state, 50),
+      goMode.reRoute?.keepRouteId
+    )
     if (!best) {
-      // "none" card state; the missed-bus push already told the rider.
-      dispatch(setRerouteResult(null))
+      // No same-route option (last run of the day, outside the search
+      // window...): surface the alternatives as the regular card instead of
+      // auto-swapping. The missed-bus push already told the rider.
+      dispatch(setRerouteResult(candidates?.length ? candidates : null))
       return
     }
 
@@ -676,19 +704,17 @@ export function applyAutoReroute(candidates: Itinerary[]) {
 
     // Confirm what changed — the new boarding is the fact the rider needs.
     const firstTransitLeg = (best.legs || []).find((l: any) => l.transitLeg)
-    const message = firstTransitLeg
-      ? `Trip updated — ${
-          firstTransitLeg.routeShortName ||
-          firstTransitLeg.routeLongName ||
-          'your bus'
-        } departs ${firstTransitLeg.from?.name || 'the stop'} at ${format(
-          utcToZonedTime(
-            Number(firstTransitLeg.startTime),
-            getState().otp.config.homeTimezone
-          ),
-          'h:mm a'
-        )}.`
-      : 'Trip updated with a new route.'
+    const message = `Trip updated — ${
+      firstTransitLeg.routeShortName ||
+      firstTransitLeg.routeLongName ||
+      'your bus'
+    } departs ${firstTransitLeg.from?.name || 'the stop'} at ${format(
+      utcToZonedTime(
+        Number(firstTransitLeg.startTime),
+        getState().otp.config.homeTimezone
+      ),
+      'h:mm a'
+    )}.`
     const notification: NotificationEvent = {
       id: `TRIP_UPDATED_auto_${Date.now()}`,
       message,
@@ -1691,8 +1717,8 @@ export function handlePositionUpdate(position: GeolocationPosition) {
 
     // A detected missed bus re-plans immediately: definitively missed (the
     // realtime feed says the bus left, or the rider clearly isn't at the stop)
-    // auto-applies the best alternative — no prompt for what the app already
-    // knows — while an ambiguous miss surfaces the regular Switch/Keep card.
+    // auto-updates to the SAME route's next departure — no prompt, no route
+    // change — while an ambiguous miss surfaces the regular Switch/Keep card.
     const reRouteStatus = goMode.reRoute?.status || 'idle'
     if (
       missedCtx &&
@@ -1706,6 +1732,9 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       dispatch(
         reRouteFromCurrentPosition({
           autoApply: missedCtx.definitive,
+          keepRouteId: getLegRouteId(
+            itinerary.legs[missedCtx.boardLegIndex] as Leg
+          ),
           reason: 'missed-bus'
         })
       )

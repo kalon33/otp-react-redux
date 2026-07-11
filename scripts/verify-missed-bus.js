@@ -231,8 +231,15 @@ async function main() {
   if (after.reRouteStatus !== 'idle') {
     throw new Error('reRoute state not reset after auto-apply')
   }
+  // The auto-update must keep the rider on the route they chose — never a
+  // different route or a bike-the-whole-way "winner" (07-11 field report).
+  if (after.newBusRoute !== chosen.busRoute) {
+    throw new Error(
+      `auto-update changed the route: ${chosen.busRoute} -> ${after.newBusRoute}`
+    )
+  }
   console.log(
-    '\nPASS: missed bus detected, trip auto-updated, rider informed — no prompts'
+    '\nPASS: missed bus detected, trip auto-updated on the SAME route, rider informed — no prompts'
   )
 }
 

@@ -147,6 +147,9 @@ export interface GoModeState {
     candidate: Itinerary | null
     // All browsable alternatives, shortest-duration first.
     candidates: Itinerary[]
+    // Auto-apply may only pick itineraries boarding this route — the one the
+    // rider already chose. Null = no constraint (manual re-routes).
+    keepRouteId: string | null
     // What prompted the re-route (e.g. 'missed-bus'); diagnostic only.
     reason: string | null
     searchId: string | null
@@ -221,6 +224,7 @@ const defaultState: GoModeState = {
     autoApply: false,
     candidate: null,
     candidates: [],
+    keepRouteId: null,
     reason: null,
     searchId: null,
     status: 'idle'
@@ -575,6 +579,7 @@ const goMode = handleActions<GoModeState, any>(
         autoApply: !!action.payload.autoApply,
         candidate: null,
         candidates: [],
+        keepRouteId: action.payload.keepRouteId ?? null,
         reason: action.payload.reason ?? null,
         searchId: action.payload.searchId,
         status: 'searching' as const
