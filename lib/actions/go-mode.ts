@@ -36,7 +36,6 @@ import {
   shouldTransitionToNextLeg
 } from '../util/go-mode/position-matching'
 import { getNextStopOnRide } from '../util/go-mode/next-stop'
-import { sendPush } from '../util/go-mode/push-service'
 import type {
   NotificationEvent,
   NotificationType
@@ -57,7 +56,8 @@ import {
 } from '../util/go-mode/native-gps'
 import {
   ensureNativeNotifyPermission,
-  hasNativeNotify
+  hasNativeNotify,
+  sendPush
 } from '../util/go-mode/native-notify'
 
 import {
@@ -1661,8 +1661,8 @@ export function handlePositionUpdate(position: GeolocationPosition) {
 
     // Show notifications. Always record them in state (so replay assertions and
     // the debug log see the sequence), but suppress the real-world side effects
-    // (browser notification/vibration and the Pushover relay) during replay so a
-    // fast offline replay loop doesn't buzz the phone.
+    // (in-app toast/vibration and the phone's system notification) during replay
+    // so a fast offline replay loop doesn't buzz the phone.
     const replaying = isReplayActive()
     notifications.forEach((notification) => {
       dispatch(addNotification(notification))
@@ -1675,9 +1675,10 @@ export function handlePositionUpdate(position: GeolocationPosition) {
             vibrationEnabled: true
           }
         )
-        // Forward the highest-value alerts to the phone as a real push (Pushover).
-        // Dedup is already guaranteed upstream by checkForNotifications, so each
-        // fires at most once. Limited to a few types to avoid push spam.
+        // Raise the highest-value alerts as a system notification on the phone
+        // (native shell only; no-op in a browser). Dedup is already guaranteed
+        // upstream by checkForNotifications, so each fires at most once.
+        // Limited to a few types to avoid notification spam.
         if (PUSH_NOTIFICATION_TYPES.has(notification.type)) {
           sendPush({
             message: notification.message,
