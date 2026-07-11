@@ -67,6 +67,7 @@ interface Props {
   map: React.ReactElement
   routingQuery: any
   setMobileScreen: (screen: number) => void
+  syncCurrentLocationOrigin: () => void
   updateQueryTimeIfLeavingNow: () => void
 }
 
@@ -97,9 +98,17 @@ class BatchSearchScreen extends Component<Props> {
   _advancedSettingRef = React.createRef<HTMLDivElement>()
 
   handlePlanTripClick = () => {
-    const { currentQuery, intl, routingQuery, updateQueryTimeIfLeavingNow } =
-      this.props
+    const {
+      currentQuery,
+      intl,
+      routingQuery,
+      syncCurrentLocationOrigin,
+      updateQueryTimeIfLeavingNow
+    } = this.props
     updateQueryTimeIfLeavingNow()
+    // "Update the point with each search": a Current Location origin plans
+    // from the freshest GPS fix, not the one captured when the field was set.
+    syncCurrentLocationOrigin()
     alertUserTripPlan(intl, currentQuery, routingQuery, () =>
       this.setState({ planTripClicked: true })
     )
@@ -244,6 +253,7 @@ const mapDispatchToProps = {
   beginOnboardFlow: goModeActions.beginOnboardFlow,
   routingQuery: apiActions.routingQuery,
   setMobileScreen: uiActions.setMobileScreen,
+  syncCurrentLocationOrigin: formActions.syncCurrentLocationOrigin,
   updateQueryTimeIfLeavingNow: formActions.updateQueryTimeIfLeavingNow
 }
 
