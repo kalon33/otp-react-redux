@@ -55,6 +55,10 @@ import {
   startNativeGps,
   stopNativeGps
 } from '../util/go-mode/native-gps'
+import {
+  ensureNativeNotifyPermission,
+  hasNativeNotify
+} from '../util/go-mode/native-notify'
 
 import {
   fetchOnboardCandidatePlan,
@@ -1295,6 +1299,10 @@ export function startPositionTracking() {
           if (!simulationActive) dispatch(setTrackingError(error as any))
         }
       )
+      // Ask for notification permission alongside the location prompt — trip
+      // start is the moment the rider understands why. Fire-and-forget; alerts
+      // fall back to in-app toasts if declined.
+      if (hasNativeNotify()) ensureNativeNotifyPermission()
       return
     }
 
