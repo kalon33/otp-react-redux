@@ -31,6 +31,9 @@ export interface GoModeSession {
   activeItinerary: any
   departureOverride: number | null
   originalFrom: any | null
+  // Sticky "rider is aboard this vehicle" fact — kept across reloads so a
+  // mid-ride refresh never re-asks which bus the rider is on.
+  riding: any | null
   // Set once when the trip starts; preserved across reloads so the freshness
   // window measures the real trip age, not the time since the last save.
   startedAt: number
@@ -79,6 +82,7 @@ export function saveGoModeSession(goMode: GoModeState): void {
     activeItinerary: goMode.activeItinerary,
     departureOverride: goMode.departureOverride ?? null,
     originalFrom: goMode.originalFrom ?? null,
+    riding: goMode.riding ?? null,
     startedAt: sessionStartedAt,
     vehicleMatch: goMode.vehicleMatch?.match ?? null
   }

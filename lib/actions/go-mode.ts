@@ -33,6 +33,7 @@ import {
   matchPositionToRoute,
   shouldTransitionToNextLeg
 } from '../util/go-mode/position-matching'
+import { getNextStopOnRide } from '../util/go-mode/next-stop'
 import { sendPush } from '../util/go-mode/push-service'
 import type {
   NotificationEvent,
@@ -87,6 +88,17 @@ const REROUTE_SNAPSHOT_INTERVAL_MS = 90000
 // tick fetches immediately.
 let lastLiveLegTimesAt = 0
 const LIVE_LEG_TIMES_INTERVAL_MS = 20000
+
+// How long the rider must stay off-route before the sticky "riding" fact is
+// dropped. GPS noise and tunnels produce transient off-route ticks; only a
+// sustained departure means the rider genuinely left the vehicle.
+const RIDING_OFFROUTE_CLEAR_MS = 90000
+
+// Minimum progress along a transit leg before GPS alone establishes
+// aboard-ness. isOnRoute is true within 250m of the leg — including while
+// still waiting at the boarding stop — so require clear movement along the
+// leg (or a confirmed/high vehicle match, which skips this gate).
+const RIDING_MIN_PROGRESS = 0.05
 
 // Module-scoped visibilitychange handler for cleanup
 let visibilityChangeHandler: (() => void) | null = null
@@ -143,6 +155,7 @@ const { randId } = coreUtils.storage
 
 // Action types
 export const ADD_NOTIFICATION = 'ADD_NOTIFICATION'
+export const CLEAR_RIDING = 'CLEAR_RIDING'
 export const CLEAR_VEHICLE_MATCH = 'CLEAR_VEHICLE_MATCH'
 export const CONFIRM_VEHICLE = 'CONFIRM_VEHICLE'
 export const DISMISS_BOARDING_PROMPT = 'DISMISS_BOARDING_PROMPT'
@@ -150,6 +163,7 @@ export const PAUSE_GPS_SIMULATION = 'PAUSE_GPS_SIMULATION'
 export const REROUTE_SNAPSHOT = 'REROUTE_SNAPSHOT'
 export const RESUME_GPS_SIMULATION = 'RESUME_GPS_SIMULATION'
 export const SET_DEPARTURE_OVERRIDE = 'SET_DEPARTURE_OVERRIDE'
+export const SET_RIDING = 'SET_RIDING'
 export const SET_LIVE_LEG_TIMES = 'SET_LIVE_LEG_TIMES'
 export const SET_NOTIFICATION_CONFIG = 'SET_NOTIFICATION_CONFIG'
 export const SET_TRACKING_ERROR = 'SET_TRACKING_ERROR'
@@ -207,6 +221,30 @@ export interface LiveLegTime {
 }
 export const setLiveLegTimes =
   createAction<Record<number, LiveLegTime>>(SET_LIVE_LEG_TIMES)
+
+/**
+ * The durable "rider is aboard this vehicle" fact. Unlike routeMatch (a
+ * per-GPS-tick snapshot) and vehicleMatch (reset by each new trip/search),
+ * this survives new searches and itinerary switches so the app never asks
+ * the rider which bus they're on mid-ride. Cleared when the rider alights
+ * (leg transition past the bus leg), Go Mode stops, or the rider stays
+ * off-route long enough that the fact is evidently no longer true.
+ */
+export interface RidingState {
+  /** Epoch ms when aboard-ness was first established. */
+  boardedAt: number
+  headsign: string | null
+  /** Transit leg index in activeItinerary; -1 = not anchored to a leg. */
+  legIndex: number
+  /** Epoch ms of the first consecutive off-route tick; null while on route. */
+  offRouteSince: number | null
+  routeId: string | null
+  routeShortName: string | null
+  tripId: string | null
+  vehicleId: string | null
+}
+export const setRiding = createAction<RidingState>(SET_RIDING)
+export const clearRiding = createAction(CLEAR_RIDING)
 export const addNotification = createAction<NotificationEvent>(ADD_NOTIFICATION)
 export const setTrackingError = createAction<GeolocationPositionError | null>(
   SET_TRACKING_ERROR
@@ -301,6 +339,27 @@ export function beginGoMode(itinerary: Itinerary) {
     dispatch(setMobileScreen(MobileScreens.GO_MODE))
 
     await dispatch(startGoModeTracking(itinerary))
+
+    // If the rider is already aboard a known vehicle (sticky riding state —
+    // e.g. this trip was started from a mid-ride search), keep the vehicle
+    // match locked so matching never re-runs or re-prompts.
+    const { goMode } = getState().otp
+    const riding: RidingState | null = goMode?.riding ?? null
+    if (
+      riding?.vehicleId &&
+      goMode?.vehicleMatch?.match?.confidence !== 'confirmed'
+    ) {
+      dispatch({
+        payload: {
+          confidence: 'confirmed' as const,
+          distanceMeters: null,
+          label: riding.routeShortName || riding.vehicleId,
+          lastSeen: Date.now(),
+          vehicleId: riding.vehicleId
+        },
+        type: CONFIRM_VEHICLE
+      })
+    }
   }
 }
 
@@ -508,6 +567,30 @@ export function reRouteFromCurrentPosition(
       }
     }
 
+    // Aboard a bus, "current position" is a moving mid-street point the rider
+    // can't act on. Plan from the next stop ahead on their line instead,
+    // anchored to when the bus gets there, and prefer their current route so
+    // "stay on this bus" surfaces as the default choice.
+    const riding = goMode?.riding
+    const nextStop = riding ? getNextStopOnRide(state) : null
+    if (riding && nextStop) {
+      const zoned = utcToZonedTime(nextStop.arrivalEpoch, homeTimezone)
+      payload.date = format(zoned, coreUtils.time.OTP_API_DATE_FORMAT)
+      payload.departArrive = 'DEPART'
+      payload.from = {
+        lat: nextStop.lat,
+        lon: nextStop.lon,
+        name: nextStop.name
+      }
+      payload.time = format(zoned, coreUtils.time.OTP_API_TIME_FORMAT)
+      if (riding.routeId) {
+        payload.preferred = {
+          otherThanPreferredRoutesPenalty: 900,
+          routes: riding.routeId
+        }
+      }
+    }
+
     const profile = options.profileId
       ? getRoutingProfile(options.profileId)
       : undefined
@@ -516,6 +599,10 @@ export function reRouteFromCurrentPosition(
       payload.routingPreferences = profile.prefs
     } else if (options.preferences) {
       payload.routingPreferences = options.preferences
+    } else if (riding && nextStop) {
+      // No caller-specified preferences: default a mid-ride re-plan to the
+      // stay-seated profile so transfers away from the boarded bus cost extra.
+      payload.routingPreferences = getRoutingProfile('stay-seated')?.prefs
     }
 
     // Reuse the normal search pipeline; results populate searches[searchId].
@@ -649,6 +736,42 @@ export function beginOnboardFlow() {
     dispatch(setMobileScreen(MobileScreens.GO_MODE))
     dispatch(updateTrackingInterval({ interval: 5000 }))
     dispatch(startPositionTracking())
+
+    // The rider's vehicle may already be known from a prior confirmation or
+    // route match this ride (sticky riding state). Re-confirm it silently
+    // instead of re-running discovery and re-asking which bus they're on.
+    const riding: RidingState | null = getState().otp.goMode?.riding ?? null
+    if (riding?.tripId) {
+      const label = riding.routeShortName || riding.headsign || riding.routeId
+      const vehicleId = riding.vehicleId || `route:${riding.routeId}`
+      dispatch({
+        payload: {
+          confidence: 'confirmed' as const,
+          distanceMeters: null,
+          label: label || vehicleId,
+          lastSeen: Date.now(),
+          vehicleId
+        },
+        type: CONFIRM_VEHICLE
+      })
+      dispatch(
+        setOnboardVehicle({
+          label,
+          nextStopId: null,
+          routeId: riding.routeId,
+          tripId: riding.tripId,
+          vehicleId
+        })
+      )
+      dispatch(loadOnboardScheduleAndOptimize(riding.tripId))
+      return
+    }
+    if (riding?.routeId) {
+      // Route known but not the specific trip — resolve it without prompting.
+      dispatch(confirmOnboardRoute(riding.routeId))
+      return
+    }
+
     dispatch(discoverNearbyVehicles())
   }
 }
@@ -1264,6 +1387,54 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       return
     }
 
+    // Maintain the sticky "riding" fact (see RidingState). Established once the
+    // rider is verifiably aboard a transit leg; refreshed if the anchor leg
+    // changes; dropped only after a sustained off-route period.
+    const matchedLeg: any = itinerary.legs[routeMatch.legIndex]
+    const riding = goMode.riding
+    const nowForRiding = getCurrentTime().getTime()
+    if (routeMatch.isOnRoute && matchedLeg?.transitLeg) {
+      const vehicleConfidence = goMode.vehicleMatch?.match?.confidence
+      const aboard =
+        vehicleConfidence === 'confirmed' ||
+        vehicleConfidence === 'high' ||
+        routeMatch.progressAlongLeg >= RIDING_MIN_PROGRESS
+      if (
+        aboard &&
+        (!riding ||
+          riding.legIndex !== routeMatch.legIndex ||
+          riding.offRouteSince != null)
+      ) {
+        dispatch(
+          setRiding({
+            boardedAt: riding?.boardedAt ?? nowForRiding,
+            headsign: matchedLeg.headsign ?? null,
+            legIndex: routeMatch.legIndex,
+            offRouteSince: null,
+            routeId: getLegRouteId(matchedLeg),
+            routeShortName:
+              matchedLeg.routeShortName ?? matchedLeg.route?.shortName ?? null,
+            tripId:
+              matchedLeg.trip?.gtfsId ||
+              matchedLeg.tripId ||
+              riding?.tripId ||
+              null,
+            vehicleId:
+              goMode.vehicleMatch?.match?.vehicleId ?? riding?.vehicleId ?? null
+          })
+        )
+      }
+    } else if (riding) {
+      if (riding.offRouteSince == null) {
+        dispatch(setRiding({ ...riding, offRouteSince: nowForRiding }))
+      } else if (
+        nowForRiding - riding.offRouteSince >
+        RIDING_OFFROUTE_CLEAR_MS
+      ) {
+        dispatch(clearRiding())
+      }
+    }
+
     // Check for leg transition
     const previousLegIndex = goMode.routeMatch?.legIndex || 0
     if (
@@ -1520,7 +1691,9 @@ export function performVehicleMatching(routeId: string) {
         if (matchResult.vehicleId && matchResult.confidence !== 'low') {
           dispatch(confirmVehicleSelection(matchResult.vehicleId))
         }
-      } else {
+      } else if (!goMode.riding) {
+        // With sticky riding state set, the rider's bus is already known —
+        // never re-ask, even in the onboard flow.
         dispatch(showBoardingPromptAction())
       }
     }
@@ -1549,6 +1722,24 @@ export function confirmVehicleSelection(vehicleId: string) {
       },
       type: CONFIRM_VEHICLE
     })
+
+    // An explicit rider confirmation is the strongest aboard-ness signal —
+    // stamp the sticky riding fact directly (no GPS heuristics needed).
+    if (selected?.routeId || selected?.tripId) {
+      const prevRiding = goMode?.riding
+      dispatch(
+        setRiding({
+          boardedAt: prevRiding?.boardedAt ?? Date.now(),
+          headsign: selected.tripHeadsign ?? null,
+          legIndex: goMode?.routeMatch?.legIndex ?? -1,
+          offRouteSince: null,
+          routeId: selected.routeId ?? null,
+          routeShortName: null,
+          tripId: selected.tripId ?? null,
+          vehicleId
+        })
+      )
+    }
 
     // In the "I'm on the bus" onboard flow (no itinerary yet), use the selected
     // vehicle's trip to fetch the schedule and optimize the alight stop.
@@ -1757,6 +1948,21 @@ export function confirmOnboardRoute(routeId: string) {
         label: label || routeId,
         nextStopId: chosen?.nextStopId || null,
         routeId,
+        tripId,
+        vehicleId
+      })
+    )
+    // The rider explicitly told us their route — stamp the sticky riding fact
+    // so no later flow re-asks which bus they're on.
+    const prevRiding = goMode?.riding
+    dispatch(
+      setRiding({
+        boardedAt: prevRiding?.boardedAt ?? Date.now(),
+        headsign: chosen?.tripHeadsign ?? null,
+        legIndex: goMode?.routeMatch?.legIndex ?? -1,
+        offRouteSince: null,
+        routeId,
+        routeShortName: null,
         tripId,
         vehicleId
       })

@@ -6,6 +6,7 @@ import {
   BEGIN_ONBOARD_FLOW,
   CLEAR_ONBOARD,
   CLEAR_REROUTE,
+  CLEAR_RIDING,
   CLEAR_VEHICLE_MATCH,
   CONFIRM_VEHICLE,
   DISMISS_BOARDING_PROMPT,
@@ -19,6 +20,7 @@ import {
   SET_ONBOARD_TRIP,
   SET_ONBOARD_VEHICLE,
   SET_REROUTE_RESULT,
+  SET_RIDING,
   SET_TRACKING_ERROR,
   SET_TRANSIT_LEG_ENTERED,
   SHOW_BOARDING_PROMPT,
@@ -38,7 +40,7 @@ import {
   UPDATE_TRACKING_INTERVAL,
   UPDATE_VEHICLE_MATCH
 } from '../actions/go-mode'
-import type { LiveLegTime } from '../actions/go-mode'
+import type { LiveLegTime, RidingState } from '../actions/go-mode'
 import type {
   NearbyVehicleOption,
   VehicleMatchResult
@@ -145,6 +147,13 @@ export interface GoModeState {
     status: 'idle' | 'searching' | 'found' | 'none' | 'error'
   }
 
+  /**
+   * The durable "rider is aboard this vehicle" fact (see RidingState in
+   * actions/go-mode). Survives new searches and itinerary switches; cleared
+   * on alight, STOP_GO_MODE, or sustained off-route.
+   */
+  riding: RidingState | null
+
   routeMatch: RouteMatchResult | null
 
   simulation: SimulationState
@@ -208,6 +217,8 @@ const defaultState: GoModeState = {
     status: 'idle'
   },
 
+  riding: null,
+
   routeMatch: null,
 
   simulation: {
@@ -236,6 +247,42 @@ const defaultState: GoModeState = {
     nearbyVehicles: [],
     trackedRouteId: null
   }
+}
+
+/** Route id from a leg — OTP2 object form (leg.route.id) or legacy leg.routeId. */
+function legRouteId(leg: any): string | null {
+  if (!leg) return null
+  const route = leg.route
+  if (route && typeof route === 'object') return route.id ?? null
+  return leg.routeId ?? null
+}
+
+/**
+ * Re-anchor the sticky riding fact onto a (possibly new) itinerary: find the
+ * transit leg matching the boarded trip (preferred) or route. When the new
+ * itinerary doesn't contain it, keep the fact un-anchored (legIndex -1) —
+ * the rider is still on that bus until GPS disproves it.
+ */
+function reanchorRiding(
+  riding: RidingState | null,
+  itinerary: Itinerary | null
+): RidingState | null {
+  if (!riding || !itinerary?.legs) return riding
+  const legs: any[] = itinerary.legs
+  let legIndex = -1
+  if (riding.tripId) {
+    legIndex = legs.findIndex(
+      (l) =>
+        l?.transitLeg &&
+        (l.trip?.gtfsId === riding.tripId || l.tripId === riding.tripId)
+    )
+  }
+  if (legIndex < 0 && riding.routeId) {
+    legIndex = legs.findIndex(
+      (l) => l?.transitLeg && legRouteId(l) === riding.routeId
+    )
+  }
+  return { ...riding, legIndex }
 }
 
 const goMode = handleActions<GoModeState, any>(
@@ -299,6 +346,11 @@ const goMode = handleActions<GoModeState, any>(
     [CLEAR_REROUTE]: (state) => ({
       ...state,
       reRoute: { ...defaultState.reRoute }
+    }),
+
+    [CLEAR_RIDING]: (state) => ({
+      ...state,
+      riding: null
     }),
 
     [CLEAR_VEHICLE_MATCH]: (state) => ({
@@ -423,6 +475,11 @@ const goMode = handleActions<GoModeState, any>(
       }
     },
 
+    [SET_RIDING]: (state, action) => ({
+      ...state,
+      riding: action.payload
+    }),
+
     [SET_TRACKING_ERROR]: (state, action) => {
       return {
         ...state,
@@ -465,6 +522,7 @@ const goMode = handleActions<GoModeState, any>(
         originalFrom: originalFrom ?? null,
         progress: null,
         reRoute: { ...defaultState.reRoute },
+        riding: reanchorRiding(state.riding, itinerary),
         routeMatch: null,
         tracking: {
           ...state.tracking,
@@ -531,9 +589,17 @@ const goMode = handleActions<GoModeState, any>(
     [TRANSITION_LEG]: (state, action) => {
       const { legIndex } = action.payload
 
+      // Advancing past the boarded transit leg means the rider alighted —
+      // drop the sticky riding fact.
+      const alighted =
+        state.riding != null &&
+        state.riding.legIndex >= 0 &&
+        legIndex > state.riding.legIndex
+
       return {
         ...state,
         departureOverride: null,
+        riding: alighted ? null : state.riding,
         routeMatch: state.routeMatch
           ? {
               ...state.routeMatch,
@@ -543,7 +609,7 @@ const goMode = handleActions<GoModeState, any>(
       }
     },
 
-    [UPDATE_NEARBY_VEHICLES]: (state, action) => ({
+    [UPDATE_NEARBY_VEHICLES]: (state: GoModeState, action: any) => ({
       ...state,
       vehicleMatch: {
         ...state.vehicleMatch,
@@ -551,7 +617,7 @@ const goMode = handleActions<GoModeState, any>(
       }
     }),
 
-    [UPDATE_POSITION]: (state, action) => {
+    [UPDATE_POSITION]: (state: GoModeState, action: any) => {
       return {
         ...state,
         tracking: {
@@ -562,21 +628,21 @@ const goMode = handleActions<GoModeState, any>(
       }
     },
 
-    [UPDATE_PROGRESS]: (state, action) => {
+    [UPDATE_PROGRESS]: (state: GoModeState, action: any) => {
       return {
         ...state,
         progress: action.payload
       }
     },
 
-    [UPDATE_ROUTE_MATCH]: (state, action) => {
+    [UPDATE_ROUTE_MATCH]: (state: GoModeState, action: any) => {
       return {
         ...state,
         routeMatch: action.payload
       }
     },
 
-    [UPDATE_SIMULATION_PROGRESS]: (state, action) => ({
+    [UPDATE_SIMULATION_PROGRESS]: (state: GoModeState, action: any) => ({
       ...state,
       simulation: {
         ...state.simulation,
@@ -584,7 +650,7 @@ const goMode = handleActions<GoModeState, any>(
       }
     }),
 
-    [UPDATE_TRACKING_INTERVAL]: (state, action) => {
+    [UPDATE_TRACKING_INTERVAL]: (state: GoModeState, action: any) => {
       const { interval } = action.payload
 
       return {
@@ -596,7 +662,7 @@ const goMode = handleActions<GoModeState, any>(
       }
     },
 
-    [UPDATE_VEHICLE_MATCH]: (state, action) => ({
+    [UPDATE_VEHICLE_MATCH]: (state: GoModeState, action: any) => ({
       ...state,
       vehicleMatch: {
         ...state.vehicleMatch,
