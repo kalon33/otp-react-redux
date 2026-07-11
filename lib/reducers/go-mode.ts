@@ -140,10 +140,15 @@ export interface GoModeState {
   progress: TripProgress | null
 
   reRoute: {
+    // Apply the best result without asking (definitive missed bus) instead of
+    // surfacing the Switch/Keep card.
+    autoApply: boolean
     // The single best candidate (kept for callers that only need one).
     candidate: Itinerary | null
     // All browsable alternatives, shortest-duration first.
     candidates: Itinerary[]
+    // What prompted the re-route (e.g. 'missed-bus'); diagnostic only.
+    reason: string | null
     searchId: string | null
     status: 'idle' | 'searching' | 'found' | 'none' | 'error'
   }
@@ -213,8 +218,10 @@ const defaultState: GoModeState = {
   progress: null,
 
   reRoute: {
+    autoApply: false,
     candidate: null,
     candidates: [],
+    reason: null,
     searchId: null,
     status: 'idle'
   },
@@ -474,6 +481,9 @@ const goMode = handleActions<GoModeState, any>(
         ...state,
         reRoute: {
           ...state.reRoute,
+          // Results resolved into a card (or "none") — the auto-apply moment,
+          // if there was one, has passed.
+          autoApply: false,
           candidate: candidates[0] ?? null,
           candidates,
           status: candidates.length > 0 ? ('found' as const) : ('none' as const)
@@ -562,8 +572,10 @@ const goMode = handleActions<GoModeState, any>(
     [START_REROUTE]: (state, action) => ({
       ...state,
       reRoute: {
+        autoApply: !!action.payload.autoApply,
         candidate: null,
         candidates: [],
+        reason: action.payload.reason ?? null,
         searchId: action.payload.searchId,
         status: 'searching' as const
       }

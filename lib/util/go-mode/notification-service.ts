@@ -1,5 +1,6 @@
 import type { Leg } from '@opentripplanner/types'
 
+import { calculateDistance } from './position-matching'
 import type { TripProgress } from './progress-calculator'
 
 export type NotificationType =
@@ -11,7 +12,9 @@ export type NotificationType =
   | 'ROUTE_DEVIATION'
   | 'CONNECTION_WARNING'
   | 'LEAVE_SOON'
+  | 'MISSED_BUS'
   | 'TRIP_COMPLETE'
+  | 'TRIP_UPDATED'
 
 export interface NotificationConfig {
   enabled: boolean
@@ -266,6 +269,182 @@ export function checkLeaveSoon(
     timestamp: new Date(),
     title: 'Time to go',
     type: 'LEAVE_SOON'
+  }
+}
+
+// Grace after the boarded-or-not departure time before declaring a miss.
+// With a realtime (GPS-fed) board epoch the bus verifiably left, so only GPS
+// jitter needs absorbing; schedule-only data must also absorb an unreported
+// late-running bus.
+const MISSED_BUS_GRACE_REALTIME_MS = 90_000
+const MISSED_BUS_GRACE_SCHEDULED_MS = 180_000
+// Above this ground speed the rider is moving at vehicle pace — assume they
+// boarded even if vehicle matching hasn't confirmed yet.
+const MISSED_BUS_MAX_RIDER_SPEED_MPS = 4
+// Within this range of the boarding stop, schedule-only data can't distinguish
+// "bus hasn't come" from "rider missed it" — stay ambiguous (card, not swap).
+const MISSED_BUS_AT_STOP_RADIUS_M = 50
+
+/** Everything classifyMissedBus needs to judge the upcoming boarding. */
+export interface MissedBusInput {
+  currentLegIndex: number
+  departureOverrideMs: number | null
+  legs: Leg[]
+  liveLegTimes: Record<number, { boardEpoch: number | null; realtime: boolean }>
+  nowMs: number
+  riderPosition: [number, number] | null
+  riderSpeedMps: number | null
+  riding: { legIndex: number } | null
+  vehicleConfidence?: string
+}
+
+export interface MissedBusContext {
+  boardLegIndex: number
+  // True when the miss is certain (realtime says the bus left, or the rider is
+  // provably away from the stop) — safe to swap the trip without prompting.
+  definitive: boolean
+  effectiveBoardMs: number
+  realtime: boolean
+}
+
+/**
+ * The departure time the rider actually needs to make: a live (GPS-fed) board
+ * epoch beats a rider-selected later departure, which beats the plan's
+ * scheduled time. A realtime epoch still in the future means the bus is late,
+ * not missed.
+ */
+export function getEffectiveBoardTimeMs(
+  leg: Leg,
+  liveLegTime: { boardEpoch: number | null; realtime: boolean } | undefined,
+  departureOverrideMs: number | null
+): { ms: number; realtime: boolean } {
+  if (liveLegTime?.realtime && liveLegTime.boardEpoch != null) {
+    return { ms: liveLegTime.boardEpoch, realtime: true }
+  }
+  if (departureOverrideMs != null) {
+    return { ms: departureOverrideMs, realtime: false }
+  }
+  return { ms: Number(leg.startTime), realtime: false }
+}
+
+/**
+ * Detect a missed boarding: the next transit departure has passed (plus grace)
+ * and the rider is verifiably not aboard. Returns null while there is nothing
+ * to miss — rider aboard, departure still ahead, or no upcoming transit leg.
+ *
+ * `definitive` drives what happens next: a definitive miss auto-updates the
+ * trip (the app should never ask the rider to confirm what it already knows);
+ * an ambiguous one (schedule-only data while standing at the stop — the bus
+ * may simply be late) surfaces the regular Switch/Keep card instead.
+ */
+export function classifyMissedBus(
+  input: MissedBusInput
+): MissedBusContext | null {
+  const {
+    currentLegIndex,
+    departureOverrideMs,
+    legs,
+    liveLegTimes,
+    nowMs,
+    riderPosition,
+    riderSpeedMps,
+    riding,
+    vehicleConfidence
+  } = input
+
+  // The boarding at stake: first transit leg not yet behind the rider.
+  let boardLegIndex = -1
+  for (let i = currentLegIndex; i < legs.length; i++) {
+    if (isTransitMode(legs[i].mode)) {
+      boardLegIndex = i
+      break
+    }
+  }
+  if (boardLegIndex === -1) return null
+  const boardLeg = legs[boardLegIndex]
+
+  // Aboard already? The sticky riding fact or a strong vehicle match settles
+  // it. Ground speed at vehicle pace counts too: the realtime feed can mark
+  // the bus departed the instant the rider boards, before matching confirms.
+  if (riding?.legIndex === boardLegIndex) return null
+  if (
+    currentLegIndex === boardLegIndex &&
+    (vehicleConfidence === 'confirmed' || vehicleConfidence === 'high')
+  ) {
+    return null
+  }
+  if (riderSpeedMps != null && riderSpeedMps > MISSED_BUS_MAX_RIDER_SPEED_MPS) {
+    return null
+  }
+
+  const effective = getEffectiveBoardTimeMs(
+    boardLeg,
+    liveLegTimes[boardLegIndex],
+    // The rider-selected later departure only applies to the upcoming boarding.
+    boardLegIndex === currentLegIndex || boardLegIndex === currentLegIndex + 1
+      ? departureOverrideMs
+      : null
+  )
+  if (!Number.isFinite(effective.ms)) return null
+
+  const graceMs = effective.realtime
+    ? MISSED_BUS_GRACE_REALTIME_MS
+    : MISSED_BUS_GRACE_SCHEDULED_MS
+  if (nowMs < effective.ms + graceMs) return null
+
+  // Definitive when realtime says the bus left; schedule-only data is only
+  // conclusive if the rider is clearly not at the stop (otherwise the bus may
+  // just be running late with no realtime reporting).
+  let definitive = effective.realtime
+  if (!definitive && riderPosition && boardLeg.from) {
+    const distanceToStop = calculateDistance(
+      riderPosition[0],
+      riderPosition[1],
+      boardLeg.from.lat,
+      boardLeg.from.lon
+    )
+    definitive = distanceToStop > MISSED_BUS_AT_STOP_RADIUS_M
+  }
+
+  return {
+    boardLegIndex,
+    definitive,
+    effectiveBoardMs: effective.ms,
+    realtime: effective.realtime
+  }
+}
+
+/**
+ * Build the missed-bus notification (once per missed departure — the id is
+ * keyed to the departure epoch, so a later miss of the *next* bus re-fires).
+ */
+export function checkMissedBus(
+  ctx: MissedBusContext,
+  legs: Leg[],
+  sentNotifications: string[]
+): NotificationEvent | null {
+  const boardLeg = legs[ctx.boardLegIndex]
+  const routeName =
+    boardLeg.routeShortName || boardLeg.routeLongName || 'your bus'
+  const stopName = boardLeg.from?.name || 'the stop'
+
+  const id = generateNotificationId(
+    'MISSED_BUS',
+    `${routeName}_${stopName}_${ctx.effectiveBoardMs}`
+  )
+  if (wasRecentlySent(id, sentNotifications, 30 * 60 * 1000)) return null
+
+  const message = ctx.definitive
+    ? `Missed the ${routeName} — updating your trip to the next departure.`
+    : `The ${routeName} may have left ${stopName} — checking alternatives…`
+
+  return {
+    id,
+    message,
+    priority: 'high',
+    timestamp: new Date(),
+    title: 'Missed bus',
+    type: 'MISSED_BUS'
   }
 }
 

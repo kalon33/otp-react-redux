@@ -16,8 +16,10 @@ const initial = goMode(undefined, { type: '@@INIT' })
 describe('go-mode re-route reducer', () => {
   it('starts with an idle reRoute state', () => {
     expect(initial.reRoute).toEqual({
+      autoApply: false,
       candidate: null,
       candidates: [],
+      reason: null,
       searchId: null,
       status: 'idle'
     })
@@ -26,11 +28,32 @@ describe('go-mode re-route reducer', () => {
   it('START_REROUTE marks searching and records the searchId', () => {
     const state = goMode(initial, startReroute({ searchId: 'abc' }))
     expect(state.reRoute).toEqual({
+      autoApply: false,
       candidate: null,
       candidates: [],
+      reason: null,
       searchId: 'abc',
       status: 'searching'
     })
+  })
+
+  it('START_REROUTE records autoApply and reason for a missed-bus re-plan', () => {
+    const state = goMode(
+      initial,
+      startReroute({ autoApply: true, reason: 'missed-bus', searchId: 'abc' })
+    )
+    expect(state.reRoute.autoApply).toBe(true)
+    expect(state.reRoute.reason).toBe('missed-bus')
+  })
+
+  it('SET_REROUTE_RESULT clears autoApply — the auto-apply moment has passed', () => {
+    const searching = goMode(
+      initial,
+      startReroute({ autoApply: true, reason: 'missed-bus', searchId: 'abc' })
+    )
+    const state = goMode(searching, setRerouteResult(null))
+    expect(state.reRoute.autoApply).toBe(false)
+    expect(state.reRoute.status).toBe('none')
   })
 
   it('SET_REROUTE_RESULT with an itinerary -> found + candidate', () => {
@@ -57,8 +80,10 @@ describe('go-mode re-route reducer', () => {
     )
     const state = goMode(found, clearReroute())
     expect(state.reRoute).toEqual({
+      autoApply: false,
       candidate: null,
       candidates: [],
+      reason: null,
       searchId: null,
       status: 'idle'
     })

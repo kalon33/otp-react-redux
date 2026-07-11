@@ -32,6 +32,7 @@ import GoModeNotifications from './GoModeNotifications'
 import TripSheet from './TripSheet'
 
 interface Props {
+  applyAutoReroute: (candidates: any[]) => void
   beginGoMode: (itinerary: any) => void
   boardingStopData: any
   departureOverride: number | null
@@ -49,6 +50,7 @@ interface Props {
 }
 
 const GoModeScreen = ({
+  applyAutoReroute,
   beginGoMode,
   boardingStopData,
   departureOverride,
@@ -156,19 +158,26 @@ const GoModeScreen = ({
 
   // Resolve the re-route search into a browsable list of alternatives (or
   // "none") once results arrive. getRerouteCandidates reads the dedicated
-  // re-route search directly.
+  // re-route search directly. An auto-apply re-route (definitive missed bus)
+  // switches to the best alternative immediately instead of showing the card.
   useEffect(() => {
     if (goMode.reRoute.status !== 'searching') return
     if (reRouteCandidates.length > 0) {
-      setRerouteResult(reRouteCandidates)
+      if (goMode.reRoute.autoApply) {
+        applyAutoReroute(reRouteCandidates)
+      } else {
+        setRerouteResult(reRouteCandidates)
+      }
     } else if (reRouteSettled) {
       setRerouteResult(null)
     }
   }, [
     goMode.reRoute.status,
+    goMode.reRoute.autoApply,
     reRouteCandidates,
     reRouteSettled,
-    setRerouteResult
+    setRerouteResult,
+    applyAutoReroute
   ])
 
   const handleExit = () => {
@@ -480,6 +489,7 @@ const mapStateToProps = (state: any) => {
 }
 
 const mapDispatchToProps = {
+  applyAutoReroute: goModeActions.applyAutoReroute,
   beginGoMode: goModeActions.beginGoMode,
   endGoMode: goModeActions.endGoMode,
   pauseGpsSimulation: goModeActions.pauseGpsSimulation,

@@ -18,6 +18,8 @@ import type { AlightCandidateResult } from '../util/go-mode/alight-optimizer'
 import { calculateTripProgress } from '../util/go-mode/progress-calculator'
 import {
   checkForNotifications,
+  checkMissedBus,
+  classifyMissedBus,
   shouldAutoReroute,
   showNotification
 } from '../util/go-mode/notification-service'
@@ -262,7 +264,11 @@ export const setNotificationConfig = createAction<{
   vibrationEnabled?: boolean
 }>(SET_NOTIFICATION_CONFIG)
 
-export const startReroute = createAction<{ searchId: string }>(START_REROUTE)
+export const startReroute = createAction<{
+  autoApply?: boolean
+  reason?: string
+  searchId: string
+}>(START_REROUTE)
 // Accepts the full list of alternatives (preferred), or a single itinerary /
 // null for the legacy "best candidate only" callers. The reducer normalizes.
 export const setRerouteResult = createAction<Itinerary[] | Itinerary | null>(
@@ -333,8 +339,14 @@ export function beginGoMode(itinerary: Itinerary) {
     // before any async work, to avoid race with the GoModeScreen useEffect
     // that redirects away when isActive is false.
     // Capture the origin so it can be restored on exit if a mid-trip re-route
-    // replaces it with the rider's GPS position.
-    const originalFrom = getState().otp.currentQuery?.from || null
+    // replaces it with the rider's GPS position. When switching itineraries
+    // mid-trip (rider switch or missed-bus auto-update), currentQuery.from is
+    // already the re-route's GPS point — keep the origin from trip start.
+    const { currentQuery, goMode: priorGoMode } = getState().otp
+    const originalFrom =
+      (priorGoMode?.isActive && priorGoMode?.originalFrom) ||
+      currentQuery?.from ||
+      null
     dispatch(startGoMode({ itinerary, originalFrom }))
     dispatch(setMobileScreen(MobileScreens.GO_MODE))
 
@@ -373,7 +385,7 @@ export function startGoModeTracking(
   itinerary: Itinerary,
   options: { replay?: boolean } = {}
 ) {
-  return async function (dispatch: any) {
+  return async function (dispatch: any, getState: any) {
     // Pre-fetch stop times for all transit boarding stops
     const today = new Date().toISOString().split('T')[0]
     for (const leg of itinerary.legs) {
@@ -405,6 +417,19 @@ export function startGoModeTracking(
     }
     w.__resumeGpsSimulation = () => {
       dispatch(resumeGpsSimulation())
+    }
+    // Test-only time control: jump the simulated clock forward (e.g. past a
+    // departure) and re-run a position tick at the last fix without moving.
+    // Together these make a "rider stands still through the departure"
+    // scenario reproducible in seconds.
+    w.__advanceSimulatedTime = (ms: number) => {
+      if (simulationActive && simulatedTimeMs > 0) {
+        simulatedTimeMs += ms
+      }
+    }
+    w.__pingPosition = () => {
+      const last = getState().otp?.goMode?.tracking?.lastPosition
+      if (last) dispatch(handlePositionUpdate(last))
     }
 
     // Set initial tracking interval based on first leg
@@ -506,6 +531,8 @@ export function endGoMode() {
     delete w.__stopGpsSimulation
     delete w.__pauseGpsSimulation
     delete w.__resumeGpsSimulation
+    delete w.__advanceSimulatedTime
+    delete w.__pingPosition
 
     dispatch(stopGoMode())
 
@@ -530,7 +557,15 @@ export function endGoMode() {
  * best one as a Switch/Keep card. Optionally applies a routing profile.
  */
 export function reRouteFromCurrentPosition(
-  options: { preferences?: any; profileId?: string } = {}
+  options: {
+    // Apply the best result automatically instead of surfacing the
+    // Switch/Keep card — used when the current itinerary is definitively dead
+    // (missed bus) and there is nothing for the rider to decide.
+    autoApply?: boolean
+    preferences?: any
+    profileId?: string
+    reason?: string
+  } = {}
 ) {
   return function (dispatch: any, getState: any) {
     const state = getState()
@@ -549,7 +584,13 @@ export function reRouteFromCurrentPosition(
 
     const { homeTimezone } = state.otp.config
     const searchId = randId()
-    dispatch(startReroute({ searchId }))
+    dispatch(
+      startReroute({
+        autoApply: !!options.autoApply,
+        reason: options.reason,
+        searchId
+      })
+    )
 
     const payload: any = {
       date: coreUtils.time.getCurrentDate(homeTimezone),
@@ -607,6 +648,57 @@ export function reRouteFromCurrentPosition(
 
     // Reuse the normal search pipeline; results populate searches[searchId].
     dispatch(setQueryParam(payload, searchId))
+  }
+}
+
+/**
+ * Apply the best re-route candidate without asking (missed-bus auto-update:
+ * the old itinerary is dead, so there is no decision to put to the rider).
+ * Falls back to the regular card resolution when nothing usable came back.
+ */
+export function applyAutoReroute(candidates: Itinerary[]) {
+  return function (dispatch: any, getState: any) {
+    const goMode = getState().otp?.goMode
+    if (!goMode?.isActive || !goMode.reRoute?.autoApply) return
+
+    const best = candidates[0]
+    if (!best) {
+      // "none" card state; the missed-bus push already told the rider.
+      dispatch(setRerouteResult(null))
+      return
+    }
+
+    dispatch(beginGoMode(best))
+
+    // Confirm what changed — the new boarding is the fact the rider needs.
+    const firstTransitLeg = (best.legs || []).find((l: any) => l.transitLeg)
+    const message = firstTransitLeg
+      ? `Trip updated — ${
+          firstTransitLeg.routeShortName ||
+          firstTransitLeg.routeLongName ||
+          'your bus'
+        } departs ${firstTransitLeg.from?.name || 'the stop'} at ${format(
+          utcToZonedTime(
+            Number(firstTransitLeg.startTime),
+            getState().otp.config.homeTimezone
+          ),
+          'h:mm a'
+        )}.`
+      : 'Trip updated with a new route.'
+    const notification: NotificationEvent = {
+      id: `TRIP_UPDATED_auto_${Date.now()}`,
+      message,
+      priority: 'high',
+      timestamp: new Date(),
+      title: 'Trip updated',
+      type: 'TRIP_UPDATED'
+    }
+    // After beginGoMode so the fresh trip's notification state keeps it.
+    dispatch(addNotification(notification))
+    if (!isReplayActive()) {
+      showNotification(notification, getState().otp.goMode.notifications)
+      sendPush({ message, priority: 1, title: notification.title })
+    }
   }
 }
 
@@ -1276,7 +1368,13 @@ export function startPositionTracking() {
       { ...options, timeout: 15000 }
     )
 
-    // Set up polling interval
+    // Set up polling interval. A mid-trip itinerary switch (rider switch or
+    // missed-bus auto-update) re-enters here with a poll already running —
+    // replace it, never stack a second one.
+    if (gpsPollingIntervalId) {
+      clearInterval(gpsPollingIntervalId)
+      gpsPollingIntervalId = null
+    }
     const state = getState()
     const interval = state.otp?.goMode?.tracking?.interval || 8000
     const intervalId = setInterval(pollPosition, interval)
@@ -1305,7 +1403,8 @@ export function startPositionTracking() {
 const PUSH_NOTIFICATION_TYPES = new Set<NotificationType>([
   'LEAVE_SOON',
   'CONNECTION_WARNING',
-  'ARRIVING_STOP'
+  'ARRIVING_STOP',
+  'MISSED_BUS'
 ])
 
 /**
@@ -1530,6 +1629,28 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       itinerary.legs
     )
 
+    // Missed boarding? Judged outside checkForNotifications because it needs
+    // live board times, the sticky riding fact, and the raw GPS fix.
+    const missedCtx = classifyMissedBus({
+      currentLegIndex: routeMatch.legIndex,
+      departureOverrideMs: departureOverride,
+      legs: itinerary.legs,
+      liveLegTimes: goMode.liveLegTimes || {},
+      nowMs: currentTime.getTime(),
+      riderPosition: currentPosition,
+      riderSpeedMps: position.coords.speed ?? null,
+      riding: goMode.riding,
+      vehicleConfidence: goMode.vehicleMatch?.match?.confidence
+    })
+    const missedEvent =
+      missedCtx &&
+      checkMissedBus(
+        missedCtx,
+        itinerary.legs,
+        goMode.notifications?.sentNotifications || []
+      )
+    if (missedEvent) notifications.push(missedEvent)
+
     // Show notifications. Always record them in state (so replay assertions and
     // the debug log see the sequence), but suppress the real-world side effects
     // (browser notification/vibration and the Pushover relay) during replay so a
@@ -1559,10 +1680,32 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       }
     })
 
-    // Proactively offer a re-route when a connection is at risk or the rider
-    // has drifted off-route. Surfaced as a Switch/Keep card — never swapped
-    // automatically. The helper guards on reRoute.status === 'idle'.
-    if (shouldAutoReroute(notifications, goMode.reRoute?.status || 'idle')) {
+    // A detected missed bus re-plans immediately: definitively missed (the
+    // realtime feed says the bus left, or the rider clearly isn't at the stop)
+    // auto-applies the best alternative — no prompt for what the app already
+    // knows — while an ambiguous miss surfaces the regular Switch/Keep card.
+    const reRouteStatus = goMode.reRoute?.status || 'idle'
+    if (
+      missedCtx &&
+      missedEvent &&
+      // A definitive miss also supersedes an already-showing card — those
+      // alternatives were computed for an itinerary that is now dead. Only an
+      // in-flight search is left to resolve on its own.
+      (reRouteStatus === 'idle' ||
+        (missedCtx.definitive && reRouteStatus !== 'searching'))
+    ) {
+      dispatch(
+        reRouteFromCurrentPosition({
+          autoApply: missedCtx.definitive,
+          reason: 'missed-bus'
+        })
+      )
+    } else if (
+      // Otherwise offer a re-route when a connection is at risk or the rider
+      // has drifted off-route. Surfaced as a Switch/Keep card — never swapped
+      // automatically. The helper guards on reRoute.status === 'idle'.
+      shouldAutoReroute(notifications, reRouteStatus)
+    ) {
       dispatch(reRouteFromCurrentPosition())
     }
   }
