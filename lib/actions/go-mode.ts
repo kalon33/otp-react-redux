@@ -11,7 +11,7 @@ import {
   getDownstreamStops,
   hasLiveArrival,
   liveStopArrival,
-  pickBestAlightOption,
+  rankAlightOptions,
   selectCandidateStops
 } from '../util/go-mode/alight-optimizer'
 import type { AlightCandidateResult } from '../util/go-mode/alight-optimizer'
@@ -979,7 +979,7 @@ export function planFromOnboardBus() {
       candidates.map((c) => dispatch(fetchCandidatePlan(c, ctx)))
     )
 
-    dispatch(setOnboardResult(pickBestAlightOption(results, { walkOnlyMax })))
+    dispatch(setOnboardResult(rankAlightOptions(results, { walkOnlyMax })))
   }
 }
 
@@ -1139,10 +1139,10 @@ function buildOnboardItinerary(
  * Commit to the recommended alight stop: synthesize the full itinerary and hand
  * off into live Go Mode tracking, keeping the same bus confirmed as the vehicle.
  */
-export function confirmOnboardAlightStop() {
+export function confirmOnboardAlightStop(option?: any) {
   return function (dispatch: any, getState: any) {
     const goMode = getState().otp?.goMode
-    const best = goMode?.onboard?.bestAlightStop
+    const best = option || goMode?.onboard?.bestAlightStop
     const trip = goMode?.onboard?.trip
     const vehicle = goMode?.onboard?.vehicle
     if (!best || !trip) return

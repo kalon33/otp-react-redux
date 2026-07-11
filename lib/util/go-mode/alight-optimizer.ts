@@ -267,69 +267,97 @@ function isUsableItinerary(itin: Itinerary, walkOnlyMax: number): boolean {
 }
 
 /**
- * Across the candidate alight stops whose onward plans came back, pick the stop
- * whose total arrival time (bus arrival at the stop + remaining-journey
- * duration) is earliest. Ties (within TIE_MS) break on fewer transfers, then
- * less walking, then earlier arrival — biasing toward staying on the current bus
- * to a convenient stop rather than getting off early to shave a few seconds.
- * Returns null when no candidate produced a usable itinerary.
+ * Order two scored options: earlier total arrival wins, but ties (within
+ * TIE_MS) break on fewer transfers, then less walking, then earlier arrival —
+ * biasing toward staying on the current bus to a convenient stop rather than
+ * getting off early to shave a few seconds. Returns <0 when `a` is better.
+ */
+function compareAlightOptions(
+  a: AlightOption & { arrival: number },
+  b: AlightOption & { arrival: number }
+): number {
+  if (Math.abs(a.arrival - b.arrival) <= TIE_MS) {
+    const dT = (a.itinerary.transfers ?? 0) - (b.itinerary.transfers ?? 0)
+    if (dT !== 0) return dT
+    const dW = (a.itinerary.walkDistance ?? 0) - (b.itinerary.walkDistance ?? 0)
+    if (dW !== 0) return dW
+  }
+  return a.arrival - b.arrival
+}
+
+/** A lightweight signature of an onward journey (mode + route + endpoints per
+ * leg), used to drop duplicate options the multi-stop search surfaces more than
+ * once. Mirrors getRerouteCandidates' dedup idiom in lib/util/state.js. */
+function journeySignature(stopId: string, itinerary: Itinerary): string {
+  const legs = (itinerary.legs || [])
+    .map(
+      (l: any) =>
+        `${l.mode}:${l.routeId || l.route?.id || ''}:${l.from?.name || ''}>${
+          l.to?.name || ''
+        }`
+    )
+    .join('|')
+  return `${stopId}#${legs}`
+}
+
+/**
+ * Across the candidate alight stops whose onward plans came back, return the
+ * best overall onward options ranked by the metrics that matter — earliest
+ * total arrival (bus arrival at the stop + remaining-journey duration), then
+ * fewer transfers, then less walking. Every usable itinerary from every stop is
+ * a candidate (the rider doesn't care which stop, just the best journeys);
+ * near-identical journeys are deduped and the list is capped at `limit`.
+ */
+export function rankAlightOptions(
+  results: AlightCandidateResult[],
+  {
+    limit = 5,
+    walkOnlyMax = 1200
+  }: { limit?: number; walkOnlyMax?: number } = {}
+): AlightOption[] {
+  const scored: Array<AlightOption & { arrival: number }> = []
+  results.forEach((r) => {
+    if (!r || r.error) return
+    ;(r.itineraries || []).forEach((itin) => {
+      if (!isUsableItinerary(itin, walkOnlyMax)) return
+      scored.push({
+        arrival: scoreAlightOption(r.busArrivalEpoch, itin),
+        busArrivalEpoch: r.busArrivalEpoch,
+        itinerary: itin,
+        realtime: r.realtime,
+        stopId: r.stopId,
+        stopName: r.stopName
+      })
+    })
+  })
+
+  scored.sort(compareAlightOptions)
+
+  const seen = new Set<string>()
+  const ranked: AlightOption[] = []
+  for (const option of scored) {
+    const sig = journeySignature(option.stopId, option.itinerary)
+    if (seen.has(sig)) continue
+    seen.add(sig)
+    ranked.push({
+      busArrivalEpoch: option.busArrivalEpoch,
+      itinerary: option.itinerary,
+      realtime: option.realtime,
+      stopId: option.stopId,
+      stopName: option.stopName
+    })
+    if (ranked.length >= limit) break
+  }
+  return ranked
+}
+
+/**
+ * The single best stop to get off — the top of the ranked list. Retained for
+ * callers that only want one option.
  */
 export function pickBestAlightOption(
   results: AlightCandidateResult[],
   { walkOnlyMax = 1200 }: { walkOnlyMax?: number } = {}
 ): AlightOption | null {
-  // Reduce each candidate to its quickest usable onward itinerary, scored by
-  // total arrival time.
-  const scored: Array<AlightOption & { arrival: number }> = []
-  results.forEach((r) => {
-    if (!r || r.error) return
-    const usable = (r.itineraries || []).filter((itin) =>
-      isUsableItinerary(itin, walkOnlyMax)
-    )
-    if (usable.length === 0) return
-
-    const bestForStop = usable.reduce((b, itin) =>
-      itin.duration < b.duration ? itin : b
-    )
-    scored.push({
-      arrival: scoreAlightOption(r.busArrivalEpoch, bestForStop),
-      busArrivalEpoch: r.busArrivalEpoch,
-      itinerary: bestForStop,
-      realtime: r.realtime,
-      stopId: r.stopId,
-      stopName: r.stopName
-    })
-  })
-
-  let best: (AlightOption & { arrival: number }) | null = null
-  for (const option of scored) {
-    if (!best) {
-      best = option
-      continue
-    }
-    let better
-    if (Math.abs(option.arrival - best.arrival) <= TIE_MS) {
-      const dT =
-        (option.itinerary.transfers ?? 0) - (best.itinerary.transfers ?? 0)
-      const dW =
-        (option.itinerary.walkDistance ?? 0) -
-        (best.itinerary.walkDistance ?? 0)
-      better =
-        dT < 0 ||
-        (dT === 0 && dW < 0) ||
-        (dT === 0 && dW === 0 && option.arrival < best.arrival)
-    } else {
-      better = option.arrival < best.arrival
-    }
-    if (better) best = option
-  }
-
-  if (!best) return null
-  return {
-    busArrivalEpoch: best.busArrivalEpoch,
-    itinerary: best.itinerary,
-    realtime: best.realtime,
-    stopId: best.stopId,
-    stopName: best.stopName
-  }
+  return rankAlightOptions(results, { walkOnlyMax })[0] ?? null
 }

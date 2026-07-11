@@ -88,6 +88,7 @@ export interface OnboardAlightOption {
  * Distinct from reRoute (a mid-trip swap of an already-active itinerary).
  */
 export interface OnboardState {
+  alightOptions: OnboardAlightOption[]
   bestAlightStop: OnboardAlightOption | null
   candidates: OnboardCandidate[]
   status:
@@ -199,6 +200,7 @@ const defaultState: GoModeState = {
   },
 
   onboard: {
+    alightOptions: [],
     bestAlightStop: null,
     candidates: [],
     status: 'idle',
@@ -423,14 +425,18 @@ const goMode = handleActions<GoModeState, any>(
       }
     },
 
-    [SET_ONBOARD_RESULT]: (state, action) => ({
-      ...state,
-      onboard: {
-        ...state.onboard,
-        bestAlightStop: action.payload || null,
-        status: action.payload ? ('ready' as const) : ('error' as const)
+    [SET_ONBOARD_RESULT]: (state, action) => {
+      const options: OnboardAlightOption[] = action.payload || []
+      return {
+        ...state,
+        onboard: {
+          ...state.onboard,
+          alightOptions: options,
+          bestAlightStop: options[0] || null,
+          status: options.length ? ('ready' as const) : ('error' as const)
+        }
       }
-    }),
+    },
 
     [SET_ONBOARD_STATUS]: (state, action) => ({
       ...state,
@@ -546,6 +552,7 @@ const goMode = handleActions<GoModeState, any>(
       ...state,
       onboard: {
         ...state.onboard,
+        alightOptions: [],
         bestAlightStop: null,
         candidates: action.payload.candidates,
         status: 'optimizing' as const

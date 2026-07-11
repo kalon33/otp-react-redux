@@ -116,19 +116,41 @@ const mockStore = (onboard: any) =>
     subscribe: () => () => undefined
   } as any)
 
-const readyOnboard = (realtime: boolean) => ({
-  bestAlightStop: {
-    busArrivalEpoch: NOW + 11 * 60000,
-    itinerary: { duration: 240, transfers: 1, walkDistance: 140 },
-    realtime,
-    stopId: '1:9',
-    stopName: 'Nicollet Mall'
-  },
-  candidates: [],
-  status: 'ready',
-  trip: null,
-  vehicle: null
-})
+const readyOnboard = (realtime: boolean) => {
+  // A ranked list of onward options (earliest arrival first), each a stop the
+  // rider can pick to get off at.
+  const alightOptions = [
+    {
+      busArrivalEpoch: NOW + 11 * 60000,
+      itinerary: { duration: 240, transfers: 1, walkDistance: 140 },
+      realtime,
+      stopId: '1:9',
+      stopName: 'Nicollet Mall'
+    },
+    {
+      busArrivalEpoch: NOW + 13 * 60000,
+      itinerary: { duration: 180, transfers: 0, walkDistance: 220 },
+      realtime,
+      stopId: '1:12',
+      stopName: 'Government Plaza'
+    },
+    {
+      busArrivalEpoch: NOW + 16 * 60000,
+      itinerary: { duration: 120, transfers: 0, walkDistance: 300 },
+      realtime,
+      stopId: '1:15',
+      stopName: 'Target Field'
+    }
+  ]
+  return {
+    alightOptions,
+    bestAlightStop: alightOptions[0],
+    candidates: [],
+    status: 'ready',
+    trip: null,
+    vehicle: null
+  }
+}
 
 // Multi-leg journey for the trip-overview sheet: walking to the stop → METRO
 // Orange Line → walk. The rider is on the first walk leg, so the bus row shows
@@ -215,10 +237,12 @@ const demoSheetStore = {
 
 const Frame = ({
   children,
+  minHeight = 150,
   note,
   title
 }: {
   children: React.ReactNode
+  minHeight?: number
   note?: string
   title: string
 }) => (
@@ -236,7 +260,7 @@ const Frame = ({
         background: '#f2f3f5',
         border: '1px solid #ccc',
         borderRadius: 12,
-        minHeight: 150,
+        minHeight,
         overflow: 'hidden',
         position: 'relative',
         width: 390
@@ -317,7 +341,8 @@ const GoModeDemo = (): JSX.Element => (
       </Frame>
 
       <Frame
-        note="Get-there time carries the LIVE waves glyph."
+        minHeight={280}
+        note="Ranked list of onward options, earliest arrival first. Get-there time carries the LIVE waves glyph."
         title="Alight recommendation, LIVE"
       >
         <Provider store={mockStore(readyOnboard(true))}>
@@ -326,6 +351,7 @@ const GoModeDemo = (): JSX.Element => (
       </Frame>
 
       <Frame
+        minHeight={280}
         note="Get-there time, no glyph."
         title="Alight recommendation, SCHEDULED"
       >

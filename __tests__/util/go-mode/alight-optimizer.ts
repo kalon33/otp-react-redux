@@ -1,5 +1,6 @@
 import {
   pickBestAlightOption,
+  rankAlightOptions,
   scoreAlightOption
 } from '../../../lib/util/go-mode/alight-optimizer'
 
@@ -99,6 +100,57 @@ describe('pickBestAlightOption', () => {
       candidate(T0, [transitItin(1800), transitItin(600)], { stopId: 'A' })
     ])
     expect(best?.itinerary.duration).toBe(600)
+  })
+})
+
+describe('rankAlightOptions', () => {
+  it('returns an empty list when no candidate is usable', () => {
+    expect(rankAlightOptions([])).toEqual([])
+    expect(rankAlightOptions([candidate(T0, []), candidate(T0, [])])).toEqual(
+      []
+    )
+  })
+
+  it('ranks options across stops by earliest total arrival', () => {
+    // Distinct stops so the journeys are not deduped.
+    const a = candidate(T0 + 300_000, [transitItin(120)], { stopId: 'A' }) // +420s
+    const b = candidate(T0, [transitItin(1800)], { stopId: 'B' }) // +1800s
+    const c = candidate(T0, [transitItin(300)], { stopId: 'C' }) // +300s
+    const ranked = rankAlightOptions([a, b, c])
+    expect(ranked.map((o) => o.stopId)).toEqual(['C', 'A', 'B'])
+  })
+
+  it('within the tie window ranks fewer transfers higher', () => {
+    const a = candidate(T0, [transitItin(600, { transfers: 2 })], {
+      stopId: 'A'
+    })
+    const b = candidate(T0 + 60_000, [transitItin(600, { transfers: 0 })], {
+      stopId: 'B'
+    })
+    expect(rankAlightOptions([a, b])[0].stopId).toBe('B')
+  })
+
+  it('dedups identical journeys from the same stop', () => {
+    // Two itineraries from stop A with the same leg signature collapse to one.
+    const ranked = rankAlightOptions([
+      candidate(T0, [transitItin(1800), transitItin(600)], { stopId: 'A' })
+    ])
+    expect(ranked).toHaveLength(1)
+    expect(ranked[0].itinerary.duration).toBe(600)
+  })
+
+  it('respects the limit', () => {
+    const cands = ['A', 'B', 'C', 'D', 'E', 'F', 'G'].map((s, i) =>
+      candidate(T0 + i * 60_000, [transitItin(300)], { stopId: s })
+    )
+    expect(rankAlightOptions(cands, { limit: 3 })).toHaveLength(3)
+  })
+
+  it('[0] matches pickBestAlightOption', () => {
+    const a = candidate(T0 + 300_000, [transitItin(120)], { stopId: 'A' })
+    const b = candidate(T0, [transitItin(1800)], { stopId: 'B' })
+    const best = pickBestAlightOption([a, b])
+    expect(rankAlightOptions([a, b])[0].stopId).toBe(best?.stopId)
   })
 })
 

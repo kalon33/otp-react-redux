@@ -6,19 +6,23 @@ import * as goModeActions from '../../actions/go-mode'
 import type { GoModeState } from '../../reducers/go-mode'
 
 import {
+  AltRow,
+  AltSwitchButton,
   RerouteActions,
   RerouteBar,
   RerouteCard,
   RerouteCardTitle,
   RerouteKeepButton,
-  RerouteSummary,
-  RerouteSwitchButton
+  RerouteSwitchButton,
+  VehicleDetail,
+  VehicleInfo,
+  VehicleLabel
 } from './styled'
 import RealtimeTime from './RealtimeTime'
 
 interface Props {
   changeBus: () => void
-  confirmOnboardAlightStop: () => void
+  confirmOnboardAlightStop: (option?: unknown) => void
   endGoMode: () => void
   goMode: GoModeState
 }
@@ -106,54 +110,71 @@ const AlightRecommendation = ({
     )
   }
 
-  // status === 'ready'
-  const best = onboard.bestAlightStop
-  if (!best) return null
-
-  const arrivalTime = new Date(
-    best.busArrivalEpoch + (best.itinerary.duration || 0) * 1000
-  )
+  // status === 'ready' — a ranked list of the best onward options (earliest
+  // arrival first), each a stop the rider can choose to get off at.
+  const options = onboard.alightOptions || []
+  if (options.length === 0) return null
 
   return (
     <RerouteBar>
       <RerouteCard>
         <RerouteCardTitle>
-          {intl.formatMessage(
-            {
-              defaultMessage: 'Stay on until {stop}',
-              id: 'components.GoMode.stayOnUntil'
-            },
-            { stop: best.stopName }
-          )}
+          {intl.formatMessage({
+            defaultMessage: 'Where do you want to get off?',
+            id: 'components.GoMode.whereToAlight'
+          })}
         </RerouteCardTitle>
-        <RerouteSummary>
-          {intl.formatMessage(
-            {
-              defaultMessage:
-                'Get there {arrival} · {transfers, plural, one {# more transfer} other {# more transfers}} · {walk} m walk',
-              id: 'components.GoMode.alightSummary'
-            },
-            {
-              arrival: (
-                <RealtimeTime live={best.realtime}>
-                  {arrivalTime.toLocaleTimeString([], {
-                    hour: 'numeric',
-                    minute: '2-digit'
-                  })}
-                </RealtimeTime>
-              ),
-              transfers: best.itinerary.transfers ?? 0,
-              walk: Math.round(best.itinerary.walkDistance ?? 0)
-            }
-          )}
-        </RerouteSummary>
+        {options.map((option, i) => {
+          const arrivalTime = new Date(
+            option.busArrivalEpoch + (option.itinerary.duration || 0) * 1000
+          )
+          return (
+            <AltRow key={`${option.stopId}-${i}`}>
+              <VehicleInfo>
+                <VehicleLabel>
+                  {intl.formatMessage(
+                    {
+                      defaultMessage: 'Off at {stop}',
+                      id: 'components.GoMode.offAtStop'
+                    },
+                    { stop: option.stopName }
+                  )}
+                </VehicleLabel>
+                <VehicleDetail>
+                  {intl.formatMessage(
+                    {
+                      defaultMessage:
+                        '{arrival} · {transfers, plural, one {# more transfer} other {# more transfers}} · {walk} m walk',
+                      id: 'components.GoMode.alightSummary'
+                    },
+                    {
+                      arrival: (
+                        <RealtimeTime live={option.realtime}>
+                          {arrivalTime.toLocaleTimeString([], {
+                            hour: 'numeric',
+                            minute: '2-digit'
+                          })}
+                        </RealtimeTime>
+                      ),
+                      transfers: option.itinerary.transfers ?? 0,
+                      walk: Math.round(option.itinerary.walkDistance ?? 0)
+                    }
+                  )}
+                </VehicleDetail>
+              </VehicleInfo>
+              <AltSwitchButton
+                onClick={() => confirmOnboardAlightStop(option)}
+                type="button"
+              >
+                {intl.formatMessage({
+                  defaultMessage: 'Go',
+                  id: 'components.GoMode.startGuidanceShort'
+                })}
+              </AltSwitchButton>
+            </AltRow>
+          )
+        })}
         <RerouteActions>
-          <RerouteSwitchButton onClick={confirmOnboardAlightStop} type="button">
-            {intl.formatMessage({
-              defaultMessage: 'Start guidance',
-              id: 'components.GoMode.startGuidance'
-            })}
-          </RerouteSwitchButton>
           <RerouteKeepButton onClick={changeBus} type="button">
             {intl.formatMessage({
               defaultMessage: 'Change bus',
