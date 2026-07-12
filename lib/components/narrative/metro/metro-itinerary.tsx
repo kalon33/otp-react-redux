@@ -349,11 +349,13 @@ class MetroItinerary extends NarrativeItinerary {
         10
       )
     }
-    const formattedFare = intl.formatNumber(transitFare, {
-      currency: fareCurrency,
-      currencyDisplay: 'narrowSymbol',
-      style: 'currency'
-    })
+    const formattedFare = fareCurrency
+      ? intl.formatNumber(transitFare, {
+          currency: fareCurrency,
+          currencyDisplay: 'narrowSymbol',
+          style: 'currency'
+        })
+      : intl.formatNumber(transitFare)
 
     let fareInfo =
       // Hide the fare information entirely if the defaultFareType isn't specified.
