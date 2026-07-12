@@ -118,6 +118,93 @@ export function clampPreferences(
 }
 
 /**
+ * Plain-English summary of an active lever, with the raw value(s) kept around
+ * for a hover tooltip. Used by the search-form indicator so a rider can see
+ * what their description actually changed.
+ */
+export interface PreferenceSummary {
+  // raw lever(s) behind this phrase, e.g. "bikeReluctance 8"
+  detail: string
+  // human phrase, e.g. "avoiding biking"
+  phrase: string
+}
+
+/**
+ * Per-lever phrasing. `baseline` is the engine's neutral value: above it we use
+ * `higher`, below it `lower`. A lever sitting at its baseline is treated as "no
+ * change" and omitted. Two levers may share a phrase (e.g. transferPenalty and
+ * walkBoardCost both read as "fewer transfers"); summarizePreferences folds
+ * their raw details together so the rider sees one chip.
+ */
+const PREFERENCE_PHRASES: Record<
+  LeverKey,
+  { baseline: number; higher: string; lower: string }
+> = {
+  bikeReluctance: {
+    baseline: 2,
+    higher: 'avoiding biking',
+    lower: 'more biking'
+  },
+  bikeSpeed: { baseline: 4, higher: 'faster biking', lower: 'slower biking' },
+  minTransferTime: {
+    baseline: 0,
+    higher: 'longer transfer buffer',
+    lower: 'shorter transfer buffer'
+  },
+  transferPenalty: {
+    baseline: 0,
+    higher: 'fewer transfers',
+    lower: 'more transfers'
+  },
+  waitReluctance: {
+    baseline: 1,
+    higher: 'less waiting at stops',
+    lower: 'okay waiting at stops'
+  },
+  walkBoardCost: {
+    baseline: 0,
+    higher: 'fewer transfers',
+    lower: 'more transfers'
+  },
+  walkReluctance: {
+    baseline: 2,
+    higher: 'less walking',
+    lower: 'more walking'
+  },
+  walkSpeed: {
+    baseline: 1.34,
+    higher: 'brisker walking pace',
+    lower: 'gentler walking pace'
+  }
+}
+
+/**
+ * Turn a set of levers into de-duplicated plain-English chips, each carrying
+ * the raw lever value(s) for a tooltip. Returns [] when nothing is customized.
+ */
+export function summarizePreferences(
+  prefs?: RoutingPreferences
+): PreferenceSummary[] {
+  const clamped = clampPreferences(prefs)
+  const out: PreferenceSummary[] = []
+  ;(Object.keys(clamped) as LeverKey[]).forEach((key) => {
+    const value = clamped[key] as number
+    const { baseline, higher, lower } = PREFERENCE_PHRASES[key]
+    // Skip levers sitting at their neutral baseline — no meaningful change.
+    if (Math.abs(value - baseline) < 1e-6) return
+    const phrase = value > baseline ? higher : lower
+    const detail = `${key} ${value}`
+    const existing = out.find((item) => item.phrase === phrase)
+    if (existing) {
+      existing.detail += `, ${detail}`
+    } else {
+      out.push({ detail, phrase })
+    }
+  })
+  return out
+}
+
+/**
  * Bookkeeping keys we stash in currentQuery (so they round-trip through the
  * query pipeline) but must NOT send to OTP as GraphQL variables.
  */

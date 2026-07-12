@@ -87,13 +87,13 @@ export const LegPanelContainer = styled.div`
 
 // TransitProgress styles
 export const TransitContainer = styled.div`
-  padding: 8px 12px;
+  padding: 6px 12px;
 `
 
 export const RouteHeader = styled.div`
   align-items: center;
   display: flex;
-  margin-bottom: 16px;
+  margin-bottom: 8px;
   min-width: 0;
   overflow: hidden;
 `
@@ -186,7 +186,7 @@ export const InfoCardValue = styled.div<{
 
 // WalkingNavigation styles
 export const WalkingContainer = styled.div`
-  padding: 8px 12px;
+  padding: 6px 12px;
 `
 
 export const NavigationInstruction = styled.div<{ $highlight: boolean }>`
@@ -220,58 +220,127 @@ export const NextLegPreview = styled.div`
   padding: 12px;
 `
 
-export const CountdownCard = styled.div<{ $urgency: 'ok' | 'tight' | 'late' }>`
-  background-color: ${(props) => {
-    switch (props.$urgency) {
-      case 'ok':
-        return '#e8f5e9'
-      case 'tight':
-        return '#fff8e1'
-      case 'late':
-        return '#ffebee'
-    }
-  }};
-  border-left: 4px solid
-    ${(props) => {
-      switch (props.$urgency) {
-        case 'ok':
-          return '#4caf50'
-        case 'tight':
-          return '#ff9800'
-        case 'late':
-          return '#f44336'
+// --- Single navigation card (access leg → transit) ------------------------
+// One flat, neutral card that states the facts directly: when the bus arrives
+// and how long the ride to the stop is. No "leave in" computation — the rider
+// deduces that themselves.
+export const NavCard = styled.div`
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  border-top: 4px solid #2196f3;
+  padding: 10px 14px;
+`
+
+// Compact back arrow that lives inline inside the card header instead of a
+// dedicated nav-bar row above it.
+export const CardBackButton = styled.button`
+  align-items: center;
+  background: none;
+  border: none;
+  color: #555;
+  cursor: pointer;
+  display: inline-flex;
+  flex-shrink: 0;
+  font-size: 22px;
+  justify-content: center;
+  line-height: 1;
+  margin: -2px 4px -2px -4px;
+  padding: 2px 6px;
+
+  &:active {
+    opacity: 0.6;
+  }
+`
+
+// Row holding the back arrow + eyebrow on one line.
+export const NavEyebrowRow = styled.div`
+  align-items: center;
+  display: flex;
+  min-width: 0;
+`
+
+export const NavEyebrow = styled.div`
+  color: #888;
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+`
+
+export const NavHero = styled.div`
+  color: #111;
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1.15;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+`
+
+export const NavSub = styled.div`
+  color: #555;
+  font-size: 15px;
+  font-weight: 500;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+`
+
+// Realtime cue, copied verbatim from the search UI so Go Mode matches it
+// exactly: a pulsing pair of radiating "waves" rendered as a ::before glyph
+// immediately to the LEFT of the time, green, 7x14, no margin, dipping to 0.5
+// opacity on a 2s pulse. See lib/components/narrative/default/itinerary.css
+// ".realtime::before" — this is the same mechanism, glyph, size, and timing.
+// Convention: glyph == live, no glyph == scheduled (the time itself is not
+// recolored, just as in search).
+const pulseRealtime = keyframes`
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+`
+
+export const RealtimeTimeBox = styled.span<{ $live?: boolean }>`
+  ${(props) =>
+    props.$live &&
+    css`
+      &::before {
+        animation: ${pulseRealtime} 2s ease-in-out infinite;
+        background: rgb(0, 180, 0);
+        clip-path: path(
+          'M3.7,4.1C3.1,4.9,3,6,3.4,7.2c0.1,0.3,0.5,0.6,0.8,0.6c0.3,0,0.5-0.2,0.4-0.5C4.3,6.4,4.4,5.5,4.9,4.9s1.2-1,2.2-1 c0.1,0,0.3-0.1,0.3-0.1c0.1-0.1,0.1-0.3,0-0.4C7.3,3,6.9,2.8,6.6,2.8C5.3,2.8,4.3,3.2,3.7,4.1z M5.6,0C3.5-0.1,1.8,0.7,0.8,2 s-1.1,3.2-0.3,5.2C0.6,7.5,1,7.8,1.3,7.8c0.3,0,0.5-0.2,0.4-0.5C1,5.6,1.1,4,2,2.8s2.3-1.8,4.1-1.7c0.2,0,0.3-0.1,0.3-0.1 c0.1-0.1,0.1-0.2,0-0.4C6.3,0.3,5.9,0,5.6,0z'
+        );
+        content: '';
+        display: inline-block;
+        height: 14px;
+        width: 7px;
       }
-    }};
-  border-radius: 4px;
-  margin-top: 8px;
-  padding: 10px 12px;
+    `}
 `
 
-export const CountdownValue = styled.div<{ $urgency: 'ok' | 'tight' | 'late' }>`
-  color: ${(props) => {
-    switch (props.$urgency) {
-      case 'ok':
-        return '#2e7d32'
-      case 'tight':
-        return '#e65100'
-      case 'late':
-        return '#c62828'
-    }
-  }};
-  font-size: 18px;
-  font-weight: bold;
+export const NavFoot = styled.div`
+  color: #333;
+  font-size: 16px;
+  font-weight: 500;
+  margin-top: 10px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 `
 
-export const CountdownLabel = styled.div`
-  color: #666;
-  font-size: 12px;
-  margin-bottom: 2px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+// Secondary strip at the card bottom for rare controls (alternate departures,
+// reset-to-planned). Only rendered when relevant.
+export const NavExtras = styled.div`
+  border-top: 1px solid #eee;
+  margin-top: 10px;
+  padding-top: 8px;
 `
 
 export const SmallProgressTrack = styled.div`
@@ -361,28 +430,58 @@ export const DeviationWarning = styled.div`
 export const FullScreenWrapper = styled.div`
   background: #fff;
   bottom: 0;
+  display: flex;
+  flex-direction: column;
   left: 0;
   position: fixed;
   right: 0;
   top: 0;
   z-index: 1000;
 
-  /* MobileNavigationBar renders outside .otp context, so its CSS won't apply */
+  /* MobileNavigationBar renders outside .otp context, so its CSS won't apply.
+     Slim it into a compact, transparent strip with the back arrow inline at the
+     left (next to the optional header text) instead of a tall gray bar. */
+  > header {
+    height: 38px !important;
+  }
+
+  .mobile-navbar-container {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    margin: 0;
+    min-height: 38px;
+  }
+
+  /* Strip the heavy default button chrome so the arrow reads as just an arrow. */
+  .mobile-back {
+    background: none;
+    border: none;
+    box-shadow: none;
+    height: 38px;
+    padding: 0 12px;
+  }
+
+  /* Account/locale controls are noise during turn-by-turn navigation. */
+  .locale-selector-and-login {
+    display: none;
+  }
+
   .navbar .mobile-header {
     align-items: center;
     display: flex;
     flex: 1;
-    height: 100%;
-    justify-content: center;
+    height: 38px;
+    justify-content: flex-start;
     overflow: hidden;
-    padding: 0 8px;
-    text-align: center;
+    padding: 0;
+    text-align: left;
   }
 
   .mobile-header-text {
     color: #333;
-    font-size: 14px !important;
-    font-weight: 400;
+    font-size: 15px !important;
+    font-weight: 600;
     line-height: 1.1;
     margin: 0;
     overflow: hidden;
@@ -394,9 +493,11 @@ export const FullScreenWrapper = styled.div`
 
 export const ScreenMain = styled.main`
   display: flex;
+  flex: 1;
   flex-direction: column;
-  height: calc(100vh - 50px);
+  min-height: 0;
   overflow: hidden;
+  padding-top: env(safe-area-inset-top, 0);
   position: relative;
 `
 
@@ -761,4 +862,173 @@ export const RerouteNlError = styled.div`
   color: #d32f2f;
   font-size: 12px;
   margin-top: 6px;
+`
+
+// In-trip overview sheet: swipe-up handle + rest-of-trip list + alternatives.
+// Reuses BoardingOverlay/BoardingSheet (above) so the live map keeps running
+// underneath while the rider browses without leaving their route.
+export const SheetHandle = styled.button`
+  align-items: center;
+  background: #fff;
+  border: none;
+  border-radius: 14px 14px 0 0;
+  bottom: 0;
+  box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  left: 50%;
+  padding: 7px 32px 10px;
+  position: absolute;
+  transform: translateX(-50%);
+  z-index: 1100;
+
+  &::before {
+    background: #ccc;
+    border-radius: 999px;
+    content: '';
+    height: 4px;
+    width: 38px;
+  }
+
+  &:active {
+    background: #f7f7f7;
+  }
+`
+
+export const SheetHandleLabel = styled.span`
+  color: #2196f3;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+`
+
+export const SheetHeader = styled.div`
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4px;
+`
+
+export const SheetCloseButton = styled.button`
+  background: none;
+  border: none;
+  color: #666;
+  cursor: pointer;
+  font-size: 26px;
+  line-height: 1;
+  padding: 0 6px;
+
+  &:active {
+    color: #000;
+  }
+`
+
+export const SheetSectionTitle = styled.h4`
+  color: #333;
+  font-size: 15px;
+  font-weight: 700;
+  margin: 20px 0 8px;
+`
+
+export const LegRow = styled.div<{ $current?: boolean; $dim?: boolean }>`
+  align-items: flex-start;
+  border-left: 3px solid ${(p) => (p.$current ? '#2196f3' : 'transparent')};
+  display: flex;
+  gap: 10px;
+  opacity: ${(p) => (p.$dim ? 0.45 : 1)};
+  padding: 8px 0 8px 10px;
+`
+
+export const LegIcon = styled.div`
+  font-size: 22px;
+  line-height: 1.3;
+`
+
+export const LegInfo = styled.div`
+  flex: 1;
+  min-width: 0;
+`
+
+export const LegTitle = styled.div`
+  color: #222;
+  font-size: 15px;
+  font-weight: 600;
+`
+
+export const LegSubtitle = styled.div`
+  color: #666;
+  font-size: 13px;
+`
+
+export const LegTime = styled.div`
+  color: #444;
+  flex-shrink: 0;
+  font-size: 13px;
+  font-weight: 600;
+  padding-top: 1px;
+  text-align: right;
+  white-space: nowrap;
+`
+
+export const WaitNote = styled.div`
+  align-items: center;
+  color: #8a5a00;
+  display: flex;
+  font-size: 12px;
+  font-weight: 600;
+  gap: 4px;
+  margin-top: 3px;
+`
+
+export const StopList = styled.ul`
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+`
+
+export const StopRow = styled.li<{ $next?: boolean; $passed?: boolean }>`
+  align-items: center;
+  color: ${(p) => (p.$passed ? '#aaa' : p.$next ? '#1565c0' : '#444')};
+  display: flex;
+  font-size: 13px;
+  font-weight: ${(p) => (p.$next ? 700 : 400)};
+  gap: 8px;
+  padding: 3px 0;
+`
+
+export const StopDot = styled.span<{ $next?: boolean; $passed?: boolean }>`
+  background: ${(p) => (p.$next ? '#1565c0' : p.$passed ? '#ddd' : '#bbb')};
+  border-radius: 50%;
+  flex-shrink: 0;
+  height: ${(p) => (p.$next ? 10 : 7)}px;
+  width: ${(p) => (p.$next ? 10 : 7)}px;
+`
+
+export const AltRow = styled.div`
+  align-items: center;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  padding: 12px;
+`
+
+export const AltSwitchButton = styled.button`
+  background: #2196f3;
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  cursor: pointer;
+  flex-shrink: 0;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 8px 16px;
+
+  &:active {
+    opacity: 0.8;
+  }
 `

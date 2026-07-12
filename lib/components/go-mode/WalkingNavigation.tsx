@@ -2,220 +2,240 @@ import { useIntl } from 'react-intl'
 import React, { useMemo } from 'react'
 import type { Leg } from '@opentripplanner/types'
 
-import { mergeAndSortStopTimes } from '../../util/stop-times'
+import {
+  getLegRouteId,
+  getRouteDepartures,
+  getSoonestCatchableMs
+} from '../../util/go-mode/departure-anchor'
 import type { TripProgress } from '../../util/go-mode/progress-calculator'
 
 import {
   AlternativeDeparture,
-  CountdownCard,
-  CountdownLabel,
-  CountdownValue,
-  InfoCardLabel,
-  InfoCardValue,
-  NextLegPreview,
+  CardBackButton,
+  NavCard,
+  NavExtras,
+  NavEyebrow,
+  NavEyebrowRow,
+  NavFoot,
+  NavHero,
+  NavSub,
   ResetButton,
   UseNextButton,
   WalkingContainer
 } from './styled'
+import RealtimeTime from './RealtimeTime'
 
 interface Props {
   boardingStopData?: any
   departureOverride?: number | null
   leg: Leg
   nextLeg?: Leg
+  onExit?: () => void
   onSelectDeparture?: (epochMs: number | null) => void
   progress: TripProgress
 }
 
+/**
+ * Access (walk/bike) leg view: state the facts directly and let the rider
+ * decide when to leave. The card shows when the bus arrives at the boarding
+ * stop (clock time + minutes away) and how long the ride to that stop is.
+ *
+ * Crucially it targets the *soonest bus the rider can physically reach* — the
+ * earliest departure of the route at the boarding stop whose time is at least
+ * the remaining ride away — rather than the comfortably-padded departure OTP
+ * planned. A slim margin still counts: if you can bike there before it leaves,
+ * you see it.
+ */
 const WalkingNavigation = ({
   boardingStopData,
   departureOverride,
   leg,
   nextLeg,
+  onExit,
   onSelectDeparture,
   progress
 }: Props) => {
   const intl = useIntl()
 
-  const isNearDestination = progress.currentLegProgress > 90
-
   const isNextLegTransit =
-    nextLeg &&
+    !!nextLeg &&
     (nextLeg.mode === 'BUS' ||
       nextLeg.mode === 'RAIL' ||
       nextLeg.mode === 'SUBWAY' ||
       nextLeg.mode === 'TRAM')
 
-  const getUrgency = (waitSeconds: number): 'ok' | 'tight' | 'late' => {
-    if (waitSeconds < 0) return 'late'
-    if (waitSeconds < 300) return 'tight'
-    return 'ok'
+  const transitEmoji = (mode?: string): string => {
+    switch (mode) {
+      case 'RAIL':
+        return '🚆'
+      case 'SUBWAY':
+        return '🚇'
+      case 'TRAM':
+        return '🚊'
+      default:
+        return '🚌'
+    }
   }
 
   const formatMinutes = (seconds: number): string => {
     const mins = Math.round(seconds / 60)
-    if (mins <= 0) return '<1 min'
-    return `${mins} min`
+    return mins <= 0 ? '<1 min' : `${mins} min`
   }
 
-  const formatClockTime = (epochMs: number): string => {
-    return new Date(epochMs).toLocaleTimeString([], {
+  const formatClockTime = (epochMs: number): string =>
+    new Date(epochMs).toLocaleTimeString([], {
       hour: 'numeric',
       minute: '2-digit'
     })
-  }
 
-  const walkSecondsRemaining = Math.max(
+  const nowMs = progress.currentTime.getTime()
+  const rideSecondsRemaining = Math.max(
     0,
     (leg.duration || 0) * (1 - progress.currentLegProgress / 100)
   )
 
-  // Determine the effective departure time for display
+  const route = nextLeg?.routeShortName || nextLeg?.routeLongName || ''
+  const stopName = nextLeg?.from?.name || leg.to.name
+  const isBike = leg.mode === 'BICYCLE'
+  const accessEmoji = isBike ? '🚲' : '🚶'
+
+  const nextLegRouteId = getLegRouteId(nextLeg)
+
+  // All upcoming departures of the boarding route at the boarding stop, from
+  // the stop-times data (re-polled while walking; sorted earliest first).
+  const routeDepartures = useMemo(
+    () =>
+      isNextLegTransit
+        ? getRouteDepartures(boardingStopData, nextLegRouteId)
+        : [],
+    [boardingStopData, isNextLegTransit, nextLegRouteId]
+  )
+
+  const soonestCatchableMs = useMemo(
+    () => getSoonestCatchableMs(routeDepartures, nowMs, rideSecondsRemaining),
+    [routeDepartures, nowMs, rideSecondsRemaining]
+  )
+
+  // Manual override wins; otherwise show the soonest reachable bus; fall back to
+  // OTP's planned departure only when we have no schedule data.
   const effectiveDepartureMs =
-    departureOverride || progress.plannedDepartureTime
+    departureOverride || soonestCatchableMs || progress.plannedDepartureTime
 
-  // Filter upcoming alternative departures for the same route at the boarding stop
-  const alternativeDepartures = useMemo(() => {
-    if (!boardingStopData || !isNextLegTransit || !nextLeg) return []
+  // Whether the departure time we're showing came from live (realtime) data.
+  // Override / soonest-catchable times originate from routeDepartures, so we
+  // match back to that list; a fall-back to OTP's planned time is "scheduled".
+  const departureIsLive = useMemo(
+    () =>
+      !!effectiveDepartureMs &&
+      routeDepartures.some(
+        (d) => d.depMs === effectiveDepartureMs && d.realtime
+      ),
+    [routeDepartures, effectiveDepartureMs]
+  )
 
-    try {
-      const allStopTimes = mergeAndSortStopTimes(boardingStopData)
-      const nowMs = progress.currentTime.getTime()
-      const targetedDepartureMs = effectiveDepartureMs || nextLeg.startTime
+  const busInSeconds = effectiveDepartureMs
+    ? (effectiveDepartureMs - nowMs) / 1000
+    : progress.timeUntilNextDeparture ?? 0
+  // Slack between reaching the stop and the bus leaving — negative if you can't
+  // quite make it.
+  const waitAtStopSeconds = busInSeconds - rideSecondsRemaining
 
-      // Match by route GTFS ID
-      const nextLegRouteId = (nextLeg as any).routeId || nextLeg.routeId
-      return allStopTimes
-        .filter((st: any) => {
-          // Match route
-          const stRouteId = st.route?.gtfsId || st.trip?.route?.gtfsId
-          if (!stRouteId || !nextLegRouteId) return false
-          if (stRouteId !== nextLegRouteId) return false
+  // Later departures of the same route, offered as safer fallbacks when the
+  // targeted bus is tight (or the rider just wants the next one).
+  const laterDepartures = useMemo(() => {
+    if (!effectiveDepartureMs) return []
+    return routeDepartures
+      .filter((d) => d.depMs > effectiveDepartureMs + 30000)
+      .slice(0, 3)
+      .map((d) => ({ departureMs: d.depMs, realtime: d.realtime }))
+  }, [routeDepartures, effectiveDepartureMs])
 
-          // Calculate actual departure epoch ms
-          const depSeconds = st.realtimeDeparture ?? st.scheduledDeparture
-          const depMs = (st.serviceDay + depSeconds) * 1000
+  const showAlternatives = laterDepartures.length > 0 && waitAtStopSeconds < 120
+  const showReset = !!progress.departureIsOverridden && !!onSelectDeparture
+  const showExtras = (showAlternatives || showReset) && !!onSelectDeparture
 
-          // Must be in the future and within 2 hours
-          if (depMs <= nowMs) return false
-          if (depMs > nowMs + 2 * 60 * 60 * 1000) return false
+  // Card content.
+  let eyebrow: string
+  let hero: string
+  let sub: string | null = null
+  let foot: string | null = null
 
-          // Exclude the currently-targeted departure (within 60s tolerance)
-          if (Math.abs(depMs - targetedDepartureMs) < 60000) return false
-
-          return true
-        })
-        .slice(0, 3)
-        .map((st: any) => {
-          const depSeconds = st.realtimeDeparture ?? st.scheduledDeparture
-          const depMs = (st.serviceDay + depSeconds) * 1000
-          return { departureMs: depMs }
-        })
-    } catch {
-      return []
-    }
-  }, [
-    boardingStopData,
-    isNextLegTransit,
-    nextLeg,
-    progress.currentTime,
-    effectiveDepartureMs
-  ])
-
-  // Show alternatives when timing is tight (wait < 60s) or late
-  const showAlternatives =
-    isNextLegTransit &&
-    alternativeDepartures.length > 0 &&
-    progress.waitTimeAtStop !== undefined &&
-    progress.waitTimeAtStop < 60
+  if (isNextLegTransit) {
+    // Bus facts as the headline; ride-to-stop fact below.
+    eyebrow = `${transitEmoji(nextLeg?.mode)} ${route}`
+    hero = effectiveDepartureMs ? formatClockTime(effectiveDepartureMs) : ''
+    sub = intl.formatMessage(
+      {
+        defaultMessage: 'arrives in {time}',
+        id: 'components.GoMode.arrivesIn'
+      },
+      { time: formatMinutes(busInSeconds) }
+    )
+    foot = isBike
+      ? intl.formatMessage(
+          {
+            defaultMessage: '{emoji} {time} ride to {stop}',
+            id: 'components.GoMode.rideToStop'
+          },
+          {
+            emoji: accessEmoji,
+            stop: stopName,
+            time: formatMinutes(rideSecondsRemaining)
+          }
+        )
+      : intl.formatMessage(
+          {
+            defaultMessage: '{emoji} {time} walk to {stop}',
+            id: 'components.GoMode.walkToStop'
+          },
+          {
+            emoji: accessEmoji,
+            stop: stopName,
+            time: formatMinutes(rideSecondsRemaining)
+          }
+        )
+  } else {
+    // Plain walk/bike leg with no transit connection next.
+    eyebrow = intl.formatMessage(
+      { defaultMessage: '{emoji} To {stop}', id: 'components.GoMode.toStop' },
+      { emoji: accessEmoji, stop: leg.to.name }
+    )
+    hero = formatMinutes(rideSecondsRemaining)
+    sub = progress.nextInstruction || null
+  }
 
   return (
     <WalkingContainer>
-      {/* Navigation instruction with time remaining -- compact inline */}
-      <div
-        style={{
-          alignItems: 'center',
-          display: 'flex',
-          justifyContent: 'space-between'
-        }}
-      >
-        <span
-          style={{
-            fontSize: '15px',
-            fontWeight: 500,
-            minWidth: 0,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap' as const
-          }}
-        >
-          {progress.nextInstruction || `Walk to ${leg.to.name}`}
-        </span>
-        <span
-          style={{
-            color: '#2196f3',
-            flexShrink: 0,
-            fontSize: '15px',
-            fontWeight: 'bold',
-            marginLeft: '12px',
-            whiteSpace: 'nowrap'
-          }}
-        >
-          {formatMinutes(walkSecondsRemaining)}
-        </span>
-      </div>
-
-      {/* Transit Departure Countdown */}
-      {isNextLegTransit && progress.timeUntilNextDeparture !== undefined && (
-        <CountdownCard
-          $urgency={getUrgency(
-            progress.waitTimeAtStop ?? progress.timeUntilNextDeparture
+      <NavCard>
+        <NavEyebrowRow>
+          {onExit && (
+            <CardBackButton
+              aria-label={intl.formatMessage({ id: 'common.forms.back' })}
+              onClick={onExit}
+              type="button"
+            >
+              ←
+            </CardBackButton>
           )}
-        >
-          <CountdownLabel>
-            {nextLeg.routeShortName || nextLeg.routeLongName}
-          </CountdownLabel>
-          <CountdownValue
-            $urgency={getUrgency(
-              progress.waitTimeAtStop ?? progress.timeUntilNextDeparture
+          <NavEyebrow>{eyebrow}</NavEyebrow>
+        </NavEyebrowRow>
+        {hero && (
+          <NavHero>
+            {isNextLegTransit ? (
+              <RealtimeTime live={departureIsLive}>{hero}</RealtimeTime>
+            ) : (
+              hero
             )}
-          >
-            {effectiveDepartureMs
-              ? `${formatClockTime(
-                  effectiveDepartureMs
-                )} \u2014 ${formatMinutes(
-                  progress.timeUntilNextDeparture
-                )} away`
-              : intl.formatMessage(
-                  {
-                    defaultMessage: 'Departs in {time}',
-                    id: 'components.GoMode.departsIn'
-                  },
-                  { time: formatMinutes(progress.timeUntilNextDeparture) }
-                )}
-          </CountdownValue>
-          {progress.waitTimeAtStop !== undefined && (
-            <div style={{ fontSize: '13px', marginTop: '4px' }}>
-              {progress.waitTimeAtStop < 0
-                ? intl.formatMessage({
-                    defaultMessage: 'Hurry! You may miss the bus',
-                    id: 'components.GoMode.hurryWarning'
-                  })
-                : intl.formatMessage(
-                    {
-                      defaultMessage: '~{time} wait at stop',
-                      id: 'components.GoMode.waitAtStop'
-                    },
-                    { time: formatMinutes(progress.waitTimeAtStop) }
-                  )}
-            </div>
-          )}
+          </NavHero>
+        )}
+        {sub && <NavSub>{sub}</NavSub>}
+        {foot && <NavFoot>{foot}</NavFoot>}
 
-          {/* Override reset link */}
-          {progress.departureIsOverridden && onSelectDeparture && (
-            <div style={{ marginTop: '6px' }}>
+        {showExtras && (
+          <NavExtras>
+            {showReset && (
               <ResetButton
-                onClick={() => onSelectDeparture(null)}
+                onClick={() => onSelectDeparture?.(null)}
                 type="button"
               >
                 {intl.formatMessage({
@@ -223,83 +243,56 @@ const WalkingNavigation = ({
                   id: 'components.GoMode.resetToPlanned'
                 })}
               </ResetButton>
-            </div>
-          )}
-
-          {/* Alternative departures */}
-          {showAlternatives &&
-            onSelectDeparture &&
-            alternativeDepartures.map(
-              (alt: { departureMs: number }, idx: number) => {
-                const minsAway = Math.round(
-                  (alt.departureMs - progress.currentTime.getTime()) / 60000
-                )
-                return (
-                  <AlternativeDeparture key={idx}>
-                    <span
-                      style={{
-                        fontSize: '13px',
-                        minWidth: 0,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap' as const
-                      }}
-                    >
-                      {intl.formatMessage(
-                        {
-                          defaultMessage: 'Next: {time} ({mins} min away)',
-                          id: 'components.GoMode.nextDeparture'
-                        },
-                        {
-                          mins: minsAway,
-                          time: formatClockTime(alt.departureMs)
-                        }
-                      )}
-                    </span>
-                    <UseNextButton
-                      onClick={() => onSelectDeparture(alt.departureMs)}
-                      type="button"
-                    >
-                      {intl.formatMessage({
-                        defaultMessage: 'Use this',
-                        id: 'components.GoMode.useThisDeparture'
-                      })}
-                    </UseNextButton>
-                  </AlternativeDeparture>
-                )
-              }
             )}
-        </CountdownCard>
-      )}
-
-      {/* Next Leg Preview */}
-      {nextLeg && isNearDestination && (
-        <NextLegPreview>
-          <InfoCardLabel>
-            {intl.formatMessage({
-              defaultMessage: 'Up Next',
-              id: 'components.GoMode.upNext'
-            })}
-          </InfoCardLabel>
-          <InfoCardValue>
-            {nextLeg.mode === 'BUS' || nextLeg.mode === 'RAIL'
-              ? intl.formatMessage(
-                  {
-                    defaultMessage: 'Board {route}',
-                    id: 'components.GoMode.nextLegTransit'
-                  },
-                  { route: nextLeg.routeShortName || nextLeg.routeLongName }
-                )
-              : intl.formatMessage(
-                  {
-                    defaultMessage: 'Walk to {destination}',
-                    id: 'components.GoMode.nextLegWalk'
-                  },
-                  { destination: nextLeg.to.name }
-                )}
-          </InfoCardValue>
-        </NextLegPreview>
-      )}
+            {showAlternatives &&
+              laterDepartures.map(
+                (
+                  alt: { departureMs: number; realtime: boolean },
+                  idx: number
+                ) => {
+                  const minsAway = Math.round((alt.departureMs - nowMs) / 60000)
+                  return (
+                    <AlternativeDeparture key={idx}>
+                      <span
+                        style={{
+                          fontSize: '13px',
+                          minWidth: 0,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap' as const
+                        }}
+                      >
+                        {intl.formatMessage(
+                          {
+                            defaultMessage: 'Next: {time} ({mins} min away)',
+                            id: 'components.GoMode.nextDeparture'
+                          },
+                          {
+                            mins: minsAway,
+                            time: (
+                              <RealtimeTime live={alt.realtime}>
+                                {formatClockTime(alt.departureMs)}
+                              </RealtimeTime>
+                            )
+                          }
+                        )}
+                      </span>
+                      <UseNextButton
+                        onClick={() => onSelectDeparture?.(alt.departureMs)}
+                        type="button"
+                      >
+                        {intl.formatMessage({
+                          defaultMessage: 'Use this',
+                          id: 'components.GoMode.useThisDeparture'
+                        })}
+                      </UseNextButton>
+                    </AlternativeDeparture>
+                  )
+                }
+              )}
+          </NavExtras>
+        )}
+      </NavCard>
     </WalkingContainer>
   )
 }

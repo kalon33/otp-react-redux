@@ -3,20 +3,30 @@ import type { Itinerary } from '@opentripplanner/types'
 
 import {
   ADD_NOTIFICATION,
+  BEGIN_ONBOARD_FLOW,
+  CLEAR_ONBOARD,
   CLEAR_REROUTE,
+  CLEAR_RIDING,
   CLEAR_VEHICLE_MATCH,
   CONFIRM_VEHICLE,
   DISMISS_BOARDING_PROMPT,
   PAUSE_GPS_SIMULATION,
   RESUME_GPS_SIMULATION,
   SET_DEPARTURE_OVERRIDE,
+  SET_LIVE_LEG_TIMES,
   SET_NOTIFICATION_CONFIG,
+  SET_ONBOARD_RESULT,
+  SET_ONBOARD_STATUS,
+  SET_ONBOARD_TRIP,
+  SET_ONBOARD_VEHICLE,
   SET_REROUTE_RESULT,
+  SET_RIDING,
   SET_TRACKING_ERROR,
   SET_TRANSIT_LEG_ENTERED,
   SHOW_BOARDING_PROMPT,
   START_GO_MODE,
   START_GPS_SIMULATION,
+  START_ONBOARD_OPTIMIZE,
   START_REROUTE,
   STOP_GO_MODE,
   STOP_GPS_SIMULATION,
@@ -30,6 +40,7 @@ import {
   UPDATE_TRACKING_INTERVAL,
   UPDATE_VEHICLE_MATCH
 } from '../actions/go-mode'
+import type { LiveLegTime, RidingState } from '../actions/go-mode'
 import type {
   NearbyVehicleOption,
   VehicleMatchResult
@@ -45,6 +56,53 @@ export interface SimulationState {
   totalPoints: number
 }
 
+/** The live vehicle the rider confirmed they are already aboard. */
+export interface OnboardVehicle {
+  label: string | null
+  nextStopId: string | null
+  routeId: string | null
+  tripId: string | null
+  vehicleId: string
+}
+
+/** One candidate alight stop being evaluated by the onboard optimizer. */
+export interface OnboardCandidate {
+  busArrivalEpoch: number
+  realtime: boolean
+  stopId: string
+  stopName: string
+}
+
+/** The chosen best stop to get off, with its remaining-journey itinerary. */
+export interface OnboardAlightOption {
+  busArrivalEpoch: number
+  itinerary: Itinerary
+  realtime: boolean
+  stopId: string
+  stopName: string
+}
+
+/**
+ * "I'm already on the bus" flow: discover the live vehicle the rider is on,
+ * fetch its schedule, and find the best stop to alight to finish the trip.
+ * Distinct from reRoute (a mid-trip swap of an already-active itinerary).
+ */
+export interface OnboardState {
+  alightOptions: OnboardAlightOption[]
+  bestAlightStop: OnboardAlightOption | null
+  candidates: OnboardCandidate[]
+  status:
+    | 'idle'
+    | 'discovering'
+    | 'awaiting-selection'
+    | 'fetching-schedule'
+    | 'optimizing'
+    | 'ready'
+    | 'error'
+  trip: any | null
+  vehicle: OnboardVehicle | null
+}
+
 export interface GoModeState {
   activeItinerary: Itinerary | null
 
@@ -57,6 +115,11 @@ export interface GoModeState {
   departureOverride: number | null
 
   isActive: boolean
+
+  /** Live (or schedule-fallback) transit-leg times, keyed by leg index. Kept
+   * fresh mid-ride by refreshLiveLegTimes; consumed by the trip overview. */
+  liveLegTimes: Record<number, LiveLegTime>
+
   notifications: {
     enabled: boolean
     recentNotifications: NotificationEvent[]
@@ -64,6 +127,8 @@ export interface GoModeState {
     soundEnabled: boolean
     vibrationEnabled: boolean
   }
+
+  onboard: OnboardState
 
   /**
    * The trip origin captured when Go Mode began. A mid-trip re-route replaces
@@ -75,10 +140,28 @@ export interface GoModeState {
   progress: TripProgress | null
 
   reRoute: {
+    // Apply the best result without asking (definitive missed bus) instead of
+    // surfacing the Switch/Keep card.
+    autoApply: boolean
+    // The single best candidate (kept for callers that only need one).
     candidate: Itinerary | null
+    // All browsable alternatives, shortest-duration first.
+    candidates: Itinerary[]
+    // Auto-apply may only pick itineraries boarding this route — the one the
+    // rider already chose. Null = no constraint (manual re-routes).
+    keepRouteId: string | null
+    // What prompted the re-route (e.g. 'missed-bus'); diagnostic only.
+    reason: string | null
     searchId: string | null
     status: 'idle' | 'searching' | 'found' | 'none' | 'error'
   }
+
+  /**
+   * The durable "rider is aboard this vehicle" fact (see RidingState in
+   * actions/go-mode). Survives new searches and itinerary switches; cleared
+   * on alight, STOP_GO_MODE, or sustained off-route.
+   */
+  riding: RidingState | null
 
   routeMatch: RouteMatchResult | null
 
@@ -115,6 +198,7 @@ const defaultState: GoModeState = {
   departureOverride: null,
 
   isActive: false,
+  liveLegTimes: {},
   notifications: {
     enabled: true,
     recentNotifications: [],
@@ -123,15 +207,30 @@ const defaultState: GoModeState = {
     vibrationEnabled: true
   },
 
+  onboard: {
+    alightOptions: [],
+    bestAlightStop: null,
+    candidates: [],
+    status: 'idle',
+    trip: null,
+    vehicle: null
+  },
+
   originalFrom: null,
 
   progress: null,
 
   reRoute: {
+    autoApply: false,
     candidate: null,
+    candidates: [],
+    keepRouteId: null,
+    reason: null,
     searchId: null,
     status: 'idle'
   },
+
+  riding: null,
 
   routeMatch: null,
 
@@ -150,7 +249,9 @@ const defaultState: GoModeState = {
   },
 
   ui: {
-    mapFollowUser: true
+    // Off by default: the map should stay where the user leaves it and only
+    // recenter on the live GPS point when the user asks (blue dot control).
+    mapFollowUser: false
   },
 
   vehicleMatch: {
@@ -159,6 +260,42 @@ const defaultState: GoModeState = {
     nearbyVehicles: [],
     trackedRouteId: null
   }
+}
+
+/** Route id from a leg — OTP2 object form (leg.route.id) or legacy leg.routeId. */
+function legRouteId(leg: any): string | null {
+  if (!leg) return null
+  const route = leg.route
+  if (route && typeof route === 'object') return route.id ?? null
+  return leg.routeId ?? null
+}
+
+/**
+ * Re-anchor the sticky riding fact onto a (possibly new) itinerary: find the
+ * transit leg matching the boarded trip (preferred) or route. When the new
+ * itinerary doesn't contain it, keep the fact un-anchored (legIndex -1) —
+ * the rider is still on that bus until GPS disproves it.
+ */
+function reanchorRiding(
+  riding: RidingState | null,
+  itinerary: Itinerary | null
+): RidingState | null {
+  if (!riding || !itinerary?.legs) return riding
+  const legs: any[] = itinerary.legs
+  let legIndex = -1
+  if (riding.tripId) {
+    legIndex = legs.findIndex(
+      (l) =>
+        l?.transitLeg &&
+        (l.trip?.gtfsId === riding.tripId || l.tripId === riding.tripId)
+    )
+  }
+  if (legIndex < 0 && riding.routeId) {
+    legIndex = legs.findIndex(
+      (l) => l?.transitLeg && legRouteId(l) === riding.routeId
+    )
+  }
+  return { ...riding, legIndex }
 }
 
 const goMode = handleActions<GoModeState, any>(
@@ -193,9 +330,40 @@ const goMode = handleActions<GoModeState, any>(
       }
     },
 
+    [BEGIN_ONBOARD_FLOW]: (state, action) => ({
+      ...state,
+      activeItinerary: null,
+      boardingPrompt: { ...defaultState.boardingPrompt },
+      isActive: true,
+      onboard: {
+        ...defaultState.onboard,
+        status: 'discovering' as const
+      },
+      originalFrom: action.payload?.originalFrom ?? null,
+      progress: null,
+      reRoute: { ...defaultState.reRoute },
+      routeMatch: null,
+      tracking: {
+        ...state.tracking,
+        error: null,
+        isTracking: true
+      },
+      vehicleMatch: { ...defaultState.vehicleMatch }
+    }),
+
+    [CLEAR_ONBOARD]: (state) => ({
+      ...state,
+      onboard: { ...defaultState.onboard }
+    }),
+
     [CLEAR_REROUTE]: (state) => ({
       ...state,
       reRoute: { ...defaultState.reRoute }
+    }),
+
+    [CLEAR_RIDING]: (state) => ({
+      ...state,
+      riding: null
     }),
 
     [CLEAR_VEHICLE_MATCH]: (state) => ({
@@ -253,6 +421,11 @@ const goMode = handleActions<GoModeState, any>(
       departureOverride: action.payload
     }),
 
+    [SET_LIVE_LEG_TIMES]: (state, action) => ({
+      ...state,
+      liveLegTimes: action.payload
+    }),
+
     [SET_NOTIFICATION_CONFIG]: (state, action) => {
       return {
         ...state,
@@ -263,13 +436,68 @@ const goMode = handleActions<GoModeState, any>(
       }
     },
 
-    [SET_REROUTE_RESULT]: (state, action) => ({
-      ...state,
-      reRoute: {
-        ...state.reRoute,
-        candidate: action.payload || null,
-        status: action.payload ? ('found' as const) : ('none' as const)
+    [SET_ONBOARD_RESULT]: (state, action) => {
+      const options: OnboardAlightOption[] = action.payload || []
+      return {
+        ...state,
+        onboard: {
+          ...state.onboard,
+          alightOptions: options,
+          bestAlightStop: options[0] || null,
+          status: options.length ? ('ready' as const) : ('error' as const)
+        }
       }
+    },
+
+    [SET_ONBOARD_STATUS]: (state, action) => ({
+      ...state,
+      onboard: {
+        ...state.onboard,
+        status: action.payload
+      }
+    }),
+
+    [SET_ONBOARD_TRIP]: (state, action) => ({
+      ...state,
+      onboard: {
+        ...state.onboard,
+        trip: action.payload
+      }
+    }),
+
+    [SET_ONBOARD_VEHICLE]: (state, action) => ({
+      ...state,
+      onboard: {
+        ...state.onboard,
+        status: 'fetching-schedule' as const,
+        vehicle: action.payload
+      }
+    }),
+
+    [SET_REROUTE_RESULT]: (state, action) => {
+      // Payload is the full list of alternatives (or null/[] for "none").
+      const candidates: Itinerary[] = Array.isArray(action.payload)
+        ? action.payload
+        : action.payload
+        ? [action.payload]
+        : []
+      return {
+        ...state,
+        reRoute: {
+          ...state.reRoute,
+          // Results resolved into a card (or "none") — the auto-apply moment,
+          // if there was one, has passed.
+          autoApply: false,
+          candidate: candidates[0] ?? null,
+          candidates,
+          status: candidates.length > 0 ? ('found' as const) : ('none' as const)
+        }
+      }
+    },
+
+    [SET_RIDING]: (state, action) => ({
+      ...state,
+      riding: action.payload
     }),
 
     [SET_TRACKING_ERROR]: (state, action) => {
@@ -305,6 +533,7 @@ const goMode = handleActions<GoModeState, any>(
         ...state,
         activeItinerary: itinerary,
         isActive: true,
+        liveLegTimes: {},
         notifications: {
           ...state.notifications,
           recentNotifications: [],
@@ -313,6 +542,7 @@ const goMode = handleActions<GoModeState, any>(
         originalFrom: originalFrom ?? null,
         progress: null,
         reRoute: { ...defaultState.reRoute },
+        riding: reanchorRiding(state.riding, itinerary),
         routeMatch: null,
         tracking: {
           ...state.tracking,
@@ -332,10 +562,25 @@ const goMode = handleActions<GoModeState, any>(
       }
     }),
 
+    [START_ONBOARD_OPTIMIZE]: (state, action) => ({
+      ...state,
+      onboard: {
+        ...state.onboard,
+        alightOptions: [],
+        bestAlightStop: null,
+        candidates: action.payload.candidates,
+        status: 'optimizing' as const
+      }
+    }),
+
     [START_REROUTE]: (state, action) => ({
       ...state,
       reRoute: {
+        autoApply: !!action.payload.autoApply,
         candidate: null,
+        candidates: [],
+        keepRouteId: action.payload.keepRouteId ?? null,
+        reason: action.payload.reason ?? null,
         searchId: action.payload.searchId,
         status: 'searching' as const
       }
@@ -368,9 +613,17 @@ const goMode = handleActions<GoModeState, any>(
     [TRANSITION_LEG]: (state, action) => {
       const { legIndex } = action.payload
 
+      // Advancing past the boarded transit leg means the rider alighted —
+      // drop the sticky riding fact.
+      const alighted =
+        state.riding != null &&
+        state.riding.legIndex >= 0 &&
+        legIndex > state.riding.legIndex
+
       return {
         ...state,
         departureOverride: null,
+        riding: alighted ? null : state.riding,
         routeMatch: state.routeMatch
           ? {
               ...state.routeMatch,
@@ -380,7 +633,7 @@ const goMode = handleActions<GoModeState, any>(
       }
     },
 
-    [UPDATE_NEARBY_VEHICLES]: (state, action) => ({
+    [UPDATE_NEARBY_VEHICLES]: (state: GoModeState, action: any) => ({
       ...state,
       vehicleMatch: {
         ...state.vehicleMatch,
@@ -388,7 +641,7 @@ const goMode = handleActions<GoModeState, any>(
       }
     }),
 
-    [UPDATE_POSITION]: (state, action) => {
+    [UPDATE_POSITION]: (state: GoModeState, action: any) => {
       return {
         ...state,
         tracking: {
@@ -399,21 +652,21 @@ const goMode = handleActions<GoModeState, any>(
       }
     },
 
-    [UPDATE_PROGRESS]: (state, action) => {
+    [UPDATE_PROGRESS]: (state: GoModeState, action: any) => {
       return {
         ...state,
         progress: action.payload
       }
     },
 
-    [UPDATE_ROUTE_MATCH]: (state, action) => {
+    [UPDATE_ROUTE_MATCH]: (state: GoModeState, action: any) => {
       return {
         ...state,
         routeMatch: action.payload
       }
     },
 
-    [UPDATE_SIMULATION_PROGRESS]: (state, action) => ({
+    [UPDATE_SIMULATION_PROGRESS]: (state: GoModeState, action: any) => ({
       ...state,
       simulation: {
         ...state.simulation,
@@ -421,7 +674,7 @@ const goMode = handleActions<GoModeState, any>(
       }
     }),
 
-    [UPDATE_TRACKING_INTERVAL]: (state, action) => {
+    [UPDATE_TRACKING_INTERVAL]: (state: GoModeState, action: any) => {
       const { interval } = action.payload
 
       return {
@@ -433,7 +686,7 @@ const goMode = handleActions<GoModeState, any>(
       }
     },
 
-    [UPDATE_VEHICLE_MATCH]: (state, action) => ({
+    [UPDATE_VEHICLE_MATCH]: (state: GoModeState, action: any) => ({
       ...state,
       vehicleMatch: {
         ...state.vehicleMatch,

@@ -213,6 +213,7 @@
     "testEnvironment": "jsdom",
     "moduleNameMapper": {
       "react-map-gl/maplibre": "@vis.gl/react-maplibre",
+      "util/debug-log$": "<rootDir>__tests__/test-utils/mock-data/debug-log.js",
       "i18n/(.*)\\.yml$": "<rootDir>__tests__/test-utils/mock-data/empty-yml.js",
       "modeSettings.yml$": "<rootDir>__tests__/test-utils/mock-data/empty-yml.js",
       "i18n-loader": "<rootDir>__tests__/test-utils/mock-data/i18n-loader.js",

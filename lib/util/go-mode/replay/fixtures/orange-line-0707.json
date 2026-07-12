@@ -1,0 +1,2785 @@
+{
+  "gpsTrack": [
+    {
+      "accuracy": 4.560756941213977,
+      "heading": 90.04856969345707,
+      "lat": 44.89007660985866,
+      "lon": -93.27989932949112,
+      "speed": 25.112146063662255,
+      "tMs": 1783467347636
+    },
+    {
+      "accuracy": 14,
+      "heading": 31.2890625,
+      "lat": 44.89219946325281,
+      "lon": -93.27495616869375,
+      "speed": 25.15999984741211,
+      "tMs": 1783467358538
+    },
+    {
+      "accuracy": 3.5355339059327373,
+      "heading": 1.0546875,
+      "lat": 44.89435696512916,
+      "lon": -93.2749417518203,
+      "speed": 25.68000030517578,
+      "tMs": 1783467368043
+    },
+    {
+      "accuracy": 4.748651530202791,
+      "heading": 3.1640769314241073,
+      "lat": 44.89754132032205,
+      "lon": -93.27487763634763,
+      "speed": 29.26000022857292,
+      "tMs": 1783467380000
+    },
+    {
+      "accuracy": 4.748651530202791,
+      "heading": 3.1640769314241073,
+      "lat": 44.89754132032205,
+      "lon": -93.27487763634763,
+      "speed": 29.26000022857292,
+      "tMs": 1783467380000
+    },
+    {
+      "accuracy": 4.748651530202791,
+      "heading": 3.1640769314241073,
+      "lat": 44.89754132032205,
+      "lon": -93.27487763634763,
+      "speed": 29.26000022857292,
+      "tMs": 1783467380000
+    },
+    {
+      "accuracy": 4.748651530202791,
+      "heading": 3.1640769314241073,
+      "lat": 44.89754132032205,
+      "lon": -93.27487763634763,
+      "speed": 29.26000022857292,
+      "tMs": 1783467380000
+    }
+  ],
+  "itinerary": {
+    "accessibilityScore": null,
+    "duration": 1476,
+    "endTime": 1783468945000,
+    "legs": [
+      {
+        "accessibilityScore": null,
+        "agency": null,
+        "alerts": [],
+        "arrivalDelay": 0,
+        "departureDelay": 0,
+        "distance": 234.2,
+        "dropOffBookingInfo": {
+          "latestBookingTime": null
+        },
+        "dropoffType": "SCHEDULED",
+        "duration": 88,
+        "endTime": 1783467557000,
+        "fareProducts": [],
+        "from": {
+          "lat": 44.8834758,
+          "lon": -93.2953967,
+          "name": "Current location",
+          "rentalVehicle": null,
+          "stop": null,
+          "vertexType": "NORMAL"
+        },
+        "headsign": null,
+        "id": null,
+        "interlineWithPreviousLeg": false,
+        "intermediateStops": null,
+        "intermediatePlaces": null,
+        "legGeometry": {
+          "length": 17,
+          "points": "wh}pGfwlxP@tE?d@\\?V?@]?AAK?IAGAkC?KAS?Q?K?AB?"
+        },
+        "mode": "BICYCLE",
+        "pickupBookingInfo": null,
+        "pickupType": "SCHEDULED",
+        "realTime": false,
+        "realtimeState": null,
+        "rentedBike": false,
+        "rideHailingEstimate": null,
+        "startTime": 1783467469000,
+        "steps": [
+          {
+            "absoluteDirection": "WEST",
+            "alerts": [],
+            "area": false,
+            "distance": 99.35,
+            "elevationProfile": [],
+            "lat": 44.8834859,
+            "lon": -93.2953969,
+            "relativeDirection": "DEPART",
+            "stayOn": false,
+            "streetName": "West 66th Street"
+          },
+          {
+            "absoluteDirection": "SOUTH",
+            "alerts": [],
+            "area": false,
+            "distance": 29.72,
+            "elevationProfile": [],
+            "lat": 44.8834709,
+            "lon": -93.2966576,
+            "relativeDirection": "LEFT",
+            "stayOn": false,
+            "streetName": "bike path"
+          },
+          {
+            "absoluteDirection": "EAST",
+            "alerts": [],
+            "area": false,
+            "distance": 105.15,
+            "elevationProfile": [],
+            "lat": 44.8832037,
+            "lon": -93.296655,
+            "relativeDirection": "LEFT",
+            "stayOn": true,
+            "streetName": "Richfield Bicycle Routes"
+          }
+        ],
+        "stopCalls": [],
+        "to": {
+          "lat": 44.88321,
+          "lon": -93.295321,
+          "name": "I-35W & 66th St Station",
+          "rentalVehicle": null,
+          "stop": {
+            "alerts": [],
+            "code": "48084",
+            "gtfsId": "1:48084",
+            "id": "U3RvcDoxOjQ4MDg0",
+            "lat": 44.88321,
+            "lon": -93.295321
+          },
+          "vertexType": "TRANSIT",
+          "stopCode": "48084",
+          "stopId": "1:48084"
+        },
+        "transitLeg": false,
+        "trip": null,
+        "alightRule": "scheduled",
+        "boardRule": "scheduled",
+        "bookingRuleInfo": {
+          "dropOff": {},
+          "pickUp": {}
+        },
+        "routeColor": "333333",
+        "routeTextColor": ""
+      },
+      {
+        "accessibilityScore": null,
+        "agency": {
+          "alerts": [],
+          "gtfsId": "1:0",
+          "id": "1:0",
+          "name": "Metro Transit",
+          "timezone": "America/Chicago",
+          "url": "https://www.metrotransit.org"
+        },
+        "alerts": [],
+        "arrivalDelay": 50,
+        "departureDelay": 77,
+        "distance": 12270.44,
+        "dropOffBookingInfo": {
+          "latestBookingTime": null
+        },
+        "dropoffType": "SCHEDULED",
+        "duration": 813,
+        "endTime": 1783468370000,
+        "fareProducts": [],
+        "from": {
+          "lat": 44.88321,
+          "lon": -93.295321,
+          "name": "I-35W & 66th St Station",
+          "rentalVehicle": null,
+          "stop": {
+            "alerts": [],
+            "code": "48084",
+            "gtfsId": "1:48084",
+            "id": "U3RvcDoxOjQ4MDg0",
+            "lat": 44.88321,
+            "lon": -93.295321
+          },
+          "vertexType": "TRANSIT",
+          "stopCode": "48084",
+          "stopId": "1:48084"
+        },
+        "headsign": "Orange Downtown Minneapolis",
+        "id": "rO0ABXdNABhTQ0hFRFVMRURfVFJBTlNJVF9MRUdfVjMACTE6MTA4NDYxMwAKMjAyNi0wNy0wNwAAAAUAAAAKAAcxOjQ4MDg0AAcxOjUzMzE0AAA=",
+        "interlineWithPreviousLeg": false,
+        "intermediateStops": [
+          {
+            "lat": 44.919902,
+            "locationType": "STOP",
+            "lon": -93.274801,
+            "name": "I-35W & 46th St Station",
+            "stopCode": "53542",
+            "stopId": "U3RvcDoxOjUzNTQy"
+          },
+          {
+            "lat": 44.948626,
+            "locationType": "STOP",
+            "lon": -93.274662,
+            "name": "I-35W & Lake St Station",
+            "stopCode": "17780",
+            "stopId": "U3RvcDoxOjE3Nzgw"
+          },
+          {
+            "lat": 44.971664,
+            "locationType": "STOP",
+            "lon": -93.27276,
+            "name": "2nd Ave S & 11th St - Stop Group F",
+            "stopCode": "53311",
+            "stopId": "U3RvcDoxOjUzMzEx"
+          },
+          {
+            "lat": 44.975587,
+            "locationType": "STOP",
+            "lon": -93.269488,
+            "name": "2nd Ave S & 7th St - Stop Group F",
+            "stopCode": "53313",
+            "stopId": "U3RvcDoxOjUzMzEz"
+          }
+        ],
+        "intermediatePlaces": [
+          {
+            "arrivalTime": 1783467797000,
+            "departureTime": 1783467819000,
+            "lat": 44.919902,
+            "lon": -93.274801,
+            "name": "I-35W & 46th St Station",
+            "stop": {
+              "code": "53542",
+              "gtfsId": "1:53542",
+              "id": "U3RvcDoxOjUzNTQy"
+            }
+          },
+          {
+            "arrivalTime": 1783467988000,
+            "departureTime": 1783467988000,
+            "lat": 44.948626,
+            "lon": -93.274662,
+            "name": "I-35W & Lake St Station",
+            "stop": {
+              "code": "17780",
+              "gtfsId": "1:17780",
+              "id": "U3RvcDoxOjE3Nzgw"
+            }
+          },
+          {
+            "arrivalTime": 1783468168000,
+            "departureTime": 1783468192000,
+            "lat": 44.971664,
+            "lon": -93.27276,
+            "name": "2nd Ave S & 11th St - Stop Group F",
+            "stop": {
+              "code": "53311",
+              "gtfsId": "1:53311",
+              "id": "U3RvcDoxOjUzMzEx"
+            }
+          },
+          {
+            "arrivalTime": 1783468310000,
+            "departureTime": 1783468310000,
+            "lat": 44.975587,
+            "lon": -93.269488,
+            "name": "2nd Ave S & 7th St - Stop Group F",
+            "stop": {
+              "code": "53313",
+              "gtfsId": "1:53313",
+              "id": "U3RvcDoxOjUzMzEz"
+            }
+          }
+        ],
+        "legGeometry": {
+          "length": 257,
+          "points": "wf}pGhwlxPI?IAI?a@Ae@@kCPu@Fk@@g@?o@A{BIiAC_ACiAEaAC{@Em@Ec@I]K_@O_@Q_@UYQ_@[e@m@]e@Ua@g@i@IYEOSo@O_AK{@Ky@Ey@Cw@As@AoAAmAAqAAkBAwAAyD?s@?}@@}C?kB@cD@_C?kA@aC?oB?wA@sBA}C@wC?wC@wB?sA?{@Ae@Cq@Eq@Gi@Gg@Ik@Ou@Mg@Og@Oa@M]ISWg@OYMU[a@Y_@]]][OMOKQMWOOGGEWK_@MSG[GWEWC[CYA[Aa@?m@AaBEm@AmBCoGGoEEc@?_DC}BAeA?uDA_J?iE@gBA]?WAoHAiIEwFEqEAiDCcE@sB?wDBuDDgE@wFEKAcBZkCD_CC}GG_@HIFU@sA?a@???M?a@?OEQGa@M}DAmFAw@?wCa@kD@iE?wFBg@@yD?aJCgD?qH?oLAu@?sG@yFCmC?gJBqG@cIBwA?mE@qOB_G@WR{@@U?O???O?I?[Uu@Aw@Eu@Ko@Mc@K_@KUIy@Ye@Wk@[c@Wg@a@g@]c@_@]YsDsCeCqBgG{EwAcAu@k@eAq@k@Yq@[k@Sq@OiB]OCiBD}@Bu@Fq@Hy@Lc@Hy@No@Js@Do@@{@AwJIi@?gC?mB@gA@iDBqC@W@W?kA?Y?qAAE?w@Cw@E{AG_AISCSCq@D_A?_@BYNA@UPm@r@i@x@JfB?f@?XCZETs@|BGVsBrGuC_C??OMYUaE{CgEaDcE_DyCeC??OMUS_E_D{CaC"
+        },
+        "mode": "BUS",
+        "pickupBookingInfo": null,
+        "pickupType": "SCHEDULED",
+        "realTime": true,
+        "realtimeState": "UPDATED",
+        "rentedBike": null,
+        "rideHailingEstimate": null,
+        "route": {
+          "alerts": [],
+          "color": "F68B1F",
+          "gtfsId": "1:904",
+          "id": "1:904",
+          "longName": "METRO Orange Line",
+          "shortName": null,
+          "textColor": "",
+          "type": 3
+        },
+        "startTime": 1783467557000,
+        "steps": [],
+        "stopCalls": [
+          {
+            "stopLocation": {
+              "__typename": "Stop"
+            }
+          },
+          {
+            "stopLocation": {
+              "__typename": "Stop"
+            }
+          },
+          {
+            "stopLocation": {
+              "__typename": "Stop"
+            }
+          },
+          {
+            "stopLocation": {
+              "__typename": "Stop"
+            }
+          },
+          {
+            "stopLocation": {
+              "__typename": "Stop"
+            }
+          },
+          {
+            "stopLocation": {
+              "__typename": "Stop"
+            }
+          }
+        ],
+        "to": {
+          "lat": 44.977502,
+          "lon": -93.267844,
+          "name": "2nd Ave S & 5th St - Stop Group F",
+          "rentalVehicle": null,
+          "stop": {
+            "alerts": [],
+            "code": "53314",
+            "gtfsId": "1:53314",
+            "id": "U3RvcDoxOjUzMzE0",
+            "lat": 44.977502,
+            "lon": -93.267844
+          },
+          "vertexType": "TRANSIT",
+          "stopCode": "53314",
+          "stopId": "1:53314"
+        },
+        "transitLeg": true,
+        "trip": {
+          "arrivalStoptime": {
+            "stop": {
+              "gtfsId": "1:56800",
+              "id": "U3RvcDoxOjU2ODAw"
+            },
+            "stopPosition": 13
+          },
+          "departureStoptime": {
+            "stop": {
+              "gtfsId": "1:56830",
+              "id": "U3RvcDoxOjU2ODMw"
+            },
+            "stopPosition": 1
+          },
+          "gtfsId": "1:1084613",
+          "id": "VHJpcDoxOjEwODQ2MTM"
+        },
+        "origColor": "F68B1F",
+        "agencyBrandingUrl": "https://www.metrotransit.org",
+        "agencyId": "1:0",
+        "agencyName": "Metro Transit",
+        "agencyUrl": "https://www.metrotransit.org",
+        "alightRule": "scheduled",
+        "boardRule": "scheduled",
+        "bookingRuleInfo": {
+          "dropOff": {},
+          "pickUp": {}
+        },
+        "routeColor": "F68B1F",
+        "routeId": "1:904",
+        "routeLongName": "METRO Orange Line",
+        "routeShortName": null,
+        "routeTextColor": "",
+        "tripId": "1:1084613",
+        "originalMode": "BUS"
+      },
+      {
+        "accessibilityScore": null,
+        "agency": null,
+        "alerts": [],
+        "arrivalDelay": 0,
+        "departureDelay": 0,
+        "distance": 1432.4,
+        "dropOffBookingInfo": {
+          "latestBookingTime": null
+        },
+        "dropoffType": "SCHEDULED",
+        "duration": 575,
+        "endTime": 1783468945000,
+        "fareProducts": [],
+        "from": {
+          "lat": 44.977502,
+          "lon": -93.267844,
+          "name": "2nd Ave S & 5th St - Stop Group F",
+          "rentalVehicle": null,
+          "stop": {
+            "alerts": [],
+            "code": "53314",
+            "gtfsId": "1:53314",
+            "id": "U3RvcDoxOjUzMzE0",
+            "lat": 44.977502,
+            "lon": -93.267844
+          },
+          "vertexType": "TRANSIT",
+          "stopCode": "53314",
+          "stopId": "1:53314"
+        },
+        "headsign": null,
+        "id": null,
+        "interlineWithPreviousLeg": false,
+        "intermediateStops": null,
+        "intermediatePlaces": null,
+        "legGeometry": {
+          "length": 94,
+          "points": "ktoqG`kgxPMKAFITGGCCGEsAiAoAcAMKOMK\\_@pAk@fBSb@GVGNAFOf@mA`EGRIN[`AAFeA~CGJEHABCHCJGTAF@DHHFJ@B@@DHJDd@p@R\\n@`ABNFJBBBDHNDDCBkAnBGHm@bAMNMRYd@_@j@KN[b@GFOFMFKLCBGHKPOVc@r@_@l@Yd@W^MNGLKR_BdCIJa@n@o@bAYb@kAjBFJhAmBLSBDDFDF@BBDFJ?D@D@D@BBBD@"
+        },
+        "mode": "BICYCLE",
+        "pickupBookingInfo": null,
+        "pickupType": "SCHEDULED",
+        "realTime": false,
+        "realtimeState": null,
+        "rentedBike": false,
+        "rideHailingEstimate": null,
+        "startTime": 1783468370000,
+        "steps": [
+          {
+            "absoluteDirection": "NORTHWEST",
+            "alerts": [],
+            "area": false,
+            "distance": 13.57,
+            "elevationProfile": [],
+            "lat": 44.9775713,
+            "lon": -93.2677841,
+            "relativeDirection": "DEPART",
+            "stayOn": false,
+            "streetName": "South 5th Street"
+          },
+          {
+            "absoluteDirection": "NORTHEAST",
+            "alerts": [],
+            "area": false,
+            "distance": 139.36,
+            "elevationProfile": [],
+            "lat": 44.9776349,
+            "lon": -93.2679313,
+            "relativeDirection": "RIGHT",
+            "stayOn": false,
+            "streetName": "2nd Avenue South"
+          },
+          {
+            "absoluteDirection": "NORTHWEST",
+            "alerts": [],
+            "area": false,
+            "distance": 404.33,
+            "elevationProfile": [],
+            "lat": 44.9787042,
+            "lon": -93.2670072,
+            "relativeDirection": "LEFT",
+            "stayOn": false,
+            "streetName": "3rd/4th Bikeway"
+          },
+          {
+            "absoluteDirection": "SOUTHWEST",
+            "alerts": [],
+            "area": false,
+            "distance": 145.28,
+            "elevationProfile": [],
+            "lat": 44.9805696,
+            "lon": -93.2714119,
+            "relativeDirection": "LEFT",
+            "stayOn": true,
+            "streetName": "Hennepin Ave"
+          },
+          {
+            "absoluteDirection": "NORTHWEST",
+            "alerts": [],
+            "area": false,
+            "distance": 208.4,
+            "elevationProfile": [],
+            "lat": 44.9796498,
+            "lon": -93.2726997,
+            "relativeDirection": "RIGHT",
+            "stayOn": false,
+            "streetName": "North 5th Street"
+          },
+          {
+            "absoluteDirection": "NORTH",
+            "alerts": [],
+            "area": false,
+            "distance": 405.5,
+            "elevationProfile": [],
+            "lat": 44.9809837,
+            "lon": -93.2745583,
+            "relativeDirection": "SLIGHTLY_RIGHT",
+            "stayOn": true,
+            "streetName": "North 5th Street"
+          },
+          {
+            "absoluteDirection": "SOUTHWEST",
+            "alerts": [],
+            "area": false,
+            "distance": 5.91,
+            "elevationProfile": [],
+            "lat": 44.983606,
+            "lon": -93.2781085,
+            "relativeDirection": "LEFT",
+            "stayOn": false,
+            "streetName": "path"
+          },
+          {
+            "absoluteDirection": "SOUTHEAST",
+            "alerts": [],
+            "area": false,
+            "distance": 78.96,
+            "elevationProfile": [],
+            "lat": 44.9835687,
+            "lon": -93.278162,
+            "relativeDirection": "LEFT",
+            "stayOn": true,
+            "streetName": "sidewalk"
+          },
+          {
+            "absoluteDirection": "SOUTHWEST",
+            "alerts": [],
+            "area": false,
+            "distance": 15.78,
+            "elevationProfile": [],
+            "lat": 44.9830727,
+            "lon": -93.2775869,
+            "relativeDirection": "RIGHT",
+            "stayOn": true,
+            "streetName": "sidewalk"
+          },
+          {
+            "absoluteDirection": "WEST",
+            "alerts": [],
+            "area": true,
+            "distance": 15.37,
+            "elevationProfile": [],
+            "lat": 44.9829764,
+            "lon": -93.2777338,
+            "relativeDirection": "RIGHT",
+            "stayOn": true,
+            "streetName": "open area"
+          }
+        ],
+        "stopCalls": [],
+        "to": {
+          "lat": 44.982898,
+          "lon": -93.277873,
+          "name": "Target Field, Twins Way, North Loop, Minneapolis, MN",
+          "rentalVehicle": null,
+          "stop": null,
+          "vertexType": "NORMAL"
+        },
+        "transitLeg": false,
+        "trip": null,
+        "alightRule": "scheduled",
+        "boardRule": "scheduled",
+        "bookingRuleInfo": {
+          "dropOff": {},
+          "pickUp": {}
+        },
+        "routeColor": "333333",
+        "routeTextColor": ""
+      }
+    ],
+    "startTime": 1783467469000,
+    "transfers": 0,
+    "waitingTime": 0,
+    "walkTime": 0,
+    "otp2QueryParams": {
+      "arriveBy": false,
+      "banned": {},
+      "date": "2026-07-07",
+      "modes": [
+        {
+          "mode": "BUS"
+        },
+        {
+          "mode": "TRAM"
+        },
+        {
+          "mode": "BICYCLE"
+        }
+      ],
+      "time": "18:34",
+      "departArrive": "DEPART",
+      "intermediatePlaces": [],
+      "mode": "WALK,TRANSIT",
+      "numItineraries": 10,
+      "routingType": "ITINERARY",
+      "modeButtons": "transit_bike_bicycle",
+      "fromPlace": "Current location::44.8834758262244,-93.29539672222464",
+      "toPlace": "Target Field, Twins Way, North Loop, Minneapolis, MN::44.982898,-93.277873",
+      "wheelchair": false
+    },
+    "index": 9,
+    "rank": 369,
+    "totalFare": 1.7976931348623157e+308
+  },
+  "meta": {
+    "endMs": 1783467380717,
+    "homeTimezone": "America/Chicago",
+    "label": "orange-line-0707",
+    "notes": "",
+    "recordedAt": "2026-07-07T23:35:58.557Z",
+    "routeIds": [
+      "1:904"
+    ],
+    "session": "mrbaetjp-clvhms",
+    "startMs": 1783467358557
+  },
+  "rerouteSnapshots": [],
+  "routingResponses": [],
+  "schemaVersion": 1,
+  "stopTimeSnapshots": [
+    {
+      "payload": {
+        "gtfsId": "1:48084",
+        "code": "48084",
+        "lat": 44.88321,
+        "lon": -93.295321,
+        "locationType": "STOP",
+        "name": "I-35W & 66th St Station",
+        "wheelchairBoarding": "POSSIBLE",
+        "routes": [
+          {
+            "id": "1:904",
+            "agency": {
+              "gtfsId": "1:0",
+              "name": "Metro Transit"
+            },
+            "longName": "METRO Orange Line",
+            "mode": "BUS",
+            "color": "F68B1F",
+            "textColor": "000000",
+            "shortName": null,
+            "patterns": [
+              {
+                "id": "UGF0dGVybjoxOjkwNDoxOjAx",
+                "headsign": "Orange Burnsville"
+              },
+              {
+                "id": "UGF0dGVybjoxOjkwNDowOjAx",
+                "headsign": "Orange Downtown Minneapolis"
+              }
+            ]
+          }
+        ],
+        "stoptimesForPatterns": [
+          {
+            "pattern": {
+              "desc": "METRO Orange Line Orange Downtown Minneapolis",
+              "headsign": "Orange Downtown Minneapolis",
+              "id": "1:904:0:01",
+              "route": {
+                "agency": {
+                  "name": "Metro Transit",
+                  "gtfsId": "1:0"
+                },
+                "gtfsId": "1:904"
+              }
+            },
+            "stoptimes": [
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 85080,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 85080,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "164760",
+                  "id": "VHJpcDoxOjEwODUwNjg",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 84180,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 84180,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "166131",
+                  "id": "VHJpcDoxOjEwODQ4MTQ",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 83280,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 83280,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "162795",
+                  "id": "VHJpcDoxOjEwODIyMDI",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 82380,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 82380,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "164256",
+                  "id": "VHJpcDoxOjEwODQ0NTA",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 81480,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 81480,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "163502",
+                  "id": "VHJpcDoxOjEwODI0Nzg",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 80580,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 80580,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "164059",
+                  "id": "VHJpcDoxOjEwODQwNjA",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 79680,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 79680,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "163854",
+                  "id": "VHJpcDoxOjEwODIwODU",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 78780,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 78780,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "164760",
+                  "id": "VHJpcDoxOjEwODI5OTY",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 77880,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 77880,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "166131",
+                  "id": "VHJpcDoxOjEwODE4MDE",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 76980,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 76980,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "162795",
+                  "id": "VHJpcDoxOjEwODI2Nzg",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 76080,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 76080,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "164256",
+                  "id": "VHJpcDoxOjEwODQ4ODk",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 75180,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 75180,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "163502",
+                  "id": "VHJpcDoxOjEwODIwMDY",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 74280,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 74280,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "164059",
+                  "id": "VHJpcDoxOjEwODQzMjY",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 73380,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 73380,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "163854",
+                  "id": "VHJpcDoxOjEwODE5NDE",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 72480,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 72480,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "164760",
+                  "id": "VHJpcDoxOjEwODM5MTY",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 71580,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 71580,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "166131",
+                  "id": "VHJpcDoxOjEwODM5MDI",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 65,
+                "realtimeDeparture": 70745,
+                "realtimeState": "UPDATED",
+                "scheduledDeparture": 70680,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "162795",
+                  "id": "VHJpcDoxOjEwODIzMDY",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 43,
+                "realtimeDeparture": 69823,
+                "realtimeState": "UPDATED",
+                "scheduledDeparture": 69780,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "165467",
+                  "id": "VHJpcDoxOjEwODU0OTM",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 112,
+                "realtimeDeparture": 68992,
+                "realtimeState": "UPDATED",
+                "scheduledDeparture": 68880,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "163502",
+                  "id": "VHJpcDoxOjEwODM1OTA",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 85,
+                "realtimeDeparture": 68065,
+                "realtimeState": "UPDATED",
+                "scheduledDeparture": 67980,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "164059",
+                  "id": "VHJpcDoxOjEwODU0ODE",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 77,
+                "realtimeDeparture": 67157,
+                "realtimeState": "UPDATED",
+                "scheduledDeparture": 67080,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "163854",
+                  "id": "VHJpcDoxOjEwODQ2MTM",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 66180,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 66180,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "165108",
+                  "id": "VHJpcDoxOjEwODMyNDk",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 65220,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 65220,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "164760",
+                  "id": "VHJpcDoxOjEwODUwODc",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 64620,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 64620,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "166131",
+                  "id": "VHJpcDoxOjEwODQ0MjA",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 64020,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 64020,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "162795",
+                  "id": "VHJpcDoxOjEwODMyOTc",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 63420,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 63420,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "165336",
+                  "id": "VHJpcDoxOjEwODUwODI",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 62760,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 62760,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "163502",
+                  "id": "VHJpcDoxOjEwODUzMjI",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 62160,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 62160,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "165876",
+                  "id": "VHJpcDoxOjEwODI3OTI",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 61560,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 61560,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "164059",
+                  "id": "VHJpcDoxOjEwODQ4Njg",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 60960,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 60960,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "163854",
+                  "id": "VHJpcDoxOjEwODM3MDA",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 60360,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 60360,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "162843",
+                  "id": "VHJpcDoxOjEwODIyMTY",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 59760,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 59760,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "165108",
+                  "id": "VHJpcDoxOjEwODQ3NTU",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 59160,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 59160,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "165884",
+                  "id": "VHJpcDoxOjEwODMwNDI",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 58560,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 58560,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "163342",
+                  "id": "VHJpcDoxOjEwODUxODc",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 57960,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 57960,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "164588",
+                  "id": "VHJpcDoxOjEwODQ3Njk",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 57360,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 57360,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "162795",
+                  "id": "VHJpcDoxOjEwODM0MTE",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 56760,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 56760,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "165336",
+                  "id": "VHJpcDoxOjEwODQzMTg",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 56220,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 56220,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "163502",
+                  "id": "VHJpcDoxOjEwODMyMTY",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 55680,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 55680,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "165876",
+                  "id": "VHJpcDoxOjEwODMwNTM",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 55080,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 55080,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "164059",
+                  "id": "VHJpcDoxOjEwODIxMjA",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 54480,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 54480,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "163854",
+                  "id": "VHJpcDoxOjEwODMzNjg",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 53880,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 53880,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "162843",
+                  "id": "VHJpcDoxOjEwODM2NjM",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 53280,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 53280,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "165108",
+                  "id": "VHJpcDoxOjEwODUzMjY",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 52680,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 52680,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "165884",
+                  "id": "VHJpcDoxOjEwODUzODc",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 51780,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 51780,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "163342",
+                  "id": "VHJpcDoxOjEwODM3ODY",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 50880,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 50880,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "164681",
+                  "id": "VHJpcDoxOjEwODQ2NTc",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 49980,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 49980,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "165336",
+                  "id": "VHJpcDoxOjEwODI3OTE",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 49080,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 49080,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "165876",
+                  "id": "VHJpcDoxOjEwODE4MTU",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 48180,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 48180,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "163948",
+                  "id": "VHJpcDoxOjEwODE4Mzc",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 47280,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 47280,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "162843",
+                  "id": "VHJpcDoxOjEwODU0ODg",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 46380,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 46380,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "166547",
+                  "id": "VHJpcDoxOjEwODIwMzY",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 45480,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 45480,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "163342",
+                  "id": "VHJpcDoxOjEwODQyMDE",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 44580,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 44580,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "164681",
+                  "id": "VHJpcDoxOjEwODE4ODQ",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 43680,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 43680,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "165336",
+                  "id": "VHJpcDoxOjEwODU0ODc",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 42780,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 42780,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "165876",
+                  "id": "VHJpcDoxOjEwODIyMzc",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 41880,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 41880,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "163948",
+                  "id": "VHJpcDoxOjEwODQ4NzE",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 40980,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 40980,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "166129",
+                  "id": "VHJpcDoxOjEwODQ1ODY",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 40080,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 40080,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "166547",
+                  "id": "VHJpcDoxOjEwODQ0MjU",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 39180,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 39180,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "163342",
+                  "id": "VHJpcDoxOjEwODMyMzc",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 38280,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 38280,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "166429",
+                  "id": "VHJpcDoxOjEwODE5ODU",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 37380,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 37380,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "164681",
+                  "id": "VHJpcDoxOjEwODM4MzE",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 36480,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 36480,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "166585",
+                  "id": "VHJpcDoxOjEwODM5MzM",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 35580,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 35580,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "163948",
+                  "id": "VHJpcDoxOjEwODI5ODM",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 34680,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 34680,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "166129",
+                  "id": "VHJpcDoxOjEwODIzMTk",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 33780,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 33780,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "166547",
+                  "id": "VHJpcDoxOjEwODQ5NzU",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 32820,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 32820,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "163342",
+                  "id": "VHJpcDoxOjEwODI2MjA",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 31920,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 31920,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "166429",
+                  "id": "VHJpcDoxOjEwODIxMDU",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 31020,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 31020,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "164681",
+                  "id": "VHJpcDoxOjEwODQzNTY",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 30420,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 30420,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "166585",
+                  "id": "VHJpcDoxOjEwODUyODQ",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 29820,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 29820,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "162923",
+                  "id": "VHJpcDoxOjEwODUwMzc",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 29220,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 29220,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "163948",
+                  "id": "VHJpcDoxOjEwODM0Njg",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 28620,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 28620,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "166129",
+                  "id": "VHJpcDoxOjEwODMwNTg",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 28020,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 28020,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "163432",
+                  "id": "VHJpcDoxOjEwODQ0MTQ",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 27420,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 27420,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "166547",
+                  "id": "VHJpcDoxOjEwODE3NjM",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 26820,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 26820,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "163342",
+                  "id": "VHJpcDoxOjEwODI5MTg",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 26220,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 26220,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "166040",
+                  "id": "VHJpcDoxOjEwODUyMTQ",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 25620,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 25620,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "166429",
+                  "id": "VHJpcDoxOjEwODQ3MjU",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 25020,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 25020,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "164681",
+                  "id": "VHJpcDoxOjEwODIwNTk",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 24420,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 24420,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "163909",
+                  "id": "VHJpcDoxOjEwODIwMzA",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 23880,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 23880,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "166585",
+                  "id": "VHJpcDoxOjEwODMyNTk",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 23280,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 23280,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "162923",
+                  "id": "VHJpcDoxOjEwODQyMTM",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 22680,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 22680,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "163948",
+                  "id": "VHJpcDoxOjEwODUwOTg",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 22080,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 22080,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "166129",
+                  "id": "VHJpcDoxOjEwODI5MDg",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 21180,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 21180,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "166547",
+                  "id": "VHJpcDoxOjEwODQ2NDY",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 20280,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 20280,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "166040",
+                  "id": "VHJpcDoxOjEwODQxMTM",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 19380,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 19380,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "166429",
+                  "id": "VHJpcDoxOjEwODM5Mjg",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 18480,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 18480,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "164681",
+                  "id": "VHJpcDoxOjEwODM5MTk",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 17580,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 17580,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "166585",
+                  "id": "VHJpcDoxOjEwODI3ODM",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              },
+              {
+                "headsign": "Orange Downtown Minneapolis",
+                "departureDelay": 0,
+                "realtimeDeparture": 16680,
+                "realtimeState": "SCHEDULED",
+                "scheduledDeparture": 16680,
+                "serviceDay": 1783400400,
+                "trip": {
+                  "blockId": "163948",
+                  "id": "VHJpcDoxOjEwODU1MDg",
+                  "pattern": {
+                    "id": "UGF0dGVybjoxOjkwNDowOjAx"
+                  },
+                  "route": {
+                    "gtfsId": "1:904"
+                  }
+                }
+              }
+            ]
+          }
+        ],
+        "fetchStatus": 2,
+        "stopTimesLastUpdated": 1783467358665
+      },
+      "stopId": "1:48084",
+      "tMs": 1783467358667
+    }
+  ],
+  "tripSnapshots": [],
+  "vehicleSnapshots": [
+    {
+      "payload": {
+        "routeId": "1:904",
+        "vehicles": [
+          {
+            "heading": null,
+            "label": "",
+            "lat": 0,
+            "lon": 0,
+            "patternId": "UGF0dGVybjoxOjkwNDoxOjAx",
+            "routeId": "1:904",
+            "seconds": null,
+            "speed": 0,
+            "tripHeadsign": "Orange Burnsville",
+            "tripId": "1:1170579",
+            "vehicleId": "1:8148"
+          },
+          {
+            "heading": null,
+            "label": "",
+            "lat": 0,
+            "lon": 0,
+            "patternId": "UGF0dGVybjoxOjkwNDoxOjAx",
+            "routeId": "1:904",
+            "seconds": null,
+            "speed": 0,
+            "tripHeadsign": "Orange Burnsville",
+            "tripId": "1:1171558",
+            "vehicleId": "1:3312"
+          },
+          {
+            "heading": null,
+            "label": "",
+            "lat": 0,
+            "lon": 0,
+            "patternId": "UGF0dGVybjoxOjkwNDoxOjAx",
+            "routeId": "1:904",
+            "seconds": null,
+            "speed": 0,
+            "tripHeadsign": "Orange Burnsville",
+            "tripId": "1:1171803",
+            "vehicleId": "1:8150"
+          },
+          {
+            "heading": 180,
+            "label": "1559",
+            "lat": 44.8580704,
+            "lon": -93.3019028,
+            "nextStopId": "1:56884",
+            "nextStopName": "Knox Ave & American Blvd Station",
+            "patternId": "UGF0dGVybjoxOjkwNDoxOjAx",
+            "routeId": "1:904",
+            "seconds": 1783467308,
+            "speed": 2,
+            "stopStatus": "STOPPED_AT",
+            "tripHeadsign": "Orange Burnsville",
+            "tripId": "1:1172015",
+            "vehicleId": "1:1559"
+          },
+          {
+            "heading": null,
+            "label": "",
+            "lat": 0,
+            "lon": 0,
+            "patternId": "UGF0dGVybjoxOjkwNDoxOjAx",
+            "routeId": "1:904",
+            "seconds": null,
+            "speed": 0,
+            "tripHeadsign": "Orange Burnsville",
+            "tripId": "1:1172378",
+            "vehicleId": "1:8227"
+          },
+          {
+            "heading": 28,
+            "label": "8203",
+            "lat": 44.8269844,
+            "lon": -93.2932358,
+            "nextStopId": "1:56830",
+            "nextStopName": "Burnsville Heart of the City Station",
+            "patternId": "UGF0dGVybjoxOjkwNDoxOjAx",
+            "routeId": "1:904",
+            "seconds": 1783467313,
+            "speed": 9,
+            "stopStatus": "IN_TRANSIT_TO",
+            "tripHeadsign": "Orange Burnsville",
+            "tripId": "1:1173407",
+            "vehicleId": "1:8203"
+          },
+          {
+            "heading": null,
+            "label": "8147",
+            "lat": 44.9482536,
+            "lon": -93.2748795,
+            "nextStopId": "1:17781",
+            "nextStopName": "I-35W & Lake St Station",
+            "patternId": "UGF0dGVybjoxOjkwNDoxOjAx",
+            "routeId": "1:904",
+            "seconds": 1783467320,
+            "speed": 0,
+            "stopStatus": "STOPPED_AT",
+            "tripHeadsign": "Orange Burnsville",
+            "tripId": "1:1173682",
+            "vehicleId": "1:8147"
+          },
+          {
+            "heading": 179,
+            "label": "8139",
+            "lat": 44.7751808,
+            "lon": -93.2886124,
+            "nextStopId": "1:56830",
+            "nextStopName": "Burnsville Heart of the City Station",
+            "patternId": "UGF0dGVybjoxOjkwNDoxOjAx",
+            "routeId": "1:904",
+            "seconds": 1783467319,
+            "speed": 18,
+            "stopStatus": "IN_TRANSIT_TO",
+            "tripHeadsign": "Orange Burnsville",
+            "tripId": "1:1173943",
+            "vehicleId": "1:8139"
+          },
+          {
+            "heading": null,
+            "label": "",
+            "lat": 0,
+            "lon": 0,
+            "patternId": "UGF0dGVybjoxOjkwNDoxOjAx",
+            "routeId": "1:904",
+            "seconds": null,
+            "speed": 0,
+            "tripHeadsign": "Orange Burnsville",
+            "tripId": "1:1200343",
+            "vehicleId": "1:8146"
+          },
+          {
+            "heading": null,
+            "label": "",
+            "lat": 0,
+            "lon": 0,
+            "patternId": "UGF0dGVybjoxOjkwNDowOjAx",
+            "routeId": "1:904",
+            "seconds": null,
+            "speed": 0,
+            "tripHeadsign": "Orange Downtown Minneapolis",
+            "tripId": "1:1082306",
+            "vehicleId": "1:8147"
+          },
+          {
+            "heading": 90,
+            "label": "8227",
+            "lat": 44.8901253,
+            "lon": -93.2868652,
+            "nextStopId": "1:53542",
+            "nextStopName": "I-35W & 46th St Station",
+            "patternId": "UGF0dGVybjoxOjkwNDowOjAx",
+            "routeId": "1:904",
+            "seconds": 1783467316,
+            "speed": 21,
+            "stopStatus": "IN_TRANSIT_TO",
+            "tripHeadsign": "Orange Downtown Minneapolis",
+            "tripId": "1:1083249",
+            "vehicleId": "1:8227"
+          },
+          {
+            "heading": null,
+            "label": "",
+            "lat": 0,
+            "lon": 0,
+            "patternId": "UGF0dGVybjoxOjkwNDowOjAx",
+            "routeId": "1:904",
+            "seconds": null,
+            "speed": 0,
+            "tripHeadsign": "Orange Downtown Minneapolis",
+            "tripId": "1:1083590",
+            "vehicleId": "1:8203"
+          },
+          {
+            "heading": null,
+            "label": "8150",
+            "lat": 44.9788818,
+            "lon": -93.2621765,
+            "nextStopId": "1:56800",
+            "nextStopName": "Gateway Ramp Layover",
+            "patternId": "UGF0dGVybjoxOjkwNDowOjAx",
+            "routeId": "1:904",
+            "seconds": 1783467305,
+            "speed": 0,
+            "stopStatus": "IN_TRANSIT_TO",
+            "tripHeadsign": "Orange Downtown Minneapolis",
+            "tripId": "1:1084420",
+            "vehicleId": "1:8150"
+          },
+          {
+            "heading": 3,
+            "label": "8148",
+            "lat": 44.8630409,
+            "lon": -93.3023148,
+            "nextStopId": "1:56828",
+            "nextStopName": "Knox Ave & 76th St Station",
+            "patternId": "UGF0dGVybjoxOjkwNDowOjAx",
+            "routeId": "1:904",
+            "seconds": 1783467319,
+            "speed": 9,
+            "stopStatus": "IN_TRANSIT_TO",
+            "tripHeadsign": "Orange Downtown Minneapolis",
+            "tripId": "1:1084613",
+            "vehicleId": "1:8148"
+          },
+          {
+            "heading": null,
+            "label": "8146",
+            "lat": 44.7761497,
+            "lon": -93.2788467,
+            "nextStopId": "1:56830",
+            "nextStopName": "Burnsville Heart of the City Station",
+            "patternId": "UGF0dGVybjoxOjkwNDowOjAx",
+            "routeId": "1:904",
+            "seconds": 1783467307,
+            "speed": 0,
+            "stopStatus": "STOPPED_AT",
+            "tripHeadsign": "Orange Downtown Minneapolis",
+            "tripId": "1:1085481",
+            "vehicleId": "1:8146"
+          },
+          {
+            "heading": 172,
+            "label": "8149",
+            "lat": 44.7993851,
+            "lon": -93.289711,
+            "nextStopId": "1:56830",
+            "nextStopName": "Burnsville Heart of the City Station",
+            "patternId": "UGF0dGVybjoxOjkwNDowOjAx",
+            "routeId": "1:904",
+            "seconds": 1783467321,
+            "speed": 5,
+            "stopStatus": "STOPPED_AT",
+            "tripHeadsign": "Orange Downtown Minneapolis",
+            "tripId": "1:1085493",
+            "vehicleId": "1:8149"
+          }
+        ]
+      },
+      "routeId": "1:904",
+      "tMs": 1783467358665
+    },
+    {
+      "payload": {
+        "routeId": "1:904",
+        "vehicles": [
+          {
+            "heading": null,
+            "label": "",
+            "lat": 0,
+            "lon": 0,
+            "patternId": "UGF0dGVybjoxOjkwNDoxOjAx",
+            "routeId": "1:904",
+            "seconds": null,
+            "speed": 0,
+            "tripHeadsign": "Orange Burnsville",
+            "tripId": "1:1170579",
+            "vehicleId": "1:8148"
+          },
+          {
+            "heading": null,
+            "label": "",
+            "lat": 0,
+            "lon": 0,
+            "patternId": "UGF0dGVybjoxOjkwNDoxOjAx",
+            "routeId": "1:904",
+            "seconds": null,
+            "speed": 0,
+            "tripHeadsign": "Orange Burnsville",
+            "tripId": "1:1171558",
+            "vehicleId": "1:3312"
+          },
+          {
+            "heading": 232,
+            "label": "8150",
+            "lat": 44.9792519,
+            "lon": -93.2633591,
+            "nextStopId": "1:56800",
+            "nextStopName": "Gateway Ramp Layover",
+            "patternId": "UGF0dGVybjoxOjkwNDoxOjAx",
+            "routeId": "1:904",
+            "seconds": 1783467329,
+            "speed": 2,
+            "stopStatus": "STOPPED_AT",
+            "tripHeadsign": "Orange Burnsville",
+            "tripId": "1:1171803",
+            "vehicleId": "1:8150"
+          },
+          {
+            "heading": null,
+            "label": "1559",
+            "lat": 44.8580513,
+            "lon": -93.3018875,
+            "nextStopId": "1:56884",
+            "nextStopName": "Knox Ave & American Blvd Station",
+            "patternId": "UGF0dGVybjoxOjkwNDoxOjAx",
+            "routeId": "1:904",
+            "seconds": 1783467325,
+            "speed": 0,
+            "stopStatus": "STOPPED_AT",
+            "tripHeadsign": "Orange Burnsville",
+            "tripId": "1:1172015",
+            "vehicleId": "1:1559"
+          },
+          {
+            "heading": null,
+            "label": "",
+            "lat": 0,
+            "lon": 0,
+            "patternId": "UGF0dGVybjoxOjkwNDoxOjAx",
+            "routeId": "1:904",
+            "seconds": null,
+            "speed": 0,
+            "tripHeadsign": "Orange Burnsville",
+            "tripId": "1:1172378",
+            "vehicleId": "1:8227"
+          },
+          {
+            "heading": 176,
+            "label": "8203",
+            "lat": 44.8250771,
+            "lon": -93.2917862,
+            "nextStopId": "1:56830",
+            "nextStopName": "Burnsville Heart of the City Station",
+            "patternId": "UGF0dGVybjoxOjkwNDoxOjAx",
+            "routeId": "1:904",
+            "seconds": 1783467334,
+            "speed": 17,
+            "stopStatus": "IN_TRANSIT_TO",
+            "tripHeadsign": "Orange Burnsville",
+            "tripId": "1:1173407",
+            "vehicleId": "1:8203"
+          },
+          {
+            "heading": null,
+            "label": "8147",
+            "lat": 44.9482536,
+            "lon": -93.2748795,
+            "nextStopId": "1:17781",
+            "nextStopName": "I-35W & Lake St Station",
+            "patternId": "UGF0dGVybjoxOjkwNDoxOjAx",
+            "routeId": "1:904",
+            "seconds": 1783467335,
+            "speed": 0,
+            "stopStatus": "STOPPED_AT",
+            "tripHeadsign": "Orange Burnsville",
+            "tripId": "1:1173682",
+            "vehicleId": "1:8147"
+          },
+          {
+            "heading": 183,
+            "label": "8139",
+            "lat": 44.7723351,
+            "lon": -93.2886429,
+            "nextStopId": "1:56830",
+            "nextStopName": "Burnsville Heart of the City Station",
+            "patternId": "UGF0dGVybjoxOjkwNDoxOjAx",
+            "routeId": "1:904",
+            "seconds": 1783467336,
+            "speed": 19,
+            "stopStatus": "IN_TRANSIT_TO",
+            "tripHeadsign": "Orange Burnsville",
+            "tripId": "1:1173943",
+            "vehicleId": "1:8139"
+          },
+          {
+            "heading": null,
+            "label": "",
+            "lat": 0,
+            "lon": 0,
+            "patternId": "UGF0dGVybjoxOjkwNDoxOjAx",
+            "routeId": "1:904",
+            "seconds": null,
+            "speed": 0,
+            "tripHeadsign": "Orange Burnsville",
+            "tripId": "1:1200343",
+            "vehicleId": "1:8146"
+          },
+          {
+            "heading": null,
+            "label": "",
+            "lat": 0,
+            "lon": 0,
+            "patternId": "UGF0dGVybjoxOjkwNDowOjAx",
+            "routeId": "1:904",
+            "seconds": null,
+            "speed": 0,
+            "tripHeadsign": "Orange Downtown Minneapolis",
+            "tripId": "1:1082306",
+            "vehicleId": "1:8147"
+          },
+          {
+            "heading": 92,
+            "label": "8227",
+            "lat": 44.8900986,
+            "lon": -93.283783,
+            "nextStopId": "1:53542",
+            "nextStopName": "I-35W & 46th St Station",
+            "patternId": "UGF0dGVybjoxOjkwNDowOjAx",
+            "routeId": "1:904",
+            "seconds": 1783467327,
+            "speed": 22,
+            "stopStatus": "IN_TRANSIT_TO",
+            "tripHeadsign": "Orange Downtown Minneapolis",
+            "tripId": "1:1083249",
+            "vehicleId": "1:8227"
+          },
+          {
+            "heading": null,
+            "label": "",
+            "lat": 0,
+            "lon": 0,
+            "patternId": "UGF0dGVybjoxOjkwNDowOjAx",
+            "routeId": "1:904",
+            "seconds": null,
+            "speed": 0,
+            "tripHeadsign": "Orange Downtown Minneapolis",
+            "tripId": "1:1083590",
+            "vehicleId": "1:8203"
+          },
+          {
+            "heading": 356,
+            "label": "8148",
+            "lat": 44.8644295,
+            "lon": -93.3022995,
+            "nextStopId": "1:56828",
+            "nextStopName": "Knox Ave & 76th St Station",
+            "patternId": "UGF0dGVybjoxOjkwNDowOjAx",
+            "routeId": "1:904",
+            "seconds": 1783467334,
+            "speed": 5,
+            "stopStatus": "STOPPED_AT",
+            "tripHeadsign": "Orange Downtown Minneapolis",
+            "tripId": "1:1084613",
+            "vehicleId": "1:8148"
+          },
+          {
+            "heading": null,
+            "label": "8146",
+            "lat": 44.7761497,
+            "lon": -93.2788467,
+            "nextStopId": "1:56830",
+            "nextStopName": "Burnsville Heart of the City Station",
+            "patternId": "UGF0dGVybjoxOjkwNDowOjAx",
+            "routeId": "1:904",
+            "seconds": 1783467328,
+            "speed": 0,
+            "stopStatus": "STOPPED_AT",
+            "tripHeadsign": "Orange Downtown Minneapolis",
+            "tripId": "1:1085481",
+            "vehicleId": "1:8146"
+          },
+          {
+            "heading": 171,
+            "label": "8149",
+            "lat": 44.7987289,
+            "lon": -93.2895813,
+            "nextStopId": "1:56830",
+            "nextStopName": "Burnsville Heart of the City Station",
+            "patternId": "UGF0dGVybjoxOjkwNDowOjAx",
+            "routeId": "1:904",
+            "seconds": 1783467335,
+            "speed": 4,
+            "stopStatus": "STOPPED_AT",
+            "tripHeadsign": "Orange Downtown Minneapolis",
+            "tripId": "1:1085493",
+            "vehicleId": "1:8149"
+          }
+        ]
+      },
+      "routeId": "1:904",
+      "tMs": 1783467373695
+    }
+  ]
+}
