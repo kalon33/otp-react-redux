@@ -156,16 +156,16 @@ async function main() {
     },
     { polling: 500, timeout: 90000 }
   )
-  // choose the FIRST (default) option — item 4 is about times, not choice
+  // choose the FIRST (default) option — item 4 is about times, not choice.
+  // Options render through the normal itinerary list (li.result rows, see
+  // verify-onboard-options); a tap anywhere on the row selects it.
   const started = await page.evaluate(() => {
-    const btn = Array.from(document.querySelectorAll('button')).find(
-      (b) => b.textContent.trim() === 'Go'
-    )
-    if (!btn) return false
-    btn.click()
+    const row = document.querySelector('li.result')
+    if (!row) return false
+    row.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     return true
   })
-  if (!started) throw new Error('no Go button — onboard flow failed')
+  if (!started) throw new Error('no alight-option rows — onboard flow failed')
   await page.waitForFunction(
     () => window.store.getState().otp.goMode.activeItinerary != null,
     { polling: 300, timeout: 20000 }

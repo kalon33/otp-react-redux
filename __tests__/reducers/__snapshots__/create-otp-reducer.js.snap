@@ -88,6 +88,7 @@ Object {
       "lastPosition": null,
     },
     "ui": Object {
+      "backgrounded": false,
       "mapFollowUser": false,
     },
     "vehicleMatch": Object {
