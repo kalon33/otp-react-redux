@@ -498,10 +498,9 @@ export function checkRouteDeviation(
   sentNotifications: string[]
 ): NotificationEvent | null {
   if (distanceFromRoute > 200) {
-    const id = generateNotificationId(
-      'ROUTE_DEVIATION',
-      `deviation_${Math.floor(distanceFromRoute)}`
-    )
+    // Stable context: the measured distance changes every GPS tick, so it must
+    // not be part of the dedup key or the 120s window never matches.
+    const id = generateNotificationId('ROUTE_DEVIATION', 'deviation')
 
     if (!wasRecentlySent(id, sentNotifications, 120000)) {
       return {

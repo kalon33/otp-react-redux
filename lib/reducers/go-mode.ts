@@ -309,8 +309,10 @@ const goMode = handleActions<GoModeState, any>(
         notification.id
       ]
 
-      // Keep only last 20 sent notification IDs to prevent memory growth
-      if (sentNotifications.length > 20) {
+      // Keep only last 50 sent notification IDs to prevent memory growth. The
+      // window must be wide enough that a chatty type (e.g. route deviation)
+      // cannot evict one-shot ids like TRIP_COMPLETE within their dedup window.
+      if (sentNotifications.length > 50) {
         sentNotifications.shift()
       }
 

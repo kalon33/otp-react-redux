@@ -271,6 +271,25 @@ describe('util > go-mode > notification-service', () => {
     it('should return null when exactly at threshold', () => {
       expect(checkRouteDeviation(200, [])).toBeNull()
     })
+
+    it('should dedup repeated deviations even as the distance changes', () => {
+      const sent: string[] = []
+      let fired = 0
+      // Simulate a minute of once-per-second GPS ticks drifting 204m -> 263m.
+      for (let i = 0; i < 60; i++) {
+        const result = checkRouteDeviation(204 + i, sent)
+        if (result) {
+          fired++
+          sent.push(result.id)
+        }
+      }
+      expect(fired).toBe(1)
+    })
+
+    it('should fire again after the 120s window expires', () => {
+      const staleId = `ROUTE_DEVIATION_deviation_${Date.now() - 121000}`
+      expect(checkRouteDeviation(250, [staleId])).not.toBeNull()
+    })
   })
 
   describe('checkTripComplete', () => {
@@ -297,6 +316,18 @@ describe('util > go-mode > notification-service', () => {
     it('should return null when trip is in progress', () => {
       const progress = makeProgress({ overallProgress: 50 })
       expect(checkTripComplete(progress, [])).toBeNull()
+    })
+
+    it('should stay deduped while deviation ids share the sent list', () => {
+      const progress = makeProgress({
+        overallProgress: 100,
+        status: 'completed'
+      })
+      const sent = [`TRIP_COMPLETE_trip_end_${Date.now() - 1000}`]
+      for (let i = 0; i < 30; i++) {
+        sent.push(`ROUTE_DEVIATION_deviation_${Date.now() - i * 1000}`)
+      }
+      expect(checkTripComplete(progress, sent)).toBeNull()
     })
   })
 
