@@ -1284,6 +1284,7 @@ function fetchCandidatePlan(
     modeSettings: any
     modes: any
     numItineraries: number
+    preferred: any
     routingPreferences: any
     to: { lat: number; lon: number; name: string }
   }
@@ -1298,6 +1299,7 @@ function fetchCandidatePlan(
       modes: ctx.modes,
       modeSettings: ctx.modeSettings,
       numItineraries: ctx.numItineraries,
+      preferred: ctx.preferred,
       routingPreferences: ctx.routingPreferences,
       time: format(zoned, coreUtils.time.OTP_API_TIME_FORMAT),
       to: { lat: ctx.to.lat, lon: ctx.to.lon, name: ctx.to.name }
@@ -1371,12 +1373,24 @@ export function planFromOnboardBus() {
 
     const { modes, modeSettings, numItineraries } = getBasePlanParts(state)
     const walkOnlyMax = state.otp.config?.itinerary?.maxWalkDistance ?? 1200
+    // The question being answered is "where do I get off THIS bus" — bias the
+    // onward plans like a mid-ride re-plan (stay-seated profile + prefer the
+    // boarded route) so a parallel express can't hijack the recommendation
+    // into "get off in two stops and switch buses". Observed 2026-07-13:
+    // MVTA 460 outran the Orange Line on I-35W and became the top option.
+    const boardedRouteId =
+      vehicle?.routeId || goMode?.riding?.routeId || trip.route?.id || null
     const ctx = {
       homeTimezone,
       modes,
       modeSettings,
       numItineraries,
-      routingPreferences: state.otp.currentQuery?.routingPreferences,
+      preferred: boardedRouteId
+        ? { otherThanPreferredRoutesPenalty: 900, routes: boardedRouteId }
+        : undefined,
+      routingPreferences:
+        state.otp.currentQuery?.routingPreferences ??
+        getRoutingProfile('stay-seated')?.prefs,
       to: { lat: to.lat, lon: to.lon, name: to.name }
     }
 
