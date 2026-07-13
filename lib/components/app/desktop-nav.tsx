@@ -17,6 +17,7 @@ import { NetworkConnectionBanner } from './network-connection-banner'
 import AppMenu, { Icon } from './app-menu'
 import LocaleSelector from './locale-selector'
 import NavbarItem from './nav-item'
+import ReturnToTripBanner from './return-to-trip-banner'
 import ViewSwitcher from './view-switcher'
 
 const StyledNav = styled(Nav)`
@@ -162,6 +163,7 @@ const DesktopNav = ({
         </Navbar.Header>
       </Navbar>
       <NetworkConnectionBanner networkConnectionLost={networkConnectionLost} />
+      <ReturnToTripBanner />
     </header>
   )
 }
