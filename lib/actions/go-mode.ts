@@ -36,7 +36,11 @@ import {
   shouldTransitionToNextLeg
 } from '../util/go-mode/position-matching'
 import { getNextStopOnRide } from '../util/go-mode/next-stop'
-import { getRerouteCandidates, pickSameRouteReroute } from '../util/state'
+import {
+  getRerouteCandidates,
+  pickAccessReplanCandidate,
+  pickSameRouteReroute
+} from '../util/state'
 import type {
   NotificationEvent,
   NotificationType
@@ -100,6 +104,12 @@ const REROUTE_SNAPSHOT_INTERVAL_MS = 90000
 // tick fetches immediately.
 let lastLiveLegTimesAt = 0
 const LIVE_LEG_TIMES_INTERVAL_MS = 20000
+
+// Debounce for the quiet access-leg replan (bike/walk deviation): a swap
+// restarts route matching from the new itinerary, so give the rider time to
+// converge onto it before considering another replan.
+let lastQuietReplanAt = 0
+const QUIET_REPLAN_MIN_INTERVAL_MS = 60000
 
 // Auto-anchor bookkeeping (see the throttled block in handlePositionUpdate).
 // The rider's explicit departure pick (or "Reset to planned") must never be
@@ -555,6 +565,9 @@ export function endGoMode() {
     // Reset the live-leg-times throttle so the next trip fetches immediately.
     lastLiveLegTimesAt = 0
 
+    // Reset the quiet-replan debounce — a new trip is a fresh slate.
+    lastQuietReplanAt = 0
+
     // Reset auto-anchor bookkeeping — a new trip is a new decision.
     manualDepartureLock = false
     lastAutoAnchorMs = null
@@ -776,6 +789,85 @@ export function applyAutoReroute(candidates: Itinerary[]) {
       showNotification(notification, getState().otp.goMode.notifications)
       sendPush({ message, priority: 1, title: notification.title })
     }
+  }
+}
+
+/**
+ * Quietly re-plan the current WALK/BICYCLE access leg when the rider has
+ * drifted off it (chosen their own way, car-GPS style): plan current GPS →
+ * final destination as an ISOLATED background request (no currentQuery / URL /
+ * active-search side effects, so the mobile shell never yanks the rider off
+ * the Go Mode screen), then swap the itinerary in without asking. Selection
+ * never forces a route change (pickAccessReplanCandidate); when nothing
+ * qualifies the trip is left untouched — the explicit reroute button remains
+ * the rider's escape hatch.
+ */
+export function quietReplanAccessLeg() {
+  return async function (dispatch: any, getState: any) {
+    const state = getState()
+    const goMode = state.otp?.goMode
+    const itinerary: Itinerary | null = goMode?.activeItinerary
+    const lastPosition: GeolocationPosition | null =
+      goMode?.tracking?.lastPosition
+    const legs = itinerary?.legs || []
+    const destLeg = legs[legs.length - 1]
+    if (!goMode?.isActive || !itinerary || !lastPosition || !destLeg) return
+    if ((goMode.reRoute?.status || 'idle') !== 'idle') return
+
+    const nowMs = getCurrentTime().getTime()
+    if (nowMs - lastQuietReplanAt < QUIET_REPLAN_MIN_INTERVAL_MS) return
+    lastQuietReplanAt = nowMs
+
+    const { homeTimezone } = state.otp.config
+    const { modes, modeSettings, numItineraries } = getBasePlanParts(state)
+    const routingPreferences = state.otp.currentQuery?.routingPreferences
+    const zoned = utcToZonedTime(nowMs, homeTimezone)
+    const combo = {
+      arriveBy: false,
+      date: format(zoned, coreUtils.time.OTP_API_DATE_FORMAT),
+      from: {
+        category: 'CURRENT_LOCATION',
+        lat: lastPosition.coords.latitude,
+        lon: lastPosition.coords.longitude,
+        name: 'Current location'
+      },
+      modes,
+      modeSettings,
+      numItineraries,
+      routingPreferences,
+      time: format(zoned, coreUtils.time.OTP_API_TIME_FORMAT),
+      to: {
+        lat: destLeg.to.lat,
+        lon: destLeg.to.lon,
+        name: destLeg.to.name
+      }
+    }
+
+    const currentLegIndex = goMode.routeMatch?.legIndex ?? 0
+    const currentLeg = legs[currentLegIndex]
+    const nextTransitLeg = legs
+      .slice(currentLegIndex)
+      .find((l: Leg) => l.transitLeg)
+
+    const { error, itineraries } = await dispatch(
+      fetchOnboardCandidatePlan(combo)
+    )
+    if (error || !itineraries?.length) return
+
+    // Re-check state after the async plan: the rider may have exited Go Mode
+    // or a reroute may have started while the request was in flight.
+    const after = getState().otp?.goMode
+    if (!after?.isActive || (after.reRoute?.status || 'idle') !== 'idle') return
+
+    const best = pickAccessReplanCandidate(itineraries, {
+      accessMode: currentLeg?.mode,
+      nextTransitRouteId: nextTransitLeg
+        ? getLegRouteId(nextTransitLeg as Leg)
+        : null
+    })
+    if (!best) return
+
+    dispatch(beginGoMode(best))
   }
 }
 
@@ -1896,13 +1988,24 @@ export function handlePositionUpdate(position: GeolocationPosition) {
           reason: 'boarded-earlier'
         })
       )
-    } else if (
-      // Otherwise offer a re-route when a connection is at risk or the rider
-      // has drifted off-route. Surfaced as a Switch/Keep card — never swapped
-      // automatically. The helper guards on reRoute.status === 'idle'.
-      shouldAutoReroute(notifications, reRouteStatus)
-    ) {
-      dispatch(reRouteFromCurrentPosition())
+    } else if (shouldAutoReroute(notifications, reRouteStatus)) {
+      const offAccessLeg =
+        currentLeg &&
+        !currentLeg.transitLeg &&
+        (currentLeg.mode === 'WALK' || currentLeg.mode === 'BICYCLE') &&
+        notifications.some((n) => n.type === 'ROUTE_DEVIATION') &&
+        !notifications.some((n) => n.type === 'CONNECTION_WARNING')
+      if (offAccessLeg) {
+        // Drifted off a walk/bike leg: the rider chose their own way. Quietly
+        // re-plan the access path from where they are (car-GPS style) — no
+        // card, no screen change; same-route rule enforced by the picker.
+        dispatch(quietReplanAccessLeg())
+      } else {
+        // Connection at risk or off-route on transit: offer a re-route as the
+        // Switch/Keep card — never swapped automatically. The helper guards
+        // on reRoute.status === 'idle'.
+        dispatch(reRouteFromCurrentPosition())
+      }
     }
   }
 }
