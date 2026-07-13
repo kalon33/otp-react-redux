@@ -960,6 +960,22 @@ GoMode:
   walkToStop: '{emoji} {time} de marche jusqu''à {stop}'
   waitingGPS: Acquisition du signal GPS…
   deviationWarning: à {distance}m de l'itinéraire
+  openTripSheet: Ouvrir l'aperçu du trajet
+  sheetHandleLabel: Voir le trajet et autres options
+  busNotBroadcasting: Bus non encore en diffusion - prévu à {time}
+  offAtStop: Descendre à {stop}
+  whereToAlight: Où souhaitez-vous descendre ?
+  startGuidanceShort: Aller
+  tripSheetTitle: Aperçu du trajet
+  tripSheetHeading: Votre trajet
+  legWalk: Marche
+  legBike: Vélo
+  legWait: Attendre {time} · {mins} min d'attente
+  legStopsTo: '{count, plural, one {# arrêt} other {# arrêts}} jusqu''à {dest}'
+  legTo: jusqu'à {dest}
+  rerouteSearchHere: Rechercher depuis ma position actuelle
+  altOption: Option {n}
+  restOfTrip: Reste de votre trajet
 config:
   accessModes:
     car_hail: Course en voiture
