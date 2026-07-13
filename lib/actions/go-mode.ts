@@ -1624,17 +1624,13 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       }
     }
 
-    // Check for leg transition.
-    //
-    // shouldTransitionToNextLeg also fires on "near the end of the current
-    // leg", which stays true for as long as the rider waits at the boarding
-    // stop — and the match still points at the leg they're standing on, so the
-    // dispatch below would re-run its side effects on every GPS tick (tearing
-    // down and rebuilding the position watcher once a second, and clearing the
-    // anchored departure). Run the transition once per leg instead.
+    // Check for leg transition. This is side-effectful (it restarts the position
+    // watcher and vehicle tracking, and clears the anchored departure), so it
+    // must run once per leg — routeMatch is rebuilt from raw GPS every tick and
+    // cannot carry that fact itself.
     const previousLegIndex = goMode.routeMatch?.legIndex || 0
     if (
-      shouldTransitionToNextLeg(routeMatch, previousLegIndex, itinerary.legs) &&
+      shouldTransitionToNextLeg(routeMatch, previousLegIndex) &&
       routeMatch.legIndex !== lastTransitionedLegIndex
     ) {
       lastTransitionedLegIndex = routeMatch.legIndex

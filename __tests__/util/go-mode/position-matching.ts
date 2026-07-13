@@ -2,7 +2,6 @@ import {
   calculateCumulativeDistances,
   calculateDistance,
   decodeLegGeometry,
-  isNearLegEnd,
   matchPositionToRoute,
   shouldTransitionToNextLeg
 } from '../../../lib/util/go-mode/position-matching'
@@ -180,101 +179,35 @@ describe('util > go-mode > position-matching', () => {
     })
   })
 
-  describe('isNearLegEnd', () => {
-    it('should return true when progress >= threshold', () => {
-      const match = {
-        distanceFromRoute: 10,
-        isOnRoute: true,
-        legIndex: 0,
-        nearestPoint: [44.98, -93.27] as [number, number],
-        progressAlongLeg: 0.96,
-        progressAlongSegment: 0.5,
-        segmentIndex: 0
-      }
-      expect(isNearLegEnd(match)).toBe(true)
-    })
-
-    it('should return false when progress < threshold', () => {
-      const match = {
-        distanceFromRoute: 10,
-        isOnRoute: true,
-        legIndex: 0,
-        nearestPoint: [44.98, -93.27] as [number, number],
-        progressAlongLeg: 0.5,
-        progressAlongSegment: 0.5,
-        segmentIndex: 0
-      }
-      expect(isNearLegEnd(match)).toBe(false)
-    })
-
-    it('should respect custom threshold', () => {
-      const match = {
-        distanceFromRoute: 10,
-        isOnRoute: true,
-        legIndex: 0,
-        nearestPoint: [44.98, -93.27] as [number, number],
-        progressAlongLeg: 0.85,
-        progressAlongSegment: 0.5,
-        segmentIndex: 0
-      }
-      expect(isNearLegEnd(match, 0.8)).toBe(true)
-      expect(isNearLegEnd(match, 0.9)).toBe(false)
-    })
-  })
-
   describe('shouldTransitionToNextLeg', () => {
-    const legs = [{ mode: 'WALK' }, { mode: 'BUS' }, { mode: 'WALK' }] as any[]
+    const matchOn = (legIndex: number, progressAlongLeg: number) => ({
+      distanceFromRoute: 10,
+      isOnRoute: true,
+      legIndex,
+      nearestPoint: [44.98, -93.27] as [number, number],
+      progressAlongLeg,
+      progressAlongSegment: 0.5,
+      segmentIndex: 0
+    })
 
     it('should return true when match is on a later leg', () => {
-      const match = {
-        distanceFromRoute: 10,
-        isOnRoute: true,
-        legIndex: 1,
-        nearestPoint: [44.98, -93.27] as [number, number],
-        progressAlongLeg: 0.5,
-        progressAlongSegment: 0.5,
-        segmentIndex: 0
-      }
-      expect(shouldTransitionToNextLeg(match, 0, legs)).toBe(true)
-    })
-
-    it('should return true when very close to end of current leg and next leg exists', () => {
-      const match = {
-        distanceFromRoute: 10,
-        isOnRoute: true,
-        legIndex: 0,
-        nearestPoint: [44.98, -93.27] as [number, number],
-        progressAlongLeg: 0.99,
-        progressAlongSegment: 0.5,
-        segmentIndex: 0
-      }
-      expect(shouldTransitionToNextLeg(match, 0, legs)).toBe(true)
+      expect(shouldTransitionToNextLeg(matchOn(1, 0.5), 0)).toBe(true)
     })
 
     it('should return false when on current leg and not near end', () => {
-      const match = {
-        distanceFromRoute: 10,
-        isOnRoute: true,
-        legIndex: 0,
-        nearestPoint: [44.98, -93.27] as [number, number],
-        progressAlongLeg: 0.5,
-        progressAlongSegment: 0.5,
-        segmentIndex: 0
-      }
-      expect(shouldTransitionToNextLeg(match, 0, legs)).toBe(false)
+      expect(shouldTransitionToNextLeg(matchOn(0, 0.5), 0)).toBe(false)
     })
 
-    it('should return false when on last leg even if near end', () => {
-      const match = {
-        distanceFromRoute: 10,
-        isOnRoute: true,
-        legIndex: 2,
-        nearestPoint: [44.98, -93.27] as [number, number],
-        progressAlongLeg: 0.99,
-        progressAlongSegment: 0.5,
-        segmentIndex: 0
-      }
-      expect(shouldTransitionToNextLeg(match, 2, legs)).toBe(false)
+    // Waiting at the boarding stop pins the match to the end of the access leg
+    // for the whole wait. That is not evidence of boarding, and advancing on it
+    // would put a rider standing on the curb onto the bus — irreversibly, since
+    // matching only ever searches forward.
+    it('should return false when parked at the end of the current leg', () => {
+      expect(shouldTransitionToNextLeg(matchOn(0, 1), 0)).toBe(false)
+    })
+
+    it('should return false when on the last leg', () => {
+      expect(shouldTransitionToNextLeg(matchOn(2, 0.99), 2)).toBe(false)
     })
   })
 })

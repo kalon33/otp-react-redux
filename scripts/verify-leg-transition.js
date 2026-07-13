@@ -1,19 +1,24 @@
 /* eslint-disable no-console */
 /**
- * Leg-transition verification: a rider waiting at the boarding stop sits at
- * ~100% of the access leg for as long as the bus takes to show up. The route
- * match is recomputed from raw GPS every tick and keeps pointing at the leg
- * they're standing on, so "should I transition?" stays true the whole time.
+ * Leg-transition verification. A rider waiting at the boarding stop sits at
+ * ~100% of the access leg for as long as the bus takes to show up, and the
+ * route match — rebuilt from raw GPS every tick — keeps pointing at the leg
+ * they're standing on. Two things must hold:
  *
- * The transition is side-effectful — it restarts the position watcher, restarts
- * vehicle tracking, and clears the anchored departure — so it must fire ONCE
- * per leg, not once per GPS tick. (Observed on the 2026-07-12 trip: 56
- * TRANSITION_LEG dispatches in 50s while standing at I-35W & 46th St Station.)
+ *   1. Waiting advances nothing. Standing on the curb is not boarding, and the
+ *      transition is side-effectful (it restarts the position watcher and
+ *      vehicle tracking, and clears the anchored departure). On the 2026-07-12
+ *      trip it fired 56 times in 50s at I-35W & 46th St Station, which locked
+ *      navigation up.
+ *   2. Boarding still advances the leg, exactly once. Position matching only
+ *      ever searches forward, so a leg advance is unrecoverable — it must take
+ *      real evidence (the match itself moving onto the transit leg).
  *
  * Harness: drive the real app at :9967, plan a walk→bus trip, start Go Mode,
- * then invoke the handlePositionUpdate thunk directly with a fixed position at
- * the end of the access leg — calling it with our own dispatch so every action
- * it emits is counted while still hitting the real store.
+ * then invoke the handlePositionUpdate thunk directly with a fixed position —
+ * first at the end of the access leg, then out along the bus's own geometry —
+ * calling it with our own dispatch so every action it emits is counted while
+ * real state still advances through the real store.
  */
 const puppeteer = require('puppeteer')
 
@@ -100,8 +105,18 @@ async function main() {
     let i = cum.findIndex((d) => d >= target)
     if (i < 1) i = poly.length - 1
     const [lat, lon] = poly[i]
+
+    // ...and then the bus actually comes: a point well along the transit leg's
+    // own geometry, which is the evidence that must still advance the leg.
+    const busPoly = pm.decodeLegGeometry(busLeg)
+    const busCum = pm.calculateCumulativeDistances(busPoly)
+    let j = busCum.findIndex((d) => d >= busCum[busCum.length - 1] * 0.25)
+    if (j < 1) j = Math.floor(busPoly.length / 2)
+    const [busLat, busLon] = busPoly[j]
+
     return {
       busRoute: busLeg.routeShortName || busLeg.routeLongName,
+      rideAt: { lat: busLat, lon: busLon },
       stop: busLeg.from?.name,
       waitAt: { lat, lon }
     }
@@ -125,79 +140,127 @@ async function main() {
     { polling: 300, timeout: 20000 }
   )
 
-  // Rider arrives at the stop and stands still for TICKS GPS updates.
-  const result = await page.evaluate(
-    async (waitAt, ticks) => {
-      // eslint-disable-next-line import/no-absolute-path
-      const goMode = await import('/lib/actions/go-mode.js')
-      const seen = []
-      // Call the thunk with our own dispatch so we observe every action it
-      // emits, while real state still advances through the real store.
-      const spy = (action) => {
-        if (typeof action === 'function') return window.store.dispatch(action)
-        if (action?.type) seen.push(action.type)
-        return window.store.dispatch(action)
-      }
-      const getState = () => window.store.getState()
-
-      for (let i = 0; i < ticks; i++) {
-        const position = {
-          coords: {
-            accuracy: 10,
-            altitude: null,
-            altitudeAccuracy: null,
-            heading: null,
-            latitude: waitAt.lat,
-            longitude: waitAt.lon,
-            speed: 0
-          },
-          timestamp: Date.now() + i * 1000
+  // Feed the thunk a fixed position for N ticks and count what it dispatches.
+  const tick = (at, ticks) =>
+    page.evaluate(
+      async (at, ticks) => {
+        // eslint-disable-next-line import/no-absolute-path
+        const goMode = await import('/lib/actions/go-mode.js')
+        const seen = []
+        // Call the thunk with our own dispatch so we observe every action it
+        // emits, while real state still advances through the real store.
+        const transitionedTo = []
+        const spy = (action) => {
+          if (typeof action === 'function') return window.store.dispatch(action)
+          if (action?.type) seen.push(action.type)
+          if (action?.type === 'TRANSITION_LEG') {
+            transitionedTo.push(action.payload.legIndex)
+          }
+          return window.store.dispatch(action)
         }
-        goMode.handlePositionUpdate(position)(spy, getState)
-        await new Promise((resolve) => setTimeout(resolve, 120))
-      }
+        const getState = () => window.store.getState()
 
-      const g = getState().otp.goMode
-      return {
-        legTransitions: seen.filter((t) => t === 'TRANSITION_LEG').length,
-        matchedLeg: g.routeMatch?.legIndex,
-        progressAlongLeg: g.routeMatch?.progressAlongLeg,
-        trackingIntervalUpdates: seen.filter(
-          (t) => t === 'UPDATE_TRACKING_INTERVAL'
-        ).length
-      }
-    },
-    chosen.waitAt,
-    TICKS
-  )
+        for (let i = 0; i < ticks; i++) {
+          const position = {
+            coords: {
+              accuracy: 10,
+              altitude: null,
+              altitudeAccuracy: null,
+              heading: null,
+              latitude: at.lat,
+              longitude: at.lon,
+              speed: 0
+            },
+            timestamp: Date.now() + i * 1000
+          }
+          goMode.handlePositionUpdate(position)(spy, getState)
+          await new Promise((resolve) => setTimeout(resolve, 120))
+        }
 
+        const g = getState().otp.goMode
+        return {
+          itineraryStart: Number(g.activeItinerary?.startTime),
+          legTransitions: seen.filter((t) => t === 'TRANSITION_LEG').length,
+          matchedLeg: g.routeMatch?.legIndex,
+          notable: seen.filter((t) =>
+            ['ADD_NOTIFICATION', 'START_GO_MODE', 'START_REROUTE'].includes(t)
+          ),
+          progressAlongLeg: g.routeMatch?.progressAlongLeg,
+          trackingIntervalUpdates: seen.filter(
+            (t) => t === 'UPDATE_TRACKING_INTERVAL'
+          ).length,
+          transitionedTo
+        }
+      },
+      at,
+      ticks
+    )
+
+  // (1) The rider reaches the stop and waits for the bus. No storm, no advance:
+  // standing on the curb is not boarding.
+  const waiting = await tick(chosen.waitAt, TICKS)
   console.log(
-    `[wait] ${TICKS} GPS ticks standing at the stop ` +
-      `(matched leg ${result.matchedLeg}, ${(
-        result.progressAlongLeg * 100
+    `[wait] ${TICKS} ticks standing at the stop ` +
+      `(matched leg ${waiting.matchedLeg}, ${(
+        waiting.progressAlongLeg * 100
       ).toFixed(1)}% along it)`
   )
-  console.log(`  TRANSITION_LEG dispatches:      ${result.legTransitions}`)
+  console.log(`  TRANSITION_LEG dispatches:      ${waiting.legTransitions}`)
   console.log(
-    `  UPDATE_TRACKING_INTERVAL:       ${result.trackingIntervalUpdates}`
+    `  UPDATE_TRACKING_INTERVAL:       ${waiting.trackingIntervalUpdates}`
+  )
+
+  // (2) The bus comes and they board: the leg must still advance, exactly once.
+  await page.setGeolocation({
+    accuracy: 10,
+    latitude: chosen.rideAt.lat,
+    longitude: chosen.rideAt.lon
+  })
+  const riding = await tick(chosen.rideAt, TICKS)
+  console.log(
+    `[ride] ${TICKS} ticks aboard the ${chosen.busRoute} ` +
+      `(matched leg ${riding.matchedLeg})`
+  )
+  console.log(
+    `  TRANSITION_LEG dispatches:      ${riding.legTransitions} ` +
+      `-> leg(s) [${riding.transitionedTo.join(', ')}]`
+  )
+  // Teleporting onto the middle of the bus route before the bus is due reads as
+  // a deviation, so Go Mode may re-plan and reset to leg 0 right after the
+  // transition. That's the reroute logic doing its job — assert on the
+  // transition the ride produced, not on state a re-plan is entitled to reset.
+  console.log(
+    `  itinerary ${
+      riding.itineraryStart === waiting.itineraryStart
+        ? 'unchanged'
+        : 'swapped by a re-plan (harness artifact)'
+    }`
   )
 
   await browser.close()
 
-  if (result.progressAlongLeg < 0.98) {
+  if (waiting.progressAlongLeg < 0.98) {
     throw new Error(
       `test setup is not exercising the bug: rider is only ${(
-        result.progressAlongLeg * 100
+        waiting.progressAlongLeg * 100
       ).toFixed(1)}% along the access leg, needs >=98%`
     )
   }
-  if (result.legTransitions > 1) {
+  if (waiting.legTransitions > 0) {
     throw new Error(
-      `FAIL: leg transition re-fired ${result.legTransitions}x while the rider ` +
-        'stood still — expected at most 1 per leg'
+      `FAIL: ${waiting.legTransitions} leg transition(s) fired while the rider ` +
+        'stood at the stop — waiting is not boarding'
     )
   }
-  console.log('\nPASS: the transition ran at most once while the rider waited.')
+  if (riding.transitionedTo.length !== 1 || riding.transitionedTo[0] !== 1) {
+    throw new Error(
+      'FAIL: boarding the bus transitioned to leg(s) ' +
+        `[${riding.transitionedTo.join(', ')}] — expected exactly one, to leg 1`
+    )
+  }
+  console.log(
+    '\nPASS: waiting at the stop advances nothing; boarding advances the leg once.'
+  )
 }
 
 main().catch((e) => {
