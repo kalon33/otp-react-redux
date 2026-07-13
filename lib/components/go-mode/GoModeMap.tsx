@@ -1,6 +1,7 @@
 import { Layer, Marker, Source, useMap } from 'react-map-gl/maplibre'
 import polyline from '@mapbox/polyline'
 import React, { useEffect, useMemo, useRef } from 'react'
+import { useIntl } from 'react-intl'
 import styled, { keyframes } from 'styled-components'
 import type { Itinerary } from '@opentripplanner/types'
 
@@ -196,6 +197,7 @@ const GoModeMap = ({
   itinerary,
   routeMatch
 }: Props) => {
+  const intl = useIntl()
   // Build GeoJSON for route overlay, with per-leg styling properties
   const routeGeoJson = useMemo((): GeoJSON.FeatureCollection | null => {
     if (!itinerary?.legs) return null
@@ -233,7 +235,13 @@ const GoModeMap = ({
       {/* Deviation Warning */}
       {routeMatch && !routeMatch.isOnRoute && (
         <DeviationWarning>
-          {Math.round(routeMatch.distanceFromRoute)}m from route
+          {intl.formatMessage(
+            {
+              defaultMessage: '{distance}m from route',
+              id: 'components.GoMode.deviationWarning'
+            },
+            { distance: Math.round(routeMatch.distanceFromRoute) }
+          )}
         </DeviationWarning>
       )}
     </MapContainer>

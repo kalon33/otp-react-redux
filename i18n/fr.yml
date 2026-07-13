@@ -181,6 +181,12 @@ components:
     confirmExit: Êtes-vous sûr de vouloir arrêter le suivi de ce trajet ?
     errorPermissionDenied: Autorisation de localisation refusée. Veuillez activer
       l'accès à la localisation dans les paramètres de votre navigateur.
+    deviationWarning: "{distance} m du parcours"
+    minWalkTo: "{minutes} min de marche jusqu’à"
+    restOfYourTrip: Reste de votre trajet
+    searchFromCurrentPosition: Rechercher depuis ma position actuelle
+    viewTripAndOtherWays: Voir le trajet et autres options
+    yourTrip: Votre trajet
     errorTimeout: Le signal GPS a expiré. Veuillez vous assurer que vous êtes dans
       une zone couverte par le GPS.
     errorUnavailable: Impossible de déterminer votre position. Veuillez vérifier les

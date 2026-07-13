@@ -169,6 +169,14 @@ common:
       {hours, plural, =0 {} other {# hr }}{minutes} min { seconds, plural, =0 {}
       other {# sec}}
 components:
+  GoMode:
+    deviationWarning: "{distance}m from route"
+    findAnotherWay: Find another way
+    minWalkTo: "{minutes} min walk to"
+    restOfYourTrip: Rest of your trip
+    searchFromCurrentPosition: Search from my current position
+    viewTripAndOtherWays: View trip & other ways
+    yourTrip: Your trip
   A11yPrefs:
     accessibilityRoutingByDefault: Prefer accessible trips by default
   AccountSetupFinishPane:
