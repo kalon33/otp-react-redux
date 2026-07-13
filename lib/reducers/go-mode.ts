@@ -12,6 +12,7 @@ import {
   DISMISS_BOARDING_PROMPT,
   PAUSE_GPS_SIMULATION,
   RESUME_GPS_SIMULATION,
+  SET_ARRIVED,
   SET_DEPARTURE_OVERRIDE,
   SET_LIVE_LEG_TIMES,
   SET_NOTIFICATION_CONFIG,
@@ -106,6 +107,10 @@ export interface OnboardState {
 export interface GoModeState {
   activeItinerary: Itinerary | null
 
+  /** Epoch ms when trip progress first read completed; null while en route.
+   * While set, position ticks quiesce and the arrival card is shown. */
+  arrivedAt: number | null
+
   boardingPrompt: {
     lastDismissedAt: number | null
     shown: boolean
@@ -188,6 +193,8 @@ export interface GoModeState {
 
 const defaultState: GoModeState = {
   activeItinerary: null,
+
+  arrivedAt: null,
 
   boardingPrompt: {
     lastDismissedAt: null,
@@ -418,6 +425,11 @@ const goMode = handleActions<GoModeState, any>(
       }
     }),
 
+    [SET_ARRIVED]: (state, action) => ({
+      ...state,
+      arrivedAt: action.payload
+    }),
+
     [SET_DEPARTURE_OVERRIDE]: (state, action) => ({
       ...state,
       departureOverride: action.payload
@@ -534,6 +546,7 @@ const goMode = handleActions<GoModeState, any>(
       return {
         ...state,
         activeItinerary: itinerary,
+        arrivedAt: null,
         isActive: true,
         liveLegTimes: {},
         notifications: {

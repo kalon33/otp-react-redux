@@ -203,6 +203,7 @@ export const DISMISS_BOARDING_PROMPT = 'DISMISS_BOARDING_PROMPT'
 export const PAUSE_GPS_SIMULATION = 'PAUSE_GPS_SIMULATION'
 export const REROUTE_SNAPSHOT = 'REROUTE_SNAPSHOT'
 export const RESUME_GPS_SIMULATION = 'RESUME_GPS_SIMULATION'
+export const SET_ARRIVED = 'SET_ARRIVED'
 export const SET_DEPARTURE_OVERRIDE = 'SET_DEPARTURE_OVERRIDE'
 export const SET_RIDING = 'SET_RIDING'
 export const SET_LIVE_LEG_TIMES = 'SET_LIVE_LEG_TIMES'
@@ -262,6 +263,10 @@ export interface LiveLegTime {
 }
 export const setLiveLegTimes =
   createAction<Record<number, LiveLegTime>>(SET_LIVE_LEG_TIMES)
+
+// Epoch ms of the moment trip progress first read "completed" — the rider is
+// at their destination and Go Mode shows the arrival card until they dismiss.
+export const setArrived = createAction<number>(SET_ARRIVED)
 
 /**
  * The durable "rider is aboard this vehicle" fact. Unlike routeMatch (a
@@ -1770,6 +1775,22 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     )
 
     dispatch(updateProgress(progress))
+
+    // Arrival: mark it once and let this tick's notification pass emit
+    // TRIP_COMPLETE; every later tick quiesces here — no live-times polling,
+    // auto-anchor, notifications, missed-bus or reroute activity for a rider
+    // who has arrived (on 7/12 the deviation checks kept firing after the
+    // destination). Position/route/progress updates above keep the map honest
+    // while the arrival card is up.
+    const hasArrived = goMode.arrivedAt != null
+    if (
+      !hasArrived &&
+      (progress.status === 'completed' || progress.overallProgress >= 99.5)
+    ) {
+      dispatch(setArrived(currentTime.getTime()))
+    } else if (hasArrived) {
+      return
+    }
 
     // Keep the trip-overview transit rows current off GTFS-realtime, throttled
     // to LIVE_LEG_TIMES_INTERVAL_MS regardless of tick rate. Skipped in replay,

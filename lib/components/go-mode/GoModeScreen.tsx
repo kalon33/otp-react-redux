@@ -14,6 +14,12 @@ import {
   FullScreenWrapper,
   GpsWarningBanner,
   LoadingMessage,
+  RerouteActions,
+  RerouteBar,
+  RerouteCard,
+  RerouteCardTitle,
+  RerouteSummary,
+  RerouteSwitchButton,
   RetryButton,
   ScreenMain,
   SheetHandle,
@@ -206,6 +212,15 @@ const GoModeScreen = ({
     setMobileScreen(MobileScreens.SEARCH_FORM)
   }
 
+  // Trip complete: the rider dismisses the arrival card themselves — landing
+  // on the home screen, not a stale results list. (Both dispatches happen in
+  // one handler, so the parent swaps screens before the inactive-redirect
+  // effect can route to RESULTS_SUMMARY.)
+  const handleArrivedDone = () => {
+    endGoMode()
+    setMobileScreen(MobileScreens.SEARCH_FORM)
+  }
+
   // "I'm on the bus" onboard flow: no itinerary yet — show discovery, the bus
   // picker, and the alight-stop recommendation.
   if (onboardActive && !goMode.activeItinerary) {
@@ -335,7 +350,33 @@ const GoModeScreen = ({
           </GpsWarningBanner>
         )}
 
-        {!sheetOpen && (
+        {goMode.arrivedAt != null && (
+          <RerouteBar>
+            <RerouteCard role="status">
+              <RerouteCardTitle>
+                {intl.formatMessage({
+                  defaultMessage: "🎉 You've arrived!",
+                  id: 'components.GoMode.arrivedTitle'
+                })}
+              </RerouteCardTitle>
+              <RerouteSummary>
+                {goMode.activeItinerary.legs[
+                  goMode.activeItinerary.legs.length - 1
+                ]?.to?.name || ''}
+              </RerouteSummary>
+              <RerouteActions>
+                <RerouteSwitchButton onClick={handleArrivedDone} type="button">
+                  {intl.formatMessage({
+                    defaultMessage: 'Done',
+                    id: 'components.GoMode.arrivedDone'
+                  })}
+                </RerouteSwitchButton>
+              </RerouteActions>
+            </RerouteCard>
+          </RerouteBar>
+        )}
+
+        {!sheetOpen && goMode.arrivedAt == null && (
           <SheetHandle
             aria-label={intl.formatMessage({
               defaultMessage: 'Open trip overview',
