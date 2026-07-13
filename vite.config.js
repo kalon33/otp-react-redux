@@ -136,6 +136,12 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 9967,
     proxy: {
+      // Onboard-discovery sidecar (transitnav prefs-api on the host; the dev
+      // container runs host-network). Same-origin in dev, mirroring nginx's
+      // /api/onboard proxy in prod.
+      '/api/onboard': {
+        target: 'http://127.0.0.1:8092'
+      },
       '/pelias': {
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/pelias/, ''),

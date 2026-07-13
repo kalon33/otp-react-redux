@@ -2,6 +2,7 @@ import {
   beginOnboardFlowAction,
   stopGoMode
 } from '../../../lib/actions/go-mode'
+import { mergeCandidateRoutes } from '../../../lib/util/go-mode/onboard-discovery-util'
 import goMode from '../../../lib/reducers/go-mode'
 
 const initial = goMode(undefined, { type: '@@INIT' })
@@ -55,5 +56,41 @@ describe('onboard flow keeps what the app already knows', () => {
       type: 'UPDATE_VEHICLE_MATCH'
     })
     expect(goMode(low, stopGoMode()).vehicleMatch.match).toBeNull()
+  })
+})
+
+describe('mergeCandidateRoutes (position-based discovery)', () => {
+  it('puts live-vehicle routes first, then shape routes, deduped, prefixed', () => {
+    const vehicles = [
+      { distanceMeters: 120, longName: 'METRO Orange Line', routeId: '904' },
+      { distanceMeters: 300, mode: 'BUS', routeId: '4', shortName: '4' },
+      { distanceMeters: 500, routeId: '904' } // second Orange bus — dedupe
+    ]
+    const routes = [
+      { distanceMeters: 17, routeId: '467', shortName: '467' },
+      { distanceMeters: 17, routeId: '904' } // already known live — dedupe
+    ]
+    expect(mergeCandidateRoutes(vehicles, routes)).toEqual([
+      {
+        id: '1:904',
+        longName: 'METRO Orange Line',
+        mode: 'BUS',
+        shortName: null
+      },
+      { id: '1:4', longName: null, mode: 'BUS', shortName: '4' },
+      { id: '1:467', longName: null, mode: 'BUS', shortName: '467' }
+    ])
+  })
+
+  it('works with either source missing', () => {
+    expect(mergeCandidateRoutes(null, [{ routeId: '904' }])).toHaveLength(1)
+    expect(mergeCandidateRoutes([{ routeId: '4' }], undefined)).toHaveLength(1)
+    expect(mergeCandidateRoutes(null, null)).toEqual([])
+  })
+
+  it('skips entries without a routeId (vehicles heading to layover)', () => {
+    expect(
+      mergeCandidateRoutes([{ routeId: null }, { routeId: '904' }], [])
+    ).toEqual([{ id: '1:904', longName: null, mode: 'BUS', shortName: null }])
   })
 })

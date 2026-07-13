@@ -55,6 +55,7 @@ import {
   setReplayClock
 } from '../util/go-mode/replay/replay-engine'
 import { isTripRecordingEnabled } from '../util/debug-log'
+import { fetchOnboardCandidateRoutes } from '../util/go-mode/onboard-discovery'
 import {
   hasNativeGps,
   startNativeGps,
@@ -1097,21 +1098,42 @@ export function discoverNearbyVehicles(attempt = 0) {
     const lat = pos.coords.latitude
     const lon = pos.coords.longitude
 
-    // 1. Routes serving nearby stops.
-    // TODO(shape-matching): candidates should come from checking the rider's
-    // position against route GEOMETRY (GTFS shapes) or the live all-vehicles
-    // feed, not stop proximity — a rider on freeway BRT between stations has
-    // no stops within any sane radius (7/12: three empty discoveries mid-I-35W).
-    // Interim stopgap: widen with speed like the vehicle scan below, and retry
-    // once at a much larger radius before falling back to the manual prompt.
-    const stopsRadius = speedAdjustedRadius(400, pos.coords.speed)
-    await dispatch(findRoutesNearby({ lat, lon, radius: stopsRadius }))
-    let routes = getState().otp?.transitIndex?.nearbyRoutes || []
-    if (!routes.length) {
-      await dispatch(
-        findRoutesNearby({ lat, lon, radius: Math.max(1500, stopsRadius * 3) })
-      )
+    // 1. Candidate routes from the rider's POSITION — what they are ON, not
+    // what stops are near: live vehicles around them first (the nearest bus
+    // IS the answer), route shapes under them second (see the transitnav
+    // sidecar's /api/onboard endpoints). Stop-radius discovery survives only
+    // as the last-resort fallback when the sidecar is unreachable — it found
+    // nothing three times mid-I-35W on the 2026-07-12 ride.
+    let routes: Array<{ id: string }> = []
+    const candidates = await fetchOnboardCandidateRoutes(
+      lat,
+      lon,
+      speedAdjustedRadius(750, pos.coords.speed)
+    )
+    if (candidates?.length) {
+      routes = candidates
+      // Same shape findRoutesNearby stores — keeps the boarding prompt's
+      // manual route picker working off transitIndex.nearbyRoutes.
+      dispatch({
+        payload: { routes: candidates },
+        type: 'NEARBY_ROUTES_RESPONSE'
+      })
+    } else {
+      // Fallback: routes serving nearby stops, widened with rider speed and
+      // retried once at a much larger radius before the manual prompt.
+      const stopsRadius = speedAdjustedRadius(400, pos.coords.speed)
+      await dispatch(findRoutesNearby({ lat, lon, radius: stopsRadius }))
       routes = getState().otp?.transitIndex?.nearbyRoutes || []
+      if (!routes.length) {
+        await dispatch(
+          findRoutesNearby({
+            lat,
+            lon,
+            radius: Math.max(1500, stopsRadius * 3)
+          })
+        )
+        routes = getState().otp?.transitIndex?.nearbyRoutes || []
+      }
     }
 
     // 2. Live vehicles for each nearby route.
