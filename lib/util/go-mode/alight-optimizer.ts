@@ -360,7 +360,8 @@ function compareAlightOptions(
 
 /** A lightweight signature of an onward journey (mode + route + endpoints per
  * leg), used to drop duplicate options the multi-stop search surfaces more than
- * once. Mirrors getRerouteCandidates' dedup idiom in lib/util/state.js. */
+ * once. Mirrors collectRerouteCandidates' dedup idiom in
+ * lib/util/go-mode/reroute-candidates.ts. */
 function journeySignature(stopId: string, itinerary: Itinerary): string {
   const legs = (itinerary.legs || [])
     .map(

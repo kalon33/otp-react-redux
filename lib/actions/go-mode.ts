@@ -37,11 +37,8 @@ import {
   shouldTransitionToNextLeg
 } from '../util/go-mode/position-matching'
 import { getNextStopOnRide } from '../util/go-mode/next-stop'
-import {
-  getRerouteCandidates,
-  pickAccessReplanCandidate,
-  pickSameRouteReroute
-} from '../util/state'
+import { collectRerouteCandidates } from '../util/go-mode/reroute-candidates'
+import { pickAccessReplanCandidate, pickSameRouteReroute } from '../util/state'
 import type {
   NotificationEvent,
   NotificationType
@@ -617,7 +614,9 @@ export function endGoMode() {
 
     // If a mid-trip re-route replaced the origin with the rider's GPS position,
     // restore the origin they started with so the trip planner isn't left
-    // showing "Current location".
+    // showing "Current location". (Re-routes are isolated plans now and no
+    // longer touch currentQuery — this restore only protects sessions started
+    // under the old pipeline and can eventually be removed.)
     if (
       originalFrom &&
       currentFrom &&
@@ -630,10 +629,12 @@ export function endGoMode() {
 }
 
 /**
- * Re-plan from the rider's current GPS position to the trip destination using
- * the standard routing pipeline (real OTP results — no fabricated data). The
- * resulting itineraries land in a dedicated search; GoModeScreen surfaces the
- * best one as a Switch/Keep card. Optionally applies a routing profile.
+ * Re-plan from the rider's current GPS position to the trip destination as an
+ * ISOLATED background plan (real OTP results — no fabricated data): no shared
+ * currentQuery, no URL change, no active-search churn, so the trip planner the
+ * rider may be browsing in the foreground is never disturbed. Results resolve
+ * here in the thunk (screen-independent) into goMode.reRoute; TripSheet
+ * surfaces them as a Switch/Keep card. Optionally applies a routing profile.
  */
 export function reRouteFromCurrentPosition(
   options: {
@@ -649,7 +650,7 @@ export function reRouteFromCurrentPosition(
     reason?: string
   } = {}
 ) {
-  return function (dispatch: any, getState: any) {
+  return async function (dispatch: any, getState: any) {
     const state = getState()
     const goMode = state.otp.goMode
     const itinerary: Itinerary | null = goMode?.activeItinerary
@@ -665,6 +666,8 @@ export function reRouteFromCurrentPosition(
     }
 
     const { homeTimezone } = state.otp.config
+    // Not a searches[] key anymore — a stale-response token: only the newest
+    // in-flight reroute may resolve into goMode.reRoute.
     const searchId = randId()
     dispatch(
       startReroute({
@@ -675,15 +678,19 @@ export function reRouteFromCurrentPosition(
       })
     )
 
+    const { modes, modeSettings, numItineraries } = getBasePlanParts(state)
     const payload: any = {
+      arriveBy: false,
       date: coreUtils.time.getCurrentDate(homeTimezone),
-      departArrive: 'NOW',
       from: {
         category: 'CURRENT_LOCATION',
         lat: lastPosition.coords.latitude,
         lon: lastPosition.coords.longitude,
         name: 'Current location'
       },
+      modes,
+      modeSettings,
+      numItineraries,
       time: coreUtils.time.getCurrentTime(homeTimezone),
       to: {
         lat: destLeg.to.lat,
@@ -701,7 +708,6 @@ export function reRouteFromCurrentPosition(
     if (riding && nextStop) {
       const zoned = utcToZonedTime(nextStop.arrivalEpoch, homeTimezone)
       payload.date = format(zoned, coreUtils.time.OTP_API_DATE_FORMAT)
-      payload.departArrive = 'DEPART'
       payload.from = {
         lat: nextStop.lat,
         lon: nextStop.lon,
@@ -729,7 +735,6 @@ export function reRouteFromCurrentPosition(
       ? getRoutingProfile(options.profileId)
       : undefined
     if (profile) {
-      payload.activeProfileId = profile.id
       payload.routingPreferences = profile.prefs
     } else if (options.preferences) {
       payload.routingPreferences = options.preferences
@@ -739,8 +744,32 @@ export function reRouteFromCurrentPosition(
       payload.routingPreferences = getRoutingProfile('stay-seated')?.prefs
     }
 
-    // Reuse the normal search pipeline; results populate searches[searchId].
-    dispatch(setQueryParam(payload, searchId))
+    const { error, itineraries } = await dispatch(
+      fetchOnboardCandidatePlan(payload)
+    )
+
+    // Re-check state after the async plan: the rider may have exited Go Mode,
+    // cleared the card, or fired a newer reroute while this one was in flight.
+    const after = getState().otp?.goMode
+    if (
+      !after?.isActive ||
+      after.reRoute?.searchId !== searchId ||
+      after.reRoute?.status !== 'searching'
+    ) {
+      return
+    }
+
+    if (error || !itineraries?.length) {
+      dispatch(setRerouteResult(null))
+      return
+    }
+
+    const display = collectRerouteCandidates(itineraries)
+    if (after.reRoute.autoApply) {
+      dispatch(applyAutoReroute(itineraries, display))
+    } else {
+      dispatch(setRerouteResult(display))
+    }
   }
 }
 
@@ -753,7 +782,10 @@ export function reRouteFromCurrentPosition(
  * rider decides. Full re-planning stays behind the explicit
  * "Find another way" button.
  */
-export function applyAutoReroute(candidates: Itinerary[]) {
+export function applyAutoReroute(
+  allItineraries: Itinerary[],
+  displayCandidates?: Itinerary[]
+) {
   return function (dispatch: any, getState: any) {
     const state = getState()
     const goMode = state.otp?.goMode
@@ -763,14 +795,16 @@ export function applyAutoReroute(candidates: Itinerary[]) {
     // duration, which is exactly the ranking that buried the next bus under
     // bike-the-whole-way options).
     const best = pickSameRouteReroute(
-      getRerouteCandidates(state, 50),
+      collectRerouteCandidates(allItineraries, 50),
       goMode.reRoute?.keepRouteId
     )
     if (!best) {
       // No same-route option (last run of the day, outside the search
       // window...): surface the alternatives as the regular card instead of
       // auto-swapping. The missed-bus push already told the rider.
-      dispatch(setRerouteResult(candidates?.length ? candidates : null))
+      dispatch(
+        setRerouteResult(displayCandidates?.length ? displayCandidates : null)
+      )
       return
     }
 
