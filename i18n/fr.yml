@@ -945,6 +945,7 @@ components:
     nextDeparture: "Prochain : {time} ({mins} min)"
     nextLegTransit: Montez à bord de {route}
     nextLegWalk: Marchez jusqu'à {destination}
+    walkTo: Marchez jusqu'à {destination}
     noBusesDetected: Aucun bus détecté à proximité
     noLiveBusDetected: "Aucun bus en direct détecté — choisissez votre itinéraire :"
     noBusesNearby: Aucun bus détecté à proximité

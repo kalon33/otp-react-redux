@@ -149,7 +149,14 @@ const WalkingNavigation = ({
             whiteSpace: 'nowrap'
           }}
         >
-          {progress.nextInstruction || `Walk to ${leg.to.name}`}
+          {progress.nextInstruction ||
+            intl.formatMessage(
+              {
+                defaultMessage: 'Walk to {destination}',
+                id: 'components.GoMode.walkTo'
+              },
+              { destination: leg.to.name }
+            )}
         </span>
         <span
           style={{
