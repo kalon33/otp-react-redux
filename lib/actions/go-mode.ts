@@ -11,6 +11,7 @@ import {
   getDownstreamStops,
   hasLiveArrival,
   liveStopArrival,
+  mergeLiveTimePoint,
   rankAlightOptions,
   selectCandidateStops
 } from '../util/go-mode/alight-optimizer'
@@ -258,7 +259,12 @@ export const transitionLeg = createAction<{ legIndex: number }>(TRANSITION_LEG)
 /** Live (or schedule-fallback) times for a transit leg, keyed by leg index. */
 export interface LiveLegTime {
   alightEpoch: number | null
+  /** Whether alightEpoch is a live prediction (drives the pulsing icon). */
+  alightRealtime?: boolean
   boardEpoch: number | null
+  /** Whether boardEpoch is a live prediction. */
+  boardRealtime?: boolean
+  /** Legacy any-field-live flag; display code should use the per-field ones. */
   realtime: boolean
 }
 export const setLiveLegTimes =
@@ -1603,7 +1609,9 @@ export function refreshLiveLegTimes() {
 
     const legs = itinerary.legs || []
     const currentLegIndex = goMode.routeMatch?.legIndex ?? 0
+    const prevTimes: Record<number, LiveLegTime> = goMode.liveLegTimes || {}
     const liveTimes: Record<number, LiveLegTime> = {}
+    const nowMs = getCurrentTime().getTime()
 
     for (let i = currentLegIndex; i < legs.length; i++) {
       const leg: any = legs[i]
@@ -1620,12 +1628,36 @@ export function refreshLiveLegTimes() {
         getState().otp?.transitIndex?.trips?.[tripId]?.stopTimes || []
       if (!stopTimes.length) continue
 
-      const alight = liveStopArrival(stopTimes, leg.to?.stop?.gtfsId)
-      const board = liveStopArrival(stopTimes, leg.from?.stop?.gtfsId)
+      // Merge each field against its previous value so a realtime dropout
+      // (liveStopArrival falling back to the schedule) can never walk a
+      // displayed time backwards or keep styling it live.
+      const prev = prevTimes[i]
+      const alight = mergeLiveTimePoint(
+        prev?.alightEpoch != null
+          ? {
+              epoch: prev.alightEpoch,
+              realtime: prev.alightRealtime ?? prev.realtime
+            }
+          : null,
+        liveStopArrival(stopTimes, leg.to?.stop?.gtfsId, leg.to?.name),
+        nowMs
+      )
+      const board = mergeLiveTimePoint(
+        prev?.boardEpoch != null
+          ? {
+              epoch: prev.boardEpoch,
+              realtime: prev.boardRealtime ?? prev.realtime
+            }
+          : null,
+        liveStopArrival(stopTimes, leg.from?.stop?.gtfsId, leg.from?.name),
+        nowMs
+      )
       if (alight || board) {
         liveTimes[i] = {
           alightEpoch: alight?.epoch ?? null,
+          alightRealtime: !!alight?.realtime,
           boardEpoch: board?.epoch ?? null,
+          boardRealtime: !!board?.realtime,
           realtime: !!(alight?.realtime || board?.realtime)
         }
       }

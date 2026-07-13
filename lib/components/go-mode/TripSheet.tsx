@@ -113,7 +113,12 @@ const TripSheet = ({
   ): { epoch: number | string | undefined; realtime: boolean } => {
     const live = liveLegTimes[i]
     if (TRANSIT_MODES.has(leg.mode) && live?.alightEpoch) {
-      return { epoch: live.alightEpoch, realtime: live.realtime }
+      // Per-field flag: the leg-level `realtime` is an OR across board and
+      // alight, which kept styling a schedule-fallback alight time as live.
+      return {
+        epoch: live.alightEpoch,
+        realtime: live.alightRealtime ?? live.realtime
+      }
     }
     return { epoch: leg.endTime, realtime: false }
   }
