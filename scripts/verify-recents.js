@@ -111,6 +111,66 @@ async function main() {
   if (hasCurrentLoc) throw new Error('current-location origin polluted recents')
   if (!stored.recentSearches.length) throw new Error('search not remembered')
 
+  // ---- Go-Mode-internal reroutes must NOT add recents ----
+  // On the 7/12 ride every deviation reroute re-remembered the endpoints:
+  // destination saved 36x, "Current location" 24x, a mid-trip station 8x.
+  await page.evaluate(async () => {
+    const searches = window.store.getState().otp.searches || {}
+    const itin = Object.values(searches)
+      .flatMap((s) => s.response || [])
+      .flatMap((r) => r?.plan?.itineraries || [])[0]
+    await window.__beginGoMode(itin)
+  })
+  await page.waitForFunction(
+    () => {
+      const g = window.store.getState().otp.goMode
+      return g.isActive && g.tracking?.lastPosition
+    },
+    { polling: 300, timeout: 20000 }
+  )
+  await page.evaluate(async () => {
+    // eslint-disable-next-line import/no-absolute-path
+    const goMode = await import('/lib/actions/go-mode.js')
+    window.store.dispatch(goMode.reRouteFromCurrentPosition())
+  })
+  await page.waitForFunction(
+    () => {
+      const r = window.store.getState().otp.goMode.reRoute
+      return r.status !== 'idle' && r.status !== 'searching'
+    },
+    { polling: 500, timeout: 60000 }
+  )
+  const afterReroute = await page.evaluate(() => ({
+    recent: JSON.parse(window.localStorage.getItem('otp.recent') || '[]'),
+    recentSearches: JSON.parse(
+      window.localStorage.getItem('otp.recentSearches') || '[]'
+    ),
+    rerouteStatus: window.store.getState().otp.goMode.reRoute.status
+  }))
+  console.log(
+    `[reroute] settled '${afterReroute.rerouteStatus}'; recents ` +
+      `${stored.recent.length} -> ${afterReroute.recent.length}, searches ` +
+      `${stored.recentSearches.length} -> ${afterReroute.recentSearches.length}`
+  )
+  if (afterReroute.recent.length !== stored.recent.length) {
+    throw new Error('a Go Mode reroute added recent place(s)')
+  }
+  if (afterReroute.recentSearches.length !== stored.recentSearches.length) {
+    throw new Error('a Go Mode reroute was remembered as a recent search')
+  }
+  if (
+    afterReroute.recent.some((p) =>
+      /current location/i.test(p.name || p.address || '')
+    )
+  ) {
+    throw new Error('reroute leaked a "Current location" recent')
+  }
+  await page.evaluate(async () => {
+    // eslint-disable-next-line import/no-absolute-path
+    const goMode = await import('/lib/actions/go-mode.js')
+    window.store.dispatch(goMode.endGoMode())
+  })
+
   // ---- fresh session: reload, destination must be offered back ----
   await page.goto(APP, { timeout: 60000, waitUntil: 'networkidle2' })
   await page.waitForFunction(() => !!window.store, { timeout: 30000 })
