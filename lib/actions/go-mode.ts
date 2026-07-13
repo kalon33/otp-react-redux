@@ -652,6 +652,7 @@ export function reRouteFromCurrentPosition(
       date: coreUtils.time.getCurrentDate(homeTimezone),
       departArrive: 'NOW',
       from: {
+        category: 'CURRENT_LOCATION',
         lat: lastPosition.coords.latitude,
         lon: lastPosition.coords.longitude,
         name: 'Current location'
@@ -805,6 +806,7 @@ export function captureRerouteSnapshot() {
     const routingPreferences = state.otp.currentQuery?.routingPreferences
     const zoned = utcToZonedTime(getCurrentTime().getTime(), homeTimezone)
     const from = {
+      category: 'CURRENT_LOCATION',
       lat: lastPosition.coords.latitude,
       lon: lastPosition.coords.longitude,
       name: 'Current location'
