@@ -223,11 +223,14 @@ type Props = {
   intl: IntlShape
   itinerary: Itinerary
   mini?: boolean
+  returnToGoMode?: () => void
   setActiveItinerary: SetActiveItineraryHandler
   setActiveLeg: (leg: Leg) => void
   setItineraryView: (view: string) => void
   setMobileScreen?: (screen: number) => void
   showRealtimeAnnotation: () => void
+  /** True while a Go Mode trip is running (start button becomes a switch). */
+  tripActive?: boolean
 }
 
 class MetroItinerary extends NarrativeItinerary {
@@ -249,6 +252,32 @@ class MetroItinerary extends NarrativeItinerary {
     if (typeof setVisibleItinerary === 'function' && visible) {
       setVisibleItinerary({ index: null })
     }
+  }
+
+  _handleStartTrip = () => {
+    const { beginGoMode, intl, itinerary, returnToGoMode, tripActive } =
+      this.props
+    if (!beginGoMode) return
+    if (tripActive) {
+      // A trip is already running (backgrounded behind the planner):
+      // adopting an alternate is an explicit switch, so confirm — the current
+      // guidance is replaced (riding state is preserved/reanchored).
+      if (
+        !window.confirm(
+          intl.formatMessage({
+            defaultMessage:
+              'Switch your active trip to this route? Your current guidance will update.',
+            id: 'components.MetroUI.confirmSwitchTrip'
+          })
+        )
+      ) {
+        return
+      }
+      beginGoMode(itinerary)
+      returnToGoMode?.()
+      return
+    }
+    beginGoMode(itinerary)
   }
 
   _renderMainRouteBlock = (legs: Leg[]) => {
@@ -296,7 +325,8 @@ class MetroItinerary extends NarrativeItinerary {
       setMobileScreen,
       showInlineItinerarySummary,
       showLegDurations,
-      showRealtimeAnnotation
+      showRealtimeAnnotation,
+      tripActive
     } = this.props
     const { ItineraryPreviewSupplement, RouteRenderer, SvgIcon } = this.context
     const Route = RouteRenderer || DefaultRouteRenderer
@@ -589,15 +619,18 @@ class MetroItinerary extends NarrativeItinerary {
               setActiveLeg={setActiveLeg}
             />
             {beginGoMode && (
-              <StartTripButton
-                onClick={() => {
-                  beginGoMode(itinerary)
-                }}
-              >
-                <FormattedMessage
-                  defaultMessage="Start Trip"
-                  id="components.MetroUI.startTrip"
-                />
+              <StartTripButton onClick={this._handleStartTrip}>
+                {tripActive ? (
+                  <FormattedMessage
+                    defaultMessage="Switch to this trip"
+                    id="components.MetroUI.switchTrip"
+                  />
+                ) : (
+                  <FormattedMessage
+                    defaultMessage="Start Trip"
+                    id="components.MetroUI.startTrip"
+                  />
+                )}
               </StartTripButton>
             )}
           </>
@@ -623,13 +656,15 @@ const mapStateToProps = (state: AppReduxState, ownProps: Props) => {
 
     showInlineItinerarySummary:
       state.otp.config.itinerary?.showInlineItinerarySummary,
-    showLegDurations: state.otp.config.itinerary?.showLegDurations
+    showLegDurations: state.otp.config.itinerary?.showLegDurations,
+    tripActive: Boolean(state.otp.goMode?.isActive)
   }
 }
 
 // TS TODO: correct redux types
 const mapDispatchToProps = {
   beginGoMode: goModeActions.beginGoMode,
+  returnToGoMode: goModeActions.returnToGoMode,
   setItineraryView: uiActions.setItineraryView,
   setMobileScreen: uiActions.setMobileScreen
 }

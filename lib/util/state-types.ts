@@ -7,6 +7,8 @@ import {
 } from '../components/user/types'
 import { Leg, Location, ModeSetting } from '@opentripplanner/types'
 
+import type { GoModeState } from '../reducers/go-mode'
+
 import { AppConfig, PopupTargetConfig } from './config-types'
 
 export type NearbyFilterKey =
@@ -24,6 +26,7 @@ export interface OtpState {
   config: AppConfig
   currentQuery: any
   filter: FilterType
+  goMode?: GoModeState
   location: any
   modeSettingDefinitions: ModeSetting[]
   overlay: any
