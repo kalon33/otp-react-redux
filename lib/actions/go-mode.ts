@@ -1045,6 +1045,24 @@ export function beginOnboardFlow() {
       return
     }
 
+    // No riding fact, but the vehicle-match pipeline may already have a
+    // confirmed vehicle (it survives BEGIN_ONBOARD_FLOW when confirmed).
+    // Never re-ask the rider what the app has already verified.
+    const match: any = getState().otp.goMode?.vehicleMatch?.match
+    if (match?.confidence === 'confirmed' && match.tripId) {
+      dispatch(
+        setOnboardVehicle({
+          label: match.label ?? match.vehicleId,
+          nextStopId: match.nextStopId ?? null,
+          routeId: match.routeId ?? null,
+          tripId: match.tripId,
+          vehicleId: match.vehicleId
+        })
+      )
+      dispatch(loadOnboardScheduleAndOptimize(match.tripId))
+      return
+    }
+
     dispatch(discoverNearbyVehicles())
   }
 }
@@ -1076,8 +1094,21 @@ export function discoverNearbyVehicles(attempt = 0) {
     const lon = pos.coords.longitude
 
     // 1. Routes serving nearby stops.
-    await dispatch(findRoutesNearby({ lat, lon, radius: 250 }))
-    const routes = getState().otp?.transitIndex?.nearbyRoutes || []
+    // TODO(shape-matching): candidates should come from checking the rider's
+    // position against route GEOMETRY (GTFS shapes) or the live all-vehicles
+    // feed, not stop proximity — a rider on freeway BRT between stations has
+    // no stops within any sane radius (7/12: three empty discoveries mid-I-35W).
+    // Interim stopgap: widen with speed like the vehicle scan below, and retry
+    // once at a much larger radius before falling back to the manual prompt.
+    const stopsRadius = speedAdjustedRadius(400, pos.coords.speed)
+    await dispatch(findRoutesNearby({ lat, lon, radius: stopsRadius }))
+    let routes = getState().otp?.transitIndex?.nearbyRoutes || []
+    if (!routes.length) {
+      await dispatch(
+        findRoutesNearby({ lat, lon, radius: Math.max(1500, stopsRadius * 3) })
+      )
+      routes = getState().otp?.transitIndex?.nearbyRoutes || []
+    }
 
     // 2. Live vehicles for each nearby route.
     await Promise.all(

@@ -242,6 +242,40 @@ async function main() {
     path: path.join(OUT, 'onboard-guidance-started.png')
   })
 
+  // ---- 6. exit and immediately re-enter (7/12 regression) ----
+  // Backing out of Go Mode and reopening "I'm on the bus" seconds later must
+  // go straight back to the schedule/optimize path with no "which bus?"
+  // prompt: being aboard is a physical fact the app already verified.
+  await page.evaluate(async () => {
+    // eslint-disable-next-line import/no-absolute-path
+    const gm = await import('/lib/actions/go-mode.ts')
+    window.store.dispatch(gm.endGoMode())
+    window.store.dispatch(gm.beginOnboardFlow())
+  })
+  await page.waitForFunction(
+    () => {
+      const ob = window.store.getState().otp.goMode.onboard
+      return ob.status === 'ready' || ob.status === 'error'
+    },
+    { polling: 500, timeout: 90000 }
+  )
+  const reentry = await page.evaluate(() => {
+    const g = window.store.getState().otp.goMode
+    return {
+      optionCount: g.onboard.alightOptions.length,
+      promptShown: g.boardingPrompt.shown,
+      status: g.onboard.status,
+      vehicleId: g.onboard.vehicle?.vehicleId
+    }
+  })
+  console.log('[reentry]', JSON.stringify(reentry))
+  if (reentry.status !== 'ready' || reentry.optionCount === 0)
+    throw new Error('re-entry did not reach ready options')
+  if (reentry.promptShown)
+    throw new Error(
+      're-entry re-asked which bus — the app must trust its verified vehicle'
+    )
+
   await browser.close()
   console.log('PASS: on-bus search surfaces ranked options and honors choice')
 }

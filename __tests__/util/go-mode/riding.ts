@@ -75,9 +75,13 @@ describe('go-mode riding reducer', () => {
     expect(state.riding?.tripId).toBe('1:trip-1')
   })
 
-  it('STOP_GO_MODE clears riding', () => {
+  it('STOP_GO_MODE preserves riding — exiting a screen is not alighting', () => {
+    // 7/12: the rider backed out of Go Mode and immediately reopened the
+    // onboard flow; with riding wiped the app forgot the confirmed bus and
+    // re-ran (failing) discovery. Alight and sustained off-route remain the
+    // physical invalidators (and a stale fact self-heals in 90s off-route).
     const set = goMode(initial, setRiding(riding))
-    expect(goMode(set, stopGoMode()).riding).toBeNull()
+    expect(goMode(set, stopGoMode()).riding).toEqual(riding)
   })
 })
 

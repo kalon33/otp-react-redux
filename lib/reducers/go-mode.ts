@@ -357,7 +357,12 @@ const goMode = handleActions<GoModeState, any>(
         error: null,
         isTracking: true
       },
-      vehicleMatch: { ...defaultState.vehicleMatch }
+      // Keep a confirmed vehicle: re-entering the onboard flow must not make
+      // the app forget which bus it already verified the rider is on.
+      vehicleMatch:
+        state.vehicleMatch.match?.confidence === 'confirmed'
+          ? state.vehicleMatch
+          : { ...defaultState.vehicleMatch }
     }),
 
     [CLEAR_ONBOARD]: (state) => ({
@@ -601,8 +606,18 @@ const goMode = handleActions<GoModeState, any>(
       }
     }),
 
-    [STOP_GO_MODE]: () => ({
-      ...defaultState
+    [STOP_GO_MODE]: (state) => ({
+      ...defaultState,
+      // Being aboard a bus is a physical fact; exiting the Go Mode screen
+      // doesn't change it. On 7/12 the rider backed out and immediately
+      // reopened "I'm on the bus" — with riding wiped here, the flow forgot
+      // the confirmed vehicle and re-ran (failing) discovery. Alight and
+      // sustained off-route remain the only physical invalidators.
+      riding: state.riding,
+      vehicleMatch:
+        state.vehicleMatch.match?.confidence === 'confirmed'
+          ? state.vehicleMatch
+          : { ...defaultState.vehicleMatch }
     }),
 
     [STOP_GPS_SIMULATION]: (state) => ({
