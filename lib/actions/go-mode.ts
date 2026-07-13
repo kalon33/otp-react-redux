@@ -430,6 +430,8 @@ export function beginGoMode(itinerary: Itinerary) {
           distanceMeters: null,
           label: riding.routeShortName || riding.vehicleId,
           lastSeen: Date.now(),
+          routeId: riding.routeId,
+          tripId: riding.tripId,
           vehicleId: riding.vehicleId
         },
         type: CONFIRM_VEHICLE
@@ -1023,6 +1025,8 @@ export function beginOnboardFlow() {
           distanceMeters: null,
           label: label || vehicleId,
           lastSeen: Date.now(),
+          routeId: riding.routeId,
+          tripId: riding.tripId,
           vehicleId
         },
         type: CONFIRM_VEHICLE
@@ -1283,7 +1287,28 @@ export function planFromOnboardBus() {
       candidates.map((c) => dispatch(fetchCandidatePlan(c, ctx)))
     )
 
-    dispatch(setOnboardResult(rankAlightOptions(results, { walkOnlyMax })))
+    const ranked = rankAlightOptions(results, { walkOnlyMax })
+    // Decorate each option with the itinerary the rider actually gets on tap
+    // (current-bus leg prepended, transfers recounted, real bike legs) so the
+    // results list displays exactly what confirmOnboardAlightStop will start.
+    // The 7/12 cards showed the ONWARD plan's numbers instead — "0 more
+    // transfers" became a 1-transfer trip after tapping.
+    const decorated = (ranked || []).map((option: any) => {
+      try {
+        return {
+          ...option,
+          displayItinerary: buildOnboardItinerary(
+            trip,
+            vehicle,
+            option,
+            lastPosition
+          )
+        }
+      } catch {
+        return option
+      }
+    })
+    dispatch(setOnboardResult(decorated.length ? decorated : null))
   }
 }
 
@@ -1293,7 +1318,7 @@ export function planFromOnboardBus() {
  * synthesized from the trip schedule (geometry sliced between boarding and
  * alight stops, intermediate stops, schedule-anchored times).
  */
-function buildOnboardItinerary(
+export function buildOnboardItinerary(
   trip: any,
   vehicle: any,
   best: { busArrivalEpoch: number; itinerary: Itinerary; stopId: string },
@@ -1481,6 +1506,8 @@ export function confirmOnboardAlightStop(option?: any) {
             distanceMeters: null,
             label: vehicle.label || vehicle.vehicleId,
             lastSeen: Date.now(),
+            routeId: vehicle.routeId ?? null,
+            tripId: vehicle.tripId ?? null,
             vehicleId: vehicle.vehicleId
           },
           type: CONFIRM_VEHICLE
@@ -2254,6 +2281,8 @@ export function confirmVehicleSelection(vehicleId: string) {
         distanceMeters: selected?.distanceMeters || null,
         label: selected?.label || vehicleId,
         lastSeen: Date.now(),
+        routeId: selected?.routeId ?? null,
+        tripId: selected?.tripId ?? null,
         vehicleId
       },
       type: CONFIRM_VEHICLE
@@ -2475,6 +2504,8 @@ export function confirmOnboardRoute(routeId: string) {
         distanceMeters: chosen?.distanceMeters ?? null,
         label: label || routeId,
         lastSeen: Date.now(),
+        routeId,
+        tripId,
         vehicleId
       },
       type: CONFIRM_VEHICLE

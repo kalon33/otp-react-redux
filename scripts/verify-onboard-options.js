@@ -195,18 +195,17 @@ async function main() {
     path: path.join(OUT, 'onboard-options-list.png')
   })
 
-  // ---- 5. choose the SECOND option via the real UI button ----
+  // ---- 5. choose the SECOND option via the real UI (itinerary-list rows) ----
   const target = opts[1]
   const clicked = await page.evaluate(() => {
-    // Rows render in alightOptions order; click the SECOND row's Go button.
-    const goButtons = Array.from(document.querySelectorAll('button')).filter(
-      (b) => b.textContent.trim() === 'Go'
-    )
-    if (goButtons.length < 2) return null
-    goButtons[1].click()
-    return `clicked Go #2 of ${goButtons.length}`
+    // Options render through the normal itinerary list; rows are li.result in
+    // alightOptions order. Tapping anywhere on the SECOND row selects it.
+    const rows = document.querySelectorAll('li.result')
+    if (rows.length < 2) return null
+    rows[1].dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    return `clicked row #2 of ${rows.length}`
   })
-  if (!clicked) throw new Error(`could not click Go for "${target.stopName}"`)
+  if (!clicked) throw new Error(`could not click row for "${target.stopName}"`)
   console.log(`[click] chose option 2: "${target.stopName}" (${clicked})`)
 
   await page.waitForFunction(
@@ -252,13 +251,26 @@ async function main() {
     window.store.dispatch(gm.endGoMode())
     window.store.dispatch(gm.beginOnboardFlow())
   })
-  await page.waitForFunction(
-    () => {
-      const ob = window.store.getState().otp.goMode.onboard
-      return ob.status === 'ready' || ob.status === 'error'
-    },
-    { polling: 500, timeout: 90000 }
-  )
+  await page
+    .waitForFunction(
+      () => {
+        const ob = window.store.getState().otp.goMode.onboard
+        return ob.status === 'ready' || ob.status === 'error'
+      },
+      { polling: 500, timeout: 90000 }
+    )
+    .catch(async () => {
+      const stuck = await page.evaluate(() => {
+        const g = window.store.getState().otp.goMode
+        return {
+          isActive: g.isActive,
+          riding: g.riding,
+          status: g.onboard.status,
+          vehicle: g.onboard.vehicle
+        }
+      })
+      throw new Error(`re-entry stuck: ${JSON.stringify(stuck)}`)
+    })
   const reentry = await page.evaluate(() => {
     const g = window.store.getState().otp.goMode
     return {

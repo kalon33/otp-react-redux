@@ -77,6 +77,10 @@ export interface OnboardCandidate {
 /** The chosen best stop to get off, with its remaining-journey itinerary. */
 export interface OnboardAlightOption {
   busArrivalEpoch: number
+  /** The full trip a tap starts: current-bus leg + onward legs. What the
+   * results list renders, so the display matches the outcome exactly. */
+  displayItinerary?: Itinerary
+  /** The onward plan from the alight stop (ranking input). */
   itinerary: Itinerary
   realtime: boolean
   stopId: string
