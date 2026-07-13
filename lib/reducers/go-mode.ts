@@ -14,6 +14,7 @@ import {
   RESUME_GPS_SIMULATION,
   SET_ARRIVED,
   SET_DEPARTURE_OVERRIDE,
+  SET_GO_MODE_BACKGROUNDED,
   SET_LIVE_LEG_TIMES,
   SET_NOTIFICATION_CONFIG,
   SET_ONBOARD_RESULT,
@@ -184,6 +185,13 @@ export interface GoModeState {
   }
 
   ui: {
+    /**
+     * The trip is running but the rider has stepped out to the normal trip
+     * planner (browsing alternate routes). Tracking, notifications, and
+     * auto-updates all keep running; only what's on screen changes. The
+     * ReturnToTripBanner is the way back.
+     */
+    backgrounded: boolean
     mapFollowUser: boolean
   }
 
@@ -260,6 +268,7 @@ const defaultState: GoModeState = {
   },
 
   ui: {
+    backgrounded: false,
     // Off by default: the map should stay where the user leaves it and only
     // recenter on the live GPS point when the user asks (blue dot control).
     mapFollowUser: false
@@ -444,6 +453,14 @@ const goMode = handleActions<GoModeState, any>(
       departureOverride: action.payload
     }),
 
+    [SET_GO_MODE_BACKGROUNDED]: (state, action) => ({
+      ...state,
+      ui: {
+        ...state.ui,
+        backgrounded: !!action.payload
+      }
+    }),
+
     [SET_LIVE_LEG_TIMES]: (state, action) => ({
       ...state,
       liveLegTimes: action.payload
@@ -552,6 +569,10 @@ const goMode = handleActions<GoModeState, any>(
     [START_GO_MODE]: (state, action) => {
       const { itinerary, originalFrom } = action.payload
 
+      // `ui` is deliberately preserved: a background auto-update (missed bus,
+      // quiet access replan) swaps the itinerary via this action while the
+      // rider may be browsing the planner — that must not clear
+      // ui.backgrounded and yank them back to the Go Mode screen.
       return {
         ...state,
         activeItinerary: itinerary,

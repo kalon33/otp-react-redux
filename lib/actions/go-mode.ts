@@ -204,6 +204,7 @@ export const REROUTE_SNAPSHOT = 'REROUTE_SNAPSHOT'
 export const RESUME_GPS_SIMULATION = 'RESUME_GPS_SIMULATION'
 export const SET_ARRIVED = 'SET_ARRIVED'
 export const SET_DEPARTURE_OVERRIDE = 'SET_DEPARTURE_OVERRIDE'
+export const SET_GO_MODE_BACKGROUNDED = 'SET_GO_MODE_BACKGROUNDED'
 export const SET_RIDING = 'SET_RIDING'
 export const SET_LIVE_LEG_TIMES = 'SET_LIVE_LEG_TIMES'
 export const SET_NOTIFICATION_CONFIG = 'SET_NOTIFICATION_CONFIG'
@@ -300,6 +301,9 @@ export const setTrackingError = createAction<GeolocationPositionError | null>(
   SET_TRACKING_ERROR
 )
 export const toggleMapFollow = createAction(TOGGLE_MAP_FOLLOW)
+export const setGoModeBackgrounded = createAction<boolean>(
+  SET_GO_MODE_BACKGROUNDED
+)
 export const updateTrackingInterval = createAction<{ interval: number }>(
   UPDATE_TRACKING_INTERVAL
 )
@@ -409,7 +413,12 @@ export function beginGoMode(itinerary: Itinerary) {
       currentQuery?.from ||
       null
     dispatch(startGoMode({ itinerary, originalFrom }))
-    dispatch(setMobileScreen(MobileScreens.GO_MODE))
+    // While the trip is backgrounded (rider browsing the planner), an
+    // auto-update swapping the itinerary through here must not yank the
+    // screen back to Go Mode — explicit returns go through returnToGoMode.
+    if (!priorGoMode?.ui?.backgrounded) {
+      dispatch(setMobileScreen(MobileScreens.GO_MODE))
+    }
 
     await dispatch(startGoModeTracking(itinerary))
 
@@ -435,6 +444,38 @@ export function beginGoMode(itinerary: Itinerary) {
         type: CONFIRM_VEHICLE
       })
     }
+  }
+}
+
+/**
+ * Step out of the Go Mode screen into the normal trip planner WITHOUT ending
+ * the trip: tracking, notifications, and auto-updates keep running, and the
+ * ReturnToTripBanner stays visible as the way back. Lands the rider on their
+ * own last search results (or the search form when there are none).
+ */
+export function backgroundGoMode() {
+  return function (dispatch: any, getState: any) {
+    const { activeSearchId, goMode, searches } = getState().otp
+    if (!goMode?.isActive || !goMode.activeItinerary) return
+    dispatch(setGoModeBackgrounded(true))
+    dispatch(
+      setMobileScreen(
+        activeSearchId && searches?.[activeSearchId]
+          ? MobileScreens.RESULTS_SUMMARY
+          : MobileScreens.SEARCH_FORM
+      )
+    )
+  }
+}
+
+/**
+ * Return from the planner to the active trip's Go Mode screen (banner tap or
+ * after explicitly adopting an alternate itinerary).
+ */
+export function returnToGoMode() {
+  return function (dispatch: any) {
+    dispatch(setGoModeBackgrounded(false))
+    dispatch(setMobileScreen(MobileScreens.GO_MODE))
   }
 }
 

@@ -35,6 +35,7 @@ import CurrentLegPanel from './CurrentLegPanel'
 import GoModeMap from './GoModeMap'
 import GoModeNotifications from './GoModeNotifications'
 import TripSheet from './TripSheet'
+import useActiveTripGuards from './use-active-trip-guards'
 
 interface Props {
   beginGoMode: (itinerary: any) => void
@@ -97,61 +98,9 @@ const GoModeScreen = ({
     }
   }, [goMode.isActive, goMode.activeItinerary, onboardActive, setMobileScreen])
 
-  useEffect(() => {
-    // Keep the screen awake during a trip. The OS silently RELEASES the wake
-    // lock every time the page hides (app switch, brief lock), so a single
-    // request is not enough — re-request on every return to visibility, or the
-    // screen starts auto-locking again mid-trip and tracking/recording dies
-    // with it.
-    if ('wakeLock' in navigator && goMode.isActive) {
-      let wakeLock: any = null
-      let disposed = false
-
-      const requestWakeLock = async () => {
-        try {
-          wakeLock = await (navigator as any).wakeLock.request('screen')
-        } catch (err) {
-          console.warn('Wake lock request failed:', err)
-        }
-      }
-
-      const reacquire = () => {
-        if (!disposed && document.visibilityState === 'visible') {
-          requestWakeLock()
-        }
-      }
-
-      requestWakeLock()
-      document.addEventListener('visibilitychange', reacquire)
-
-      return () => {
-        disposed = true
-        document.removeEventListener('visibilitychange', reacquire)
-        if (wakeLock) {
-          wakeLock.release()
-        }
-      }
-    }
-  }, [goMode.isActive])
-
-  // Navigation exit protection: warn on page unload and cleanup on unmount
-  useEffect(() => {
-    if (!goMode.isActive) return
-
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      e.preventDefault()
-      e.returnValue = ''
-    }
-
-    window.addEventListener('beforeunload', handleBeforeUnload)
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload)
-      // Do NOT tear down Go Mode here. Unmounting (navigating away, a transient
-      // remount) must leave the trip intact so it survives navigation and can be
-      // resumed; tracking is torn down only on an explicit exit or completion
-      // (handleExit / handleOnboardExit -> endGoMode).
-    }
-  }, [goMode.isActive])
+  // Wake lock + reload warning for the life of the trip (shared with the
+  // ReturnToTripBanner so the guards survive backgrounding).
+  useActiveTripGuards(goMode.isActive)
 
   const handleExit = () => {
     if (
