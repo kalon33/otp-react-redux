@@ -1,16 +1,24 @@
 import {
   clearReroute,
+  reRouteFromCurrentPosition,
   setRerouteResult,
   startGoMode,
   startReroute
 } from '../../../lib/actions/go-mode'
-import {
-  getRerouteCandidate,
-  getRerouteSearch,
-  isRerouteSearchSettled,
-  pickSameRouteReroute
-} from '../../../lib/util/state'
+import { collectRerouteCandidates } from '../../../lib/util/go-mode/reroute-candidates'
+import { fetchOnboardCandidatePlan } from '../../../lib/actions/apiV2'
+import { pickSameRouteReroute } from '../../../lib/util/state'
 import goMode from '../../../lib/reducers/go-mode'
+
+jest.mock('../../../lib/actions/apiV2', () => ({
+  ...jest.requireActual('../../../lib/actions/apiV2'),
+  fetchOnboardCandidatePlan: jest.fn(),
+  getBasePlanParts: jest.fn(() => ({
+    modes: [{ mode: 'TRANSIT' }, { mode: 'WALK' }],
+    modeSettings: [],
+    numItineraries: 5
+  }))
+}))
 
 const initial = goMode(undefined, { type: '@@INIT' })
 
@@ -110,42 +118,140 @@ describe('go-mode re-route reducer', () => {
   })
 })
 
-describe('go-mode re-route selectors', () => {
-  const buildState = (searchId: string | null, search: any) => ({
-    otp: {
-      goMode: { reRoute: { searchId } },
-      searches: search ? { [searchId as string]: search } : {}
+describe('collectRerouteCandidates', () => {
+  it('de-duplicates by leg signature, sorts by duration and caps the list', () => {
+    const itin = (duration: number, routeId = 'r1', to = 'B') =>
+      ({
+        duration,
+        legs: [{ from: { name: 'A' }, mode: 'BUS', routeId, to: { name: to } }]
+      } as any)
+    const dupA = itin(1500)
+    const dupB = itin(1200) // same signature as dupA, shorter — first in input wins dedupe
+    const result = collectRerouteCandidates(
+      [dupA, dupB, itin(900, 'r2'), itin(1800, 'r3'), itin(600, 'r4')],
+      3
+    )
+    // dupB dropped (same signature as dupA); rest sorted by duration, capped.
+    expect(result.map((i: any) => i.duration)).toEqual([600, 900, 1500])
+  })
+
+  it('returns [] for empty or missing input', () => {
+    expect(collectRerouteCandidates([])).toEqual([])
+    expect(collectRerouteCandidates(null)).toEqual([])
+    expect(collectRerouteCandidates(undefined)).toEqual([])
+  })
+})
+
+describe('reRouteFromCurrentPosition (isolated pipeline)', () => {
+  const mockedFetch = fetchOnboardCandidatePlan as jest.Mock
+
+  // Minimal store: real goMode reducer behind a hand-rolled dispatch, so the
+  // thunk sees its own startReroute take effect (searchId/status) exactly as
+  // in the app — and we can inject staleness between request and response.
+  const makeStore = (goModeOverrides: any = {}) => {
+    let goModeState: any = {
+      ...initial,
+      activeItinerary: {
+        legs: [
+          {
+            mode: 'WALK',
+            to: { lat: 44.98, lon: -93.27, name: 'Destination' }
+          }
+        ]
+      },
+      isActive: true,
+      tracking: {
+        ...initial.tracking,
+        lastPosition: { coords: { latitude: 44.95, longitude: -93.29 } }
+      },
+      ...goModeOverrides
     }
-  })
-
-  it('getRerouteSearch returns null when no re-route is underway', () => {
-    expect(getRerouteSearch(buildState(null, null) as any)).toBeNull()
-  })
-
-  it('getRerouteCandidate picks the shortest-duration itinerary, ignoring errors', () => {
-    const state = buildState('s1', {
-      pending: 0,
-      response: [
-        { plan: { itineraries: [{ duration: 1500 }, { duration: 1200 }] } },
-        { error: { id: 404 } },
-        { plan: { itineraries: [{ duration: 1800 }] } }
-      ]
+    const actions: any[] = []
+    const getState = () => ({
+      otp: {
+        config: { homeTimezone: 'America/Chicago' },
+        currentQuery: {},
+        goMode: goModeState
+      }
     })
-    expect(getRerouteCandidate(state as any)).toEqual({ duration: 1200 })
+    const dispatch: any = (action: any) => {
+      if (typeof action === 'function') return action(dispatch, getState)
+      actions.push(action)
+      goModeState = goMode(goModeState, action)
+      return action
+    }
+    return {
+      actions,
+      dispatch,
+      getGoMode: () => goModeState,
+      setGoMode: (next: any) => {
+        goModeState = next
+      }
+    }
+  }
+
+  beforeEach(() => mockedFetch.mockReset())
+
+  it('never touches the shared search pipeline and resolves in the thunk', async () => {
+    const itineraries = [
+      {
+        duration: 900,
+        legs: [
+          { from: { name: 'A' }, mode: 'BUS', routeId: 'r1', to: { name: 'B' } }
+        ]
+      }
+    ]
+    mockedFetch.mockReturnValue(() =>
+      Promise.resolve({ error: false, itineraries })
+    )
+    const store = makeStore()
+    await store.dispatch(reRouteFromCurrentPosition())
+
+    const types = store.actions.map((a) => a.type)
+    // The whole point of isolation: nothing from the planner pipeline fires.
+    expect(types).not.toContain('SET_QUERY_PARAM')
+    expect(types).not.toContain('ROUTING_REQUEST')
+    expect(types).toContain('START_REROUTE')
+    expect(store.getGoMode().reRoute.status).toBe('found')
+    expect(store.getGoMode().reRoute.candidates).toEqual(itineraries)
   })
 
-  it('getRerouteCandidate returns null before any itineraries arrive', () => {
-    const state = buildState('s1', { pending: 2, response: [] })
-    expect(getRerouteCandidate(state as any)).toBeNull()
+  it('resolves to "none" on an error or empty plan', async () => {
+    mockedFetch.mockReturnValue(() =>
+      Promise.resolve({ error: true, itineraries: [] })
+    )
+    const store = makeStore()
+    await store.dispatch(reRouteFromCurrentPosition())
+    expect(store.getGoMode().reRoute.status).toBe('none')
   })
 
-  it('isRerouteSearchSettled is false while pending, true at zero', () => {
-    expect(
-      isRerouteSearchSettled(buildState('s1', { pending: 2 }) as any)
-    ).toBe(false)
-    expect(
-      isRerouteSearchSettled(buildState('s1', { pending: 0 }) as any)
-    ).toBe(true)
+  it('drops a stale response when a newer reroute superseded it', async () => {
+    mockedFetch.mockReturnValue(
+      () =>
+        new Promise((resolve) => {
+          // A newer reroute repoints the token while this one is in flight.
+          store.setGoMode({
+            ...store.getGoMode(),
+            reRoute: { ...store.getGoMode().reRoute, searchId: 'newer' }
+          })
+          resolve({
+            error: false,
+            itineraries: [{ duration: 900, legs: [] }]
+          })
+        })
+    )
+    const store = makeStore()
+    await store.dispatch(reRouteFromCurrentPosition())
+    // The stale result must not resolve the newer search's card.
+    expect(store.getGoMode().reRoute.status).toBe('searching')
+    expect(store.getGoMode().reRoute.searchId).toBe('newer')
+  })
+
+  it('bails without fetching when position or itinerary is missing', async () => {
+    const store = makeStore({ tracking: { lastPosition: null } })
+    await store.dispatch(reRouteFromCurrentPosition())
+    expect(mockedFetch).not.toHaveBeenCalled()
+    expect(store.getGoMode().reRoute.status).toBe('none')
   })
 })
 

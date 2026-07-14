@@ -38,6 +38,7 @@ exports[`lib > reducers > create-otp-reducer should be able to create the initia
   },
   "goMode": Object {
     "activeItinerary": null,
+    "arrivedAt": null,
     "boardingPrompt": Object {
       "lastDismissedAt": null,
       "shown": false,
@@ -54,6 +55,7 @@ exports[`lib > reducers > create-otp-reducer should be able to create the initia
       "vibrationEnabled": true,
     },
     "onboard": Object {
+      "alightOptions": Array [],
       "bestAlightStop": null,
       "candidates": Array [],
       "status": "idle",
@@ -63,8 +65,11 @@ exports[`lib > reducers > create-otp-reducer should be able to create the initia
     "originalFrom": null,
     "progress": null,
     "reRoute": Object {
+      "autoApply": false,
       "candidate": null,
       "candidates": Array [],
+      "keepRouteId": null,
+      "reason": null,
       "searchId": null,
       "status": "idle",
     },
@@ -83,6 +88,7 @@ exports[`lib > reducers > create-otp-reducer should be able to create the initia
       "lastPosition": null,
     },
     "ui": Object {
+      "backgrounded": false,
       "mapFollowUser": false,
     },
     "vehicleMatch": Object {

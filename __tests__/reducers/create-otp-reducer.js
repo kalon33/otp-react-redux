@@ -46,5 +46,17 @@ describe('lib > reducers > create-otp-reducer', () => {
       type: 'SET_LIVE_LEG_TIMES'
     })
     expect(withTimes.goMode.liveLegTimes).toEqual(liveTimes)
+
+    const withArrival = reducer(initial, {
+      payload: 1783884008121,
+      type: 'SET_ARRIVED'
+    })
+    expect(withArrival.goMode.arrivedAt).toBe(1783884008121)
+    // A new trip clears the arrival fact.
+    const restarted = reducer(withArrival, {
+      payload: { itinerary: { legs: [] }, originalFrom: null },
+      type: 'START_GO_MODE'
+    })
+    expect(restarted.goMode.arrivedAt).toBeNull()
   })
 })

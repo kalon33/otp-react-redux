@@ -26,6 +26,10 @@ export interface VehicleMatchResult {
   distanceMeters: number | null
   label: string | null
   lastSeen: number // epoch ms
+  /** GTFS ids of the matched run, when known — lets flows that trust a
+   * confirmed match (onboard silent path) act without re-asking. */
+  routeId?: string | null
+  tripId?: string | null
   vehicleId: string | null
 }
 

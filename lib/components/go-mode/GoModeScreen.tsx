@@ -4,7 +4,6 @@ import React, { useEffect, useRef, useState } from 'react'
 
 import * as goModeActions from '../../actions/go-mode'
 import * as uiActions from '../../actions/ui'
-import { getRerouteCandidates, isRerouteSearchSettled } from '../../util/state'
 import { MobileScreens } from '../../actions/ui-constants'
 import MobileNavigationBar from '../mobile/navigation-bar'
 import type { GoModeState } from '../../reducers/go-mode'
@@ -14,6 +13,12 @@ import {
   FullScreenWrapper,
   GpsWarningBanner,
   LoadingMessage,
+  RerouteActions,
+  RerouteBar,
+  RerouteCard,
+  RerouteCardTitle,
+  RerouteSummary,
+  RerouteSwitchButton,
   RetryButton,
   ScreenMain,
   SheetHandle,
@@ -30,39 +35,32 @@ import CurrentLegPanel from './CurrentLegPanel'
 import GoModeMap from './GoModeMap'
 import GoModeNotifications from './GoModeNotifications'
 import TripSheet from './TripSheet'
+import useActiveTripGuards from './use-active-trip-guards'
 
 interface Props {
-  applyAutoReroute: (candidates: any[]) => void
   beginGoMode: (itinerary: any) => void
   boardingStopData: any
   departureOverride: number | null
   endGoMode: () => void
   goMode: GoModeState
   pauseGpsSimulation: () => void
-  reRouteCandidates: any[]
-  reRouteSettled: boolean
   resumeGpsSimulation: () => void
   setDepartureOverride: (epochMs: number | null) => void
   setMobileScreen: (screen: number) => void
-  setRerouteResult: (itineraries: any) => void
   startGpsSimulation: (speedMultiplier?: number) => void
   stopGpsSimulation: () => void
 }
 
 const GoModeScreen = ({
-  applyAutoReroute,
   beginGoMode,
   boardingStopData,
   departureOverride,
   endGoMode,
   goMode,
   pauseGpsSimulation,
-  reRouteCandidates,
-  reRouteSettled,
   resumeGpsSimulation,
   setDepartureOverride,
   setMobileScreen,
-  setRerouteResult,
   startGpsSimulation,
   stopGpsSimulation
 }: Props) => {
@@ -100,85 +98,9 @@ const GoModeScreen = ({
     }
   }, [goMode.isActive, goMode.activeItinerary, onboardActive, setMobileScreen])
 
-  useEffect(() => {
-    // Keep the screen awake during a trip. The OS silently RELEASES the wake
-    // lock every time the page hides (app switch, brief lock), so a single
-    // request is not enough — re-request on every return to visibility, or the
-    // screen starts auto-locking again mid-trip and tracking/recording dies
-    // with it.
-    if ('wakeLock' in navigator && goMode.isActive) {
-      let wakeLock: any = null
-      let disposed = false
-
-      const requestWakeLock = async () => {
-        try {
-          wakeLock = await (navigator as any).wakeLock.request('screen')
-        } catch (err) {
-          console.warn('Wake lock request failed:', err)
-        }
-      }
-
-      const reacquire = () => {
-        if (!disposed && document.visibilityState === 'visible') {
-          requestWakeLock()
-        }
-      }
-
-      requestWakeLock()
-      document.addEventListener('visibilitychange', reacquire)
-
-      return () => {
-        disposed = true
-        document.removeEventListener('visibilitychange', reacquire)
-        if (wakeLock) {
-          wakeLock.release()
-        }
-      }
-    }
-  }, [goMode.isActive])
-
-  // Navigation exit protection: warn on page unload and cleanup on unmount
-  useEffect(() => {
-    if (!goMode.isActive) return
-
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      e.preventDefault()
-      e.returnValue = ''
-    }
-
-    window.addEventListener('beforeunload', handleBeforeUnload)
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload)
-      // Do NOT tear down Go Mode here. Unmounting (navigating away, a transient
-      // remount) must leave the trip intact so it survives navigation and can be
-      // resumed; tracking is torn down only on an explicit exit or completion
-      // (handleExit / handleOnboardExit -> endGoMode).
-    }
-  }, [goMode.isActive])
-
-  // Resolve the re-route search into a browsable list of alternatives (or
-  // "none") once results arrive. getRerouteCandidates reads the dedicated
-  // re-route search directly. An auto-apply re-route (definitive missed bus)
-  // switches to the best alternative immediately instead of showing the card.
-  useEffect(() => {
-    if (goMode.reRoute.status !== 'searching') return
-    if (reRouteCandidates.length > 0) {
-      if (goMode.reRoute.autoApply) {
-        applyAutoReroute(reRouteCandidates)
-      } else {
-        setRerouteResult(reRouteCandidates)
-      }
-    } else if (reRouteSettled) {
-      setRerouteResult(null)
-    }
-  }, [
-    goMode.reRoute.status,
-    goMode.reRoute.autoApply,
-    reRouteCandidates,
-    reRouteSettled,
-    setRerouteResult,
-    applyAutoReroute
-  ])
+  // Wake lock + reload warning for the life of the trip (shared with the
+  // ReturnToTripBanner so the guards survive backgrounding).
+  useActiveTripGuards(goMode.isActive)
 
   const handleExit = () => {
     if (
@@ -202,6 +124,15 @@ const GoModeScreen = ({
   }
 
   const handleOnboardExit = () => {
+    endGoMode()
+    setMobileScreen(MobileScreens.SEARCH_FORM)
+  }
+
+  // Trip complete: the rider dismisses the arrival card themselves — landing
+  // on the home screen, not a stale results list. (Both dispatches happen in
+  // one handler, so the parent swaps screens before the inactive-redirect
+  // effect can route to RESULTS_SUMMARY.)
+  const handleArrivedDone = () => {
     endGoMode()
     setMobileScreen(MobileScreens.SEARCH_FORM)
   }
@@ -335,7 +266,33 @@ const GoModeScreen = ({
           </GpsWarningBanner>
         )}
 
-        {!sheetOpen && (
+        {goMode.arrivedAt != null && (
+          <RerouteBar>
+            <RerouteCard role="status">
+              <RerouteCardTitle>
+                {intl.formatMessage({
+                  defaultMessage: "🎉 You've arrived!",
+                  id: 'components.GoMode.arrivedTitle'
+                })}
+              </RerouteCardTitle>
+              <RerouteSummary>
+                {goMode.activeItinerary.legs[
+                  goMode.activeItinerary.legs.length - 1
+                ]?.to?.name || ''}
+              </RerouteSummary>
+              <RerouteActions>
+                <RerouteSwitchButton onClick={handleArrivedDone} type="button">
+                  {intl.formatMessage({
+                    defaultMessage: 'Done',
+                    id: 'components.GoMode.arrivedDone'
+                  })}
+                </RerouteSwitchButton>
+              </RerouteActions>
+            </RerouteCard>
+          </RerouteBar>
+        )}
+
+        {!sheetOpen && goMode.arrivedAt == null && (
           <SheetHandle
             aria-label={intl.formatMessage({
               defaultMessage: 'Open trip overview',
@@ -482,21 +439,17 @@ const mapStateToProps = (state: any) => {
   return {
     boardingStopData,
     departureOverride: goMode?.departureOverride ?? null,
-    goMode,
-    reRouteCandidates: getRerouteCandidates(state),
-    reRouteSettled: isRerouteSearchSettled(state)
+    goMode
   }
 }
 
 const mapDispatchToProps = {
-  applyAutoReroute: goModeActions.applyAutoReroute,
   beginGoMode: goModeActions.beginGoMode,
   endGoMode: goModeActions.endGoMode,
   pauseGpsSimulation: goModeActions.pauseGpsSimulation,
   resumeGpsSimulation: goModeActions.resumeGpsSimulation,
   setDepartureOverride: goModeActions.selectDeparture,
   setMobileScreen: uiActions.setMobileScreen,
-  setRerouteResult: goModeActions.setRerouteResult,
   startGpsSimulation: goModeActions.startGpsSimulation,
   stopGpsSimulation: goModeActions.stopGpsSimulation
 }

@@ -156,16 +156,16 @@ async function main() {
     },
     { polling: 500, timeout: 90000 }
   )
-  // choose the FIRST (default) option — item 4 is about times, not choice
+  // choose the FIRST (default) option — item 4 is about times, not choice.
+  // Options render through the normal itinerary list (li.result rows, see
+  // verify-onboard-options); a tap anywhere on the row selects it.
   const started = await page.evaluate(() => {
-    const btn = Array.from(document.querySelectorAll('button')).find(
-      (b) => b.textContent.trim() === 'Go'
-    )
-    if (!btn) return false
-    btn.click()
+    const row = document.querySelector('li.result')
+    if (!row) return false
+    row.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     return true
   })
-  if (!started) throw new Error('no Go button — onboard flow failed')
+  if (!started) throw new Error('no alight-option rows — onboard flow failed')
   await page.waitForFunction(
     () => window.store.getState().otp.goMode.activeItinerary != null,
     { polling: 300, timeout: 20000 }
@@ -175,7 +175,55 @@ async function main() {
       SETTLE_MS / 1000
     }s for live-time refresh cycles...`
   )
-  await new Promise((resolve) => setTimeout(resolve, SETTLE_MS))
+  // While settling, sample the displayed alight time every 2s and enforce the
+  // no-regression invariant (7/12 bug: a realtime dropout walked the time
+  // backwards to a scheduled 14:01 already in the past and kept the live
+  // icon): a non-live value must never sit in the past, and any value may
+  // move earlier ONLY while flagged live.
+  const samples = []
+  const sampleEnd = Date.now() + SETTLE_MS
+  while (Date.now() < sampleEnd) {
+    const snap = await page.evaluate(() => {
+      const g = window.store.getState().otp.goMode
+      const legs = g.activeItinerary?.legs || []
+      const busIdx = legs.findIndex((l) => l.transitLeg)
+      const t = g.liveLegTimes?.[busIdx]
+      return t
+        ? {
+            alightEpoch: t.alightEpoch,
+            alightRealtime: t.alightRealtime ?? t.realtime,
+            atMs: Date.now()
+          }
+        : null
+    })
+    if (snap) samples.push(snap)
+    await new Promise((resolve) => setTimeout(resolve, 2000))
+  }
+  for (let i = 0; i < samples.length; i++) {
+    const s0 = samples[i]
+    if (!s0.alightRealtime && s0.alightEpoch < s0.atMs - 5000) {
+      throw new Error(
+        `non-live alight time ${fmt(s0.alightEpoch)} sat in the past at ` +
+          fmt(s0.atMs)
+      )
+    }
+    if (
+      i > 0 &&
+      !s0.alightRealtime &&
+      s0.alightEpoch < samples[i - 1].alightEpoch - 1000
+    ) {
+      throw new Error(
+        `alight time walked backwards while non-live: ${fmt(
+          samples[i - 1].alightEpoch
+        )} -> ${fmt(s0.alightEpoch)}`
+      )
+    }
+  }
+  console.log(
+    `[monotonic] ${samples.length} samples, ` +
+      `${samples.filter((x) => x.alightRealtime).length} live — ` +
+      'no past-frozen or backwards non-live values'
+  )
 
   // ---- capture app state + ground truth at the same moment ----
   const app = await page.evaluate(() => {
@@ -199,9 +247,14 @@ async function main() {
 
   const truthQ = await gql(`{ trip(id: "${tripId}") {
     stoptimesForDate { scheduledArrival realtimeArrival realtimeState serviceDay
-      stop { gtfsId } } } }`)
+      stop { gtfsId name } } } }`)
   const sts = truthQ?.data?.trip?.stoptimesForDate || []
-  const alightSt = sts.find((st) => st.stop.gtfsId === app.alightStopId)
+  // Shared stations exist under several feeds (Metro Transit 1:*, MVTA 2:*)
+  // and the onward plan may reference the twin feed's id — fall back to the
+  // stop name within the boarded trip, same as liveStopArrival does.
+  const alightSt =
+    sts.find((st) => st.stop.gtfsId === app.alightStopId) ||
+    sts.find((st) => st.stop.name === app.alightStopName)
   if (!alightSt)
     throw new Error(`alight stop ${app.alightStopId} not in boarded trip`)
   const live = ['UPDATED', 'ADDED', 'MODIFIED'].includes(alightSt.realtimeState)

@@ -19,6 +19,27 @@ describe('actions > apiV2 > shouldRememberPlace', () => {
     ).toBe(false)
   })
 
+  it('skips an untagged "Current location" origin by name', () => {
+    // Synthetic reroute origins should carry category CURRENT_LOCATION, but a
+    // bare name must never slip into recents either (7/12 ride: saved 24x).
+    expect(
+      shouldRememberPlace({ lat: 44.8, lon: -93.3, name: 'Current location' })
+    ).toBe(false)
+    expect(
+      shouldRememberPlace({ lat: 44.8, lon: -93.3, name: '(Current Location)' })
+    ).toBe(false)
+  })
+
+  it('still remembers a place whose name merely contains those words', () => {
+    expect(
+      shouldRememberPlace({
+        lat: 44.8,
+        lon: -93.3,
+        name: 'Current Location Coffee Co'
+      })
+    ).toBe(true)
+  })
+
   it('skips already-saved place types', () => {
     for (const type of ['home', 'work', 'suggested', 'stop']) {
       expect(shouldRememberPlace({ name: 'x', type })).toBe(false)

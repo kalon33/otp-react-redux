@@ -29,6 +29,9 @@ const END_TIME_GRACE_MS = 45 * 60 * 1000
  */
 export interface GoModeSession {
   activeItinerary: any
+  // Whether the rider had stepped out to the planner (ReturnToTripBanner
+  // showing) — restored so a reload doesn't force the Go Mode screen back.
+  backgrounded?: boolean
   departureOverride: number | null
   originalFrom: any | null
   // Sticky "rider is aboard this vehicle" fact — kept across reloads so a
@@ -80,6 +83,7 @@ export function saveGoModeSession(goMode: GoModeState): void {
 
   const session: GoModeSession = {
     activeItinerary: goMode.activeItinerary,
+    backgrounded: !!goMode.ui?.backgrounded,
     departureOverride: goMode.departureOverride ?? null,
     originalFrom: goMode.originalFrom ?? null,
     riding: goMode.riding ?? null,

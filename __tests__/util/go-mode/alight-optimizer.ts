@@ -1,4 +1,6 @@
 import {
+  liveStopArrival,
+  mergeLiveTimePoint,
   pickBestAlightOption,
   pickTripServiceInstance,
   rankAlightOptions,
@@ -203,5 +205,89 @@ describe('pickTripServiceInstance', () => {
 describe('scoreAlightOption', () => {
   it('adds onward duration (seconds) to the bus arrival epoch (ms)', () => {
     expect(scoreAlightOption(T0, transitItin(600))).toBe(T0 + 600_000)
+  })
+})
+
+describe('mergeLiveTimePoint', () => {
+  const NOW = 1783883000000 // 14:03:20 on the 7/12 ride
+
+  it('accepts live data as-is, even moving earlier', () => {
+    const prev = { epoch: NOW + 300000, realtime: true }
+    const next = { epoch: NOW + 240000, realtime: true }
+    expect(mergeLiveTimePoint(prev, next, NOW)).toEqual(next)
+  })
+
+  it('keeps the last live figure when realtime drops to schedule (7/12 case)', () => {
+    // Live said 14:07:27; the prediction vanished and schedule says 14:01:00
+    // (already past). The displayed time must not walk backwards.
+    const prev = { epoch: 1783883247000, realtime: true }
+    const next = { epoch: 1783882860000, realtime: false }
+    const merged = mergeLiveTimePoint(prev, next, NOW)
+    expect(merged).toEqual({ epoch: 1783883247000, realtime: false })
+  })
+
+  it('clamps a schedule-only value to now (a bus cannot arrive in the past)', () => {
+    const next = { epoch: NOW - 120000, realtime: false }
+    expect(mergeLiveTimePoint(null, next, NOW)).toEqual({
+      epoch: NOW,
+      realtime: false
+    })
+  })
+
+  it('keeps a frozen last-known value across repeated schedule ticks', () => {
+    const live = { epoch: NOW + 250000, realtime: true }
+    const scheduled = { epoch: NOW - 140000, realtime: false }
+    const tick1 = mergeLiveTimePoint(live, scheduled, NOW)
+    const tick2 = mergeLiveTimePoint(tick1, scheduled, NOW + 20000)
+    expect(tick2).toEqual({ epoch: NOW + 250000, realtime: false })
+  })
+
+  it('recovers to live when the prediction comes back', () => {
+    const frozen = { epoch: NOW + 250000, realtime: false }
+    const back = { epoch: NOW + 280000, realtime: true }
+    expect(mergeLiveTimePoint(frozen, back, NOW)).toEqual(back)
+  })
+
+  it('keeps the previous value when no new data arrives', () => {
+    const prev = { epoch: NOW + 250000, realtime: true }
+    expect(mergeLiveTimePoint(prev, null, NOW)).toEqual({
+      epoch: NOW + 250000,
+      realtime: false
+    })
+  })
+
+  it('returns null with nothing to merge', () => {
+    expect(mergeLiveTimePoint(null, null, NOW)).toBeNull()
+  })
+})
+
+describe('liveStopArrival name fallback', () => {
+  const stopTimes = [
+    {
+      realtimeArrival: 51000,
+      realtimeState: 'UPDATED',
+      scheduledArrival: 50900,
+      scheduledDeparture: 50900,
+      serviceDay: 1783771200,
+      stop: {
+        id: '1:17868',
+        lat: 44.77,
+        lon: -93.27,
+        name: 'Burnsville Transit Station'
+      }
+    }
+  ] as any[]
+
+  it('matches the twin-feed stop by name when the id misses', () => {
+    const hit = liveStopArrival(
+      stopTimes,
+      '2:31929',
+      'Burnsville Transit Station'
+    )
+    expect(hit).toEqual({ epoch: (1783771200 + 51000) * 1000, realtime: true })
+  })
+
+  it('still returns null when neither id nor name matches', () => {
+    expect(liveStopArrival(stopTimes, '2:31929', 'Somewhere Else')).toBeNull()
   })
 })

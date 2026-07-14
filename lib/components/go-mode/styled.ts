@@ -325,6 +325,51 @@ export const RealtimeTimeBox = styled.span<{ $live?: boolean }>`
     `}
 `
 
+// "Go Mode is live" banner over the onboard results list: same shape as
+// GpsWarningBanner, green, with a pulsing dot to read as live tracking.
+const pulseDot = keyframes`
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+`
+
+export const GoModeLiveBanner = styled.div`
+  align-items: center;
+  background: #2e7d32;
+  color: white;
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  overflow-wrap: break-word;
+  padding: 10px;
+  text-align: center;
+  word-wrap: break-word;
+
+  &::before {
+    animation: ${pulseDot} 2s ease-in-out infinite;
+    background: #b9f6ca;
+    border-radius: 50%;
+    content: '';
+    display: inline-block;
+    flex: none;
+    height: 10px;
+    width: 10px;
+  }
+`
+
+// Scroll container for the onboard results list (ScreenMain clips overflow).
+export const OnboardResultsScroll = styled.div`
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+`
+
 export const NavFoot = styled.div`
   color: #333;
   font-size: 16px;

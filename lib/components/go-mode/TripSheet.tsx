@@ -56,6 +56,7 @@ const TRANSIT_MODES = new Set(['BUS', 'FERRY', 'RAIL', 'SUBWAY', 'TRAM'])
 
 interface Props {
   activeItinerary: Itinerary | null
+  backgroundGoMode: () => void
   beginGoMode: (itinerary: any) => void
   fetchPreferencesFromText: (text: string) => Promise<any>
   liveLegTimes: Record<number, LiveLegTime>
@@ -77,6 +78,7 @@ interface Props {
  */
 const TripSheet = ({
   activeItinerary,
+  backgroundGoMode,
   beginGoMode,
   fetchPreferencesFromText,
   liveLegTimes,
@@ -113,7 +115,12 @@ const TripSheet = ({
   ): { epoch: number | string | undefined; realtime: boolean } => {
     const live = liveLegTimes[i]
     if (TRANSIT_MODES.has(leg.mode) && live?.alightEpoch) {
-      return { epoch: live.alightEpoch, realtime: live.realtime }
+      // Per-field flag: the leg-level `realtime` is an OR across board and
+      // alight, which kept styling a schedule-fallback alight time as live.
+      return {
+        epoch: live.alightEpoch,
+        realtime: live.alightRealtime ?? live.realtime
+      }
     }
     return { epoch: leg.endTime, realtime: false }
   }
@@ -190,6 +197,12 @@ const TripSheet = ({
 
   const handleChip = (profileId: string) => {
     reRouteFromCurrentPosition({ profileId })
+  }
+
+  // Step out to the full trip planner (trip keeps running, banner comes back).
+  const handleBrowsePlanner = () => {
+    onClose()
+    backgroundGoMode()
   }
 
   const handleFindAnotherWay = () => {
@@ -331,6 +344,12 @@ const TripSheet = ({
             id: 'components.GoMode.findAnotherWay'
           })}
         </SheetSectionTitle>
+        <RerouteButton onClick={handleBrowsePlanner} type="button">
+          {intl.formatMessage({
+            defaultMessage: 'Browse routes in the trip planner',
+            id: 'components.GoMode.browsePlanner'
+          })}
+        </RerouteButton>
         <RerouteButton
           disabled={reRouteStatus === 'searching'}
           onClick={handleFindAnotherWay}
@@ -451,6 +470,7 @@ const mapStateToProps = (state: any) => {
 }
 
 const mapDispatchToProps = {
+  backgroundGoMode: goModeActions.backgroundGoMode,
   beginGoMode: goModeActions.beginGoMode,
   fetchPreferencesFromText: routingProfileActions.fetchPreferencesFromText,
   reRouteFromCurrentPosition: goModeActions.reRouteFromCurrentPosition

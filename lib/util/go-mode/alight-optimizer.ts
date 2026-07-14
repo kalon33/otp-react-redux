@@ -46,10 +46,18 @@ export function hasLiveArrival(st: TripStopTime): boolean {
  */
 export function liveStopArrival(
   stopTimes: TripStopTime[],
-  stopGtfsId: string | null | undefined
+  stopGtfsId: string | null | undefined,
+  stopName?: string | null
 ): { epoch: number; realtime: boolean } | null {
-  if (!stopGtfsId) return null
-  const st = stopTimes.find((s) => s.stop?.id === stopGtfsId)
+  if (!stopGtfsId && !stopName) return null
+  // Exact id first; fall back to the stop NAME within this trip's own stop
+  // list. Shared stations exist under several GTFS feeds (e.g. Burnsville
+  // Transit Station is both 1:xxxx and MVTA's 2:31929), and a plan leg may
+  // reference the twin feed's id — an exact-id-only match then never finds
+  // live data for the leg.
+  const st =
+    stopTimes.find((s) => stopGtfsId && s.stop?.id === stopGtfsId) ||
+    (stopName ? stopTimes.find((s) => s.stop?.name === stopName) : undefined)
   // serviceDay <= 0 means the stop times carry no service-date context (OTP's
   // dateless trip.stoptimes returns -1) — an absolute epoch would be garbage.
   if (!st || st.serviceDay == null || st.serviceDay <= 0) return null
@@ -67,6 +75,27 @@ export function liveStopArrival(
     }
   }
   return null
+}
+
+/**
+ * Merge one board/alight time against its previous value so the display never
+ * regresses. As a vehicle nears (or passes) a stop, OTP commonly stops
+ * publishing a live prediction for it and liveStopArrival falls back to the
+ * SCHEDULE — on 7/12 the alight time jumped backwards from a live 14:07:27 to
+ * a scheduled 14:01:00 (already in the past) and froze there, styled live.
+ * Rules: live data always wins (predictions may legitimately move earlier);
+ * without live data the best-known epoch is kept, clamped to now (a bus can't
+ * arrive in the past) and honestly flagged non-live.
+ */
+export function mergeLiveTimePoint(
+  prev: { epoch: number; realtime: boolean } | null,
+  next: { epoch: number; realtime: boolean } | null,
+  nowMs: number
+): { epoch: number; realtime: boolean } | null {
+  if (next?.realtime) return next
+  const kept = prev ?? next
+  if (!kept) return null
+  return { epoch: Math.max(kept.epoch, nowMs), realtime: false }
 }
 
 /**
@@ -331,7 +360,8 @@ function compareAlightOptions(
 
 /** A lightweight signature of an onward journey (mode + route + endpoints per
  * leg), used to drop duplicate options the multi-stop search surfaces more than
- * once. Mirrors getRerouteCandidates' dedup idiom in lib/util/state.js. */
+ * once. Mirrors collectRerouteCandidates' dedup idiom in
+ * lib/util/go-mode/reroute-candidates.ts. */
 function journeySignature(stopId: string, itinerary: Itinerary): string {
   const legs = (itinerary.legs || [])
     .map(

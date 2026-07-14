@@ -12,7 +12,9 @@ import {
   DISMISS_BOARDING_PROMPT,
   PAUSE_GPS_SIMULATION,
   RESUME_GPS_SIMULATION,
+  SET_ARRIVED,
   SET_DEPARTURE_OVERRIDE,
+  SET_GO_MODE_BACKGROUNDED,
   SET_LIVE_LEG_TIMES,
   SET_NOTIFICATION_CONFIG,
   SET_ONBOARD_RESULT,
@@ -76,6 +78,10 @@ export interface OnboardCandidate {
 /** The chosen best stop to get off, with its remaining-journey itinerary. */
 export interface OnboardAlightOption {
   busArrivalEpoch: number
+  /** The full trip a tap starts: current-bus leg + onward legs. What the
+   * results list renders, so the display matches the outcome exactly. */
+  displayItinerary?: Itinerary
+  /** The onward plan from the alight stop (ranking input). */
   itinerary: Itinerary
   realtime: boolean
   stopId: string
@@ -105,6 +111,10 @@ export interface OnboardState {
 
 export interface GoModeState {
   activeItinerary: Itinerary | null
+
+  /** Epoch ms when trip progress first read completed; null while en route.
+   * While set, position ticks quiesce and the arrival card is shown. */
+  arrivedAt: number | null
 
   boardingPrompt: {
     lastDismissedAt: number | null
@@ -175,6 +185,13 @@ export interface GoModeState {
   }
 
   ui: {
+    /**
+     * The trip is running but the rider has stepped out to the normal trip
+     * planner (browsing alternate routes). Tracking, notifications, and
+     * auto-updates all keep running; only what's on screen changes. The
+     * ReturnToTripBanner is the way back.
+     */
+    backgrounded: boolean
     mapFollowUser: boolean
   }
 
@@ -188,6 +205,8 @@ export interface GoModeState {
 
 const defaultState: GoModeState = {
   activeItinerary: null,
+
+  arrivedAt: null,
 
   boardingPrompt: {
     lastDismissedAt: null,
@@ -249,6 +268,7 @@ const defaultState: GoModeState = {
   },
 
   ui: {
+    backgrounded: false,
     // Off by default: the map should stay where the user leaves it and only
     // recenter on the live GPS point when the user asks (blue dot control).
     mapFollowUser: false
@@ -309,8 +329,10 @@ const goMode = handleActions<GoModeState, any>(
         notification.id
       ]
 
-      // Keep only last 20 sent notification IDs to prevent memory growth
-      if (sentNotifications.length > 20) {
+      // Keep only last 50 sent notification IDs to prevent memory growth. The
+      // window must be wide enough that a chatty type (e.g. route deviation)
+      // cannot evict one-shot ids like TRIP_COMPLETE within their dedup window.
+      if (sentNotifications.length > 50) {
         sentNotifications.shift()
       }
 
@@ -348,7 +370,12 @@ const goMode = handleActions<GoModeState, any>(
         error: null,
         isTracking: true
       },
-      vehicleMatch: { ...defaultState.vehicleMatch }
+      // Keep a confirmed vehicle: re-entering the onboard flow must not make
+      // the app forget which bus it already verified the rider is on.
+      vehicleMatch:
+        state.vehicleMatch.match?.confidence === 'confirmed'
+          ? state.vehicleMatch
+          : { ...defaultState.vehicleMatch }
     }),
 
     [CLEAR_ONBOARD]: (state) => ({
@@ -416,9 +443,22 @@ const goMode = handleActions<GoModeState, any>(
       }
     }),
 
+    [SET_ARRIVED]: (state, action) => ({
+      ...state,
+      arrivedAt: action.payload
+    }),
+
     [SET_DEPARTURE_OVERRIDE]: (state, action) => ({
       ...state,
       departureOverride: action.payload
+    }),
+
+    [SET_GO_MODE_BACKGROUNDED]: (state, action) => ({
+      ...state,
+      ui: {
+        ...state.ui,
+        backgrounded: !!action.payload
+      }
     }),
 
     [SET_LIVE_LEG_TIMES]: (state, action) => ({
@@ -529,9 +569,14 @@ const goMode = handleActions<GoModeState, any>(
     [START_GO_MODE]: (state, action) => {
       const { itinerary, originalFrom } = action.payload
 
+      // `ui` is deliberately preserved: a background auto-update (missed bus,
+      // quiet access replan) swaps the itinerary via this action while the
+      // rider may be browsing the planner — that must not clear
+      // ui.backgrounded and yank them back to the Go Mode screen.
       return {
         ...state,
         activeItinerary: itinerary,
+        arrivedAt: null,
         isActive: true,
         liveLegTimes: {},
         notifications: {
@@ -586,8 +631,18 @@ const goMode = handleActions<GoModeState, any>(
       }
     }),
 
-    [STOP_GO_MODE]: () => ({
-      ...defaultState
+    [STOP_GO_MODE]: (state) => ({
+      ...defaultState,
+      // Being aboard a bus is a physical fact; exiting the Go Mode screen
+      // doesn't change it. On 7/12 the rider backed out and immediately
+      // reopened "I'm on the bus" — with riding wiped here, the flow forgot
+      // the confirmed vehicle and re-ran (failing) discovery. Alight and
+      // sustained off-route remain the only physical invalidators.
+      riding: state.riding,
+      vehicleMatch:
+        state.vehicleMatch.match?.confidence === 'confirmed'
+          ? state.vehicleMatch
+          : { ...defaultState.vehicleMatch }
     }),
 
     [STOP_GPS_SIMULATION]: (state) => ({
