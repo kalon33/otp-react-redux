@@ -318,6 +318,13 @@ function reanchorRiding(
   return { ...riding, legIndex }
 }
 
+
+interface GoModeAction {
+  type: string
+  payload?: any
+  meta?: any
+}
+
 const goMode = handleActions<GoModeState, any>(
   {
     [ADD_NOTIFICATION]: (state, action) => {

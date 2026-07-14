@@ -2741,8 +2741,8 @@ function buildTransitTimedPoints(
   // Origin
   const legFrom = (leg as any).from
   stops.push({
-    arrivalTime: leg.startTime,
-    departureTime: leg.startTime,
+    arrivalTime: Number(leg.startTime),
+    departureTime: Number(leg.startTime),
     lat: legFrom?.lat ?? decoded[0][0],
     lon: legFrom?.lon ?? decoded[0][1],
     name: legFrom?.name ?? 'Origin'
@@ -2751,8 +2751,8 @@ function buildTransitTimedPoints(
   // Intermediate places
   for (const p of places) {
     stops.push({
-      arrivalTime: p.arrivalTime,
-      departureTime: p.departureTime,
+      arrivalTime: Number(p.arrivalTime),
+      departureTime: Number(p.departureTime),
       lat: p.lat,
       lon: p.lon,
       name: p.name
@@ -2762,8 +2762,8 @@ function buildTransitTimedPoints(
   // Destination
   const legTo = (leg as any).to
   stops.push({
-    arrivalTime: leg.endTime,
-    departureTime: leg.endTime,
+    arrivalTime: Number(leg.endTime),
+    departureTime: Number(leg.endTime),
     lat: legTo?.lat ?? decoded[decoded.length - 1][0],
     lon: legTo?.lon ?? decoded[decoded.length - 1][1],
     name: legTo?.name ?? 'Destination'
