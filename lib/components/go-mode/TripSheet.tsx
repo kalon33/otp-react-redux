@@ -46,10 +46,10 @@ import RealtimeTime from './RealtimeTime'
 
 // Quick mid-trip re-route options; each maps to a pre-built routing profile.
 const REROUTE_CHIPS = [
-  { label: 'Less walking', profileId: 'minimize-walking' },
-  { label: 'Fewer transfers', profileId: 'stay-seated' },
-  { label: 'Avoid biking', profileId: 'avoid-biking' },
-  { label: 'Fastest', profileId: 'fastest' }
+  { labelId: 'components.GoMode.lessWalking', profileId: 'minimize-walking' },
+  { labelId: 'components.GoMode.fewerTransfers', profileId: 'stay-seated' },
+  { labelId: 'components.GoMode.avoidBiking', profileId: 'avoid-biking' },
+  { labelId: 'components.GoMode.fastest', profileId: 'fastest' }
 ]
 
 const TRANSIT_MODES = new Set(['BUS', 'FERRY', 'RAIL', 'SUBWAY', 'TRAM'])
@@ -374,7 +374,7 @@ const TripSheet = ({
               onClick={() => handleChip(chip.profileId)}
               type="button"
             >
-              {chip.label}
+              {intl.formatMessage({ id: chip.labelId })}
             </RerouteChip>
           ))}
         </RerouteChips>

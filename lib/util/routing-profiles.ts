@@ -60,39 +60,39 @@ export const ROUTING_PROFILES: RoutingProfile[] = [
   {
     description: 'Balanced — uses the routing engine defaults.',
     id: 'fastest',
-    label: 'Fastest',
+    label: 'fastest',
     prefs: {}
   },
   {
     description: 'Favors itineraries with the least walking.',
     id: 'minimize-walking',
-    label: 'Minimize walking',
+    label: 'minimize-walking',
     prefs: { walkReluctance: 8 }
   },
   {
     description:
       'Prefers staying on one vehicle over transferring or waiting at stops.',
     id: 'stay-seated',
-    label: 'Stay seated (fewest transfers)',
+    label: 'stay-seated',
     prefs: { transferPenalty: 600, waitReluctance: 4 }
   },
   {
     description: 'Leans on biking; favors bike + transit combinations.',
     id: 'bike-forward',
-    label: 'Bike-forward',
+    label: 'bike-forward',
     prefs: { bikeReluctance: 0.6, bikeSpeed: 5.5 }
   },
   {
     description: 'Avoids biking in favor of walking and transit.',
     id: 'avoid-biking',
-    label: 'Avoid biking',
+    label: 'avoid-biking',
     prefs: { bikeReluctance: 8 }
   },
   {
     description:
       'Builds in extra transfer buffer for more reliable connections.',
     id: 'reliable-transfers',
-    label: 'Reliable transfers',
+    label: 'reliable-transfers',
     prefs: { minTransferTime: 300, transferPenalty: 180 }
   }
 ]
@@ -142,39 +142,39 @@ const PREFERENCE_PHRASES: Record<
 > = {
   bikeReluctance: {
     baseline: 2,
-    higher: 'avoiding biking',
-    lower: 'more biking'
+    higher: 'components.ActiveRoutingPreferences.avoidingBiking',
+    lower: 'components.ActiveRoutingPreferences.moreBiking'
   },
-  bikeSpeed: { baseline: 4, higher: 'faster biking', lower: 'slower biking' },
+  bikeSpeed: { baseline: 4, higher: 'components.ActiveRoutingPreferences.fasterBiking', lower: 'components.ActiveRoutingPreferences.slowerBiking' },
   minTransferTime: {
     baseline: 0,
-    higher: 'longer transfer buffer',
-    lower: 'shorter transfer buffer'
+    higher: 'components.ActiveRoutingPreferences.longerTransferBuffer',
+    lower: 'components.ActiveRoutingPreferences.shorterTransferBuffer'
   },
   transferPenalty: {
     baseline: 0,
-    higher: 'fewer transfers',
-    lower: 'more transfers'
+    higher: 'components.ActiveRoutingPreferences.fewerTransfers',
+    lower: 'components.ActiveRoutingPreferences.moreTransfers'
   },
   waitReluctance: {
     baseline: 1,
-    higher: 'less waiting at stops',
-    lower: 'okay waiting at stops'
+    higher: 'components.ActiveRoutingPreferences.lessWaiting',
+    lower: 'components.ActiveRoutingPreferences.okayWaiting'
   },
   walkBoardCost: {
     baseline: 0,
-    higher: 'fewer transfers',
-    lower: 'more transfers'
+    higher: 'components.ActiveRoutingPreferences.fewerTransfers',
+    lower: 'components.ActiveRoutingPreferences.moreTransfers'
   },
   walkReluctance: {
     baseline: 2,
-    higher: 'less walking',
-    lower: 'more walking'
+    higher: 'components.ActiveRoutingPreferences.lessWalking',
+    lower: 'components.ActiveRoutingPreferences.moreWalking'
   },
   walkSpeed: {
     baseline: 1.34,
-    higher: 'brisker walking pace',
-    lower: 'gentler walking pace'
+    higher: 'components.ActiveRoutingPreferences.briskerWalking',
+    lower: 'components.ActiveRoutingPreferences.gentlerWalking'
   }
 }
 

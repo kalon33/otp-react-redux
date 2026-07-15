@@ -860,6 +860,10 @@ components:
   WelcomeScreen:
     prompt: Où désirez-vous aller ?
   GoMode:
+    lessWalking: Moins de marche
+    fewerTransfers: Moins de correspondances
+    avoidBiking: Éviter le vélo
+    fastest: Le plus rapide
     arrivingSoon: Arrivée prochaine
     boardingQuestion: Êtes-vous à bord ?
     boardingSubtitle: Confirmez que vous êtes dans le bus
@@ -953,6 +957,26 @@ components:
   ActiveRoutingPreferences:
     label: Préférences de routage actives
     clear: Effacer
+    fastest: Le plus rapide
+    minimizeWalking: Minimiser la marche
+    staySeated: Rester assis (moins de correspondances)
+    bikeForward: Privilégier le vélo
+    avoidBiking: Éviter le vélo
+    reliableTransfers: Correspondances fiables
+    avoidingBiking: éviter le vélo
+    moreBiking: plus de vélo
+    fasterBiking: vélo plus rapide
+    slowerBiking: vélo plus lent
+    longerTransferBuffer: temps de correspondance plus long
+    shorterTransferBuffer: temps de correspondance plus court
+    fewerTransfers: moins de correspondances
+    moreTransfers: plus de correspondances
+    lessWaiting: moins d'attente aux arrêts
+    okayWaiting: attente aux arrêts acceptable
+    lessWalking: moins de marche
+    moreWalking: plus de marche
+    briskerWalking: marche plus rapide
+    gentlerWalking: marche plus lente
 config:
   accessModes:
     car_hail: Course en voiture
@@ -1001,3 +1025,4 @@ stay-seated: Rester assis (moins de correspondances)
 terms: Conditions
 walkTime: Temps de marche
 'yes': Oui
+

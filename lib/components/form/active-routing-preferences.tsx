@@ -86,7 +86,7 @@ const ActiveRoutingPreferences = ({
       </LabelText>
       {summary.map((item) => (
         <Chip key={item.phrase} title={item.detail}>
-          {item.phrase}
+          {intl.formatMessage({ id: item.phrase })}
         </Chip>
       ))}
       <ClearButton onClick={clearPreferences} type="button">

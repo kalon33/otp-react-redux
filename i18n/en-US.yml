@@ -832,6 +832,10 @@ components:
   WelcomeScreen:
     prompt: Where do you want to go?
   GoMode:
+    lessWalking: Less walking
+    fewerTransfers: Fewer transfers
+    avoidBiking: Avoid biking
+    fastest: Fastest
     arrivingSoon: Components Gomode Arrivingsoon
     boardingQuestion: Components Gomode Boardingquestion
     boardingSubtitle: Components Gomode Boardingsubtitle
@@ -935,3 +939,4 @@ stay-seated: Stay Seated
 terms: Terms
 walkTime: Walktime
 'yes': 'Yes'
+
