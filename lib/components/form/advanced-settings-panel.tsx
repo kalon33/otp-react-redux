@@ -427,7 +427,7 @@ const AdvancedSettingsPanel = ({
           name="routingProfile"
           onChange={onRoutingProfileChange}
           options={ROUTING_PROFILES.map((profile) => ({
-            text: profile.label,
+            text: intl.formatMessage({ id: profile.id }),
             value: profile.id
           }))}
           value={currentQuery.activeProfileId || DEFAULT_PROFILE_ID}
