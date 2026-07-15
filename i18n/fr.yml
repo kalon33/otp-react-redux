@@ -220,7 +220,7 @@ components:
     submodeSelectorLabel: Sélectionnez vos modes et sous-modes de déplacement
     tripOptions: Options concernant le trajet
     routingProfileLabel: Optimiser le routage pour
-    nlPreferencesPlaceholder: e.g. bad knee today, avoid transfers
+    nlPreferencesPlaceholder: ex. genou douloureux aujourd'hui, éviter les correspondances
     nlPreferencesHeader: Décrivez vos besoins
     nlPreferencesApplied: Préférences appliquées
     nlPreferencesApply: Appliquer les préférences
@@ -927,9 +927,9 @@ components:
     findingBestStop: Recherche du meilleur arrêt...
     findingYourBus: Recherche de votre bus...
     legBike: Vélo
-    legStopsTo: '{stops} arrêts jusqu''à {stop}'
-    legTo: Vers {stop}
-    legWait: Attendre {duration}
+    legStopsTo: '{count, plural, one {# arrêt} other {# arrêts}} vers {dest}'
+    legTo: vers {dest}
+    legWait: ⏰ Monter à {time} · {mins} min d'attente
     legWalk: 'Marche: {distance}'
     liveBanner: Suivi en direct
     loadingSchedule: Chargement des horaires...
@@ -944,7 +944,7 @@ components:
     rideToStop: Monter à {stop}
     routeOption: Option de ligne
     sheetHandleLabel: Faire glisser pour plus d'options
-    toStop: Vers l'arrêt
+    toStop: Vers {stop}
     tripSheetHeading: Détails du trajet
     tripSheetTitle: Votre trajet
     rerouteSearchHere: Rechercher ici
@@ -976,7 +976,7 @@ all: Tout
 app-menu-locale-selector: Sélecteur de langue
 arrivalTime: Heure d'arrivée
 avoid-biking: Éviter le vélo
-bike-forward: Vélo vers l'avant
+bike-forward: Privilégier le vélo
 cancelled: Annulé
 carbonEmission: Émissions de CO2
 companions: Compagnons
@@ -997,7 +997,7 @@ past: Passé
 places: Lieux
 planned: Prévu
 reliable-transfers: Correspondances fiables
-stay-seated: Rester assis
+stay-seated: Rester assis (moins de correspondances)
 terms: Conditions
 walkTime: Temps de marche
 'yes': Oui
