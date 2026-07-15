@@ -219,14 +219,14 @@ components:
     setAsDefault: Définir ces options par défaut
     submodeSelectorLabel: Sélectionnez vos modes et sous-modes de déplacement
     tripOptions: Options concernant le trajet
-    routingProfileLabel: Optimize routing for
+    routingProfileLabel: Optimiser le routage pour
     nlPreferencesPlaceholder: e.g. bad knee today, avoid transfers
-    nlPreferencesHeader: Describe your needs
+    nlPreferencesHeader: Décrivez vos besoins
     nlPreferencesApplied: Préférences appliquées
     nlPreferencesApply: Appliquer les préférences
     nlPreferencesError: Erreur de préférences
     nlPreferencesLoading: Chargement des préférences...
-    routingProfileHeader: Profil d'itinéraire
+    routingProfileHeader: Profil de routage
   BatchSettings:
     destination: destination
     invalidModeSelection: Impossible de planifier un trajet avec les modes sélectionnés.
@@ -339,6 +339,9 @@ components:
     originallyScheduledTime: (initialement {originalTime})
     singleModeItineraryDescription: Trajet de {time} {mode}
     timeWalking: '{time} de marche'
+    startTrip: Commencer le trajet
+    switchTrip: Passer à ce trajet
+    confirmSwitchTrip: Confirmer le changement de trajet
   MobilityProfile:
     DevicesPane:
       devices:
@@ -912,6 +915,44 @@ components:
     vehicleDistance: À {distance} m
     waitAtStop: Attendre à l'arrêt
     waitingGPS: En attente de GPS...
+    altOption: Option alternative
+    arrivedDone: Arrivé
+    arrivedTitle: Vous êtes arrivé
+    arrivesIn: Arrivée dans {time}
+    browsePlanner: Ouvrir le planificateur
+    busLabelHeadsign: 'Direction: {headsign}'
+    busNotBroadcasting: Le bus ne diffuse pas sa position
+    changeBus: Changer de bus
+    deviationWarning: 'Attention: déviation possible'
+    findingBestStop: Recherche du meilleur arrêt...
+    findingYourBus: Recherche de votre bus...
+    legBike: Vélo
+    legStopsTo: '{stops} arrêts jusqu''à {stop}'
+    legTo: Vers {stop}
+    legWait: Attendre {duration}
+    legWalk: 'Marche: {distance}'
+    liveBanner: Suivi en direct
+    loadingSchedule: Chargement des horaires...
+    offAtStop: Descendre à {stop}
+    onboardCancel: Annuler
+    onboardError: Erreur lors de l'embarquement
+    onboardTitle: À bord
+    openTripSheet: Ouvrir les détails du trajet
+    pickYourBus: Choisissez votre bus
+    pickYourRoute: Choisissez votre ligne
+    restOfTrip: Reste du trajet
+    rideToStop: Monter à {stop}
+    routeOption: Option de ligne
+    sheetHandleLabel: Faire glisser pour plus d'options
+    toStop: Vers l'arrêt
+    tripSheetHeading: Détails du trajet
+    tripSheetTitle: Votre trajet
+    rerouteSearchHere: Rechercher ici
+    whereToAlight: Où descendre ?
+    walkToStop: Marchez jusqu'à {stop}
+  ActiveRoutingPreferences:
+    label: Préférences de routage actives
+    clear: Effacer
 config:
   accessModes:
     car_hail: Course en voiture
