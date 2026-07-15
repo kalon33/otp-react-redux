@@ -906,7 +906,7 @@ components:
     resetToPlanned: Réinitialiser à l'itinéraire prévu
     retry: Réessayer
     selectVehicle: Sélectionner un véhicule
-    stopsRemainingCompact: '{stops} arrêts'
+    stopsRemainingCompact: '{count, plural, one {1 arrêt} other {# arrêts}} restants'
     theBus: le bus
     trackingBus: Suivi du bus
     upNext: Prochaine étape
