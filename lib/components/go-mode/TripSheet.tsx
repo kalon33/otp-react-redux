@@ -151,16 +151,22 @@ const TripSheet = ({
       return leg.routeShortName || leg.routeLongName || leg.mode
     }
     if (leg.mode === 'WALK') {
-      return intl.formatMessage({
-        defaultMessage: 'Walk',
-        id: 'components.GoMode.legWalk'
-      })
+      return intl.formatMessage(
+        {
+          defaultMessage: 'Walk',
+          id: 'components.GoMode.legWalk'
+        },
+        { distance: Math.round(leg.distance || 0) }
+      )
     }
     if (leg.mode === 'BICYCLE') {
-      return intl.formatMessage({
-        defaultMessage: 'Bike',
-        id: 'components.GoMode.legBike'
-      })
+      return intl.formatMessage(
+        {
+          defaultMessage: 'Bike',
+          id: 'components.GoMode.legBike'
+        },
+        { distance: Math.round(leg.distance || 0) }
+      )
     }
     return leg.mode
   }
