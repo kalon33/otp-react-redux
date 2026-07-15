@@ -5,9 +5,12 @@ import {
   checkDelayAlert,
   checkForNotifications,
   checkLegTransition,
+  checkMissedBus,
   checkRouteDeviation,
   checkTripComplete,
   checkUpcomingTurn,
+  classifyMissedBus,
+  getEffectiveBoardTimeMs,
   shouldAutoReroute,
   triggerVibration,
   wasRecentlySent
@@ -268,6 +271,25 @@ describe('util > go-mode > notification-service', () => {
     it('should return null when exactly at threshold', () => {
       expect(checkRouteDeviation(200, [])).toBeNull()
     })
+
+    it('should dedup repeated deviations even as the distance changes', () => {
+      const sent: string[] = []
+      let fired = 0
+      // Simulate a minute of once-per-second GPS ticks drifting 204m -> 263m.
+      for (let i = 0; i < 60; i++) {
+        const result = checkRouteDeviation(204 + i, sent)
+        if (result) {
+          fired++
+          sent.push(result.id)
+        }
+      }
+      expect(fired).toBe(1)
+    })
+
+    it('should fire again after the 120s window expires', () => {
+      const staleId = `ROUTE_DEVIATION_deviation_${Date.now() - 121000}`
+      expect(checkRouteDeviation(250, [staleId])).not.toBeNull()
+    })
   })
 
   describe('checkTripComplete', () => {
@@ -294,6 +316,18 @@ describe('util > go-mode > notification-service', () => {
     it('should return null when trip is in progress', () => {
       const progress = makeProgress({ overallProgress: 50 })
       expect(checkTripComplete(progress, [])).toBeNull()
+    })
+
+    it('should stay deduped while deviation ids share the sent list', () => {
+      const progress = makeProgress({
+        overallProgress: 100,
+        status: 'completed'
+      })
+      const sent = [`TRIP_COMPLETE_trip_end_${Date.now() - 1000}`]
+      for (let i = 0; i < 30; i++) {
+        sent.push(`ROUTE_DEVIATION_deviation_${Date.now() - i * 1000}`)
+      }
+      expect(checkTripComplete(progress, sent)).toBeNull()
     })
   })
 
@@ -671,5 +705,238 @@ describe('shouldAutoReroute', () => {
   it('ignores non-triggering notifications', () => {
     expect(shouldAutoReroute([makeEvent('APPROACH_STOP')], 'idle')).toBe(false)
     expect(shouldAutoReroute([], 'idle')).toBe(false)
+  })
+})
+
+describe('missed-bus detection', () => {
+  // Board time for the transit leg; other times are relative to it.
+  const BOARD = 1783783824000
+  const STOP = {
+    lat: 44.817,
+    lon: -93.31039,
+    name: 'Old Shakopee Rd & Queen Ave S'
+  }
+  // ~23m from the stop (today's ride: rider pinned near, not at, the stop)
+  const NEAR_STOP: [number, number] = [44.816793, -93.310211]
+  // ~500m away — clearly not at the stop
+  const FAR_AWAY: [number, number] = [44.8125, -93.31039]
+
+  const makeLegs = (): any[] => [
+    {
+      duration: 600,
+      endTime: BOARD - 10000,
+      from: { lat: 44.8168, lon: -93.3103, name: 'Queen Av S' },
+      mode: 'WALK',
+      startTime: BOARD - 610000,
+      to: STOP
+    },
+    {
+      duration: 300,
+      endTime: BOARD + 300000,
+      from: STOP,
+      mode: 'BUS',
+      routeShortName: '546',
+      startTime: BOARD,
+      to: { lat: 44.8318, lon: -93.2985, name: '98th St W & Logan Ave S' },
+      transitLeg: true
+    },
+    {
+      duration: 200,
+      endTime: BOARD + 500000,
+      from: { lat: 44.8318, lon: -93.2985, name: '98th St W & Logan Ave S' },
+      mode: 'WALK',
+      startTime: BOARD + 300000,
+      to: { lat: 44.825177, lon: -93.302367, name: 'Bloomington City Hall' }
+    }
+  ]
+
+  const baseInput = (overrides: Record<string, any> = {}): any => ({
+    currentLegIndex: 0,
+    departureOverrideMs: null,
+    legs: makeLegs(),
+    liveLegTimes: {},
+    nowMs: BOARD,
+    riderPosition: NEAR_STOP,
+    riderSpeedMps: 0,
+    riding: null,
+    vehicleConfidence: undefined,
+    ...overrides
+  })
+
+  describe('getEffectiveBoardTimeMs', () => {
+    const leg = makeLegs()[1]
+
+    it('prefers a realtime board epoch over everything', () => {
+      expect(
+        getEffectiveBoardTimeMs(
+          leg,
+          { boardEpoch: BOARD + 60000, realtime: true },
+          BOARD + 120000
+        )
+      ).toEqual({ ms: BOARD + 60000, realtime: true })
+    })
+
+    it('ignores a schedule-quality live entry and falls to the override', () => {
+      expect(
+        getEffectiveBoardTimeMs(
+          leg,
+          { boardEpoch: BOARD + 60000, realtime: false },
+          BOARD + 120000
+        )
+      ).toEqual({ ms: BOARD + 120000, realtime: false })
+    })
+
+    it('falls back to the scheduled leg start', () => {
+      expect(getEffectiveBoardTimeMs(leg, undefined, null)).toEqual({
+        ms: BOARD,
+        realtime: false
+      })
+    })
+  })
+
+  describe('classifyMissedBus', () => {
+    it('returns null while the departure is still ahead', () => {
+      expect(classifyMissedBus(baseInput({ nowMs: BOARD - 60000 }))).toBeNull()
+    })
+
+    it('returns null within the schedule-only grace (bus may just be late)', () => {
+      expect(classifyMissedBus(baseInput({ nowMs: BOARD + 120000 }))).toBeNull()
+    })
+
+    it('schedule-only past grace while AT the stop -> ambiguous miss', () => {
+      const ctx = classifyMissedBus(baseInput({ nowMs: BOARD + 200000 }))
+      expect(ctx).not.toBeNull()
+      expect(ctx!.definitive).toBe(false)
+      expect(ctx!.boardLegIndex).toBe(1)
+    })
+
+    it('schedule-only past grace while far from the stop -> definitive miss', () => {
+      const ctx = classifyMissedBus(
+        baseInput({ nowMs: BOARD + 200000, riderPosition: FAR_AWAY })
+      )
+      expect(ctx?.definitive).toBe(true)
+    })
+
+    it('realtime says the bus left + grace -> definitive even at the stop (the 07-11 ride)', () => {
+      const ctx = classifyMissedBus(
+        baseInput({
+          liveLegTimes: { 1: { boardEpoch: BOARD, realtime: true } },
+          nowMs: BOARD + 100000
+        })
+      )
+      expect(ctx?.definitive).toBe(true)
+      expect(ctx?.realtime).toBe(true)
+      expect(ctx?.effectiveBoardMs).toBe(BOARD)
+    })
+
+    it('realtime board epoch still in the future (late bus) -> no miss', () => {
+      const ctx = classifyMissedBus(
+        baseInput({
+          liveLegTimes: { 1: { boardEpoch: BOARD + 300000, realtime: true } },
+          nowMs: BOARD + 200000
+        })
+      )
+      expect(ctx).toBeNull()
+    })
+
+    it('rider already riding the leg -> null', () => {
+      expect(
+        classifyMissedBus(
+          baseInput({ nowMs: BOARD + 200000, riding: { legIndex: 1 } })
+        )
+      ).toBeNull()
+    })
+
+    it('strong vehicle match on the boarding leg -> null', () => {
+      expect(
+        classifyMissedBus(
+          baseInput({
+            currentLegIndex: 1,
+            nowMs: BOARD + 200000,
+            vehicleConfidence: 'high'
+          })
+        )
+      ).toBeNull()
+    })
+
+    it('rider moving at vehicle speed -> null (assume boarded)', () => {
+      expect(
+        classifyMissedBus(
+          baseInput({ nowMs: BOARD + 200000, riderSpeedMps: 12 })
+        )
+      ).toBeNull()
+    })
+
+    it('honors a rider-selected later departure', () => {
+      const overrideMs = BOARD + 600000
+      expect(
+        classifyMissedBus(
+          baseInput({ departureOverrideMs: overrideMs, nowMs: BOARD + 200000 })
+        )
+      ).toBeNull()
+      const ctx = classifyMissedBus(
+        baseInput({
+          departureOverrideMs: overrideMs,
+          nowMs: overrideMs + 200000,
+          riderPosition: FAR_AWAY
+        })
+      )
+      expect(ctx?.definitive).toBe(true)
+      expect(ctx?.effectiveBoardMs).toBe(overrideMs)
+    })
+
+    it('no upcoming transit leg -> null', () => {
+      expect(
+        classifyMissedBus(
+          baseInput({ currentLegIndex: 2, nowMs: BOARD + 900000 })
+        )
+      ).toBeNull()
+    })
+  })
+
+  describe('checkMissedBus', () => {
+    const legs = makeLegs()
+    const ctxDefinitive = {
+      boardLegIndex: 1,
+      definitive: true,
+      effectiveBoardMs: BOARD,
+      realtime: true
+    }
+
+    it('builds the auto-update copy for a definitive miss', () => {
+      const event = checkMissedBus(ctxDefinitive, legs, [])
+      expect(event?.type).toBe('MISSED_BUS')
+      expect(event?.priority).toBe('high')
+      expect(event?.message).toContain('Missed the 546')
+      expect(event?.message).toContain('next departure')
+    })
+
+    it('builds the checking-alternatives copy for an ambiguous miss', () => {
+      const event = checkMissedBus(
+        { ...ctxDefinitive, definitive: false },
+        legs,
+        []
+      )
+      expect(event?.message).toContain('may have left')
+    })
+
+    it('dedups per missed departure (30 min window)', () => {
+      const sent = [
+        `MISSED_BUS_546_${STOP.name}_${BOARD}_${Date.now() - 60000}`
+      ]
+      expect(checkMissedBus(ctxDefinitive, legs, sent)).toBeNull()
+    })
+
+    it('re-fires for a different departure epoch (the next bus missed too)', () => {
+      const sent = [
+        `MISSED_BUS_546_${STOP.name}_${BOARD}_${Date.now() - 60000}`
+      ]
+      const event = checkMissedBus(
+        { ...ctxDefinitive, effectiveBoardMs: BOARD + 3600000 },
+        legs,
+        sent
+      )
+      expect(event).not.toBeNull()
+    })
   })
 })

@@ -7,6 +7,7 @@ import {
   determineTripStatus,
   estimateArrival,
   getTransitProgress,
+  getUpcomingTransitTiming,
   getWalkingInstruction,
   shouldAlertForApproachingStop,
   shouldAlertForBoarding
@@ -442,5 +443,45 @@ describe('util > go-mode > progress-calculator', () => {
       expect(result.status).toBe('deviated')
       expect(result.currentLegIndex).toBe(0)
     })
+  })
+})
+
+describe('getUpcomingTransitTiming', () => {
+  const NOW = new Date('2026-01-28T10:00:00')
+  const walkLeg = { duration: 600, mode: 'WALK' } as any
+  const busLeg = {
+    endTime: NOW.getTime() + 40 * 60000,
+    mode: 'BUS',
+    startTime: NOW.getTime() + 20 * 60000
+  } as any
+
+  it('uses the planned board time without an override', () => {
+    const t = getUpcomingTransitTiming(NOW, walkLeg, busLeg, 0.5)
+    // 20 min to departure, 5 min of walking left -> 15 min wait at the stop.
+    expect(t.timeUntilNextDeparture).toBeCloseTo(1200)
+    expect(t.waitTimeAtStop).toBeCloseTo(900)
+    expect(t.departureIsOverridden).toBe(false)
+    expect(t.plannedDepartureTime).toBe(busLeg.startTime)
+  })
+
+  it('an override (auto-anchor or manual pick) shifts the wait', () => {
+    // Anchored to a bus 8 min out instead of the planned 20.
+    const overrideMs = NOW.getTime() + 8 * 60000
+    const t = getUpcomingTransitTiming(NOW, walkLeg, busLeg, 0.5, overrideMs)
+    expect(t.timeUntilNextDeparture).toBeCloseTo(480)
+    expect(t.waitTimeAtStop).toBeCloseTo(180)
+    expect(t.departureIsOverridden).toBe(true)
+    // The planned time is still reported for display/deltas.
+    expect(t.plannedDepartureTime).toBe(busLeg.startTime)
+  })
+
+  it('reports the destination arrival on transit legs', () => {
+    const t = getUpcomingTransitTiming(NOW, busLeg, undefined, 0.2)
+    expect(t.destinationArrivalTime).toBe(busLeg.endTime)
+  })
+
+  it('returns nothing for non-transit connections', () => {
+    const bikeLeg = { duration: 300, mode: 'BICYCLE' } as any
+    expect(getUpcomingTransitTiming(NOW, walkLeg, bikeLeg, 0.5)).toEqual({})
   })
 })

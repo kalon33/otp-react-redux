@@ -1,0 +1,133 @@
+import coreUtils from '@opentripplanner/core-utils'
+
+import type { GoModeState } from '../../reducers/go-mode'
+
+const { getItem, removeItem, storeItem } = coreUtils.storage
+
+/** Local-storage key holding the in-progress Go Mode trip for resume-on-reload. */
+const GO_MODE_SESSION_KEY = 'goModeSession'
+
+/**
+ * Only resume trips started within this window. A live navigation session that
+ * has been sitting around for hours (phone left on the results screen, picked
+ * back up the next day) should not silently resurrect — drop it instead.
+ */
+const MAX_SESSION_AGE_MS = 3 * 60 * 60 * 1000
+
+/**
+ * Grace past the itinerary's SCHEDULED end before a trip counts as over. Real
+ * trips outlive their schedule constantly (delays, boarding an earlier/later
+ * run of the same route) — dropping the saved session the moment scheduled
+ * endTime passed stranded a rider who reloaded while still riding.
+ */
+const END_TIME_GRACE_MS = 45 * 60 * 1000
+
+/**
+ * The durable parts of a Go Mode trip — enough to drop the rider back into live
+ * tracking after a reload. GPS-derived state (tracking/progress/simulation) is
+ * intentionally omitted; it recomputes once location resumes.
+ */
+export interface GoModeSession {
+  activeItinerary: any
+  // Whether the rider had stepped out to the planner (ReturnToTripBanner
+  // showing) — restored so a reload doesn't force the Go Mode screen back.
+  backgrounded?: boolean
+  departureOverride: number | null
+  originalFrom: any | null
+  // Sticky "rider is aboard this vehicle" fact — kept across reloads so a
+  // mid-ride refresh never re-asks which bus the rider is on.
+  riding: any | null
+  // Set once when the trip starts; preserved across reloads so the freshness
+  // window measures the real trip age, not the time since the last save.
+  startedAt: number
+  vehicleMatch: any | null
+}
+
+// Stable across saves within one page session; reset on clear. Initialized
+// lazily from any already-saved session so reloads keep the original startedAt.
+let sessionStartedAt: number | null = null
+
+/**
+ * Return a JSON-safe deep copy with any circular references dropped. Real OTP
+ * itineraries can contain cycles (enriched leg/route back-references), which
+ * make a naive JSON.stringify throw — "cannot serialize cyclic structures" on
+ * Safari. Since this serialization runs from the redux store subscriber during
+ * dispatch, that throw used to abort trip start entirely (Start Trip appeared to
+ * do nothing). Dropping the cyclic edges keeps the durable trip data intact.
+ */
+function stripCycles<T>(value: T): T {
+  const seen = new WeakSet()
+  return JSON.parse(
+    JSON.stringify(value, (_key, val) => {
+      if (val && typeof val === 'object') {
+        if (seen.has(val)) return undefined
+        seen.add(val)
+      }
+      return val
+    })
+  )
+}
+
+/**
+ * Persist the in-progress trip. No-op unless Go Mode is genuinely active with a
+ * locked-in itinerary (the onboard "I'm on the bus" discovery state has no
+ * itinerary yet and is not worth resuming).
+ */
+export function saveGoModeSession(goMode: GoModeState): void {
+  if (!goMode?.isActive || !goMode.activeItinerary) return
+
+  if (sessionStartedAt == null) {
+    const existing = getItem(GO_MODE_SESSION_KEY, null) as GoModeSession | null
+    sessionStartedAt = existing?.startedAt ?? Date.now()
+  }
+
+  const session: GoModeSession = {
+    activeItinerary: goMode.activeItinerary,
+    backgrounded: !!goMode.ui?.backgrounded,
+    departureOverride: goMode.departureOverride ?? null,
+    originalFrom: goMode.originalFrom ?? null,
+    riding: goMode.riding ?? null,
+    startedAt: sessionStartedAt,
+    vehicleMatch: goMode.vehicleMatch?.match ?? null
+  }
+  // Persistence is best-effort and runs from the store subscriber mid-dispatch:
+  // it must NEVER throw, or it would abort the action that started the trip.
+  try {
+    storeItem(GO_MODE_SESSION_KEY, stripCycles(session))
+  } catch {
+    // Resume-on-reload is a nicety; a save failure must not disrupt the live trip.
+  }
+}
+
+/**
+ * Read a resumable trip, or null if none / stale. A trip is stale if it started
+ * more than MAX_SESSION_AGE_MS ago or has already ended. Stale sessions are
+ * cleared as a side effect so they don't linger.
+ */
+export function loadGoModeSession(): GoModeSession | null {
+  const session = getItem(GO_MODE_SESSION_KEY, null) as GoModeSession | null
+  if (!session || !session.activeItinerary) return null
+
+  const now = Date.now()
+  const tooOld =
+    typeof session.startedAt !== 'number' ||
+    now - session.startedAt > MAX_SESSION_AGE_MS
+  const endTime = session.activeItinerary.endTime
+  const alreadyEnded =
+    typeof endTime === 'number' && endTime + END_TIME_GRACE_MS < now
+
+  if (tooOld || alreadyEnded) {
+    clearGoModeSession()
+    return null
+  }
+
+  // Adopt the restored start so subsequent saves this session keep it.
+  sessionStartedAt = session.startedAt
+  return session
+}
+
+/** Drop the saved trip (explicit exit or completion) so it never resurrects. */
+export function clearGoModeSession(): void {
+  sessionStartedAt = null
+  removeItem(GO_MODE_SESSION_KEY)
+}

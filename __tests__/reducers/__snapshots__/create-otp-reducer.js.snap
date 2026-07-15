@@ -38,6 +38,7 @@ exports[`lib > reducers > create-otp-reducer should be able to create the initia
   },
   "goMode": Object {
     "activeItinerary": null,
+    "arrivedAt": null,
     "boardingPrompt": Object {
       "lastDismissedAt": null,
       "shown": false,
@@ -45,6 +46,7 @@ exports[`lib > reducers > create-otp-reducer should be able to create the initia
     },
     "departureOverride": null,
     "isActive": false,
+    "liveLegTimes": Object {},
     "notifications": Object {
       "enabled": true,
       "recentNotifications": Array [],
@@ -52,13 +54,26 @@ exports[`lib > reducers > create-otp-reducer should be able to create the initia
       "soundEnabled": false,
       "vibrationEnabled": true,
     },
+    "onboard": Object {
+      "alightOptions": Array [],
+      "bestAlightStop": null,
+      "candidates": Array [],
+      "status": "idle",
+      "trip": null,
+      "vehicle": null,
+    },
     "originalFrom": null,
     "progress": null,
     "reRoute": Object {
+      "autoApply": false,
       "candidate": null,
+      "candidates": Array [],
+      "keepRouteId": null,
+      "reason": null,
       "searchId": null,
       "status": "idle",
     },
+    "riding": null,
     "routeMatch": null,
     "simulation": Object {
       "pointIndex": 0,
@@ -73,7 +88,8 @@ exports[`lib > reducers > create-otp-reducer should be able to create the initia
       "lastPosition": null,
     },
     "ui": Object {
-      "mapFollowUser": true,
+      "backgrounded": false,
+      "mapFollowUser": false,
     },
     "vehicleMatch": Object {
       "consecutiveMatches": 0,

@@ -218,33 +218,19 @@ export function matchPositionToRoute(
 }
 
 /**
- * Check if user is near the end of current leg (for leg transition detection)
- */
-export function isNearLegEnd(
-  match: RouteMatchResult,
-  threshold = 0.95
-): boolean {
-  return match.progressAlongLeg >= threshold
-}
-
-/**
- * Check if user has likely moved to next leg
+ * Check if the rider has moved on to a later leg.
+ *
+ * The only evidence taken is the match itself: their position is now nearest to
+ * a leg further along the itinerary. Being near the *end* of the current leg is
+ * deliberately not enough — waiting at a boarding stop parks you at ~100% of the
+ * access leg for as long as the bus takes to arrive, which would advance a rider
+ * standing on the curb onto the bus. (Matching only ever searches forward, so
+ * that advance is unrecoverable.) Actual boarding is established by the riding
+ * state, which wants a vehicle match or real progress along the transit leg.
  */
 export function shouldTransitionToNextLeg(
   match: RouteMatchResult,
-  currentLegIndex: number,
-  legs: Leg[]
+  currentLegIndex: number
 ): boolean {
-  if (match.legIndex > currentLegIndex) {
-    return true
-  }
-
-  if (match.legIndex === currentLegIndex) {
-    // Check if we're very close to the end and next leg exists
-    if (isNearLegEnd(match, 0.98) && currentLegIndex < legs.length - 1) {
-      return true
-    }
-  }
-
-  return false
+  return match.legIndex > currentLegIndex
 }

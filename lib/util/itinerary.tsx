@@ -96,7 +96,13 @@ function legLocationsAreEqual(legLocation: Place, other: Place) {
 export function itinerariesAreEqual(
   itinerary: Itinerary,
   other: Itinerary,
-  defaultFareType: FareProductSelector
+  defaultFareType: FareProductSelector,
+  // When true, two itineraries are only "equal" if every transit leg uses the
+  // same route (same routeId), so the merge collapses same-route/different-time
+  // departures while keeping genuinely different routes as separate results.
+  // When false (default), legs are matched by mode + stop location only, which
+  // also folds alternate routes serving the same stops together.
+  requireSameRoute = false
 ): boolean {
   return (
     getFare(itinerary, defaultFareType).transitFare ===
@@ -107,7 +113,10 @@ export function itinerariesAreEqual(
       return (
         otherLeg.mode === leg.mode &&
         legLocationsAreEqual(otherLeg?.to, leg?.to) &&
-        legLocationsAreEqual(otherLeg?.from, leg?.from)
+        legLocationsAreEqual(otherLeg?.from, leg?.from) &&
+        // routeId is undefined on access (walk/bike) legs, so those still match.
+        (!requireSameRoute ||
+          (otherLeg?.routeId ?? null) === (leg?.routeId ?? null))
       )
     })
   )

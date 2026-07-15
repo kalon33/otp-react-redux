@@ -14,6 +14,7 @@ import {
 import { alertUserTripPlan } from '../form/util'
 import { getActiveSearch, getShowUserSettings } from '../../util/state'
 import { getPersistenceMode } from '../../util/user'
+import ActiveRoutingPreferences from '../form/active-routing-preferences'
 import AdvancedSettingsPanel from '../form/advanced-settings-panel'
 import BatchSettings from '../form/batch-settings'
 import InvisibleA11yLabel from '../util/invisible-a11y-label'
@@ -195,6 +196,7 @@ class BatchRoutingPanel extends Component<Props> {
                       onPlanTripClick={this.handlePlanTripClick}
                       openAdvancedSettings={this.openAdvancedSettings}
                     />
+                    <ActiveRoutingPreferences />
                   </div>
                 </CSSTransition>
               )}
