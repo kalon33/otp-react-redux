@@ -31,6 +31,7 @@ describe('go-mode re-route reducer', () => {
       keepRouteId: null,
       reason: null,
       searchId: null,
+      startedAtMs: null,
       status: 'idle'
     })
   })
@@ -44,8 +45,17 @@ describe('go-mode re-route reducer', () => {
       keepRouteId: null,
       reason: null,
       searchId: 'abc',
+      startedAtMs: null,
       status: 'searching'
     })
+  })
+
+  it('START_REROUTE records startedAtMs so a stuck search can be detected', () => {
+    const state = goMode(
+      initial,
+      startReroute({ searchId: 'abc', startedAtMs: 123456 })
+    )
+    expect(state.reRoute.startedAtMs).toBe(123456)
   })
 
   it('START_REROUTE records autoApply, keepRouteId and reason for a missed-bus re-plan', () => {
@@ -103,6 +113,7 @@ describe('go-mode re-route reducer', () => {
       keepRouteId: null,
       reason: null,
       searchId: null,
+      startedAtMs: null,
       status: 'idle'
     })
   })
@@ -252,6 +263,45 @@ describe('reRouteFromCurrentPosition (isolated pipeline)', () => {
     await store.dispatch(reRouteFromCurrentPosition())
     expect(mockedFetch).not.toHaveBeenCalled()
     expect(store.getGoMode().reRoute.status).toBe('none')
+  })
+
+  // The 7/13 failure: a plan fetch killed by a WebView suspension never
+  // settled, so reRoute.status sat at 'searching' for two hours and silently
+  // blocked every missed-bus auto-update. The thunk must ALWAYS resolve.
+  it('times out a plan fetch that never settles instead of staying "searching"', async () => {
+    jest.useFakeTimers()
+    try {
+      // a Promise that never settles — the suspension-killed fetch
+      mockedFetch.mockReturnValue(() => new Promise(() => undefined))
+      const store = makeStore()
+      const pending = store.dispatch(reRouteFromCurrentPosition())
+      expect(store.getGoMode().reRoute.status).toBe('searching')
+      jest.advanceTimersByTime(46000)
+      await pending
+      expect(store.getGoMode().reRoute.status).toBe('none')
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it('resolves to "none" when the plan fetch rejects', async () => {
+    mockedFetch.mockReturnValue(() => Promise.reject(new Error('network')))
+    const store = makeStore()
+    await store.dispatch(reRouteFromCurrentPosition())
+    expect(store.getGoMode().reRoute.status).toBe('none')
+  })
+
+  it('records a wall-clock startedAtMs on the in-flight search', async () => {
+    mockedFetch.mockReturnValue(() =>
+      Promise.resolve({ error: false, itineraries: [] })
+    )
+    const store = makeStore()
+    const before = Date.now()
+    await store.dispatch(reRouteFromCurrentPosition())
+    const started = store.actions.find(
+      (a) => a.type === 'START_REROUTE'
+    )?.payload
+    expect(started.startedAtMs).toBeGreaterThanOrEqual(before)
   })
 })
 

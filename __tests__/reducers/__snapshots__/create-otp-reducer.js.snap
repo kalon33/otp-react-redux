@@ -71,6 +71,7 @@ Object {
       "keepRouteId": null,
       "reason": null,
       "searchId": null,
+      "startedAtMs": null,
       "status": "idle",
     },
     "riding": null,
