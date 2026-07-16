@@ -993,3 +993,9 @@ util:
       dans le rayon spécifié ou aux heures indiquées, ou ne sont pas accessibles en
       toute sécurité.
     noTripFoundWithReason: '{noTripFound} {reason}'
+bike-forward: Privilégier le vélo
+avoid-biking: Éviter le vélo
+stay-seated: Rester assis (moins de correspondances)
+minimize-walking: Minimiser la marche
+fastest: Le plus rapide
+reliable-transfers: Correspondances fiables
