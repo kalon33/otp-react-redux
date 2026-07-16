@@ -33,7 +33,7 @@
   },
   "homepage": "",
   "dependencies": {
-    "@auth0/auth0-react": "^1.1.0",
+    "@auth0/auth0-react": "1.1.0",
     "@bugsnag/js": "^7.17.0",
     "@bugsnag/plugin-react": "^7.17.0",
     "@floating-ui/react": "^0.19.2",
@@ -161,13 +161,13 @@
     "esbuild-plugin-yaml": "^0.0.1",
     "eslint-config-prettier": "^3.4.0",
     "eslint-config-react-app": "^6.0.0",
-    "eslint-config-standard": "^16.0.3",
+    "eslint-config-standard": "^16.0.0",
     "eslint-config-standard-jsx": "^10.0.0",
     "eslint-plugin-import": "^2.18.2",
     "eslint-plugin-jest": "^24.3.6",
     "eslint-plugin-jsx-a11y": "^6.2.3",
     "eslint-plugin-node": "^11.1.0",
-    "eslint-plugin-prettier": "^3.4.0",
+    "eslint-plugin-prettier": "^3.4.1",
     "eslint-plugin-promise": "^5.1.0",
     "eslint-plugin-react": "^7.24.0",
     "eslint-plugin-react-hooks": "^4.2.0",
@@ -208,6 +208,7 @@
   },
   "resolutions": {
     "@leeoniya/ufuzzy": "npm:dry-uninstall",
+    "@auth0/auth0-react": "1.1.0",
     "@opentripplanner/base-map": "7.0.1",
     "@opentripplanner/building-blocks": "3.1.1",
     "@opentripplanner/core-utils": "16.1.0",
@@ -251,8 +252,8 @@
       "\\.[jt]sx?$": "babel-jest"
     },
     "testMatch": [
-      "**/__tests__/**/*.[jt]s?(x)",
-      "**/*.test.[jt]s?(x)"
+      "**/__tests__/**/*.[jt]sx?(x)",
+      "**/*.test.[jt]sx?(x)"
     ],
     "rootDir": "./",
     "testPathIgnorePatterns": [
