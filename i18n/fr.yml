@@ -895,6 +895,7 @@ components:
     noBusesNearby: Aucun bus à proximité
     notYet: Pas encore
     onBus: Dans le bus
+    onBusButton: Je suis déjà dans le bus
     remaining: Restant
     rerouteFound: Nouvel itinéraire trouvé
     rerouteKeep: Garder cet itinéraire
