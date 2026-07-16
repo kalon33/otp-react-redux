@@ -896,6 +896,125 @@ components:
     switcher: Sélecteur de vues
   WelcomeScreen:
     prompt: Où désirez-vous aller ?
+  GoMode:
+    lessWalking: Moins de marche
+    fewerTransfers: Moins de correspondances
+    avoidBiking: Éviter le vélo
+    fastest: Le plus rapide
+    arrivingSoon: Arrivée prochaine
+    boardingQuestion: Êtes-vous à bord ?
+    boardingSubtitle: Confirmez que vous êtes dans le bus
+    busLabel: Bus
+    confirmExit: Confirmer la sortie
+    departsIn: Départ dans {time}
+    errorPermissionDenied: Permission refusée
+    errorTimeout: Délai dépassé
+    errorUnavailable: Service indisponible
+    estimatedArrival: 'Arrivée estimée: {time}'
+    findAnotherWay: Trouver un autre chemin
+    getReady: Préparez-vous
+    getReadyNow: Préparez-vous maintenant
+    gpsError: Erreur GPS
+    gpsErrorTitle: Erreur de positionnement
+    header:
+      getOffAt: Descendre à {stop}
+      getOffAtTime: Descendre à {stop} à {time}
+      nextDeparture: 'Prochain départ: {time}'
+      routeDepartsIn: Ligne {route} part dans {time}
+    hoursMinutesRemaining: '{hours}h {minutes}min restantes'
+    hurryWarning: Dépêchez-vous !
+    loading: Chargement...
+    locatingBus: Localisation du bus...
+    minutesRemaining: '{minutes} min restantes'
+    nextDeparture: Prochain départ
+    nextLegTransit: Prochaine étape en transport
+    nextLegWalk: Prochaine étape à pied
+    noBusesNearby: Aucun bus à proximité
+    notYet: Pas encore
+    onBus: Dans le bus
+    onBusButton: Je suis déjà dans le bus
+    remaining: Restant
+    rerouteFound: Nouvel itinéraire trouvé
+    rerouteKeep: Garder cet itinéraire
+    rerouteNlError: Erreur de recherche
+    rerouteNlLabel: Message pour le conducteur
+    rerouteNlPlaceholder: Envoyer un message...
+    rerouteNlSend: Envoyer
+    rerouteNone: Aucun nouvel itinéraire
+    rerouteOk: OK
+    rerouteSearching: Recherche en cours...
+    rerouteSummary: '{minutes} min · {transfers} correspondance(s) · {walk} m à pied'
+    rerouteSwitch: Changer d'itinéraire
+    resetToPlanned: Réinitialiser à l'itinéraire prévu
+    retry: Réessayer
+    selectVehicle: Sélectionner un véhicule
+    stopsRemainingCompact: '{count, plural, one {1 arrêt} other {# arrêts}} restants'
+    theBus: le bus
+    trackingBus: Suivi du bus
+    upNext: Prochaine étape
+    useThisDeparture: Utiliser ce départ
+    vehicleDetail: 'Détails du véhicule: {detail}'
+    vehicleDistance: À {distance} m
+    waitAtStop: Attendre à l'arrêt
+    waitingGPS: En attente de GPS...
+    altOption: Option alternative
+    arrivedDone: Arrivé
+    arrivedTitle: Vous êtes arrivé
+    arrivesIn: Arrivée dans {time}
+    browsePlanner: Ouvrir le planificateur
+    busLabelHeadsign: 'Direction: {headsign}'
+    busNotBroadcasting: Le bus ne diffuse pas sa position
+    changeBus: Changer de bus
+    deviationWarning: 'Attention: déviation possible'
+    findingBestStop: Recherche du meilleur arrêt...
+    findingYourBus: Recherche de votre bus...
+    legBike: 'Vélo: {distance} m'
+    legStopsTo: '{count, plural, one {# arrêt} other {# arrêts}} vers {dest}'
+    legTo: vers {dest}
+    legWait: ⏰ Monter à {time} · {mins} min d'attente
+    legWalk: 'Marche: {distance} m'
+    liveBanner: Suivi en direct
+    loadingSchedule: Chargement des horaires...
+    offAtStop: Descendre à {stop}
+    onboardCancel: Annuler
+    onboardError: Erreur lors de l'embarquement
+    onboardTitle: À bord
+    openTripSheet: Ouvrir les détails du trajet
+    pickYourBus: Choisissez votre bus
+    pickYourRoute: Choisissez votre ligne
+    restOfTrip: Reste du trajet
+    rideToStop: Monter à {stop}
+    routeOption: Option de ligne
+    sheetHandleLabel: Faire glisser pour plus d'options
+    toStop: Vers {stop}
+    tripSheetHeading: Détails du trajet
+    tripSheetTitle: Votre trajet
+    rerouteSearchHere: Rechercher ici
+    whereToAlight: Où descendre ?
+    walkToStop: Marchez jusqu'à {stop}
+  ActiveRoutingPreferences:
+    label: Préférences de routage actives
+    clear: Effacer
+    fastest: Le plus rapide
+    minimizeWalking: Minimiser la marche
+    staySeated: Rester assis (moins de correspondances)
+    bikeForward: Privilégier le vélo
+    avoidBiking: Éviter le vélo
+    reliableTransfers: Correspondances fiables
+    avoidingBiking: éviter le vélo
+    moreBiking: plus de vélo
+    fasterBiking: vélo plus rapide
+    slowerBiking: vélo plus lent
+    longerTransferBuffer: temps de correspondance plus long
+    shorterTransferBuffer: temps de correspondance plus court
+    fewerTransfers: moins de correspondances
+    moreTransfers: plus de correspondances
+    lessWaiting: moins d'attente aux arrêts
+    okayWaiting: attente aux arrêts acceptable
+    lessWalking: moins de marche
+    moreWalking: plus de marche
+    briskerWalking: marche plus rapide
+    gentlerWalking: marche plus lente
 config:
   accessModes:
     car_hail: Course en voiture
