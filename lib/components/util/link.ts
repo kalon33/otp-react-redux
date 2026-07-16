@@ -1,4 +1,4 @@
-import { AnchorHTMLAttributes, ComponentType } from 'react'
+import { AnchorHTMLAttributes, ComponentType, FC } from 'react'
 import { connect } from 'react-redux'
 
 import { AppReduxState } from '../../util/state-types'
@@ -21,7 +21,11 @@ export function isSubpath(path: string, to: string): boolean {
  * Renders an anchor element <a> with specified path and query params,
  * that preserves other existing query params.
  */
-const Link: ComponentType = 'a' as unknown as ComponentType
+const LinkComponent: FC<OwnProps> = ({ to, toParams, tracking, ...rest }) => {
+  // These props are handled internally and should not be passed to the <a> element
+  const { className, ...otherProps } = rest
+  return <a {...otherProps} className={className} />
+}
 
 // connect to the redux store so that the search params get updated in timely fashion.
 
@@ -38,13 +42,9 @@ const mapStateToProps = (state: AppReduxState, ownProps: OwnProps) => {
         : isActive
         ? 'active'
         : className,
-    href,
-    // Remove the passed to, toParams, and tracking props from the rendered HTML.
-    to: undefined,
-    toParams: undefined,
-    tracking: undefined
+    href
   }
 }
 
 // Pass an empty object as mapDispatchToProps to remove dispatch from the rendered HTML.
-export default connect(mapStateToProps, {})(Link)
+export default connect(mapStateToProps, {})(LinkComponent)
