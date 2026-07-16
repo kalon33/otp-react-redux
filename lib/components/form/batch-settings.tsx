@@ -1,7 +1,8 @@
 import { connect } from 'react-redux'
 import { decodeQueryParams } from 'use-query-params'
 import {
-  DepartArriveDropdown
+  DepartArriveDropdown,
+  MetroModeSelector
 } from '@opentripplanner/trip-form'
 import { ModeButtonDefinition } from '@opentripplanner/types'
 import { Search } from '@styled-icons/fa-solid/Search'
@@ -9,7 +10,6 @@ import { SyncAlt } from '@styled-icons/fa-solid/SyncAlt'
 import { useIntl } from 'react-intl'
 import AnimateHeight from 'react-animate-height'
 import React, { useCallback, useContext, useEffect, useMemo } from 'react'
-import styled from 'styled-components'
 
 import * as apiActions from '../../actions/api'
 import * as formActions from '../../actions/form'
@@ -40,18 +40,6 @@ import DateTimeModal, {
   setQueryParamMiddleware
 } from './date-time-modal'
 
-// Styled components for custom mode selector
-const CustomModeSelectorContainer = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 10px;
-`
-
-const ModeButtonWrapper = styled.div`
-  display: inline-flex;
-`
-
 // TYPESCRIPT TODO: better types
 type Props = {
   activeSearch: any
@@ -78,61 +66,6 @@ export function setModeButtonEnabled(enabledKeys: string[]) {
       enabled: enabledKeys?.includes(modeButton.key)
     }
   }
-}
-
-/**
- * Custom mode selector that ensures each button has a unique key prop.
- * This replaces MetroModeSelector to fix React's warning about missing keys.
- */
-function CustomModeSelector({
-  accentColor,
-  activeHoverColor,
-  fillModeIcons,
-  label,
-  modeButtons,
-  onSettingsUpdate,
-  onToggleModeButton
-}: {
-  accentColor: any
-  activeHoverColor: string
-  fillModeIcons?: boolean
-  label: string
-  modeButtons: ModeButtonDefinition[]
-  onSettingsUpdate: (params: any) => void
-  onToggleModeButton: (buttonId: string, newState: boolean) => void
-}) {
-  return (
-    <div>
-      {label && <div style={{ marginBottom: '8px', fontWeight: 600 }}>{label}</div>}
-      <CustomModeSelectorContainer>
-        {modeButtons.map((button) => (
-          <ModeButtonWrapper key={button.key || button.mode}>
-            <button
-              type="button"
-              onClick={() => onToggleModeButton(button.key || button.mode, !button.enabled)}
-              style={{
-                background: button.enabled ? accentColor : 'transparent',
-                border: `1px solid ${button.enabled ? accentColor : '#ccc'}`,
-                borderRadius: '4px',
-                padding: '6px 12px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                color: button.enabled ? 'white' : '#333',
-                transition: 'all 0.2s ease'
-              }}
-              aria-label={button.label}
-              title={button.label}
-            >
-              {button.Icon && <button.Icon />}
-              {button.label}
-            </button>
-          </ModeButtonWrapper>
-        ))}
-      </CustomModeSelectorContainer>
-    </div>
-  )
 }
 
 /**
@@ -176,7 +109,8 @@ function BatchSettings({
   )
 
   const baseColor = getBaseColor()
-  const accentColor = getDarkenedBaseColor().toHexString()
+
+  const accentColor = getDarkenedBaseColor()
 
   const onQueryParamChange = useCallback(
     (params) => {
@@ -226,9 +160,15 @@ function BatchSettings({
       </AnimateHeight>
 
       <ModeSelectorContainer>
-        <CustomModeSelector
+        {/*
+          MetroModeSelector internally uses ModeSelector3 which doesn't properly
+          handle React keys for its children. This warning originates from that
+          external component and cannot be fixed without modifying @opentripplanner/trip-form.
+          The modeButtons passed here have unique keys, but ModeSelector3 doesn't use them.
+        */}
+        <MetroModeSelector
           accentColor={baseColor}
-          activeHoverColor={accentColor}
+          activeHoverColor={accentColor.toHexString()}
           fillModeIcons={fillModeIcons}
           label={intl.formatMessage({
             id: 'components.BatchSearchScreen.modeSelectorLabel'
