@@ -9,7 +9,7 @@ import { Search } from '@styled-icons/fa-solid/Search'
 import { SyncAlt } from '@styled-icons/fa-solid/SyncAlt'
 import { useIntl } from 'react-intl'
 import AnimateHeight from 'react-animate-height'
-import React, { useCallback, useContext, useEffect } from 'react'
+import React, { useCallback, useContext, useEffect, useMemo } from 'react'
 
 import * as apiActions from '../../actions/api'
 import * as formActions from '../../actions/form'
@@ -92,17 +92,22 @@ function BatchSettings({
   // @ts-expect-error Context not typed
   const { ModeIcon } = useContext(ComponentContext)
 
-  const processedModeButtons = modeButtonOptions.map(
-    pipe(
-      addModeButtonIcon(ModeIcon),
-      setModeButtonEnabled(enabledModeButtons),
-      // Ensure each button has a unique key for React list rendering
-      (button: ModeButtonDefinition) => ({
-        ...button,
-        // Use the existing key if available, otherwise generate one from the mode
-        key: button.key || button.mode
-      })
-    )
+  // Process mode buttons with unique keys for React list rendering
+  const processedModeButtons = useMemo(
+    () =>
+      modeButtonOptions.map(
+        pipe(
+          addModeButtonIcon(ModeIcon),
+          setModeButtonEnabled(enabledModeButtons),
+          (button: ModeButtonDefinition, index: number) => ({
+            ...button,
+            // Ensure each button has a unique key for React list rendering
+            // Use the existing key if available, otherwise generate one from the mode or index
+            key: button.key || button.mode || `mode-button-${index}`
+          })
+        )
+      ),
+    [modeButtonOptions, ModeIcon, enabledModeButtons]
   )
 
   const baseColor = getBaseColor()
