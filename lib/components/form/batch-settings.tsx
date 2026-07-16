@@ -93,7 +93,16 @@ function BatchSettings({
   const { ModeIcon } = useContext(ComponentContext)
 
   const processedModeButtons = modeButtonOptions.map(
-    pipe(addModeButtonIcon(ModeIcon), setModeButtonEnabled(enabledModeButtons))
+    pipe(
+      addModeButtonIcon(ModeIcon),
+      setModeButtonEnabled(enabledModeButtons),
+      // Ensure each button has a unique key for React list rendering
+      (button: ModeButtonDefinition) => ({
+        ...button,
+        // Use the existing key if available, otherwise generate one from the mode
+        key: button.key || button.mode
+      })
+    )
   )
 
   const baseColor = getBaseColor()
