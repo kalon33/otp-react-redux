@@ -69,6 +69,32 @@ export function setModeButtonEnabled(enabledKeys: string[]) {
 }
 
 /**
+ * Wrapper component to ensure each mode button has a unique key prop.
+ * This addresses React's warning about missing keys in lists.
+ */
+function ModeSelectorWithKeys({
+  modeButtons,
+  ...rest
+}: {
+  modeButtons: ModeButtonDefinition[]
+  [key: string]: any
+}) {
+  // Clone each button with a guaranteed unique key
+  const buttonsWithKeys = useMemo(
+    () =>
+      modeButtons.map((button, index) => ({
+        ...button,
+        // Ensure each button has a unique key for React list rendering
+        key: button.key || button.mode || `mode-button-${index}`
+      })),
+    [modeButtons]
+  )
+
+  // Render MetroModeSelector with the buttons that have unique keys
+  return <MetroModeSelector {...rest} modeButtons={buttonsWithKeys} />
+}
+
+/**
  * Main panel for the batch/trip comparison form.
  */
 function BatchSettings({
@@ -92,22 +118,11 @@ function BatchSettings({
   // @ts-expect-error Context not typed
   const { ModeIcon } = useContext(ComponentContext)
 
-  // Process mode buttons with unique keys for React list rendering
-  const processedModeButtons = useMemo(
-    () =>
-      modeButtonOptions.map(
-        pipe(
-          addModeButtonIcon(ModeIcon),
-          setModeButtonEnabled(enabledModeButtons),
-          (button: ModeButtonDefinition, index: number) => ({
-            ...button,
-            // Ensure each button has a unique key for React list rendering
-            // Use the existing key if available, otherwise generate one from the mode or index
-            key: button.key || button.mode || `mode-button-${index}`
-          })
-        )
-      ),
-    [modeButtonOptions, ModeIcon, enabledModeButtons]
+  const processedModeButtons = modeButtonOptions.map(
+    pipe(
+      addModeButtonIcon(ModeIcon),
+      setModeButtonEnabled(enabledModeButtons)
+    )
   )
 
   const baseColor = getBaseColor()
@@ -162,7 +177,7 @@ function BatchSettings({
       </AnimateHeight>
 
       <ModeSelectorContainer>
-        <MetroModeSelector
+        <ModeSelectorWithKeys
           accentColor={baseColor}
           activeHoverColor={accentColor.toHexString()}
           fillModeIcons={fillModeIcons}
