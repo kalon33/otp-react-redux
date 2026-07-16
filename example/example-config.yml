@@ -130,6 +130,8 @@ map:
 
   # Enable the following option to show the endpoints popup even with persistence disabled
   # forceDisplayEndpointsPopup: false
+  # Show "view stop" button in stop popup. Set to true by default
+  showViewStopInPopup: true
   baseLayers:
     - name: Streets
       # These tiles are free to use, but not in production
@@ -239,6 +241,7 @@ geocoder:
 
 # Use this mode config for the enhanced Transit+ config
 modes:
+  # allowFlexWithoutTransit: true # True by default
   ### Optional number of itineraries to return by default - Defaults to 3.
   # numItineraries: 3
   # Definition for the mode buttons to display in trip form
@@ -375,6 +378,8 @@ itinerary:
   renderRouteNamesInBlocks: true
   # Whether the mode icons should be colored as well
   fillModeIcons: true
+  # Whether to omit trips that involve a transit leg that has been canceled via realtime update
+  omitCanceledTrips: true
   # Allow user to collapse alerts in itinerary body
   allowUserAlertCollapsing: true
   # The medium and rider category selected here will be used to render the total itinerary fare
