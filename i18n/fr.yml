@@ -202,6 +202,8 @@ components:
     networkConnectionRestored: Connexion réseau restaurée
     openMenu: Ouvrir le menu
     skipNavigation: Sauter la navigation
+    shareDiagnosticsOff: 'Partage des diagnostics: Désactivé'
+    shareDiagnosticsOn: 'Partage des diagnostics: Activé'
   BackToTripPlanner:
     backToTripPlanner: Retour au planificateur de trajets
   BatchResultsScreen:
@@ -223,10 +225,10 @@ components:
     routingProfileHeader: Profil de routage
     routingProfileLabel: Sélectionnez un profil de routage
     nlPreferencesHeader: Préférences NL
-    nlPreferencesPlaceholder: Saisissez vos préférences NL ici...
+    nlPreferencesPlaceholder: Saisir les préférences NL...
     nlPreferencesLoading: Application en cours...
     nlPreferencesApply: Appliquer
-    nlPreferencesApplied: 'Préférences appliquées : {summary}'
+    nlPreferencesApplied: Préférences appliquées
     nlPreferencesError: Erreur lors de l'application des préférences
   BatchSettings:
     destination: destination
@@ -340,6 +342,9 @@ components:
     singleModeItineraryDescription: Trajet de {time} {mode}
     timeWalking: '{time} de marche'
     startTrip: Commencer le trajet
+    confirmSwitchTrip: Confirmer le changement de trajet
+    switchTrip: Changer de trajet
+    timeBiking: '{time} en vélo'
   MobilityProfile:
     DevicesPane:
       devices:
@@ -858,16 +863,11 @@ components:
   WelcomeScreen:
     prompt: Où désirez-vous aller ?
   GoMode:
-    lessWalking: Moins de marche
-    fewerTransfers: Moins de correspondances
-    avoidBiking: Éviter le vélo
-    fastest: Le plus rapide
     arrivingSoon: Arrivée prochaine
     boardingQuestion: Êtes-vous à bord ?
     boardingSubtitle: Confirmez que vous êtes dans le bus
     busLabel: Bus
     confirmExit: Confirmer la sortie
-    departsIn: Départ dans {time}
     errorPermissionDenied: Permission refusée
     errorTimeout: Délai dépassé
     errorUnavailable: Service indisponible
@@ -883,26 +883,20 @@ components:
       nextDeparture: 'Prochain départ: {time}'
       routeDepartsIn: Ligne {route} part dans {time}
     hoursMinutesRemaining: '{hours}h {minutes}min restantes'
-    hurryWarning: Dépêchez-vous !
     loading: Début du trajet...
     locatingBus: Localisation du bus...
     minutesRemaining: '{minutes} min restantes'
     nextDeparture: Prochain départ
-    nextLegTransit: Prochaine étape en transport
-    nextLegWalk: Prochaine étape à pied
     noBusesNearby: Aucun bus à proximité
     notYet: Pas encore
     onBus: Dans le bus
     onBusButton: Je suis déjà dans le bus
     remaining: Restant
-    rerouteFound: Nouvel itinéraire trouvé
-    rerouteKeep: Garder cet itinéraire
     rerouteNlError: Erreur de recherche
     rerouteNlLabel: Message pour le conducteur
     rerouteNlPlaceholder: Envoyer un message...
     rerouteNlSend: Envoyer
     rerouteNone: Aucun nouvel itinéraire
-    rerouteOk: OK
     rerouteSearching: Recherche en cours...
     rerouteSummary: '{minutes} min · {transfers} correspondance(s) · {walk} m à pied'
     rerouteSwitch: Changer d'itinéraire
@@ -912,11 +906,9 @@ components:
     stopsRemainingCompact: '{count, plural, one {1 arrêt} other {# arrêts}} restants'
     theBus: le bus
     trackingBus: Suivi du bus
-    upNext: Prochaine étape
     useThisDeparture: Utiliser ce départ
     vehicleDetail: 'Détails du véhicule: {detail}'
     vehicleDistance: À {distance} m
-    waitAtStop: Attendre à l'arrêt
     waitingGPS: Acquisition du signal GPS...
     altOption: Option alternative
     arrivedDone: Arrivé
@@ -953,29 +945,13 @@ components:
     rerouteSearchHere: Rechercher ici
     whereToAlight: Où descendre ?
     walkToStop: Marchez jusqu'à {stop}
+    returnBannerArrived: Arrivé
+    returnBannerLive: Suivi en direct
+    returnBannerNoProgress: Aucune progression
+    chooseBus: Choisir le bus
   ActiveRoutingPreferences:
     label: Préférences de routage actives
     clear: Effacer
-    fastest: Le plus rapide
-    minimizeWalking: Minimiser la marche
-    staySeated: Rester assis (moins de correspondances)
-    bikeForward: Privilégier le vélo
-    avoidBiking: Éviter le vélo
-    reliableTransfers: Correspondances fiables
-    avoidingBiking: éviter le vélo
-    moreBiking: plus de vélo
-    fasterBiking: vélo plus rapide
-    slowerBiking: vélo plus lent
-    longerTransferBuffer: temps de correspondance plus long
-    shorterTransferBuffer: temps de correspondance plus court
-    fewerTransfers: moins de correspondances
-    moreTransfers: plus de correspondances
-    lessWaiting: moins d'attente aux arrêts
-    okayWaiting: attente aux arrêts acceptable
-    lessWalking: moins de marche
-    moreWalking: plus de marche
-    briskerWalking: marche plus rapide
-    gentlerWalking: marche plus lente
 config:
   accessModes:
     car_hail: Course en voiture
@@ -995,9 +971,3 @@ util:
       dans le rayon spécifié ou aux heures indiquées, ou ne sont pas accessibles en
       toute sécurité.
     noTripFoundWithReason: '{noTripFound} {reason}'
-bike-forward: Privilégier le vélo
-avoid-biking: Éviter le vélo
-stay-seated: Rester assis (moins de correspondances)
-minimize-walking: Minimiser la marche
-fastest: Le plus rapide
-reliable-transfers: Correspondances fiables
