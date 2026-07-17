@@ -78,17 +78,18 @@ export default defineConfig({
       },
       plugins: [yamlPlugin(), VitePWA({
       manifest: {
-        name: 'OpenTripPlanner',
-        short_name: 'OTP',
-        description: 'Plan your trips with OpenTripPlanner',
-        theme_color: '#000000',
+        name: 'Transit Paris',
+        short_name: 'OTP Paris',
+        description: 'Planifiez vos trajets avec Transit Paris',
+        theme_color: '#0055a4',
         background_color: '#ffffff',
         display: 'standalone',
         icons: [
           {
             src: '/icons/icon-192x192.png',
             sizes: '192x192',
-            type: 'image/png'
+            type: 'image/png',
+            purpose: 'any maskable'
           },
           {
             src: '/icons/icon-512x512.png',
@@ -103,7 +104,8 @@ export default defineConfig({
           {
             src: '/icons/icon-180x180.png',
             sizes: '180x180',
-            type: 'image/png'
+            type: 'image/png',
+            purpose: 'apple touch icon'
           }
         ]
       },
