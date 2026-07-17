@@ -963,6 +963,19 @@ components:
     bikeForward: Privilégier le vélo
     avoidBiking: Éviter le vélo
     reliableTransfers: Correspondances fiables
+    avoidingBiking: Éviter le vélo
+    moreBiking: Plus de vélo
+    fasterBiking: Vélo plus rapide
+    slowerBiking: Vélo plus lent
+    longerTransferBuffer: Temps de correspondance plus long
+    shorterTransferBuffer: Temps de correspondance plus court
+    fewerTransfers: Moins de correspondances
+    moreTransfers: Plus de correspondances
+    lessWaiting: Moins d'attente aux arrêts
+    okayWaiting: Attente aux arrêts acceptable
+    moreWalking: Plus de marche
+    briskerWalking: Marche plus rapide
+    gentlerWalking: Marche plus lente
 config:
   accessModes:
     car_hail: Course en voiture

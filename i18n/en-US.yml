@@ -927,6 +927,20 @@ components:
   ActiveRoutingPreferences:
     label: Active routing preferences
     clear: Clear
+    avoidingBiking: Avoiding biking
+    moreBiking: More biking
+    fasterBiking: Faster biking
+    slowerBiking: Slower biking
+    longerTransferBuffer: Longer transfer buffer
+    shorterTransferBuffer: Shorter transfer buffer
+    fewerTransfers: Fewer transfers
+    moreTransfers: More transfers
+    lessWaiting: Less waiting
+    okayWaiting: Okay waiting
+    lessWalking: Less walking
+    moreWalking: More walking
+    briskerWalking: Brisker walking
+    gentlerWalking: Gentler walking
 config:
   accessModes:
     car_hail: Ride Hail
