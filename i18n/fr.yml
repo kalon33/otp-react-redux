@@ -953,6 +953,14 @@ components:
     fewerTransfers: Moins de correspondances
     avoidBiking: Éviter le vélo
     fastest: Le plus rapide
+    nextLegTransit: Prochaine étape en transport
+    nextLegWalk: Prochaine étape à pied
+    rerouteFound: Nouvel itinéraire trouvé
+    rerouteKeep: Garder cet itinéraire
+    rerouteOk: OK
+    waitAtStop: Attendre à l'arrêt
+    walking: Marche
+    hurryWarning: Dépêchez-vous !
   ActiveRoutingPreferences:
     label: Préférences de routage actives
     clear: Effacer

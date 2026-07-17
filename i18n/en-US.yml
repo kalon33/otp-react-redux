@@ -924,6 +924,14 @@ components:
     selectVehicle: Select vehicle
     waitingGPS: Waiting for GPS...
     chooseBus: Choose bus
+    rerouteFound: New itinerary found
+    rerouteKeep: Keep this itinerary
+    rerouteOk: OK
+    waitAtStop: Wait at stop
+    walking: Walking
+    hurryWarning: Hurry!
+    nextLegTransit: Next transit leg
+    nextLegWalk: Next walking leg
   ActiveRoutingPreferences:
     label: Active routing preferences
     clear: Clear
@@ -941,6 +949,12 @@ components:
     moreWalking: More walking
     briskerWalking: Brisker walking
     gentlerWalking: Gentler walking
+    reliableTransfers: Reliable transfers
+    bikeForward: Prefer biking
+    avoidBiking: Avoid biking
+    minimizeWalking: Minimize walking
+    staySeated: Stay seated (fewer transfers)
+    fastest: Fastest
 config:
   accessModes:
     car_hail: Ride Hail

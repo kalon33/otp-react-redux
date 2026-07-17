@@ -1,0 +1,9 @@
+{
+  "ignore": [
+    "**/node_modules/**",
+    "**/lib/util/routing-profiles.ts",
+    "**/lib/components/form/advanced-settings-panel.tsx",
+    "**/lib/components/go-mode/TripSheet.tsx",
+    "**/lib/components/form/active-routing-preferences.tsx"
+  ]
+}
