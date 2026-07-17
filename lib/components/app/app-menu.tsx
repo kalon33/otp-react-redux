@@ -1,3 +1,4 @@
+import { Bug } from '@styled-icons/fa-solid/Bug'
 import { Bus } from '@styled-icons/fa-solid/Bus'
 import { connect } from 'react-redux'
 import { Envelope } from '@styled-icons/fa-regular/Envelope'
@@ -20,6 +21,7 @@ import { AppMenuItemConfig, LanguageConfig } from '../../util/config-types'
 import { AppReduxState } from '../../util/state-types'
 import { ComponentContext } from '../../util/contexts'
 import { convertChineseLanguageCode, getLanguageOptions } from '../../util/i18n'
+import { isDebugLogEnabled, setDebugLogEnabled } from '../../util/debug-log'
 import { isModuleEnabled, Modules } from '../../util/config'
 
 import AppMenuItem from './app-menu-item'
@@ -57,6 +59,7 @@ type AppMenuProps = {
   translateExternalLinks?: boolean
 }
 type AppMenuState = {
+  diagnosticsOn: boolean
   isPaneOpen: boolean
 }
 
@@ -70,6 +73,7 @@ class AppMenu extends Component<
   static contextType = ComponentContext
 
   state = {
+    diagnosticsOn: isDebugLogEnabled(),
     isPaneOpen: false
   }
 
@@ -89,6 +93,15 @@ class AppMenu extends Component<
 
   _handleSkipNavigation = () => {
     document.querySelector('main')?.focus()
+  }
+
+  // Diagnostics sharing (the remote debug-log stream) is opt-in per device;
+  // this menu toggle is the only way to opt in from the native app, which has
+  // no URL bar for the ?debugLog=1 override.
+  _toggleDiagnostics = () => {
+    const diagnosticsOn = !this.state.diagnosticsOn
+    setDebugLogEnabled(diagnosticsOn)
+    this.setState({ diagnosticsOn })
   }
 
   _addExtraMenuItems = (
@@ -293,6 +306,22 @@ class AppMenu extends Component<
                 })}
               />
             )}
+            <AppMenuItem
+              aria-pressed={this.state.diagnosticsOn}
+              icon={<Bug />}
+              onClick={this._toggleDiagnostics}
+              text={
+                this.state.diagnosticsOn
+                  ? intl.formatMessage({
+                      defaultMessage: 'Share diagnostics: On',
+                      id: 'components.AppMenu.shareDiagnosticsOn'
+                    })
+                  : intl.formatMessage({
+                      defaultMessage: 'Share diagnostics: Off',
+                      id: 'components.AppMenu.shareDiagnosticsOff'
+                    })
+              }
+            />
             {this._addExtraMenuItems(extraMenuItems, translateExternalLinks)}
             {this._addExtraMenuItems(languageMenuItems)}
           </div>
