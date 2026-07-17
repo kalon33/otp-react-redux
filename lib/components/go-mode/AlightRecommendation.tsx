@@ -49,7 +49,7 @@ const AlightRecommendation = ({
     let message: string
     if (status === 'discovering') {
       message = intl.formatMessage({
-        defaultMessage: 'Finding your bus…',
+        defaultMessage: 'Finding your bus\u2026',
         id: 'components.GoMode.findingYourBus'
       })
     } else if (status === 'awaiting-selection') {
@@ -59,12 +59,12 @@ const AlightRecommendation = ({
       })
     } else if (status === 'fetching-schedule') {
       message = intl.formatMessage({
-        defaultMessage: 'Loading the schedule for your bus…',
+        defaultMessage: 'Loading the schedule for your bus\u2026',
         id: 'components.GoMode.loadingSchedule'
       })
     } else {
       message = intl.formatMessage({
-        defaultMessage: 'Finding the best stop to get off…',
+        defaultMessage: 'Finding the best stop to get off\u2026',
         id: 'components.GoMode.findingBestStop'
       })
     }
@@ -92,7 +92,7 @@ const AlightRecommendation = ({
             <RerouteSwitchButton onClick={changeBus} type="button">
               {intl.formatMessage({
                 defaultMessage: 'Choose bus',
-                id: 'components.GoMode.changeBus'
+                id: 'components.GoMode.chooseBus'
               })}
             </RerouteSwitchButton>
             <RerouteKeepButton onClick={endGoMode} type="button">
@@ -107,7 +107,7 @@ const AlightRecommendation = ({
     )
   }
 
-  // status === 'ready' — the best onward options (earliest arrival first),
+  // status === 'ready' \u2014 the best onward options (earliest arrival first),
   // one per candidate alight stop, rendered through the app's NORMAL
   // itinerary-results list so each row carries the familiar full detail
   // (times, transfers, bike/walk legs with distances). A "Go Mode is live"
@@ -119,7 +119,7 @@ const AlightRecommendation = ({
     <OnboardResultsScroll>
       <GoModeLiveBanner>
         {intl.formatMessage({
-          defaultMessage: 'Go Mode is live — tracking your bus',
+          defaultMessage: 'Go Mode is live \u2014 tracking your bus',
           id: 'components.GoMode.liveBanner'
         })}
       </GoModeLiveBanner>
@@ -155,7 +155,4 @@ const mapDispatchToProps = {
   endGoMode: goModeActions.endGoMode
 }
 
-export default connect(
-  mapStateToProps,
-  mapDispatchToProps
-)(AlightRecommendation)
+export default connect(mapStateToProps, mapDispatchToProps)(AlightRecommendation)
