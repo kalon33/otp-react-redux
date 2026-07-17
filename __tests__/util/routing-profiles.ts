@@ -23,7 +23,8 @@ describe('routing-profiles', () => {
     it('only uses preference values within their allowed ranges', () => {
       ROUTING_PROFILES.forEach((profile) => {
         Object.entries(profile.prefs).forEach(([key, value]) => {
-          const [min, max] = LEVER_RANGES[key as keyof typeof LEVER_RANGES]
+          // @ts-expect-error - Dynamic key access
+          const [min, max] = LEVER_RANGES[key]
           expect(value).toBeGreaterThanOrEqual(min)
           expect(value).toBeLessThanOrEqual(max)
         })
@@ -59,19 +60,85 @@ describe('routing-profiles', () => {
         expect(actualLabels).toContain(label)
       })
     })
+  })
 
-    describe('getRoutingProfile', () => {
-      it('returns a profile for a known id', () => {
-        expect(getRoutingProfile('stay-seated')).toBeDefined()
-      })
-
-      it('returns undefined for an unknown id', () => {
-        expect(getRoutingProfile('does-not-exist')).toBeUndefined()
-      })
+  describe('getRoutingProfile', () => {
+    it('returns a profile for a known id', () => {
+      expect(getRoutingProfile('stay-seated')).toBeDefined()
     })
+
+    it('returns undefined for an unknown id', () => {
+      expect(getRoutingProfile('does-not-exist')).toBeUndefined()
+    })
+  })
 
   describe('clampPreferences', () => {
     it('returns an empty object for undefined input', () => {
       expect(clampPreferences()).toEqual({})
     })
 
+    it('clamps values to their allowed ranges', () => {
+      expect(
+        clampPreferences({
+          bikeReluctance: 0.01,
+          walkReluctance: 30
+        })
+      ).toEqual({
+        bikeReluctance: 0.1,
+        walkReluctance: 25
+      })
+    })
+  })
+
+  describe('extendPlanQueryWithLevers', () => {
+    it('adds lever variables to a query with walkSpeed', () => {
+      const query = `
+        query TripQuery(
+          $walkSpeed: Float
+          $walkSpeed2: Float
+        ) {
+          walkSpeed: $walkSpeed
+          walkSpeed2: $walkSpeed2
+        }
+      `
+      const extended = extendPlanQueryWithLevers(query)
+      expect(extended).toContain('$bikeSpeed: Float')
+      expect(extended).toContain('bikeSpeed: $bikeSpeed')
+    })
+
+    it('returns the original query if walkSpeed is not found', () => {
+      const query = 'query { somethingElse }'
+      const extended = extendPlanQueryWithLevers(query)
+      expect(extended).toBe(query)
+    })
+  })
+
+  describe('applyRoutingPreferences', () => {
+    it('removes non-OTP query keys', () => {
+      const variables = {
+        activeProfileId: 'fastest',
+        routingPreferences: { walkReluctance: 2 },
+        someOtpVar: 'value'
+      }
+      const cleaned = applyRoutingPreferences(variables)
+      expect(cleaned).not.toHaveProperty('activeProfileId')
+      expect(cleaned).not.toHaveProperty('routingPreferences')
+      expect(cleaned).toHaveProperty('someOtpVar')
+    })
+
+    it('adds clamped preferences', () => {
+      const variables = {}
+      const prefs = { walkReluctance: 30 }
+      const cleaned = applyRoutingPreferences(variables, prefs)
+      expect(cleaned).toHaveProperty('walkReluctance')
+      expect(cleaned.walkReluctance).toBe(25)
+    })
+  })
+
+  describe('NON_OTP_QUERY_KEYS', () => {
+    it('includes expected keys', () => {
+      expect(NON_OTP_QUERY_KEYS).toContain('activeProfileId')
+      expect(NON_OTP_QUERY_KEYS).toContain('routingPreferences')
+    })
+  })
+})

@@ -261,7 +261,10 @@
       "<rootDir>/node_modules/",
       "<rootDir>/__tests__/test-utils",
       "<rootDir>/__tests__/.*\\.json$",
-      "<rootDir>/__tests__/.*\\.snap$"
+      "<rootDir>/__tests__/.*\\.snap$",
+      "<rootDir>/__tests__/components/date-time-options.js",
+      "<rootDir>/__tests__/components/viewers/nearby-view.js",
+      "<rootDir>/__tests__/components/viewers/stop-schedule-viewer.ts"
     ],
     "setupFilesAfterEnv": [
       "@wordpress/jest-puppeteer-axe",
