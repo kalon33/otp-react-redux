@@ -11,10 +11,37 @@
     <meta http-equiv="x-ua-compatible" content="ie=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/manifest.json">
+    <!-- Theme color for PWA -->
+    <meta name="theme-color" content="#000000">
+    <!-- Apple Touch Icon (for iOS) -->
+    <link rel="apple-touch-icon" href="/icons/icon-192x192.png">
+    <!-- PWA app name for iOS -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="OpenTripPlanner">
+    <!-- Description for PWA -->
+    <meta name="description" content="Plan your trips with OpenTripPlanner">
+
     <link href="https://fonts.googleapis.com/css?family=Hind:300,400,500,600,700" rel="stylesheet">
     <title>OpenTripPlanner</title>
   </head>
   <body>
     <div id="main"></div>
+    <!-- PWA: Register Service Worker -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/service-worker.js')
+            .then(registration => {
+              console.log('ServiceWorker registration successful');
+            })
+            .catch(err => {
+              console.log('ServiceWorker registration failed: ', err);
+            });
+        });
+      }
+    </script>
   </body>
 </html>

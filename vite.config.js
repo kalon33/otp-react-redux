@@ -8,6 +8,7 @@ import fs from 'fs-extra'
 import raw from 'vite-raw-plugin'
 import react from '@vitejs/plugin-react'
 import ViteYaml from '@modyfi/vite-plugin-yaml'
+import { VitePWA } from 'vite-plugin-pwa'
 
 /**
  * Helper function to copy a file based on an env variable.
@@ -75,7 +76,57 @@ export default defineConfig({
       loader: {
         '.js': 'jsx'
       },
-      plugins: [yamlPlugin()]
+      plugins: [yamlPlugin(), VitePWA({
+      manifest: {
+        name: 'OpenTripPlanner',
+        short_name: 'OTP',
+        description: 'Plan your trips with OpenTripPlanner',
+        theme_color: '#000000',
+        background_color: '#ffffff',
+        display: 'standalone',
+        icons: [
+          {
+            src: '/icons/icon-192x192.png',
+            sizes: '192x192',
+            type: 'image/png'
+          },
+          {
+            src: '/icons/icon-512x512.png',
+            sizes: '512x512',
+            type: 'image/png'
+          },
+          {
+            src: '/icons/icon-144x144.png',
+            sizes: '144x144',
+            type: 'image/png'
+          },
+          {
+            src: '/icons/icon-180x180.png',
+            sizes: '180x180',
+            type: 'image/png'
+          }
+        ]
+      },
+      workbox: {
+        globDirectory: 'public/',
+        globPatterns: [
+          '**/*.{js,css,html,png,svg,woff2}'
+        ],
+        runtimeCaching: [
+          {
+            urlPattern: /^https://.*.tile.openstreetmap.org/.*/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'osm-tiles',
+              expiration: {
+                maxEntries: 100,
+                maxAgeSeconds: 24 * 60 * 60 // 1 day
+              }
+            }
+          }
+        ]
+      }
+    })]
     }
   },
   plugins: [
