@@ -253,13 +253,15 @@
       "\\.[jt]sx?$": "babel-jest"
     },
     "testMatch": [
-      "**/__tests__/**/*.[jt]sx?(x)",
-      "**/*.test.[jt]sx?(x)"
+      "**/__tests__/**/*.[jt]s?(x)",
+      "**/*.test.[jt]s?(x)"
     ],
     "rootDir": "./",
     "testPathIgnorePatterns": [
       "<rootDir>/node_modules/",
-      "<rootDir>/__tests__/test-utils"
+      "<rootDir>/__tests__/test-utils",
+      "<rootDir>/__tests__/.*\\.json$",
+      "<rootDir>/__tests__/.*\\.snap$"
     ],
     "setupFilesAfterEnv": [
       "@wordpress/jest-puppeteer-axe",

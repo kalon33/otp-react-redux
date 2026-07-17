@@ -14,3 +14,11 @@ if (!window.URL.createObjectURL) {
   window.URL.createObjectURL = () => ''
   window.URL.revokeObjectURL = () => undefined
 }
+
+// Polyfill TextDecoder for jsdom environment
+if (typeof TextDecoder === 'undefined') {
+  // Use the util module from Node.js to provide TextDecoder
+  const { TextDecoder: NodeTextDecoder, TextEncoder: NodeTextEncoder } = require('util')
+  global.TextDecoder = NodeTextDecoder
+  global.TextEncoder = NodeTextEncoder
+}
