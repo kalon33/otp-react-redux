@@ -949,9 +949,20 @@ components:
     returnBannerLive: Suivi en direct
     returnBannerNoProgress: Aucune progression
     chooseBus: Choisir le bus
+    lessWalking: Moins de marche
+    fewerTransfers: Moins de correspondances
+    avoidBiking: Éviter le vélo
+    fastest: Le plus rapide
   ActiveRoutingPreferences:
     label: Préférences de routage actives
     clear: Effacer
+    lessWalking: Moins de marche
+    fastest: Le plus rapide
+    minimizeWalking: Minimiser la marche
+    staySeated: Rester assis (moins de correspondances)
+    bikeForward: Privilégier le vélo
+    avoidBiking: Éviter le vélo
+    reliableTransfers: Correspondances fiables
 config:
   accessModes:
     car_hail: Course en voiture
@@ -971,3 +982,8 @@ util:
       dans le rayon spécifié ou aux heures indiquées, ou ne sont pas accessibles en
       toute sécurité.
     noTripFoundWithReason: '{noTripFound} {reason}'
+bike-forward: Privilégier le vélo
+avoid-biking: Éviter le vélo
+stay-seated: Rester assis (moins de correspondances)
+minimize-walking: Minimiser la marche
+reliable-transfers: Correspondances fiables
