@@ -946,3 +946,9 @@ util:
       distance or at the specified time, or your start or end point might not be safely
       accessible.
     noTripFoundWithReason: '{noTripFound} {reason}'
+fastest: Fastest
+minimize-walking: Minimize walking
+stay-seated: Stay seated (fewer transfers)
+bike-forward: Prefer biking
+avoid-biking: Avoid biking
+reliable-transfers: Reliable transfers
