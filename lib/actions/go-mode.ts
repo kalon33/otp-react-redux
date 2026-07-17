@@ -134,6 +134,27 @@ const EARLY_BOARD_MIN_MS = 120000
 // sustained departure means the rider genuinely left the vehicle.
 const RIDING_OFFROUTE_CLEAR_MS = 90000
 
+// A reroute fetch must always settle: a fetch killed by a WebView suspension
+// (app backgrounded mid-flight) can otherwise pin reRoute.status at
+// 'searching' forever, silently blocking every future missed-bus auto-update
+// (this stranded the 7/13 trip for two hours).
+const REROUTE_FETCH_TIMEOUT_MS = 45000
+// Wall-clock age past which a 'searching' reroute is declared stuck and
+// cleared by the position tick — covers the timeout timer itself being lost
+// to a suspension.
+const REROUTE_STUCK_MS = 90000
+// A definitive missed bus retries the same-route auto-update on its own
+// schedule: the notification's 30-minute dedup must not gate trip recovery.
+// Retries only while the previous attempt failed outright ('idle'/'none'),
+// never over a card the rider is looking at.
+const MISSED_BUS_REROUTE_RETRY_MS = 60000
+const MISSED_BUS_REROUTE_MAX_ATTEMPTS = 5
+let missedBusRerouteAttempt: {
+  attempts: number
+  departureMs: number
+  lastAtMs: number
+} | null = null
+
 // Minimum progress along a transit leg before GPS alone establishes
 // aboard-ness. isOnRoute is true within 250m of the leg — including while
 // still waiting at the boarding stop — so require clear movement along the
@@ -333,6 +354,7 @@ export const startReroute = createAction<{
   keepRouteId?: string | null
   reason?: string
   searchId: string
+  startedAtMs?: number
 }>(START_REROUTE)
 // Accepts the full list of alternatives (preferred), or a single itinerary /
 // null for the legacy "best candidate only" callers. The reducer normalizes.
@@ -625,6 +647,7 @@ export function endGoMode() {
     lastAutoAnchorMs = null
     earlyBoardReplanKey = null
     lastTransitionedLegIndex = null
+    missedBusRerouteAttempt = null
 
     // Clean up visibilitychange listener
     if (visibilityChangeHandler) {
@@ -715,7 +738,8 @@ export function reRouteFromCurrentPosition(
         autoApply: !!options.autoApply,
         keepRouteId: options.keepRouteId ?? null,
         reason: options.reason,
-        searchId
+        searchId,
+        startedAtMs: Date.now()
       })
     )
 
@@ -785,9 +809,23 @@ export function reRouteFromCurrentPosition(
       payload.routingPreferences = getRoutingProfile('stay-seated')?.prefs
     }
 
-    const { error, itineraries } = await dispatch(
-      fetchOnboardCandidatePlan(payload)
-    )
+    // The plan fetch is written to never reject, but a WebView suspension can
+    // kill it without ever settling — race a timeout (and catch, belt and
+    // braces) so this thunk ALWAYS resolves reRoute.status. Left at
+    // 'searching', every future missed-bus auto-update is silently blocked.
+    let fetchTimeoutId: ReturnType<typeof setTimeout> | undefined
+    const { error, itineraries } = await Promise.race([
+      Promise.resolve(dispatch(fetchOnboardCandidatePlan(payload))).catch(
+        () => ({ error: true, itineraries: [] })
+      ),
+      new Promise<{ error: boolean; itineraries: Itinerary[] }>((resolve) => {
+        fetchTimeoutId = setTimeout(
+          () => resolve({ error: true, itineraries: [] }),
+          REROUTE_FETCH_TIMEOUT_MS
+        )
+      })
+    ])
+    clearTimeout(fetchTimeoutId)
 
     // Re-check state after the async plan: the rider may have exited Go Mode,
     // cleared the card, or fired a newer reroute while this one was in flight.
@@ -2145,20 +2183,60 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       }
     })
 
+    // A reroute stuck at 'searching' (both the fetch and its timeout timer
+    // lost to a WebView suspension) blocks every auto-update below — declare
+    // it dead once definitively overdue so recovery can proceed.
+    let reRouteStatus = goMode.reRoute?.status || 'idle'
+    if (
+      reRouteStatus === 'searching' &&
+      goMode.reRoute?.startedAtMs != null &&
+      Date.now() - goMode.reRoute.startedAtMs > REROUTE_STUCK_MS
+    ) {
+      dispatch(clearReroute())
+      reRouteStatus = 'idle'
+    }
+
+    // Track auto-update attempts per missed departure: the notification's
+    // 30-minute dedup must not gate trip recovery, so a definitive miss keeps
+    // its own retry schedule while attempts fail outright ('idle'/'none') —
+    // never over a card the rider is looking at, and capped so a dead network
+    // doesn't retry forever.
+    if (
+      missedCtx?.definitive &&
+      missedBusRerouteAttempt?.departureMs !== missedCtx.effectiveBoardMs
+    ) {
+      missedBusRerouteAttempt = {
+        attempts: 0,
+        departureMs: missedCtx.effectiveBoardMs,
+        lastAtMs: 0
+      }
+    }
+    const missedRetryDue =
+      missedCtx?.definitive &&
+      missedBusRerouteAttempt != null &&
+      (reRouteStatus === 'idle' || reRouteStatus === 'none') &&
+      missedBusRerouteAttempt.attempts < MISSED_BUS_REROUTE_MAX_ATTEMPTS &&
+      Date.now() - missedBusRerouteAttempt.lastAtMs >=
+        MISSED_BUS_REROUTE_RETRY_MS
+
     // A detected missed bus re-plans immediately: definitively missed (the
     // realtime feed says the bus left, or the rider clearly isn't at the stop)
     // auto-updates to the SAME route's next departure — no prompt, no route
     // change — while an ambiguous miss surfaces the regular Switch/Keep card.
-    const reRouteStatus = goMode.reRoute?.status || 'idle'
     if (
       missedCtx &&
-      missedEvent &&
-      // A definitive miss also supersedes an already-showing card — those
-      // alternatives were computed for an itinerary that is now dead. Only an
-      // in-flight search is left to resolve on its own.
-      (reRouteStatus === 'idle' ||
-        (missedCtx.definitive && reRouteStatus !== 'searching'))
+      (missedEvent
+        ? // A definitive miss also supersedes an already-showing card — those
+          // alternatives were computed for an itinerary that is now dead. Only
+          // an in-flight search is left to resolve on its own.
+          reRouteStatus === 'idle' ||
+          (missedCtx.definitive && reRouteStatus !== 'searching')
+        : missedRetryDue)
     ) {
+      if (missedCtx.definitive && missedBusRerouteAttempt) {
+        missedBusRerouteAttempt.attempts += 1
+        missedBusRerouteAttempt.lastAtMs = Date.now()
+      }
       dispatch(
         reRouteFromCurrentPosition({
           autoApply: missedCtx.definitive,

@@ -163,6 +163,9 @@ export interface GoModeState {
     // What prompted the re-route (e.g. 'missed-bus'); diagnostic only.
     reason: string | null
     searchId: string | null
+    // Wall-clock start of the in-flight search — lets the position tick
+    // declare a 'searching' that never settled (WebView suspension) stuck.
+    startedAtMs: number | null
     status: 'idle' | 'searching' | 'found' | 'none' | 'error'
   }
 
@@ -246,6 +249,7 @@ const defaultState: GoModeState = {
     keepRouteId: null,
     reason: null,
     searchId: null,
+    startedAtMs: null,
     status: 'idle'
   },
 
@@ -634,6 +638,7 @@ const goMode = handleActions<GoModeState, any>(
         keepRouteId: action.payload.keepRouteId ?? null,
         reason: action.payload.reason ?? null,
         searchId: action.payload.searchId,
+        startedAtMs: action.payload.startedAtMs ?? null,
         status: 'searching' as const
       }
     }),
