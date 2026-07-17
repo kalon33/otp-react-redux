@@ -36,38 +36,38 @@ exports[`lib > reducers > create-otp-reducer should be able to create the initia
       "type": "BEST",
     },
   },
-  "goMode": Object {
+  "goMode": {
     "activeItinerary": null,
     "arrivedAt": null,
-    "boardingPrompt": Object {
+    "boardingPrompt": {
       "lastDismissedAt": null,
       "shown": false,
       "transitLegEnteredAt": null,
     },
     "departureOverride": null,
     "isActive": false,
-    "liveLegTimes": Object {},
-    "notifications": Object {
+    "liveLegTimes": {},
+    "notifications": {
       "enabled": true,
-      "recentNotifications": Array [],
-      "sentNotifications": Array [],
+      "recentNotifications": [],
+      "sentNotifications": [],
       "soundEnabled": false,
       "vibrationEnabled": true,
     },
-    "onboard": Object {
-      "alightOptions": Array [],
+    "onboard": {
+      "alightOptions": [],
       "bestAlightStop": null,
-      "candidates": Array [],
+      "candidates": [],
       "status": "idle",
       "trip": null,
       "vehicle": null,
     },
     "originalFrom": null,
     "progress": null,
-    "reRoute": Object {
+    "reRoute": {
       "autoApply": false,
       "candidate": null,
-      "candidates": Array [],
+      "candidates": [],
       "keepRouteId": null,
       "reason": null,
       "searchId": null,
@@ -76,26 +76,26 @@ exports[`lib > reducers > create-otp-reducer should be able to create the initia
     },
     "riding": null,
     "routeMatch": null,
-    "simulation": Object {
+    "simulation": {
       "pointIndex": 0,
       "speedMultiplier": 1,
       "status": "idle",
       "totalPoints": 0,
     },
-    "tracking": Object {
+    "tracking": {
       "error": null,
       "interval": 8000,
       "isTracking": false,
       "lastPosition": null,
     },
-    "ui": Object {
+    "ui": {
       "backgrounded": false,
       "mapFollowUser": false,
     },
-    "vehicleMatch": Object {
+    "vehicleMatch": {
       "consecutiveMatches": 0,
       "match": null,
-      "nearbyVehicles": Array [],
+      "nearbyVehicles": [],
       "trackedRouteId": null,
     },
   },
