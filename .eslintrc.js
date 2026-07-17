@@ -19,7 +19,6 @@ module.exports = {
     'jest',
     'jsx-a11y',
     'react',
-    'sort-destructure-keys',
     'sort-imports-es6-autofix',
     'typescript-sort-keys'
   ],
@@ -83,12 +82,7 @@ module.exports = {
         ignoreCase: true
       }
     ],
-    'sort-destructure-keys/sort-destructure-keys': [
-      'error',
-      {
-        caseSensitive: false
-      }
-    ],
+    'sort-destructure-keys/sort-destructure-keys': 'off',
     'sort-imports-es6-autofix/sort-imports-es6': [
       2,
       {

@@ -18,7 +18,7 @@ if (!window.URL.createObjectURL) {
 // Polyfill TextDecoder for jsdom environment
 if (typeof TextDecoder === 'undefined') {
   // Use the util module from Node.js to provide TextDecoder
-  const { TextDecoder: NodeTextDecoder, TextEncoder: NodeTextEncoder } = require('util')
-  global.TextDecoder = NodeTextDecoder
-  global.TextEncoder = NodeTextEncoder
+  const util = require('util')
+  global.TextDecoder = util.TextDecoder
+  global.TextEncoder = util.TextEncoder
 }
