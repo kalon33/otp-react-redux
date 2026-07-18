@@ -76,7 +76,11 @@ export default defineConfig({
       loader: {
         '.js': 'jsx'
       },
-      plugins: [yamlPlugin(), VitePWA({
+      plugins: [yamlPlugin()]
+    }
+  },
+  plugins: [
+    VitePWA({
       manifest: {
         name: 'Transit Paris',
         short_name: 'OTP Paris',
@@ -128,10 +132,7 @@ export default defineConfig({
           }
         ]
       }
-    })]
-    }
-  },
-  plugins: [
+    }),
     {
       name: 'inject-main-script-to-html',
       transformIndexHtml: {
