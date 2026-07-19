@@ -85,6 +85,7 @@ export default defineConfig({
         name: 'Transit Paris',
         short_name: 'OTP Paris',
         description: 'Planifiez vos trajets avec Transit Paris',
+        start_url: '/',
         theme_color: '#0055a4',
         background_color: '#ffffff',
         display: 'standalone',
@@ -118,6 +119,7 @@ export default defineConfig({
         globPatterns: [
           '**/*.{js,css,html,png,svg,woff2}'
         ],
+        cleanupOutdatedCaches: true,
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/.*.tile.openstreetmap.org\/.*/i,
