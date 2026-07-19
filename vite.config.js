@@ -81,6 +81,8 @@ export default defineConfig({
   },
   plugins: [
     VitePWA({
+      registerType: 'autoUpdate',
+      includeAssets: ['favicon.ico'],
       manifest: {
         name: 'Transit Paris',
         short_name: 'OTP Paris',
