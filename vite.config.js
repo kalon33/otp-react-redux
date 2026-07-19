@@ -8,6 +8,7 @@ import fs from 'fs-extra'
 import raw from 'vite-raw-plugin'
 import react from '@vitejs/plugin-react'
 import ViteYaml from '@modyfi/vite-plugin-yaml'
+import { VitePWA } from 'vite-plugin-pwa'
 
 /**
  * Helper function to copy a file based on an env variable.
@@ -63,7 +64,7 @@ customFile(
 )
 
 export default defineConfig({
-  base: './',
+  base: '/',
   build: {
     // Flatten the output for mastarm deploy (mastarm doesn't support uploading subfolders).
     assetsDir: ''
@@ -79,6 +80,63 @@ export default defineConfig({
     }
   },
   plugins: [
+    VitePWA({
+      registerType: 'autoUpdate',
+      includeAssets: ['favicon.ico'],
+      manifest: {
+        name: 'Transit Paris',
+        short_name: 'OTP Paris',
+        description: 'Planifiez vos trajets avec Transit Paris',
+        start_url: '/',
+        theme_color: '#0055a4',
+        background_color: '#ffffff',
+        display: 'standalone',
+        icons: [
+          {
+            src: '/icon-192x192.png',
+            sizes: '192x192',
+            type: 'image/png',
+            purpose: 'any maskable'
+          },
+          {
+            src: '/icon-512x512.png',
+            sizes: '512x512',
+            type: 'image/png'
+          },
+          {
+            src: '/icon-144x144.png',
+            sizes: '144x144',
+            type: 'image/png'
+          },
+          {
+            src: '/icon-180x180.png',
+            sizes: '180x180',
+            type: 'image/png',
+            purpose: 'apple touch icon'
+          }
+        ]
+      },
+      workbox: {
+        globDirectory: 'public/',
+        globPatterns: [
+          '**/*.{js,css,html,png,svg,woff2}'
+        ],
+        cleanupOutdatedCaches: true,
+        runtimeCaching: [
+          {
+            urlPattern: /^https:\/\/.*.tile.openstreetmap.org\/.*/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'osm-tiles',
+              expiration: {
+                maxEntries: 100,
+                maxAgeSeconds: 24 * 60 * 60 // 1 day
+              }
+            }
+          }
+        ]
+      }
+    }),
     {
       name: 'inject-main-script-to-html',
       transformIndexHtml: {
