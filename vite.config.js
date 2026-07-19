@@ -90,23 +90,23 @@ export default defineConfig({
         display: 'standalone',
         icons: [
           {
-            src: '/icons/icon-192x192.png',
+            src: '/icon-192x192.png',
             sizes: '192x192',
             type: 'image/png',
             purpose: 'any maskable'
           },
           {
-            src: '/icons/icon-512x512.png',
+            src: '/icon-512x512.png',
             sizes: '512x512',
             type: 'image/png'
           },
           {
-            src: '/icons/icon-144x144.png',
+            src: '/icon-144x144.png',
             sizes: '144x144',
             type: 'image/png'
           },
           {
-            src: '/icons/icon-180x180.png',
+            src: '/icon-180x180.png',
             sizes: '180x180',
             type: 'image/png',
             purpose: 'apple touch icon'
