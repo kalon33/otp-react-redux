@@ -200,6 +200,14 @@ export interface GoModeState {
 
   vehicleMatch: {
     consecutiveMatches: number
+    /**
+     * Consecutive vehicle-position polls that came back with ZERO vehicles on
+     * the tracked route. Some agencies publish no GTFS-RT vehicle feed at all
+     * (or theirs is down), in which case a match can never happen and an
+     * endless "Locating your bus…" reads as a hung app. Past
+     * NO_LIVE_VEHICLE_POLLS the UI says so instead.
+     */
+    emptyPolls: number
     match: VehicleMatchResult | null
     nearbyVehicles: NearbyVehicleOption[]
     trackedRouteId: string | null
@@ -280,6 +288,7 @@ const defaultState: GoModeState = {
 
   vehicleMatch: {
     consecutiveMatches: 0,
+    emptyPolls: 0,
     match: null,
     nearbyVehicles: [],
     trackedRouteId: null
@@ -746,12 +755,21 @@ const goMode = handleActions<GoModeState, any>(
       }
     },
 
+    // Payload keys are optional so the "no vehicles on this route" poll can
+    // bump emptyPolls alone without clobbering the last real match.
     [UPDATE_VEHICLE_MATCH]: (state: GoModeState, action: any) => ({
       ...state,
       vehicleMatch: {
         ...state.vehicleMatch,
-        consecutiveMatches: action.payload.consecutiveMatches,
-        match: action.payload.match
+        ...(action.payload.consecutiveMatches !== undefined && {
+          consecutiveMatches: action.payload.consecutiveMatches
+        }),
+        ...(action.payload.emptyPolls !== undefined && {
+          emptyPolls: action.payload.emptyPolls
+        }),
+        ...(action.payload.match !== undefined && {
+          match: action.payload.match
+        })
       }
     })
   },
