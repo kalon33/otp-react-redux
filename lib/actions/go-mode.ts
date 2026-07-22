@@ -2388,7 +2388,17 @@ export function performVehicleMatching(routeId: string) {
     if (!userPos) return
 
     const vehicles = state.otp?.transitIndex?.routes?.[routeId]?.vehicles || []
-    if (vehicles.length === 0) return
+    if (vehicles.length === 0) {
+      // No vehicles on this route at all. Usually the feed simply hasn't
+      // landed yet, but some agencies (e.g. MVTA before its GTFS-RT was wired
+      // up) publish none — count the empty polls so the UI can stop promising
+      // a match that will never come. See NO_LIVE_VEHICLE_POLLS.
+      dispatch({
+        payload: { emptyPolls: (goMode.vehicleMatch?.emptyPolls || 0) + 1 },
+        type: UPDATE_VEHICLE_MATCH
+      })
+      return
+    }
 
     const previousMatch = goMode.vehicleMatch?.match || null
 
@@ -2423,7 +2433,7 @@ export function performVehicleMatching(routeId: string) {
     }
 
     dispatch({
-      payload: { consecutiveMatches, match: matchResult },
+      payload: { consecutiveMatches, emptyPolls: 0, match: matchResult },
       type: UPDATE_VEHICLE_MATCH
     })
 

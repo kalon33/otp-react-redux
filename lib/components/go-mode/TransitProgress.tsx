@@ -4,6 +4,7 @@ import React from 'react'
 import type { Leg } from '@opentripplanner/types'
 
 import { getModeIcon } from '../../util/go-mode/mode-icon'
+import { NO_LIVE_VEHICLE_POLLS } from '../../util/go-mode/vehicle-matching'
 import type { TripProgress } from '../../util/go-mode/progress-calculator'
 import type { VehicleMatchResult } from '../../util/go-mode/vehicle-matching'
 
@@ -25,13 +26,20 @@ import {
 } from './styled'
 
 interface Props {
+  emptyPolls: number
   leg: Leg
   onExit?: () => void
   progress: TripProgress
   vehicleMatch?: VehicleMatchResult | null
 }
 
-const TransitProgress = ({ leg, onExit, progress, vehicleMatch }: Props) => {
+const TransitProgress = ({
+  emptyPolls,
+  leg,
+  onExit,
+  progress,
+  vehicleMatch
+}: Props) => {
   const intl = useIntl()
 
   const shouldShowAlert =
@@ -114,6 +122,14 @@ const TransitProgress = ({ leg, onExit, progress, vehicleMatch }: Props) => {
                         })
                       }
                     )
+                  : emptyPolls >= NO_LIVE_VEHICLE_POLLS
+                  ? // The route publishes no live vehicle positions (or the
+                    // feed is down). Stop promising a match that will never
+                    // arrive — stop progress still comes from GPS.
+                    intl.formatMessage({
+                      defaultMessage: 'No live bus data — tracking by GPS',
+                      id: 'components.GoMode.noLiveVehicleData'
+                    })
                   : intl.formatMessage({
                       defaultMessage: 'Locating your bus...',
                       id: 'components.GoMode.locatingBus'
@@ -144,6 +160,7 @@ const TransitProgress = ({ leg, onExit, progress, vehicleMatch }: Props) => {
 }
 
 const mapStateToProps = (state: any) => ({
+  emptyPolls: state.otp?.goMode?.vehicleMatch?.emptyPolls || 0,
   vehicleMatch: state.otp?.goMode?.vehicleMatch?.match || null
 })
 

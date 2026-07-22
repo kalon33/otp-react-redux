@@ -94,6 +94,7 @@ Object {
     },
     "vehicleMatch": Object {
       "consecutiveMatches": 0,
+      "emptyPolls": 0,
       "match": null,
       "nearbyVehicles": Array [],
       "trackedRouteId": null,
