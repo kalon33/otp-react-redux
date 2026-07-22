@@ -28,6 +28,28 @@ export interface RouteDeparture {
 }
 
 /**
+ * The service date `findStopTimesForStop` should be asked for so that it
+ * returns the departures still runnable *now*: the local calendar date in the
+ * feed's timezone, rolled back one day before the 03:30 service break
+ * (SERVICE_BREAK in util/api — an after-midnight run belongs to yesterday's
+ * service day). The naive `new Date().toISOString()` this replaces was the
+ * UTC date, which from 7 PM CDT onward is already *tomorrow* — every evening
+ * the anchor fetched a day with no catchable departures and went dead.
+ */
+export function currentServiceDate(nowMs: number, timeZone: string): string {
+  const hourMin = new Intl.DateTimeFormat('en-GB', {
+    hour: '2-digit',
+    hour12: false,
+    minute: '2-digit',
+    timeZone
+  }).format(nowMs)
+  const beforeServiceBreak = hourMin < '03:30'
+  return new Intl.DateTimeFormat('sv-SE', { timeZone }).format(
+    beforeServiceBreak ? nowMs - 86400000 : nowMs
+  )
+}
+
+/**
  * OTP2 returns the route as an object (leg.route.id, aliased to gtfsId);
  * legacy responses use a top-level leg.routeId. Match the stop-time gtfsId.
  */

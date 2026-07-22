@@ -8,6 +8,7 @@ import polyline from '@mapbox/polyline'
 import type { Itinerary, LatLngArray, Leg } from '@opentripplanner/types'
 
 import {
+  clampNonLiveLegTimes,
   getDownstreamStops,
   hasLiveArrival,
   liveStopArrival,
@@ -60,6 +61,7 @@ import {
 } from '../util/go-mode/native-gps'
 import {
   AUTO_ANCHOR_MIN_GAIN_MS,
+  currentServiceDate,
   getRouteDepartures,
   getSoonestCatchableMs
 } from '../util/go-mode/departure-anchor'
@@ -517,7 +519,10 @@ export function startGoModeTracking(
     lastTransitionedLegIndex = null
 
     // Pre-fetch stop times for all transit boarding stops
-    const today = new Date().toISOString().split('T')[0]
+    const today = currentServiceDate(
+      getCurrentTime().getTime(),
+      getState().otp.config.homeTimezone
+    )
     for (const leg of itinerary.legs) {
       const stopId = (leg as any).from?.stop?.gtfsId
       if (leg.transitLeg && stopId) {
@@ -2062,7 +2067,10 @@ export function handlePositionUpdate(position: GeolocationPosition) {
           try {
             dispatch(
               findStopTimesForStop({
-                date: new Date().toISOString().split('T')[0],
+                date: currentServiceDate(
+                  currentTime.getTime(),
+                  getState().otp.config.homeTimezone
+                ),
                 forceFetch: true,
                 stopId: boardingStopId
               })
@@ -2100,6 +2108,16 @@ export function handlePositionUpdate(position: GeolocationPosition) {
           }
         }
       }
+    } else if (!isReplayActive()) {
+      // Between polls the clock keeps walking — re-raise any non-live epoch
+      // that fell into the past so displayed times never sit behind now.
+      // (Replay reproduces recorded state and is left untouched, same as the
+      // poll itself.)
+      const staleClamped = clampNonLiveLegTimes(
+        getState().otp.goMode?.liveLegTimes,
+        currentTime.getTime()
+      )
+      if (staleClamped) dispatch(setLiveLegTimes(staleClamped))
     }
 
     // Perform vehicle matching on transit legs
