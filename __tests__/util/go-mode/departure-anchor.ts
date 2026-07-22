@@ -1,4 +1,5 @@
 import {
+  currentServiceDate,
   getLegRouteId,
   getRouteDepartures,
   getSoonestCatchableMs,
@@ -104,5 +105,32 @@ describe('departure-anchor', () => {
     it('returns null when nothing is reachable', () => {
       expect(getSoonestCatchableMs([], 0, 600)).toBeNull()
     })
+  })
+})
+
+describe('currentServiceDate', () => {
+  const TZ = 'America/Chicago'
+  const utc = (y: number, mo: number, d: number, h: number, mi = 0) =>
+    Date.UTC(y, mo - 1, d, h, mi)
+
+  it('uses the local calendar date during the day', () => {
+    // 2026-07-21 14:00 CDT = 19:00 UTC
+    expect(currentServiceDate(utc(2026, 7, 21, 19), TZ)).toBe('2026-07-21')
+  })
+
+  it('stays on the local date in the evening when UTC has rolled over (the dead-anchor bug)', () => {
+    // 2026-07-21 20:00 CDT = 2026-07-22 01:00 UTC — toISOString said 07-22
+    expect(currentServiceDate(utc(2026, 7, 22, 1), TZ)).toBe('2026-07-21')
+  })
+
+  it('rolls back to yesterday after midnight, before the 03:30 service break', () => {
+    // 2026-07-22 00:30 CDT = 05:30 UTC
+    expect(currentServiceDate(utc(2026, 7, 22, 5, 30), TZ)).toBe('2026-07-21')
+  })
+
+  it('flips to the new service day at exactly 03:30 local', () => {
+    // 03:29 CDT -> yesterday; 03:30 CDT -> today
+    expect(currentServiceDate(utc(2026, 7, 22, 8, 29), TZ)).toBe('2026-07-21')
+    expect(currentServiceDate(utc(2026, 7, 22, 8, 30), TZ)).toBe('2026-07-22')
   })
 })
