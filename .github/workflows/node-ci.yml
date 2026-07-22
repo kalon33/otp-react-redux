@@ -6,6 +6,7 @@ on:
       - master
       - dev
       - mistral
+      - mistral2
       - working
   pull_request:
 
