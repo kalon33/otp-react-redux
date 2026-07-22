@@ -3,6 +3,10 @@ import React, { useMemo } from 'react'
 import type { Leg } from '@opentripplanner/types'
 
 import {
+  asContinuation,
+  formatCueDistance
+} from '../../util/go-mode/turn-by-turn'
+import {
   getLegRouteId,
   getRouteDepartures,
   getSoonestCatchableMs
@@ -98,6 +102,20 @@ const WalkingNavigation = ({
   const stopName = nextLeg?.from?.name || leg.to.name
   const isBike = leg.mode === 'BICYCLE'
   const accessEmoji = isBike ? '🚲' : '🚶'
+
+  // Turn-by-turn guidance for this access leg, when the leg carries steps.
+  const turnLine =
+    progress.nextTurnCue && progress.distanceToNextTurn != null
+      ? `${progress.nextTurnCue.instruction} · ${formatCueDistance(
+          progress.distanceToNextTurn
+        )}`
+      : null
+  const thenLine = progress.followingTurnCue
+    ? intl.formatMessage(
+        { defaultMessage: 'then {turn}', id: 'components.GoMode.thenTurn' },
+        { turn: asContinuation(progress.followingTurnCue.instruction) }
+      )
+    : null
 
   const nextLegRouteId = getLegRouteId(nextLeg)
 
@@ -195,13 +213,16 @@ const WalkingNavigation = ({
           }
         )
   } else {
-    // Plain walk/bike leg with no transit connection next.
+    // Plain walk/bike leg with no transit connection next. The turn is the only
+    // thing to act on here, so it gets the sub line and the one after it the
+    // foot — nothing else is competing for the space.
     eyebrow = intl.formatMessage(
       { defaultMessage: '{emoji} To {stop}', id: 'components.GoMode.toStop' },
       { emoji: accessEmoji, stop: leg.to.name }
     )
     hero = formatMinutes(rideSecondsRemaining)
-    sub = progress.nextInstruction || null
+    sub = turnLine || progress.nextInstruction || null
+    foot = thenLine
   }
 
   return (
@@ -230,6 +251,9 @@ const WalkingNavigation = ({
         )}
         {sub && <NavSub>{sub}</NavSub>}
         {foot && <NavFoot>{foot}</NavFoot>}
+        {/* Riding to a bus: the departure stays the headline, but the rider
+            still needs to know which way to go to reach the stop. */}
+        {isNextLegTransit && turnLine && <NavFoot>{turnLine}</NavFoot>}
 
         {showExtras && (
           <NavExtras>

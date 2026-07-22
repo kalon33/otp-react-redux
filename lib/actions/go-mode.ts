@@ -66,10 +66,12 @@ import {
   getSoonestCatchableMs
 } from '../util/go-mode/departure-anchor'
 import {
+  TURN_CARD_NOTIFICATION_ID,
   ensureNativeNotifyPermission,
   hasNativeNotify,
   sendPush
 } from '../util/go-mode/native-notify'
+import { asContinuation, formatCueDistance } from '../util/go-mode/turn-by-turn'
 
 import {
   fetchOnboardCandidatePlan,
@@ -121,6 +123,11 @@ const QUIET_REPLAN_MIN_INTERVAL_MS = 60000
 let manualDepartureLock = false
 let lastAutoAnchorMs: number | null = null
 let earlyBoardReplanKey: string | null = null
+
+// Text currently showing on the always-current turn card, so it is only
+// re-scheduled when the wording actually changes. Rescheduling on every GPS
+// tick would be a notification write per second for the whole ride.
+let lastTurnCardKey: string | null = null
 
 // A leg transition is side-effectful (vehicle tracking, GPS interval restart,
 // departure-override reset), so it must run once per leg. The route match is
@@ -650,6 +657,7 @@ export function endGoMode() {
     // Reset auto-anchor bookkeeping — a new trip is a new decision.
     manualDepartureLock = false
     lastAutoAnchorMs = null
+    lastTurnCardKey = null
     earlyBoardReplanKey = null
     lastTransitionedLegIndex = null
     missedBusRerouteAttempt = null
@@ -1801,7 +1809,12 @@ const PUSH_NOTIFICATION_TYPES = new Set<NotificationType>([
   'LEAVE_SOON',
   'CONNECTION_WARNING',
   'ARRIVING_STOP',
-  'MISSED_BUS'
+  'MISSED_BUS',
+  // Only the turns worth interrupting for; routine ones arrive as
+  // UPCOMING_TURN, which is deliberately absent here and reaches the rider
+  // through the silent turn card below instead. A paired watch gets one
+  // vibration policy for the whole app, so restraint here IS the haptic design.
+  'TURN_ALERT'
 ])
 
 /**
@@ -2200,6 +2213,34 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         }
       }
     })
+
+    // The always-current turn card. One notification, reused id, replaced in
+    // place as the guidance changes, so the top of the rider's notification
+    // list — and therefore the first thing on a paired watch face — always
+    // reads the live next turn. Passive: it must never buzz, because the turns
+    // that deserve a buzz already went out as TURN_ALERT above.
+    if (!replaying && getState().otp.config.goMode?.turnCard !== false) {
+      const cue = progress.nextTurnCue
+      const metresToTurn = progress.distanceToNextTurn
+      if (cue && metresToTurn != null) {
+        // Key on the DISPLAYED distance, not the raw metres: the card only
+        // needs rewriting when the rider would see a different string.
+        const distanceText = formatCueDistance(metresToTurn)
+        const cardKey = `${cue.instruction}|${distanceText}`
+        if (cardKey !== lastTurnCardKey) {
+          lastTurnCardKey = cardKey
+          const then = progress.followingTurnCue
+            ? ` · then ${asContinuation(progress.followingTurnCue.instruction)}`
+            : ''
+          sendPush({
+            id: TURN_CARD_NOTIFICATION_ID,
+            message: `${distanceText}${then}`,
+            passive: true,
+            title: cue.instruction
+          })
+        }
+      }
+    }
 
     // A reroute stuck at 'searching' (both the fetch and its timeout timer
     // lost to a WebView suspension) blocks every auto-update below — declare

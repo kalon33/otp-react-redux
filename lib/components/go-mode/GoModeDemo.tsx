@@ -329,13 +329,35 @@ const GoModeDemo = (): JSX.Element => (
         />
       </Frame>
 
-      <Frame note="Plain access leg, no transit next." title="Walking only">
+      <Frame
+        note="Plain access leg, no transit next — turn-by-turn off leg.steps."
+        title="Walking only"
+      >
         <WalkingNavigation
           leg={walkLeg}
           onExit={() => undefined}
           progress={{
             ...baseProgress,
-            nextInstruction: 'Head north on Hennepin'
+            distanceToNextTurn: 90,
+            followingTurnCue: {
+              distanceMeters: 300,
+              index: 2,
+              instruction: 'Turn right on East 40th Street',
+              offsetMeters: 800,
+              relativeDirection: 'RIGHT',
+              significant: false,
+              streetName: 'East 40th Street'
+            },
+            nextInstruction: 'Turn left on 2nd Avenue South',
+            nextTurnCue: {
+              distanceMeters: 160,
+              index: 1,
+              instruction: 'Turn left on 2nd Avenue South',
+              offsetMeters: 500,
+              relativeDirection: 'LEFT',
+              significant: true,
+              streetName: '2nd Avenue South'
+            }
           }}
         />
       </Frame>

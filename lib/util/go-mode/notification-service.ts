@@ -1,5 +1,6 @@
 import type { Leg } from '@opentripplanner/types'
 
+import { asContinuation, formatCueDistance } from './turn-by-turn'
 import { calculateDistance } from './position-matching'
 import type { TripProgress } from './progress-calculator'
 
@@ -7,6 +8,7 @@ export type NotificationType =
   | 'APPROACH_STOP'
   | 'ARRIVING_STOP'
   | 'UPCOMING_TURN'
+  | 'TURN_ALERT'
   | 'LEG_TRANSITION'
   | 'DELAY_ALERT'
   | 'ROUTE_DEVIATION'
@@ -176,6 +178,12 @@ export function checkArrivingStop(
   return null
 }
 
+// Lead distances for turn cues, in metres. A cyclist covers 50 m in about 8
+// seconds, so the walking numbers this used to carry arrived far too late to
+// act on; these give a bike roughly the same *time* to react that a walker gets.
+const BIKE_CUE_DISTANCES = { act: 30, prepare: 120 }
+const WALK_CUE_DISTANCES = { act: 15, prepare: 40 }
+
 /**
  * Check if should notify for upcoming turn
  */
@@ -184,29 +192,50 @@ export function checkUpcomingTurn(
   currentLeg: Leg,
   sentNotifications: string[]
 ): NotificationEvent | null {
-  if (
-    (currentLeg.mode === 'WALK' || currentLeg.mode === 'BICYCLE') &&
-    progress.distanceToNextTurn &&
-    progress.distanceToNextTurn < 50 &&
-    progress.distanceToNextTurn > 10
-  ) {
-    const id = generateNotificationId('UPCOMING_TURN', `${currentLeg.to.name}`)
+  const isBike = currentLeg.mode === 'BICYCLE'
+  if (!isBike && currentLeg.mode !== 'WALK') return null
 
-    if (!wasRecentlySent(id, sentNotifications, 30000)) {
-      return {
-        id,
-        message:
-          progress.nextInstruction ||
-          `In ${Math.round(progress.distanceToNextTurn)}m`,
-        priority: 'medium',
-        timestamp: new Date(),
-        title: 'Turn Ahead',
-        type: 'UPCOMING_TURN'
-      }
-    }
+  const cue = progress.nextTurnCue
+  const distance = progress.distanceToNextTurn
+  if (!cue || distance == null) return null
+
+  const { act, prepare } = isBike ? BIKE_CUE_DISTANCES : WALK_CUE_DISTANCES
+  if (distance > prepare) return null
+
+  // Two cues per turn: one with time to react, one at the corner itself.
+  const stage = distance <= act ? 'act' : 'prepare'
+
+  // Key on the turn's identity and stage — never the distance, which changes
+  // every GPS tick and would defeat the dedup window entirely.
+  const id = generateNotificationId(
+    'UPCOMING_TURN',
+    `${currentLeg.startTime}_${cue.index}_${stage}`
+  )
+  if (wasRecentlySent(id, sentNotifications, 30000)) return null
+
+  // Instruction leads the title: Garmin shows the title prominently and
+  // truncates the body, so "Turn left on Bryant Ave S" must not land there.
+  const title = cue.instruction
+  const then = progress.followingTurnCue
+    ? `, then ${asContinuation(progress.followingTurnCue.instruction)}`
+    : ''
+  const message =
+    stage === 'act'
+      ? formatCueDistance(distance)
+      : `In ${formatCueDistance(distance)}${then}`
+
+  return {
+    id,
+    message,
+    priority: 'medium',
+    timestamp: new Date(),
+    title,
+    // Only significant turns become TURN_ALERT, the type that is pushed to the
+    // phone (and so to the rider's watch). Everything else stays UPCOMING_TURN:
+    // on-screen and on the always-current card, but silent.
+    type:
+      cue.significant && stage === 'prepare' ? 'TURN_ALERT' : 'UPCOMING_TURN'
   }
-
-  return null
 }
 
 // Lead time for the "time to go" alert: warn when the rider has this many
@@ -495,9 +524,17 @@ export function checkLegTransition(
  */
 export function checkRouteDeviation(
   distanceFromRoute: number,
-  sentNotifications: string[]
+  sentNotifications: string[],
+  currentLeg?: Leg
 ): NotificationEvent | null {
-  if (distanceFromRoute > 200) {
+  // 200 m is a walking allowance. On a bike a wrong turn puts that much
+  // sideways distance between you and the route in well under a minute, and
+  // every extra second spent off-route is another block to backtrack — so react
+  // sooner. Still generous enough to absorb GPS scatter and a parallel bike
+  // path running alongside the planned street.
+  const threshold = currentLeg?.mode === 'BICYCLE' ? 120 : 200
+
+  if (distanceFromRoute > threshold) {
     // Stable context: the measured distance changes every GPS tick, so it must
     // not be part of the dedup key or the 120s window never matches.
     const id = generateNotificationId('ROUTE_DEVIATION', 'deviation')
@@ -757,7 +794,7 @@ export function checkForNotifications(
   )
   pushIf(
     notifications,
-    checkRouteDeviation(distanceFromRoute, sentNotifications)
+    checkRouteDeviation(distanceFromRoute, sentNotifications, currentLeg)
   )
 
   // At-risk downstream connection (needs the full leg list).
@@ -782,8 +819,15 @@ export function checkForNotifications(
 
   pushIf(notifications, checkTripComplete(progress, sentNotifications))
 
-  // Lower priority: only surface a turn when nothing else is showing.
-  if (notifications.length === 0) {
+  // Turn cues are real navigation now, not the "Continue to X" filler they used
+  // to be, so they are no longer suppressed by any alert that happens to fire in
+  // the same tick. Only the two that would have the rider abandoning this leg
+  // outright still win — following a turn onto a bus you've already missed is
+  // worse than saying nothing.
+  const supersedesTurn = notifications.some(
+    (n) => n.type === 'MISSED_BUS' || n.type === 'CONNECTION_WARNING'
+  )
+  if (!supersedesTurn) {
     pushIf(
       notifications,
       checkUpcomingTurn(progress, currentLeg, sentNotifications)

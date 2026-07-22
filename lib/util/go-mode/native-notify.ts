@@ -19,10 +19,34 @@
  */
 
 export interface PushPayload {
+  /**
+   * Stable notification id. Reusing one makes iOS REPLACE the existing
+   * notification instead of stacking a new one — the mechanism behind the
+   * always-current turn card. Omit for one-off alerts, which each want their
+   * own entry.
+   */
+  id?: number
   message: string
+  /**
+   * Deliver without lighting the screen or buzzing (iOS `.passive`
+   * interruption level). Used for the turn card, which updates continuously and
+   * must not tap the rider's wrist every time the distance ticks down.
+   *
+   * Supported natively by @capacitor/local-notifications — it maps the
+   * "passive" string onto UNNotificationInterruptionLevel.passive. Older
+   * shells that don't recognise the key ignore it and alert normally.
+   */
+  passive?: boolean
   priority?: number
   title: string
 }
+
+/**
+ * Reserved id for the live turn card. Any value works so long as it is stable
+ * and can't collide with the `Date.now()`-derived ids of one-off alerts — those
+ * are epoch-millisecond timestamps, so a small constant is permanently safe.
+ */
+export const TURN_CARD_NOTIFICATION_ID = 1
 
 function bridge(): any | null {
   const cap = (window as any).Capacitor
@@ -69,9 +93,12 @@ export async function sendPush(payload: PushPayload): Promise<void> {
           body: payload.message,
           // Millisecond clock truncated to a positive int (plugin id limit);
           // alerts are seconds apart so collisions don't happen in practice.
-          id: Date.now() & 0x7fffffff,
+          id: payload.id ?? Date.now() & 0x7fffffff,
+          interruptionLevel: payload.passive ? 'passive' : undefined,
           sound:
-            payload.priority && payload.priority > 0 ? 'default' : undefined,
+            !payload.passive && payload.priority && payload.priority > 0
+              ? 'default'
+              : undefined,
           title: payload.title
         }
       ]
