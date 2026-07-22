@@ -595,7 +595,16 @@ const goMode = handleActions<GoModeState, any>(
         notifications: {
           ...state.notifications,
           recentNotifications: [],
-          sentNotifications: []
+          // Alight alerts are keyed to the physical exit STOP, and they alone
+          // survive a trip swap: a background auto-update re-enters here with a
+          // new itinerary, and wiping their history let the same stop buzz the
+          // rider a second time — the complaint this whole path exists to fix.
+          // Everything else (boarding, connections, turns) is about the trip
+          // that just changed and must be free to fire again.
+          sentNotifications: state.notifications.sentNotifications.filter(
+            (id) =>
+              id.startsWith('APPROACH_STOP_') || id.startsWith('ARRIVING_STOP_')
+          )
         },
         originalFrom: originalFrom ?? null,
         progress: null,

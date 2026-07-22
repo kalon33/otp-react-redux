@@ -21,6 +21,8 @@ import {
   LegRow,
   LegSubtitle,
   LegTime,
+  LegTimeLabel,
+  LegTimePair,
   LegTitle,
   RerouteButton,
   RerouteCardTitle,
@@ -53,6 +55,61 @@ const REROUTE_CHIPS = [
 ]
 
 const TRANSIT_MODES = new Set(['BUS', 'FERRY', 'RAIL', 'SUBWAY', 'TRAM'])
+
+interface TimePoint {
+  epoch: number | string | undefined
+  realtime: boolean
+}
+
+/**
+ * A transit row's two clock times, labelled. One unlabelled time left the rider
+ * guessing which end of the ride it referred to, exactly when it mattered
+ * (7/22 note: "should show boarding bus time, and exit bus time for clarity").
+ * Each carries its own realtime flag — a live board time and a scheduled alight
+ * time are common, and the glyph must tell the truth about both.
+ */
+const TransitLegTimes = ({
+  alight,
+  alightText,
+  board,
+  boardText
+}: {
+  alight: TimePoint
+  alightText: string
+  board: TimePoint
+  boardText: string
+}) => {
+  const intl = useIntl()
+  if (!boardText && !alightText) return null
+  return (
+    <LegTime>
+      <LegTimePair>
+        {boardText && (
+          <span>
+            <LegTimeLabel>
+              {intl.formatMessage({
+                defaultMessage: 'board',
+                id: 'components.GoMode.legBoardLabel'
+              })}
+            </LegTimeLabel>
+            <RealtimeTime live={board.realtime}>{boardText}</RealtimeTime>
+          </span>
+        )}
+        {alightText && (
+          <span>
+            <LegTimeLabel>
+              {intl.formatMessage({
+                defaultMessage: 'off',
+                id: 'components.GoMode.legAlightLabel'
+              })}
+            </LegTimeLabel>
+            <RealtimeTime live={alight.realtime}>{alightText}</RealtimeTime>
+          </span>
+        )}
+      </LegTimePair>
+    </LegTime>
+  )
+}
 
 interface Props {
   activeItinerary: Itinerary | null
@@ -125,9 +182,21 @@ const TripSheet = ({
     return { epoch: leg.endTime, realtime: false }
   }
 
-  // Board time for the wait note: prefer the live figure, else the plan's.
-  const legBoardTime = (i: number, leg: Leg): string =>
-    formatClock(liveLegTimes[i]?.boardEpoch ?? leg.startTime)
+  // Board time, mirroring legAlight: prefer the live figure, else the plan's,
+  // and report honestly whether what's shown is realtime.
+  const legBoard = (
+    i: number,
+    leg: Leg
+  ): { epoch: number | string | undefined; realtime: boolean } => {
+    const live = liveLegTimes[i]
+    if (TRANSIT_MODES.has(leg.mode) && live?.boardEpoch) {
+      return {
+        epoch: live.boardEpoch,
+        realtime: live.boardRealtime ?? live.realtime
+      }
+    }
+    return { epoch: leg.startTime, realtime: false }
+  }
 
   // Wait at a transit leg's boarding stop: the gap between reaching the stop
   // and the bus leaving. For the very next bus the rider is walking toward,
@@ -286,6 +355,8 @@ const TripSheet = ({
           const waitMins = waitSecs != null ? Math.round(waitSecs / 60) : 0
           const alight = legAlight(i, leg)
           const alightText = formatClock(alight.epoch)
+          const board = legBoard(i, leg)
+          const boardText = isTransit ? formatClock(board.epoch) : ''
           return (
             <LegRow $current={isCurrent} $dim={i < currentLegIndex} key={i}>
               <LegIcon>{getModeIcon(leg.mode)}</LegIcon>
@@ -295,10 +366,10 @@ const TripSheet = ({
                   <WaitNote>
                     {intl.formatMessage(
                       {
-                        defaultMessage: '🕒 board {time} · {mins} min wait',
+                        defaultMessage: '🕒 {mins} min wait',
                         id: 'components.GoMode.legWait'
                       },
-                      { mins: waitMins, time: legBoardTime(i, leg) }
+                      { mins: waitMins }
                     )}
                   </WaitNote>
                 )}
@@ -322,16 +393,15 @@ const TripSheet = ({
                 </LegSubtitle>
                 {isCurrent && isTransit && renderCurrentStops(leg)}
               </LegInfo>
-              {alightText && (
-                <LegTime>
-                  {isTransit ? (
-                    <RealtimeTime live={alight.realtime}>
-                      {alightText}
-                    </RealtimeTime>
-                  ) : (
-                    alightText
-                  )}
-                </LegTime>
+              {isTransit ? (
+                <TransitLegTimes
+                  alight={alight}
+                  alightText={alightText}
+                  board={board}
+                  boardText={boardText}
+                />
+              ) : (
+                alightText && <LegTime>{alightText}</LegTime>
               )}
             </LegRow>
           )

@@ -1,6 +1,5 @@
 import {
-  checkApproachingStop,
-  checkArrivingStop,
+  checkAlightAlerts,
   checkConnectionWarning,
   checkDelayAlert,
   checkForNotifications,
@@ -115,78 +114,102 @@ describe('util > go-mode > notification-service', () => {
     })
   })
 
-  describe('checkApproachingStop', () => {
-    it('should return notification when 2 stops remaining on BUS', () => {
-      const progress = makeProgress({
-        nextStopName: 'Stop B',
-        stopsRemaining: 2
-      })
-      const leg = {
-        mode: 'BUS',
-        routeShortName: '5',
-        to: { name: 'Destination' }
-      } as any
+  describe('checkAlightAlerts', () => {
+    const busLeg = {
+      mode: 'BUS',
+      routeShortName: '5',
+      startTime: 1769610000000,
+      to: { name: 'My Stop' }
+    } as any
 
-      const result = checkApproachingStop(progress, leg, [])
+    it('warns once about 2 minutes out', () => {
+      const result = checkAlightAlerts(
+        makeProgress(),
+        busLeg,
+        { distanceMetres: 3000, etaSeconds: 110 },
+        []
+      )
       expect(result).not.toBeNull()
       expect(result!.type).toBe('APPROACH_STOP')
       expect(result!.priority).toBe('high')
-      expect(result!.message).toContain('2 stops away')
+      expect(result!.message).toContain('My Stop')
     })
 
-    it('should return notification when 2 stops remaining on RAIL', () => {
-      const progress = makeProgress({ stopsRemaining: 2 })
-      const leg = {
-        mode: 'RAIL',
-        routeLongName: 'Blue Line',
-        to: { name: 'Target Field' }
-      } as any
-
-      const result = checkApproachingStop(progress, leg, [])
-      expect(result).not.toBeNull()
-      expect(result!.type).toBe('APPROACH_STOP')
+    it('says nothing while the stop is still far off', () => {
+      expect(
+        checkAlightAlerts(
+          makeProgress(),
+          busLeg,
+          { distanceMetres: 6000, etaSeconds: 400 },
+          []
+        )
+      ).toBeNull()
     })
 
-    it('should return null when not 2 stops remaining', () => {
-      const progress = makeProgress({ stopsRemaining: 3 })
-      const leg = {
-        mode: 'BUS',
-        routeShortName: '5',
-        to: { name: 'Dest' }
-      } as any
-      expect(checkApproachingStop(progress, leg, [])).toBeNull()
-    })
-
-    it('should return null for WALK mode', () => {
-      const progress = makeProgress({ stopsRemaining: 2 })
-      const leg = { mode: 'WALK', to: { name: 'Dest' } } as any
-      expect(checkApproachingStop(progress, leg, [])).toBeNull()
-    })
-  })
-
-  describe('checkArrivingStop', () => {
-    it('should return notification when 1 stop remaining on transit', () => {
-      const progress = makeProgress({ stopsRemaining: 1 })
-      const leg = {
-        mode: 'BUS',
-        routeShortName: '5',
-        to: { name: 'My Stop' }
-      } as any
-
-      const result = checkArrivingStop(progress, leg, [])
-      expect(result).not.toBeNull()
+    it('raises the door alert as arrival gets close', () => {
+      const result = checkAlightAlerts(
+        makeProgress(),
+        busLeg,
+        { distanceMetres: 900, etaSeconds: 20 },
+        []
+      )
       expect(result!.type).toBe('ARRIVING_STOP')
       expect(result!.message).toContain('My Stop')
     })
 
-    it('should return null when more than 1 stop remaining', () => {
-      const progress = makeProgress({ stopsRemaining: 2 })
-      const leg = {
-        mode: 'BUS',
-        routeShortName: '5',
-        to: { name: 'Dest' }
-      } as any
-      expect(checkArrivingStop(progress, leg, [])).toBeNull()
+    it('raises the door alert on GPS proximity when the prediction is stale', () => {
+      const result = checkAlightAlerts(
+        makeProgress({ currentLegProgress: 95 }),
+        busLeg,
+        { distanceMetres: 120, etaSeconds: 240 },
+        []
+      )
+      expect(result!.type).toBe('ARRIVING_STOP')
+    })
+
+    it('ignores proximity early in the leg (a route that loops back)', () => {
+      expect(
+        checkAlightAlerts(
+          makeProgress({ currentLegProgress: 10 }),
+          busLeg,
+          { distanceMetres: 120, etaSeconds: 900 },
+          []
+        )
+      ).toBeNull()
+    })
+
+    // The 7/22 complaint: stopsRemaining sat at 1 for minutes and the old
+    // level+60s-window trigger re-fired every minute. Each stage must fire
+    // exactly once no matter how long the rider lingers in range.
+    it('fires each stage exactly once across a whole approach', () => {
+      const sent: string[] = []
+      const emitted: string[] = []
+      // Every 15 s from 5 minutes out to arrival.
+      for (let eta = 300; eta >= 0; eta -= 15) {
+        const event = checkAlightAlerts(
+          makeProgress({ currentLegProgress: 90 }),
+          busLeg,
+          { distanceMetres: eta * 8, etaSeconds: eta },
+          sent
+        )
+        if (event) {
+          emitted.push(event.type)
+          sent.push(event.id)
+        }
+      }
+      expect(emitted).toEqual(['APPROACH_STOP', 'ARRIVING_STOP'])
+    })
+
+    it('returns null for WALK mode', () => {
+      const leg = { mode: 'WALK', startTime: 1, to: { name: 'Dest' } } as any
+      expect(
+        checkAlightAlerts(
+          makeProgress(),
+          leg,
+          { distanceMetres: 10, etaSeconds: 5 },
+          []
+        )
+      ).toBeNull()
     })
   })
 
@@ -557,13 +580,11 @@ describe('util > go-mode > notification-service', () => {
     })
 
     it('should return approach stop notification', () => {
-      const progress = makeProgress({
-        nextStopName: 'Stop B',
-        stopsRemaining: 2
-      })
+      const progress = makeProgress({ nextStopName: 'Stop B' })
       const leg = {
         mode: 'BUS',
         routeShortName: '5',
+        startTime: 1769610000000,
         to: { name: 'Destination' }
       } as any
       const config = makeConfig()
@@ -575,10 +596,35 @@ describe('util > go-mode > notification-service', () => {
         undefined,
         10,
         [],
-        config
+        config,
+        [leg],
+        { distanceMetres: 2000, etaSeconds: 100 }
       )
       expect(result.length).toBeGreaterThan(0)
       expect(result.some((n) => n.type === 'APPROACH_STOP')).toBe(true)
+    })
+
+    it('raises no alight alert without an alight context', () => {
+      const leg = {
+        mode: 'BUS',
+        routeShortName: '5',
+        startTime: 1769610000000,
+        to: { name: 'Destination' }
+      } as any
+      const result = checkForNotifications(
+        makeProgress(),
+        leg,
+        0,
+        undefined,
+        10,
+        [],
+        makeConfig()
+      )
+      expect(
+        result.some(
+          (n) => n.type === 'APPROACH_STOP' || n.type === 'ARRIVING_STOP'
+        )
+      ).toBe(false)
     })
 
     it('should return route deviation notification', () => {

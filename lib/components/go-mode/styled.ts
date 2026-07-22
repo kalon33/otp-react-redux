@@ -1017,6 +1017,22 @@ export const LegTime = styled.div`
   white-space: nowrap;
 `
 
+// "board" / "off" labels beside a transit row's two clock times. Deliberately
+// quiet — the times are what the rider scans for; the labels only disambiguate.
+export const LegTimeLabel = styled.span`
+  color: #888;
+  font-size: 11px;
+  font-weight: 500;
+  margin-right: 4px;
+`
+
+// Stacks the board time above the alight time inside LegTime.
+export const LegTimePair = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+`
+
 export const WaitNote = styled.div`
   align-items: center;
   color: #8a5a00;

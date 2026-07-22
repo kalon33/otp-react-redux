@@ -41,6 +41,7 @@ import { getNextStopOnRide } from '../util/go-mode/next-stop'
 import { collectRerouteCandidates } from '../util/go-mode/reroute-candidates'
 import { pickAccessReplanCandidate, pickSameRouteReroute } from '../util/state'
 import type {
+  AlightContext,
   NotificationEvent,
   NotificationType
 } from '../util/go-mode/notification-service'
@@ -60,10 +61,11 @@ import {
   stopNativeGps
 } from '../util/go-mode/native-gps'
 import {
-  AUTO_ANCHOR_MIN_GAIN_MS,
+  DEPARTURE_OVERDUE_GRACE_MS,
   currentServiceDate,
   getRouteDepartures,
-  getSoonestCatchableMs
+  getSoonestCatchableMs,
+  shouldAdoptAnchor
 } from '../util/go-mode/departure-anchor'
 import {
   TURN_CARD_NOTIFICATION_ID,
@@ -1892,6 +1894,59 @@ export function refreshLiveLegTimes() {
   }
 }
 
+/**
+ * Move the trip on to `legIndex`. Side-effectful — it clears the anchored
+ * departure, swaps vehicle tracking, and restarts the position watcher at the
+ * new leg's polling rate — so it must run once per leg; `lastTransitionedLegIndex`
+ * is the guard, and setting it here is what keeps the automatic path from
+ * re-running the same transition on the following tick.
+ *
+ * Both the GPS-driven transition and the rider's manual "I got off here" come
+ * through this. Manual advances stick: matchPositionToRoute only ever searches
+ * forward from the current leg, so the matcher cannot pull the trip back.
+ */
+export function advanceToLeg(legIndex: number) {
+  return function (dispatch: any, getState: any) {
+    const goMode = getState().otp?.goMode
+    const itinerary: Itinerary | null = goMode?.activeItinerary
+    if (!goMode?.isActive || !itinerary) return
+    const legs = itinerary.legs || []
+    if (legIndex < 0 || legIndex >= legs.length) return
+
+    const previousLegIndex = goMode.routeMatch?.legIndex || 0
+    lastTransitionedLegIndex = legIndex
+    dispatch(transitionLeg({ legIndex }))
+
+    // New leg = new upcoming boarding = a fresh auto-anchor decision.
+    manualDepartureLock = false
+    lastAutoAnchorMs = null
+
+    // Update tracking interval for new leg
+    const newLeg = legs[legIndex]
+    const newInterval = getTrackingIntervalForLeg(newLeg)
+    dispatch(updateTrackingInterval({ interval: newInterval }))
+
+    // Handle vehicle tracking on leg transitions
+    const previousLeg = legs[previousLegIndex]
+    if (previousLeg?.transitLeg) {
+      dispatch(stopVehicleTracking())
+    }
+    const newLegRouteId = getLegRouteId(newLeg)
+    if (newLeg?.transitLeg && newLegRouteId) {
+      dispatch(startVehicleTracking(newLegRouteId))
+    }
+
+    // Restart tracking with new interval (but not during simulation)
+    if (!simulationActive) {
+      if (gpsPollingIntervalId) {
+        clearInterval(gpsPollingIntervalId)
+        gpsPollingIntervalId = null
+      }
+      dispatch(startPositionTracking())
+    }
+  }
+}
+
 export function handlePositionUpdate(position: GeolocationPosition) {
   return function (dispatch: any, getState: any) {
     const state = getState()
@@ -1989,36 +2044,7 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       shouldTransitionToNextLeg(routeMatch, previousLegIndex) &&
       routeMatch.legIndex !== lastTransitionedLegIndex
     ) {
-      lastTransitionedLegIndex = routeMatch.legIndex
-      dispatch(transitionLeg({ legIndex: routeMatch.legIndex }))
-
-      // New leg = new upcoming boarding = a fresh auto-anchor decision.
-      manualDepartureLock = false
-      lastAutoAnchorMs = null
-
-      // Update tracking interval for new leg
-      const newLeg = itinerary.legs[routeMatch.legIndex]
-      const newInterval = getTrackingIntervalForLeg(newLeg)
-      dispatch(updateTrackingInterval({ interval: newInterval }))
-
-      // Handle vehicle tracking on leg transitions
-      const previousLeg = itinerary.legs[previousLegIndex]
-      if (previousLeg?.transitLeg) {
-        dispatch(stopVehicleTracking())
-      }
-      const newLegRouteId = getLegRouteId(newLeg)
-      if (newLeg?.transitLeg && newLegRouteId) {
-        dispatch(startVehicleTracking(newLegRouteId))
-      }
-
-      // Restart tracking with new interval (but not during simulation)
-      if (!simulationActive) {
-        if (gpsPollingIntervalId) {
-          clearInterval(gpsPollingIntervalId)
-          gpsPollingIntervalId = null
-        }
-        dispatch(startPositionTracking())
-      }
+      dispatch(advanceToLeg(routeMatch.legIndex))
     }
 
     // Calculate progress — use simulated clock during simulation, real time for live GPS
@@ -2107,12 +2133,15 @@ export function handlePositionUpdate(position: GeolocationPosition) {
             const soonest = getSoonestCatchableMs(
               getRouteDepartures(stopData, getLegRouteId(anchorNextLeg)),
               currentTime.getTime(),
-              rideSecondsRemaining
+              rideSecondsRemaining,
+              DEPARTURE_OVERDUE_GRACE_MS
             )
+            // Measured against the departure currently in force, never the
+            // plan's — see shouldAdoptAnchor.
+            const effectiveDeparture =
+              departureOverride ?? Number(anchorNextLeg.startTime)
             if (
-              soonest != null &&
-              Number(anchorNextLeg.startTime) - soonest >=
-                AUTO_ANCHOR_MIN_GAIN_MS &&
+              shouldAdoptAnchor(soonest, effectiveDeparture) &&
               soonest !== departureOverride
             ) {
               lastAutoAnchorMs = soonest
@@ -2147,6 +2176,31 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         ? itinerary.legs[routeMatch.legIndex + 1]
         : undefined
 
+    // How close the rider is to their exit, for the two alight alerts. The live
+    // alight epoch is used ONLY when it is genuinely realtime: the non-live
+    // branch is clamped forward to `now` by clampNonLiveLegTimes, which would
+    // read as "arriving now" on every tick. Schedule data falls back to the
+    // plan leg's own endTime, and GPS distance backs both up at the kerb.
+    const liveAlight = goMode.liveLegTimes?.[routeMatch.legIndex]
+    const alightEpochMs =
+      liveAlight?.alightRealtime && liveAlight.alightEpoch != null
+        ? liveAlight.alightEpoch
+        : Number(currentLeg?.endTime)
+    const alightContext: AlightContext = {
+      distanceMetres:
+        currentLeg?.to?.lat != null && currentLeg?.to?.lon != null
+          ? calculateDistance(
+              currentPosition[0],
+              currentPosition[1],
+              currentLeg.to.lat,
+              currentLeg.to.lon
+            )
+          : null,
+      etaSeconds: Number.isFinite(alightEpochMs)
+        ? (alightEpochMs - currentTime.getTime()) / 1000
+        : null
+    }
+
     const notifications = checkForNotifications(
       progress,
       currentLeg,
@@ -2159,7 +2213,8 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         soundEnabled: false,
         vibrationEnabled: true
       },
-      itinerary.legs
+      itinerary.legs,
+      alightContext
     )
 
     // Missed boarding? Judged outside checkForNotifications because it needs
