@@ -1,4 +1,5 @@
 import {
+  clampNonLiveLegTimes,
   liveStopArrival,
   mergeLiveTimePoint,
   pickBestAlightOption,
@@ -258,6 +259,70 @@ describe('mergeLiveTimePoint', () => {
 
   it('returns null with nothing to merge', () => {
     expect(mergeLiveTimePoint(null, null, NOW)).toBeNull()
+  })
+})
+
+describe('clampNonLiveLegTimes', () => {
+  const NOW = 1784692936000 // 23:42:16 on the 7/21 end-of-service sample
+  const entry = (over: any) => ({
+    alightEpoch: NOW + 300000,
+    alightRealtime: false,
+    boardEpoch: NOW + 60000,
+    boardRealtime: false,
+    realtime: false,
+    ...over
+  })
+
+  it('raises a non-live alight epoch that drifted behind now (7/21 case)', () => {
+    // 23:42:10 sampled at 23:42:16 — 6 s stale between 20 s refresh polls.
+    const times = { 1: entry({ alightEpoch: NOW - 6000 }) }
+    expect(clampNonLiveLegTimes(times, NOW)).toEqual({
+      1: entry({ alightEpoch: NOW })
+    })
+  })
+
+  it('clamps board and alight independently', () => {
+    const times = {
+      1: entry({ alightEpoch: NOW - 6000, boardEpoch: NOW - 9000 })
+    }
+    expect(clampNonLiveLegTimes(times, NOW)).toEqual({
+      1: entry({ alightEpoch: NOW, boardEpoch: NOW })
+    })
+  })
+
+  it('leaves live figures alone even when past (a live time may lag honestly)', () => {
+    const times = {
+      1: entry({
+        alightEpoch: NOW - 6000,
+        alightRealtime: true,
+        realtime: true
+      })
+    }
+    expect(clampNonLiveLegTimes(times, NOW)).toBeNull()
+  })
+
+  it('falls back to the legacy any-field realtime flag', () => {
+    const times = {
+      1: entry({
+        alightEpoch: NOW - 6000,
+        alightRealtime: undefined,
+        realtime: true
+      })
+    }
+    expect(clampNonLiveLegTimes(times, NOW)).toBeNull()
+  })
+
+  it('returns null when nothing drifted, so callers skip the dispatch', () => {
+    expect(clampNonLiveLegTimes({ 1: entry({}) }, NOW)).toBeNull()
+    expect(clampNonLiveLegTimes(null, NOW)).toBeNull()
+  })
+
+  it('keeps untouched legs identical while clamping the stale one', () => {
+    const fresh = entry({})
+    const times = { 1: fresh, 2: entry({ alightEpoch: NOW - 3000 }) }
+    const out = clampNonLiveLegTimes(times, NOW)
+    expect(out?.[1]).toBe(fresh)
+    expect(out?.[2].alightEpoch).toBe(NOW)
   })
 })
 

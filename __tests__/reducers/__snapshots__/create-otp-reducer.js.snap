@@ -1,73 +1,73 @@
-// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+// Jest Snapshot v1, https://goo.gl/fbAQLP
 
 exports[`lib > reducers > create-otp-reducer should be able to create the initial state 1`] = `
-{
+Object {
   "activeSearchId": 0,
-  "config": {
-    "autoPlan": {
+  "config": Object {
+    "autoPlan": Object {
       "default": "ONE_LOCATION_CHANGED",
       "mobile": "BOTH_LOCATIONS_CHANGED",
     },
     "debouncePlanTimeMs": 0,
     "homeTimezone": "America/Los_Angeles",
-    "language": {},
+    "language": Object {},
     "onTimeThresholdSeconds": 60,
-    "phoneFormatOptions": {
+    "phoneFormatOptions": Object {
       "countryCode": "US",
     },
     "realtimeEffectsDisplayThreshold": 120,
-    "stopViewer": {
+    "stopViewer": Object {
       "showBlockIds": false,
     },
-    "transitOperators": [],
+    "transitOperators": Array [],
   },
-  "currentQuery": {
+  "currentQuery": Object {
     "date": "2019-08-04",
     "departArrive": "NOW",
-    "intermediatePlaces": [],
+    "intermediatePlaces": Array [],
     "mode": "WALK,TRANSIT",
     "numItineraries": 3,
     "routingType": "ITINERARY",
     "time": "19:34",
   },
-  "filter": {
-    "sort": {
+  "filter": Object {
+    "sort": Object {
       "direction": "ASC",
       "type": "BEST",
     },
   },
-  "goMode": {
+  "goMode": Object {
     "activeItinerary": null,
     "arrivedAt": null,
-    "boardingPrompt": {
+    "boardingPrompt": Object {
       "lastDismissedAt": null,
       "shown": false,
       "transitLegEnteredAt": null,
     },
     "departureOverride": null,
     "isActive": false,
-    "liveLegTimes": {},
-    "notifications": {
+    "liveLegTimes": Object {},
+    "notifications": Object {
       "enabled": true,
-      "recentNotifications": [],
-      "sentNotifications": [],
+      "recentNotifications": Array [],
+      "sentNotifications": Array [],
       "soundEnabled": false,
       "vibrationEnabled": true,
     },
-    "onboard": {
-      "alightOptions": [],
+    "onboard": Object {
+      "alightOptions": Array [],
       "bestAlightStop": null,
-      "candidates": [],
+      "candidates": Array [],
       "status": "idle",
       "trip": null,
       "vehicle": null,
     },
     "originalFrom": null,
     "progress": null,
-    "reRoute": {
+    "reRoute": Object {
       "autoApply": false,
       "candidate": null,
-      "candidates": [],
+      "candidates": Array [],
       "keepRouteId": null,
       "reason": null,
       "searchId": null,
@@ -76,97 +76,97 @@ exports[`lib > reducers > create-otp-reducer should be able to create the initia
     },
     "riding": null,
     "routeMatch": null,
-    "simulation": {
+    "simulation": Object {
       "pointIndex": 0,
       "speedMultiplier": 1,
       "status": "idle",
       "totalPoints": 0,
     },
-    "tracking": {
+    "tracking": Object {
       "error": null,
       "interval": 8000,
       "isTracking": false,
       "lastPosition": null,
     },
-    "ui": {
+    "ui": Object {
       "backgrounded": false,
       "mapFollowUser": false,
     },
-    "vehicleMatch": {
+    "vehicleMatch": Object {
       "consecutiveMatches": 0,
       "match": null,
-      "nearbyVehicles": [],
+      "nearbyVehicles": Array [],
       "trackedRouteId": null,
     },
   },
   "initialUrl": "/",
   "lastActionMillis": 0,
-  "location": {
-    "currentPosition": {
+  "location": Object {
+    "currentPosition": Object {
       "coords": null,
       "error": null,
       "fetching": false,
     },
-    "nearbyStops": [],
-    "sessionSearches": [],
+    "nearbyStops": Array [],
+    "sessionSearches": Array [],
   },
-  "modeSettingDefinitions": [],
-  "overlay": {
-    "bikeRental": {
-      "stations": [],
+  "modeSettingDefinitions": Array [],
+  "overlay": Object {
+    "bikeRental": Object {
+      "stations": Array [],
     },
-    "carRental": {
-      "stations": [],
+    "carRental": Object {
+      "stations": Array [],
     },
-    "parkAndRide": {
+    "parkAndRide": Object {
       "locations": null,
     },
-    "transit": {
-      "stops": [],
+    "transit": Object {
+      "stops": Array [],
     },
     "transitive": null,
-    "vehicleRental": {
-      "stations": [],
+    "vehicleRental": Object {
+      "stations": Array [],
     },
-    "zipcar": {
-      "locations": [],
+    "zipcar": Object {
+      "locations": Array [],
     },
   },
-  "searches": {},
-  "tnc": {
-    "etaEstimates": {},
-    "rideEstimates": {},
+  "searches": Object {},
+  "tnc": Object {
+    "etaEstimates": Object {},
+    "rideEstimates": Object {},
   },
-  "transitIndex": {
-    "feeds": [],
-    "routes": {},
+  "transitIndex": Object {
+    "feeds": Array [],
+    "routes": Object {},
     "routesFetchStatus": 0,
-    "stops": {},
-    "trips": {},
+    "stops": Object {},
+    "trips": Object {},
   },
-  "ui": {
+  "ui": Object {
     "diagramLeg": null,
-    "errors": {
+    "errors": Object {
       "networkConnectionLost": false,
     },
     "locale": null,
     "localizedMessages": null,
     "mainPanelContent": null,
     "mobileScreen": 1,
-    "nearbyView": {
-      "filters": {
+    "nearbyView": Object {
+      "filters": Object {
         "BikeRentalStation": true,
         "RentalVehicle": true,
         "Stop": true,
         "VehicleParking": true,
       },
     },
-    "popup": {
+    "popup": Object {
       "id": null,
     },
     "printView": false,
-    "routeViewer": {
-      "filter": {
+    "routeViewer": Object {
+      "filter": Object {
         "agency": null,
         "mode": null,
         "search": "",

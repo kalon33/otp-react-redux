@@ -245,16 +245,28 @@ async function main() {
   })
   const nowMs = Date.now()
 
-  const truthQ = await gql(`{ trip(id: "${tripId}") {
-    stoptimesForDate { scheduledArrival realtimeArrival realtimeState serviceDay
-      stop { gtfsId name } } } }`)
-  const sts = truthQ?.data?.trip?.stoptimesForDate || []
+  // An after-midnight run belongs to the PREVIOUS service day (the app's
+  // findTrip fetches both; see pickTripServiceInstance) — mirror that here,
+  // else the dateless query flips to the new day at 00:00 and comes back
+  // empty for the boarded trip.
+  const svcDate = (d) =>
+    new Date(d).toLocaleDateString('sv-SE', { timeZone: 'America/Chicago' })
+  const truthSts = async (serviceDate) => {
+    const q = await gql(`{ trip(id: "${tripId}") {
+      stoptimesForDate(serviceDate: "${serviceDate}") {
+        scheduledArrival realtimeArrival realtimeState serviceDay
+        stop { gtfsId name } } } }`)
+    return q?.data?.trip?.stoptimesForDate || []
+  }
   // Shared stations exist under several feeds (Metro Transit 1:*, MVTA 2:*)
   // and the onward plan may reference the twin feed's id — fall back to the
   // stop name within the boarded trip, same as liveStopArrival does.
-  const alightSt =
+  const findAlight = (sts) =>
     sts.find((st) => st.stop.gtfsId === app.alightStopId) ||
     sts.find((st) => st.stop.name === app.alightStopName)
+  let alightSt = findAlight(await truthSts(svcDate(nowMs)))
+  if (!alightSt)
+    alightSt = findAlight(await truthSts(svcDate(nowMs - 86400000)))
   if (!alightSt)
     throw new Error(`alight stop ${app.alightStopId} not in boarded trip`)
   const live = ['UPDATED', 'ADDED', 'MODIFIED'].includes(alightSt.realtimeState)
