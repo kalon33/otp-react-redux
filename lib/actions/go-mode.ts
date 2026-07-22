@@ -69,11 +69,12 @@ import {
 } from '../util/go-mode/departure-anchor'
 import {
   TURN_CARD_NOTIFICATION_ID,
+  cancelPush,
   ensureNativeNotifyPermission,
   hasNativeNotify,
   sendPush
 } from '../util/go-mode/native-notify'
-import { asContinuation, formatCueDistance } from '../util/go-mode/turn-by-turn'
+import { asContinuation } from '../util/go-mode/turn-by-turn'
 
 import {
   fetchOnboardCandidatePlan,
@@ -126,9 +127,9 @@ let manualDepartureLock = false
 let lastAutoAnchorMs: number | null = null
 let earlyBoardReplanKey: string | null = null
 
-// Text currently showing on the always-current turn card, so it is only
-// re-scheduled when the wording actually changes. Rescheduling on every GPS
-// tick would be a notification write per second for the whole ride.
+// Identity (leg + cue index) of the turn currently on the sticky card, so it is
+// re-posted only when the turn itself changes — once per turn, not once per GPS
+// tick. Null when no card is showing.
 let lastTurnCardKey: string | null = null
 
 // A leg transition is side-effectful (vehicle tracking, GPS interval restart,
@@ -659,6 +660,8 @@ export function endGoMode() {
     // Reset auto-anchor bookkeeping — a new trip is a new decision.
     manualDepartureLock = false
     lastAutoAnchorMs = null
+    // Clear the sticky turn card so it doesn't linger on the wrist post-trip.
+    if (lastTurnCardKey !== null) cancelPush(TURN_CARD_NOTIFICATION_ID)
     lastTurnCardKey = null
     earlyBoardReplanKey = null
     lastTransitionedLegIndex = null
@@ -1840,12 +1843,19 @@ export function refreshLiveLegTimes() {
     const liveTimes: Record<number, LiveLegTime> = {}
     const nowMs = getCurrentTime().getTime()
 
+    const riding = goMode.riding
     for (let i = currentLegIndex; i < legs.length; i++) {
       const leg: any = legs[i]
       if (!leg?.transitLeg) continue
       // convertGraphQLResponseToLegacy keeps leg.trip.gtfsId and also adds a
-      // top-level leg.tripId; accept either.
-      const tripId = leg.trip?.gtfsId || leg.tripId
+      // top-level leg.tripId; accept either. For the leg the rider is
+      // verifiably aboard, the sticky riding fact wins: they may be on a
+      // different run of the route than the plan boarded (earlier bus), and
+      // the times shown must be THEIR bus's, not the planned one's.
+      const tripId =
+        (riding?.legIndex === i && riding.tripId) ||
+        leg.trip?.gtfsId ||
+        leg.tripId
       if (!tripId) continue
 
       // findTrip is noThrottle and idempotent; it refreshes the cached trip
@@ -1994,15 +2004,27 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     const riding = goMode.riding
     const nowForRiding = getCurrentTime().getTime()
     if (routeMatch.isOnRoute && matchedLeg?.transitLeg) {
-      const vehicleConfidence = goMode.vehicleMatch?.match?.confidence
+      const vehicleMatchNow = goMode.vehicleMatch?.match
+      const vehicleConfidence = vehicleMatchNow?.confidence
+      const vehicleTrusted =
+        vehicleConfidence === 'confirmed' || vehicleConfidence === 'high'
       const aboard =
-        vehicleConfidence === 'confirmed' ||
-        vehicleConfidence === 'high' ||
-        routeMatch.progressAlongLeg >= RIDING_MIN_PROGRESS
+        vehicleTrusted || routeMatch.progressAlongLeg >= RIDING_MIN_PROGRESS
+      // The trip the rider is ACTUALLY on: a trusted vehicle match knows its
+      // GTFS-RT trip, which outranks the planned leg's — the rider may have
+      // caught an earlier run of the same route, and the boarded-earlier
+      // replan, next-stop anchoring, and live leg times all key off this id.
+      const ridingTripId =
+        (vehicleTrusted ? vehicleMatchNow?.tripId : null) ||
+        matchedLeg.trip?.gtfsId ||
+        matchedLeg.tripId ||
+        riding?.tripId ||
+        null
       if (
         aboard &&
         (!riding ||
           riding.legIndex !== routeMatch.legIndex ||
+          riding.tripId !== ridingTripId ||
           riding.offRouteSince != null)
       ) {
         dispatch(
@@ -2014,13 +2036,8 @@ export function handlePositionUpdate(position: GeolocationPosition) {
             routeId: getLegRouteId(matchedLeg),
             routeShortName:
               matchedLeg.routeShortName ?? matchedLeg.route?.shortName ?? null,
-            tripId:
-              matchedLeg.trip?.gtfsId ||
-              matchedLeg.tripId ||
-              riding?.tripId ||
-              null,
-            vehicleId:
-              goMode.vehicleMatch?.match?.vehicleId ?? riding?.vehicleId ?? null
+            tripId: ridingTripId,
+            vehicleId: vehicleMatchNow?.vehicleId ?? riding?.vehicleId ?? null
           })
         )
       }
@@ -2269,31 +2286,38 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       }
     })
 
-    // The always-current turn card. One notification, reused id, replaced in
-    // place as the guidance changes, so the top of the rider's notification
-    // list — and therefore the first thing on a paired watch face — always
-    // reads the live next turn. Passive: it must never buzz, because the turns
-    // that deserve a buzz already went out as TURN_ALERT above.
+    // The sticky per-turn card. ONE notification (fixed id, so iOS replaces it
+    // in place rather than stacking), posted once when a turn becomes current
+    // and held unchanged until the rider passes it — then swapped for the next
+    // turn. It carries the instruction only, no live distance: the smooth
+    // countdown lives on the phone screen (WalkingNavigation), while the wrist
+    // wants a stable "what's my next move" glance that doesn't churn. Passive,
+    // because the turns that deserve a buzz already went out as TURN_ALERT.
+    //
+    // This reaches any paired watch over ANCS — see native-notify.ts. Keyed on
+    // the cue's identity (leg + index), so it writes ~once per turn, not once
+    // per GPS tick.
     if (!replaying && getState().otp.config.goMode?.turnCard !== false) {
       const cue = progress.nextTurnCue
-      const metresToTurn = progress.distanceToNextTurn
-      if (cue && metresToTurn != null) {
-        // Key on the DISPLAYED distance, not the raw metres: the card only
-        // needs rewriting when the rider would see a different string.
-        const distanceText = formatCueDistance(metresToTurn)
-        const cardKey = `${cue.instruction}|${distanceText}`
+      if (cue) {
+        const cardKey = `${currentLeg?.startTime}_${cue.index}`
         if (cardKey !== lastTurnCardKey) {
           lastTurnCardKey = cardKey
           const then = progress.followingTurnCue
-            ? ` · then ${asContinuation(progress.followingTurnCue.instruction)}`
+            ? `then ${asContinuation(progress.followingTurnCue.instruction)}`
             : ''
           sendPush({
             id: TURN_CARD_NOTIFICATION_ID,
-            message: `${distanceText}${then}`,
+            message: then,
             passive: true,
             title: cue.instruction
           })
         }
+      } else if (lastTurnCardKey !== null) {
+        // No turn to show anymore (boarded a bus, or trip ended). Clear the
+        // stale card so the wrist stops displaying a turn that no longer holds.
+        lastTurnCardKey = null
+        cancelPush(TURN_CARD_NOTIFICATION_ID)
       }
     }
 
@@ -2584,9 +2608,25 @@ export function confirmVehicleSelection(vehicleId: string) {
     const state = getState()
     const goMode = state.otp?.goMode
     const nearby = goMode?.vehicleMatch?.nearbyVehicles || []
-    const selected = nearby.find(
+    let selected = nearby.find(
       (v: { vehicleId: string }) => v.vehicleId === vehicleId
     )
+    // The nearby list (tighter radius, per-tick snapshot) can miss a vehicle
+    // the matcher itself found — falling through with tripId null here used to
+    // confirm a bus whose run we then couldn't identify (and skipped the
+    // riding fact entirely). Recover the identity from the raw route feeds.
+    if (!selected) {
+      const routes = state.otp?.transitIndex?.routes || {}
+      for (const routeId of Object.keys(routes)) {
+        const v = (routes[routeId]?.vehicles || []).find(
+          (rv: { vehicleId: string }) => rv.vehicleId === vehicleId
+        )
+        if (v) {
+          selected = { ...v, routeId: v.routeId ?? routeId }
+          break
+        }
+      }
+    }
 
     dispatch({
       payload: {

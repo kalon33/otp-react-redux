@@ -149,11 +149,51 @@ async function main() {
     latitude: plan.points[0].lat,
     longitude: plan.points[0].lon
   })
+
   await page.evaluate(() => window.__beginGoMode(window.__itin))
   await page.waitForFunction(
     () => window.store.getState().otp.goMode.isActive,
     { polling: 300, timeout: 20000 }
   )
+
+  // Only now inject a fake Capacitor bridge, so the real sendPush/cancelPush
+  // path runs during the ride and records what would land on the phone (and
+  // thus the watch over ANCS). Injecting AFTER beginGoMode keeps that call on
+  // its browser path (its native branch reloads the shell). Only
+  // LocalNotifications is provided, so hasNativeGps() stays false and the
+  // manually-driven GPS path is untouched.
+  await page.evaluate(() => {
+    window.__pushLog = []
+    window.Capacitor = {
+      isNativePlatform: () => true,
+      Plugins: {
+        LocalNotifications: {
+          cancel: (o) => {
+            const list = o.notifications || []
+            list.forEach((n) =>
+              window.__pushLog.push({ id: n.id, kind: 'cancel' })
+            )
+            return Promise.resolve()
+          },
+          checkPermissions: () => Promise.resolve({ display: 'granted' }),
+          requestPermissions: () => Promise.resolve({ display: 'granted' }),
+          schedule: (o) => {
+            const list = o.notifications || []
+            list.forEach((n) =>
+              window.__pushLog.push({
+                body: n.body,
+                id: n.id,
+                kind: 'schedule',
+                passive: n.interruptionLevel === 'passive',
+                title: n.title
+              })
+            )
+            return Promise.resolve()
+          }
+        }
+      }
+    }
+  })
 
   // Ride the leg, capturing every notification the real reducer chain emits.
   const seen = await page.evaluate(async (points) => {
@@ -190,6 +230,9 @@ async function main() {
     }
     return emitted
   }, plan.points)
+
+  // What actually went to the phone/watch via the native bridge.
+  const pushLog = await page.evaluate(() => window.__pushLog || [])
 
   // ---- Report -------------------------------------------------------------
   const turns = seen.filter(
@@ -262,8 +305,67 @@ async function main() {
     )
   }
 
+  // ---- Sticky per-turn card (the watch-facing notification) ---------------
+  // TURN_CARD_NOTIFICATION_ID is 1 (native-notify.ts).
+  const stickyWrites = pushLog.filter(
+    (p) => p.kind === 'schedule' && p.id === 1
+  )
+  const stickyCancels = pushLog.filter((p) => p.kind === 'cancel' && p.id === 1)
+
+  console.log('\nsticky card writes (id=1, passive), in order:')
+  stickyWrites.forEach((w) =>
+    console.log(`  "${w.title}"${w.body ? ` / ${w.body}` : ''}`)
+  )
+  console.log(`sticky cancels: ${stickyCancels.length}`)
+
+  if (!stickyWrites.length) {
+    failures.push('the sticky turn card never posted')
+  }
+  // One write per turn, not one per GPS tick: the card must be sticky, and on a
+  // limited watch churn is the whole failure mode we are guarding against.
+  if (stickyWrites.length > plan.cues.length + 1) {
+    failures.push(
+      `sticky card wrote ${stickyWrites.length}x for ${plan.cues.length} cues — churning, not sticky`
+    )
+  }
+  // Consecutive writes must be different turns — never the same card re-posted.
+  for (let i = 1; i < stickyWrites.length; i++) {
+    if (stickyWrites[i].title === stickyWrites[i - 1].title) {
+      failures.push(
+        `sticky card re-posted the same turn: "${stickyWrites[i].title}"`
+      )
+      break
+    }
+  }
+  // Instruction-only: no distance on the card (it lives on the phone screen).
+  // Match distance UNITS, not bare digits — "42nd Street" is a street name.
+  const distanceRe = /\d+(\.\d+)?\s*(ft|mi|feet|miles?)\b/i
+  const withDistance = stickyWrites.find(
+    (w) => distanceRe.test(w.title) || distanceRe.test(w.body || '')
+  )
+  if (withDistance) {
+    failures.push(
+      `sticky card carried a distance: "${withDistance.title} / ${withDistance.body}"`
+    )
+  }
+  // Every sticky write must be silent — the buzz is TURN_ALERT's job.
+  if (stickyWrites.some((w) => !w.passive)) {
+    failures.push(
+      'a sticky card write was not passive — it would buzz the wrist'
+    )
+  }
+  // The card must clear once the rider is past every turn (here: end of leg).
+  if (!stickyCancels.length) {
+    failures.push(
+      'the sticky card was never cancelled — it would linger post-turn'
+    )
+  }
+
   console.log(
     `\n${turns.length} turn cues, ${alerts.length} of them buzzing the watch`
+  )
+  console.log(
+    `${stickyWrites.length} sticky card writes for ${plan.cues.length} cues, ${stickyCancels.length} cancel(s)`
   )
   if (failures.length) {
     failures.forEach((f) => console.log(`FAIL: ${f}`))
