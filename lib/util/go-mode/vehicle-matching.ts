@@ -1,5 +1,13 @@
 import { calculateDistance } from './position-matching'
 
+/**
+ * Consecutive empty vehicle-position polls (15s apart) after which we stop
+ * saying "Locating your bus…" and admit the route has no live vehicle data.
+ * Six polls ≈ 90s — long enough to ride out a slow first fetch or a brief
+ * feed hiccup, short enough that a rider isn't left staring at a spinner.
+ */
+export const NO_LIVE_VEHICLE_POLLS = 6
+
 // --- Types ---
 
 export interface VehiclePosition {

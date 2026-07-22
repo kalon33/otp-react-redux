@@ -116,6 +116,14 @@ const mockStore = (onboard: any) =>
     subscribe: () => () => undefined
   } as any)
 
+// Same idea for TransitProgress, which reads goMode.vehicleMatch.
+const vehicleMatchStore = (vehicleMatch: any) =>
+  ({
+    dispatch: () => undefined,
+    getState: () => ({ otp: { config: {}, goMode: { vehicleMatch } } }),
+    subscribe: () => () => undefined
+  } as any)
+
 const readyOnboard = (realtime: boolean) => {
   // A ranked list of onward options (earliest arrival first), each a stop the
   // rider can pick to get off at.
@@ -338,6 +346,19 @@ const GoModeDemo = (): JSX.Element => (
           onExit={() => undefined}
           progress={transitProgress}
         />
+      </Frame>
+
+      <Frame
+        note="Route publishes no live vehicle positions (or its feed is down). Say so rather than spinning on 'Locating your bus...' forever — stop progress still comes from GPS."
+        title="Transit progress, no live vehicle data"
+      >
+        <Provider store={vehicleMatchStore({ emptyPolls: 12, match: null })}>
+          <TransitProgress
+            leg={onBusLeg}
+            onExit={() => undefined}
+            progress={transitProgress}
+          />
+        </Provider>
       </Frame>
 
       <Frame
