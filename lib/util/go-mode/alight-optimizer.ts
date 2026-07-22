@@ -99,6 +99,55 @@ export function mergeLiveTimePoint(
 }
 
 /**
+ * mergeLiveTimePoint clamps at merge time, but merges only run once per
+ * refresh poll (20 s apart) — between polls the clock keeps walking, so a
+ * non-live epoch can sit up to a full poll interval in the past (seen
+ * 2026-07-21: an end-of-service realtime dropout left the alight time 6 s
+ * stale). Re-raise every non-live epoch that has fallen behind `nowMs`.
+ * Returns the updated record, or null when nothing drifted so callers can
+ * skip the dispatch.
+ */
+export function clampNonLiveLegTimes<
+  T extends {
+    alightEpoch: number | null
+    alightRealtime?: boolean
+    boardEpoch: number | null
+    boardRealtime?: boolean
+    realtime: boolean
+  }
+>(
+  times: Record<number, T> | null | undefined,
+  nowMs: number
+): Record<number, T> | null {
+  if (!times) return null
+  let changed = false
+  const out: Record<number, T> = {}
+  for (const key of Object.keys(times)) {
+    const idx = Number(key)
+    const t = times[idx]
+    let next = t
+    if (
+      !(t.alightRealtime ?? t.realtime) &&
+      t.alightEpoch != null &&
+      t.alightEpoch < nowMs
+    ) {
+      next = { ...next, alightEpoch: nowMs }
+      changed = true
+    }
+    if (
+      !(t.boardRealtime ?? t.realtime) &&
+      t.boardEpoch != null &&
+      t.boardEpoch < nowMs
+    ) {
+      next = { ...next, boardEpoch: nowMs }
+      changed = true
+    }
+    out[idx] = next
+  }
+  return changed ? out : null
+}
+
+/**
  * Choose which service-date instance of a trip the rider is actually on.
  * A trip id names a run on EVERY day it operates; findTrip fetches both
  * today's and yesterday's instances (an after-midnight ride belongs to
