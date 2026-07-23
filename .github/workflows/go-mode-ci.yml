@@ -1,0 +1,78 @@
+name: Go Mode CI
+
+# Runs on every push to the Go Mode trunk (and PRs into it): typecheck + the
+# Go Mode jest suites + a production build smoke. This is the gate that keeps
+# a broken tip from reaching a TestFlight build — transitnav-ios's
+# testflight.yml runs the same jest gate before building.
+#
+# Deliberately separate from upstream's node-ci.yml (which only watches
+# master) so merges from upstream stay clean.
+#
+# The verify-*.js GPS-replay suite is NOT here: it needs the real OTP backend
+# and the :9967 dev server, so it runs locally pre-push and via a nightly cron
+# on the home server (otp-minneapolis/scripts/nightly-verify.sh).
+
+on:
+  push:
+    branches: [feature/go-mode]
+  pull_request:
+    branches: [feature/go-mode]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: yarn
+
+      # postinstall runs patch-package — do NOT --ignore-scripts.
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      # Advisory only: the branch carries ~60 pre-existing TS errors (implicit
+      # anys in the go-mode modules, missing redux-actions decls). Flip this to
+      # blocking once they're paid down.
+      - name: Typecheck (advisory)
+        continue-on-error: true
+        run: yarn typecheck
+
+      # NODE_ENV=test is mandatory — without it jest dies in global-setup
+      # (regeneratorRuntime). TZ pinned: snapshot/calendar tests assume the
+      # metro's timezone, and runners default to UTC.
+      - name: Go Mode unit tests
+        env:
+          NODE_ENV: test
+          TZ: America/Chicago
+        run: >
+          yarn jest
+          __tests__/util/go-mode
+          __tests__/components/go-mode
+          __tests__/reducers
+          __tests__/actions
+
+  build-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: yarn
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      # No YAML_CONFIG: vite falls back to example/example-config.yml. This
+      # proves the bundle still builds before anyone dispatches a TestFlight
+      # run (which builds with transitnav-ios's web-config/app-config.yml).
+      - name: Production build
+        env:
+          NODE_ENV: production
+        run: yarn build

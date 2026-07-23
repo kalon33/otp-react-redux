@@ -364,3 +364,10 @@
 .toast-hidden {
   display: none !important;
 }
+
+/* Build stamp at the foot of the app menu (CI-injected; "dev" locally). */
+.app-menu .app-menu-build-info {
+  color: #999;
+  font-size: 12px;
+  padding: 12px 10px;
+}
