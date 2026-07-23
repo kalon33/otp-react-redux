@@ -4,8 +4,11 @@ import React from 'react'
 import type { Leg } from '@opentripplanner/types'
 
 import * as goModeActions from '../../actions/go-mode'
+import {
+  displayVehicleLabel,
+  NO_LIVE_VEHICLE_POLLS
+} from '../../util/go-mode/vehicle-matching'
 import { getModeIcon } from '../../util/go-mode/mode-icon'
-import { NO_LIVE_VEHICLE_POLLS } from '../../util/go-mode/vehicle-matching'
 import type { TripProgress } from '../../util/go-mode/progress-calculator'
 import type { VehicleMatchResult } from '../../util/go-mode/vehicle-matching'
 
@@ -95,14 +98,14 @@ const TransitProgress = ({
                       defaultMessage: 'On Bus #{label}',
                       id: 'components.GoMode.onBus'
                     },
-                    { label: vehicleMatch.label }
+                    { label: displayVehicleLabel(vehicleMatch.label) }
                   )
                 : intl.formatMessage(
                     {
                       defaultMessage: 'Tracking Bus #{label}',
                       id: 'components.GoMode.trackingBus'
                     },
-                    { label: vehicleMatch.label }
+                    { label: displayVehicleLabel(vehicleMatch.label) }
                   )}
             </VehicleTrackingBadge>
           )}

@@ -81,6 +81,14 @@ export function speedAdjustedRadius(
 }
 
 /**
+ * A rider-facing vehicle label. Fallback paths use the GTFS vehicle id, which
+ * is feed-scoped ("1:8148") — the "1:" means nothing to a rider, so drop it.
+ */
+export function displayVehicleLabel(label: string | null | undefined): string {
+  return (label ?? '').replace(/^[^:\s]+:/, '')
+}
+
+/**
  * Find vehicles within a given radius of the user, sorted by distance.
  */
 export function findNearbyVehicles(
