@@ -49,7 +49,12 @@ export function shouldAutoReroute(
   notifications: NotificationEvent[],
   reRouteStatus: string
 ): boolean {
-  if (reRouteStatus !== 'idle') return false
+  // 'none' is a settled failed/empty attempt — retryable, like the missed-bus
+  // and boarded-earlier paths treat it. Nothing ever resets 'none' back to
+  // 'idle', so requiring exactly 'idle' let one empty reroute anywhere in a
+  // ride permanently kill every later deviation response (7/22: the bike leg
+  // stayed un-replanned all evening).
+  if (reRouteStatus !== 'idle' && reRouteStatus !== 'none') return false
   return notifications.some((n) => AUTO_REROUTE_TRIGGER_TYPES.includes(n.type))
 }
 
