@@ -74,7 +74,12 @@ import {
   hasNativeNotify,
   sendPush
 } from '../util/go-mode/native-notify'
+import {
+  PACING_CARD_NOTIFICATION_ID,
+  evaluatePacingCard
+} from '../util/go-mode/pacing-card'
 import { asContinuation } from '../util/go-mode/turn-by-turn'
+import type { PacingCardState } from '../util/go-mode/pacing-card'
 
 import {
   fetchOnboardCandidatePlan,
@@ -155,6 +160,10 @@ let earlyBoardReplan: {
 // re-posted only when the turn itself changes — once per turn, not once per GPS
 // tick. Null when no card is showing.
 let lastTurnCardKey: string | null = null
+
+// What the sticky bike-pacing card last showed (see pacing-card.ts). Null when
+// no card is showing.
+let lastPacingCard: PacingCardState | null = null
 
 // A leg transition is side-effectful (vehicle tracking, GPS interval restart,
 // departure-override reset), so it must run once per leg. The route match is
@@ -699,6 +708,8 @@ export function endGoMode() {
     // Clear the sticky turn card so it doesn't linger on the wrist post-trip.
     if (lastTurnCardKey !== null) cancelPush(TURN_CARD_NOTIFICATION_ID)
     lastTurnCardKey = null
+    if (lastPacingCard !== null) cancelPush(PACING_CARD_NOTIFICATION_ID)
+    lastPacingCard = null
     earlyBoardReplan = null
     lastTransitionedLegIndex = null
     missedBusRerouteAttempt = null
@@ -2490,6 +2501,27 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         lastTurnCardKey = null
         cancelPush(TURN_CARD_NOTIFICATION_ID)
       }
+    }
+
+    // The sticky bike-pacing card (id 2, alongside the turn card): ride time
+    // left, the bus being chased, and the buffer at the stop, so the rider
+    // knows whether to go fast or slow. All cadence decisions live in
+    // evaluatePacingCard.
+    if (!replaying && getState().otp.config.goMode?.pacingCard !== false) {
+      const evaluated = evaluatePacingCard(lastPacingCard, {
+        currentLeg,
+        nextLeg,
+        nowMs: currentTime.getTime(),
+        progress
+      })
+      if (evaluated.post) {
+        sendPush({ id: PACING_CARD_NOTIFICATION_ID, ...evaluated.post })
+      } else if (!evaluated.next && lastPacingCard) {
+        // Boarded (or the leg no longer leads to transit) — drop the card so
+        // the wrist stops advising a ride that's over.
+        cancelPush(PACING_CARD_NOTIFICATION_ID)
+      }
+      lastPacingCard = evaluated.next
     }
 
     // A reroute stuck at 'searching' (both the fetch and its timeout timer
