@@ -1,3 +1,5 @@
+import { encode } from '@mapbox/polyline'
+
 import {
   calculateExpectedProgress,
   calculateOverallProgress,
@@ -250,6 +252,73 @@ describe('util > go-mode > progress-calculator', () => {
         to: { name: 'Destination' }
       } as any
       expect(getTransitProgress(leg, 0.5)).toEqual({})
+    })
+
+    describe('with leg geometry (unevenly spaced stops)', () => {
+      // Orange-Line shape: a straight leg whose stops bunch at the far end —
+      // one early stop at 20% of the distance, then nothing until a cluster at
+      // 85/90/95%, alighting at 100%. Even spacing would badly miscount here.
+      const line: [number, number][] = []
+      for (let i = 0; i <= 20; i++) line.push([i * 0.005, 0])
+      const stopAt = (lat: number, name: string) => ({ lat, lon: 0, name })
+      const leg = {
+        intermediateStops: [
+          stopAt(0.02, 'Early Stop'),
+          stopAt(0.085, 'Cluster A'),
+          stopAt(0.09, 'Cluster B'),
+          stopAt(0.095, 'Cluster C')
+        ],
+        legGeometry: { points: encode(line, 5) },
+        mode: 'BUS',
+        to: { lat: 0.1, lon: 0, name: 'Destination' }
+      } as any
+
+      it('counts every stop ahead early in the leg', () => {
+        expect(getTransitProgress(leg, 0.1)).toEqual({
+          nextStopName: 'Early Stop',
+          stopsRemaining: 5
+        })
+      })
+
+      it('still counts the whole tail cluster mid-leg', () => {
+        // Even spacing says floor(0.5 × 5) = 2 stops passed; in reality only
+        // one stop is behind the rider at half the distance.
+        expect(getTransitProgress(leg, 0.5)).toEqual({
+          nextStopName: 'Cluster A',
+          stopsRemaining: 4
+        })
+      })
+
+      it('does not report the alight stop as next while cluster stops remain', () => {
+        // The 7/22 ride bug: at 90% of the distance the header said "1 stop
+        // remaining" with two cluster stops still ahead of the rider.
+        expect(getTransitProgress(leg, 0.9)).toEqual({
+          nextStopName: 'Cluster C',
+          stopsRemaining: 2
+        })
+      })
+
+      it('reports the alight stop once past the cluster', () => {
+        expect(getTransitProgress(leg, 0.99)).toEqual({
+          nextStopName: 'Destination',
+          stopsRemaining: 1
+        })
+      })
+
+      it('prefers intermediatePlaces when present', () => {
+        const placesLeg = {
+          ...leg,
+          intermediatePlaces: [
+            stopAt(0.085, 'Places A'),
+            stopAt(0.09, 'Places B'),
+            stopAt(0.095, 'Places C')
+          ]
+        }
+        expect(getTransitProgress(placesLeg, 0.5)).toEqual({
+          nextStopName: 'Places A',
+          stopsRemaining: 4
+        })
+      })
     })
   })
 

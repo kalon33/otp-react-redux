@@ -41,6 +41,89 @@ function toOrderedStop(place: any): OrderedStop | null {
 }
 
 /**
+ * The leg's stops in travel order: intermediates then the alight stop.
+ * intermediatePlaces (planned + synthesized onboard itineraries) carries
+ * arrival times and gtfsIds; intermediateStops (name/lat/lon only) is the
+ * fallback shape some responses use.
+ */
+export function orderedStopsOnLeg(leg: any): OrderedStop[] {
+  const intermediates: any[] =
+    (leg?.intermediatePlaces?.length
+      ? leg.intermediatePlaces
+      : leg?.intermediateStops) || []
+  return [...intermediates, leg?.to]
+    .map(toOrderedStop)
+    .filter(Boolean) as OrderedStop[]
+}
+
+/**
+ * Fraction (0..1) along the leg geometry at which each stop sits. Monotonic
+ * scan: stops appear along the geometry in travel order, so each nearest-point
+ * search resumes where the previous stop landed. Null when the geometry is
+ * unusable (fewer than two points or zero length).
+ */
+export function stopFractionsAlongLeg(
+  stops: { lat: number; lon: number }[],
+  polyline: [number, number][]
+): number[] | null {
+  if (polyline.length < 2) return null
+  const cumulative = calculateCumulativeDistances(polyline)
+  const total = cumulative[cumulative.length - 1]
+  if (!(total > 0)) return null
+  const fractions: number[] = []
+  let searchFrom = 0
+  for (const stop of stops) {
+    let bestIdx = searchFrom
+    let bestDist = Infinity
+    for (let i = searchFrom; i < polyline.length; i++) {
+      const d = calculateDistance(
+        stop.lat,
+        stop.lon,
+        polyline[i][0],
+        polyline[i][1]
+      )
+      if (d < bestDist) {
+        bestDist = d
+        bestIdx = i
+      }
+    }
+    searchFrom = bestIdx
+    fractions.push(cumulative[bestIdx] / total)
+  }
+  return fractions
+}
+
+// Epsilon on leg-progress comparisons so the stop the bus is currently AT
+// (doors open) doesn't count as still ahead.
+const AT_STOP_EPSILON = 0.005
+
+/**
+ * How many stops are still ahead of the rider on the leg (the alight stop
+ * counts as 1), plus the name of the nearest one. Stops sit unevenly along a
+ * leg — a freeway BRT runs stopless for miles, then downtown stops bunch at
+ * the end — so the count comes from each stop's measured position on the
+ * geometry; an even-spacing estimate reports "1 stop remaining" with a whole
+ * downtown cluster still ahead. Null when the leg has no stops with
+ * coordinates or no usable geometry.
+ */
+export function countStopsAhead(
+  leg: any,
+  progress: number
+): { nextStopName: string; stopsRemaining: number } | null {
+  const ordered = orderedStopsOnLeg(leg)
+  if (!ordered.length) return null
+  const fractions = stopFractionsAlongLeg(ordered, decodeLegGeometry(leg))
+  if (!fractions) return null
+  const clamped = Math.max(0, Math.min(1, progress))
+  let idx = fractions.findIndex((f) => f > clamped + AT_STOP_EPSILON)
+  if (idx === -1) idx = ordered.length - 1
+  return {
+    nextStopName: ordered[idx].name,
+    stopsRemaining: ordered.length - idx
+  }
+}
+
+/**
  * Compute the next stop ahead on the transit leg the rider is aboard, or null
  * when the sticky riding state isn't anchored to a transit leg. Position along
  * the leg comes from the live route match (GPS projected onto the leg
@@ -62,17 +145,7 @@ export function getNextStopOnRide(
   const leg: any = itinerary.legs?.[riding.legIndex]
   if (!leg?.transitLeg) return null
 
-  // Ordered stops remaining relevant: intermediates then the alight stop.
-  // intermediatePlaces (planned + synthesized onboard itineraries) carries
-  // arrival times and gtfsIds; intermediateStops (name/lat/lon only) is the
-  // fallback shape some responses use.
-  const intermediates: any[] =
-    (leg.intermediatePlaces?.length
-      ? leg.intermediatePlaces
-      : leg.intermediateStops) || []
-  const ordered = [...intermediates, leg.to]
-    .map(toOrderedStop)
-    .filter(Boolean) as OrderedStop[]
+  const ordered = orderedStopsOnLeg(leg)
   if (!ordered.length) return null
 
   // Fraction of the leg already covered. Trust the live route match when it is
@@ -84,38 +157,11 @@ export function getNextStopOnRide(
       : null
 
   let next: OrderedStop | null = null
-  const polyline = decodeLegGeometry(leg)
-  if (progress != null && polyline.length >= 2) {
-    const cumulative = calculateCumulativeDistances(polyline)
-    const total = cumulative[cumulative.length - 1]
-    if (total > 0) {
-      // Monotonic scan: stops appear along the geometry in travel order, so
-      // resume each nearest-point search where the previous stop landed.
-      let searchFrom = 0
-      for (const stop of ordered) {
-        let bestIdx = searchFrom
-        let bestDist = Infinity
-        for (let i = searchFrom; i < polyline.length; i++) {
-          const d = calculateDistance(
-            stop.lat,
-            stop.lon,
-            polyline[i][0],
-            polyline[i][1]
-          )
-          if (d < bestDist) {
-            bestDist = d
-            bestIdx = i
-          }
-        }
-        searchFrom = bestIdx
-        const fraction = cumulative[bestIdx] / total
-        // Small epsilon so the stop the bus is currently at isn't offered as
-        // "next" a second time while doors are still open.
-        if (fraction > progress + 0.005) {
-          next = stop
-          break
-        }
-      }
+  if (progress != null) {
+    const fractions = stopFractionsAlongLeg(ordered, decodeLegGeometry(leg))
+    if (fractions) {
+      const idx = fractions.findIndex((f) => f > progress + AT_STOP_EPSILON)
+      if (idx !== -1) next = ordered[idx]
     }
   }
 

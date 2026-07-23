@@ -1,5 +1,6 @@
 import type { Itinerary, Leg } from '@opentripplanner/types'
 
+import { countStopsAhead } from './next-stop'
 import { getNextCue } from './turn-by-turn'
 import type { RouteMatchResult } from './position-matching'
 import type { StepCue } from './turn-by-turn'
@@ -165,6 +166,8 @@ export function calculateExpectedProgress(
   return Math.max(0, Math.min(100, progress))
 }
 
+const STOP_COUNT_MODES = new Set(['BUS', 'RAIL', 'TRAM', 'SUBWAY'])
+
 /**
  * Get transit-specific progress information
  */
@@ -175,14 +178,21 @@ export function getTransitProgress(
   nextStopName?: string
   stopsRemaining?: number
 } {
-  if (!leg.intermediateStops || (leg.mode !== 'BUS' && leg.mode !== 'RAIL')) {
+  if (!STOP_COUNT_MODES.has(leg.mode as string)) {
     return {}
   }
 
-  const stops = leg.intermediateStops
-  const totalStops = stops.length + 1 // +1 for destination stop
+  // Count from each stop's measured position on the leg geometry — stops sit
+  // unevenly along a leg, so a progress-fraction estimate miscounts badly
+  // (see countStopsAhead).
+  const counted = countStopsAhead(leg, progressInLeg)
+  if (counted) return counted
 
-  // Estimate which stop we're approaching based on progress
+  // No usable geometry or stop coordinates: even-spacing estimate over the
+  // raw stop list is the best guess left.
+  const stops = leg.intermediateStops
+  if (!stops) return {}
+  const totalStops = stops.length + 1 // +1 for destination stop
   const stopIndex = Math.floor(progressInLeg * totalStops)
 
   if (stopIndex < stops.length) {
