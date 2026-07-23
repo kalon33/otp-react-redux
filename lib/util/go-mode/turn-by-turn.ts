@@ -114,13 +114,10 @@ const SIGNIFICANT_GAP_SECONDS = 90
 const FALLBACK_SPEED_MPS = 1.8
 
 /**
- * Metric distance formatting ("300 m", "1.5 km") for cue copy.
+ * Imperial distance formatting ("30 ft", "0.3 mi") for cue copy.
  */
 export function formatCueDistance(meters: number): string {
-  if (meters < 1000) {
-    return `${Math.round(meters)} m`
-  }
-  return `${(meters / 1000).toFixed(1)} km`
+  return humanizeDistanceStringImperial(meters, true)
 }
 
 /**
