@@ -318,6 +318,8 @@ components:
     shared-vehicles: Phương Tiện Đi Chung
     stations: Trạm Trung Chuyển
     stops: Điểm dừng của phương tiện công cộng
+    realtimeStops: Các trạm dừng theo thời gian thực
+    OTP-UI-stopsAndStations: Các trạm dừng và ga
     streets: Đường phố
   MapillaryFrame:
     title: Hình ảnh đường phố

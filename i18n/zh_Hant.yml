@@ -278,6 +278,8 @@ components:
     satellite: 衛星
     shared-vehicles: 共享車輛
     stops: 公共交通車站
+    realtimeStops: 即時站點
+    OTP-UI-stopsAndStations: 站點和車站
     streets: 街道
     stations: Transit Stations
   MapillaryFrame:

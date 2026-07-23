@@ -325,6 +325,8 @@ components:
     shared-vehicles: பகிரப்பட்ட வாகனங்கள்
     stations: போக்குவரத்து நிலையங்கள்
     stops: போக்குவரத்து நிறுத்தப்படும்
+    realtimeStops: நேரடி நிறுத்தங்கள்
+    OTP-UI-stopsAndStations: நிறுத்தங்கள் மற்றும் நிலையங்கள்
     streets: வீதிகள்
   MapillaryFrame:
     title: தெருவின் படங்கள்

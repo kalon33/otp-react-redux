@@ -295,6 +295,8 @@ components:
     shared-vehicles: 공유 차량
     stations: 환승역
     stops: 대중 교통 정류장
+    realtimeStops: 실시간 정류장
+    OTP-UI-stopsAndStations: 정류장 및 역
     streets: 거리
   MapillaryFrame:
     title: 거리 보기

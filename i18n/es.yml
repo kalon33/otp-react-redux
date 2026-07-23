@@ -320,6 +320,8 @@ components:
     shared-vehicles: Vehículos compartidos
     stations: Estaciones de transporte
     stops: Paradas de tránsito
+    realtimeStops: Paradas en tiempo real
+    OTP-UI-stopsAndStations: Paradas y estaciones
     streets: Calles
   MapillaryFrame:
     title: Imágenes de la calle

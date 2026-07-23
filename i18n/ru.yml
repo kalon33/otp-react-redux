@@ -313,6 +313,8 @@ components:
     shared-vehicles: Общие транспортные средства
     stations: Транзитные станции
     stops: Остановки общественного транспорта
+    realtimeStops: Остановки в реальном времени
+    OTP-UI-stopsAndStations: Остановки и станции
     streets: Улицы
   MapillaryFrame:
     title: Изображения с улицы
