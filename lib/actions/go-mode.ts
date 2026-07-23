@@ -2344,6 +2344,7 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         : null
     }
 
+    const units = getState().otp.config?.units || 'imperial'
     const notifications = checkForNotifications(
       progress,
       currentLeg,
@@ -2357,7 +2358,8 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         vibrationEnabled: true
       },
       itinerary.legs,
-      alightContext
+      alightContext,
+      units
     )
 
     // Missed boarding? Judged outside checkForNotifications because it needs

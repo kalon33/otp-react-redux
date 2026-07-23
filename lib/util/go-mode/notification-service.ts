@@ -207,7 +207,8 @@ const WALK_CUE_DISTANCES = { act: 15, prepare: 40 }
 export function checkUpcomingTurn(
   progress: TripProgress,
   currentLeg: Leg,
-  sentNotifications: string[]
+  sentNotifications: string[],
+  units: 'imperial' | 'metric' = 'imperial'
 ): NotificationEvent | null {
   const isBike = currentLeg.mode === 'BICYCLE'
   if (!isBike && currentLeg.mode !== 'WALK') return null
@@ -238,8 +239,8 @@ export function checkUpcomingTurn(
     : ''
   const message =
     stage === 'act'
-      ? formatCueDistance(distance)
-      : `In ${formatCueDistance(distance)}${then}`
+      ? formatCueDistance(distance, units)
+      : `In ${formatCueDistance(distance, units)}${then}`
 
   return {
     id,
@@ -780,7 +781,8 @@ export function checkForNotifications(
   sentNotifications: string[],
   config: NotificationConfig,
   legs?: Leg[],
-  alight?: AlightContext
+  alight?: AlightContext,
+  units: 'imperial' | 'metric' = 'imperial'
 ): NotificationEvent[] {
   if (!config.enabled) {
     return []
@@ -846,7 +848,7 @@ export function checkForNotifications(
   if (!supersedesTurn) {
     pushIf(
       notifications,
-      checkUpcomingTurn(progress, currentLeg, sentNotifications)
+      checkUpcomingTurn(progress, currentLeg, sentNotifications, units)
     )
   }
 
