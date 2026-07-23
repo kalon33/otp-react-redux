@@ -949,6 +949,8 @@ components:
       turnLeft: Turn left
       turnRight: Turn right
       uTurn: U-turn
+      continueTo: "Continue to {destination}"
+      arrivingAt: "Arriving at {destination}"
   ActiveRoutingPreferences:
     label: Active routing preferences
     clear: Clear

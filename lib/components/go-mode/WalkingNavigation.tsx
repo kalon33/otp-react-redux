@@ -3,7 +3,7 @@ import React, { useMemo } from 'react'
 import type { Leg } from '@opentripplanner/types'
 
 import {
-  asContinuation,
+  asContinuationWithIntl,
   formatCueDistance
 } from '../../util/go-mode/turn-by-turn'
 import {
@@ -11,6 +11,7 @@ import {
   getRouteDepartures,
   getSoonestCatchableMs
 } from '../../util/go-mode/departure-anchor'
+import { getWalkingInstructionWithIntl } from '../../util/go-mode/progress-calculator'
 import type { TripProgress } from '../../util/go-mode/progress-calculator'
 
 import {
@@ -71,13 +72,13 @@ const WalkingNavigation = ({
   const transitEmoji = (mode?: string): string => {
     switch (mode) {
       case 'RAIL':
-        return '🚆'
+        return '\ud83d\ude86'
       case 'SUBWAY':
-        return '🚇'
+        return '\ud83d\ude87'
       case 'TRAM':
-        return '🚊'
+        return '\ud83d\ude8a'
       default:
-        return '🚌'
+        return '\ud83d\ude8c'
     }
   }
 
@@ -101,19 +102,26 @@ const WalkingNavigation = ({
   const route = nextLeg?.routeShortName || nextLeg?.routeLongName || ''
   const stopName = nextLeg?.from?.name || leg.to.name
   const isBike = leg.mode === 'BICYCLE'
-  const accessEmoji = isBike ? '🚲' : '🚶'
+  const accessEmoji = isBike ? '\ud83d\udeb2' : '\ud83d\udeb6'
 
   // Turn-by-turn guidance for this access leg, when the leg carries steps.
+  // Use localized version
+  const walkingInstruction = getWalkingInstructionWithIntl(
+    leg,
+    progress.currentLegProgress / 100,
+    intl
+  )
+
   const turnLine =
-    progress.nextTurnCue && progress.distanceToNextTurn != null
-      ? `${progress.nextTurnCue.instruction} · ${formatCueDistance(
-          progress.distanceToNextTurn
+    walkingInstruction.nextTurnCue && walkingInstruction.distanceToNextTurn != null
+      ? `${walkingInstruction.nextTurnCue.instruction} \u00b7 ${formatCueDistance(
+          walkingInstruction.distanceToNextTurn
         )}`
       : null
-  const thenLine = progress.followingTurnCue
+  const thenLine = walkingInstruction.followingTurnCue
     ? intl.formatMessage(
         { defaultMessage: 'then {turn}', id: 'components.GoMode.thenTurn' },
-        { turn: asContinuation(progress.followingTurnCue.instruction) }
+        { turn: asContinuationWithIntl(walkingInstruction.followingTurnCue.instruction, intl) }
       )
     : null
 
@@ -148,7 +156,7 @@ const WalkingNavigation = ({
       routeDepartures.some(
         (d) => d.depMs === effectiveDepartureMs && d.realtime
       ),
-    [routeDepartures, effectiveDepartureMs]
+    [effectiveDepartureMs, routeDepartures]
   )
 
   const busInSeconds = effectiveDepartureMs
@@ -221,7 +229,7 @@ const WalkingNavigation = ({
       { emoji: accessEmoji, stop: leg.to.name }
     )
     hero = formatMinutes(rideSecondsRemaining)
-    sub = turnLine || progress.nextInstruction || null
+    sub = turnLine || walkingInstruction.nextInstruction || null
     foot = thenLine
   }
 
@@ -321,4 +329,4 @@ const WalkingNavigation = ({
   )
 }
 
-export default WalkingNavigation
+export default React.memo(WalkingNavigation)
