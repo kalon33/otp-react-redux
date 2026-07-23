@@ -14,9 +14,17 @@ name: Go Mode CI
 
 on:
   push:
-    branches: [feature/go-mode]
+    branches: 
+      - feature/go-mode
+      - mistral
+      - mistral2
+      - working
   pull_request:
-    branches: [feature/go-mode]
+    branches:
+      - feature/go-mode
+      - mistral
+      - mistral2
+      - working
 
 jobs:
   test:
