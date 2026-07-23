@@ -934,6 +934,21 @@ components:
     hurryWarning: Hurry!
     nextLegTransit: Next transit leg
     nextLegWalk: Next walking leg
+    turnInstructions:
+      bearLeft: Bear left
+      bearRight: Bear right
+      continue: Continue
+      continueOn: "Continue on {street}"
+      enterStation: Enter the station
+      exitStation: Exit the station
+      followSigns: Follow signs
+      sharpLeft: Sharp left
+      sharpRight: Sharp right
+      takeElevator: Take the elevator
+      takeRoundabout: Take the roundabout
+      turnLeft: Turn left
+      turnRight: Turn right
+      uTurn: U-turn
   ActiveRoutingPreferences:
     label: Active routing preferences
     clear: Clear

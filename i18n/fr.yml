@@ -962,6 +962,21 @@ components:
     rerouteOk: OK
     waitAtStop: Attendre à l'arrêt
     walking: Marche
+    turnInstructions:
+      bearLeft: Tournez à gauche
+      bearRight: Tournez à droite
+      continue: Continuer
+      continueOn: "Continuer sur {street}"
+      enterStation: Entrer dans la station
+      exitStation: Sortir de la station
+      followSigns: Suivre les panneaux
+      sharpLeft: Tournez à gauche de manière abrupte
+      sharpRight: Tournez à droite de manière abrupte
+      takeElevator: Prendre l'ascenseur
+      takeRoundabout: Prendre le rond-point
+      turnLeft: Tournez à gauche
+      turnRight: Tournez à droite
+      uTurn: Demi-tour
     hurryWarning: Dépêchez-vous !
   ActiveRoutingPreferences:
     label: Préférences de routage actives
