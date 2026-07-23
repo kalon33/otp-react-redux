@@ -38,6 +38,7 @@ interface Props {
   onExit?: () => void
   onSelectDeparture?: (epochMs: number | null) => void
   progress: TripProgress
+  units: 'imperial' | 'metric'
 }
 
 /**
@@ -58,7 +59,8 @@ const WalkingNavigation = ({
   nextLeg,
   onExit,
   onSelectDeparture,
-  progress
+  progress,
+  units
 }: Props) => {
   const intl = useIntl()
 
@@ -115,7 +117,8 @@ const WalkingNavigation = ({
   const turnLine =
     walkingInstruction.nextTurnCue && walkingInstruction.distanceToNextTurn != null
       ? `${walkingInstruction.nextTurnCue.instruction} \u00b7 ${formatCueDistance(
-          walkingInstruction.distanceToNextTurn
+          walkingInstruction.distanceToNextTurn,
+          units
         )}`
       : null
   const thenLine = walkingInstruction.followingTurnCue

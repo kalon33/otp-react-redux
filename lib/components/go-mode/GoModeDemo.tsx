@@ -332,7 +332,7 @@ const GoModeDemo = (): JSX.Element => (
         note="Live realtime departure → green waves glyph left of the time; alternatives mix live + scheduled."
         title="Boarding (walk → bus), LIVE"
       >
-        <WalkingNavigation
+        <WalkingNavigation units="imperial"
           boardingStopData={makeBoardingStopData(true)}
           leg={walkLeg}
           nextLeg={busNextLeg}
@@ -346,7 +346,7 @@ const GoModeDemo = (): JSX.Element => (
         note="No realtime → plain time, no glyph."
         title="Boarding (walk → bus), SCHEDULED"
       >
-        <WalkingNavigation
+        <WalkingNavigation units="imperial"
           boardingStopData={makeBoardingStopData(false)}
           leg={walkLeg}
           nextLeg={busNextLeg}
@@ -360,7 +360,7 @@ const GoModeDemo = (): JSX.Element => (
         note="Plain access leg, no transit next — turn-by-turn off leg.steps."
         title="Walking only"
       >
-        <WalkingNavigation
+        <WalkingNavigation units="imperial"
           leg={walkLeg}
           onExit={() => undefined}
           progress={{
