@@ -350,7 +350,14 @@ const TripSheet = ({
         {legs.map((leg: Leg, i: number) => {
           const isCurrent = i === currentLegIndex
           const isTransit = TRANSIT_MODES.has(leg.mode)
-          const stopCount = (leg.intermediateStops?.length ?? 0) + 1
+          // Mid-leg, count the stops still AHEAD (same live figure as the
+          // header's "N stops remaining" — the two must never disagree);
+          // for legs not yet started the leg's full stop count is the fact.
+          const liveRemaining = progress?.stopsRemaining
+          const stopCount =
+            isCurrent && isTransit && liveRemaining != null && liveRemaining > 0
+              ? liveRemaining
+              : (leg.intermediateStops?.length ?? 0) + 1
           const waitSecs = waitSecondsBeforeLeg(i)
           const waitMins = waitSecs != null ? Math.round(waitSecs / 60) : 0
           const alight = legAlight(i, leg)

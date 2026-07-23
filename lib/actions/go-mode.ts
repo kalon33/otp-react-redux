@@ -121,11 +121,21 @@ const QUIET_REPLAN_MIN_INTERVAL_MS = 60000
 // The rider's explicit departure pick (or "Reset to planned") must never be
 // fought by the auto-anchor, so a manual selectDeparture locks auto-anchoring
 // off for the current boarding. lastAutoAnchorMs lets the anchor keep chasing
-// the live feed while the current override is its own. earlyBoardReplanKey
-// makes the boarded-earlier replan a one-shot per boarding.
+// the live feed while the current override is its own.
 let manualDepartureLock = false
 let lastAutoAnchorMs: number | null = null
-let earlyBoardReplanKey: string | null = null
+
+// The boarded-earlier replan retries per boarding (spaced, capped) rather than
+// one-shot: a single lost fetch used to strand the whole ride on the planned
+// bus's times. Success ends the loop naturally — the applied itinerary boards
+// the actual trip, so the trigger condition itself disappears.
+const EARLY_BOARD_REPLAN_RETRY_MS = 60000
+const EARLY_BOARD_REPLAN_MAX_ATTEMPTS = 3
+let earlyBoardReplan: {
+  attempts: number
+  key: string
+  lastAtMs: number
+} | null = null
 
 // Identity (leg + cue index) of the turn currently on the sticky card, so it is
 // re-posted only when the turn itself changes — once per turn, not once per GPS
@@ -663,7 +673,7 @@ export function endGoMode() {
     // Clear the sticky turn card so it doesn't linger on the wrist post-trip.
     if (lastTurnCardKey !== null) cancelPush(TURN_CARD_NOTIFICATION_ID)
     lastTurnCardKey = null
-    earlyBoardReplanKey = null
+    earlyBoardReplan = null
     lastTransitionedLegIndex = null
     missedBusRerouteAttempt = null
 
@@ -2393,14 +2403,23 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       // yields a same-route itinerary whose downstream transfers are real;
       // beginGoMode (via the auto-apply path) then resets the override.
       (() => {
-        if (reRouteStatus !== 'idle') return false
+        // 'none' is a settled failed/empty attempt — retryable, same as the
+        // missed-bus auto-update. Anything else is in flight or showing a card.
+        if (reRouteStatus !== 'idle' && reRouteStatus !== 'none') return false
         const riding = goMode.riding
         if (!riding || riding.legIndex == null || riding.legIndex < 0)
           return false
         const ridingLeg = itinerary.legs[riding.legIndex]
         if (!ridingLeg?.transitLeg) return false
-        const oneShotKey = `${riding.legIndex}:${riding.boardedAt ?? ''}`
-        if (earlyBoardReplanKey === oneShotKey) return false
+        const boardingKey = `${riding.legIndex}:${riding.boardedAt ?? ''}`
+        if (
+          earlyBoardReplan?.key === boardingKey &&
+          (earlyBoardReplan.attempts >= EARLY_BOARD_REPLAN_MAX_ATTEMPTS ||
+            Date.now() - earlyBoardReplan.lastAtMs <
+              EARLY_BOARD_REPLAN_RETRY_MS)
+        ) {
+          return false
+        }
         const plannedTripId =
           (ridingLeg as any)?.trip?.gtfsId || (ridingLeg as any)?.tripId
         const matched = goMode.vehicleMatch?.match
@@ -2414,7 +2433,14 @@ export function handlePositionUpdate(position: GeolocationPosition) {
           currentTime.getTime() <
           Number(ridingLeg.startTime) - EARLY_BOARD_MIN_MS
         if (!tripMismatch && !aboardBeforePlanned) return false
-        earlyBoardReplanKey = oneShotKey
+        earlyBoardReplan = {
+          attempts:
+            earlyBoardReplan?.key === boardingKey
+              ? earlyBoardReplan.attempts + 1
+              : 1,
+          key: boardingKey,
+          lastAtMs: Date.now()
+        }
         return true
       })()
     ) {

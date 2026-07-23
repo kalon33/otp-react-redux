@@ -34,9 +34,11 @@ export interface VehicleMatchResult {
   distanceMeters: number | null
   label: string | null
   lastSeen: number // epoch ms
+  nextStopId?: string | null
   /** GTFS ids of the matched run, when known — lets flows that trust a
    * confirmed match (onboard silent path) act without re-asking. */
   routeId?: string | null
+  tripHeadsign?: string | null
   tripId?: string | null
   vehicleId: string | null
 }
@@ -218,6 +220,13 @@ export function matchUserToVehicle(
     distanceMeters: Math.round(best.distance),
     label: bestVehicle.label,
     lastSeen: Date.now(),
+    nextStopId: bestVehicle.nextStopId ?? null,
+    routeId: bestVehicle.routeId ?? null,
+    tripHeadsign: bestVehicle.tripHeadsign ?? null,
+    // The matched run's identity travels with the match: the boarded-earlier
+    // trigger and the riding fact compare it against the PLANNED leg's trip
+    // to detect that the rider caught a different bus on the same route.
+    tripId: bestVehicle.tripId ?? null,
     vehicleId: bestVehicle.vehicleId
   }
 }
