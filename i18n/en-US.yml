@@ -310,6 +310,8 @@ components:
     shared-vehicles: Shared Vehicles
     stations: Transit Stations
     stops: Transit Stops
+    realtimeStops: Realtime Stops
+    OTP-UI-stopsAndStations: Stops and Stations
     streets: Streets
   MapillaryFrame:
     title: Imagery of the street

@@ -327,6 +327,8 @@ components:
     shared-vehicles: Véhicules en partage
     stations: Arrêts et stations
     stops: Arrêts et stations
+    realtimeStops: Arrêts en temps réel
+    OTP-UI-stopsAndStations: Arrêts et stations
     streets: Plan des rues
   MapillaryFrame:
     title: Vue panoramique

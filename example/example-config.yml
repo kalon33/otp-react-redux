@@ -18,6 +18,10 @@ api:
   basePath: /otp
   port: 8080
 
+### Timezone configuration
+# Set the home timezone for proper display of stop times
+homeTimezone: America/Los_Angeles
+
 ### This setting makes the UI display metric units.
 # units: metric
 
