@@ -1,4 +1,4 @@
-import { humanizeDistanceStringImperial } from '@opentripplanner/humanize-distance'
+import { humanizeDistanceStringImperial, humanizeDistanceStringMetric } from '@opentripplanner/humanize-distance'
 import type { IntlShape } from 'react-intl'
 import type { LatLngArray, Leg, Step } from '@opentripplanner/types'
 
@@ -114,10 +114,13 @@ const SIGNIFICANT_GAP_SECONDS = 90
 const FALLBACK_SPEED_MPS = 1.8
 
 /**
- * Imperial distance formatting ("30 ft", "0.3 mi") for cue copy.
+ * Distance formatting for cue copy. Uses imperial units (ft, mi) for en-US/en-GB locales,
+ * metric units (m, km) for others.
  */
-export function formatCueDistance(meters: number): string {
-  return humanizeDistanceStringImperial(meters, true)
+export function formatCueDistance(meters: number, units: 'imperial' | 'metric' = 'imperial'): string {
+  return units === 'imperial'
+    ? humanizeDistanceStringImperial(meters, true, undefined)
+    : humanizeDistanceStringMetric(meters, undefined)
 }
 
 /**
