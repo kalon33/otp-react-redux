@@ -220,7 +220,7 @@ async function main() {
 
   // (2) Collapse the buffer: pull the departure to 60s before the rider can
   // arrive (departure override, same lever the anchor uses). Expect an
-  // immediate non-passive "Go fast" repost despite the 90s floor.
+  // immediate non-passive repost (negative wait) despite the 90s floor.
   await page.evaluate(async (remainingRideSecs) => {
     // eslint-disable-next-line import/no-absolute-path
     const goMode = await import('/lib/actions/go-mode.js')
@@ -258,8 +258,14 @@ async function main() {
       'FAIL: the initial pacing post should alert, not be passive'
     )
   }
-  if (!/min ride/.test(p1Posts[0].title)) {
+  // Rider-confirmed copy: ride time and projected wait, nothing else.
+  if (!/^🚲 \d+ min ride · −?\d+ min wait$/u.test(p1Posts[0].title)) {
     throw new Error(`FAIL: unexpected initial title "${p1Posts[0].title}"`)
+  }
+  if (p1Posts[0].body) {
+    throw new Error(
+      `FAIL: pacing card should have no body, got "${p1Posts[0].body}"`
+    )
   }
   const p2Posts = phase2.filter((p) => p.kind === 'schedule')
   if (p2Posts.length !== 1) {
@@ -268,9 +274,9 @@ async function main() {
         p2Posts.length
     )
   }
-  if (p2Posts[0].passive || !/Go fast/.test(p2Posts[0].title)) {
+  if (p2Posts[0].passive || !/−\d+ min wait/u.test(p2Posts[0].title)) {
     throw new Error(
-      'FAIL: collapse repost should buzz with "Go fast", got ' +
+      'FAIL: collapse repost should buzz and show a negative wait, got ' +
         `"${p2Posts[0].title}" passive=${p2Posts[0].passive}`
     )
   }

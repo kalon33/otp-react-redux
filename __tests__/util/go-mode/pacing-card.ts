@@ -48,9 +48,9 @@ describe('util > go-mode > pacing-card', () => {
     const { next, post } = tick(null, T0, 900, 120)
     expect(post).not.toBeNull()
     expect(post?.passive).toBe(false)
-    expect(post?.title).toContain('13 min ride')
-    expect(post?.title).toContain('2 min wait')
-    expect(post?.message).toContain('535')
+    // Rider-confirmed copy: the two numbers and nothing else.
+    expect(post?.title).toBe('🚲 13 min ride · 2 min wait')
+    expect(post?.message).toBe('')
     expect(next?.state).toBe('tight')
   })
 
@@ -103,7 +103,8 @@ describe('util > go-mode > pacing-card', () => {
     expect(r.post).not.toBeNull()
     expect(r.post?.passive).toBe(false)
     expect(r.post?.priority).toBe(1)
-    expect(r.post?.title).toContain('Go fast')
+    // A negative projected wait keeps the same two-number shape.
+    expect(r.post?.title).toContain('−1 min wait')
     expect(r.next?.state).toBe('atRisk')
   })
 

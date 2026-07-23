@@ -57,44 +57,22 @@ export function classifyBuffer(waitSeconds: number): PacingState {
   return 'comfortable'
 }
 
-const PACE_HINT: Record<PacingState, string> = {
-  atRisk: 'go fast — cutting it close',
-  comfortable: 'easy pace',
-  tight: 'keep moving'
-}
-
-function formatClock(epochMs: number): string {
-  return new Intl.DateTimeFormat(undefined, {
-    hour: 'numeric',
-    minute: '2-digit'
-  }).format(new Date(epochMs))
-}
-
+// Rider-confirmed copy: ride time left and projected wait, NOTHING else. A
+// negative wait shows with its minus sign — "−2 min wait" says everything
+// "go fast" did without adding words. Urgency still arrives as the buzz on a
+// worsening pacing edge; the glance stays two numbers.
 function composePost(
-  nextLeg: Leg,
   rideMin: number,
   bufferMin: number,
   state: PacingState,
-  departureEpochMs: number,
   passive: boolean
 ): PacingCardPost {
-  const routeName =
-    (nextLeg as any).routeShortName ||
-    (nextLeg as any).route?.shortName ||
-    'Your bus'
-  const title =
-    state === 'atRisk'
-      ? `🚲 Go fast — ${rideMin} min ride, bus at ${formatClock(
-          departureEpochMs
-        )}`
-      : `🚲 ${rideMin} min ride · ${bufferMin} min wait at stop`
+  const wait = bufferMin < 0 ? `−${-bufferMin}` : `${bufferMin}`
   return {
-    message: `${routeName} at ${formatClock(departureEpochMs)} — ${
-      PACE_HINT[state]
-    }`,
+    message: '',
     passive,
     priority: state === 'atRisk' ? 1 : 0,
-    title
+    title: `🚲 ${rideMin} min ride · ${wait} min wait`
   }
 }
 
@@ -128,9 +106,10 @@ export function evaluatePacingCard(
   }
 
   const rideMin = Math.max(0, Math.round((due - wait) / 60))
-  const bufferMin = Math.round(wait / 60)
+  // Negative waits round AWAY from zero: 30 s short is "−1 min wait", never a
+  // false "0 min wait".
+  const bufferMin = wait < 0 ? Math.floor(wait / 60) : Math.round(wait / 60)
   const state = classifyBuffer(wait)
-  const departureEpochMs = nowMs + due * 1000
   const legKey = String(currentLeg.startTime)
 
   const freshLeg = !prev || prev.legKey !== legKey
@@ -151,13 +130,6 @@ export function evaluatePacingCard(
   const passive = !freshLeg && !worsened
   return {
     next: { bufferMin, legKey, postedAtMs: nowMs, state },
-    post: composePost(
-      nextLeg,
-      rideMin,
-      bufferMin,
-      state,
-      departureEpochMs,
-      passive
-    )
+    post: composePost(rideMin, bufferMin, state, passive)
   }
 }
