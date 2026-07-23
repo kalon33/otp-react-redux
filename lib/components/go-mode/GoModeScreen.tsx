@@ -250,6 +250,7 @@ const GoModeScreen = ({
         />
 
         <GoModeMap
+          activeLegIndex={goMode.ui.activeLeg}
           currentLegIndex={goMode.progress.currentLegIndex}
           currentPosition={goMode.tracking.lastPosition}
           followUser={goMode.ui.mapFollowUser}

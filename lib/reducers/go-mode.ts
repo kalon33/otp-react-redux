@@ -14,6 +14,7 @@ import {
   RESUME_GPS_SIMULATION,
   SET_ARRIVED,
   SET_DEPARTURE_OVERRIDE,
+  SET_GO_MODE_ACTIVE_LEG,
   SET_GO_MODE_BACKGROUNDED,
   SET_LIVE_LEG_TIMES,
   SET_NOTIFICATION_CONFIG,
@@ -189,6 +190,12 @@ export interface GoModeState {
 
   ui: {
     /**
+     * Index of the leg the rider tapped in the trip sheet, or null for none.
+     * The Go Mode equivalent of the planner's activeSearch.activeLeg: the map
+     * zooms to it and draws it as selected.
+     */
+    activeLeg: number | null
+    /**
      * The trip is running but the rider has stepped out to the normal trip
      * planner (browsing alternate routes). Tracking, notifications, and
      * auto-updates all keep running; only what's on screen changes. The
@@ -280,6 +287,7 @@ const defaultState: GoModeState = {
   },
 
   ui: {
+    activeLeg: null,
     backgrounded: false,
     // Off by default: the map should stay where the user leaves it and only
     // recenter on the live GPS point when the user asks (blue dot control).
@@ -464,6 +472,14 @@ const goMode = handleActions<GoModeState, any>(
     [SET_DEPARTURE_OVERRIDE]: (state, action) => ({
       ...state,
       departureOverride: action.payload
+    }),
+
+    [SET_GO_MODE_ACTIVE_LEG]: (state, action) => ({
+      ...state,
+      ui: {
+        ...state.ui,
+        activeLeg: action.payload ?? null
+      }
     }),
 
     [SET_GO_MODE_BACKGROUNDED]: (state, action) => ({

@@ -1,18 +1,20 @@
+import { ArrowsAlt } from '@styled-icons/fa-solid/ArrowsAlt'
 import { connect } from 'react-redux'
-import { useIntl } from 'react-intl'
-import React, { useState } from 'react'
+import { FormattedMessage, useIntl } from 'react-intl'
+import { ListUl } from '@styled-icons/fa-solid/ListUl'
+import React, { useRef, useState } from 'react'
 import type { Itinerary, Leg } from '@opentripplanner/types'
 
 import * as goModeActions from '../../actions/go-mode'
 import * as routingProfileActions from '../../actions/routing-profiles'
+import { buildLiveItinerary } from '../../util/go-mode/live-itinerary'
 import { getModeIcon } from '../../util/go-mode/mode-icon'
-import type { GoModeState } from '../../reducers/go-mode'
+import { IconWithText } from '../util/styledIcon'
+import ItineraryBody from '../narrative/line-itin/connected-itinerary-body'
 import type { LiveLegTime } from '../../actions/go-mode'
 import type { TripProgress } from '../../util/go-mode/progress-calculator'
 
 import {
-  AltRow,
-  AltSwitchButton,
   BoardingOverlay,
   BoardingSheet,
   BoardingTitle,
@@ -20,31 +22,23 @@ import {
   LegInfo,
   LegRow,
   LegSubtitle,
-  LegTime,
-  LegTimeLabel,
-  LegTimePair,
   LegTitle,
   RerouteButton,
-  RerouteCardTitle,
   RerouteChip,
   RerouteChips,
   RerouteNlError,
   RerouteNlInput,
   RerouteNlRow,
   RerouteSendButton,
-  RerouteSummary,
   SheetCloseButton,
+  SheetExpandButton,
   SheetHeader,
   SheetSectionTitle,
   StopDot,
   StopList,
   StopRow,
-  VehicleDetail,
-  VehicleInfo,
-  VehicleLabel,
   WaitNote
 } from './styled'
-import RealtimeTime from './RealtimeTime'
 
 // Quick mid-trip re-route options; each maps to a pre-built routing profile.
 const REROUTE_CHIPS = [
@@ -56,147 +50,62 @@ const REROUTE_CHIPS = [
 
 const TRANSIT_MODES = new Set(['BUS', 'FERRY', 'RAIL', 'SUBWAY', 'TRAM'])
 
-interface TimePoint {
-  epoch: number | string | undefined
-  realtime: boolean
-}
-
-/**
- * A transit row's two clock times, labelled. One unlabelled time left the rider
- * guessing which end of the ride it referred to, exactly when it mattered
- * (7/22 note: "should show boarding bus time, and exit bus time for clarity").
- * Each carries its own realtime flag — a live board time and a scheduled alight
- * time are common, and the glyph must tell the truth about both.
- */
-const TransitLegTimes = ({
-  alight,
-  alightText,
-  board,
-  boardText
-}: {
-  alight: TimePoint
-  alightText: string
-  board: TimePoint
-  boardText: string
-}) => {
-  const intl = useIntl()
-  if (!boardText && !alightText) return null
-  return (
-    <LegTime>
-      <LegTimePair>
-        {boardText && (
-          <span>
-            <LegTimeLabel>
-              {intl.formatMessage({
-                defaultMessage: 'board',
-                id: 'components.GoMode.legBoardLabel'
-              })}
-            </LegTimeLabel>
-            <RealtimeTime live={board.realtime}>{boardText}</RealtimeTime>
-          </span>
-        )}
-        {alightText && (
-          <span>
-            <LegTimeLabel>
-              {intl.formatMessage({
-                defaultMessage: 'off',
-                id: 'components.GoMode.legAlightLabel'
-              })}
-            </LegTimeLabel>
-            <RealtimeTime live={alight.realtime}>{alightText}</RealtimeTime>
-          </span>
-        )}
-      </LegTimePair>
-    </LegTime>
-  )
-}
-
 interface Props {
   activeItinerary: Itinerary | null
-  backgroundGoMode: () => void
-  beginGoMode: (itinerary: any) => void
+  activeLeg: number | null
+  browseFromCurrentPosition: (options?: {
+    preferences?: any
+    profileId?: string
+  }) => void
   fetchPreferencesFromText: (text: string) => Promise<any>
   liveLegTimes: Record<number, LiveLegTime>
   onClose: () => void
   progress: TripProgress | null
-  reRouteCandidates: Itinerary[]
-  reRouteFromCurrentPosition: (options?: {
-    preferences?: any
-    profileId?: string
-  }) => void
-  reRouteStatus: GoModeState['reRoute']['status']
+  setGoModeActiveLeg: (index: number | null) => void
 }
 
 /**
  * Slide-up sheet the rider opens mid-trip to (a) see the rest of their journey
- * as a list and (b) browse alternative routes — all without leaving the active
- * Go Mode route, which keeps running on the map underneath. Closing the sheet
- * never tears down the trip; only an explicit "Switch" swaps routes.
+ * and (b) look for another way — all without leaving the active Go Mode route,
+ * which keeps running on the map underneath. Closing the sheet never tears down
+ * the trip.
+ *
+ * The journey itself is rendered by the SAME ItineraryBody the trip planner
+ * uses (the component the rider tapped to start this trip), fed a live-times
+ * clone of the itinerary — so the leg breakdown, realtime styling and
+ * tap-a-leg-to-zoom are the app's own, not a Go Mode re-implementation. The
+ * two things only Go Mode knows — which leg is happening right now, and how
+ * long the wait at the next stop is — are layered on top as a "Right now" card.
  */
 const TripSheet = ({
   activeItinerary,
-  backgroundGoMode,
-  beginGoMode,
+  activeLeg,
+  browseFromCurrentPosition,
   fetchPreferencesFromText,
   liveLegTimes,
   onClose,
   progress,
-  reRouteCandidates,
-  reRouteFromCurrentPosition,
-  reRouteStatus
+  setGoModeActiveLeg
 }: Props) => {
   const intl = useIntl()
   const [rerouteText, setRerouteText] = useState('')
   const [nlBusy, setNlBusy] = useState(false)
   const [nlError, setNlError] = useState(false)
+  // Starts tall (the list is what the rider opened the sheet for); tapping a
+  // leg or the toggle drops it so the map — and the zoom — are visible.
+  const [expanded, setExpanded] = useState(true)
+
+  // ItineraryBody only re-renders when the ITINERARY changes
+  // (ConnectedItineraryBody.shouldComponentUpdate), so the setActiveLeg it
+  // holds is whichever closure it first received. Read the current selection
+  // through a ref so that stale closure still toggles against the truth
+  // instead of re-selecting the same leg forever.
+  const activeLegRef = useRef<number | null>(activeLeg)
+  activeLegRef.current = activeLeg
 
   const legs = activeItinerary?.legs || []
   const currentLegIndex = progress?.currentLegIndex ?? 0
-
-  // Leg start/end times are epoch ms (typed number | string); coerce and
-  // render as a short local clock time, e.g. "4:52 PM".
-  const formatClock = (value: number | string | undefined): string => {
-    const ms = Number(value)
-    if (!ms || Number.isNaN(ms)) return ''
-    return intl.formatTime(ms, { hour: 'numeric', minute: '2-digit' })
-  }
-
-  // The bus's own times are shown as-is: a bus departs when it departs,
-  // regardless of how fast the rider walks — the rider's pace surfaces instead
-  // as the wait at the stop (below). refreshLiveLegTimes re-polls GTFS-realtime
-  // mid-ride and stores a per-leg live arrival; prefer it, falling back to the
-  // plan leg's own endTime (itself realtime-as-of-planning, else schedule).
-  const legAlight = (
-    i: number,
-    leg: Leg
-  ): { epoch: number | string | undefined; realtime: boolean } => {
-    const live = liveLegTimes[i]
-    if (TRANSIT_MODES.has(leg.mode) && live?.alightEpoch) {
-      // Per-field flag: the leg-level `realtime` is an OR across board and
-      // alight, which kept styling a schedule-fallback alight time as live.
-      return {
-        epoch: live.alightEpoch,
-        realtime: live.alightRealtime ?? live.realtime
-      }
-    }
-    return { epoch: leg.endTime, realtime: false }
-  }
-
-  // Board time, mirroring legAlight: prefer the live figure, else the plan's,
-  // and report honestly whether what's shown is realtime.
-  const legBoard = (
-    i: number,
-    leg: Leg
-  ): { epoch: number | string | undefined; realtime: boolean } => {
-    const live = liveLegTimes[i]
-    if (TRANSIT_MODES.has(leg.mode) && live?.boardEpoch) {
-      return {
-        epoch: live.boardEpoch,
-        realtime: live.boardRealtime ?? live.realtime
-      }
-    }
-    return { epoch: leg.startTime, realtime: false }
-  }
+  const currentLeg: Leg | undefined = legs[currentLegIndex]
 
   // Wait at a transit leg's boarding stop: the gap between reaching the stop
   // and the bus leaving. For the very next bus the rider is walking toward,
@@ -264,24 +173,87 @@ const TripSheet = ({
     )
   }
 
+  /**
+   * The "Right now" card: the leg in progress, with the two facts the plain
+   * itinerary can't know — live stops-remaining (the same figure as the header
+   * above the map; the two must never disagree) and the wait before the next
+   * bus.
+   */
+  const renderCurrentLegCard = () => {
+    if (!currentLeg) return null
+    const isTransit = TRANSIT_MODES.has(currentLeg.mode)
+    const liveRemaining = progress?.stopsRemaining
+    const stopCount =
+      isTransit && liveRemaining != null && liveRemaining > 0
+        ? liveRemaining
+        : (currentLeg.intermediateStops?.length ?? 0) + 1
+    // The wait that matters is the one the rider is about to sit through:
+    // theirs on this leg if it's a bus, else the one before the next bus.
+    const waitSecs = isTransit
+      ? waitSecondsBeforeLeg(currentLegIndex)
+      : waitSecondsBeforeLeg(currentLegIndex + 1)
+    const waitMins = waitSecs != null ? Math.round(waitSecs / 60) : 0
+
+    return (
+      <LegRow $current>
+        <LegIcon>{getModeIcon(currentLeg.mode)}</LegIcon>
+        <LegInfo>
+          <LegTitle>{legTitle(currentLeg)}</LegTitle>
+          {waitMins >= 1 && (
+            <WaitNote>
+              {intl.formatMessage(
+                {
+                  defaultMessage: '🕒 {mins} min wait',
+                  id: 'components.GoMode.legWait'
+                },
+                { mins: waitMins }
+              )}
+            </WaitNote>
+          )}
+          <LegSubtitle>
+            {isTransit
+              ? intl.formatMessage(
+                  {
+                    defaultMessage:
+                      '{count, plural, one {# stop} other {# stops}} to {dest}',
+                    id: 'components.GoMode.legStopsTo'
+                  },
+                  { count: stopCount, dest: currentLeg.to.name }
+                )
+              : intl.formatMessage(
+                  {
+                    defaultMessage: 'to {dest}',
+                    id: 'components.GoMode.legTo'
+                  },
+                  { dest: currentLeg.to.name }
+                )}
+          </LegSubtitle>
+          {isTransit && renderCurrentStops(currentLeg)}
+        </LegInfo>
+      </LegRow>
+    )
+  }
+
+  // Same toggle semantics as the planner's narrative list: tapping the active
+  // leg again clears it. Selecting one drops the sheet so the zoom is visible.
+  const handleLegClick = (index: number) => {
+    const next = activeLegRef.current === index ? null : index
+    activeLegRef.current = next
+    setGoModeActiveLeg(next)
+    if (next !== null) setExpanded(false)
+  }
+
+  const handleClose = () => {
+    setGoModeActiveLeg(null)
+    onClose()
+  }
+
   const handleChip = (profileId: string) => {
-    reRouteFromCurrentPosition({ profileId })
+    browseFromCurrentPosition({ profileId })
   }
 
-  // Step out to the full trip planner (trip keeps running, banner comes back).
-  const handleBrowsePlanner = () => {
-    onClose()
-    backgroundGoMode()
-  }
-
-  const handleFindAnotherWay = () => {
-    reRouteFromCurrentPosition()
-  }
-
-  const handleSwitch = (itinerary: Itinerary) => {
-    // beginGoMode restarts tracking and resets re-route state for the new route.
-    onClose()
-    beginGoMode(itinerary)
+  const handleSearchFromHere = () => {
+    browseFromCurrentPosition()
   }
 
   const handleSendMessage = async () => {
@@ -291,7 +263,7 @@ const TripSheet = ({
     setNlError(false)
     try {
       const prefs = await fetchPreferencesFromText(text)
-      reRouteFromCurrentPosition({ preferences: prefs })
+      browseFromCurrentPosition({ preferences: prefs })
       setRerouteText('')
     } catch {
       setNlError(true)
@@ -300,24 +272,22 @@ const TripSheet = ({
     }
   }
 
-  const formatSummary = (itin: Itinerary): string =>
-    intl.formatMessage(
-      {
-        defaultMessage:
-          '{minutes} min · {transfers, plural, one {# transfer} other {# transfers}} · {walk} m walk',
-        id: 'components.GoMode.rerouteSummary'
-      },
-      {
-        minutes: Math.round(itin.duration / 60),
-        transfers: (itin as any).transfers ?? 0,
-        walk: Math.round(itin.walkDistance ?? 0)
-      }
-    )
+  const liveItinerary = activeItinerary
+    ? buildLiveItinerary(activeItinerary, liveLegTimes)
+    : null
 
   return (
     <>
-      <BoardingOverlay onClick={onClose} />
+      {/* Only dim the map when the sheet is tall — collapsed, the map is the
+          point and must stay tappable. */}
+      {expanded && (
+        <BoardingOverlay
+          className="go-mode-sheet-overlay"
+          onClick={handleClose}
+        />
+      )}
       <BoardingSheet
+        $expanded={expanded}
         aria-label={intl.formatMessage({
           defaultMessage: 'Trip overview',
           id: 'components.GoMode.tripSheetTitle'
@@ -331,116 +301,70 @@ const TripSheet = ({
               id: 'components.GoMode.tripSheetHeading'
             })}
           </BoardingTitle>
-          <SheetCloseButton
-            aria-label={intl.formatMessage({ id: 'common.forms.close' })}
-            onClick={onClose}
-            type="button"
-          >
-            ×
-          </SheetCloseButton>
+          <div>
+            <SheetExpandButton
+              onClick={() => setExpanded(!expanded)}
+              type="button"
+            >
+              <IconWithText Icon={expanded ? ArrowsAlt : ListUl}>
+                {expanded ? (
+                  <FormattedMessage
+                    defaultMessage="Expand map"
+                    id="components.BatchResultsScreen.expandMap"
+                  />
+                ) : (
+                  <FormattedMessage
+                    defaultMessage="Show results"
+                    id="components.BatchResultsScreen.showResults"
+                  />
+                )}
+              </IconWithText>
+            </SheetExpandButton>
+            <SheetCloseButton
+              aria-label={intl.formatMessage({ id: 'common.forms.close' })}
+              onClick={handleClose}
+              type="button"
+            >
+              ×
+            </SheetCloseButton>
+          </div>
         </SheetHeader>
 
-        {/* Section A — rest of the trip */}
+        {/* Section A — the journey itself, rendered by the planner's own
+            itinerary component with Go Mode's live times folded in. */}
         <SheetSectionTitle>
           {intl.formatMessage({
             defaultMessage: 'Rest of your trip',
             id: 'components.GoMode.restOfTrip'
           })}
         </SheetSectionTitle>
-        {legs.map((leg: Leg, i: number) => {
-          const isCurrent = i === currentLegIndex
-          const isTransit = TRANSIT_MODES.has(leg.mode)
-          // Mid-leg, count the stops still AHEAD (same live figure as the
-          // header's "N stops remaining" — the two must never disagree);
-          // for legs not yet started the leg's full stop count is the fact.
-          const liveRemaining = progress?.stopsRemaining
-          const stopCount =
-            isCurrent && isTransit && liveRemaining != null && liveRemaining > 0
-              ? liveRemaining
-              : (leg.intermediateStops?.length ?? 0) + 1
-          const waitSecs = waitSecondsBeforeLeg(i)
-          const waitMins = waitSecs != null ? Math.round(waitSecs / 60) : 0
-          const alight = legAlight(i, leg)
-          const alightText = formatClock(alight.epoch)
-          const board = legBoard(i, leg)
-          const boardText = isTransit ? formatClock(board.epoch) : ''
-          return (
-            <LegRow $current={isCurrent} $dim={i < currentLegIndex} key={i}>
-              <LegIcon>{getModeIcon(leg.mode)}</LegIcon>
-              <LegInfo>
-                <LegTitle>{legTitle(leg)}</LegTitle>
-                {isTransit && waitMins >= 1 && (
-                  <WaitNote>
-                    {intl.formatMessage(
-                      {
-                        defaultMessage: '🕒 {mins} min wait',
-                        id: 'components.GoMode.legWait'
-                      },
-                      { mins: waitMins }
-                    )}
-                  </WaitNote>
-                )}
-                <LegSubtitle>
-                  {isTransit
-                    ? intl.formatMessage(
-                        {
-                          defaultMessage:
-                            '{count, plural, one {# stop} other {# stops}} to {dest}',
-                          id: 'components.GoMode.legStopsTo'
-                        },
-                        { count: stopCount, dest: leg.to.name }
-                      )
-                    : intl.formatMessage(
-                        {
-                          defaultMessage: 'to {dest}',
-                          id: 'components.GoMode.legTo'
-                        },
-                        { dest: leg.to.name }
-                      )}
-                </LegSubtitle>
-                {isCurrent && isTransit && renderCurrentStops(leg)}
-              </LegInfo>
-              {isTransit ? (
-                <TransitLegTimes
-                  alight={alight}
-                  alightText={alightText}
-                  board={board}
-                  boardText={boardText}
-                />
-              ) : (
-                alightText && <LegTime>{alightText}</LegTime>
-              )}
-            </LegRow>
-          )
-        })}
+        {renderCurrentLegCard()}
+        {liveItinerary && (
+          <ItineraryBody
+            itinerary={liveItinerary}
+            setActiveLeg={handleLegClick}
+            showTripTools={false}
+          />
+        )}
 
-        {/* Section B — find another way (browsable alternatives) */}
+        {/* Section B — find another way. This hands the rider the real trip
+            planner (results screen, expand-map, "Switch to this trip") with
+            the origin at where they actually are. */}
         <SheetSectionTitle>
           {intl.formatMessage({
             defaultMessage: 'Find another way',
             id: 'components.GoMode.findAnotherWay'
           })}
         </SheetSectionTitle>
-        <RerouteButton onClick={handleBrowsePlanner} type="button">
+        <RerouteButton onClick={handleSearchFromHere} type="button">
           {intl.formatMessage({
-            defaultMessage: 'Browse routes in the trip planner',
-            id: 'components.GoMode.browsePlanner'
-          })}
-        </RerouteButton>
-        <RerouteButton
-          disabled={reRouteStatus === 'searching'}
-          onClick={handleFindAnotherWay}
-          type="button"
-        >
-          {intl.formatMessage({
-            defaultMessage: 'Search from my current position',
+            defaultMessage: 'Search from here',
             id: 'components.GoMode.rerouteSearchHere'
           })}
         </RerouteButton>
         <RerouteChips>
           {REROUTE_CHIPS.map((chip) => (
             <RerouteChip
-              disabled={reRouteStatus === 'searching'}
               key={chip.profileId}
               onClick={() => handleChip(chip.profileId)}
               type="button"
@@ -490,46 +414,6 @@ const TripSheet = ({
             })}
           </RerouteNlError>
         )}
-
-        {reRouteStatus === 'searching' && (
-          <RerouteCardTitle>
-            {intl.formatMessage({
-              defaultMessage: 'Finding a better route…',
-              id: 'components.GoMode.rerouteSearching'
-            })}
-          </RerouteCardTitle>
-        )}
-        {reRouteStatus === 'found' &&
-          reRouteCandidates.map((itin, i) => (
-            <AltRow key={i}>
-              <VehicleInfo>
-                <VehicleLabel>
-                  {intl.formatMessage(
-                    {
-                      defaultMessage: 'Option {n}',
-                      id: 'components.GoMode.altOption'
-                    },
-                    { n: i + 1 }
-                  )}
-                </VehicleLabel>
-                <VehicleDetail>{formatSummary(itin)}</VehicleDetail>
-              </VehicleInfo>
-              <AltSwitchButton onClick={() => handleSwitch(itin)} type="button">
-                {intl.formatMessage({
-                  defaultMessage: 'Switch',
-                  id: 'components.GoMode.rerouteSwitch'
-                })}
-              </AltSwitchButton>
-            </AltRow>
-          ))}
-        {(reRouteStatus === 'none' || reRouteStatus === 'error') && (
-          <RerouteCardTitle>
-            {intl.formatMessage({
-              defaultMessage: 'No better route right now',
-              id: 'components.GoMode.rerouteNone'
-            })}
-          </RerouteCardTitle>
-        )}
       </BoardingSheet>
     </>
   )
@@ -539,18 +423,16 @@ const mapStateToProps = (state: any) => {
   const goMode = state.otp.goMode
   return {
     activeItinerary: goMode?.activeItinerary || null,
+    activeLeg: goMode?.ui?.activeLeg ?? null,
     liveLegTimes: goMode?.liveLegTimes || {},
-    progress: goMode?.progress || null,
-    reRouteCandidates: goMode?.reRoute?.candidates || [],
-    reRouteStatus: goMode?.reRoute?.status || 'idle'
+    progress: goMode?.progress || null
   }
 }
 
 const mapDispatchToProps = {
-  backgroundGoMode: goModeActions.backgroundGoMode,
-  beginGoMode: goModeActions.beginGoMode,
+  browseFromCurrentPosition: goModeActions.browseFromCurrentPosition,
   fetchPreferencesFromText: routingProfileActions.fetchPreferencesFromText,
-  reRouteFromCurrentPosition: goModeActions.reRouteFromCurrentPosition
+  setGoModeActiveLeg: goModeActions.setGoModeActiveLeg
 }
 
 export default connect(mapStateToProps, mapDispatchToProps)(TripSheet)

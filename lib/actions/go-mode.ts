@@ -247,6 +247,7 @@ export const REROUTE_SNAPSHOT = 'REROUTE_SNAPSHOT'
 export const RESUME_GPS_SIMULATION = 'RESUME_GPS_SIMULATION'
 export const SET_ARRIVED = 'SET_ARRIVED'
 export const SET_DEPARTURE_OVERRIDE = 'SET_DEPARTURE_OVERRIDE'
+export const SET_GO_MODE_ACTIVE_LEG = 'SET_GO_MODE_ACTIVE_LEG'
 export const SET_GO_MODE_BACKGROUNDED = 'SET_GO_MODE_BACKGROUNDED'
 export const SET_RIDING = 'SET_RIDING'
 export const SET_LIVE_LEG_TIMES = 'SET_LIVE_LEG_TIMES'
@@ -346,6 +347,15 @@ export const setTrackingError = createAction<GeolocationPositionError | null>(
 export const toggleMapFollow = createAction(TOGGLE_MAP_FOLLOW)
 export const setGoModeBackgrounded = createAction<boolean>(
   SET_GO_MODE_BACKGROUNDED
+)
+
+/**
+ * The leg the rider tapped in the trip sheet, mirroring the planner's
+ * activeLeg: the Go Mode map zooms to it and draws it as selected. null means
+ * "no selection" — the map is back to the whole trip.
+ */
+export const setGoModeActiveLeg = createAction<number | null>(
+  SET_GO_MODE_ACTIVE_LEG
 )
 export const updateTrackingInterval = createAction<{ interval: number }>(
   UPDATE_TRACKING_INTERVAL
@@ -704,11 +714,11 @@ export function endGoMode() {
 
     dispatch(stopGoMode())
 
-    // If a mid-trip re-route replaced the origin with the rider's GPS position,
+    // If a mid-trip search replaced the origin with the rider's GPS position,
     // restore the origin they started with so the trip planner isn't left
-    // showing "Current location". (Re-routes are isolated plans now and no
-    // longer touch currentQuery — this restore only protects sessions started
-    // under the old pipeline and can eventually be removed.)
+    // showing "Current location". Automatic re-routes are isolated plans and
+    // never touch currentQuery, but browseFromCurrentPosition deliberately
+    // does — it IS a real search — so this restore is load-bearing.
     if (
       originalFrom &&
       currentFrom &&
@@ -717,6 +727,120 @@ export function endGoMode() {
     ) {
       dispatch(setQueryParam({ from: originalFrom }))
     }
+  }
+}
+
+/**
+ * Where a mid-trip search should start FROM. Aboard a bus, "current position"
+ * is a moving mid-street point the rider can't act on, so plan from the next
+ * stop ahead on their line, anchored to when the bus gets there. Otherwise plan
+ * from the GPS fix, now. Shared by the isolated auto-reroute and the rider's
+ * own "Search from here" so the two never disagree about where they are.
+ */
+function currentPositionOrigin(state: any): {
+  date: string
+  from: any
+  time: string
+} | null {
+  const goMode = state.otp.goMode
+  const lastPosition: GeolocationPosition | null =
+    goMode?.tracking?.lastPosition
+  if (!lastPosition) return null
+  const { homeTimezone } = state.otp.config
+
+  const riding = goMode?.riding
+  const nextStop = riding ? getNextStopOnRide(state) : null
+  if (riding && nextStop) {
+    const zoned = utcToZonedTime(nextStop.arrivalEpoch, homeTimezone)
+    return {
+      date: format(zoned, coreUtils.time.OTP_API_DATE_FORMAT),
+      from: { lat: nextStop.lat, lon: nextStop.lon, name: nextStop.name },
+      time: format(zoned, coreUtils.time.OTP_API_TIME_FORMAT)
+    }
+  }
+  return {
+    date: coreUtils.time.getCurrentDate(homeTimezone),
+    from: {
+      category: 'CURRENT_LOCATION',
+      lat: lastPosition.coords.latitude,
+      lon: lastPosition.coords.longitude,
+      name: 'Current location'
+    },
+    time: coreUtils.time.getCurrentTime(homeTimezone)
+  }
+}
+
+/**
+ * The rider's own "show me other ways from here": run a REAL search — origin at
+ * their actual position (or the next stop ahead when aboard), destination
+ * unchanged — and hand them the normal trip-planner results screen, which
+ * already has the expand-map/list toggle, tap-a-leg-to-zoom, and a "Switch to
+ * this trip" button on every itinerary (metro-itinerary renders it whenever
+ * goMode.isActive). The trip keeps running behind the ReturnToTripBanner.
+ *
+ * Unlike reRouteFromCurrentPosition this deliberately DOES touch currentQuery
+ * and the active search — that is what makes the planner render it. The
+ * isolation rule applies to AUTOMATIC re-routes (which must never disturb a
+ * planner the rider is reading), not to a search the rider just asked for.
+ * endGoMode restores goMode.originalFrom afterwards.
+ */
+export function browseFromCurrentPosition(
+  options: { preferences?: any; profileId?: string } = {}
+) {
+  return function (dispatch: any, getState: any) {
+    const state = getState()
+    const goMode = state.otp.goMode
+    const itinerary: Itinerary | null = goMode?.activeItinerary
+    const legs = itinerary?.legs || []
+    const destLeg = legs[legs.length - 1]
+    const origin = currentPositionOrigin(state)
+
+    // No fix or no destination yet: fall back to the plain step-out rather than
+    // dead-ending the button. The rider still lands in the planner.
+    if (!itinerary || !destLeg || !origin) {
+      dispatch(backgroundGoMode())
+      return
+    }
+
+    // Same preference ladder as the auto-reroute: an explicit profile wins,
+    // then caller-supplied levers, then (mid-ride) stay-seated so transfers
+    // away from the boarded bus cost extra.
+    const profile = options.profileId
+      ? getRoutingProfile(options.profileId)
+      : undefined
+    const riding = goMode?.riding
+    const nextStop = riding ? getNextStopOnRide(state) : null
+    const routingPreferences =
+      profile?.prefs ??
+      options.preferences ??
+      (riding && nextStop ? getRoutingProfile('stay-seated')?.prefs : undefined)
+
+    dispatch(
+      setQueryParam(
+        {
+          activeProfileId: profile?.id,
+          date: origin.date,
+          // Force depart-at: an earlier arrive-by search must not carry over
+          // into "leave from here, now".
+          departArrive: 'DEPART',
+          from: origin.from,
+          routingPreferences,
+          time: origin.time,
+          to: {
+            lat: destLeg.to.lat,
+            lon: destLeg.to.lon,
+            name: destLeg.to.name
+          }
+        },
+        // A searchId makes setQueryParam fire the real routingQuery, which
+        // already biases toward goMode.riding.routeId ("stay on this bus"
+        // ranks first) and suppresses recents while Go Mode is active.
+        randId()
+      )
+    )
+
+    dispatch(setGoModeBackgrounded(true))
+    dispatch(setMobileScreen(MobileScreens.RESULTS_SUMMARY))
   }
 }
 
@@ -750,14 +874,16 @@ export function reRouteFromCurrentPosition(
       goMode?.tracking?.lastPosition
     const legs = itinerary?.legs || []
     const destLeg = legs[legs.length - 1]
+    // Aboard a bus this resolves to the next stop ahead at the time the bus
+    // gets there, else the GPS fix now — see currentPositionOrigin.
+    const origin = currentPositionOrigin(state)
 
     // Need a real position and destination — never fabricate either.
-    if (!itinerary || !lastPosition || !destLeg) {
+    if (!itinerary || !lastPosition || !destLeg || !origin) {
       dispatch(setRerouteResult(null))
       return
     }
 
-    const { homeTimezone } = state.otp.config
     // Not a searches[] key anymore — a stale-response token: only the newest
     // in-flight reroute may resolve into goMode.reRoute.
     const searchId = randId()
@@ -774,17 +900,12 @@ export function reRouteFromCurrentPosition(
     const { modes, modeSettings, numItineraries } = getBasePlanParts(state)
     const payload: any = {
       arriveBy: false,
-      date: coreUtils.time.getCurrentDate(homeTimezone),
-      from: {
-        category: 'CURRENT_LOCATION',
-        lat: lastPosition.coords.latitude,
-        lon: lastPosition.coords.longitude,
-        name: 'Current location'
-      },
+      date: origin.date,
+      from: origin.from,
       modes,
       modeSettings,
       numItineraries,
-      time: coreUtils.time.getCurrentTime(homeTimezone),
+      time: origin.time,
       to: {
         lat: destLeg.to.lat,
         lon: destLeg.to.lon,
@@ -792,26 +913,15 @@ export function reRouteFromCurrentPosition(
       }
     }
 
-    // Aboard a bus, "current position" is a moving mid-street point the rider
-    // can't act on. Plan from the next stop ahead on their line instead,
-    // anchored to when the bus gets there, and prefer their current route so
-    // "stay on this bus" surfaces as the default choice.
+    // Aboard a bus, prefer the rider's current route so "stay on this bus"
+    // surfaces as the default choice. (The origin/time anchor for that case is
+    // already applied above by currentPositionOrigin.)
     const riding = goMode?.riding
     const nextStop = riding ? getNextStopOnRide(state) : null
-    if (riding && nextStop) {
-      const zoned = utcToZonedTime(nextStop.arrivalEpoch, homeTimezone)
-      payload.date = format(zoned, coreUtils.time.OTP_API_DATE_FORMAT)
-      payload.from = {
-        lat: nextStop.lat,
-        lon: nextStop.lon,
-        name: nextStop.name
-      }
-      payload.time = format(zoned, coreUtils.time.OTP_API_TIME_FORMAT)
-      if (riding.routeId) {
-        payload.preferred = {
-          otherThanPreferredRoutesPenalty: 900,
-          routes: riding.routeId
-        }
+    if (riding && nextStop && riding.routeId) {
+      payload.preferred = {
+        otherThanPreferredRoutesPenalty: 900,
+        routes: riding.routeId
       }
     }
 
@@ -1604,6 +1714,12 @@ export function buildOnboardItinerary(
     distance: 0,
     duration: (best.busArrivalEpoch - busLegStart) / 1000,
     endTime: best.busArrivalEpoch,
+    // Every real OTP leg carries this (empty when the agency has no Fares V2
+    // data). Omitting it crashes the fare table, which does
+    // `transitLegs.flatMap(leg => leg.fareProducts)` and then reads
+    // `.product` off each entry — a missing array lands `undefined` in that
+    // list and takes the whole trip-details panel down.
+    fareProducts: [],
     from: {
       lat: boardStop.lat,
       lon: boardStop.lon,

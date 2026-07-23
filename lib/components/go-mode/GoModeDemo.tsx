@@ -1,7 +1,10 @@
+// @ts-expect-error @opentripplanner/icons ships no type declarations
+import { ClassicLegIcon } from '@opentripplanner/icons'
 import { IntlProvider } from 'react-intl'
 import { Provider } from 'react-redux'
 import React from 'react'
 
+import { ComponentContext } from '../../util/contexts'
 import type { TripProgress } from '../../util/go-mode/progress-calculator'
 
 import AlightRecommendation from './AlightRecommendation'
@@ -162,58 +165,80 @@ const readyOnboard = (realtime: boolean) => {
 
 // Multi-leg journey for the trip-overview sheet: walking to the stop → METRO
 // Orange Line → walk. The rider is on the first walk leg, so the bus row shows
-// a live wait before boarding.
+// a live wait before boarding. Shaped for the REAL ItineraryBody the sheet now
+// renders, so walk legs carry `steps` and places carry lat/lon.
+const walkStep = (relativeDirection: string, streetName: string) => ({
+  absoluteDirection: 'NORTH',
+  distance: 120,
+  lat: 44.948,
+  lon: -93.278,
+  relativeDirection,
+  streetName
+})
+
+const place = (name: string, lat: number, lon: number) => ({ lat, lon, name })
+
 const demoSheetItinerary = {
   endTime: NOW + 28 * 60000,
   legs: [
     {
+      distance: 400,
       duration: 300,
       endTime: NOW + 2 * 60000,
-      from: { name: 'Your location' },
+      from: place('Your location', 44.948, -93.278),
       intermediateStops: [],
       mode: 'WALK',
       startTime: NOW - 3 * 60000,
-      to: { name: 'I-35W & Lake St Station' }
+      steps: [
+        walkStep('DEPART', 'Blaisdell Ave'),
+        walkStep('LEFT', 'E Lake St')
+      ],
+      to: place('I-35W & Lake St Station', 44.948, -93.269)
     },
     {
+      distance: 9000,
       duration: 900,
       // Bus departs 3 min after the rider reaches the stop.
       endTime: NOW + 20 * 60000,
-      from: { name: 'I-35W & Lake St Station' },
+      from: place('I-35W & Lake St Station', 44.948, -93.269),
       intermediateStops: [
-        { name: 'I-35W & 46th St Station' },
-        { name: 'I-35W & 66th St Station' }
+        place('I-35W & 46th St Station', 44.919, -93.269),
+        place('I-35W & 66th St Station', 44.891, -93.278)
       ],
       mode: 'BUS',
       routeShortName: 'METRO Orange Line',
       startTime: NOW + 5 * 60000,
-      to: { name: 'I-35W & 82nd St Station' },
+      steps: [],
+      to: place('I-35W & 82nd St Station', 44.86, -93.285),
       transitLeg: true
     },
     {
+      distance: 300,
       duration: 240,
       endTime: NOW + 28 * 60000,
-      from: { name: 'I-35W & 82nd St Station' },
+      from: place('I-35W & 82nd St Station', 44.86, -93.285),
       intermediateStops: [],
       mode: 'WALK',
       startTime: NOW + 20 * 60000,
-      to: { name: 'Your destination' }
+      steps: [walkStep('DEPART', 'American Blvd')],
+      to: place('Your destination', 44.859, -93.29)
     }
   ],
   startTime: NOW - 3 * 60000
 } as any
 
-const demoSheetAlternatives = [
-  { duration: 1380, transfers: 0, walkDistance: 210 },
-  { duration: 1620, transfers: 1, walkDistance: 95 },
-  { duration: 1800, transfers: 0, walkDistance: 540 }
-] as any[]
-
+// The trip sheet renders the trip through the real ItineraryBody, which pulls
+// config and ui state off the store — so the demo store has to look enough like
+// the app's for that whole subtree to mount.
 const demoSheetStore = {
   dispatch: () => undefined,
   getState: () => ({
     otp: {
-      config: {},
+      config: {
+        homeTimezone: 'America/Chicago',
+        itinerary: { hideViewTripButton: true },
+        transitOperators: []
+      },
       goMode: {
         activeItinerary: demoSheetItinerary,
         // Live GTFS-realtime for the upcoming bus leg (index 1): running a
@@ -221,7 +246,9 @@ const demoSheetStore = {
         liveLegTimes: {
           1: {
             alightEpoch: NOW + 23 * 60000,
+            alightRealtime: true,
             boardEpoch: NOW + 6 * 60000,
+            boardRealtime: true,
             realtime: true
           }
         },
@@ -231,17 +258,17 @@ const demoSheetStore = {
           currentLegIndex: 0,
           waitTimeAtStop: 180
         },
-        reRoute: {
-          candidate: demoSheetAlternatives[0],
-          candidates: demoSheetAlternatives,
-          searchId: 'demo',
-          status: 'found'
-        }
-      }
+        ui: { activeLeg: null, backgrounded: false, mapFollowUser: false }
+      },
+      ui: { diagramLeg: null }
     }
   }),
   subscribe: () => () => undefined
 } as any
+
+// LegIconWithA11y (inside the real ItineraryBody) pulls LegIcon off the
+// component context that lib/app.js normally supplies.
+const demoComponentContext = { LegIcon: ClassicLegIcon } as any
 
 const Frame = ({
   children,
@@ -421,12 +448,14 @@ const GoModeDemo = (): JSX.Element => (
       </Frame>
 
       <Frame
-        note="Swipe-up sheet: rest-of-trip list (current leg's stops highlighted) + browsable alternatives, each with Switch. Overlay is confined to this frame via a transform containing-block."
-        title="Trip sheet (overview + alternatives)"
+        note="Swipe-up sheet: a 'right now' card (current leg, its stops, the live wait) above the planner's own ItineraryBody, fed live board/off times. Tapping a leg zooms the map. 'Search from here' hands over to the real results screen. Overlay is confined to this frame via a transform containing-block."
+        title="Trip sheet (overview + search from here)"
       >
         <div style={{ height: 600, transform: 'translateZ(0)', width: '100%' }}>
           <Provider store={demoSheetStore}>
-            <TripSheet onClose={() => undefined} />
+            <ComponentContext.Provider value={demoComponentContext}>
+              <TripSheet onClose={() => undefined} />
+            </ComponentContext.Provider>
           </Provider>
         </div>
       </Frame>

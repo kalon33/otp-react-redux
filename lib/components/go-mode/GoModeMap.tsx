@@ -32,11 +32,42 @@ const UserDot = styled.div`
 `
 
 interface Props {
+  activeLegIndex: number | null
   currentLegIndex: number
   currentPosition: GeolocationPosition | null
   followUser: boolean
   itinerary: Itinerary
   routeMatch: RouteMatchResult | null
+}
+
+/**
+ * Bounding box of every LineString in a set of features, as maplibre's
+ * [[minLng, minLat], [maxLng, maxLat]], or null when there's nothing to fit.
+ */
+function bboxOf(
+  features: GeoJSON.Feature[]
+): [[number, number], [number, number]] | null {
+  let minLng = Infinity
+  let minLat = Infinity
+  let maxLng = -Infinity
+  let maxLat = -Infinity
+  for (const feature of features) {
+    const geom = feature.geometry
+    if (geom.type === 'LineString') {
+      for (const coord of geom.coordinates) {
+        const [lng, lat] = coord
+        if (lng < minLng) minLng = lng
+        if (lng > maxLng) maxLng = lng
+        if (lat < minLat) minLat = lat
+        if (lat > maxLat) maxLat = lat
+      }
+    }
+  }
+  if (minLng === Infinity) return null
+  return [
+    [minLng, minLat],
+    [maxLng, maxLat]
+  ]
 }
 
 /**
@@ -72,12 +103,12 @@ function isWalkLike(mode: string): boolean {
  * Source/Layer/Marker as map children via the react-map-gl context.
  */
 const GoModeMapOverlay = ({
-  currentLegIndex,
+  activeLegIndex,
   currentPosition,
   followUser,
   routeGeoJson
 }: {
-  currentLegIndex: number
+  activeLegIndex: number | null
   currentPosition: GeolocationPosition | null
   followUser: boolean
   routeGeoJson: GeoJSON.FeatureCollection | null
@@ -89,37 +120,28 @@ const GoModeMapOverlay = ({
   // Fit map to itinerary bounds on initial load
   useEffect(() => {
     if (hasFitBounds.current || !map || !routeGeoJson) return
-
-    // Compute bounding box from all GeoJSON coordinates
-    let minLng = Infinity
-    let minLat = Infinity
-    let maxLng = -Infinity
-    let maxLat = -Infinity
-
-    for (const feature of routeGeoJson.features) {
-      const geom = feature.geometry
-      if (geom.type === 'LineString') {
-        for (const coord of geom.coordinates) {
-          const [lng, lat] = coord
-          if (lng < minLng) minLng = lng
-          if (lng > maxLng) maxLng = lng
-          if (lat < minLat) minLat = lat
-          if (lat > maxLat) maxLat = lat
-        }
-      }
-    }
-
-    if (minLng !== Infinity) {
-      map.fitBounds(
-        [
-          [minLng, minLat],
-          [maxLng, maxLat]
-        ],
-        { duration: 600, padding: 40 }
-      )
+    const bounds = bboxOf(routeGeoJson.features)
+    if (bounds) {
+      map.fitBounds(bounds, { duration: 600, padding: 40 })
       hasFitBounds.current = true
     }
   }, [map, routeGeoJson])
+
+  // Tapping a leg in the trip sheet zooms to it, the same way tapping a leg in
+  // the planner's itinerary does. Clearing the selection leaves the map where
+  // it is rather than yanking back out — the rider chose that view.
+  useEffect(() => {
+    if (activeLegIndex == null || !map || !routeGeoJson) return
+    const feature = routeGeoJson.features.find(
+      (f) => f.properties?.index === activeLegIndex
+    )
+    const bounds = feature && bboxOf([feature])
+    // maxZoom: a 200 m walk leg has a tiny bbox and would otherwise slam the
+    // map to max zoom, where the rider can see the leg but none of its context.
+    if (bounds) {
+      map.fitBounds(bounds, { duration: 600, maxZoom: 16, padding: 40 })
+    }
+  }, [activeLegIndex, map, routeGeoJson])
 
   // Recenter on the user's position only as a one-shot when followUser is
   // *newly* enabled (i.e. the user pressed the locate button). We intentionally
@@ -152,8 +174,16 @@ const GoModeMapOverlay = ({
             }}
             paint={{
               'line-color': ['get', 'color'],
-              'line-opacity': ['case', ['get', 'isCompleted'], 0.3, 0.9],
-              'line-width': 5
+              // A tapped leg always reads as fully present, even if completed.
+              'line-opacity': [
+                'case',
+                ['get', 'isActive'],
+                1,
+                ['get', 'isCompleted'],
+                0.3,
+                0.9
+              ],
+              'line-width': ['case', ['get', 'isActive'], 8, 5]
             }}
             type="line"
           />
@@ -168,8 +198,15 @@ const GoModeMapOverlay = ({
             paint={{
               'line-color': ['get', 'color'],
               'line-dasharray': [2, 2],
-              'line-opacity': ['case', ['get', 'isCompleted'], 0.3, 0.8],
-              'line-width': 4
+              'line-opacity': [
+                'case',
+                ['get', 'isActive'],
+                1,
+                ['get', 'isCompleted'],
+                0.3,
+                0.8
+              ],
+              'line-width': ['case', ['get', 'isActive'], 7, 4]
             }}
             type="line"
           />
@@ -190,23 +227,28 @@ const GoModeMapOverlay = ({
 }
 
 const GoModeMap = ({
+  activeLegIndex,
   currentLegIndex,
   currentPosition,
   followUser,
   itinerary,
   routeMatch
 }: Props) => {
-  // Build GeoJSON for route overlay, with per-leg styling properties
+  // Build GeoJSON for route overlay, with per-leg styling properties.
+  // `index` is the ORIGINAL leg index (legs without geometry are dropped), so
+  // an active-leg lookup by index stays correct.
   const routeGeoJson = useMemo((): GeoJSON.FeatureCollection | null => {
     if (!itinerary?.legs) return null
     try {
       const features: GeoJSON.Feature[] = itinerary.legs
-        .filter((leg) => leg.legGeometry?.points)
-        .map((leg, index) => ({
+        .map((leg, index) => ({ index, leg }))
+        .filter(({ leg }) => leg.legGeometry?.points)
+        .map(({ index, leg }) => ({
           geometry: polyline.toGeoJSON(leg.legGeometry.points),
           properties: {
             color: getLegColor(leg),
             index,
+            isActive: index === activeLegIndex,
             isCompleted: index < currentLegIndex,
             isWalk: isWalkLike(leg.mode)
           },
@@ -216,14 +258,14 @@ const GoModeMap = ({
     } catch {
       return null
     }
-  }, [itinerary, currentLegIndex])
+  }, [itinerary, currentLegIndex, activeLegIndex])
 
   return (
     <MapContainer>
       <DefaultMap>
         {/* Map overlays rendered inside BaseMap's react-map-gl context */}
         <GoModeMapOverlay
-          currentLegIndex={currentLegIndex}
+          activeLegIndex={activeLegIndex}
           currentPosition={currentPosition}
           followUser={followUser}
           routeGeoJson={routeGeoJson}
