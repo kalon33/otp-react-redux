@@ -3,6 +3,7 @@ import { useIntl } from 'react-intl'
 import React from 'react'
 import type { Leg } from '@opentripplanner/types'
 
+import * as goModeActions from '../../actions/go-mode'
 import { getModeIcon } from '../../util/go-mode/mode-icon'
 import { NO_LIVE_VEHICLE_POLLS } from '../../util/go-mode/vehicle-matching'
 import type { TripProgress } from '../../util/go-mode/progress-calculator'
@@ -16,6 +17,8 @@ import {
   InfoCardValue,
   LocatingIndicator,
   ModeIcon,
+  NavExtras,
+  ResetButton,
   RouteDirection,
   RouteHeader,
   RouteName,
@@ -26,6 +29,7 @@ import {
 } from './styled'
 
 interface Props {
+  advanceToLeg: (legIndex: number) => void
   emptyPolls: number
   leg: Leg
   onExit?: () => void
@@ -34,6 +38,7 @@ interface Props {
 }
 
 const TransitProgress = ({
+  advanceToLeg,
   emptyPolls,
   leg,
   onExit,
@@ -155,6 +160,23 @@ const TransitProgress = ({
               })}
         </AlertBanner>
       )}
+
+      {/* Getting off before the planned stop (an early transfer, say) leaves
+          the app tracking a bus the rider is no longer on — position matching
+          keeps them pinned to this leg while they walk along the same corridor,
+          so no boarding alerts fire for the next bus. This is the rider saying
+          so directly; it advances the trip to the next leg. */}
+      <NavExtras>
+        <ResetButton
+          onClick={() => advanceToLeg((progress.currentLegIndex ?? 0) + 1)}
+          type="button"
+        >
+          {intl.formatMessage({
+            defaultMessage: 'I got off here',
+            id: 'components.GoMode.gotOffHere'
+          })}
+        </ResetButton>
+      </NavExtras>
     </TransitContainer>
   )
 }
@@ -164,4 +186,8 @@ const mapStateToProps = (state: any) => ({
   vehicleMatch: state.otp?.goMode?.vehicleMatch?.match || null
 })
 
-export default connect(mapStateToProps)(TransitProgress)
+const mapDispatchToProps = {
+  advanceToLeg: goModeActions.advanceToLeg
+}
+
+export default connect(mapStateToProps, mapDispatchToProps)(TransitProgress)

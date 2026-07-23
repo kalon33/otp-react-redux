@@ -56,4 +56,10 @@ describe('components > go-mode > TransitProgress', () => {
   it('still counts down stops with no live vehicle data', () => {
     expect(renderWith(6)).toContain('4 stops remaining')
   })
+
+  // Getting off early (a transfer the app can't see) leaves the rider pinned to
+  // this leg with no boarding alerts for the next bus; they say so themselves.
+  it('offers a manual "I got off here"', () => {
+    expect(renderWith(6)).toContain('I got off here')
+  })
 })

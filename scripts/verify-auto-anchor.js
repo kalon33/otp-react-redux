@@ -183,6 +183,54 @@ async function main() {
     )
   }
 
+  // (1b) The anchored bus runs late and stops reporting. Time-travel past its
+  // departure: the anchor must NOT slide onto the next trip. On the 2026-07-22
+  // ride it did — "Bus schedule skipped to next while I was waiting at station.
+  // Showed 465 at 0135 before mine even left" — because the candidate was
+  // compared against the PLANNED board time (still far later), so a jump
+  // forward from the anchored bus to the next one still looked like a gain.
+  // Deciding a bus is gone belongs to the missed-bus path, which keeps the
+  // rider's route; the anchor may only ever move earlier.
+  const anchoredBaseline = anchored.override
+  await page.evaluate((target) => {
+    const g = window.store.getState().otp.goMode
+    const simNow = g.progress?.currentTime
+      ? new Date(g.progress.currentTime).getTime()
+      : Date.now()
+    // 30 s past the anchored departure: inside the overdue grace, the bus is
+    // simply late.
+    window.__advanceSimulatedTime(target - simNow + 30000)
+    window.__pingPosition()
+  }, anchoredBaseline)
+
+  let worstOverride = anchoredBaseline
+  for (let i = 0; i < 15; i++) {
+    // Halfway through, push well past the grace as well — a bus that really is
+    // gone still must not be quietly swapped for a later one by the anchor.
+    if (i === 7) {
+      await page.evaluate(() => {
+        window.__advanceSimulatedTime(240000)
+        window.__pingPosition()
+      })
+    }
+    const now = await page.evaluate(
+      () => window.store.getState().otp.goMode.departureOverride
+    )
+    if (now != null && now > worstOverride) worstOverride = now
+    await new Promise((resolve) => setTimeout(resolve, 2000))
+  }
+  console.log(
+    `[overdue] anchored ${fmt(anchoredBaseline)}; latest override seen ` +
+      `${fmt(worstOverride)} after time-travelling past it`
+  )
+  if (worstOverride > anchoredBaseline + 1000) {
+    throw new Error(
+      `anchor skipped forward to ${fmt(
+        worstOverride
+      )} — it may only move earlier`
+    )
+  }
+
   // (2) Manual reset must lock the anchor off. Click the REAL "Reset to
   // planned" button — a dynamic import of go-mode.ts would create a second
   // Vite module instance whose lock flag the app never reads.

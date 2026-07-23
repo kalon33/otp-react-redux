@@ -41,6 +41,7 @@ import { getNextStopOnRide } from '../util/go-mode/next-stop'
 import { collectRerouteCandidates } from '../util/go-mode/reroute-candidates'
 import { pickAccessReplanCandidate, pickSameRouteReroute } from '../util/state'
 import type {
+  AlightContext,
   NotificationEvent,
   NotificationType
 } from '../util/go-mode/notification-service'
@@ -60,16 +61,20 @@ import {
   stopNativeGps
 } from '../util/go-mode/native-gps'
 import {
-  AUTO_ANCHOR_MIN_GAIN_MS,
+  DEPARTURE_OVERDUE_GRACE_MS,
   currentServiceDate,
   getRouteDepartures,
-  getSoonestCatchableMs
+  getSoonestCatchableMs,
+  shouldAdoptAnchor
 } from '../util/go-mode/departure-anchor'
 import {
+  TURN_CARD_NOTIFICATION_ID,
+  cancelPush,
   ensureNativeNotifyPermission,
   hasNativeNotify,
   sendPush
 } from '../util/go-mode/native-notify'
+import { asContinuation } from '../util/go-mode/turn-by-turn'
 
 import {
   fetchOnboardCandidatePlan,
@@ -116,11 +121,26 @@ const QUIET_REPLAN_MIN_INTERVAL_MS = 60000
 // The rider's explicit departure pick (or "Reset to planned") must never be
 // fought by the auto-anchor, so a manual selectDeparture locks auto-anchoring
 // off for the current boarding. lastAutoAnchorMs lets the anchor keep chasing
-// the live feed while the current override is its own. earlyBoardReplanKey
-// makes the boarded-earlier replan a one-shot per boarding.
+// the live feed while the current override is its own.
 let manualDepartureLock = false
 let lastAutoAnchorMs: number | null = null
-let earlyBoardReplanKey: string | null = null
+
+// The boarded-earlier replan retries per boarding (spaced, capped) rather than
+// one-shot: a single lost fetch used to strand the whole ride on the planned
+// bus's times. Success ends the loop naturally — the applied itinerary boards
+// the actual trip, so the trigger condition itself disappears.
+const EARLY_BOARD_REPLAN_RETRY_MS = 60000
+const EARLY_BOARD_REPLAN_MAX_ATTEMPTS = 3
+let earlyBoardReplan: {
+  attempts: number
+  key: string
+  lastAtMs: number
+} | null = null
+
+// Identity (leg + cue index) of the turn currently on the sticky card, so it is
+// re-posted only when the turn itself changes — once per turn, not once per GPS
+// tick. Null when no card is showing.
+let lastTurnCardKey: string | null = null
 
 // A leg transition is side-effectful (vehicle tracking, GPS interval restart,
 // departure-override reset), so it must run once per leg. The route match is
@@ -227,6 +247,7 @@ export const REROUTE_SNAPSHOT = 'REROUTE_SNAPSHOT'
 export const RESUME_GPS_SIMULATION = 'RESUME_GPS_SIMULATION'
 export const SET_ARRIVED = 'SET_ARRIVED'
 export const SET_DEPARTURE_OVERRIDE = 'SET_DEPARTURE_OVERRIDE'
+export const SET_GO_MODE_ACTIVE_LEG = 'SET_GO_MODE_ACTIVE_LEG'
 export const SET_GO_MODE_BACKGROUNDED = 'SET_GO_MODE_BACKGROUNDED'
 export const SET_RIDING = 'SET_RIDING'
 export const SET_LIVE_LEG_TIMES = 'SET_LIVE_LEG_TIMES'
@@ -326,6 +347,15 @@ export const setTrackingError = createAction<GeolocationPositionError | null>(
 export const toggleMapFollow = createAction(TOGGLE_MAP_FOLLOW)
 export const setGoModeBackgrounded = createAction<boolean>(
   SET_GO_MODE_BACKGROUNDED
+)
+
+/**
+ * The leg the rider tapped in the trip sheet, mirroring the planner's
+ * activeLeg: the Go Mode map zooms to it and draws it as selected. null means
+ * "no selection" — the map is back to the whole trip.
+ */
+export const setGoModeActiveLeg = createAction<number | null>(
+  SET_GO_MODE_ACTIVE_LEG
 )
 export const updateTrackingInterval = createAction<{ interval: number }>(
   UPDATE_TRACKING_INTERVAL
@@ -650,7 +680,10 @@ export function endGoMode() {
     // Reset auto-anchor bookkeeping — a new trip is a new decision.
     manualDepartureLock = false
     lastAutoAnchorMs = null
-    earlyBoardReplanKey = null
+    // Clear the sticky turn card so it doesn't linger on the wrist post-trip.
+    if (lastTurnCardKey !== null) cancelPush(TURN_CARD_NOTIFICATION_ID)
+    lastTurnCardKey = null
+    earlyBoardReplan = null
     lastTransitionedLegIndex = null
     missedBusRerouteAttempt = null
 
@@ -681,11 +714,11 @@ export function endGoMode() {
 
     dispatch(stopGoMode())
 
-    // If a mid-trip re-route replaced the origin with the rider's GPS position,
+    // If a mid-trip search replaced the origin with the rider's GPS position,
     // restore the origin they started with so the trip planner isn't left
-    // showing "Current location". (Re-routes are isolated plans now and no
-    // longer touch currentQuery — this restore only protects sessions started
-    // under the old pipeline and can eventually be removed.)
+    // showing "Current location". Automatic re-routes are isolated plans and
+    // never touch currentQuery, but browseFromCurrentPosition deliberately
+    // does — it IS a real search — so this restore is load-bearing.
     if (
       originalFrom &&
       currentFrom &&
@@ -694,6 +727,120 @@ export function endGoMode() {
     ) {
       dispatch(setQueryParam({ from: originalFrom }))
     }
+  }
+}
+
+/**
+ * Where a mid-trip search should start FROM. Aboard a bus, "current position"
+ * is a moving mid-street point the rider can't act on, so plan from the next
+ * stop ahead on their line, anchored to when the bus gets there. Otherwise plan
+ * from the GPS fix, now. Shared by the isolated auto-reroute and the rider's
+ * own "Search from here" so the two never disagree about where they are.
+ */
+function currentPositionOrigin(state: any): {
+  date: string
+  from: any
+  time: string
+} | null {
+  const goMode = state.otp.goMode
+  const lastPosition: GeolocationPosition | null =
+    goMode?.tracking?.lastPosition
+  if (!lastPosition) return null
+  const { homeTimezone } = state.otp.config
+
+  const riding = goMode?.riding
+  const nextStop = riding ? getNextStopOnRide(state) : null
+  if (riding && nextStop) {
+    const zoned = utcToZonedTime(nextStop.arrivalEpoch, homeTimezone)
+    return {
+      date: format(zoned, coreUtils.time.OTP_API_DATE_FORMAT),
+      from: { lat: nextStop.lat, lon: nextStop.lon, name: nextStop.name },
+      time: format(zoned, coreUtils.time.OTP_API_TIME_FORMAT)
+    }
+  }
+  return {
+    date: coreUtils.time.getCurrentDate(homeTimezone),
+    from: {
+      category: 'CURRENT_LOCATION',
+      lat: lastPosition.coords.latitude,
+      lon: lastPosition.coords.longitude,
+      name: 'Current location'
+    },
+    time: coreUtils.time.getCurrentTime(homeTimezone)
+  }
+}
+
+/**
+ * The rider's own "show me other ways from here": run a REAL search — origin at
+ * their actual position (or the next stop ahead when aboard), destination
+ * unchanged — and hand them the normal trip-planner results screen, which
+ * already has the expand-map/list toggle, tap-a-leg-to-zoom, and a "Switch to
+ * this trip" button on every itinerary (metro-itinerary renders it whenever
+ * goMode.isActive). The trip keeps running behind the ReturnToTripBanner.
+ *
+ * Unlike reRouteFromCurrentPosition this deliberately DOES touch currentQuery
+ * and the active search — that is what makes the planner render it. The
+ * isolation rule applies to AUTOMATIC re-routes (which must never disturb a
+ * planner the rider is reading), not to a search the rider just asked for.
+ * endGoMode restores goMode.originalFrom afterwards.
+ */
+export function browseFromCurrentPosition(
+  options: { preferences?: any; profileId?: string } = {}
+) {
+  return function (dispatch: any, getState: any) {
+    const state = getState()
+    const goMode = state.otp.goMode
+    const itinerary: Itinerary | null = goMode?.activeItinerary
+    const legs = itinerary?.legs || []
+    const destLeg = legs[legs.length - 1]
+    const origin = currentPositionOrigin(state)
+
+    // No fix or no destination yet: fall back to the plain step-out rather than
+    // dead-ending the button. The rider still lands in the planner.
+    if (!itinerary || !destLeg || !origin) {
+      dispatch(backgroundGoMode())
+      return
+    }
+
+    // Same preference ladder as the auto-reroute: an explicit profile wins,
+    // then caller-supplied levers, then (mid-ride) stay-seated so transfers
+    // away from the boarded bus cost extra.
+    const profile = options.profileId
+      ? getRoutingProfile(options.profileId)
+      : undefined
+    const riding = goMode?.riding
+    const nextStop = riding ? getNextStopOnRide(state) : null
+    const routingPreferences =
+      profile?.prefs ??
+      options.preferences ??
+      (riding && nextStop ? getRoutingProfile('stay-seated')?.prefs : undefined)
+
+    dispatch(
+      setQueryParam(
+        {
+          activeProfileId: profile?.id,
+          date: origin.date,
+          // Force depart-at: an earlier arrive-by search must not carry over
+          // into "leave from here, now".
+          departArrive: 'DEPART',
+          from: origin.from,
+          routingPreferences,
+          time: origin.time,
+          to: {
+            lat: destLeg.to.lat,
+            lon: destLeg.to.lon,
+            name: destLeg.to.name
+          }
+        },
+        // A searchId makes setQueryParam fire the real routingQuery, which
+        // already biases toward goMode.riding.routeId ("stay on this bus"
+        // ranks first) and suppresses recents while Go Mode is active.
+        randId()
+      )
+    )
+
+    dispatch(setGoModeBackgrounded(true))
+    dispatch(setMobileScreen(MobileScreens.RESULTS_SUMMARY))
   }
 }
 
@@ -727,14 +874,16 @@ export function reRouteFromCurrentPosition(
       goMode?.tracking?.lastPosition
     const legs = itinerary?.legs || []
     const destLeg = legs[legs.length - 1]
+    // Aboard a bus this resolves to the next stop ahead at the time the bus
+    // gets there, else the GPS fix now — see currentPositionOrigin.
+    const origin = currentPositionOrigin(state)
 
     // Need a real position and destination — never fabricate either.
-    if (!itinerary || !lastPosition || !destLeg) {
+    if (!itinerary || !lastPosition || !destLeg || !origin) {
       dispatch(setRerouteResult(null))
       return
     }
 
-    const { homeTimezone } = state.otp.config
     // Not a searches[] key anymore — a stale-response token: only the newest
     // in-flight reroute may resolve into goMode.reRoute.
     const searchId = randId()
@@ -751,17 +900,12 @@ export function reRouteFromCurrentPosition(
     const { modes, modeSettings, numItineraries } = getBasePlanParts(state)
     const payload: any = {
       arriveBy: false,
-      date: coreUtils.time.getCurrentDate(homeTimezone),
-      from: {
-        category: 'CURRENT_LOCATION',
-        lat: lastPosition.coords.latitude,
-        lon: lastPosition.coords.longitude,
-        name: 'Current location'
-      },
+      date: origin.date,
+      from: origin.from,
       modes,
       modeSettings,
       numItineraries,
-      time: coreUtils.time.getCurrentTime(homeTimezone),
+      time: origin.time,
       to: {
         lat: destLeg.to.lat,
         lon: destLeg.to.lon,
@@ -769,26 +913,15 @@ export function reRouteFromCurrentPosition(
       }
     }
 
-    // Aboard a bus, "current position" is a moving mid-street point the rider
-    // can't act on. Plan from the next stop ahead on their line instead,
-    // anchored to when the bus gets there, and prefer their current route so
-    // "stay on this bus" surfaces as the default choice.
+    // Aboard a bus, prefer the rider's current route so "stay on this bus"
+    // surfaces as the default choice. (The origin/time anchor for that case is
+    // already applied above by currentPositionOrigin.)
     const riding = goMode?.riding
     const nextStop = riding ? getNextStopOnRide(state) : null
-    if (riding && nextStop) {
-      const zoned = utcToZonedTime(nextStop.arrivalEpoch, homeTimezone)
-      payload.date = format(zoned, coreUtils.time.OTP_API_DATE_FORMAT)
-      payload.from = {
-        lat: nextStop.lat,
-        lon: nextStop.lon,
-        name: nextStop.name
-      }
-      payload.time = format(zoned, coreUtils.time.OTP_API_TIME_FORMAT)
-      if (riding.routeId) {
-        payload.preferred = {
-          otherThanPreferredRoutesPenalty: 900,
-          routes: riding.routeId
-        }
+    if (riding && nextStop && riding.routeId) {
+      payload.preferred = {
+        otherThanPreferredRoutesPenalty: 900,
+        routes: riding.routeId
       }
     }
 
@@ -1581,6 +1714,12 @@ export function buildOnboardItinerary(
     distance: 0,
     duration: (best.busArrivalEpoch - busLegStart) / 1000,
     endTime: best.busArrivalEpoch,
+    // Every real OTP leg carries this (empty when the agency has no Fares V2
+    // data). Omitting it crashes the fare table, which does
+    // `transitLegs.flatMap(leg => leg.fareProducts)` and then reads
+    // `.product` off each entry — a missing array lands `undefined` in that
+    // list and takes the whole trip-details panel down.
+    fareProducts: [],
     from: {
       lat: boardStop.lat,
       lon: boardStop.lon,
@@ -1801,7 +1940,12 @@ const PUSH_NOTIFICATION_TYPES = new Set<NotificationType>([
   'LEAVE_SOON',
   'CONNECTION_WARNING',
   'ARRIVING_STOP',
-  'MISSED_BUS'
+  'MISSED_BUS',
+  // Only the turns worth interrupting for; routine ones arrive as
+  // UPCOMING_TURN, which is deliberately absent here and reaches the rider
+  // through the silent turn card below instead. A paired watch gets one
+  // vibration policy for the whole app, so restraint here IS the haptic design.
+  'TURN_ALERT'
 ])
 
 /**
@@ -1825,12 +1969,19 @@ export function refreshLiveLegTimes() {
     const liveTimes: Record<number, LiveLegTime> = {}
     const nowMs = getCurrentTime().getTime()
 
+    const riding = goMode.riding
     for (let i = currentLegIndex; i < legs.length; i++) {
       const leg: any = legs[i]
       if (!leg?.transitLeg) continue
       // convertGraphQLResponseToLegacy keeps leg.trip.gtfsId and also adds a
-      // top-level leg.tripId; accept either.
-      const tripId = leg.trip?.gtfsId || leg.tripId
+      // top-level leg.tripId; accept either. For the leg the rider is
+      // verifiably aboard, the sticky riding fact wins: they may be on a
+      // different run of the route than the plan boarded (earlier bus), and
+      // the times shown must be THEIR bus's, not the planned one's.
+      const tripId =
+        (riding?.legIndex === i && riding.tripId) ||
+        leg.trip?.gtfsId ||
+        leg.tripId
       if (!tripId) continue
 
       // findTrip is noThrottle and idempotent; it refreshes the cached trip
@@ -1876,6 +2027,59 @@ export function refreshLiveLegTimes() {
     }
 
     dispatch(setLiveLegTimes(liveTimes))
+  }
+}
+
+/**
+ * Move the trip on to `legIndex`. Side-effectful — it clears the anchored
+ * departure, swaps vehicle tracking, and restarts the position watcher at the
+ * new leg's polling rate — so it must run once per leg; `lastTransitionedLegIndex`
+ * is the guard, and setting it here is what keeps the automatic path from
+ * re-running the same transition on the following tick.
+ *
+ * Both the GPS-driven transition and the rider's manual "I got off here" come
+ * through this. Manual advances stick: matchPositionToRoute only ever searches
+ * forward from the current leg, so the matcher cannot pull the trip back.
+ */
+export function advanceToLeg(legIndex: number) {
+  return function (dispatch: any, getState: any) {
+    const goMode = getState().otp?.goMode
+    const itinerary: Itinerary | null = goMode?.activeItinerary
+    if (!goMode?.isActive || !itinerary) return
+    const legs = itinerary.legs || []
+    if (legIndex < 0 || legIndex >= legs.length) return
+
+    const previousLegIndex = goMode.routeMatch?.legIndex || 0
+    lastTransitionedLegIndex = legIndex
+    dispatch(transitionLeg({ legIndex }))
+
+    // New leg = new upcoming boarding = a fresh auto-anchor decision.
+    manualDepartureLock = false
+    lastAutoAnchorMs = null
+
+    // Update tracking interval for new leg
+    const newLeg = legs[legIndex]
+    const newInterval = getTrackingIntervalForLeg(newLeg)
+    dispatch(updateTrackingInterval({ interval: newInterval }))
+
+    // Handle vehicle tracking on leg transitions
+    const previousLeg = legs[previousLegIndex]
+    if (previousLeg?.transitLeg) {
+      dispatch(stopVehicleTracking())
+    }
+    const newLegRouteId = getLegRouteId(newLeg)
+    if (newLeg?.transitLeg && newLegRouteId) {
+      dispatch(startVehicleTracking(newLegRouteId))
+    }
+
+    // Restart tracking with new interval (but not during simulation)
+    if (!simulationActive) {
+      if (gpsPollingIntervalId) {
+        clearInterval(gpsPollingIntervalId)
+        gpsPollingIntervalId = null
+      }
+      dispatch(startPositionTracking())
+    }
   }
 }
 
@@ -1926,15 +2130,27 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     const riding = goMode.riding
     const nowForRiding = getCurrentTime().getTime()
     if (routeMatch.isOnRoute && matchedLeg?.transitLeg) {
-      const vehicleConfidence = goMode.vehicleMatch?.match?.confidence
+      const vehicleMatchNow = goMode.vehicleMatch?.match
+      const vehicleConfidence = vehicleMatchNow?.confidence
+      const vehicleTrusted =
+        vehicleConfidence === 'confirmed' || vehicleConfidence === 'high'
       const aboard =
-        vehicleConfidence === 'confirmed' ||
-        vehicleConfidence === 'high' ||
-        routeMatch.progressAlongLeg >= RIDING_MIN_PROGRESS
+        vehicleTrusted || routeMatch.progressAlongLeg >= RIDING_MIN_PROGRESS
+      // The trip the rider is ACTUALLY on: a trusted vehicle match knows its
+      // GTFS-RT trip, which outranks the planned leg's — the rider may have
+      // caught an earlier run of the same route, and the boarded-earlier
+      // replan, next-stop anchoring, and live leg times all key off this id.
+      const ridingTripId =
+        (vehicleTrusted ? vehicleMatchNow?.tripId : null) ||
+        matchedLeg.trip?.gtfsId ||
+        matchedLeg.tripId ||
+        riding?.tripId ||
+        null
       if (
         aboard &&
         (!riding ||
           riding.legIndex !== routeMatch.legIndex ||
+          riding.tripId !== ridingTripId ||
           riding.offRouteSince != null)
       ) {
         dispatch(
@@ -1946,13 +2162,8 @@ export function handlePositionUpdate(position: GeolocationPosition) {
             routeId: getLegRouteId(matchedLeg),
             routeShortName:
               matchedLeg.routeShortName ?? matchedLeg.route?.shortName ?? null,
-            tripId:
-              matchedLeg.trip?.gtfsId ||
-              matchedLeg.tripId ||
-              riding?.tripId ||
-              null,
-            vehicleId:
-              goMode.vehicleMatch?.match?.vehicleId ?? riding?.vehicleId ?? null
+            tripId: ridingTripId,
+            vehicleId: vehicleMatchNow?.vehicleId ?? riding?.vehicleId ?? null
           })
         )
       }
@@ -1976,36 +2187,7 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       shouldTransitionToNextLeg(routeMatch, previousLegIndex) &&
       routeMatch.legIndex !== lastTransitionedLegIndex
     ) {
-      lastTransitionedLegIndex = routeMatch.legIndex
-      dispatch(transitionLeg({ legIndex: routeMatch.legIndex }))
-
-      // New leg = new upcoming boarding = a fresh auto-anchor decision.
-      manualDepartureLock = false
-      lastAutoAnchorMs = null
-
-      // Update tracking interval for new leg
-      const newLeg = itinerary.legs[routeMatch.legIndex]
-      const newInterval = getTrackingIntervalForLeg(newLeg)
-      dispatch(updateTrackingInterval({ interval: newInterval }))
-
-      // Handle vehicle tracking on leg transitions
-      const previousLeg = itinerary.legs[previousLegIndex]
-      if (previousLeg?.transitLeg) {
-        dispatch(stopVehicleTracking())
-      }
-      const newLegRouteId = getLegRouteId(newLeg)
-      if (newLeg?.transitLeg && newLegRouteId) {
-        dispatch(startVehicleTracking(newLegRouteId))
-      }
-
-      // Restart tracking with new interval (but not during simulation)
-      if (!simulationActive) {
-        if (gpsPollingIntervalId) {
-          clearInterval(gpsPollingIntervalId)
-          gpsPollingIntervalId = null
-        }
-        dispatch(startPositionTracking())
-      }
+      dispatch(advanceToLeg(routeMatch.legIndex))
     }
 
     // Calculate progress — use simulated clock during simulation, real time for live GPS
@@ -2094,12 +2276,15 @@ export function handlePositionUpdate(position: GeolocationPosition) {
             const soonest = getSoonestCatchableMs(
               getRouteDepartures(stopData, getLegRouteId(anchorNextLeg)),
               currentTime.getTime(),
-              rideSecondsRemaining
+              rideSecondsRemaining,
+              DEPARTURE_OVERDUE_GRACE_MS
             )
+            // Measured against the departure currently in force, never the
+            // plan's — see shouldAdoptAnchor.
+            const effectiveDeparture =
+              departureOverride ?? Number(anchorNextLeg.startTime)
             if (
-              soonest != null &&
-              Number(anchorNextLeg.startTime) - soonest >=
-                AUTO_ANCHOR_MIN_GAIN_MS &&
+              shouldAdoptAnchor(soonest, effectiveDeparture) &&
               soonest !== departureOverride
             ) {
               lastAutoAnchorMs = soonest
@@ -2134,6 +2319,31 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         ? itinerary.legs[routeMatch.legIndex + 1]
         : undefined
 
+    // How close the rider is to their exit, for the two alight alerts. The live
+    // alight epoch is used ONLY when it is genuinely realtime: the non-live
+    // branch is clamped forward to `now` by clampNonLiveLegTimes, which would
+    // read as "arriving now" on every tick. Schedule data falls back to the
+    // plan leg's own endTime, and GPS distance backs both up at the kerb.
+    const liveAlight = goMode.liveLegTimes?.[routeMatch.legIndex]
+    const alightEpochMs =
+      liveAlight?.alightRealtime && liveAlight.alightEpoch != null
+        ? liveAlight.alightEpoch
+        : Number(currentLeg?.endTime)
+    const alightContext: AlightContext = {
+      distanceMetres:
+        currentLeg?.to?.lat != null && currentLeg?.to?.lon != null
+          ? calculateDistance(
+              currentPosition[0],
+              currentPosition[1],
+              currentLeg.to.lat,
+              currentLeg.to.lon
+            )
+          : null,
+      etaSeconds: Number.isFinite(alightEpochMs)
+        ? (alightEpochMs - currentTime.getTime()) / 1000
+        : null
+    }
+
     const notifications = checkForNotifications(
       progress,
       currentLeg,
@@ -2146,7 +2356,8 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         soundEnabled: false,
         vibrationEnabled: true
       },
-      itinerary.legs
+      itinerary.legs,
+      alightContext
     )
 
     // Missed boarding? Judged outside checkForNotifications because it needs
@@ -2200,6 +2411,41 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         }
       }
     })
+
+    // The sticky per-turn card. ONE notification (fixed id, so iOS replaces it
+    // in place rather than stacking), posted once when a turn becomes current
+    // and held unchanged until the rider passes it — then swapped for the next
+    // turn. It carries the instruction only, no live distance: the smooth
+    // countdown lives on the phone screen (WalkingNavigation), while the wrist
+    // wants a stable "what's my next move" glance that doesn't churn. Passive,
+    // because the turns that deserve a buzz already went out as TURN_ALERT.
+    //
+    // This reaches any paired watch over ANCS — see native-notify.ts. Keyed on
+    // the cue's identity (leg + index), so it writes ~once per turn, not once
+    // per GPS tick.
+    if (!replaying && getState().otp.config.goMode?.turnCard !== false) {
+      const cue = progress.nextTurnCue
+      if (cue) {
+        const cardKey = `${currentLeg?.startTime}_${cue.index}`
+        if (cardKey !== lastTurnCardKey) {
+          lastTurnCardKey = cardKey
+          const then = progress.followingTurnCue
+            ? `then ${asContinuation(progress.followingTurnCue.instruction)}`
+            : ''
+          sendPush({
+            id: TURN_CARD_NOTIFICATION_ID,
+            message: then,
+            passive: true,
+            title: cue.instruction
+          })
+        }
+      } else if (lastTurnCardKey !== null) {
+        // No turn to show anymore (boarded a bus, or trip ended). Clear the
+        // stale card so the wrist stops displaying a turn that no longer holds.
+        lastTurnCardKey = null
+        cancelPush(TURN_CARD_NOTIFICATION_ID)
+      }
+    }
 
     // A reroute stuck at 'searching' (both the fetch and its timeout timer
     // lost to a WebView suspension) blocks every auto-update below — declare
@@ -2273,14 +2519,23 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       // yields a same-route itinerary whose downstream transfers are real;
       // beginGoMode (via the auto-apply path) then resets the override.
       (() => {
-        if (reRouteStatus !== 'idle') return false
+        // 'none' is a settled failed/empty attempt — retryable, same as the
+        // missed-bus auto-update. Anything else is in flight or showing a card.
+        if (reRouteStatus !== 'idle' && reRouteStatus !== 'none') return false
         const riding = goMode.riding
         if (!riding || riding.legIndex == null || riding.legIndex < 0)
           return false
         const ridingLeg = itinerary.legs[riding.legIndex]
         if (!ridingLeg?.transitLeg) return false
-        const oneShotKey = `${riding.legIndex}:${riding.boardedAt ?? ''}`
-        if (earlyBoardReplanKey === oneShotKey) return false
+        const boardingKey = `${riding.legIndex}:${riding.boardedAt ?? ''}`
+        if (
+          earlyBoardReplan?.key === boardingKey &&
+          (earlyBoardReplan.attempts >= EARLY_BOARD_REPLAN_MAX_ATTEMPTS ||
+            Date.now() - earlyBoardReplan.lastAtMs <
+              EARLY_BOARD_REPLAN_RETRY_MS)
+        ) {
+          return false
+        }
         const plannedTripId =
           (ridingLeg as any)?.trip?.gtfsId || (ridingLeg as any)?.tripId
         const matched = goMode.vehicleMatch?.match
@@ -2294,7 +2549,14 @@ export function handlePositionUpdate(position: GeolocationPosition) {
           currentTime.getTime() <
           Number(ridingLeg.startTime) - EARLY_BOARD_MIN_MS
         if (!tripMismatch && !aboardBeforePlanned) return false
-        earlyBoardReplanKey = oneShotKey
+        earlyBoardReplan = {
+          attempts:
+            earlyBoardReplan?.key === boardingKey
+              ? earlyBoardReplan.attempts + 1
+              : 1,
+          key: boardingKey,
+          lastAtMs: Date.now()
+        }
         return true
       })()
     ) {
@@ -2488,9 +2750,25 @@ export function confirmVehicleSelection(vehicleId: string) {
     const state = getState()
     const goMode = state.otp?.goMode
     const nearby = goMode?.vehicleMatch?.nearbyVehicles || []
-    const selected = nearby.find(
+    let selected = nearby.find(
       (v: { vehicleId: string }) => v.vehicleId === vehicleId
     )
+    // The nearby list (tighter radius, per-tick snapshot) can miss a vehicle
+    // the matcher itself found — falling through with tripId null here used to
+    // confirm a bus whose run we then couldn't identify (and skipped the
+    // riding fact entirely). Recover the identity from the raw route feeds.
+    if (!selected) {
+      const routes = state.otp?.transitIndex?.routes || {}
+      for (const routeId of Object.keys(routes)) {
+        const v = (routes[routeId]?.vehicles || []).find(
+          (rv: { vehicleId: string }) => rv.vehicleId === vehicleId
+        )
+        if (v) {
+          selected = { ...v, routeId: v.routeId ?? routeId }
+          break
+        }
+      }
+    }
 
     dispatch({
       payload: {

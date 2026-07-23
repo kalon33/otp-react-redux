@@ -1,6 +1,5 @@
 import {
-  checkApproachingStop,
-  checkArrivingStop,
+  checkAlightAlerts,
   checkConnectionWarning,
   checkDelayAlert,
   checkForNotifications,
@@ -115,111 +114,207 @@ describe('util > go-mode > notification-service', () => {
     })
   })
 
-  describe('checkApproachingStop', () => {
-    it('should return notification when 2 stops remaining on BUS', () => {
-      const progress = makeProgress({
-        nextStopName: 'Stop B',
-        stopsRemaining: 2
-      })
-      const leg = {
-        mode: 'BUS',
-        routeShortName: '5',
-        to: { name: 'Destination' }
-      } as any
+  describe('checkAlightAlerts', () => {
+    const busLeg = {
+      mode: 'BUS',
+      routeShortName: '5',
+      startTime: 1769610000000,
+      to: { name: 'My Stop' }
+    } as any
 
-      const result = checkApproachingStop(progress, leg, [])
+    it('warns once about 2 minutes out', () => {
+      const result = checkAlightAlerts(
+        makeProgress(),
+        busLeg,
+        { distanceMetres: 3000, etaSeconds: 110 },
+        []
+      )
       expect(result).not.toBeNull()
       expect(result!.type).toBe('APPROACH_STOP')
       expect(result!.priority).toBe('high')
-      expect(result!.message).toContain('2 stops away')
+      expect(result!.message).toContain('My Stop')
     })
 
-    it('should return notification when 2 stops remaining on RAIL', () => {
-      const progress = makeProgress({ stopsRemaining: 2 })
-      const leg = {
-        mode: 'RAIL',
-        routeLongName: 'Blue Line',
-        to: { name: 'Target Field' }
-      } as any
-
-      const result = checkApproachingStop(progress, leg, [])
-      expect(result).not.toBeNull()
-      expect(result!.type).toBe('APPROACH_STOP')
+    it('says nothing while the stop is still far off', () => {
+      expect(
+        checkAlightAlerts(
+          makeProgress(),
+          busLeg,
+          { distanceMetres: 6000, etaSeconds: 400 },
+          []
+        )
+      ).toBeNull()
     })
 
-    it('should return null when not 2 stops remaining', () => {
-      const progress = makeProgress({ stopsRemaining: 3 })
-      const leg = {
-        mode: 'BUS',
-        routeShortName: '5',
-        to: { name: 'Dest' }
-      } as any
-      expect(checkApproachingStop(progress, leg, [])).toBeNull()
-    })
-
-    it('should return null for WALK mode', () => {
-      const progress = makeProgress({ stopsRemaining: 2 })
-      const leg = { mode: 'WALK', to: { name: 'Dest' } } as any
-      expect(checkApproachingStop(progress, leg, [])).toBeNull()
-    })
-  })
-
-  describe('checkArrivingStop', () => {
-    it('should return notification when 1 stop remaining on transit', () => {
-      const progress = makeProgress({ stopsRemaining: 1 })
-      const leg = {
-        mode: 'BUS',
-        routeShortName: '5',
-        to: { name: 'My Stop' }
-      } as any
-
-      const result = checkArrivingStop(progress, leg, [])
-      expect(result).not.toBeNull()
+    it('raises the door alert as arrival gets close', () => {
+      const result = checkAlightAlerts(
+        makeProgress(),
+        busLeg,
+        { distanceMetres: 900, etaSeconds: 20 },
+        []
+      )
       expect(result!.type).toBe('ARRIVING_STOP')
       expect(result!.message).toContain('My Stop')
     })
 
-    it('should return null when more than 1 stop remaining', () => {
-      const progress = makeProgress({ stopsRemaining: 2 })
-      const leg = {
-        mode: 'BUS',
-        routeShortName: '5',
-        to: { name: 'Dest' }
-      } as any
-      expect(checkArrivingStop(progress, leg, [])).toBeNull()
+    it('raises the door alert on GPS proximity when the prediction is stale', () => {
+      const result = checkAlightAlerts(
+        makeProgress({ currentLegProgress: 95 }),
+        busLeg,
+        { distanceMetres: 120, etaSeconds: 240 },
+        []
+      )
+      expect(result!.type).toBe('ARRIVING_STOP')
+    })
+
+    it('ignores proximity early in the leg (a route that loops back)', () => {
+      expect(
+        checkAlightAlerts(
+          makeProgress({ currentLegProgress: 10 }),
+          busLeg,
+          { distanceMetres: 120, etaSeconds: 900 },
+          []
+        )
+      ).toBeNull()
+    })
+
+    // The 7/22 complaint: stopsRemaining sat at 1 for minutes and the old
+    // level+60s-window trigger re-fired every minute. Each stage must fire
+    // exactly once no matter how long the rider lingers in range.
+    it('fires each stage exactly once across a whole approach', () => {
+      const sent: string[] = []
+      const emitted: string[] = []
+      // Every 15 s from 5 minutes out to arrival.
+      for (let eta = 300; eta >= 0; eta -= 15) {
+        const event = checkAlightAlerts(
+          makeProgress({ currentLegProgress: 90 }),
+          busLeg,
+          { distanceMetres: eta * 8, etaSeconds: eta },
+          sent
+        )
+        if (event) {
+          emitted.push(event.type)
+          sent.push(event.id)
+        }
+      }
+      expect(emitted).toEqual(['APPROACH_STOP', 'ARRIVING_STOP'])
+    })
+
+    it('returns null for WALK mode', () => {
+      const leg = { mode: 'WALK', startTime: 1, to: { name: 'Dest' } } as any
+      expect(
+        checkAlightAlerts(
+          makeProgress(),
+          leg,
+          { distanceMetres: 10, etaSeconds: 5 },
+          []
+        )
+      ).toBeNull()
     })
   })
 
   describe('checkUpcomingTurn', () => {
-    it('should return notification for WALK leg when close to turn', () => {
-      const progress = makeProgress({
-        distanceToNextTurn: 30,
-        nextInstruction: 'Turn left on Main St'
-      })
-      const leg = { mode: 'WALK', to: { name: 'Bus Stop' } } as any
+    const makeCue = (overrides: Record<string, any> = {}) => ({
+      distanceMeters: 200,
+      index: 1,
+      instruction: 'Turn left on Main St',
+      offsetMeters: 400,
+      relativeDirection: 'LEFT',
+      significant: false,
+      streetName: 'Main St',
+      ...overrides
+    })
 
-      const result = checkUpcomingTurn(progress, leg, [])
+    const turnProgress = (distance: number, cue: Record<string, any> = {}) =>
+      makeProgress({
+        distanceToNextTurn: distance,
+        nextInstruction: 'Turn left on Main St',
+        nextTurnCue: makeCue(cue)
+      })
+
+    const walkLeg = {
+      mode: 'WALK',
+      startTime: 1,
+      to: { name: 'Bus Stop' }
+    } as any
+    const bikeLeg = {
+      mode: 'BICYCLE',
+      startTime: 1,
+      to: { name: 'Bus Stop' }
+    } as any
+
+    it('leads with the instruction so a watch never truncates it away', () => {
+      const result = checkUpcomingTurn(turnProgress(30), walkLeg, [])
       expect(result).not.toBeNull()
-      expect(result!.type).toBe('UPCOMING_TURN')
-      expect(result!.message).toBe('Turn left on Main St')
+      expect(result!.title).toBe('Turn left on Main St')
+      expect(result!.message).toMatch(/ft/)
+    })
+
+    it('gives a cyclist a far earlier prepare cue than a walker', () => {
+      // 100 m: too far to matter on foot, the right moment on a bike.
+      expect(checkUpcomingTurn(turnProgress(100), walkLeg, [])).toBeNull()
+      expect(checkUpcomingTurn(turnProgress(100), bikeLeg, [])).not.toBeNull()
     })
 
     it('should return null when too far from turn', () => {
-      const progress = makeProgress({ distanceToNextTurn: 100 })
-      const leg = { mode: 'WALK', to: { name: 'Bus Stop' } } as any
-      expect(checkUpcomingTurn(progress, leg, [])).toBeNull()
+      expect(checkUpcomingTurn(turnProgress(300), bikeLeg, [])).toBeNull()
     })
 
-    it('should return null when too close to turn', () => {
-      const progress = makeProgress({ distanceToNextTurn: 5 })
-      const leg = { mode: 'WALK', to: { name: 'Bus Stop' } } as any
-      expect(checkUpcomingTurn(progress, leg, [])).toBeNull()
+    it('still fires at the corner itself, where the old floor went silent', () => {
+      const result = checkUpcomingTurn(turnProgress(5), walkLeg, [])
+      expect(result).not.toBeNull()
     })
 
     it('should return null for non-walk modes', () => {
+      const leg = { mode: 'BUS', startTime: 1, to: { name: 'Stop' } } as any
+      expect(checkUpcomingTurn(turnProgress(30), leg, [])).toBeNull()
+    })
+
+    it('returns null when the leg produced no cue', () => {
       const progress = makeProgress({ distanceToNextTurn: 30 })
-      const leg = { mode: 'BUS', to: { name: 'Stop' } } as any
-      expect(checkUpcomingTurn(progress, leg, [])).toBeNull()
+      expect(checkUpcomingTurn(progress, walkLeg, [])).toBeNull()
+    })
+
+    it('only a significant turn becomes the pushed TURN_ALERT type', () => {
+      const routine = checkUpcomingTurn(turnProgress(100), bikeLeg, [])
+      expect(routine!.type).toBe('UPCOMING_TURN')
+
+      const notable = checkUpcomingTurn(
+        turnProgress(100, { significant: true }),
+        bikeLeg,
+        []
+      )
+      expect(notable!.type).toBe('TURN_ALERT')
+    })
+
+    it('drops back to a silent type for the act cue of a significant turn', () => {
+      // The buzz already went out at the prepare distance; buzzing again at the
+      // corner is the spam this design exists to avoid.
+      const act = checkUpcomingTurn(
+        turnProgress(20, { significant: true }),
+        bikeLeg,
+        []
+      )
+      expect(act!.type).toBe('UPCOMING_TURN')
+    })
+
+    it('dedups on the turn, not the distance, as the rider closes on it', () => {
+      const first = checkUpcomingTurn(turnProgress(110), bikeLeg, [])
+      expect(first).not.toBeNull()
+      // A tick later the distance differs but it is the same turn and stage.
+      const second = checkUpcomingTurn(turnProgress(105), bikeLeg, [first!.id])
+      expect(second).toBeNull()
+    })
+
+    it('announces a different turn even while the last one is deduped', () => {
+      const first = checkUpcomingTurn(turnProgress(110), bikeLeg, [])
+      const other = checkUpcomingTurn(
+        turnProgress(110, { index: 2, instruction: 'Turn right on Oak' }),
+        bikeLeg,
+        [first!.id]
+      )
+      expect(other).not.toBeNull()
+      expect(other!.title).toBe('Turn right on Oak')
     })
   })
 
@@ -270,6 +365,19 @@ describe('util > go-mode > notification-service', () => {
 
     it('should return null when exactly at threshold', () => {
       expect(checkRouteDeviation(200, [])).toBeNull()
+    })
+
+    it('reacts sooner on a bike, where 200m of drift takes seconds', () => {
+      const bikeLeg = { mode: 'BICYCLE' } as any
+      expect(checkRouteDeviation(150, [], bikeLeg)).not.toBeNull()
+      // The same distance on foot is still within the walking allowance.
+      expect(checkRouteDeviation(150, [], { mode: 'WALK' } as any)).toBeNull()
+    })
+
+    it('still absorbs GPS scatter and parallel bike paths', () => {
+      expect(
+        checkRouteDeviation(100, [], { mode: 'BICYCLE' } as any)
+      ).toBeNull()
     })
 
     it('should dedup repeated deviations even as the distance changes', () => {
@@ -472,13 +580,11 @@ describe('util > go-mode > notification-service', () => {
     })
 
     it('should return approach stop notification', () => {
-      const progress = makeProgress({
-        nextStopName: 'Stop B',
-        stopsRemaining: 2
-      })
+      const progress = makeProgress({ nextStopName: 'Stop B' })
       const leg = {
         mode: 'BUS',
         routeShortName: '5',
+        startTime: 1769610000000,
         to: { name: 'Destination' }
       } as any
       const config = makeConfig()
@@ -490,10 +596,35 @@ describe('util > go-mode > notification-service', () => {
         undefined,
         10,
         [],
-        config
+        config,
+        [leg],
+        { distanceMetres: 2000, etaSeconds: 100 }
       )
       expect(result.length).toBeGreaterThan(0)
       expect(result.some((n) => n.type === 'APPROACH_STOP')).toBe(true)
+    })
+
+    it('raises no alight alert without an alight context', () => {
+      const leg = {
+        mode: 'BUS',
+        routeShortName: '5',
+        startTime: 1769610000000,
+        to: { name: 'Destination' }
+      } as any
+      const result = checkForNotifications(
+        makeProgress(),
+        leg,
+        0,
+        undefined,
+        10,
+        [],
+        makeConfig()
+      )
+      expect(
+        result.some(
+          (n) => n.type === 'APPROACH_STOP' || n.type === 'ARRIVING_STOP'
+        )
+      ).toBe(false)
     })
 
     it('should return route deviation notification', () => {
@@ -533,12 +664,25 @@ describe('util > go-mode > notification-service', () => {
       expect(result.some((n) => n.type === 'TRIP_COMPLETE')).toBe(true)
     })
 
-    it('should only include upcoming turn when no other notifications', () => {
+    it('should include an upcoming turn', () => {
       const progress = makeProgress({
         distanceToNextTurn: 30,
-        nextInstruction: 'Turn left'
+        nextInstruction: 'Turn left',
+        nextTurnCue: {
+          distanceMeters: 200,
+          index: 1,
+          instruction: 'Turn left',
+          offsetMeters: 400,
+          relativeDirection: 'LEFT',
+          significant: false,
+          streetName: 'Main St'
+        }
       })
-      const leg = { mode: 'WALK', to: { name: 'Bus Stop' } } as any
+      const leg = {
+        mode: 'WALK',
+        startTime: 1,
+        to: { name: 'Bus Stop' }
+      } as any
       const config = makeConfig()
 
       const result = checkForNotifications(
@@ -550,7 +694,46 @@ describe('util > go-mode > notification-service', () => {
         [],
         config
       )
-      // Should include upcoming turn since no higher priority notifications
+      expect(result.some((n) => n.type === 'UPCOMING_TURN')).toBe(true)
+    })
+
+    it('keeps guiding the rider through a co-occurring low-priority alert', () => {
+      // Turn cues used to be suppressed by ANY other notification. Now that
+      // they are real navigation, only a missed bus or an at-risk connection —
+      // alerts that mean "stop following this leg" — can silence them.
+      const progress = makeProgress({
+        currentLegProgress: 95,
+        distanceToNextTurn: 30,
+        nextInstruction: 'Turn left',
+        nextStopName: 'Stop B',
+        nextTurnCue: {
+          distanceMeters: 200,
+          index: 1,
+          instruction: 'Turn left',
+          offsetMeters: 400,
+          relativeDirection: 'LEFT',
+          significant: false,
+          streetName: 'Main St'
+        },
+        stopsRemaining: 1
+      })
+      const leg = {
+        mode: 'WALK',
+        startTime: 1,
+        to: { name: 'Bus Stop' }
+      } as any
+
+      const result = checkForNotifications(
+        progress,
+        leg,
+        0,
+        undefined,
+        // Far enough off the polyline to raise a deviation in the same tick.
+        400,
+        [],
+        makeConfig()
+      )
+      expect(result.some((n) => n.type === 'ROUTE_DEVIATION')).toBe(true)
       expect(result.some((n) => n.type === 'UPCOMING_TURN')).toBe(true)
     })
 

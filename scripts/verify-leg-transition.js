@@ -150,8 +150,13 @@ async function main() {
         // Call the thunk with our own dispatch so we observe every action it
         // emits, while real state still advances through the real store.
         const transitionedTo = []
+        const getStateForSpy = () => window.store.getState()
         const spy = (action) => {
-          if (typeof action === 'function') return window.store.dispatch(action)
+          // Follow thunks with the spy itself: the leg advance is a thunk
+          // (advanceToLeg), and handing it to the real store dispatch would
+          // hide every action it emits — including the TRANSITION_LEG this
+          // test exists to count.
+          if (typeof action === 'function') return action(spy, getStateForSpy)
           if (action?.type) seen.push(action.type)
           if (action?.type === 'TRANSITION_LEG') {
             transitionedTo.push(action.payload.legIndex)

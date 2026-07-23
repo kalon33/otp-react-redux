@@ -70,7 +70,7 @@ function perpendicularDistance(
  * Project point onto line segment and calculate distance along segment
  * @returns Object with distance along segment (0-1) and perpendicular distance
  */
-function projectPointOntoSegment(
+export function projectPointOntoSegment(
   point: LatLngArray,
   lineStart: LatLngArray,
   lineEnd: LatLngArray

@@ -1,6 +1,8 @@
 import type { Itinerary, Leg } from '@opentripplanner/types'
 
+import { getNextCue } from './turn-by-turn'
 import type { RouteMatchResult } from './position-matching'
+import type { StepCue } from './turn-by-turn'
 
 export type TripStatus =
   | 'on_track'
@@ -23,11 +25,15 @@ export interface TripProgress {
   distanceToNextTurn?: number
   // 0-100%
   estimatedArrival: Date
+  // The turn after `nextTurnCue`, for a "then …" line
+  followingTurnCue?: StepCue
   // seconds
   // Walking-specific
   nextInstruction?: string
 
   nextStopName?: string
+  // Structured form of nextInstruction; absent when the leg has no usable steps
+  nextTurnCue?: StepCue
   overallProgress: number
   // Epoch ms — the originally planned departure time from itinerary
   plannedDepartureTime?: number
@@ -201,14 +207,27 @@ export function getWalkingInstruction(
   progressInLeg: number
 ): {
   distanceToNextTurn?: number
+  followingTurnCue?: StepCue
   nextInstruction?: string
+  nextTurnCue?: StepCue
 } {
   if (leg.mode !== 'WALK' && leg.mode !== 'BICYCLE') {
     return {}
   }
 
-  // For Phase 1 MVP, return basic instruction
-  // Phase 2 will add turn-by-turn with steps
+  // Real turn-by-turn when the leg carries usable steps.
+  const { cue, distanceToNextTurn, following } = getNextCue(leg, progressInLeg)
+  if (cue) {
+    return {
+      distanceToNextTurn,
+      followingTurnCue: following,
+      nextInstruction: cue.instruction,
+      nextTurnCue: cue
+    }
+  }
+
+  // No steps (OTP omits them for some legs), or every turn is behind the rider
+  // and only the final straight to the destination is left.
   const remainingDistance = (leg.distance || 0) * (1 - progressInLeg)
 
   if (progressInLeg < 0.9) {

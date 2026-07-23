@@ -89,6 +89,7 @@ Object {
       "lastPosition": null,
     },
     "ui": Object {
+      "activeLeg": null,
       "backgrounded": false,
       "mapFollowUser": false,
     },

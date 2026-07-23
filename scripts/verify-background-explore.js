@@ -9,7 +9,11 @@
  * (3) tapping the banner returns to the Go Mode screen;
  * (4) 'Switch to this trip' on a planner itinerary (with confirm) adopts it
  *     and foregrounds Go Mode;
- * (5) a reload while backgrounded resumes backgrounded — banner back, Go Mode
+ * (5) 'Search from here' is the DELIBERATE opposite of (1): it runs a real
+ *     search from the rider's own position, moves activeSearchId/currentQuery,
+ *     and lands on the normal results screen with the trip still running;
+ *     endGoMode then puts the original origin back;
+ * (6) a reload while backgrounded resumes backgrounded — banner back, Go Mode
  *     screen NOT forced.
  *
  * Harness (same as verify-missed-bus): drive the real app at :9967 with the
@@ -237,7 +241,125 @@ async function main() {
     '[switch] alternate adopted after confirm; Go Mode foregrounded on the new itinerary'
   )
 
-  // ---- (5) reload while backgrounded -> resumes backgrounded ----
+  // ---- (5) "Search from here": a REAL search from the rider's position ----
+  // The opposite of case (1) by design. An automatic re-route must never
+  // disturb the planner; a search the rider asked for IS the planner, so it
+  // moves activeSearchId and the query origin and lands on the results screen.
+  await page.evaluate(async () => {
+    // eslint-disable-next-line import/no-absolute-path
+    const goMode = await import('/lib/actions/go-mode.ts')
+    window.store.dispatch(goMode.returnToGoMode())
+    window.__preBrowse = {
+      activeSearchId: window.store.getState().otp.activeSearchId,
+      pos: window.store.getState().otp.goMode.tracking.lastPosition
+    }
+    window.store.dispatch(goMode.browseFromCurrentPosition())
+  })
+  await page.waitForFunction(
+    () => {
+      const otp = window.store.getState().otp
+      const s = otp.searches[otp.activeSearchId]
+      return (
+        otp.activeSearchId !== window.__preBrowse.activeSearchId &&
+        s &&
+        s.pending === 0
+      )
+    },
+    { polling: 300, timeout: 60000 }
+  )
+  const browsed = await page.evaluate((sel) => {
+    const otp = window.store.getState().otp
+    const s = otp.searches[otp.activeSearchId]
+    const pos = window.__preBrowse.pos.coords
+    const from = otp.currentQuery.from
+    // Aboard a bus the origin is the next stop ahead, not the raw fix, so
+    // allow a stop's worth of slack rather than demanding an exact match.
+    const dLat = Math.abs(from.lat - pos.latitude)
+    const dLon = Math.abs(from.lon - pos.longitude)
+    return {
+      backgrounded: otp.goMode.ui.backgrounded,
+      banner: !!document.querySelector(sel),
+      departArrive: otp.currentQuery.departArrive,
+      fromName: from.name,
+      isActive: otp.goMode.isActive,
+      itinCount: (s.response || []).flatMap((r) => r?.plan?.itineraries || [])
+        .length,
+      mobileScreen: otp.ui.mobileScreen,
+      nearFix: dLat < 0.05 && dLon < 0.05,
+      rows: document.querySelectorAll('.option.metro-itin').length
+    }
+  }, BANNER)
+  console.log(
+    `[browse] from="${browsed.fromName}" screen=${browsed.mobileScreen} ` +
+      `${browsed.itinCount} itineraries, ${browsed.rows} rows rendered`
+  )
+  if (!browsed.itinCount) throw new Error('search-from-here returned nothing')
+  if (!browsed.nearFix) {
+    throw new Error('search-from-here did not use the rider position as origin')
+  }
+  if (browsed.departArrive !== 'DEPART') {
+    throw new Error(
+      `search-from-here left departArrive=${browsed.departArrive}`
+    )
+  }
+  if (!browsed.backgrounded || browsed.mobileScreen === GO_MODE) {
+    throw new Error('search-from-here did not land on the results screen')
+  }
+  if (!browsed.isActive || !browsed.banner) {
+    throw new Error('search-from-here dropped the running trip')
+  }
+  if (!browsed.rows) throw new Error('results list did not render')
+  // The rider must be able to adopt one of these without any new plumbing.
+  const canSwitch = await page.evaluate(() => {
+    const rows = Array.from(document.querySelectorAll('.option.metro-itin'))
+    rows[0]?.querySelector('.itin-wrapper')?.click()
+    return true
+  })
+  if (canSwitch) {
+    await page.waitForFunction(
+      () =>
+        Array.from(document.querySelectorAll('button')).some((b) =>
+          (b.textContent || '').includes('Switch to this trip')
+        ),
+      { polling: 300, timeout: 15000 }
+    )
+    console.log('[browse] results offer "Switch to this trip"')
+  }
+
+  // endGoMode must put the rider's original origin back, or the planner is
+  // left showing "Current location" after the trip.
+  const restored = await page.evaluate(async () => {
+    // eslint-disable-next-line import/no-absolute-path
+    const goMode = await import('/lib/actions/go-mode.ts')
+    const originalFrom = window.store.getState().otp.goMode.originalFrom
+    window.store.dispatch(goMode.endGoMode())
+    return {
+      after: JSON.stringify(window.store.getState().otp.currentQuery.from),
+      originalFrom: JSON.stringify(originalFrom)
+    }
+  })
+  if (
+    restored.originalFrom !== 'null' &&
+    restored.after !== restored.originalFrom
+  ) {
+    throw new Error(
+      `endGoMode left the origin at ${restored.after}, expected ${restored.originalFrom}`
+    )
+  }
+  console.log('[browse] endGoMode restored the original origin')
+
+  // Re-arm a running, backgrounded trip for case (6).
+  await page.evaluate(async () => {
+    // eslint-disable-next-line import/no-absolute-path
+    const goMode = await import('/lib/actions/go-mode.ts')
+    window.store.dispatch(goMode.beginGoMode(window.__bgExploreItinerary))
+  })
+  await page.waitForFunction(
+    () => window.store.getState().otp.goMode.isActive,
+    { polling: 300, timeout: 20000 }
+  )
+
+  // ---- (6) reload while backgrounded -> resumes backgrounded ----
   await page.evaluate(async () => {
     // eslint-disable-next-line import/no-absolute-path
     const goMode = await import('/lib/actions/go-mode.ts')
@@ -269,7 +391,8 @@ async function main() {
 
   await browser.close()
   console.log(
-    '\nPASS: isolated re-route, background + banner round-trip, explicit switch, reload-resume'
+    '\nPASS: isolated re-route, background + banner round-trip, explicit switch,' +
+      ' search-from-here into the real results screen, reload-resume'
   )
 }
 
