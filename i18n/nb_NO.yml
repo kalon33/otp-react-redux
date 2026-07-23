@@ -94,6 +94,8 @@ components:
     setDestination: Sett mål
   MapLayers:
     streets: Gater
+    realtimeStops: Stopper i sanntid
+    OTP-UI-stopsAndStations: Stopper og stasjoner
   NewAccountWizard:
     createNewAccount: Opprett ny konto
     places: Legg til dine steder
