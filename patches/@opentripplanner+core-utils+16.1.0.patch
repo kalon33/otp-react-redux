@@ -1,8 +1,5 @@
 diff --git a/node_modules/@opentripplanner/core-utils/esm/planQuery.graphql b/node_modules/@opentripplanner/core-utils/esm/planQuery.graphql
-index a989fd2..e00cfa4 100644
---- a/node_modules/@opentripplanner/core-utils/esm/planQuery.graphql
-+++ b/node_modules/@opentripplanner/core-utils/esm/planQuery.graphql
-@@ -154,6 +154,18 @@ query Plan(
+@@ -154,6 +154,18 @@
            stopCode: code
            stopId: id
          }
@@ -21,11 +18,9 @@ index a989fd2..e00cfa4 100644
          legGeometry {
            length
            points
- diff --git a/node_modules/@opentripplanner/core-utils/lib/planQuery.graphql b/node_modules/@opentripplanner/core-utils/lib/planQuery.graphql
-index a989fd2..e00cfa4 100644
---- a/node_modules/@opentripplanner/core-utils/lib/planQuery.graphql
-+++ b/node_modules/@opentripplanner/core-utils/lib/planQuery.graphql
-@@ -154,6 +154,18 @@ query Plan(
+
+diff --git a/node_modules/@opentripplanner/core-utils/lib/planQuery.graphql b/node_modules/@opentripplanner/core-utils/lib/planQuery.graphql
+@@ -154,6 +154,18 @@
            stopCode: code
            stopId: id
          }
@@ -44,11 +39,9 @@ index a989fd2..e00cfa4 100644
          legGeometry {
            length
            points
- diff --git a/node_modules/@opentripplanner/core-utils/src/planQuery.graphql b/node_modules/@opentripplanner/core-utils/src/planQuery.graphql
-index a989fd2..e00cfa4 100644
---- a/node_modules/@opentripplanner/core-utils/src/planQuery.graphql
-+++ b/node_modules/@opentripplanner/core-utils/src/planQuery.graphql
-@@ -154,6 +154,18 @@ query Plan(
+
+diff --git a/node_modules/@opentripplanner/core-utils/src/planQuery.graphql b/node_modules/@opentripplanner/core-utils/src/planQuery.graphql
+@@ -154,6 +154,18 @@
            stopCode: code
            stopId: id
          }
