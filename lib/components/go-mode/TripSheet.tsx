@@ -210,7 +210,7 @@ const TripSheet = ({
               {intl.formatMessage(
                 {
                   defaultMessage: '🕒 {mins} min wait',
-                  id: 'GoMode.legWait'
+                  id: 'components.GoMode.legWait'
                 },
                 { mins: waitMins }
               )}
