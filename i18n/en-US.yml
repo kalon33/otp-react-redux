@@ -874,7 +874,7 @@ components:
     legBike: 'Bike: {distance} m'
     legStopsTo: '{count, plural, one {# stop} other {# stops}} to {dest}'
     legTo: to {dest}
-    legWait: ⏰ Board at {time} · {mins} min wait
+    legWait: ⏰ {mins} min wait
     legWalk: 'Walk: {distance} m'
     liveBanner: Live tracking
     loading: Starting trip...
