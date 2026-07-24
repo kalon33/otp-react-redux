@@ -82,7 +82,7 @@ const GoModeScreen = ({
     (window.location.search.includes('sim=1') ||
       window.localStorage?.getItem('goModeSim') === '1')
 
-  // Only leave Go Mode once a trip has genuinely ended — never during the entry
+  // Only leave Go Mode once a trip has genuinely ended \u2014 never during the entry
   // transition. Bouncing on the first render was kicking riders straight back to
   // results the instant they hit "Start Trip".
   const hasBeenActiveRef = useRef(false)
@@ -130,7 +130,7 @@ const GoModeScreen = ({
     setMobileScreen(MobileScreens.SEARCH_FORM)
   }
 
-  // Trip complete: the rider dismisses the arrival card themselves — landing
+  // Trip complete: the rider dismisses the arrival card themselves \u2014 landing
   // on the home screen, not a stale results list. (Both dispatches happen in
   // one handler, so the parent swaps screens before the inactive-redirect
   // effect can route to RESULTS_SUMMARY.)
@@ -139,7 +139,7 @@ const GoModeScreen = ({
     setMobileScreen(MobileScreens.SEARCH_FORM)
   }
 
-  // "I'm on the bus" onboard flow: no itinerary yet — show discovery, the bus
+  // "I'm on the bus" onboard flow: no itinerary yet \u2014 show discovery, the bus
   // picker, and the alight-stop recommendation.
   if (onboardActive && !goMode.activeItinerary) {
     return (
@@ -275,7 +275,7 @@ const GoModeScreen = ({
             <RerouteCard role="status">
               <RerouteCardTitle>
                 {intl.formatMessage({
-                  defaultMessage: "🎉 You've arrived!",
+                  defaultMessage: "\ud83c\udf89 You've arrived!",
                   id: 'components.GoMode.arrivedTitle'
                 })}
               </RerouteCardTitle>
@@ -320,7 +320,7 @@ const GoModeScreen = ({
               aria-label="Toggle simulation toolbar"
               onClick={() => setSimToolbarOpen(!simToolbarOpen)}
             >
-              {simToolbarOpen ? 'DEV ▼' : 'DEV ▲'}
+              {simToolbarOpen ? 'DEV \u25bc' : 'DEV \u25b2'}
             </SimToggle>
             {simToolbarOpen && (
               <SimToolbar aria-label="GPS simulation controls" role="toolbar">
@@ -425,7 +425,7 @@ const mapStateToProps = (state: any) => {
 
     // The boarding stop times are pre-fetched in beginGoMode keyed by the stop's
     // gtfsId (leg.from.stop.gtfsId). The plan query's leg `from` block exposes
-    // the gtfsId under `from.stop.gtfsId` — there is no `from.stopId` — so we
+    // the gtfsId under `from.stop.gtfsId` \u2014 there is no `from.stopId` \u2014 so we
     // must look the store up by the same gtfsId, else boardingStopData is always
     // null and the card silently falls back to OTP's planned (scheduled) time.
     const boardingStopId =
@@ -443,7 +443,8 @@ const mapStateToProps = (state: any) => {
   return {
     boardingStopData,
     departureOverride: goMode?.departureOverride ?? null,
-    goMode
+    goMode,
+    units: state.otp.config?.units || 'imperial'
   }
 }
 
