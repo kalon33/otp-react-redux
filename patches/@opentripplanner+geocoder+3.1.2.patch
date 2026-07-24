@@ -1,0 +1,40 @@
+diff --git a/node_modules/@opentripplanner/geocoder/esm/apis/photon/index.js b/node_modules/@opentripplanner/geocoder/esm/apis/photon/index.js
+index 8f15cf1..cc5a03f 100644
+--- a/node_modules/@opentripplanner/geocoder/esm/apis/photon/index.js
++++ b/node_modules/@opentripplanner/geocoder/esm/apis/photon/index.js
+@@ -69,28 +69,17 @@ function _autocomplete() {
+             limit: size,
+             q: text
+           };
+-          if (!focusPoint) {
+-            _context.next = 10;
+-            break;
++          // Add focusPoint if provided (bias toward this location)
++          if (focusPoint) {
++            _normalize3 = normalize(focusPoint), lat = _normalize3.lat, lon = _normalize3.lon;
++            query.lat = lat.toString();
++            query.lon = lon.toString();
+           }
+-          _normalize3 = normalize(focusPoint), lat = _normalize3.lat, lon = _normalize3.lon;
+-          query.lat = lat.toString();
+-          query.lon = lon.toString();
+-          _context.next = 8;
+-          return run({
+-            options: options,
+-            query: query,
+-            url: url
+-          });
+-        case 8:
+-          res = _context.sent;
+-          return _context.abrupt("return", res);
+-        case 10:
++          // Add boundary filter if provided (restrict to this area)
+           if (boundary) {
+             country = boundary.country, rect = boundary.rect;
+-            if (country) query["in"] = "countryCode:".concat(country);
+             if (rect) {
+-              query["in"] = "bbox:".concat([rect.minLon, rect.minLat, rect.maxLon, rect.maxLat].join(","));
++              query.bbox = [rect.minLon, rect.minLat, rect.maxLon, rect.maxLat].join(",");
+             }
+           }
+           return _context.abrupt("return", run({
