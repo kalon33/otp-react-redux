@@ -25,7 +25,11 @@ import {
 import { AppReduxState } from '../../util/state-types'
 import { ComponentContext } from '../../util/contexts'
 import { convertChineseLanguageCode, getLanguageOptions } from '../../util/i18n'
-import { isDebugLogEnabled, setDebugLogEnabled } from '../../util/debug-log'
+import {
+  getBuildInfo,
+  isDebugLogEnabled,
+  setDebugLogEnabled
+} from '../../util/debug-log'
 import { isModuleEnabled, Modules } from '../../util/config'
 
 import AppMenuItem from './app-menu-item'
@@ -338,6 +342,9 @@ class AppMenu extends Component<
             />
             {this._addExtraMenuItems(extraMenuItems, translateExternalLinks)}
             {this._addExtraMenuItems(languageMenuItems)}
+            <div className="app-menu-build-info">
+              TransitNav {getBuildInfo()}
+            </div>
           </div>
         </SlidingPane>
       </>

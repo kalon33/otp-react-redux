@@ -1,6 +1,9 @@
+import type { IntlShape } from 'react-intl'
 import type { Itinerary, Leg } from '@opentripplanner/types'
 
+import { getNextCue, getNextCueWithIntl } from './turn-by-turn'
 import type { RouteMatchResult } from './position-matching'
+import type { StepCue } from './turn-by-turn'
 
 export type TripStatus =
   | 'on_track'
@@ -23,11 +26,15 @@ export interface TripProgress {
   distanceToNextTurn?: number
   // 0-100%
   estimatedArrival: Date
+  // The turn after `nextTurnCue`, for a "then …" line
+  followingTurnCue?: StepCue
   // seconds
   // Walking-specific
   nextInstruction?: string
 
   nextStopName?: string
+  // Structured form of nextInstruction; absent when the leg has no usable steps
+  nextTurnCue?: StepCue
   overallProgress: number
   // Epoch ms — the originally planned departure time from itinerary
   plannedDepartureTime?: number
@@ -201,14 +208,27 @@ export function getWalkingInstruction(
   progressInLeg: number
 ): {
   distanceToNextTurn?: number
+  followingTurnCue?: StepCue
   nextInstruction?: string
+  nextTurnCue?: StepCue
 } {
   if (leg.mode !== 'WALK' && leg.mode !== 'BICYCLE') {
     return {}
   }
 
-  // For Phase 1 MVP, return basic instruction
-  // Phase 2 will add turn-by-turn with steps
+  // Real turn-by-turn when the leg carries usable steps.
+  const { cue, distanceToNextTurn, following } = getNextCue(leg, progressInLeg)
+  if (cue) {
+    return {
+      distanceToNextTurn,
+      followingTurnCue: following,
+      nextInstruction: cue.instruction,
+      nextTurnCue: cue
+    }
+  }
+
+  // No steps (OTP omits them for some legs), or every turn is behind the rider
+  // and only the final straight to the destination is left.
   const remainingDistance = (leg.distance || 0) * (1 - progressInLeg)
 
   if (progressInLeg < 0.9) {
@@ -223,6 +243,63 @@ export function getWalkingInstruction(
     nextInstruction: `Arriving at ${leg.to.name}`
   }
 }
+
+/**
+ * Get walking-specific navigation information with i18n support
+ */
+export function getWalkingInstructionWithIntl(
+  leg: Leg,
+  progressInLeg: number,
+  intl: IntlShape
+): {
+  distanceToNextTurn?: number
+  followingTurnCue?: StepCue
+  nextInstruction?: string
+  nextTurnCue?: StepCue
+} {
+  if (leg.mode !== 'WALK' && leg.mode !== 'BICYCLE') {
+    return {}
+  }
+
+  // Real turn-by-turn when the leg carries usable steps.
+  const { cue, distanceToNextTurn, following } = getNextCueWithIntl(
+    leg,
+    progressInLeg,
+    intl
+  )
+  if (cue) {
+    return {
+      distanceToNextTurn,
+      followingTurnCue: following,
+      nextInstruction: cue.instruction,
+      nextTurnCue: cue
+    }
+  }
+
+  // No steps (OTP omits them for some legs), or every turn is behind the rider
+  // and only the final straight to the destination is left.
+  const remainingDistance = (leg.distance || 0) * (1 - progressInLeg)
+
+  if (progressInLeg < 0.9) {
+    return {
+      distanceToNextTurn: remainingDistance,
+      nextInstruction: intl.formatMessage(
+        { id: 'components.GoMode.turnInstructions.continueTo' },
+        { destination: leg.to.name }
+      )
+    }
+  }
+
+  return {
+    distanceToNextTurn: remainingDistance,
+    nextInstruction: intl.formatMessage(
+      { id: 'GoMode.arrivingAt' },
+      { destination: leg.to.name }
+    )
+  }
+}
+
+
 
 /**
  * Get timing info for upcoming transit connections.
@@ -356,6 +433,94 @@ export function calculateTripProgress(
   // Get mode-specific progress info
   const transitInfo = getTransitProgress(currentLeg, progressInCurrentLeg)
   const walkingInfo = getWalkingInstruction(currentLeg, progressInCurrentLeg)
+
+  // Get upcoming transit timing
+  const nextLeg =
+    currentLegIndex < legs.length - 1 ? legs[currentLegIndex + 1] : undefined
+  const timingInfo = getUpcomingTransitTiming(
+    currentTime,
+    currentLeg,
+    nextLeg,
+    progressInCurrentLeg,
+    departureOverrideMs
+  )
+
+  // Measured schedule delay at the rider's current position (real GPS progress
+  // vs the current leg's scheduled timing). Feeds connection-risk detection.
+  const delay = computeCurrentDelay(
+    currentLeg,
+    progressInCurrentLeg,
+    currentTime
+  )
+
+  return {
+    currentLegIndex,
+    currentLegProgress,
+    currentTime,
+    delay,
+    estimatedArrival,
+    overallProgress,
+    status,
+    timeRemaining,
+    ...transitInfo,
+    ...walkingInfo,
+    ...timingInfo
+  }
+}
+
+/**
+ * Calculate trip progress with i18n support for localized turn-by-turn instructions.
+ */
+export function calculateTripProgressWithIntl(
+  currentTime: Date,
+  itinerary: Itinerary,
+  routeMatch: RouteMatchResult | null,
+  departureOverrideMs?: number | null,
+  intl?: IntlShape
+): TripProgress {
+  const legs = itinerary.legs
+  const currentLegIndex = routeMatch?.legIndex || 0
+  const progressInCurrentLeg = routeMatch?.progressAlongLeg || 0
+
+  const overallProgress = calculateOverallProgress(
+    currentLegIndex,
+    progressInCurrentLeg,
+    legs
+  )
+
+  const timeRemaining = calculateTimeRemaining(
+    currentTime,
+    itinerary,
+    currentLegIndex,
+    progressInCurrentLeg
+  )
+
+  const estimatedArrival = estimateArrival(currentTime, timeRemaining)
+
+  const startTime = new Date(itinerary.startTime)
+  const endTime = new Date(itinerary.endTime)
+  const totalDuration = (endTime.getTime() - startTime.getTime()) / 1000
+
+  const expectedProgress = calculateExpectedProgress(
+    startTime,
+    currentTime,
+    totalDuration
+  )
+
+  const status = determineTripStatus(
+    routeMatch,
+    expectedProgress,
+    overallProgress
+  )
+
+  const currentLeg = legs[currentLegIndex]
+  const currentLegProgress = progressInCurrentLeg * 100
+
+  // Get mode-specific progress info
+  const transitInfo = getTransitProgress(currentLeg, progressInCurrentLeg)
+  const walkingInfo = intl
+    ? getWalkingInstructionWithIntl(currentLeg, progressInCurrentLeg, intl)
+    : getWalkingInstruction(currentLeg, progressInCurrentLeg)
 
   // Get upcoming transit timing
   const nextLeg =

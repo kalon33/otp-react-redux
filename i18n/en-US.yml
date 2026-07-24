@@ -310,6 +310,8 @@ components:
     shared-vehicles: Shared Vehicles
     stations: Transit Stations
     stops: Transit Stops
+    realtimeStops: Realtime Stops
+    OTP-UI-stopsAndStations: Stops and Stations
     streets: Streets
   MapillaryFrame:
     title: Imagery of the street
@@ -872,7 +874,7 @@ components:
     legBike: 'Bike: {distance} m'
     legStopsTo: '{count, plural, one {# stop} other {# stops}} to {dest}'
     legTo: to {dest}
-    legWait: ⏰ Board at {time} · {mins} min wait
+    legWait: ⏰ {mins} min wait
     legWalk: 'Walk: {distance} m'
     liveBanner: Live tracking
     loading: Starting trip...
@@ -932,6 +934,23 @@ components:
     hurryWarning: Hurry!
     nextLegTransit: Next transit leg
     nextLegWalk: Next walking leg
+    turnInstructions:
+      bearLeft: Bear left
+      bearRight: Bear right
+      continue: Continue
+      continueOn: "Continue on {street}"
+      enterStation: Enter the station
+      exitStation: Exit the station
+      followSigns: Follow signs
+      sharpLeft: Sharp left
+      sharpRight: Sharp right
+      takeElevator: Take the elevator
+      takeRoundabout: Take the roundabout
+      turnLeft: Turn left
+      turnRight: Turn right
+      uTurn: U-turn
+      continueTo: "Continue to {destination}"
+      arrivingAt: "Arriving at {destination}"
   ActiveRoutingPreferences:
     label: Active routing preferences
     clear: Clear

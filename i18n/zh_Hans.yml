@@ -294,6 +294,8 @@ components:
     shared-vehicles: 共享车辆
     stations: 交通站点
     stops: 公共交通站点
+    realtimeStops: 实时站点
+    OTP-UI-stopsAndStations: 站点和车站
     streets: 街道
   MapillaryFrame:
     title: 街道图像

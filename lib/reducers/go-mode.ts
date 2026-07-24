@@ -14,6 +14,7 @@ import {
   RESUME_GPS_SIMULATION,
   SET_ARRIVED,
   SET_DEPARTURE_OVERRIDE,
+  SET_GO_MODE_ACTIVE_LEG,
   SET_GO_MODE_BACKGROUNDED,
   SET_LIVE_LEG_TIMES,
   SET_NOTIFICATION_CONFIG,
@@ -189,6 +190,12 @@ export interface GoModeState {
 
   ui: {
     /**
+     * Index of the leg the rider tapped in the trip sheet, or null for none.
+     * The Go Mode equivalent of the planner's activeSearch.activeLeg: the map
+     * zooms to it and draws it as selected.
+     */
+    activeLeg: number | null
+    /**
      * The trip is running but the rider has stepped out to the normal trip
      * planner (browsing alternate routes). Tracking, notifications, and
      * auto-updates all keep running; only what's on screen changes. The
@@ -280,6 +287,7 @@ const defaultState: GoModeState = {
   },
 
   ui: {
+    activeLeg: null,
     backgrounded: false,
     // Off by default: the map should stay where the user leaves it and only
     // recenter on the live GPS point when the user asks (blue dot control).
@@ -473,6 +481,14 @@ const goMode = handleActions<GoModeState, any>(
       departureOverride: action.payload
     }),
 
+    [SET_GO_MODE_ACTIVE_LEG]: (state, action) => ({
+      ...state,
+      ui: {
+        ...state.ui,
+        activeLeg: action.payload ?? null
+      }
+    }),
+
     [SET_GO_MODE_BACKGROUNDED]: (state, action) => ({
       ...state,
       ui: {
@@ -602,7 +618,16 @@ const goMode = handleActions<GoModeState, any>(
         notifications: {
           ...state.notifications,
           recentNotifications: [],
-          sentNotifications: []
+          // Alight alerts are keyed to the physical exit STOP, and they alone
+          // survive a trip swap: a background auto-update re-enters here with a
+          // new itinerary, and wiping their history let the same stop buzz the
+          // rider a second time — the complaint this whole path exists to fix.
+          // Everything else (boarding, connections, turns) is about the trip
+          // that just changed and must be free to fire again.
+          sentNotifications: state.notifications.sentNotifications.filter(
+            (id) =>
+              id.startsWith('APPROACH_STOP_') || id.startsWith('ARRIVING_STOP_')
+          )
         },
         originalFrom: originalFrom ?? null,
         progress: null,

@@ -320,6 +320,8 @@ components:
     shared-vehicles: Mga Nakabahaging Sasakyan
     stations: Mga Istasyon ng Pampublikong Sasakyan
     stops: Mga Hintuan ng Pampublikong Transportasyon
+    realtimeStops: Mga hintuan sa real-time
+    OTP-UI-stopsAndStations: Mga hintuan at istasyon
     streets: Mga Kalye
   MapillaryFrame:
     title: Larawan ng kalsada

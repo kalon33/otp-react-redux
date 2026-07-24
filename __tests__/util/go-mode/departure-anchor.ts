@@ -3,7 +3,8 @@ import {
   getLegRouteId,
   getRouteDepartures,
   getSoonestCatchableMs,
-  RouteDeparture
+  RouteDeparture,
+  shouldAdoptAnchor
 } from '../../../lib/util/go-mode/departure-anchor'
 
 // serviceDay chosen so epochs are easy to eyeball: depMs = (DAY + secs) * 1000
@@ -81,6 +82,33 @@ describe('departure-anchor', () => {
     })
   })
 
+  describe('shouldAdoptAnchor', () => {
+    const planned = 1_000_000_000
+    const anchored = planned - 45 * 60000 // an earlier bus already anchored
+
+    it('adopts a meaningfully earlier departure', () => {
+      expect(shouldAdoptAnchor(anchored, planned)).toBe(true)
+    })
+
+    it('ignores a difference too small to be a different bus', () => {
+      expect(shouldAdoptAnchor(planned - 60000, planned)).toBe(false)
+    })
+
+    // The 7/22 skip: measured against the PLANNED board, the next trip after a
+    // late anchored bus still looked like a 43-minute gain and the display
+    // jumped to it while the rider's bus had not left.
+    it('never moves later than the departure already in force', () => {
+      const nextTrip = anchored + 25 * 60000
+      expect(shouldAdoptAnchor(nextTrip, planned)).toBe(true)
+      expect(shouldAdoptAnchor(nextTrip, anchored)).toBe(false)
+    })
+
+    it('handles no candidate and a missing departure', () => {
+      expect(shouldAdoptAnchor(null, planned)).toBe(false)
+      expect(shouldAdoptAnchor(anchored, NaN)).toBe(false)
+    })
+  })
+
   describe('getSoonestCatchableMs', () => {
     const dep = (depMs: number): RouteDeparture => ({ depMs, realtime: false })
 
@@ -104,6 +132,31 @@ describe('departure-anchor', () => {
 
     it('returns null when nothing is reachable', () => {
       expect(getSoonestCatchableMs([], 0, 600)).toBeNull()
+    })
+
+    // 7/22 ride: standing at the stop (no ride time left), the rider's bus ran
+    // late with no realtime update. The instant its scheduled time passed it
+    // dropped out of the list and the anchor slid onto the next trip — "showed
+    // 465 at 0135 before mine even left". A slightly overdue bus stays in play.
+    it('keeps a slightly overdue departure catchable when given grace', () => {
+      const now = 1_000_000
+      const overdue = dep(now - 40_000)
+      const nextTrip = dep(now + 1_500_000)
+      expect(getSoonestCatchableMs([overdue, nextTrip], now, 0)).toBe(
+        nextTrip.depMs
+      )
+      expect(getSoonestCatchableMs([overdue, nextTrip], now, 0, 60_000)).toBe(
+        overdue.depMs
+      )
+    })
+
+    it('still gives up once the departure is past the grace', () => {
+      const now = 1_000_000
+      const longGone = dep(now - 200_000)
+      const nextTrip = dep(now + 1_500_000)
+      expect(getSoonestCatchableMs([longGone, nextTrip], now, 0, 60_000)).toBe(
+        nextTrip.depMs
+      )
     })
   })
 })

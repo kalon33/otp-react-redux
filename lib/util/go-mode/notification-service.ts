@@ -1,5 +1,6 @@
 import type { Leg } from '@opentripplanner/types'
 
+import { asContinuation, formatCueDistance } from './turn-by-turn'
 import { calculateDistance } from './position-matching'
 import type { TripProgress } from './progress-calculator'
 
@@ -7,6 +8,7 @@ export type NotificationType =
   | 'APPROACH_STOP'
   | 'ARRIVING_STOP'
   | 'UPCOMING_TURN'
+  | 'TURN_ALERT'
   | 'LEG_TRANSITION'
   | 'DELAY_ALERT'
   | 'ROUTE_DEVIATION'
@@ -108,73 +110,96 @@ export function triggerVibration(
   }
 }
 
-/**
- * Check if should notify for approaching stop
- */
-export function checkApproachingStop(
-  progress: TripProgress,
-  currentLeg: Leg,
-  sentNotifications: string[]
-): NotificationEvent | null {
-  if (
-    progress.stopsRemaining === 2 &&
-    (currentLeg.mode === 'BUS' || currentLeg.mode === 'RAIL')
-  ) {
-    const id = generateNotificationId(
-      'APPROACH_STOP',
-      `${currentLeg.routeShortName || currentLeg.routeLongName}_${
-        progress.nextStopName
-      }`
-    )
+// The rider gets exactly two alerts before their exit: a heads-up with time to
+// gather their things, and one at the door. Both are TIME-based. The stop-count
+// triggers these replace (`stopsRemaining === 2` / `=== 1`) fired on a *level*
+// with the default 60 s dedup window — and stopsRemaining sits at 1 for the
+// whole final inter-stop segment, so the "prepare to exit" alert re-fired every
+// minute and buzzed the phone each time (7/22 ride: "insane how many
+// notifications I'm getting for last stop"). Level + short window can only ever
+// mean repeats; the fix is an edge, deduped per leg for the whole leg.
+const ALIGHT_PREPARE_SECONDS = 120
+const ALIGHT_ACT_SECONDS = 30
+// At the very end a stale prediction can read minutes out while the bus is
+// visibly at the kerb — GPS proximity to the alight stop settles it.
+const ALIGHT_ACT_METRES = 200
+// One firing per stage per leg: far longer than any single transit leg's
+// approach, so neither stage can repeat.
+const ALIGHT_DEDUP_MS = 30 * 60 * 1000
 
-    if (!wasRecentlySent(id, sentNotifications)) {
-      return {
-        id,
-        message: `Get ready! Your stop (${currentLeg.to.name}) is 2 stops away.`,
-        priority: 'high',
-        timestamp: new Date(),
-        title: 'Approaching Your Stop',
-        type: 'APPROACH_STOP'
-      }
-    }
-  }
-
-  return null
+/** What the alight alerts need beyond `progress`, measured in the action layer. */
+export interface AlightContext {
+  /** Metres from the rider's GPS fix to the leg's alight stop, if known. */
+  distanceMetres: number | null
+  /** Seconds until the vehicle reaches the alight stop (live figure preferred). */
+  etaSeconds: number | null
 }
 
 /**
- * Check if should notify for arriving at stop
+ * The two — and only two — alerts before the rider's stop.
+ *
+ * `prepare` at ~2 minutes out, `act` immediately before disembarking. Each is
+ * keyed to the leg's identity and stage, never to a stop name or a live number,
+ * so a value that lingers in range cannot re-trigger it.
  */
-export function checkArrivingStop(
+export function checkAlightAlerts(
   progress: TripProgress,
   currentLeg: Leg,
+  alight: AlightContext,
   sentNotifications: string[]
 ): NotificationEvent | null {
-  if (
-    progress.stopsRemaining === 1 &&
-    (currentLeg.mode === 'BUS' || currentLeg.mode === 'RAIL')
-  ) {
-    const id = generateNotificationId(
-      'ARRIVING_STOP',
-      `${currentLeg.routeShortName || currentLeg.routeLongName}_${
-        currentLeg.to.name
-      }`
-    )
+  if (!isTransitMode(currentLeg.mode)) return null
 
-    if (!wasRecentlySent(id, sentNotifications)) {
-      return {
+  const { distanceMetres, etaSeconds } = alight
+  // The proximity trigger is gated on being past the middle of the leg: a route
+  // that loops back can pass within 200 m of the exit stop early on, and that
+  // must not spend the rider's one door alert.
+  const closeOnTheGround =
+    distanceMetres != null &&
+    distanceMetres <= ALIGHT_ACT_METRES &&
+    (progress.currentLegProgress ?? 0) >= 50
+  const nearly =
+    (etaSeconds != null && etaSeconds <= ALIGHT_ACT_SECONDS) || closeOnTheGround
+  const soon = etaSeconds != null && etaSeconds <= ALIGHT_PREPARE_SECONDS
+
+  if (!nearly && !soon) return null
+  const stage = nearly ? 'act' : 'prepare'
+
+  const stopName = currentLeg.to?.name || 'your stop'
+  // Keyed on the EXIT STOP, not the leg: an auto-update mid-ride (a missed-bus
+  // swap, a reroute) hands back a new itinerary whose legs have new identities,
+  // and keying on those let the same stop alert all over again. What the rider
+  // counts is buzzes about their stop.
+  const stopKey = (currentLeg.to as any)?.stop?.gtfsId || stopName
+  const id = generateNotificationId(
+    stage === 'act' ? 'ARRIVING_STOP' : 'APPROACH_STOP',
+    `${stopKey}_${stage}`
+  )
+  if (wasRecentlySent(id, sentNotifications, ALIGHT_DEDUP_MS)) return null
+  return stage === 'act'
+    ? {
         id,
-        message: `Prepare to exit at ${currentLeg.to.name}`,
+        message: `Prepare to exit at ${stopName}`,
         priority: 'high',
         timestamp: new Date(),
         title: 'Next Stop: Your Stop!',
         type: 'ARRIVING_STOP'
       }
-    }
-  }
-
-  return null
+    : {
+        id,
+        message: `Get ready! Your stop (${stopName}) is about 2 minutes away.`,
+        priority: 'high',
+        timestamp: new Date(),
+        title: 'Approaching Your Stop',
+        type: 'APPROACH_STOP'
+      }
 }
+
+// Lead distances for turn cues, in metres. A cyclist covers 50 m in about 8
+// seconds, so the walking numbers this used to carry arrived far too late to
+// act on; these give a bike roughly the same *time* to react that a walker gets.
+const BIKE_CUE_DISTANCES = { act: 30, prepare: 120 }
+const WALK_CUE_DISTANCES = { act: 15, prepare: 40 }
 
 /**
  * Check if should notify for upcoming turn
@@ -182,31 +207,53 @@ export function checkArrivingStop(
 export function checkUpcomingTurn(
   progress: TripProgress,
   currentLeg: Leg,
-  sentNotifications: string[]
+  sentNotifications: string[],
+  units: 'imperial' | 'metric' = 'imperial'
 ): NotificationEvent | null {
-  if (
-    (currentLeg.mode === 'WALK' || currentLeg.mode === 'BICYCLE') &&
-    progress.distanceToNextTurn &&
-    progress.distanceToNextTurn < 50 &&
-    progress.distanceToNextTurn > 10
-  ) {
-    const id = generateNotificationId('UPCOMING_TURN', `${currentLeg.to.name}`)
+  const isBike = currentLeg.mode === 'BICYCLE'
+  if (!isBike && currentLeg.mode !== 'WALK') return null
 
-    if (!wasRecentlySent(id, sentNotifications, 30000)) {
-      return {
-        id,
-        message:
-          progress.nextInstruction ||
-          `In ${Math.round(progress.distanceToNextTurn)}m`,
-        priority: 'medium',
-        timestamp: new Date(),
-        title: 'Turn Ahead',
-        type: 'UPCOMING_TURN'
-      }
-    }
+  const cue = progress.nextTurnCue
+  const distance = progress.distanceToNextTurn
+  if (!cue || distance == null) return null
+
+  const { act, prepare } = isBike ? BIKE_CUE_DISTANCES : WALK_CUE_DISTANCES
+  if (distance > prepare) return null
+
+  // Two cues per turn: one with time to react, one at the corner itself.
+  const stage = distance <= act ? 'act' : 'prepare'
+
+  // Key on the turn's identity and stage — never the distance, which changes
+  // every GPS tick and would defeat the dedup window entirely.
+  const id = generateNotificationId(
+    'UPCOMING_TURN',
+    `${currentLeg.startTime}_${cue.index}_${stage}`
+  )
+  if (wasRecentlySent(id, sentNotifications, 30000)) return null
+
+  // Instruction leads the title: Garmin shows the title prominently and
+  // truncates the body, so "Turn left on Bryant Ave S" must not land there.
+  const title = cue.instruction
+  const then = progress.followingTurnCue
+    ? `, then ${asContinuation(progress.followingTurnCue.instruction)}`
+    : ''
+  const message =
+    stage === 'act'
+      ? formatCueDistance(distance, units)
+      : `In ${formatCueDistance(distance, units)}${then}`
+
+  return {
+    id,
+    message,
+    priority: 'medium',
+    timestamp: new Date(),
+    title,
+    // Only significant turns become TURN_ALERT, the type that is pushed to the
+    // phone (and so to the rider's watch). Everything else stays UPCOMING_TURN:
+    // on-screen and on the always-current card, but silent.
+    type:
+      cue.significant && stage === 'prepare' ? 'TURN_ALERT' : 'UPCOMING_TURN'
   }
-
-  return null
 }
 
 // Lead time for the "time to go" alert: warn when the rider has this many
@@ -495,9 +542,17 @@ export function checkLegTransition(
  */
 export function checkRouteDeviation(
   distanceFromRoute: number,
-  sentNotifications: string[]
+  sentNotifications: string[],
+  currentLeg?: Leg
 ): NotificationEvent | null {
-  if (distanceFromRoute > 200) {
+  // 200 m is a walking allowance. On a bike a wrong turn puts that much
+  // sideways distance between you and the route in well under a minute, and
+  // every extra second spent off-route is another block to backtrack — so react
+  // sooner. Still generous enough to absorb GPS scatter and a parallel bike
+  // path running alongside the planned street.
+  const threshold = currentLeg?.mode === 'BICYCLE' ? 120 : 200
+
+  if (distanceFromRoute > threshold) {
     // Stable context: the measured distance changes every GPS tick, so it must
     // not be part of the dedup key or the 120s window never matches.
     const id = generateNotificationId('ROUTE_DEVIATION', 'deviation')
@@ -725,7 +780,9 @@ export function checkForNotifications(
   distanceFromRoute: number,
   sentNotifications: string[],
   config: NotificationConfig,
-  legs?: Leg[]
+  legs?: Leg[],
+  alight?: AlightContext,
+  units: 'imperial' | 'metric' = 'imperial'
 ): NotificationEvent[] {
   if (!config.enabled) {
     return []
@@ -734,14 +791,12 @@ export function checkForNotifications(
   const notifications: NotificationEvent[] = []
 
   // Highest-priority, always-checked alerts.
-  pushIf(
-    notifications,
-    checkApproachingStop(progress, currentLeg, sentNotifications)
-  )
-  pushIf(
-    notifications,
-    checkArrivingStop(progress, currentLeg, sentNotifications)
-  )
+  if (alight) {
+    pushIf(
+      notifications,
+      checkAlightAlerts(progress, currentLeg, alight, sentNotifications)
+    )
+  }
   pushIf(
     notifications,
     checkLeaveSoon(progress, currentLeg, nextLeg, sentNotifications)
@@ -757,7 +812,7 @@ export function checkForNotifications(
   )
   pushIf(
     notifications,
-    checkRouteDeviation(distanceFromRoute, sentNotifications)
+    checkRouteDeviation(distanceFromRoute, sentNotifications, currentLeg)
   )
 
   // At-risk downstream connection (needs the full leg list).
@@ -782,11 +837,18 @@ export function checkForNotifications(
 
   pushIf(notifications, checkTripComplete(progress, sentNotifications))
 
-  // Lower priority: only surface a turn when nothing else is showing.
-  if (notifications.length === 0) {
+  // Turn cues are real navigation now, not the "Continue to X" filler they used
+  // to be, so they are no longer suppressed by any alert that happens to fire in
+  // the same tick. Only the two that would have the rider abandoning this leg
+  // outright still win — following a turn onto a bus you've already missed is
+  // worse than saying nothing.
+  const supersedesTurn = notifications.some(
+    (n) => n.type === 'MISSED_BUS' || n.type === 'CONNECTION_WARNING'
+  )
+  if (!supersedesTurn) {
     pushIf(
       notifications,
-      checkUpcomingTurn(progress, currentLeg, sentNotifications)
+      checkUpcomingTurn(progress, currentLeg, sentNotifications, units)
     )
   }
 

@@ -154,6 +154,10 @@ function getLayerName(overlay, config, intl) {
     case 'otp2':
       // The otp2 type will result in multiple layers, so don't show a warning.
       return type
+    case 'realtimeStops':
+      return intl.formatMessage({ id: 'components.MapLayers.realtimeStops' })
+    case 'OTP-UI-stopsAndStations':
+      return intl.formatMessage({ id: 'components.MapLayers.OTP-UI-stopsAndStations' })
     default:
       console.warn(`No name found for overlay type ${type}.`)
       return type

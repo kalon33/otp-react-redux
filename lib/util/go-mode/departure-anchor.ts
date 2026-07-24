@@ -21,6 +21,10 @@ export const LIVE_REALTIME_STATES = new Set(['UPDATED', 'ADDED', 'MODIFIED'])
 // a different bus.
 export const AUTO_ANCHOR_MIN_GAIN_MS = 120000
 
+// How long a departure stays catchable after its predicted time has passed.
+// Absorbs a late bus that isn't reporting realtime; see getSoonestCatchableMs.
+export const DEPARTURE_OVERDUE_GRACE_MS = 60000
+
 export interface RouteDeparture {
   depMs: number
   realtime: boolean
@@ -98,15 +102,46 @@ export function getRouteDepartures(
  * stop in ~`rideSecondsRemaining`, but OTP's bike-time estimate is
  * conservative — so also surface departures they'd reach by riding up to 25%
  * faster (capped at 3 min). If there's a chance, you see it.
+ *
+ * `graceMs` keeps a departure that is slightly overdue in the running. Standing
+ * at the stop, `rideSecondsRemaining` is ~0, so without it a bus running a
+ * minute late with no realtime update drops out of the list the instant its
+ * scheduled time passes — and the anchor slides onto the NEXT trip while the
+ * rider's bus is still on its way (7/22: "showed 465 at 0135 before mine even
+ * left"). Whether a bus is truly gone is classifyMissedBus's call, not this
+ * function's.
  */
 export function getSoonestCatchableMs(
   departures: RouteDeparture[],
   nowMs: number,
-  rideSecondsRemaining: number
+  rideSecondsRemaining: number,
+  graceMs = 0
 ): number | null {
   const optimismMs = Math.min(180000, rideSecondsRemaining * 1000 * 0.25)
   const reachable = departures.find(
-    (d) => d.depMs - nowMs >= rideSecondsRemaining * 1000 - optimismMs
+    (d) => d.depMs - nowMs >= rideSecondsRemaining * 1000 - optimismMs - graceMs
   )
   return reachable?.depMs ?? null
+}
+
+/**
+ * Whether the anchor should adopt `candidateMs` over the departure currently in
+ * force (a previous anchor, else the plan's board time).
+ *
+ * The comparison must be against the EFFECTIVE departure, never the planned
+ * one: on 2026-07-22 the anchor had already moved to an earlier bus, that bus
+ * ran late with no realtime, and the next trip — still far earlier than the
+ * plan — looked like a fresh gain, so the display skipped to it while the
+ * rider's bus was still coming ("showed 465 at 0135 before mine even left").
+ * The anchor may only ever move earlier; giving up on a bus is the missed-bus
+ * path's call, and that one keeps the rider's route.
+ */
+export function shouldAdoptAnchor(
+  candidateMs: number | null,
+  effectiveDepartureMs: number
+): boolean {
+  if (candidateMs == null || !Number.isFinite(effectiveDepartureMs)) {
+    return false
+  }
+  return effectiveDepartureMs - candidateMs >= AUTO_ANCHOR_MIN_GAIN_MS
 }

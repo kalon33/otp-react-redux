@@ -15,6 +15,7 @@ interface Props {
   onExit?: () => void
   onSelectDeparture?: (epochMs: number | null) => void
   progress: TripProgress
+  units: 'imperial' | 'metric'
 }
 
 const TRANSIT_MODES = new Set(['BUS', 'FERRY', 'RAIL', 'SUBWAY', 'TRAM'])
@@ -26,7 +27,8 @@ const CurrentLegPanel = ({
   nextLeg,
   onExit,
   onSelectDeparture,
-  progress
+  progress,
+  units
 }: Props) => {
   const isTransit = TRANSIT_MODES.has(leg.mode)
   const isWalking = leg.mode === 'WALK' || leg.mode === 'BICYCLE'
@@ -45,6 +47,7 @@ const CurrentLegPanel = ({
           onExit={onExit}
           onSelectDeparture={onSelectDeparture}
           progress={progress}
+          units={units}
         />
       )}
       {/* Fallback: unknown modes get walking navigation */}
@@ -57,6 +60,7 @@ const CurrentLegPanel = ({
           onExit={onExit}
           onSelectDeparture={onSelectDeparture}
           progress={progress}
+          units={units}
         />
       )}
     </LegPanelContainer>

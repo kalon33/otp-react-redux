@@ -3,10 +3,15 @@ import React, { useMemo } from 'react'
 import type { Leg } from '@opentripplanner/types'
 
 import {
+  asContinuationWithIntl,
+  formatCueDistance
+} from '../../util/go-mode/turn-by-turn'
+import {
   getLegRouteId,
   getRouteDepartures,
   getSoonestCatchableMs
 } from '../../util/go-mode/departure-anchor'
+import { getWalkingInstructionWithIntl } from '../../util/go-mode/progress-calculator'
 import type { TripProgress } from '../../util/go-mode/progress-calculator'
 
 import {
@@ -33,6 +38,7 @@ interface Props {
   onExit?: () => void
   onSelectDeparture?: (epochMs: number | null) => void
   progress: TripProgress
+  units: 'imperial' | 'metric'
 }
 
 /**
@@ -53,7 +59,8 @@ const WalkingNavigation = ({
   nextLeg,
   onExit,
   onSelectDeparture,
-  progress
+  progress,
+  units
 }: Props) => {
   const intl = useIntl()
 
@@ -67,13 +74,13 @@ const WalkingNavigation = ({
   const transitEmoji = (mode?: string): string => {
     switch (mode) {
       case 'RAIL':
-        return '🚆'
+        return '\ud83d\ude86'
       case 'SUBWAY':
-        return '🚇'
+        return '\ud83d\ude87'
       case 'TRAM':
-        return '🚊'
+        return '\ud83d\ude8a'
       default:
-        return '🚌'
+        return '\ud83d\ude8c'
     }
   }
 
@@ -97,7 +104,29 @@ const WalkingNavigation = ({
   const route = nextLeg?.routeShortName || nextLeg?.routeLongName || ''
   const stopName = nextLeg?.from?.name || leg.to.name
   const isBike = leg.mode === 'BICYCLE'
-  const accessEmoji = isBike ? '🚲' : '🚶'
+  const accessEmoji = isBike ? '\ud83d\udeb2' : '\ud83d\udeb6'
+
+  // Turn-by-turn guidance for this access leg, when the leg carries steps.
+  // Use localized version
+  const walkingInstruction = getWalkingInstructionWithIntl(
+    leg,
+    progress.currentLegProgress / 100,
+    intl
+  )
+
+  const turnLine =
+    walkingInstruction.nextTurnCue && walkingInstruction.distanceToNextTurn != null
+      ? `${walkingInstruction.nextTurnCue.instruction} \u00b7 ${formatCueDistance(
+          walkingInstruction.distanceToNextTurn,
+          units
+        )}`
+      : null
+  const thenLine = walkingInstruction.followingTurnCue
+    ? intl.formatMessage(
+        { defaultMessage: 'then {turn}', id: 'components.GoMode.thenTurn' },
+        { turn: asContinuationWithIntl(walkingInstruction.followingTurnCue.instruction, intl) }
+      )
+    : null
 
   const nextLegRouteId = getLegRouteId(nextLeg)
 
@@ -130,7 +159,7 @@ const WalkingNavigation = ({
       routeDepartures.some(
         (d) => d.depMs === effectiveDepartureMs && d.realtime
       ),
-    [routeDepartures, effectiveDepartureMs]
+    [effectiveDepartureMs, routeDepartures]
   )
 
   const busInSeconds = effectiveDepartureMs
@@ -195,13 +224,16 @@ const WalkingNavigation = ({
           }
         )
   } else {
-    // Plain walk/bike leg with no transit connection next.
+    // Plain walk/bike leg with no transit connection next. The turn is the only
+    // thing to act on here, so it gets the sub line and the one after it the
+    // foot — nothing else is competing for the space.
     eyebrow = intl.formatMessage(
       { defaultMessage: '{emoji} To {stop}', id: 'components.GoMode.toStop' },
       { emoji: accessEmoji, stop: leg.to.name }
     )
     hero = formatMinutes(rideSecondsRemaining)
-    sub = progress.nextInstruction || null
+    sub = turnLine || walkingInstruction.nextInstruction || null
+    foot = thenLine
   }
 
   return (
@@ -230,6 +262,9 @@ const WalkingNavigation = ({
         )}
         {sub && <NavSub>{sub}</NavSub>}
         {foot && <NavFoot>{foot}</NavFoot>}
+        {/* Riding to a bus: the departure stays the headline, but the rider
+            still needs to know which way to go to reach the stop. */}
+        {isNextLegTransit && turnLine && <NavFoot>{turnLine}</NavFoot>}
 
         {showExtras && (
           <NavExtras>
@@ -297,4 +332,4 @@ const WalkingNavigation = ({
   )
 }
 
-export default WalkingNavigation
+export default React.memo(WalkingNavigation)

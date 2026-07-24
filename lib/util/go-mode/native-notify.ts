@@ -16,13 +16,47 @@
  * server and no account — the app process is already alive in the background
  * during a trip (continuous location session), so scheduling an immediate
  * notification from JS works with the screen locked.
+ *
+ * This is also the whole story for delivering guidance to a WATCH. A system
+ * notification raised here is forwarded by iOS over ANCS (the Apple
+ * Notification Center Service — the standard BLE notification protocol) to
+ * whatever watch is paired: Garmin, Apple Watch, Fitbit, Wear-OS-on-iOS. There
+ * is deliberately no per-watch code anywhere — the watch is just an ANCS
+ * consumer, so anything that reaches the phone's notification centre reaches
+ * the wrist for free.
  */
 
 export interface PushPayload {
+  /**
+   * Stable notification id. Reusing one makes iOS REPLACE the existing
+   * notification instead of stacking a new one — the mechanism behind the
+   * sticky per-turn card, which holds one entry on the wrist and swaps its
+   * contents at each turn. Omit for one-off alerts, which each want their own
+   * entry. Pair with {@link cancelPush} to clear a stable-id notification.
+   */
+  id?: number
   message: string
+  /**
+   * Deliver without lighting the screen or buzzing (iOS `.passive`
+   * interruption level). Used for the sticky turn card: it must update the one
+   * wrist entry silently, because the turns that deserve a buzz already went
+   * out on their own alerting notification.
+   *
+   * Supported natively by @capacitor/local-notifications — it maps the
+   * "passive" string onto UNNotificationInterruptionLevel.passive. Older
+   * shells that don't recognise the key ignore it and alert normally.
+   */
+  passive?: boolean
   priority?: number
   title: string
 }
+
+/**
+ * Reserved id for the sticky turn card. Any value works so long as it is stable
+ * and can't collide with the `Date.now()`-derived ids of one-off alerts — those
+ * are epoch-millisecond timestamps, so a small constant is permanently safe.
+ */
+export const TURN_CARD_NOTIFICATION_ID = 1
 
 function bridge(): any | null {
   const cap = (window as any).Capacitor
@@ -69,14 +103,33 @@ export async function sendPush(payload: PushPayload): Promise<void> {
           body: payload.message,
           // Millisecond clock truncated to a positive int (plugin id limit);
           // alerts are seconds apart so collisions don't happen in practice.
-          id: Date.now() & 0x7fffffff,
+          id: payload.id ?? Date.now() & 0x7fffffff,
+          interruptionLevel: payload.passive ? 'passive' : undefined,
           sound:
-            payload.priority && payload.priority > 0 ? 'default' : undefined,
+            !payload.passive && payload.priority && payload.priority > 0
+              ? 'default'
+              : undefined,
           title: payload.title
         }
       ]
     })
   } catch {
     // Best-effort: a missing/failed notification must not disrupt navigation.
+  }
+}
+
+/**
+ * Clear a previously scheduled notification by its stable id. Used to drop the
+ * sticky turn card once there is no current turn to show (the rider boarded, or
+ * the trip ended), so the wrist doesn't keep displaying a turn that no longer
+ * applies. No-op in a browser; failures swallowed, same as {@link sendPush}.
+ */
+export async function cancelPush(id: number): Promise<void> {
+  const plugin = bridge()
+  if (!plugin) return
+  try {
+    await plugin.cancel({ notifications: [{ id }] })
+  } catch {
+    // Best-effort: clearing is cosmetic and must never disrupt navigation.
   }
 }

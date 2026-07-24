@@ -746,18 +746,25 @@ export const BoardingOverlay = styled.div`
   z-index: 3000;
 `
 
-export const BoardingSheet = styled.div`
+// $expanded mirrors the results screen's expand-map/show-results toggle: the
+// sheet sits over the live map, so shrinking it is how the rider gets the map
+// back (and how a tapped leg's zoom becomes visible). Omitting the prop keeps
+// the original fixed height — BoardingPrompt shares this sheet and doesn't
+// toggle.
+export const BoardingSheet = styled.div<{ $expanded?: boolean }>`
   animation: ${slideUp} 0.3s ease-out;
   background: #fff;
   border-radius: 16px 16px 0 0;
   bottom: 0;
   box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.15);
   left: 0;
-  max-height: 70vh;
+  max-height: ${(p) =>
+    p.$expanded === undefined ? '70vh' : p.$expanded ? '85vh' : '40vh'};
   overflow-y: auto;
   padding: 20px 16px;
   position: fixed;
   right: 0;
+  transition: max-height 300ms;
   z-index: 3001;
 `
 
@@ -956,6 +963,24 @@ export const SheetHeader = styled.div`
   margin-bottom: 4px;
 `
 
+// Map/list toggle for the trip sheet. Deliberately quiet next to the close
+// button — it mirrors the results screen's ExpandMapButton, which is also a
+// small secondary control rather than a primary action.
+export const SheetExpandButton = styled.button`
+  background: #f2f2f2;
+  border: none;
+  border-radius: 999px;
+  color: #333;
+  cursor: pointer;
+  font-size: 13px;
+  margin-right: 8px;
+  padding: 6px 12px;
+
+  &:active {
+    background: #e2e2e2;
+  }
+`
+
 export const SheetCloseButton = styled.button`
   background: none;
   border: none;
@@ -1007,16 +1032,6 @@ export const LegSubtitle = styled.div`
   font-size: 13px;
 `
 
-export const LegTime = styled.div`
-  color: #444;
-  flex-shrink: 0;
-  font-size: 13px;
-  font-weight: 600;
-  padding-top: 1px;
-  text-align: right;
-  white-space: nowrap;
-`
-
 export const WaitNote = styled.div`
   align-items: center;
   color: #8a5a00;
@@ -1049,31 +1064,4 @@ export const StopDot = styled.span<{ $next?: boolean; $passed?: boolean }>`
   flex-shrink: 0;
   height: ${(p) => (p.$next ? 10 : 7)}px;
   width: ${(p) => (p.$next ? 10 : 7)}px;
-`
-
-export const AltRow = styled.div`
-  align-items: center;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  display: flex;
-  gap: 12px;
-  justify-content: space-between;
-  margin-bottom: 8px;
-  padding: 12px;
-`
-
-export const AltSwitchButton = styled.button`
-  background: #2196f3;
-  border: none;
-  border-radius: 6px;
-  color: #fff;
-  cursor: pointer;
-  flex-shrink: 0;
-  font-size: 14px;
-  font-weight: 600;
-  padding: 8px 16px;
-
-  &:active {
-    opacity: 0.8;
-  }
 `
