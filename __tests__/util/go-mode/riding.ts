@@ -48,6 +48,31 @@ describe('go-mode riding reducer', () => {
     expect(goMode(set, transitionLeg({ legIndex: 3 })).riding).not.toBeNull()
   })
 
+  it('TRANSITION_LEG resets routeMatch progress to the start of the new leg', () => {
+    // Manual "I got off here"/onboard transitions used to inherit the old
+    // leg's ~1.0 progress, flashing "1 stop remaining" (and its GET READY
+    // banner) until the next GPS tick recomputed.
+    const withMatch = {
+      ...goMode(initial, setRiding(riding)),
+      routeMatch: {
+        distanceFromRoute: 12,
+        isOnRoute: true,
+        legIndex: 1,
+        nearestPoint: [44.9, -93.2],
+        progressAlongLeg: 0.98,
+        progressAlongSegment: 0.6,
+        segmentIndex: 7
+      }
+    } as any
+    const next = goMode(withMatch, transitionLeg({ legIndex: 2 }))
+    expect(next.routeMatch).toMatchObject({
+      legIndex: 2,
+      progressAlongLeg: 0,
+      progressAlongSegment: 0,
+      segmentIndex: 0
+    })
+  })
+
   it('START_GO_MODE re-anchors riding onto the new itinerary by tripId', () => {
     const set = goMode(initial, setRiding(riding))
     const itinerary: any = {

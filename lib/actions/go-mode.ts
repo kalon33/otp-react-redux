@@ -22,6 +22,7 @@ import {
   checkForNotifications,
   checkMissedBus,
   classifyMissedBus,
+  findBoardLegIndex,
   shouldAutoReroute,
   showNotification
 } from '../util/go-mode/notification-service'
@@ -31,6 +32,12 @@ import {
   shouldShowBoardingPrompt,
   speedAdjustedRadius
 } from '../util/go-mode/vehicle-matching'
+import {
+  findVehicleById,
+  findVehicleForTrip,
+  shouldRebindRidingTrip,
+  shouldReplanBoardedEarlier
+} from '../util/go-mode/transit-trust'
 import { getRoutingProfile } from '../util/routing-profiles'
 import {
   calculateDistance,
@@ -169,10 +176,6 @@ let lastPacingCard: PacingCardState | null = null
 // departure-override reset), so it must run once per leg. The route match is
 // recomputed from raw position on every tick and cannot carry that fact.
 let lastTransitionedLegIndex: number | null = null
-
-// You can't be aboard a bus that hasn't left yet: riding this much before the
-// planned board time proves the rider caught an earlier departure.
-const EARLY_BOARD_MIN_MS = 120000
 
 // How long the rider must stay off-route before the sticky "riding" fact is
 // dropped. GPS noise and tunnels produce transient off-route ticks; only a
@@ -2194,11 +2197,27 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         matchedLeg.tripId ||
         riding?.tripId ||
         null
+      // Rebind hysteresis: rewriting riding.tripId to a DIFFERENT trip arms
+      // the boarded-earlier replan, so it needs sustained consistent evidence
+      // (see shouldRebindRidingTrip). On 7/29 a two-tick stale-feed flap onto
+      // the opposite-direction Orange Line rebound the ride and cascaded into
+      // auto-replans. When a rebind is disallowed, refreshes (legIndex change,
+      // offRouteSince clear) still go out with the EXISTING trip/vehicle.
+      const rebindAllowed = shouldRebindRidingTrip(
+        riding,
+        ridingTripId,
+        matchedLeg,
+        goMode.vehicleMatch
+      )
+      const nextTripId = rebindAllowed ? ridingTripId : riding?.tripId ?? null
+      const nextVehicleId = rebindAllowed
+        ? vehicleMatchNow?.vehicleId ?? riding?.vehicleId ?? null
+        : riding?.vehicleId ?? null
       if (
         aboard &&
         (!riding ||
           riding.legIndex !== routeMatch.legIndex ||
-          riding.tripId !== ridingTripId ||
+          riding.tripId !== nextTripId ||
           riding.offRouteSince != null)
       ) {
         dispatch(
@@ -2210,8 +2229,8 @@ export function handlePositionUpdate(position: GeolocationPosition) {
             routeId: getLegRouteId(matchedLeg),
             routeShortName:
               matchedLeg.routeShortName ?? matchedLeg.route?.shortName ?? null,
-            tripId: ridingTripId,
-            vehicleId: vehicleMatchNow?.vehicleId ?? riding?.vehicleId ?? null
+            tripId: nextTripId,
+            vehicleId: nextVehicleId
           })
         )
       }
@@ -2417,8 +2436,37 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     )
 
     // Missed boarding? Judged outside checkForNotifications because it needs
-    // live board times, the sticky riding fact, and the raw GPS fix.
+    // live board times, the sticky riding fact, and the raw GPS fix. The
+    // planned trip's own vehicle record rides along so the classifier can
+    // cross-check a "departed" epoch against where the bus actually is (7/29:
+    // the epoch said departed while bus 8140 was still pulling in).
+    const boardLegIndex = findBoardLegIndex(itinerary.legs, routeMatch.legIndex)
+    const boardLeg: any =
+      boardLegIndex >= 0 ? itinerary.legs[boardLegIndex] : null
+    const boardVehicleRecord = boardLeg
+      ? findVehicleForTrip(
+          state.otp?.transitIndex?.routes?.[getLegRouteId(boardLeg) ?? '']
+            ?.vehicles,
+          boardLeg.trip?.gtfsId || boardLeg.tripId,
+          currentTime.getTime()
+        )
+      : null
     const missedCtx = classifyMissedBus({
+      boardVehicle: boardVehicleRecord
+        ? {
+            ageSec: boardVehicleRecord.ageSec,
+            distanceToBoardStopM:
+              boardLeg?.from?.lat != null && boardLeg?.from?.lon != null
+                ? calculateDistance(
+                    boardVehicleRecord.vehicle.lat,
+                    boardVehicleRecord.vehicle.lon,
+                    boardLeg.from.lat,
+                    boardLeg.from.lon
+                  )
+                : null,
+            nextStopId: boardVehicleRecord.vehicle.nextStopId ?? null
+          }
+        : null,
       currentLegIndex: routeMatch.legIndex,
       departureOverrideMs: departureOverride,
       legs: itinerary.legs,
@@ -2613,19 +2661,37 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         ) {
           return false
         }
-        const plannedTripId =
-          (ridingLeg as any)?.trip?.gtfsId || (ridingLeg as any)?.tripId
+        // The proof gates live in shouldReplanBoardedEarlier: a trusted match
+        // on a different trip must also be sustained (a flap can't arm it),
+        // same-headsign (an opposite-direction same-route vehicle is never
+        // "the earlier bus you boarded" — 7/29), and backed by a fresh feed
+        // record for the matched vehicle.
         const matched = goMode.vehicleMatch?.match
-        const tripMismatch =
-          (matched?.confidence === 'confirmed' ||
-            matched?.confidence === 'high') &&
-          matched?.tripId != null &&
-          plannedTripId != null &&
-          matched.tripId !== plannedTripId
-        const aboardBeforePlanned =
-          currentTime.getTime() <
-          Number(ridingLeg.startTime) - EARLY_BOARD_MIN_MS
-        if (!tripMismatch && !aboardBeforePlanned) return false
+        const ridingVehicles =
+          state.otp?.transitIndex?.routes?.[
+            riding.routeId ?? getLegRouteId(ridingLeg as Leg) ?? ''
+          ]?.vehicles
+        const matchedRecord =
+          findVehicleById(
+            ridingVehicles,
+            matched?.vehicleId,
+            currentTime.getTime()
+          ) ??
+          findVehicleForTrip(
+            ridingVehicles,
+            matched?.tripId,
+            currentTime.getTime()
+          )
+        if (
+          !shouldReplanBoardedEarlier({
+            nowMs: currentTime.getTime(),
+            ridingLeg: ridingLeg as Leg,
+            vehicleMatchState: goMode.vehicleMatch,
+            vehicleRecord: matchedRecord
+          })
+        ) {
+          return false
+        }
         earlyBoardReplan = {
           attempts:
             earlyBoardReplan?.key === boardingKey
@@ -2749,6 +2815,8 @@ export function performVehicleMatching(routeId: string) {
     // Widen the match radius by rider speed: on a moving bus the GTFS-RT
     // position lags behind the rider (freeway BRT can outrun the feed by
     // several hundred meters), so fixed walking-scale radii never match.
+    // Speed also feeds the direction gate — headings only count against a
+    // candidate while the rider is actually moving.
     const riderSpeed = userPos.coords.speed
     const matchResult = matchUserToVehicle(
       userPos.coords.latitude,
@@ -2757,7 +2825,8 @@ export function performVehicleMatching(routeId: string) {
       vehicles,
       routeId,
       previousMatch,
-      speedAdjustedRadius(80, riderSpeed)
+      speedAdjustedRadius(80, riderSpeed),
+      riderSpeed
     )
 
     // Track consecutive matches

@@ -66,6 +66,19 @@ const FEED_LAG_SECONDS = 45
 // Never widen past this — beyond it "nearby" stops meaning anything.
 const MAX_ADJUSTED_RADIUS_METERS = 2500
 
+// Reject only clearly OPPOSITE vehicles: 120° absorbs GPS heading noise where
+// 90° would clip merges and curves. On 7/29 the northbound Orange Line across
+// I-35W (heading ~0° vs the rider's 179°) hijacked the match because heading
+// was only a ±10m tiebreaker; direction alone should have ruled it out.
+export const OPPOSING_HEADING_MIN_DEG = 120
+// Headings are junk when stationary — the direction gate applies only while
+// BOTH the rider and the vehicle are actually moving.
+export const MIN_SPEED_FOR_HEADING_MPS = 3
+// A challenger must beat the incumbent vehicle's distance by this margin to
+// displace it. Small against the 845m+ speed-widened radius; decisive against
+// the 7/29 flap, where the wrong bus won by 5m of stale feed distance.
+export const INCUMBENT_SWITCH_MARGIN_M = 150
+
 /**
  * Widen a proximity radius by how far the rider outruns the realtime feed. A
  * stationary rider keeps the tight base radius; on a moving bus (e.g. freeway
@@ -128,9 +141,11 @@ function headingDifference(h1: number, h2: number): number {
  * Algorithm:
  * 1. Filter vehicles within `proximityMeters` (default 80m; callers widen it
  *    via speedAdjustedRadius when the rider is moving — see feed-lag note)
- * 2. Prefer vehicles on the expected route (patternId contains routeId)
- * 3. Use heading correlation as tiebreaker
- * 4. Boost confidence if same vehicle matched consecutively (via previousMatch)
+ * 2. Drop clearly opposite-direction vehicles (both parties moving)
+ * 3. Prefer vehicles on the expected route (patternId contains routeId)
+ * 4. Use heading correlation as tiebreaker
+ * 5. Keep the incumbent match unless a challenger clearly beats it
+ * 6. Boost confidence if same vehicle matched consecutively (via previousMatch)
  */
 export function matchUserToVehicle(
   userLat: number,
@@ -139,7 +154,8 @@ export function matchUserToVehicle(
   vehicles: VehiclePosition[],
   expectedRouteId: string | null,
   previousMatch: VehicleMatchResult | null,
-  proximityMeters = 80
+  proximityMeters = 80,
+  userSpeedMps: number | null = null
 ): VehicleMatchResult {
   const noMatch: VehicleMatchResult = {
     confidence: 'none',
@@ -152,7 +168,7 @@ export function matchUserToVehicle(
   if (!vehicles || vehicles.length === 0) return noMatch
 
   // Phase 1: Proximity filter
-  const nearby = vehicles
+  let nearby = vehicles
     .map((v) => ({
       distance: calculateDistance(userLat, userLon, v.lat, v.lon),
       vehicle: v
@@ -162,7 +178,31 @@ export function matchUserToVehicle(
 
   if (nearby.length === 0) return noMatch
 
-  // Phase 2: Route filter — prefer vehicles on expected route
+  // Phase 2: Direction gate — a vehicle heading clearly the OPPOSITE way
+  // cannot be the rider's, however close the stale feed says it is (7/29:
+  // rider southbound at 17.4 m/s, the northbound run across the freeway won
+  // the match by 5m). Only judged while both sides are moving fast enough for
+  // headings to mean anything; when the gate empties the list, no match beats
+  // binding the rider to a bus going the other way.
+  if (
+    userHeading != null &&
+    userSpeedMps != null &&
+    userSpeedMps > MIN_SPEED_FOR_HEADING_MPS
+  ) {
+    nearby = nearby.filter(
+      (c) =>
+        !(
+          c.vehicle.heading != null &&
+          c.vehicle.speed != null &&
+          c.vehicle.speed > MIN_SPEED_FOR_HEADING_MPS &&
+          headingDifference(userHeading, c.vehicle.heading) >
+            OPPOSING_HEADING_MIN_DEG
+        )
+    )
+    if (nearby.length === 0) return noMatch
+  }
+
+  // Phase 3: Route filter — prefer vehicles on expected route
   let candidates = nearby
   if (expectedRouteId) {
     const onRoute = nearby.filter((v) =>
@@ -173,7 +213,7 @@ export function matchUserToVehicle(
     }
   }
 
-  // Phase 3: Heading correlation — score each candidate
+  // Phase 4: Heading correlation — score each candidate
   const scored = candidates.map((c) => {
     let headingScore = 0
     if (userHeading != null && c.vehicle.heading != null) {
@@ -192,15 +232,33 @@ export function matchUserToVehicle(
     return b.headingScore - a.headingScore
   })
 
-  const best = scored[0]
+  // Phase 5: Incumbent stickiness — feed-position distances jitter by far
+  // more than a few meters (the bus outruns its own record), so the vehicle
+  // already matched keeps the match unless a challenger CLEARLY beats it. On
+  // 7/29 the flap was 847m vs 852m; a 5m edge is noise, not a new bus.
+  let best = scored[0]
+  if (
+    previousMatch?.vehicleId != null &&
+    best.vehicle.vehicleId !== previousMatch.vehicleId
+  ) {
+    const incumbent = scored.find(
+      (c) => c.vehicle.vehicleId === previousMatch.vehicleId
+    )
+    if (
+      incumbent &&
+      best.distance >= incumbent.distance - INCUMBENT_SWITCH_MARGIN_M
+    ) {
+      best = incumbent
+    }
+  }
   const bestVehicle = best.vehicle
 
-  // Phase 4: Continuity bonus
+  // Phase 6: Continuity bonus
   const isContinuation =
     previousMatch?.vehicleId != null &&
     previousMatch.vehicleId === bestVehicle.vehicleId
 
-  // Phase 5: Confidence scoring
+  // Phase 7: Confidence scoring
   let confidence: MatchConfidence
 
   if (isContinuation) {

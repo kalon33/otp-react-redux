@@ -43,6 +43,14 @@ export interface TripProgress {
 
   // Transit-specific
   stopsRemaining?: number
+  // What produced stopsRemaining. Only set by trust-assessed paths (the
+  // vehicle-sourced producers land with the trust plumbing); absent means a
+  // legacy trusted path.
+  stopsSource?: 'gps' | 'vehicle' | 'vehicle-stop' | 'schedule'
+  // False when the stop count is a guess (stale fix, degenerate stop list) —
+  // consumers must not alert on it. Absent = not assessed, treated as
+  // trusted so untouched legacy paths don't regress.
+  stopsTrusted?: boolean
   timeRemaining: number
   // Seconds until next transit leg departs (walking legs only)
   timeUntilNextDeparture?: number

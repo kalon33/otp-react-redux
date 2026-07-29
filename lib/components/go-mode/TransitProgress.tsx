@@ -50,8 +50,17 @@ const TransitProgress = ({
 }: Props) => {
   const intl = useIntl()
 
+  // Only an assessed distrust suppresses (stopsTrusted is unset on legacy
+  // trusted paths); a deviated route match means the count is being measured
+  // against a leg the rider may not be on. On 7/29 a cascade of wrong replans
+  // put a GET READY banner up off legIndex 0 / stopsRemaining 1 of an
+  // itinerary the rider never chose.
+  const stopsTrusted = progress.stopsTrusted !== false
+
   const shouldShowAlert =
-    progress.stopsRemaining === 2 || progress.stopsRemaining === 1
+    (progress.stopsRemaining === 2 || progress.stopsRemaining === 1) &&
+    stopsTrusted &&
+    progress.status !== 'deviated'
 
   const isTracking =
     vehicleMatch?.confidence === 'confirmed' ||
@@ -73,8 +82,10 @@ const TransitProgress = ({
         <ModeIcon>{getModeIcon(leg.mode)}</ModeIcon>
         <div style={{ flex: 1, minWidth: 0 }}>
           <RouteName>{leg.routeShortName || leg.routeLongName}</RouteName>
-          {/* Compact stops remaining */}
-          {progress.stopsRemaining !== undefined &&
+          {/* Compact stops remaining — never shown from an untrusted count;
+              an approximate substitute would just be fake data. */}
+          {stopsTrusted &&
+            progress.stopsRemaining !== undefined &&
             progress.stopsRemaining > 0 && (
               <RouteDirection>
                 {intl.formatMessage(

@@ -234,6 +234,18 @@ const GoModeMap = ({
   itinerary,
   routeMatch
 }: Props) => {
+  // Two-tick smoothing for the deviation banner, symmetric with the
+  // notification-side input (prevDistanceFromRoute in actions/go-mode): a
+  // single off-route GPS spike used to flash "5246m from route" over the map
+  // (7/29). Show only when the previous tick was also off-route, and show the
+  // smaller of the two distances.
+  const prevOffRouteDistanceRef = useRef<number | null>(null)
+  const prevOffRouteDistance = prevOffRouteDistanceRef.current
+  useEffect(() => {
+    prevOffRouteDistanceRef.current =
+      routeMatch && !routeMatch.isOnRoute ? routeMatch.distanceFromRoute : null
+  }, [routeMatch])
+
   // Build GeoJSON for route overlay, with per-leg styling properties.
   // `index` is the ORIGINAL leg index (legs without geometry are dropped), so
   // an active-leg lookup by index stays correct.
@@ -273,9 +285,12 @@ const GoModeMap = ({
       </DefaultMap>
 
       {/* Deviation Warning */}
-      {routeMatch && !routeMatch.isOnRoute && (
+      {routeMatch && !routeMatch.isOnRoute && prevOffRouteDistance != null && (
         <DeviationWarning>
-          {Math.round(routeMatch.distanceFromRoute)}m from route
+          {Math.round(
+            Math.min(routeMatch.distanceFromRoute, prevOffRouteDistance)
+          )}
+          m from route
         </DeviationWarning>
       )}
     </MapContainer>
