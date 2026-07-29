@@ -1,7 +1,8 @@
-diff --git a/node_modules/@opentripplanner/geocoder/esm/apis/photon/index.js b/node_modules/@opentripplanner/geocoder/esm/apis/photon/index.js
-
 diff --git a/node_modules/@opentripplanner/geocoder/esm/geocoders/pelias.js b/node_modules/@opentripplanner/geocoder/esm/geocoders/pelias.js
-@@ -30,6 +30,27 @@
+index 22b87e7..f378ccf 100644
+--- a/node_modules/@opentripplanner/geocoder/esm/geocoders/pelias.js
++++ b/node_modules/@opentripplanner/geocoder/esm/geocoders/pelias.js
+@@ -30,6 +30,27 @@ var PeliasGeocoder = /*#__PURE__*/function (_Geocoder) {
    }
    _inherits(PeliasGeocoder, _Geocoder);
    return _createClass(PeliasGeocoder, [{
@@ -29,9 +30,11 @@ diff --git a/node_modules/@opentripplanner/geocoder/esm/geocoders/pelias.js b/no
      key: "getAutocompleteQuery",
      value:
      /**
-
 diff --git a/node_modules/@opentripplanner/geocoder/esm/geocoders/photon.js b/node_modules/@opentripplanner/geocoder/esm/geocoders/photon.js
-@@ -13,12 +13,24 @@
+index 8825cf4..aaf1de7 100644
+--- a/node_modules/@opentripplanner/geocoder/esm/geocoders/photon.js
++++ b/node_modules/@opentripplanner/geocoder/esm/geocoders/photon.js
+@@ -13,12 +13,24 @@ import Geocoder from "./abstract-geocoder";
  // eslint-disable-next-line prettier/prettier
  
  var generateLabel = function generateLabel(properties) {
@@ -58,16 +61,15 @@ diff --git a/node_modules/@opentripplanner/geocoder/esm/geocoders/photon.js b/no
      if (value.length > 0) {
        propertyList.push(value);
      }
-
-diff --git a/node_modules/@opentripplanner/geocoder/lib/apis/photon/index.js b/node_modules/@opentripplanner/geocoder/lib/apis/photon/index.js
-
 diff --git a/node_modules/@opentripplanner/geocoder/lib/geocoders/pelias.js b/node_modules/@opentripplanner/geocoder/lib/geocoders/pelias.js
-@@ -27,7 +27,26 @@
-    * This function fills in some more fields of the query
-    * from the existing values in the GeocoderConfig.
-    */
--  getAutocompleteQuery(query) {
-+    /**
+index 461028d..b85676b 100644
+--- a/node_modules/@opentripplanner/geocoder/lib/geocoders/pelias.js
++++ b/node_modules/@opentripplanner/geocoder/lib/geocoders/pelias.js
+@@ -21,6 +21,25 @@ const DEFAULT_LAYERS = "address,venue,street,intersection";
+  * @extends Geocoder
+  */
+ class PeliasGeocoder extends _abstractGeocoder.default {
++  /**
 +   * Override autocomplete to fall back to /v1/search (which uses libpostal)
 +   * when autocomplete returns no results.
 +   */
@@ -86,13 +88,14 @@ diff --git a/node_modules/@opentripplanner/geocoder/lib/geocoders/pelias.js b/no
 +      });
 +  }
 +
-+getAutocompleteQuery(query) {
-     const {
-       apiKey,
-       baseUrl,
-
+   /**
+    * Generate an autocomplete query specifically for the Pelias API. The
+    * `sources` parameter is a Pelias-specific option.
 diff --git a/node_modules/@opentripplanner/geocoder/lib/geocoders/photon.js b/node_modules/@opentripplanner/geocoder/lib/geocoders/photon.js
-@@ -10,12 +10,24 @@
+index e53d0ec..db7ca53 100644
+--- a/node_modules/@opentripplanner/geocoder/lib/geocoders/photon.js
++++ b/node_modules/@opentripplanner/geocoder/lib/geocoders/photon.js
+@@ -10,12 +10,24 @@ var _abstractGeocoder = _interopRequireDefault(require("./abstract-geocoder"));
  // eslint-disable-next-line prettier/prettier
  
  const generateLabel = properties => {
