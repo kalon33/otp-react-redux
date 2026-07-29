@@ -1,0 +1,124 @@
+diff --git a/node_modules/@opentripplanner/geocoder/esm/geocoders/pelias.js b/node_modules/@opentripplanner/geocoder/esm/geocoders/pelias.js
+index 22b87e7..f378ccf 100644
+--- a/node_modules/@opentripplanner/geocoder/esm/geocoders/pelias.js
++++ b/node_modules/@opentripplanner/geocoder/esm/geocoders/pelias.js
+@@ -30,6 +30,27 @@ var PeliasGeocoder = /*#__PURE__*/function (_Geocoder) {
+   }
+   _inherits(PeliasGeocoder, _Geocoder);
+   return _createClass(PeliasGeocoder, [{
++    key: "autocomplete",
++    value:
++    /**
++     * Override autocomplete to fall back to /v1/search (which uses libpostal)
++     * when autocomplete returns no results.
++     */
++    function autocomplete(query) {
++      var _this = this;
++      return this.api
++        .autocomplete(this.getAutocompleteQuery(query))
++        .then(this.rewriteAutocompleteResponse.bind(this))
++        .then(function (response) {
++          var features = response === null || response === void 0 ? void 0 : response.features;
++          if (features && features.length === 0 && query.text && query.text.length >= 8) {
++            return _this.api
++              .search(_this.getSearchQuery({ text: query.text }))
++              .then(_this.rewriteAutocompleteResponse.bind(_this));
++          }
++          return response;
++        });
++    },
+     key: "getAutocompleteQuery",
+     value:
+     /**
+diff --git a/node_modules/@opentripplanner/geocoder/esm/geocoders/photon.js b/node_modules/@opentripplanner/geocoder/esm/geocoders/photon.js
+index 8825cf4..aaf1de7 100644
+--- a/node_modules/@opentripplanner/geocoder/esm/geocoders/photon.js
++++ b/node_modules/@opentripplanner/geocoder/esm/geocoders/photon.js
+@@ -13,12 +13,24 @@ import Geocoder from "./abstract-geocoder";
+ // eslint-disable-next-line prettier/prettier
+ 
+ var generateLabel = function generateLabel(properties) {
++  // Combine housenumber with street for better address formatting
++  var housenumber = properties.housenumber ? "" + properties.housenumber : "";
++  var street = properties.street ? "" + properties.street : "";
++  var streetAddress = "";
++  if (housenumber && street) {
++    streetAddress = "" + housenumber + " " + street;
++  } else if (street) {
++    streetAddress = street;
++  } else if (housenumber) {
++    streetAddress = housenumber;
++  }
++  var modifiedProperties = _objectSpread(_objectSpread({}, properties), {}, { street: streetAddress });
+   var propertyList = [];
+   ["name", "street", "district", "state", "postcode", "city", "country"].forEach(function (propertyName) {
+-    if (typeof properties[propertyName] === "undefined") {
++    if (typeof modifiedProperties[propertyName] === "undefined") {
+       return;
+     }
+-    var value = "".concat(properties[propertyName]);
++    var value = "".concat(modifiedProperties[propertyName]);
+     if (value.length > 0) {
+       propertyList.push(value);
+     }
+diff --git a/node_modules/@opentripplanner/geocoder/lib/geocoders/pelias.js b/node_modules/@opentripplanner/geocoder/lib/geocoders/pelias.js
+index 461028d..b85676b 100644
+--- a/node_modules/@opentripplanner/geocoder/lib/geocoders/pelias.js
++++ b/node_modules/@opentripplanner/geocoder/lib/geocoders/pelias.js
+@@ -21,6 +21,25 @@ const DEFAULT_LAYERS = "address,venue,street,intersection";
+  * @extends Geocoder
+  */
+ class PeliasGeocoder extends _abstractGeocoder.default {
++  /**
++   * Override autocomplete to fall back to /v1/search (which uses libpostal)
++   * when autocomplete returns no results.
++   */
++  autocomplete(query) {
++    return this.api
++      .autocomplete(this.getAutocompleteQuery(query))
++      .then(this.rewriteAutocompleteResponse.bind(this))
++      .then(response => {
++        const features = response?.features;
++        if (features && features.length === 0 && query.text && query.text.length >= 8) {
++          return this.api
++            .search(this.getSearchQuery({ text: query.text }))
++            .then(this.rewriteAutocompleteResponse.bind(this));
++        }
++        return response;
++      });
++  }
++
+   /**
+    * Generate an autocomplete query specifically for the Pelias API. The
+    * `sources` parameter is a Pelias-specific option.
+diff --git a/node_modules/@opentripplanner/geocoder/lib/geocoders/photon.js b/node_modules/@opentripplanner/geocoder/lib/geocoders/photon.js
+index e53d0ec..db7ca53 100644
+--- a/node_modules/@opentripplanner/geocoder/lib/geocoders/photon.js
++++ b/node_modules/@opentripplanner/geocoder/lib/geocoders/photon.js
+@@ -10,12 +10,24 @@ var _abstractGeocoder = _interopRequireDefault(require("./abstract-geocoder"));
+ // eslint-disable-next-line prettier/prettier
+ 
+ const generateLabel = properties => {
++  // Combine housenumber with street for better address formatting
++  const housenumber = properties.housenumber ? `${properties.housenumber}` : ""
++  const street = properties.street ? `${properties.street}` : ""
++  let streetAddress = ""
++  if (housenumber && street) {
++    streetAddress = `${housenumber} ${street}`
++  } else if (street) {
++    streetAddress = street
++  } else if (housenumber) {
++    streetAddress = housenumber
++  }
++  const modifiedProperties = { ...properties, street: streetAddress }
+   const propertyList = [];
+   ["name", "street", "district", "state", "postcode", "city", "country"].forEach(propertyName => {
+-    if (typeof properties[propertyName] === "undefined") {
++    if (typeof modifiedProperties[propertyName] === "undefined") {
+       return;
+     }
+-    const value = `${properties[propertyName]}`;
++    const value = `${modifiedProperties[propertyName]}`;
+     if (value.length > 0) {
+       propertyList.push(value);
+     }
