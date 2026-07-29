@@ -15,7 +15,6 @@ import SlidingPane from 'react-sliding-pane'
 import type { WrappedComponentProps } from 'react-intl'
 
 import * as callTakerActions from '../../actions/call-taker'
-import * as fieldTripActions from '../../actions/field-trip'
 import * as uiActions from '../../actions/ui'
 import {
   AppMenuItemConfig,
@@ -53,13 +52,11 @@ type AppMenuProps = {
   activeLocale: string
   callTakerEnabled?: boolean
   extraMenuItems?: AppMenuItemConfig[]
-  fieldTripEnabled?: boolean
   language?: LanguageConfig
   languageOptions: Record<string, any> | null
   mailablesEnabled?: boolean
   popupTarget?: string
   resetAndToggleCallHistory?: () => void
-  resetAndToggleFieldTrips?: () => void
   setLocale: (locale: string) => void
   setPopupContent: (url: string) => void
   startOverFromInitialUrl: () => void
@@ -172,13 +169,11 @@ class AppMenu extends Component<
       activeLocale,
       callTakerEnabled,
       extraMenuItems,
-      fieldTripEnabled,
       intl,
       languageOptions,
       mailablesEnabled,
       popupTarget,
       resetAndToggleCallHistory,
-      resetAndToggleFieldTrips,
       setLocale,
       toggleMailables,
       translateExternalLinks
@@ -297,15 +292,6 @@ class AppMenu extends Component<
                 })}
               />
             )}
-            {fieldTripEnabled && (
-              <AppMenuItem
-                icon={<GraduationCap />}
-                onClick={resetAndToggleFieldTrips}
-                text={intl.formatMessage({
-                  id: 'components.AppMenu.fieldTrip'
-                })}
-              />
-            )}
             {mailablesEnabled && (
               <AppMenuItem
                 icon={<Envelope />}
@@ -361,7 +347,6 @@ const mapStateToProps = (state: AppReduxState) => {
     activeLocale: state.otp.ui.locale,
     callTakerEnabled: isModuleEnabled(state, Modules.CALL_TAKER),
     extraMenuItems,
-    fieldTripEnabled: isModuleEnabled(state, Modules.FIELD_TRIP),
     language,
     languageOptions: getLanguageOptions(language),
     mailablesEnabled: isModuleEnabled(state, Modules.MAILABLES),
@@ -372,7 +357,6 @@ const mapStateToProps = (state: AppReduxState) => {
 
 const mapDispatchToProps = {
   resetAndToggleCallHistory: callTakerActions.resetAndToggleCallHistory,
-  resetAndToggleFieldTrips: fieldTripActions.resetAndToggleFieldTrips,
   setLocale: uiActions.setLocale,
   setPopupContent: uiActions.setPopupContent,
   startOverFromInitialUrl: uiActions.startOverFromInitialUrl,
