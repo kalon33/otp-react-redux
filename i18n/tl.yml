@@ -9,32 +9,6 @@ actions:
       mag-save ng mga query.
     fetchCallsError: 'Nagka-error sa pag-fetch ng mga tawag: {err}'
     queryFetchError: 'Nagka-error sa pag-fetch ng mga query: {err}'
-  fieldTrip:
-    addNoteError: 'Error sa pagdaragdag ng tala sa field trip:'
-    confirmOverwriteItineraries: "This action will overwrite a previously planned\
-      \ {outbound, select,\n    true {outbound}\n    other {inbound}\n  } itinerary\
-      \ for this request. Do you wish to continue?\n"
-    deleteItinerariesError: 'Error sa pag-delete ng plano sa field trip:'
-    deleteNoteError: 'Error sa pag-delete ng tala sa field trip:'
-    editSubmitterNotesError: 'Error sa pag-edit ng mga tala ng nagsumite:'
-    fetchFieldTripError: 'Nagka-error sa pag-fetch sa field trip: {err}'
-    fetchFieldTripsError: 'Nagka-error sa pag-fetch sa mga field trip: {err}'
-    fetchTripsForDateError: 'Nagka-error sa pag-fetch ng mga trip para sa petsa ng
-      paglalakbay para sa field trip: {err}'
-    incompatibleTripDateError: Ang pinaplanong petsa ng biyahe ({tripDate}) ay hindi
-      ang hinihiling na araw ng paglalakbay ({requestDate})
-    itineraryCapacityError: 'Hindi Ma-save ang Plano: Hindi ma-save ang planong ito
-      dahil sa kakulangan ng kapasidad sa isa o higit pang sasakyan. Planuhin ulit
-      ang iyong biyahe.'
-    maxTripRequestsExceeded: Nalampasan ang bilang ng mga kahilingan sa biyahe nang
-      walang valid na resulta
-    saveItinerariesError: 'Hindi na-save ang mga itinerary: {err}'
-    setDateError: 'Nagka-error sa pagtatakda ng petsa:'
-    setGroupSizeError: 'Error sa pag-set up ng laki ng grupo:'
-    setPaymentError: 'Error sa pagtatakda ng impormasyon sa pagbabayad:'
-    setRequestStatusError: 'Error sa pagtatakda ng status ng kahilingan:'
-    setTimeError: 'Error setting time:'
-  location:
     deniedAccessAlert: "Naka-block ang access sa lokasyon mo.\nPara gamitin ang kasalukuyang\
       \ lokasyon mo, i-enable ang mga pahintulot sa lokasyon mula sa browser mo, at\
       \ i-reload ang page. \n"
@@ -189,7 +163,6 @@ components:
   AppMenu:
     callHistory: History ng Tawag
     closeMenu: Isara ang Menu
-    fieldTrip: Field Trip
     mailables: Mga Mailable
     networkConnectionLost: Nawala ang koneksyon sa network
     networkConnectionRestored: Naibalik na ang koneksyon sa network

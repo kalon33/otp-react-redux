@@ -8,31 +8,6 @@ actions:
     couldNotFindCallError: Не удалось найти вызов. Отмена запроса на сохранение запросов.
     fetchCallsError: 'Ошибка получения вызовов: {err}'
     queryFetchError: 'Ошибка получения запросов: {err}'
-  fieldTrip:
-    addNoteError: 'Ошибка добавления заметки о поездке:'
-    confirmOverwriteItineraries: "This action will overwrite a previously planned\
-      \ {outbound, select,\n    true {outbound}\n    other {inbound}\n  } itinerary\
-      \ for this request. Do you wish to continue?\n"
-    deleteItinerariesError: 'Ошибка удаления плана поездки:'
-    deleteNoteError: 'Ошибка удаления заметки о поездке:'
-    editSubmitterNotesError: 'Ошибка редактирования заметок отправителя:'
-    fetchFieldTripError: 'Ошибка получения поездки: {err}'
-    fetchFieldTripsError: 'Ошибка получения поездок: {err}'
-    fetchTripsForDateError: 'Ошибка получения поездок на дату поездки: {err}'
-    incompatibleTripDateError: Запланированная дата поездки ({tripDate}) не совпадает
-      с запрашиваемой датой поездки ({requestDate})
-    itineraryCapacityError: Невозможно сохранить план. Этот план невозможно сохранить
-      из-за нехватки мест в одном или нескольких транспортных средствах. Измените
-      план поездки.
-    maxTripRequestsExceeded: Превышено количество запросов на поездку без действительных
-      результатов
-    saveItinerariesError: 'Не удалось сохранить маршруты: {err}'
-    setDateError: 'Ошибка введения данных:'
-    setGroupSizeError: 'Ошибка указания размера группы:'
-    setPaymentError: 'Ошибка указания информации об оплате:'
-    setRequestStatusError: 'Ошибка указания состояния запроса:'
-    setTimeError: 'Error setting time:'
-  location:
     deniedAccessAlert: "Доступ к вашему местоположению заблокирован.\nЧтобы использовать\
       \ ваше текущее местоположение, включите разрешение на определение местоположения\
       \ в браузере и перезагрузите страницу. \n"
@@ -186,7 +161,6 @@ components:
   AppMenu:
     callHistory: История вызовов
     closeMenu: Закрыть меню
-    fieldTrip: Поездка
     mailables: Почтовые отправления
     networkConnectionLost: Сетевое подключение потеряно
     networkConnectionRestored: Сетевое подключение восстановлено
