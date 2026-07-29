@@ -285,7 +285,9 @@ const WalkingNavigation = ({
                   alt: { departureMs: number; realtime: boolean },
                   idx: number
                 ) => {
-                  const minsAway = Math.round((alt.departureMs - nowMs) / 60000)
+                  const minsAway = alt.departureMs && nowMs
+                    ? Math.round((alt.departureMs - nowMs) / 60000)
+                    : null
                   return (
                     <AlternativeDeparture key={idx}>
                       <span
@@ -297,19 +299,26 @@ const WalkingNavigation = ({
                           whiteSpace: 'nowrap' as const
                         }}
                       >
-                        {intl.formatMessage(
-                          {
-                            defaultMessage: 'Next: {time} ({mins} min away)',
-                            id: 'components.GoMode.nextDeparture'
-                          },
-                          {
-                            mins: minsAway,
-                            time: (
-                              <RealtimeTime live={alt.realtime}>
-                                {formatClockTime(alt.departureMs)}
-                              </RealtimeTime>
-                            )
-                          }
+                        {minsAway !== null && alt.departureMs ? (
+                          intl.formatMessage(
+                            {
+                              defaultMessage: 'Next: {time} ({mins} min away)',
+                              id: 'components.GoMode.nextDeparture'
+                            },
+                            {
+                              mins: minsAway,
+                              time: (
+                                <RealtimeTime live={alt.realtime || false}>
+                                  {formatClockTime(alt.departureMs)}
+                                </RealtimeTime>
+                              )
+                            }
+                          )
+                        ) : (
+                          intl.formatMessage({
+                            defaultMessage: 'Next departure',
+                            id: 'components.GoMode.nextDepartureNoInfo'
+                          })
                         )}
                       </span>
                       <UseNextButton

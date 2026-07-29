@@ -903,6 +903,7 @@ components:
     theBus: le bus
     trackingBus: Suivi du bus
     useThisDeparture: Utiliser ce départ
+    nextDepartureNoInfo: Prochain départ
     vehicleDetail: 'Détails du véhicule: {detail}'
     vehicleDistance: À {distance} m
     waitingGPS: Acquisition du signal GPS...

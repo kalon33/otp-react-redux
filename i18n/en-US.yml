@@ -890,6 +890,7 @@ components:
     tripSheetHeading: Trip details
     tripSheetTitle: Your trip
     useThisDeparture: Use this departure
+    nextDepartureNoInfo: Next departure
     vehicleDetail: 'Vehicle details: {detail}'
     vehicleDistance: At {distance} m
     whereToAlight: Where to alight?
