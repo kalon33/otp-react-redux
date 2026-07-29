@@ -74,7 +74,12 @@ import {
   hasNativeNotify,
   sendPush
 } from '../util/go-mode/native-notify'
+import {
+  PACING_CARD_NOTIFICATION_ID,
+  evaluatePacingCard
+} from '../util/go-mode/pacing-card'
 import { asContinuation } from '../util/go-mode/turn-by-turn'
+import type { PacingCardState } from '../util/go-mode/pacing-card'
 
 import {
   fetchOnboardCandidatePlan,
@@ -117,6 +122,20 @@ const LIVE_LEG_TIMES_INTERVAL_MS = 20000
 let lastQuietReplanAt = 0
 const QUIET_REPLAN_MIN_INTERVAL_MS = 60000
 
+// Quiet access-leg replans that keep coming back empty (fetch failed, or the
+// never-force-a-route-change picker rejected everything) must not stay silent
+// forever — the rider is off-route and getting no help. After this many
+// consecutive misses the explicit Switch/Keep reroute card takes over.
+const QUIET_REPLAN_MISS_LIMIT = 2
+let quietReplanMissStreak = 0
+
+// A single wild GPS fix (urban multipath) can put the matched distance
+// kilometers off-route for one tick — 5836 m mid-ride on 7/22, while riding
+// the bus dead on its line. Deviation handling only sees a distance that
+// exceeded reality on the PREVIOUS tick too, so one-tick glitches vanish and
+// sustained drift passes through one tick late.
+let prevDistanceFromRoute: number | null = null
+
 // Auto-anchor bookkeeping (see the throttled block in handlePositionUpdate).
 // The rider's explicit departure pick (or "Reset to planned") must never be
 // fought by the auto-anchor, so a manual selectDeparture locks auto-anchoring
@@ -141,6 +160,10 @@ let earlyBoardReplan: {
 // re-posted only when the turn itself changes — once per turn, not once per GPS
 // tick. Null when no card is showing.
 let lastTurnCardKey: string | null = null
+
+// What the sticky bike-pacing card last showed (see pacing-card.ts). Null when
+// no card is showing.
+let lastPacingCard: PacingCardState | null = null
 
 // A leg transition is side-effectful (vehicle tracking, GPS interval restart,
 // departure-override reset), so it must run once per leg. The route match is
@@ -676,6 +699,8 @@ export function endGoMode() {
 
     // Reset the quiet-replan debounce — a new trip is a fresh slate.
     lastQuietReplanAt = 0
+    quietReplanMissStreak = 0
+    prevDistanceFromRoute = null
 
     // Reset auto-anchor bookkeeping — a new trip is a new decision.
     manualDepartureLock = false
@@ -683,6 +708,8 @@ export function endGoMode() {
     // Clear the sticky turn card so it doesn't linger on the wrist post-trip.
     if (lastTurnCardKey !== null) cancelPush(TURN_CARD_NOTIFICATION_ID)
     lastTurnCardKey = null
+    if (lastPacingCard !== null) cancelPush(PACING_CARD_NOTIFICATION_ID)
+    lastPacingCard = null
     earlyBoardReplan = null
     lastTransitionedLegIndex = null
     missedBusRerouteAttempt = null
@@ -1077,7 +1104,10 @@ export function quietReplanAccessLeg() {
     const legs = itinerary?.legs || []
     const destLeg = legs[legs.length - 1]
     if (!goMode?.isActive || !itinerary || !lastPosition || !destLeg) return
-    if ((goMode.reRoute?.status || 'idle') !== 'idle') return
+    // 'none' (settled empty attempt) is as replannable as 'idle' — see
+    // shouldAutoReroute.
+    const statusNow = goMode.reRoute?.status || 'idle'
+    if (statusNow !== 'idle' && statusNow !== 'none') return
 
     const nowMs = getCurrentTime().getTime()
     if (nowMs - lastQuietReplanAt < QUIET_REPLAN_MIN_INTERVAL_MS) return
@@ -1117,21 +1147,36 @@ export function quietReplanAccessLeg() {
     const { error, itineraries } = await dispatch(
       fetchOnboardCandidatePlan(combo)
     )
-    if (error || !itineraries?.length) return
 
     // Re-check state after the async plan: the rider may have exited Go Mode
     // or a reroute may have started while the request was in flight.
     const after = getState().otp?.goMode
-    if (!after?.isActive || (after.reRoute?.status || 'idle') !== 'idle') return
+    const statusAfter = after?.reRoute?.status || 'idle'
+    if (!after?.isActive || (statusAfter !== 'idle' && statusAfter !== 'none'))
+      return
 
-    const best = pickAccessReplanCandidate(itineraries, {
-      accessMode: currentLeg?.mode,
-      nextTransitRouteId: nextTransitLeg
-        ? getLegRouteId(nextTransitLeg as Leg)
-        : null
-    })
-    if (!best) return
+    const best =
+      error || !itineraries?.length
+        ? null
+        : pickAccessReplanCandidate(itineraries, {
+            accessMode: currentLeg?.mode,
+            nextTransitRouteId: nextTransitLeg
+              ? getLegRouteId(nextTransitLeg as Leg)
+              : null
+          })
+    if (!best) {
+      // Empty fetch or nothing qualifying under the never-force-a-route-change
+      // rule. Repeated misses mean quiet help isn't coming (e.g. no catchable
+      // same-route departure left from here) — hand the decision to the rider
+      // via the Switch/Keep card instead of staying silent forever.
+      quietReplanMissStreak += 1
+      if (quietReplanMissStreak >= QUIET_REPLAN_MISS_LIMIT) {
+        dispatch(reRouteFromCurrentPosition())
+      }
+      return
+    }
 
+    quietReplanMissStreak = 0
     dispatch(beginGoMode(best))
   }
 }
@@ -2056,6 +2101,9 @@ export function advanceToLeg(legIndex: number) {
     // New leg = new upcoming boarding = a fresh auto-anchor decision.
     manualDepartureLock = false
     lastAutoAnchorMs = null
+    // A new leg is also a fresh quiet-replan slate — an egress leg must not
+    // inherit the access leg's miss streak.
+    quietReplanMissStreak = 0
 
     // Update tracking interval for new leg
     const newLeg = legs[legIndex]
@@ -2344,13 +2392,21 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         : null
     }
 
+    // Deviation input is the smaller of this tick's and last tick's matched
+    // distance (see prevDistanceFromRoute above).
+    const persistedDistanceFromRoute = Math.min(
+      routeMatch.distanceFromRoute,
+      prevDistanceFromRoute ?? 0
+    )
+    prevDistanceFromRoute = routeMatch.distanceFromRoute
+
     const units = getState().otp.config?.units || 'imperial'
     const notifications = checkForNotifications(
       progress,
       currentLeg,
       previousLegIndex,
       nextLeg,
-      routeMatch.distanceFromRoute,
+      persistedDistanceFromRoute,
       goMode.notifications?.sentNotifications || [],
       goMode.notifications || {
         enabled: true,
@@ -2447,6 +2503,27 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         lastTurnCardKey = null
         cancelPush(TURN_CARD_NOTIFICATION_ID)
       }
+    }
+
+    // The sticky bike-pacing card (id 2, alongside the turn card): ride time
+    // left, the bus being chased, and the buffer at the stop, so the rider
+    // knows whether to go fast or slow. All cadence decisions live in
+    // evaluatePacingCard.
+    if (!replaying && getState().otp.config.goMode?.pacingCard !== false) {
+      const evaluated = evaluatePacingCard(lastPacingCard, {
+        currentLeg,
+        nextLeg,
+        nowMs: currentTime.getTime(),
+        progress
+      })
+      if (evaluated.post) {
+        sendPush({ id: PACING_CARD_NOTIFICATION_ID, ...evaluated.post })
+      } else if (!evaluated.next && lastPacingCard) {
+        // Boarded (or the leg no longer leads to transit) — drop the card so
+        // the wrist stops advising a ride that's over.
+        cancelPush(PACING_CARD_NOTIFICATION_ID)
+      }
+      lastPacingCard = evaluated.next
     }
 
     // A reroute stuck at 'searching' (both the fetch and its timeout timer
@@ -2571,12 +2648,14 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         })
       )
     } else if (shouldAutoReroute(notifications, reRouteStatus)) {
+      // No connection-warning exclusion here: checkConnectionWarning only ever
+      // fires on transit legs, so on a walk/bike leg it could never be
+      // present — the old check was dead code that read like a policy.
       const offAccessLeg =
         currentLeg &&
         !currentLeg.transitLeg &&
         (currentLeg.mode === 'WALK' || currentLeg.mode === 'BICYCLE') &&
-        notifications.some((n) => n.type === 'ROUTE_DEVIATION') &&
-        !notifications.some((n) => n.type === 'CONNECTION_WARNING')
+        notifications.some((n) => n.type === 'ROUTE_DEVIATION')
       if (offAccessLeg) {
         // Drifted off a walk/bike leg: the rider chose their own way. Quietly
         // re-plan the access path from where they are (car-GPS style) — no

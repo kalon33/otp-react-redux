@@ -885,6 +885,13 @@ describe('shouldAutoReroute', () => {
     )
   })
 
+  it("retries after a settled empty attempt ('none') — one dud reroute must not disable deviation response for the rest of the ride", () => {
+    expect(shouldAutoReroute([makeEvent('ROUTE_DEVIATION')], 'none')).toBe(true)
+    expect(shouldAutoReroute([makeEvent('CONNECTION_WARNING')], 'none')).toBe(
+      true
+    )
+  })
+
   it('ignores non-triggering notifications', () => {
     expect(shouldAutoReroute([makeEvent('APPROACH_STOP')], 'idle')).toBe(false)
     expect(shouldAutoReroute([], 'idle')).toBe(false)
