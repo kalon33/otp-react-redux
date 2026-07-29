@@ -9,6 +9,7 @@ actions:
       mag-save ng mga query.
     fetchCallsError: 'Nagka-error sa pag-fetch ng mga tawag: {err}'
     queryFetchError: 'Nagka-error sa pag-fetch ng mga query: {err}'
+  location:
     deniedAccessAlert: "Naka-block ang access sa lokasyon mo.\nPara gamitin ang kasalukuyang\
       \ lokasyon mo, i-enable ang mga pahintulot sa lokasyon mula sa browser mo, at\
       \ i-reload ang page. \n"

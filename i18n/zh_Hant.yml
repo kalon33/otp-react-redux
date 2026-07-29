@@ -8,6 +8,7 @@ actions:
     couldNotFindCallError: 找不到通話。正在取消儲存查詢請求。
     fetchCallsError: 擷取通話時發生錯誤：{err}
     queryFetchError: 擷取查詢時發生錯誤：{err}
+  location:
     deniedAccessAlert: "系統已封鎖您存取地點的權限。\n若要使用目前的地點，請從瀏覽器啟用地點權限，然後再重新載入頁面。 \n"
     geolocationNotSupportedError: 您的瀏覽器不支援地理位置
     unknownPositionError: 取得位置時發生不明錯誤

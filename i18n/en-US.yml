@@ -8,6 +8,7 @@ actions:
     couldNotFindCallError: Could not find call. Cancelling save queries request.
     fetchCallsError: 'Error fetching calls: {err}'
     queryFetchError: 'Error fetching queries: {err}'
+  location:
     deniedAccessAlert: "Access to your location is blocked.\nTo use your current location,\
       \ enable location permissions from your browser, and reload the page. \n"
     geolocationNotSupportedError: Geolocation not supported by your browser

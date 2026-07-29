@@ -8,6 +8,7 @@ actions:
     couldNotFindCallError: 找不到通话.取消保存查询请求.
     fetchCallsError: '获取通话时出现错误: {err}'
     queryFetchError: '获取查询时出现错误: {err}'
+  location:
     deniedAccessAlert: "访问您的位置被阻止。\n若要使用当前位置，请从浏览器启用位置权限，然后重新加载页面。 \n"
     geolocationNotSupportedError: 您的浏览器不支持地理定位
     unknownPositionError: 获取位置的未知错误

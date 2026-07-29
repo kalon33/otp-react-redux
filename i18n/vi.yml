@@ -9,6 +9,7 @@ actions:
       vấn.
     fetchCallsError: 'Lỗi khi tìm nạp cuộc gọi: {err}'
     queryFetchError: 'Lỗi khi tìm nạp các truy vấn: {err}'
+  location:
     deniedAccessAlert: "Quyền truy cập vào địa điểm của quý vị bị chặn.\nĐể sử dụng\
       \ địa điểm hiện tại của mình, quý vị hãy cho phép sử dụng vị trí trong trình\
       \ duyệt và tải lại trang này. \n"
