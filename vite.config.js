@@ -77,7 +77,9 @@ export default defineConfig({
         '.js': 'jsx'
       },
       plugins: [yamlPlugin()]
-    }
+    },
+    // Exclude @auth0/auth0-react from optimization to avoid using source TSX files
+    exclude: ['@auth0/auth0-react']
   },
   plugins: [
     VitePWA({
