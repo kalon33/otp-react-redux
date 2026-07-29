@@ -33,10 +33,16 @@ import {
   speedAdjustedRadius
 } from '../util/go-mode/vehicle-matching'
 import {
+  assessRiderGpsTrust,
+  findRidingVehicle,
   findVehicleById,
   findVehicleForTrip,
+  isVehicleRecordFresh,
+  refreshConfirmedMatch,
   shouldRebindRidingTrip,
-  shouldReplanBoardedEarlier
+  shouldReplanBoardedEarlier,
+  stopsAheadFromNextStopId,
+  vehicleProgressOnLeg
 } from '../util/go-mode/transit-trust'
 import { getRoutingProfile } from '../util/routing-profiles'
 import {
@@ -64,6 +70,7 @@ import { isTripRecordingEnabled } from '../util/debug-log'
 import { fetchOnboardCandidateRoutes } from '../util/go-mode/onboard-discovery'
 import {
   hasNativeGps,
+  restartNativeGps,
   startNativeGps,
   stopNativeGps
 } from '../util/go-mode/native-gps'
@@ -107,6 +114,26 @@ let gpsPollingIntervalId: ReturnType<typeof setInterval> | null = null
 
 // Module-scoped vehicle position polling interval ID
 let vehiclePositionIntervalId: ReturnType<typeof setInterval> | null = null
+
+// Native fix-staleness watchdog. iOS occasionally wedges a background
+// location watcher without erroring (7/29: minutes of silence mid-ride while
+// the trip state aged in place); the only recovery is tearing the watcher
+// down and starting a new one. Wall-clock, because the whole point is
+// detecting that the position stream — the app's heartbeat — has died.
+let gpsWatchdogIntervalId: ReturnType<typeof setInterval> | null = null
+let lastFixAtMs = 0
+// 45s of silence on a ~1/s stream before restarting — never churns a healthy
+// watcher, still recovers within one missed traffic light.
+const GPS_WATCHDOG_MS = 45000
+// How often the watchdog looks. Cheap check, no dispatch on the happy path.
+const GPS_WATCHDOG_POLL_MS = 30000
+
+function stopGpsWatchdog() {
+  if (gpsWatchdogIntervalId) {
+    clearInterval(gpsWatchdogIntervalId)
+    gpsWatchdogIntervalId = null
+  }
+}
 
 // Reroute-snapshot capture interval (recording only). Periodically records the
 // "alternatives to finish the trip" as a request/response pair so a replay can
@@ -685,7 +712,9 @@ export function endGoMode() {
     }
 
     // Stop the native background-location stream (iOS shell) — ends the blue
-    // location indicator and the battery draw between trips.
+    // location indicator and the battery draw between trips — and its
+    // watchdog, which would otherwise restart the stream it just lost.
+    stopGpsWatchdog()
     stopNativeGps()
 
     // Clean up vehicle position polling
@@ -1867,14 +1896,36 @@ export function startPositionTracking() {
     // browser poll entirely. It keeps delivering fixes with the screen locked
     // (the whole reason the shell exists) at ~1/s — see native-gps.ts.
     if (hasNativeGps()) {
-      startNativeGps(
-        (position) => {
-          if (!simulationActive) dispatch(handlePositionUpdate(position))
-        },
-        (error) => {
-          if (!simulationActive) dispatch(setTrackingError(error as any))
+      const onNativePosition = (position: GeolocationPosition) => {
+        if (!simulationActive) dispatch(handlePositionUpdate(position))
+      }
+      const onNativeError = (error: Error) => {
+        if (!simulationActive) dispatch(setTrackingError(error as any))
+      }
+      startNativeGps(onNativePosition, onNativeError)
+      // Watchdog on the stream itself: a wedged watcher delivers no fix and no
+      // error, so silence is the only symptom. Restart with the SAME handlers
+      // after GPS_WATCHDOG_MS of quiet. Replaced (never stacked) on re-entry —
+      // a mid-trip itinerary switch comes back through here.
+      stopGpsWatchdog()
+      lastFixAtMs = Date.now()
+      gpsWatchdogIntervalId = setInterval(() => {
+        if (simulationActive || !getState().otp?.goMode?.isActive) return
+        const silenceMs = Date.now() - lastFixAtMs
+        if (silenceMs > GPS_WATCHDOG_MS) {
+          // console.warn feeds the debug-log sink (installGlobalErrorCapture),
+          // so a remote device's wedge shows up in the jsonl with its timing.
+          console.warn(
+            `[Go Mode] GPS watchdog: no fix for ${Math.round(
+              silenceMs / 1000
+            )}s — restarting native watcher`
+          )
+          // Reset the clock so a watcher that stays dead restarts once per
+          // silence window, not on every 30s check.
+          lastFixAtMs = Date.now()
+          restartNativeGps(onNativePosition, onNativeError)
         }
-      )
+      }, GPS_WATCHDOG_POLL_MS)
       // Ask for notification permission alongside the location prompt — trip
       // start is the moment the rider understands why. Fire-and-forget; alerts
       // fall back to in-app toasts if declined.
@@ -2136,6 +2187,10 @@ export function advanceToLeg(legIndex: number) {
 
 export function handlePositionUpdate(position: GeolocationPosition) {
   return function (dispatch: any, getState: any) {
+    // Heartbeat for the native GPS watchdog — wall clock, unconditionally:
+    // ANY position arriving proves the stream is alive.
+    lastFixAtMs = Date.now()
+
     const state = getState()
     const goMode = state.otp?.goMode
 
@@ -2260,11 +2315,53 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     // Calculate progress — use simulated clock during simulation, real time for live GPS
     const currentTime = getCurrentTime()
     const departureOverride = goMode.departureOverride ?? null
+
+    // On transit legs, hand progress calculation the trust-assessed inputs for
+    // stop counting: is the rider's own fix sound, and what does their bus's
+    // own feed record say (position projected on the leg, next-stop fact).
+    // On 7/29 a stale fix kept driving the count while the bus knew better.
+    // Simulation/replay fixes carry the sim clock in `timestamp`, so their age
+    // is forced fresh — fixtures replay identically.
+    let transitCtx
+    const legForProgress: any = itinerary.legs[routeMatch.legIndex]
+    if (legForProgress?.transitLeg) {
+      const fixAgeMs =
+        simulationActive || isReplayActive()
+          ? 0
+          : Date.now() - position.timestamp
+      const ridingVehicle = findRidingVehicle(
+        goMode.riding?.routeId
+          ? state.otp?.transitIndex?.routes?.[goMode.riding.routeId]?.vehicles
+          : null,
+        goMode.riding,
+        currentTime.getTime()
+      )
+      const vehicleFresh = isVehicleRecordFresh(ridingVehicle)
+      transitCtx = {
+        riderTrusted: assessRiderGpsTrust({
+          accuracy: position.coords.accuracy,
+          anchorLegIndex: goMode.riding?.legIndex ?? routeMatch.legIndex,
+          fixAgeMs,
+          routeMatch
+        }),
+        vehicleProgress: vehicleFresh
+          ? vehicleProgressOnLeg(legForProgress, ridingVehicle!.vehicle)
+          : null,
+        vehicleStops: vehicleFresh
+          ? stopsAheadFromNextStopId(
+              legForProgress,
+              ridingVehicle!.vehicle.nextStopId
+            )
+          : null
+      }
+    }
+
     const progress = calculateTripProgress(
       currentTime,
       itinerary,
       routeMatch,
-      departureOverride
+      departureOverride,
+      transitCtx
     )
 
     dispatch(updateProgress(progress))
@@ -2809,8 +2906,28 @@ export function performVehicleMatching(routeId: string) {
 
     const previousMatch = goMode.vehicleMatch?.match || null
 
-    // Skip matching if already user-confirmed
-    if (previousMatch?.confidence === 'confirmed') return
+    // A confirmed match never re-matches — but it must not freeze either. On
+    // 7/29 the confirmed record kept its confirmation-time lastSeen/nextStopId
+    // for the whole ride, so a dead feed looked healthy and the next-stop fact
+    // was useless. Refresh distance/lastSeen/nextStopId from the SAME
+    // vehicle's feed record; absent from the feed → dispatch nothing and let
+    // lastSeen age honestly (the badge goes stale at VEHICLE_MATCH_FRESH_MS).
+    if (previousMatch?.confidence === 'confirmed') {
+      const refreshed = refreshConfirmedMatch(
+        previousMatch,
+        vehicles,
+        userPos.coords.latitude,
+        userPos.coords.longitude,
+        Date.now()
+      )
+      if (refreshed) {
+        dispatch({
+          payload: { emptyPolls: 0, match: refreshed },
+          type: UPDATE_VEHICLE_MATCH
+        })
+      }
+      return
+    }
 
     // Widen the match radius by rider speed: on a moving bus the GTFS-RT
     // position lags behind the rider (freeway BRT can outrun the feed by
@@ -3493,11 +3610,13 @@ export function startGpsSimulation(speedMultiplier = 1) {
       gpsSimulationTimeoutId = null
     }
 
-    // Clean up real GPS tracking if running
+    // Clean up real GPS tracking if running. The native watchdog goes with it
+    // — simulated ticks would look like GPS silence and trigger restarts.
     if (gpsPollingIntervalId) {
       clearInterval(gpsPollingIntervalId)
       gpsPollingIntervalId = null
     }
+    stopGpsWatchdog()
 
     // Store in module scope for pause/resume
     simulationCoords = timedPoints
@@ -3602,6 +3721,9 @@ export function startTrackReplay(
       clearInterval(gpsPollingIntervalId)
       gpsPollingIntervalId = null
     }
+    // Replay drives positions itself; the native watchdog would read the
+    // recorded track as GPS silence.
+    stopGpsWatchdog()
 
     simulationCoords = trackToTimedPoints(track)
     simulationPointIndex = 0

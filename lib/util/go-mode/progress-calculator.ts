@@ -1,6 +1,6 @@
 import type { Itinerary, Leg } from '@opentripplanner/types'
 
-import { countStopsAhead } from './next-stop'
+import { countStopsAhead, hasDegenerateStopList } from './next-stop'
 import { getNextCue } from './turn-by-turn'
 import type { RouteMatchResult } from './position-matching'
 import type { StepCue } from './turn-by-turn'
@@ -177,19 +177,93 @@ export function calculateExpectedProgress(
 const STOP_COUNT_MODES = new Set(['BUS', 'RAIL', 'TRAM', 'SUBWAY'])
 
 /**
- * Get transit-specific progress information
+ * Trust-assessed inputs for stop counting on the leg the rider is aboard,
+ * built per tick in handlePositionUpdate. All nullable and entirely optional:
+ * callers without them (legacy paths, demo harness) get today's behavior
+ * with no trust fields set.
+ */
+export interface TransitTrustContext {
+  /** The rider's own fix is sound (fresh, accurate, on THIS leg's route) —
+   * see assessRiderGpsTrust. */
+  riderTrusted: boolean
+  /** The bus's own feed position projected onto the leg (0-1), when fresh and
+   * on the leg's geometry. */
+  vehicleProgress: number | null
+  /** Feed nextStopId resolved against the leg's stop list — exact identity,
+   * no geometry. */
+  vehicleStops: { nextStopName: string; stopsRemaining: number } | null
+}
+
+/**
+ * Get transit-specific progress information. Without a trust context this is
+ * the legacy rider-GPS count, unchanged. With one, sources are tried in trust
+ * order — sound rider GPS, then the bus's own position, then the feed's
+ * next-stop fact — and the result says what produced it; only the final
+ * even-spacing guess is marked untrusted. On 7/29 a stale rider fix kept
+ * counting stops off the wrong position; the bus knew better all along.
  */
 export function getTransitProgress(
+  leg: Leg,
+  progressInLeg: number,
+  transitCtx?: TransitTrustContext
+): {
+  nextStopName?: string
+  stopsRemaining?: number
+  stopsSource?: 'gps' | 'vehicle' | 'vehicle-stop' | 'schedule'
+  stopsTrusted?: boolean
+} {
+  if (!STOP_COUNT_MODES.has(leg.mode as string)) {
+    return {}
+  }
+
+  if (transitCtx) {
+    // A leg that claims intermediate stops but whose usable list collapsed to
+    // just the alight stop can only ever say "1 stop remaining" — geometric
+    // counts from it are never trusted (see hasDegenerateStopList).
+    const degenerate = hasDegenerateStopList(leg)
+    if (transitCtx.riderTrusted) {
+      const counted = countStopsAhead(leg, progressInLeg)
+      if (counted) {
+        return { ...counted, stopsSource: 'gps', stopsTrusted: !degenerate }
+      }
+    }
+    if (transitCtx.vehicleProgress != null) {
+      const counted = countStopsAhead(leg, transitCtx.vehicleProgress)
+      if (counted) {
+        return { ...counted, stopsSource: 'vehicle', stopsTrusted: !degenerate }
+      }
+    }
+    if (transitCtx.vehicleStops != null) {
+      return {
+        ...transitCtx.vehicleStops,
+        stopsSource: 'vehicle-stop',
+        stopsTrusted: true
+      }
+    }
+    // Every trusted source came up empty: the even-spacing estimate below is
+    // a schedule guess — shown nowhere that alerts, per stopsTrusted.
+    return {
+      ...legacyStopEstimate(leg, progressInLeg),
+      stopsSource: 'schedule',
+      stopsTrusted: false
+    }
+  }
+
+  return legacyStopEstimate(leg, progressInLeg)
+}
+
+/**
+ * The pre-trust stop count: geometry-measured positions when available, an
+ * even-spacing estimate over the raw stop list otherwise. Kept verbatim so
+ * ctx-less callers behave byte-identically.
+ */
+function legacyStopEstimate(
   leg: Leg,
   progressInLeg: number
 ): {
   nextStopName?: string
   stopsRemaining?: number
 } {
-  if (!STOP_COUNT_MODES.has(leg.mode as string)) {
-    return {}
-  }
-
   // Count from each stop's measured position on the leg geometry — stops sit
   // unevenly along a leg, so a progress-fraction estimate miscounts badly
   // (see countStopsAhead).
@@ -350,7 +424,8 @@ export function calculateTripProgress(
   currentTime: Date,
   itinerary: Itinerary,
   routeMatch: RouteMatchResult | null,
-  departureOverrideMs?: number | null
+  departureOverrideMs?: number | null,
+  transitCtx?: TransitTrustContext
 ): TripProgress {
   const legs = itinerary.legs
   const currentLegIndex = routeMatch?.legIndex || 0
@@ -391,7 +466,11 @@ export function calculateTripProgress(
   const currentLegProgress = progressInCurrentLeg * 100
 
   // Get mode-specific progress info
-  const transitInfo = getTransitProgress(currentLeg, progressInCurrentLeg)
+  const transitInfo = getTransitProgress(
+    currentLeg,
+    progressInCurrentLeg,
+    transitCtx
+  )
   const walkingInfo = getWalkingInstruction(currentLeg, progressInCurrentLeg)
 
   // Get upcoming transit timing

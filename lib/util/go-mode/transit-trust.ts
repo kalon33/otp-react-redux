@@ -1,5 +1,8 @@
 import type { Leg } from '@opentripplanner/types'
 
+import { calculateDistance, matchPositionToRoute } from './position-matching'
+import { orderedStopsOnLeg } from './next-stop'
+import type { RouteMatchResult } from './position-matching'
 import type { VehicleMatchResult, VehiclePosition } from './vehicle-matching'
 
 /**
@@ -33,6 +36,22 @@ export const RIDING_REBIND_MIN_CONSECUTIVE = 8
 // You can't be aboard a bus that hasn't left yet: riding this much before the
 // planned board time proves the rider caught an earlier departure.
 export const EARLY_BOARD_MIN_MS = 120000
+
+// A GPS fix older than this can't vouch for where the rider is NOW. Native
+// cadence is ~1/s and the browser transit poll is 10s — 15s tolerates one
+// missed poll before the fix stops driving stop counts.
+export const FIX_STALE_MS = 15000
+
+// Fixes worse than this still draw the blue dot, they just don't drive stop
+// counts — below the walk on-route threshold, so a fix this bad couldn't even
+// prove the rider is on a sidewalk.
+export const FIX_ACCURACY_MAX_M = 100
+
+// The badge says "On/Tracking Bus" only while the match's lastSeen is younger
+// than this (same scale as RIDING_OFFROUTE_CLEAR_MS). On 7/29 a confirmed
+// match froze at its confirmation-time record and looked healthy for the rest
+// of the ride.
+export const VEHICLE_MATCH_FRESH_MS = 90000
 
 /** A live vehicle record plus how old its feed timestamp is. */
 export interface VehicleRecordLookup {
@@ -86,6 +105,122 @@ export function isVehicleRecordFresh(
     record != null &&
     record.ageSec != null &&
     record.ageSec <= VEHICLE_RECORD_STALE_SEC
+  )
+}
+
+/**
+ * The live record of the bus the rider is on, per the sticky riding fact:
+ * vehicle id first (the physical bus is what the rider boarded), trip id as
+ * the fallback when confirmation never captured a vehicle. Callers pass the
+ * feed for riding.routeId — pure, so replay serves recorded snapshots.
+ */
+export function findRidingVehicle(
+  vehicles: VehiclePosition[] | null | undefined,
+  riding: { tripId: string | null; vehicleId: string | null } | null,
+  nowMs: number
+): VehicleRecordLookup | null {
+  if (!riding) return null
+  return (
+    findVehicleById(vehicles, riding.vehicleId, nowMs) ??
+    findVehicleForTrip(vehicles, riding.tripId, nowMs)
+  )
+}
+
+/**
+ * Refresh a user/auto-confirmed vehicle match from the feed record of the SAME
+ * vehicle — never re-match. Before 7/29 a confirmed match froze whole: its
+ * lastSeen/nextStopId stayed at confirmation time for the rest of the ride, so
+ * staleness was invisible and nextStopId was useless as a progress source.
+ * Null when the vehicle is absent from the feed — the caller dispatches
+ * nothing and lastSeen ages honestly.
+ */
+export function refreshConfirmedMatch(
+  previousMatch: VehicleMatchResult,
+  vehicles: VehiclePosition[] | null | undefined,
+  riderLat: number,
+  riderLon: number,
+  nowMs: number
+): VehicleMatchResult | null {
+  if (!vehicles || previousMatch.vehicleId == null) return null
+  const vehicle = vehicles.find((v) => v.vehicleId === previousMatch.vehicleId)
+  if (!vehicle) return null
+  return {
+    ...previousMatch,
+    distanceMeters: calculateDistance(
+      riderLat,
+      riderLon,
+      vehicle.lat,
+      vehicle.lon
+    ),
+    lastSeen: nowMs,
+    nextStopId: vehicle.nextStopId ?? previousMatch.nextStopId,
+    tripId: vehicle.tripId ?? previousMatch.tripId
+  }
+}
+
+/**
+ * The BUS's own progress along the leg it serves — the rider is wherever
+ * their bus is, however bad their phone's fix. Projects the vehicle's feed
+ * position onto the single leg's geometry; the transit on-route threshold
+ * applies, so a position that doesn't lie on the leg (wrong direction, feed
+ * garbage) yields null rather than a bogus fraction. A lagging feed
+ * under-reports progress, which over-counts stops remaining — conservative by
+ * construction.
+ */
+export function vehicleProgressOnLeg(
+  leg: Leg,
+  vehicle: VehiclePosition
+): number | null {
+  if (vehicle?.lat == null || vehicle?.lon == null) return null
+  const match = matchPositionToRoute([vehicle.lat, vehicle.lon], [leg], 0)
+  return match?.isOnRoute ? match.progressAlongLeg : null
+}
+
+/**
+ * Stop count from the feed's own "next stop" fact: exact stop identity on the
+ * leg's ordered stop list, zero geometry guesswork. Null when the id is
+ * unknown or off this leg (e.g. the bus is still upstream of the boarding
+ * stop) — callers fall back to other sources.
+ */
+export function stopsAheadFromNextStopId(
+  leg: Leg,
+  nextStopId: string | null | undefined
+): { nextStopName: string; stopsRemaining: number } | null {
+  if (nextStopId == null) return null
+  const ordered = orderedStopsOnLeg(leg)
+  const idx = ordered.findIndex((s) => s.stopId === nextStopId)
+  if (idx === -1) return null
+  return {
+    nextStopName: ordered[idx].name,
+    stopsRemaining: ordered.length - idx
+  }
+}
+
+/**
+ * Is the rider's own GPS sound enough to drive stop counting? The same rule
+ * getNextStopOnRide already applies (match anchored to the leg the rider is
+ * on, and on-route), extended with fix staleness and accuracy: a 20s-old or
+ * 150m-accurate fix still draws the map dot, but "N stops remaining" from it
+ * is a guess. Null accuracy passes — don't distrust data a platform simply
+ * doesn't report.
+ */
+export function assessRiderGpsTrust({
+  accuracy,
+  anchorLegIndex,
+  fixAgeMs,
+  routeMatch
+}: {
+  accuracy: number | null | undefined
+  anchorLegIndex: number
+  fixAgeMs: number
+  routeMatch: RouteMatchResult | null
+}): boolean {
+  return (
+    routeMatch != null &&
+    routeMatch.legIndex === anchorLegIndex &&
+    routeMatch.isOnRoute &&
+    fixAgeMs < FIX_STALE_MS &&
+    (accuracy == null || accuracy <= FIX_ACCURACY_MAX_M)
   )
 }
 

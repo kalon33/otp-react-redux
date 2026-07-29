@@ -554,3 +554,135 @@ describe('getUpcomingTransitTiming', () => {
     expect(getUpcomingTransitTiming(NOW, walkLeg, bikeLeg, 0.5)).toEqual({})
   })
 })
+
+describe('getTransitProgress with a trust context', () => {
+  // Straight geometry, one early stop and a tail cluster (see the geometry
+  // describe above); progress 0.5 puts the rider between them.
+  const line: [number, number][] = []
+  for (let i = 0; i <= 20; i++) line.push([i * 0.005, 0])
+  const stopAt = (lat: number, name: string) => ({ lat, lon: 0, name })
+  const leg = {
+    intermediateStops: [
+      stopAt(0.02, 'Early Stop'),
+      stopAt(0.085, 'Cluster A'),
+      stopAt(0.09, 'Cluster B'),
+      stopAt(0.095, 'Cluster C')
+    ],
+    legGeometry: { points: encode(line, 5) },
+    mode: 'BUS',
+    to: { lat: 0.1, lon: 0, name: 'Destination' }
+  } as any
+
+  it('without a ctx, returns the legacy result exactly — no trust fields', () => {
+    // Back-compat pin: legacy callers (demo harness, tests) see byte-identical
+    // output, so untouched paths cannot regress.
+    expect(getTransitProgress(leg, 0.5)).toEqual({
+      nextStopName: 'Cluster A',
+      stopsRemaining: 4
+    })
+  })
+
+  it('sound rider GPS drives the count: source gps, trusted', () => {
+    expect(
+      getTransitProgress(leg, 0.5, {
+        riderTrusted: true,
+        vehicleProgress: null,
+        vehicleStops: null
+      })
+    ).toEqual({
+      nextStopName: 'Cluster A',
+      stopsRemaining: 4,
+      stopsSource: 'gps',
+      stopsTrusted: true
+    })
+  })
+
+  it("distrusted rider GPS falls to the bus's own position: source vehicle, trusted", () => {
+    // The rider's fix says 0.93 of the leg (stale/garbage); the bus's own
+    // feed position projects to 0.3 — the bus wins.
+    expect(
+      getTransitProgress(leg, 0.93, {
+        riderTrusted: false,
+        vehicleProgress: 0.3,
+        vehicleStops: null
+      })
+    ).toEqual({
+      nextStopName: 'Cluster A',
+      stopsRemaining: 4,
+      stopsSource: 'vehicle',
+      stopsTrusted: true
+    })
+  })
+
+  it("the feed's next-stop fact is the next fallback: source vehicle-stop", () => {
+    expect(
+      getTransitProgress(leg, 0.93, {
+        riderTrusted: false,
+        vehicleProgress: null,
+        vehicleStops: { nextStopName: 'Cluster B', stopsRemaining: 3 }
+      })
+    ).toEqual({
+      nextStopName: 'Cluster B',
+      stopsRemaining: 3,
+      stopsSource: 'vehicle-stop',
+      stopsTrusted: true
+    })
+  })
+
+  it('with every trusted source empty, the count is an untrusted schedule guess', () => {
+    // The stale-fix regression: the count may render on passive surfaces but
+    // must never light the GET READY banner.
+    const result = getTransitProgress(leg, 0.93, {
+      riderTrusted: false,
+      vehicleProgress: null,
+      vehicleStops: null
+    })
+    expect(result.stopsTrusted).toBe(false)
+    expect(result.stopsSource).toBe('schedule')
+  })
+
+  it('a degenerate stop list is never trusted, whatever the source', () => {
+    // Claims intermediates, but every entry lacks coordinates: the count can
+    // only ever be "1 stop remaining" (the 7/29 permanent GET READY shape).
+    const degenerate = {
+      intermediatePlaces: [{ name: 'No Coords A' }, { name: 'No Coords B' }],
+      legGeometry: leg.legGeometry,
+      mode: 'BUS',
+      to: leg.to
+    } as any
+    const result = getTransitProgress(degenerate, 0.2, {
+      riderTrusted: true,
+      vehicleProgress: null,
+      vehicleStops: null
+    })
+    expect(result.stopsRemaining).toBe(1)
+    expect(result.stopsTrusted).toBe(false)
+  })
+
+  it('calculateTripProgress threads the ctx through to the transit info', () => {
+    const itinerary = {
+      endTime: '2026-07-29T17:55:00',
+      legs: [{ ...leg, distance: 11000, duration: 1200 }],
+      startTime: '2026-07-29T17:27:00'
+    } as any
+    const routeMatch = {
+      distanceFromRoute: 10,
+      isOnRoute: true,
+      legIndex: 0,
+      nearestPoint: [0.05, 0] as [number, number],
+      progressAlongLeg: 0.5,
+      progressAlongSegment: 0.5,
+      segmentIndex: 10
+    }
+    const progress = calculateTripProgress(
+      new Date('2026-07-29T17:40:00'),
+      itinerary,
+      routeMatch,
+      null,
+      { riderTrusted: false, vehicleProgress: 0.3, vehicleStops: null }
+    )
+    expect(progress.stopsSource).toBe('vehicle')
+    expect(progress.stopsTrusted).toBe(true)
+    expect(progress.stopsRemaining).toBe(4)
+  })
+})

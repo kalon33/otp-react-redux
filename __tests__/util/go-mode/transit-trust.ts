@@ -1,10 +1,20 @@
+import { encode } from '@mapbox/polyline'
+
 import {
+  assessRiderGpsTrust,
+  findRidingVehicle,
   findVehicleById,
   findVehicleForTrip,
+  refreshConfirmedMatch,
   shouldRebindRidingTrip,
-  shouldReplanBoardedEarlier
+  shouldReplanBoardedEarlier,
+  stopsAheadFromNextStopId,
+  vehicleProgressOnLeg
 } from '../../../lib/util/go-mode/transit-trust'
-import type { VehiclePosition } from '../../../lib/util/go-mode/vehicle-matching'
+import type {
+  VehicleMatchResult,
+  VehiclePosition
+} from '../../../lib/util/go-mode/vehicle-matching'
 
 const NOW = 1785364000000 // within the 7/29 incident window
 
@@ -230,5 +240,207 @@ describe('shouldReplanBoardedEarlier', () => {
         vehicleRecord: null
       })
     ).toBe(true)
+  })
+})
+
+describe('findRidingVehicle', () => {
+  const vehicles = [
+    vehicle({}),
+    vehicle({ tripId: '1:1082792', vehicleId: '1:8141' })
+  ]
+
+  it('prefers the riding vehicleId over the tripId', () => {
+    // tripId points at 8140 but the rider boarded the physical bus 8141 —
+    // the vehicle is what they are sitting in.
+    const record = findRidingVehicle(
+      vehicles,
+      { tripId: '1:1173133', vehicleId: '1:8141' },
+      NOW
+    )
+    expect(record?.vehicle.vehicleId).toBe('1:8141')
+    expect(record?.ageSec).toBeCloseTo(30)
+  })
+
+  it('falls back to the tripId when the vehicle id is unknown to the feed', () => {
+    const record = findRidingVehicle(
+      vehicles,
+      { tripId: '1:1173133', vehicleId: '1:ghost' },
+      NOW
+    )
+    expect(record?.vehicle.vehicleId).toBe('1:8140')
+  })
+
+  it('returns null with no riding fact or no feed', () => {
+    expect(findRidingVehicle(vehicles, null, NOW)).toBeNull()
+    expect(
+      findRidingVehicle(undefined, { tripId: '1:x', vehicleId: '1:y' }, NOW)
+    ).toBeNull()
+  })
+})
+
+describe('refreshConfirmedMatch', () => {
+  const confirmed: VehicleMatchResult = {
+    confidence: 'confirmed',
+    distanceMeters: 40,
+    label: '8140',
+    lastSeen: NOW - 60000,
+    nextStopId: '1:stop-old',
+    tripId: '1:1173133',
+    vehicleId: '1:8140'
+  }
+
+  it('refreshes distance/lastSeen/nextStopId/tripId from the same vehicle only', () => {
+    // Rider sits exactly on the vehicle's feed position.
+    const refreshed = refreshConfirmedMatch(
+      confirmed,
+      [vehicle({}), vehicle({ tripId: '1:1082792', vehicleId: '1:8141' })],
+      44.86,
+      -93.28,
+      NOW
+    )
+    expect(refreshed?.vehicleId).toBe('1:8140')
+    expect(refreshed?.confidence).toBe('confirmed')
+    expect(refreshed?.distanceMeters).toBeCloseTo(0)
+    expect(refreshed?.lastSeen).toBe(NOW)
+    expect(refreshed?.nextStopId).toBe('1:stop-66th')
+    expect(refreshed?.tripId).toBe('1:1173133')
+  })
+
+  it('never re-matches: absent from the feed means null, and lastSeen ages', () => {
+    // Only the OTHER bus is in the feed — a refresh must not adopt it.
+    expect(
+      refreshConfirmedMatch(
+        confirmed,
+        [vehicle({ tripId: '1:1082792', vehicleId: '1:8141' })],
+        44.86,
+        -93.28,
+        NOW
+      )
+    ).toBeNull()
+  })
+
+  it('keeps the previous next-stop/trip facts when the feed record lacks them', () => {
+    const refreshed = refreshConfirmedMatch(
+      confirmed,
+      [vehicle({ nextStopId: undefined as any, tripId: undefined })],
+      44.86,
+      -93.28,
+      NOW
+    )
+    expect(refreshed?.nextStopId).toBe('1:stop-old')
+    expect(refreshed?.tripId).toBe('1:1173133')
+  })
+})
+
+// A straight south-running transit leg, ~11km of geometry with the stops
+// bunched toward the end (Orange Line shape). Latitude degrees ≈ 111km, so
+// 0.005° between polyline points ≈ 555m.
+const legLine: [number, number][] = []
+for (let i = 0; i <= 20; i++) legLine.push([i * 0.005, 0])
+const stopAt = (lat: number, name: string, stopId: string) => ({
+  lat,
+  lon: 0,
+  name,
+  stop: { gtfsId: stopId }
+})
+const transitLeg: any = {
+  intermediatePlaces: [
+    stopAt(0.02, 'Early Stop', '1:stop-early'),
+    stopAt(0.085, 'Cluster A', '1:stop-a'),
+    stopAt(0.09, 'Cluster B', '1:stop-b'),
+    stopAt(0.095, 'Cluster C', '1:stop-c')
+  ],
+  legGeometry: { points: encode(legLine, 5) },
+  mode: 'BUS',
+  to: {
+    lat: 0.1,
+    lon: 0,
+    name: 'Destination',
+    stop: { gtfsId: '1:stop-dest' }
+  },
+  transitLeg: true
+}
+
+describe('vehicleProgressOnLeg', () => {
+  it("reports the bus's own progress when its position lies on the leg", () => {
+    const progress = vehicleProgressOnLeg(
+      transitLeg,
+      vehicle({ lat: 0.05, lon: 0 })
+    )
+    expect(progress).toBeCloseTo(0.5, 2)
+  })
+
+  it('returns null when the bus is off the leg (opposite direction, feed garbage)', () => {
+    // ~11km of longitude away — far outside the 250m transit threshold.
+    expect(
+      vehicleProgressOnLeg(transitLeg, vehicle({ lat: 0.05, lon: 0.1 }))
+    ).toBeNull()
+  })
+})
+
+describe('stopsAheadFromNextStopId', () => {
+  it('counts from the exact stop identity, zero geometry guesswork', () => {
+    expect(stopsAheadFromNextStopId(transitLeg, '1:stop-a')).toEqual({
+      nextStopName: 'Cluster A',
+      stopsRemaining: 4
+    })
+    expect(stopsAheadFromNextStopId(transitLeg, '1:stop-dest')).toEqual({
+      nextStopName: 'Destination',
+      stopsRemaining: 1
+    })
+  })
+
+  it('returns null for an unknown or missing next stop id', () => {
+    // e.g. the bus is still upstream of the boarding stop.
+    expect(stopsAheadFromNextStopId(transitLeg, '1:stop-upstream')).toBeNull()
+    expect(stopsAheadFromNextStopId(transitLeg, null)).toBeNull()
+  })
+})
+
+describe('assessRiderGpsTrust', () => {
+  const routeMatch: any = {
+    distanceFromRoute: 12,
+    isOnRoute: true,
+    legIndex: 1,
+    nearestPoint: [0.05, 0],
+    progressAlongLeg: 0.5,
+    progressAlongSegment: 0.5,
+    segmentIndex: 10
+  }
+  const sound = {
+    accuracy: 10,
+    anchorLegIndex: 1,
+    fixAgeMs: 1000,
+    routeMatch
+  }
+
+  it('trusts a fresh, accurate, on-route fix anchored to the riding leg', () => {
+    expect(assessRiderGpsTrust(sound)).toBe(true)
+  })
+
+  it('null accuracy passes — platforms that omit it are not distrusted', () => {
+    expect(assessRiderGpsTrust({ ...sound, accuracy: null })).toBe(true)
+  })
+
+  it('distrusts a fix matched to a different leg than the riding anchor', () => {
+    expect(assessRiderGpsTrust({ ...sound, anchorLegIndex: 2 })).toBe(false)
+  })
+
+  it('distrusts an off-route fix', () => {
+    expect(
+      assessRiderGpsTrust({
+        ...sound,
+        routeMatch: { ...routeMatch, isOnRoute: false }
+      })
+    ).toBe(false)
+    expect(assessRiderGpsTrust({ ...sound, routeMatch: null })).toBe(false)
+  })
+
+  it('distrusts a stale fix (20s on a ~1/s stream)', () => {
+    expect(assessRiderGpsTrust({ ...sound, fixAgeMs: 20000 })).toBe(false)
+  })
+
+  it('distrusts a low-accuracy fix (150m)', () => {
+    expect(assessRiderGpsTrust({ ...sound, accuracy: 150 })).toBe(false)
   })
 })

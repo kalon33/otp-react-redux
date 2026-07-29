@@ -9,6 +9,7 @@ import {
   NO_LIVE_VEHICLE_POLLS
 } from '../../util/go-mode/vehicle-matching'
 import { getModeIcon } from '../../util/go-mode/mode-icon'
+import { VEHICLE_MATCH_FRESH_MS } from '../../util/go-mode/transit-trust'
 import type { TripProgress } from '../../util/go-mode/progress-calculator'
 import type { VehicleMatchResult } from '../../util/go-mode/vehicle-matching'
 
@@ -62,9 +63,14 @@ const TransitProgress = ({
     stopsTrusted &&
     progress.status !== 'deviated'
 
+  // The badge is a live claim ("On Bus…"), so it also needs a recent feed
+  // sighting — a confirmed match whose vehicle left the feed keeps its
+  // confidence but its lastSeen ages (see performVehicleMatching), and the
+  // honest thing to show then is the locating/no-live-data line below.
   const isTracking =
-    vehicleMatch?.confidence === 'confirmed' ||
-    vehicleMatch?.confidence === 'high'
+    (vehicleMatch?.confidence === 'confirmed' ||
+      vehicleMatch?.confidence === 'high') &&
+    Date.now() - (vehicleMatch?.lastSeen ?? 0) < VEHICLE_MATCH_FRESH_MS
 
   return (
     <TransitContainer>
@@ -120,41 +126,42 @@ const TransitProgress = ({
                   )}
             </VehicleTrackingBadge>
           )}
-          {!isTracking &&
-            vehicleMatch?.confidence !== 'confirmed' &&
-            leg.transitLeg && (
-              <LocatingIndicator>
-                {typeof leg.startTime === 'number' && leg.startTime > Date.now()
-                  ? // Before the leg's scheduled start the vehicle usually is
-                    // not broadcasting AT ALL yet — an endless "Locating…"
-                    // reads as a bug. Say what is actually happening.
-                    intl.formatMessage(
-                      {
-                        defaultMessage:
-                          'Bus not broadcasting yet — scheduled {time}',
-                        id: 'components.GoMode.busNotBroadcasting'
-                      },
-                      {
-                        time: intl.formatTime(leg.startTime, {
-                          hour: 'numeric',
-                          minute: '2-digit'
-                        })
-                      }
-                    )
-                  : emptyPolls >= NO_LIVE_VEHICLE_POLLS
-                  ? // The route publishes no live vehicle positions (or the
-                    // feed is down). Stop promising a match that will never
-                    // arrive — stop progress still comes from GPS.
-                    intl.formatMessage({
-                      defaultMessage: 'No live bus data — tracking by GPS',
-                      id: 'components.GoMode.noLiveVehicleData'
-                    })
-                  : intl.formatMessage({
-                      defaultMessage: 'Locating your bus...',
-                      id: 'components.GoMode.locatingBus'
-                    })}
-              </LocatingIndicator>
-            )}
+          {/* A fresh confirmed/high match renders the badge above; anything
+              else — including a confirmed match gone stale — gets the honest
+              status line. */}
+          {!isTracking && leg.transitLeg && (
+            <LocatingIndicator>
+              {typeof leg.startTime === 'number' && leg.startTime > Date.now()
+                ? // Before the leg's scheduled start the vehicle usually is
+                  // not broadcasting AT ALL yet — an endless "Locating…"
+                  // reads as a bug. Say what is actually happening.
+                  intl.formatMessage(
+                    {
+                      defaultMessage:
+                        'Bus not broadcasting yet — scheduled {time}',
+                      id: 'components.GoMode.busNotBroadcasting'
+                    },
+                    {
+                      time: intl.formatTime(leg.startTime, {
+                        hour: 'numeric',
+                        minute: '2-digit'
+                      })
+                    }
+                  )
+                : emptyPolls >= NO_LIVE_VEHICLE_POLLS
+                ? // The route publishes no live vehicle positions (or the
+                  // feed is down). Stop promising a match that will never
+                  // arrive — stop progress still comes from GPS.
+                  intl.formatMessage({
+                    defaultMessage: 'No live bus data — tracking by GPS',
+                    id: 'components.GoMode.noLiveVehicleData'
+                  })
+                : intl.formatMessage({
+                    defaultMessage: 'Locating your bus...',
+                    id: 'components.GoMode.locatingBus'
+                  })}
+            </LocatingIndicator>
+          )}
         </div>
       </RouteHeader>
 
