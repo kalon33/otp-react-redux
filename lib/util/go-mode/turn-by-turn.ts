@@ -265,3 +265,92 @@ export function getNextCue(leg: Leg, progressAlongLeg: number): NextCueResult {
     following: cues[cue.index + 1]
   }
 }
+
+/**
+ * A 1 Hz fix at bike speed advances the projection ≤ ~10 m; 100 m in a single
+ * tick is the projection jumping (an off-route rider being dragged along the
+ * polyline), not riding. Also safely above verify-turn-by-turn's ~32 m/tick
+ * sample spacing, so the verify ride never trips it.
+ */
+const MAX_TICK_ADVANCE_M = 100
+/**
+ * Consecutive plausible-advance ticks required before turn announcements
+ * resume after a rejoin or a projection jump. Tick-based rather than
+ * wall-clock so live 1 Hz GPS, replays and the fast verify loop all behave
+ * identically; a backgrounded-GPS gap costs at most this many silent ticks.
+ */
+const PLAUSIBLE_TICKS_TO_RESUME = 2
+
+interface CueCursor {
+  holdTicks: number
+  lastOffsetMeters: number | null
+  lastOnRoute: boolean
+}
+
+// Per-leg navigation state, keyed like cueCache: the leg object is stable for
+// the life of an itinerary and collectable once it's swapped out, so a
+// post-replan leg is a fresh object and starts with a clean cursor.
+const cursorCache = new WeakMap<Leg, CueCursor>()
+
+export interface NavigationCueResult extends NextCueResult {
+  /** Hold turn announcements (not the on-screen/wrist cue) this tick. */
+  announceHold?: boolean
+}
+
+/**
+ * `getNextCue` with route honesty. On the 7/29 ride the rider spent two
+ * minutes on a street parallel to the bike leg (perpendicular distance
+ * flapping around the 100 m on-route threshold) while the nearest-point
+ * projection slid 537 m → 1509 m — sweeping straight past the turns at
+ * 822/992/1003 m. Every tick that dipped back under the threshold could
+ * announce whichever swept-past cue was momentarily "next": "announces turns
+ * after you take them", verbatim.
+ *
+ * So: while `!isOnRoute` the projection is a fiction and no cue is returned at
+ * all; and after a rejoin (or a same-tick projection jump bigger than a rider
+ * can move) announcements are held for a short settle while the cue itself
+ * updates immediately — the screen/wrist shows the correct next turn
+ * passively, only the buzz/toast waits. Backwards movement on-route is NOT a
+ * jump: the 7/29 track itself contains a legitimate backtrack (min 9–12, the
+ * rider rode 500 m out and returned) whose earlier cue must re-announce.
+ */
+export function selectCueForNavigation(
+  leg: Leg,
+  progressAlongLeg: number,
+  isOnRoute: boolean
+): NavigationCueResult {
+  const prev = cursorCache.get(leg)
+
+  if (!isOnRoute) {
+    cursorCache.set(leg, {
+      holdTicks: prev?.holdTicks ?? 0,
+      lastOffsetMeters: prev?.lastOffsetMeters ?? null,
+      lastOnRoute: false
+    })
+    return {}
+  }
+
+  const { legLength } = buildLegCues(leg)
+  const offset = Math.max(0, Math.min(1, progressAlongLeg)) * legLength
+
+  const jumped =
+    prev != null &&
+    (!prev.lastOnRoute ||
+      (prev.lastOffsetMeters != null &&
+        offset - prev.lastOffsetMeters > MAX_TICK_ADVANCE_M))
+
+  const holdTicks = jumped
+    ? PLAUSIBLE_TICKS_TO_RESUME
+    : Math.max(0, (prev?.holdTicks ?? 0) - 1)
+
+  cursorCache.set(leg, {
+    holdTicks,
+    lastOffsetMeters: offset,
+    lastOnRoute: true
+  })
+
+  return {
+    ...getNextCue(leg, progressAlongLeg),
+    announceHold: holdTicks > 0
+  }
+}

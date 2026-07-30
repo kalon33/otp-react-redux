@@ -4,7 +4,8 @@ import {
   buildStepIndex,
   formatCueDistance,
   getNextCue,
-  phraseInstruction
+  phraseInstruction,
+  selectCueForNavigation
 } from '../../../lib/util/go-mode/turn-by-turn'
 
 // A straight run due north from a point in south Minneapolis. 0.0009° of
@@ -250,6 +251,102 @@ describe('util > go-mode > turn-by-turn', () => {
     it('renders abbreviated imperial distances', () => {
       expect(formatCueDistance(30)).toMatch(/ft/)
       expect(formatCueDistance(3000)).toMatch(/mi/)
+    })
+  })
+
+  describe('selectCueForNavigation', () => {
+    // A 2000 m leg with turns at ~300, ~700 and ~1500 m. Each test makes a
+    // fresh leg object: the per-leg cursor is keyed on leg identity, exactly
+    // like the post-replan reset it models.
+    const makeNavLeg = () =>
+      makeLeg(
+        [
+          makeStep(0, 'DEPART', 'Bryant Ave S'),
+          makeStep(3, 'LEFT', 'W 24th St'),
+          makeStep(7, 'RIGHT', 'Colfax Ave S'),
+          makeStep(15, 'LEFT', 'E 46th St')
+        ],
+        21
+      )
+    // Progress fraction for a metre offset on that 2000 m leg.
+    const at = (meters: number) => meters / (20 * VERTEX_M)
+
+    it('returns no cue at all while the rider is off the route', () => {
+      const leg = makeNavLeg()
+      // The projection says ~40% along, but the rider is not on the route —
+      // that projection is a fiction (7/29: it swept past three real turns).
+      expect(selectCueForNavigation(leg, at(800), false)).toEqual({})
+    })
+
+    it('matches getNextCue exactly on plausible on-route ticks, no hold', () => {
+      const leg = makeNavLeg()
+      for (const m of [100, 150, 200, 250]) {
+        const result = selectCueForNavigation(leg, at(m), true)
+        expect(result.announceHold).toBeFalsy()
+        expect(result.cue).toEqual(getNextCue(leg, at(m)).cue)
+        expect(result.distanceToNextTurn).toEqual(
+          getNextCue(leg, at(m)).distanceToNextTurn
+        )
+      }
+    })
+
+    it('holds announcements for two plausible ticks after a rejoin', () => {
+      const leg = makeNavLeg()
+      selectCueForNavigation(leg, at(100), true)
+      // Off on a parallel street for a while.
+      selectCueForNavigation(leg, at(400), false)
+      selectCueForNavigation(leg, at(600), false)
+      // Rejoin: the cue is correct immediately, but announcements hold.
+      const rejoin = selectCueForNavigation(leg, at(750), true)
+      expect(rejoin.cue!.instruction).toBe('Turn left on E 46th St')
+      expect(rejoin.announceHold).toBe(true)
+      const settling = selectCueForNavigation(leg, at(760), true)
+      expect(settling.announceHold).toBe(true)
+      // Second consecutive plausible advance: announcements resume.
+      const settled = selectCueForNavigation(leg, at(770), true)
+      expect(settled.announceHold).toBeFalsy()
+      expect(settled.cue!.instruction).toBe('Turn left on E 46th St')
+    })
+
+    it('holds on a >100 m single-tick jump and never surfaces skipped cues', () => {
+      const leg = makeNavLeg()
+      const surfaced: string[] = []
+      const record = (r: ReturnType<typeof selectCueForNavigation>) => {
+        if (r.cue) surfaced.push(r.cue.instruction)
+        return r
+      }
+      record(selectCueForNavigation(leg, at(100), true))
+      record(selectCueForNavigation(leg, at(150), true))
+      // The projection leaps 650 m in one nominally on-route tick — a rider
+      // cannot move that far between fixes; this is the 7/29 sweep.
+      const jump = record(selectCueForNavigation(leg, at(800), true))
+      expect(jump.announceHold).toBe(true)
+      record(selectCueForNavigation(leg, at(810), true))
+      const settled = record(selectCueForNavigation(leg, at(820), true))
+      expect(settled.announceHold).toBeFalsy()
+      // The turn at ~700 m was swept past and must never have become current.
+      expect(surfaced).not.toContain('Turn right on Colfax Ave S')
+    })
+
+    it('does not hold on an on-route backtrack and re-serves the earlier cue', () => {
+      const leg = makeNavLeg()
+      selectCueForNavigation(leg, at(400), true)
+      selectCueForNavigation(leg, at(500), true)
+      // The 7/29 track's own min 9–12: rode out, turned around, came home.
+      const back = selectCueForNavigation(leg, at(200), true)
+      expect(back.announceHold).toBeFalsy()
+      expect(back.cue!.instruction).toBe('Turn left on W 24th St')
+    })
+
+    it('starts clean on a fresh leg object (post-replan)', () => {
+      const first = makeNavLeg()
+      selectCueForNavigation(first, at(100), false)
+      // The quiet replan hands back a NEW leg from the rider's real position;
+      // its first tick may announce straight away.
+      const fresh = makeNavLeg()
+      const result = selectCueForNavigation(fresh, at(100), true)
+      expect(result.announceHold).toBeFalsy()
+      expect(result.cue!.instruction).toBe('Turn left on W 24th St')
     })
   })
 })

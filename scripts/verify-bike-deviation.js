@@ -255,6 +255,13 @@ async function main() {
       `forbidden actions: [${offRoute.forbidden.join(', ')}]`
   )
 
+  // [gomode/turn-timing ADDENDUM] While still off the line (before the quiet
+  // replan lands), deviated ticks must be turn-silent. Kept as one separate
+  // block — this call plus the function at the end of the file — so the merge
+  // with gomode/reroute-scope's changes to this script stays mechanical.
+  // eslint-disable-next-line @typescript-eslint/no-use-before-define
+  await verifyTurnSilenceWhileDeviated(page, chosen.offAt)
+
   // Give the quiet replan's isolated plan request time to land: the swap is
   // visible as the active itinerary's origin moving to the rider's position.
   // (startTime is NOT a usable signal — OTP rounds departures to the minute.)
@@ -330,9 +337,144 @@ async function main() {
   console.log(
     '\nPASS: off-route biking quietly re-plans in place (even after a ' +
       'settled-empty reroute), one deduped notification, single-tick GPS ' +
-      'glitches ignored, no search screen, no recents pollution.'
+      'glitches ignored, no search screen, no recents pollution, and ' +
+      'deviated ticks stayed turn-silent (frozen wrist card).'
   )
 }
+
+// ============================================================================
+// [gomode/turn-timing ADDENDUM] — one self-contained block, merge as a unit.
+//
+// 7/29: "The bike turn notification announces turns after you take them." Off
+// the planned line the nearest-point projection is a fiction, so deviated
+// ticks must produce NO turn guidance: no UPCOMING_TURN / TURN_ALERT
+// notifications, no sticky turn-card (id 1) writes — and no id 1 cancels
+// either. The card FREEZES while deviated (a 100 m-threshold flap must not
+// churn cancel→repost on the wrist); boarding and trip end still clear it.
+//
+// The rejoin-side guarantees (2-tick announcement hold, no swept-cue burst)
+// are pinned offline on real 7/29 data in
+// __tests__/util/go-mode/turn-honesty-0729.ts — not re-asserted here, where
+// the quiet replan may legitimately swap the itinerary mid-phase.
+// ============================================================================
+async function verifyTurnSilenceWhileDeviated(page, offAt) {
+  // Fake Capacitor bridge (same pattern as verify-turn-by-turn.js, injected
+  // long after beginGoMode) so the real sendPush/cancelPush path records
+  // sticky-card traffic instead of no-opping in the browser.
+  await page.evaluate(() => {
+    window.__pushLog = []
+    if (!window.Capacitor) {
+      window.Capacitor = {
+        isNativePlatform: () => true,
+        Plugins: {
+          LocalNotifications: {
+            cancel: (o) => {
+              const list = o.notifications || []
+              list.forEach((n) =>
+                window.__pushLog.push({ id: n.id, kind: 'cancel' })
+              )
+              return Promise.resolve()
+            },
+            checkPermissions: () => Promise.resolve({ display: 'granted' }),
+            requestPermissions: () => Promise.resolve({ display: 'granted' }),
+            schedule: (o) => {
+              const list = o.notifications || []
+              list.forEach((n) =>
+                window.__pushLog.push({
+                  id: n.id,
+                  kind: 'schedule',
+                  title: n.title
+                })
+              )
+              return Promise.resolve()
+            }
+          }
+        }
+      }
+    }
+  })
+
+  const result = await page.evaluate(async (at) => {
+    // eslint-disable-next-line import/no-absolute-path
+    const goMode = await import('/lib/actions/go-mode.js')
+    const startItinerary = window.store.getState().otp.goMode.activeItinerary
+    let turnNotifications = 0
+    let ticksCounted = 0
+    let swapped = false
+    const spy = (action) => {
+      if (typeof action === 'function') return window.store.dispatch(action)
+      if (
+        action?.type === 'ADD_NOTIFICATION' &&
+        (action.payload?.type === 'UPCOMING_TURN' ||
+          action.payload?.type === 'TURN_ALERT')
+      ) {
+        turnNotifications += 1
+      }
+      return window.store.dispatch(action)
+    }
+    const getState = () => window.store.getState()
+    for (let i = 0; i < 6; i++) {
+      // Stop counting once the quiet replan swaps the itinerary: a fresh leg
+      // from the rider's own position puts them back ON route, where turn
+      // guidance is legitimate again.
+      if (getState().otp.goMode.activeItinerary !== startItinerary) {
+        swapped = true
+        break
+      }
+      const position = {
+        coords: {
+          accuracy: 10,
+          altitude: null,
+          altitudeAccuracy: null,
+          heading: null,
+          latitude: at.lat,
+          longitude: at.lon,
+          speed: 4
+        },
+        timestamp: Date.now() + i * 1000
+      }
+      goMode.handlePositionUpdate(position)(spy, getState)
+      ticksCounted += 1
+      await new Promise((resolve) => setTimeout(resolve, 150))
+    }
+    const pushLog = window.__pushLog || []
+    return {
+      stickyCancels: pushLog.filter((p) => p.kind === 'cancel' && p.id === 1)
+        .length,
+      stickyWrites: pushLog.filter((p) => p.kind === 'schedule' && p.id === 1)
+        .length,
+      swapped,
+      ticksCounted,
+      turnNotifications
+    }
+  }, offAt)
+
+  console.log(
+    `[turn-silence] ${result.ticksCounted} deviated tick(s)` +
+      `${result.swapped ? ' (stopped at quiet-replan swap)' : ''}: ` +
+      `${result.turnNotifications} turn notification(s), ` +
+      `${result.stickyWrites} sticky-card write(s), ` +
+      `${result.stickyCancels} sticky-card cancel(s)`
+  )
+  if (result.turnNotifications > 0) {
+    throw new Error(
+      `FAIL: ${result.turnNotifications} turn notification(s) fired while ` +
+        'deviated — off-route projections must announce nothing'
+    )
+  }
+  if (result.stickyWrites > 0) {
+    throw new Error(
+      `FAIL: ${result.stickyWrites} sticky turn-card write(s) while deviated`
+    )
+  }
+  if (result.stickyCancels > 0) {
+    throw new Error(
+      `FAIL: ${result.stickyCancels} sticky turn-card cancel(s) while ` +
+        'deviated — the card must freeze, not churn'
+    )
+  }
+}
+// ========================== [end ADDENDUM] ==================================
 
 main().catch((e) => {
   console.error(e.message)

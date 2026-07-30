@@ -210,6 +210,21 @@ export function checkAlightAlerts(
 const BIKE_CUE_DISTANCES = { act: 30, prepare: 120 }
 const WALK_CUE_DISTANCES = { act: 15, prepare: 40 }
 
+// Speed-scaled leads, up-only from the static floors above. The 7/29 ride
+// showed on-route bike speeds of 4–7 m/s (occasionally 8–9): at 6.5 m/s the
+// static 120 m prepare was only ~18 s of warning and the 30 m act cue ~4.5 s —
+// too late to brake and turn. Scaling by the rider's own speed restores the
+// intended reaction time (25 s ≈ 163 m, 8 s ≈ 52 m at 6.5 m/s); the floors
+// keep walkers and slow riders byte-identical, and the caps keep a downhill
+// 9–10 m/s from announcing a turn blocks early. No usable speed on the fix
+// (null/0, common in the 7/29 track) → floors, i.e. today's behavior.
+const PREPARE_LEAD_SECONDS = 25
+const ACT_LEAD_SECONDS = 8
+export const PREPARE_LEAD_MAX_M = 250
+// Exported: also the tolerance the turn-honesty fixture test allows between an
+// announced turn and the rider's on-route projection.
+export const ACT_LEAD_MAX_M = 60
+
 /**
  * Check if should notify for upcoming turn
  */
@@ -221,11 +236,28 @@ export function checkUpcomingTurn(
   const isBike = currentLeg.mode === 'BICYCLE'
   if (!isBike && currentLeg.mode !== 'WALK') return null
 
+  // A rejoin/jump settle is under way (see selectCueForNavigation): the cue on
+  // screen is already correct, but buzzing it now is the 7/29 rejoin burst —
+  // the projection's sweep past 822/992/1003 m announced as still ahead.
+  if (progress.turnAnnouncementsHeld) return null
+
   const cue = progress.nextTurnCue
   const distance = progress.distanceToNextTurn
   if (!cue || distance == null) return null
 
-  const { act, prepare } = isBike ? BIKE_CUE_DISTANCES : WALK_CUE_DISTANCES
+  const floors = isBike ? BIKE_CUE_DISTANCES : WALK_CUE_DISTANCES
+  const speed = progress.riderSpeedMps
+  const prepare =
+    speed != null && speed > 0
+      ? Math.min(
+          Math.max(floors.prepare, speed * PREPARE_LEAD_SECONDS),
+          PREPARE_LEAD_MAX_M
+        )
+      : floors.prepare
+  const act =
+    speed != null && speed > 0
+      ? Math.min(Math.max(floors.act, speed * ACT_LEAD_SECONDS), ACT_LEAD_MAX_M)
+      : floors.act
   if (distance > prepare) return null
 
   // Two cues per turn: one with time to react, one at the corner itself.
