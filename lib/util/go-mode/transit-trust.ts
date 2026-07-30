@@ -56,7 +56,8 @@ export const VEHICLE_MATCH_FRESH_MS = 90000
 /** A live vehicle record plus how old its feed timestamp is. */
 export interface VehicleRecordLookup {
   /** Seconds since the feed last updated this vehicle; null when the record
-   * carries no usable timestamp (never treated as fresh). */
+   * carries no usable timestamp (unknown age — treated like the null
+   * headsign/accuracy cases: it can't prove freshness, but it never blocks). */
   ageSec: number | null
   vehicle: VehiclePosition
 }
@@ -97,14 +98,18 @@ export function findVehicleById(
   return vehicle ? toRecord(vehicle, nowMs) : null
 }
 
-/** Fresh enough to count as evidence about where the bus is right now. */
+/** Fresh enough to count as evidence about where the bus is right now.
+ * A null ageSec passes: Metro Transit's live feed returns lastUpdated: null
+ * for a good share of in-service vehicles, so "no timestamp" is normal, not
+ * suspect — same policy as null headsigns/accuracy (never block a decision on
+ * data a feed simply doesn't publish). The 7/29 flap carried a KNOWN-stale
+ * timestamp, which this still rejects. */
 export function isVehicleRecordFresh(
   record: VehicleRecordLookup | null
 ): boolean {
   return (
     record != null &&
-    record.ageSec != null &&
-    record.ageSec <= VEHICLE_RECORD_STALE_SEC
+    (record.ageSec == null || record.ageSec <= VEHICLE_RECORD_STALE_SEC)
   )
 }
 
