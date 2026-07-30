@@ -721,7 +721,14 @@ const goMode = handleActions<GoModeState, any>(
         routeMatch: state.routeMatch
           ? {
               ...state.routeMatch,
-              legIndex
+              legIndex,
+              // The new leg starts at its start: inheriting the previous
+              // leg's ~1.0 progress made the manual "I got off here"/onboard
+              // paths flash "1 stop remaining" (and its GET READY banner)
+              // until the next GPS tick recomputed honestly.
+              progressAlongLeg: 0,
+              progressAlongSegment: 0,
+              segmentIndex: 0
             }
           : null
       }

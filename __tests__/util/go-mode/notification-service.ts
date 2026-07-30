@@ -904,7 +904,8 @@ describe('missed-bus detection', () => {
   const STOP = {
     lat: 44.817,
     lon: -93.31039,
-    name: 'Old Shakopee Rd & Queen Ave S'
+    name: 'Old Shakopee Rd & Queen Ave S',
+    stop: { gtfsId: '1:stop-queen' }
   }
   // ~23m from the stop (today's ride: rider pinned near, not at, the stop)
   const NEAR_STOP: [number, number] = [44.816793, -93.310211]
@@ -1035,6 +1036,93 @@ describe('missed-bus detection', () => {
           baseInput({ nowMs: BOARD + 200000, riding: { legIndex: 1 } })
         )
       ).toBeNull()
+    })
+
+    it('riding held on a PRIOR leg still means aboard — no miss for a later boarding', () => {
+      // 7/29: the riding fact is the rider's chosen bus; while it is held (it
+      // only clears after 90s sustained off-route) no boarding anywhere in
+      // the trip can be "missed", including a downstream transfer.
+      const legs = [
+        ...makeLegs(),
+        {
+          duration: 300,
+          endTime: BOARD + 1200000,
+          from: { lat: 44.825177, lon: -93.302367, name: 'City Hall' },
+          mode: 'BUS',
+          routeShortName: '539',
+          startTime: BOARD + 900000,
+          to: { lat: 44.84, lon: -93.29, name: 'Southdale TC' },
+          transitLeg: true
+        }
+      ]
+      expect(
+        classifyMissedBus(
+          baseInput({
+            currentLegIndex: 2,
+            legs,
+            nowMs: BOARD + 1200000,
+            riding: { legIndex: 1 }
+          })
+        )
+      ).toBeNull()
+    })
+
+    it('riding un-anchored (legIndex -1) after an itinerary swap -> null', () => {
+      expect(
+        classifyMissedBus(
+          baseInput({ nowMs: BOARD + 200000, riding: { legIndex: -1 } })
+        )
+      ).toBeNull()
+    })
+
+    it("planned trip's vehicle still bound for the boarding stop -> null (17:27 on 7/29)", () => {
+      // The realtime epoch says "departed" but the bus's own fresh record is
+      // still heading to the boarding stop — the epoch is stale, not the bus.
+      expect(
+        classifyMissedBus(
+          baseInput({
+            boardVehicle: {
+              ageSec: 20,
+              distanceToBoardStopM: null,
+              nextStopId: '1:stop-queen'
+            },
+            liveLegTimes: { 1: { boardEpoch: BOARD, realtime: true } },
+            nowMs: BOARD + 100000
+          })
+        )
+      ).toBeNull()
+    })
+
+    it("planned trip's vehicle within the stop radius -> null", () => {
+      expect(
+        classifyMissedBus(
+          baseInput({
+            boardVehicle: {
+              ageSec: 20,
+              distanceToBoardStopM: 120,
+              nextStopId: null
+            },
+            liveLegTimes: { 1: { boardEpoch: BOARD, realtime: true } },
+            nowMs: BOARD + 100000
+          })
+        )
+      ).toBeNull()
+    })
+
+    it('a stale vehicle record is not evidence — classification proceeds', () => {
+      const ctx = classifyMissedBus(
+        baseInput({
+          boardVehicle: {
+            ageSec: 300,
+            distanceToBoardStopM: 111,
+            nextStopId: '1:stop-queen'
+          },
+          liveLegTimes: { 1: { boardEpoch: BOARD, realtime: true } },
+          nowMs: BOARD + 100000
+        })
+      )
+      expect(ctx?.definitive).toBe(true)
+      expect(ctx?.realtime).toBe(true)
     })
 
     it('strong vehicle match on the boarding leg -> null', () => {

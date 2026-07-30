@@ -47,10 +47,28 @@ describe('components > go-mode > TransitProgress', () => {
   })
 
   it('shows the tracked vehicle instead once one is matched', () => {
-    const text = renderWith(99, { confidence: 'confirmed', label: '4054' })
+    const text = renderWith(99, {
+      confidence: 'confirmed',
+      label: '4054',
+      lastSeen: Date.now()
+    })
     expect(text).toContain('On Bus #4054')
     expect(text).not.toContain('No live bus data')
     expect(text).not.toContain('Locating your bus')
+  })
+
+  // A confirmed match whose vehicle left the feed keeps its confidence but its
+  // lastSeen ages (performVehicleMatching only refreshes, never re-matches).
+  // On 7/29 the frozen record made a dead feed look tracked for the whole
+  // ride; a stale badge is a lie, the status line below is the truth.
+  it('drops a stale confirmed badge back to the honest status line', () => {
+    const text = renderWith(99, {
+      confidence: 'confirmed',
+      label: '4054',
+      lastSeen: Date.now() - 120000
+    })
+    expect(text).not.toContain('On Bus #4054')
+    expect(text).toContain('No live bus data')
   })
 
   it('still counts down stops with no live vehicle data', () => {

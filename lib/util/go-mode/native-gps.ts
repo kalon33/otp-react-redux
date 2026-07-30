@@ -93,6 +93,21 @@ export async function startNativeGps(
   return true
 }
 
+/**
+ * Tear down and re-create the native watcher. iOS occasionally wedges a
+ * background watcher silently — no fixes, no error — and startNativeGps alone
+ * can't recover it (its already-streaming early-return sees the dead
+ * watcherId and does nothing). Stopping first clears watcherId, so the
+ * restart genuinely re-registers with the plugin.
+ */
+export async function restartNativeGps(
+  onPosition: (pos: GeolocationPosition) => void,
+  onError: (err: Error) => void
+): Promise<boolean> {
+  await stopNativeGps()
+  return startNativeGps(onPosition, onError)
+}
+
 /** Stop the native stream (trip ended) — kills the blue indicator + battery draw. */
 export async function stopNativeGps(): Promise<void> {
   const plugin = bridge()
