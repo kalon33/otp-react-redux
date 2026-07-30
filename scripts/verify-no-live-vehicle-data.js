@@ -14,15 +14,23 @@
  * NO_LIVE_VEHICLE_POLLS the header stops saying "Locating" and admits there is
  * no live data. A poll that DOES return vehicles resets the counter.
  *
- * Harness note: the "no live vehicles" condition is enforced at the NETWORK
- * layer — request interception answers every vehiclePositions GraphQL query
- * with an empty patterns list (same technique as verify-boarded-earlier,
- * e1bc1631). The previous version mutated transitIndex vehicles empty before
- * each poll, which RACED the app's real 15s poller: a live response landing
- * between the mutation and the poll refilled the index (Orange Line
- * broadcasts in the evening) and the counter was then CORRECTLY reset by the
- * non-empty-poll path — a script race, not an app bug. With the feed forced
- * empty on the wire, a non-empty poll is impossible by construction.
+ * Harness notes (two determinism fixes, both script-side — the app behaved
+ * correctly each time):
+ * 1. The "no live vehicles" condition is enforced at the NETWORK layer —
+ *    request interception answers every vehiclePositions GraphQL query with
+ *    an empty patterns list (same technique as verify-boarded-earlier,
+ *    e1bc1631). The previous version mutated transitIndex vehicles empty
+ *    before each poll, which RACED the app's real 15s poller: a live
+ *    response landing between the mutation and the poll refilled the index
+ *    (Orange Line broadcasts in the evening) and the counter was then
+ *    CORRECTLY reset by the non-empty-poll path. Forced empty on the wire, a
+ *    non-empty poll is impossible by construction.
+ * 2. The sticky riding fact is established before beginGoMode (see the
+ *    SET_RIDING dispatch below). Without it the synthetic setup itself — a
+ *    transit leg five minutes underway, a rider mid-leg, zero vehicles —
+ *    reads to the app as a definitively missed bus, and the resulting
+ *    auto-update + boarded-earlier splice each restart vehicle tracking,
+ *    whose CLEAR_VEHICLE_MATCH zeroes emptyPolls mid-loop.
  */
 const path = require('path')
 
@@ -118,10 +126,14 @@ async function main() {
     window.__itin = itin
     const route = leg.route
     return {
+      headsign: leg.headsign || null,
       lat,
+      legIndex,
       lon,
       routeId: typeof route === 'object' ? route?.id : leg.routeId,
-      routeName: leg.routeShortName || route?.shortName
+      routeName: leg.routeShortName || route?.shortName,
+      routeShortName: leg.routeShortName || route?.shortName || null,
+      tripId: leg.trip?.gtfsId || leg.tripId || null
     }
   })
   if (!aboard) throw new Error('no transit itinerary found')
@@ -149,6 +161,32 @@ async function main() {
       req.continue()
     }
   })
+
+  // Establish the sticky riding fact BEFORE the trip starts — the scenario IS
+  // "rider verifiably aboard this trip", and START_GO_MODE preserves riding
+  // (reanchorRiding). Without it, the very first GPS tick after beginGoMode
+  // reads the shifted itinerary (transit leg departed 5 minutes ago, no
+  // vehicle to match on a feed forced empty) as a definitively missed bus:
+  // the app auto-updates to the next same-route departure, riding then forms
+  // on that FUTURE leg while the rider is already moving, the boarded-earlier
+  // gate fires an aboard splice — and each swap restarts vehicle tracking,
+  // whose CLEAR_VEHICLE_MATCH resets emptyPolls mid-loop (the "race" this
+  // script kept losing; the 15s poller was only ever the messenger).
+  await page.evaluate((at) => {
+    window.store.dispatch({
+      payload: {
+        boardedAt: Date.now(),
+        headsign: at.headsign,
+        legIndex: at.legIndex,
+        offRouteSince: null,
+        routeId: at.routeId,
+        routeShortName: at.routeShortName,
+        tripId: at.tripId,
+        vehicleId: null
+      },
+      type: 'SET_RIDING'
+    })
+  }, aboard)
 
   await page.evaluate(() => window.__beginGoMode(window.__itin))
   await page.waitForFunction(
