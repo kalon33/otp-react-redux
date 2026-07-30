@@ -91,7 +91,7 @@ Object {
     "ui": Object {
       "activeLeg": null,
       "backgrounded": false,
-      "mapFollowUser": false,
+      "mapFollowUser": true,
     },
     "vehicleMatch": Object {
       "consecutiveMatches": 0,

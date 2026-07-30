@@ -17,6 +17,7 @@ import {
   SET_GO_MODE_ACTIVE_LEG,
   SET_GO_MODE_BACKGROUNDED,
   SET_LIVE_LEG_TIMES,
+  SET_MAP_FOLLOW,
   SET_NOTIFICATION_CONFIG,
   SET_ONBOARD_RESULT,
   SET_ONBOARD_STATUS,
@@ -289,9 +290,13 @@ const defaultState: GoModeState = {
   ui: {
     activeLeg: null,
     backgrounded: false,
-    // Off by default: the map should stay where the user leaves it and only
-    // recenter on the live GPS point when the user asks (blue dot control).
-    mapFollowUser: false
+    // On by default: each new trip opens in Google Maps-style live follow
+    // (7/29 rider request — "it should follow dot as you are moving"). A drag,
+    // rotate, or trip-sheet leg tap disengages it; the map's follow button
+    // re-engages. STOP_GO_MODE resets to this default, so every trip starts
+    // following, while START_GO_MODE preserves ui — a quiet background replan
+    // must not override an explicit disengage mid-trip.
+    mapFollowUser: true
   },
 
   vehicleMatch: {
@@ -493,6 +498,14 @@ const goMode = handleActions<GoModeState, any>(
     [SET_LIVE_LEG_TIMES]: (state, action) => ({
       ...state,
       liveLegTimes: action.payload
+    }),
+
+    [SET_MAP_FOLLOW]: (state: GoModeState, action: any) => ({
+      ...state,
+      ui: {
+        ...state.ui,
+        mapFollowUser: !!action.payload
+      }
     }),
 
     [SET_NOTIFICATION_CONFIG]: (state, action) => {

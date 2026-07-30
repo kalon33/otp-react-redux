@@ -46,9 +46,11 @@ interface Props {
   pauseGpsSimulation: () => void
   resumeGpsSimulation: () => void
   setDepartureOverride: (epochMs: number | null) => void
+  setMapFollow: (value: boolean) => void
   setMobileScreen: (screen: number) => void
   startGpsSimulation: (speedMultiplier?: number) => void
   stopGpsSimulation: () => void
+  toggleMapFollow: () => void
 }
 
 const GoModeScreen = ({
@@ -60,9 +62,11 @@ const GoModeScreen = ({
   pauseGpsSimulation,
   resumeGpsSimulation,
   setDepartureOverride,
+  setMapFollow,
   setMobileScreen,
   startGpsSimulation,
-  stopGpsSimulation
+  stopGpsSimulation,
+  toggleMapFollow
 }: Props) => {
   const intl = useIntl()
   const [simSpeed, setSimSpeed] = useState(2)
@@ -252,9 +256,12 @@ const GoModeScreen = ({
         <GoModeMap
           activeLegIndex={goMode.ui.activeLeg}
           currentLegIndex={goMode.progress.currentLegIndex}
+          currentLegMode={currentLeg?.mode ?? null}
           currentPosition={goMode.tracking.lastPosition}
           followUser={goMode.ui.mapFollowUser}
           itinerary={goMode.activeItinerary}
+          onSetFollow={setMapFollow}
+          onToggleFollow={toggleMapFollow}
           routeMatch={goMode.routeMatch}
         />
 
@@ -450,9 +457,11 @@ const mapDispatchToProps = {
   pauseGpsSimulation: goModeActions.pauseGpsSimulation,
   resumeGpsSimulation: goModeActions.resumeGpsSimulation,
   setDepartureOverride: goModeActions.selectDeparture,
+  setMapFollow: goModeActions.setMapFollow,
   setMobileScreen: uiActions.setMobileScreen,
   startGpsSimulation: goModeActions.startGpsSimulation,
-  stopGpsSimulation: goModeActions.stopGpsSimulation
+  stopGpsSimulation: goModeActions.stopGpsSimulation,
+  toggleMapFollow: goModeActions.toggleMapFollow
 }
 
 export default connect(mapStateToProps, mapDispatchToProps)(GoModeScreen)

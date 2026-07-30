@@ -258,7 +258,7 @@ const demoSheetStore = {
           currentLegIndex: 0,
           waitTimeAtStop: 180
         },
-        ui: { activeLeg: null, backgrounded: false, mapFollowUser: false }
+        ui: { activeLeg: null, backgrounded: false, mapFollowUser: true }
       },
       ui: { diagramLeg: null }
     }
