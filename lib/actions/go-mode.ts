@@ -2177,20 +2177,21 @@ export function replanFromAboard(
     const prefsOverride = profile?.prefs ?? options.preferences
 
     if (options.autoApply) {
-      const ranked = await dispatch(
-        optimizeAlightFromTrip({ prefsOverride, to, trip, vehicle })
-      )
-      if (!stillCurrent()) return
       // An AUTO-APPLIED splice keeps the rider's plan: alight where the
       // active itinerary already alights whenever the boarded trip serves
-      // that stop (same route, earlier bus — it almost always does). The
-      // optimizer's other candidates can legally rank "faster" via a
-      // transfer — especially before the boarded trip broadcasts realtime,
-      // when its schedule-anchored epochs skew the comparison
-      // (verify-boarded-earlier hit a 3-minute-hop splice this way) — but an
-      // automatic update must never invent a route change the rider didn't
-      // ask for. The explicit rider-facing path below keeps the full ranked
-      // choice.
+      // that stop (same route, earlier bus — it almost always does), and
+      // keep the plan's own onward legs. No optimizer, no candidate plans —
+      // deterministic, and an automatic update cannot invent a route change
+      // the rider didn't ask for (their standing rule). The optimizer run
+      // below is the FALLBACK for a boarded trip that genuinely doesn't
+      // reach the planned stop; even then a ranked candidate matching the
+      // planned stop is preferred, because the ranking can legally favor a
+      // hop-off-and-transfer — verify-boarded-earlier caught both holes: the
+      // planned stop missing from the sampled candidates entirely, and
+      // schedule-anchored epochs (no realtime yet) skewing the ranking into
+      // a 3-minute-hop splice whose transfer leg then re-armed the
+      // boarded-earlier gate and wiped the live-times anchor. The explicit
+      // rider-facing path keeps the full ranked choice.
       const ridingLegForAlight: any =
         riding.legIndex != null && riding.legIndex >= 0
           ? legs[riding.legIndex]
@@ -2199,10 +2200,34 @@ export function replanFromAboard(
         ridingLegForAlight?.to?.stop?.gtfsId ??
         ridingLegForAlight?.to?.stopId ??
         null
-      const best =
-        (plannedAlightStopId != null &&
-          ranked?.find((r: any) => r.stopId === plannedAlightStopId)) ||
-        ranked?.[0]
+      const plannedArrival =
+        plannedAlightStopId != null
+          ? liveStopArrival(
+              trip.stopTimes || [],
+              plannedAlightStopId,
+              ridingLegForAlight?.to?.name
+            )
+          : null
+      let best: any = null
+      if (plannedArrival) {
+        best = {
+          busArrivalEpoch: plannedArrival.epoch,
+          itinerary: {
+            ...itinerary,
+            legs: legs.slice((riding.legIndex as number) + 1)
+          },
+          stopId: plannedAlightStopId
+        }
+      } else {
+        const ranked = await dispatch(
+          optimizeAlightFromTrip({ prefsOverride, to, trip, vehicle })
+        )
+        if (!stillCurrent()) return
+        best =
+          (plannedAlightStopId != null &&
+            ranked?.find((r: any) => r.stopId === plannedAlightStopId)) ||
+          ranked?.[0]
+      }
       if (!best) {
         // Settle the attempt ('none' stays retryable under the caller's
         // attempt caps); the trip is left untouched.
