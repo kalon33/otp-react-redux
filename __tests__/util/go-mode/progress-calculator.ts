@@ -361,6 +361,19 @@ describe('util > go-mode > progress-calculator', () => {
       const result = getWalkingInstruction(leg, 0.5)
       expect(result.nextInstruction).toContain('Continue to Station')
     })
+
+    it('returns nothing at all while the rider is off the route', () => {
+      const leg = {
+        distance: 1000,
+        mode: 'BICYCLE',
+        to: { name: 'Station' }
+      } as any
+
+      // No turn fields AND no "Continue to" filler: off the plan, that line is
+      // exactly the stale guidance the 7/29 rider shouldn't have seen. The
+      // deviation toast and the quiet replan own this state.
+      expect(getWalkingInstruction(leg, 0.5, false)).toEqual({})
+    })
   })
 
   describe('shouldAlertForApproachingStop', () => {
@@ -511,6 +524,78 @@ describe('util > go-mode > progress-calculator', () => {
 
       expect(result.status).toBe('deviated')
       expect(result.currentLegIndex).toBe(0)
+      // A null match reads as deviated, and deviated access legs carry no turn
+      // guidance at all — the projection behind it is a fiction (7/29).
+      expect(result.nextInstruction).toBeUndefined()
+      expect(result.nextTurnCue).toBeUndefined()
+      expect(result.distanceToNextTurn).toBeUndefined()
+    })
+
+    it('carries no turn fields while the rider is off the route', () => {
+      const legs = makeLegs([1000], [300], ['BICYCLE'])
+      const itinerary = makeItinerary(
+        legs,
+        '2026-01-28T10:00:00',
+        '2026-01-28T10:05:00'
+      )
+
+      const result = calculateTripProgress(
+        new Date('2026-01-28T10:02:00'),
+        itinerary,
+        {
+          distanceFromRoute: 150,
+          isOnRoute: false,
+          legIndex: 0,
+          nearestPoint: [44.92, -93.27] as [number, number],
+          progressAlongLeg: 0.4,
+          progressAlongSegment: 0.5,
+          segmentIndex: 1
+        }
+      )
+
+      expect(result.status).toBe('deviated')
+      expect(result.nextInstruction).toBeUndefined()
+      expect(result.nextTurnCue).toBeUndefined()
+      expect(result.distanceToNextTurn).toBeUndefined()
+    })
+
+    it('passes the rider speed through for lead scaling', () => {
+      const legs = makeLegs([1000], [300], ['BICYCLE'])
+      const itinerary = makeItinerary(
+        legs,
+        '2026-01-28T10:00:00',
+        '2026-01-28T10:05:00'
+      )
+
+      const result = calculateTripProgress(
+        new Date('2026-01-28T10:02:00'),
+        itinerary,
+        {
+          distanceFromRoute: 5,
+          isOnRoute: true,
+          legIndex: 0,
+          nearestPoint: [44.92, -93.27] as [number, number],
+          progressAlongLeg: 0.4,
+          progressAlongSegment: 0.5,
+          segmentIndex: 1
+        },
+        undefined,
+        undefined,
+        6.5
+      )
+
+      expect(result.riderSpeedMps).toBe(6.5)
+
+      // No speed on the fix → the field stays absent (floors apply downstream).
+      const noSpeed = calculateTripProgress(
+        new Date('2026-01-28T10:02:00'),
+        itinerary,
+        null,
+        undefined,
+        undefined,
+        null
+      )
+      expect(noSpeed.riderSpeedMps).toBeUndefined()
     })
   })
 })

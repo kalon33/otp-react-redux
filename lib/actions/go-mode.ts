@@ -2714,7 +2714,11 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       itinerary,
       routeMatch,
       departureOverride,
-      transitCtx
+      transitCtx,
+      // The fix's own ground speed lets turn-announcement leads scale with how
+      // fast the rider is actually moving (7/29: 6.5 m/s made the static 120 m
+      // prepare an 18 s warning).
+      position.coords.speed ?? null
     )
 
     dispatch(updateProgress(progress))
@@ -2993,9 +2997,21 @@ export function handlePositionUpdate(position: GeolocationPosition) {
             title: cue.instruction
           })
         }
-      } else if (lastTurnCardKey !== null) {
+      } else if (
+        lastTurnCardKey !== null &&
+        !(
+          progress.status === 'deviated' &&
+          (currentLeg?.mode === 'WALK' || currentLeg?.mode === 'BICYCLE')
+        )
+      ) {
         // No turn to show anymore (boarded a bus, or trip ended). Clear the
         // stale card so the wrist stops displaying a turn that no longer holds.
+        // While DEVIATED on an access leg, freeze instead: on 7/29 the rider's
+        // perpendicular distance flapped around the 100 m on-route threshold
+        // for two minutes, and clearing each off-route tick would churn
+        // cancel→repost on the wrist. The frozen turn is still the rider's
+        // last known move; boarding, trip end and genuine on-route cue
+        // exhaustion all still clear it.
         lastTurnCardKey = null
         cancelPush(TURN_CARD_NOTIFICATION_ID)
       }

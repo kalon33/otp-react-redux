@@ -1,7 +1,7 @@
 import type { Itinerary, Leg } from '@opentripplanner/types'
 
 import { countStopsAhead, hasDegenerateStopList } from './next-stop'
-import { getNextCue } from './turn-by-turn'
+import { selectCueForNavigation } from './turn-by-turn'
 import type { RouteMatchResult } from './position-matching'
 import type { StepCue } from './turn-by-turn'
 
@@ -38,6 +38,9 @@ export interface TripProgress {
   overallProgress: number
   // Epoch ms — the originally planned departure time from itinerary
   plannedDepartureTime?: number
+  // The rider's own GPS ground speed in m/s, when the fix carries one. Lets
+  // announcement leads scale with how fast the rider actually moves.
+  riderSpeedMps?: number
   // seconds
   status: TripStatus
 
@@ -54,6 +57,9 @@ export interface TripProgress {
   timeRemaining: number
   // Seconds until next transit leg departs (walking legs only)
   timeUntilNextDeparture?: number
+  // True while turn announcements are settling after a rejoin/projection jump
+  // (see selectCueForNavigation) — the cue itself stays current and passive.
+  turnAnnouncementsHeld?: boolean
   // Seconds of estimated wait at next stop (walking legs only)
   waitTimeAtStop?: number
 }
@@ -292,29 +298,47 @@ function legacyStopEstimate(
 }
 
 /**
- * Get walking-specific navigation information
+ * Get walking-specific navigation information.
+ *
+ * `isOnRoute` defaults to true so legacy callers keep today's behavior; pass
+ * the real route-match verdict to get honest guidance. Off the route the
+ * nearest-point projection is a fiction (on 7/29 it swept past three turns
+ * while the rider rode a parallel street), so no turn fields come back at all
+ * — not even the "Continue to X" filler, which is exactly the stale line the
+ * rider shouldn't see while off the plan. The deviation toast and the quiet
+ * replan own that state.
  */
 export function getWalkingInstruction(
   leg: Leg,
-  progressInLeg: number
+  progressInLeg: number,
+  isOnRoute = true
 ): {
   distanceToNextTurn?: number
   followingTurnCue?: StepCue
   nextInstruction?: string
   nextTurnCue?: StepCue
+  turnAnnouncementsHeld?: boolean
 } {
   if (leg.mode !== 'WALK' && leg.mode !== 'BICYCLE') {
     return {}
   }
 
-  // Real turn-by-turn when the leg carries usable steps.
-  const { cue, distanceToNextTurn, following } = getNextCue(leg, progressInLeg)
+  // Real turn-by-turn when the leg carries usable steps. Always consulted so
+  // the per-leg cursor sees every tick, including off-route ones.
+  const { announceHold, cue, distanceToNextTurn, following } =
+    selectCueForNavigation(leg, progressInLeg, isOnRoute)
+
+  if (!isOnRoute) {
+    return {}
+  }
+
   if (cue) {
     return {
       distanceToNextTurn,
       followingTurnCue: following,
       nextInstruction: cue.instruction,
-      nextTurnCue: cue
+      nextTurnCue: cue,
+      turnAnnouncementsHeld: announceHold
     }
   }
 
@@ -425,7 +449,8 @@ export function calculateTripProgress(
   itinerary: Itinerary,
   routeMatch: RouteMatchResult | null,
   departureOverrideMs?: number | null,
-  transitCtx?: TransitTrustContext
+  transitCtx?: TransitTrustContext,
+  riderSpeedMps?: number | null
 ): TripProgress {
   const legs = itinerary.legs
   const currentLegIndex = routeMatch?.legIndex || 0
@@ -471,7 +496,14 @@ export function calculateTripProgress(
     progressInCurrentLeg,
     transitCtx
   )
-  const walkingInfo = getWalkingInstruction(currentLeg, progressInCurrentLeg)
+  // Route honesty: a null match already reads as 'deviated' above, and the
+  // same suppression applies — no turn guidance from a projection the rider
+  // isn't actually on.
+  const walkingInfo = getWalkingInstruction(
+    currentLeg,
+    progressInCurrentLeg,
+    routeMatch?.isOnRoute ?? false
+  )
 
   // Get upcoming transit timing
   const nextLeg =
@@ -499,6 +531,7 @@ export function calculateTripProgress(
     delay,
     estimatedArrival,
     overallProgress,
+    riderSpeedMps: riderSpeedMps ?? undefined,
     status,
     timeRemaining,
     ...transitInfo,

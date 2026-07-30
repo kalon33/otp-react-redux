@@ -316,6 +316,71 @@ describe('util > go-mode > notification-service', () => {
       expect(other).not.toBeNull()
       expect(other!.title).toBe('Turn right on Oak')
     })
+
+    it('stays silent while announcements are held, even inside act range', () => {
+      // A rejoin/jump settle (7/29): the on-screen cue is right, the buzz
+      // waits until the projection proves plausible.
+      const held = makeProgress({
+        distanceToNextTurn: 10,
+        nextTurnCue: makeCue(),
+        turnAnnouncementsHeld: true
+      })
+      expect(checkUpcomingTurn(held, bikeLeg, [])).toBeNull()
+      expect(checkUpcomingTurn(held, walkLeg, [])).toBeNull()
+    })
+
+    describe('speed-scaled leads', () => {
+      it('widens the bike prepare lead at real riding speed', () => {
+        // 7/29 on-route speed: at 7 m/s the static 120 m floor is ~17 s of
+        // warning; the scaled lead (7 × 25 = 175 m) catches a cue at 160 m.
+        const fast = makeProgress({
+          distanceToNextTurn: 160,
+          nextTurnCue: makeCue(),
+          riderSpeedMps: 7
+        })
+        expect(checkUpcomingTurn(fast, bikeLeg, [])).not.toBeNull()
+        // Static leads would not have fired here.
+        const noSpeed = makeProgress({
+          distanceToNextTurn: 160,
+          nextTurnCue: makeCue()
+        })
+        expect(checkUpcomingTurn(noSpeed, bikeLeg, [])).toBeNull()
+      })
+
+      it('leaves a walker unchanged — the floors win at walking speed', () => {
+        // 1.4 × 25 = 35 m, under the 40 m walk floor: byte-identical behavior.
+        const walker = makeProgress({
+          distanceToNextTurn: 100,
+          nextTurnCue: makeCue(),
+          riderSpeedMps: 1.4
+        })
+        expect(checkUpcomingTurn(walker, walkLeg, [])).toBeNull()
+      })
+
+      it('caps the leads so a downhill sprint cannot announce blocks early', () => {
+        // 10 × 25 = 250 m — exactly the cap; anything beyond stays silent.
+        const downhill = (distance: number) =>
+          makeProgress({
+            distanceToNextTurn: distance,
+            nextTurnCue: makeCue(),
+            riderSpeedMps: 10
+          })
+        expect(checkUpcomingTurn(downhill(260), bikeLeg, [])).toBeNull()
+        expect(checkUpcomingTurn(downhill(240), bikeLeg, [])).not.toBeNull()
+      })
+
+      it('scales the act stage too, within its own cap', () => {
+        // 7 × 8 = 56 m: an act-stage cue at 50 m instead of the static 30 m.
+        const fast = makeProgress({
+          distanceToNextTurn: 50,
+          nextTurnCue: makeCue(),
+          riderSpeedMps: 7
+        })
+        const result = checkUpcomingTurn(fast, bikeLeg, [])
+        expect(result).not.toBeNull()
+        expect(result!.id).toContain('_act_')
+      })
+    })
   })
 
   describe('checkLegTransition', () => {
