@@ -337,6 +337,30 @@ describe('replanFromAboard (mid-ride aboard-aware replan)', () => {
     )
   })
 
+  it('autoApply splices straight to the planned stop when the schedule serves it — no optimizer', async () => {
+    // The primary auto path: the boarded trip's schedule reaches the active
+    // plan's alight stop, so the splice alights exactly there and keeps the
+    // plan's own onward legs — no candidate plans fetched at all.
+    const trip = makeTripFixture()
+    const serviceDay = Math.floor(Date.now() / 1000) - 3600
+    trip.stopTimes = trip.stopTimes.map((st: any) => ({ ...st, serviceDay }))
+    const itinerary = makeItinerary()
+    ;(itinerary.legs[0].to as any).stop = { gtfsId: '1:s3', id: '1:s3' }
+    const store = makeStore({
+      goModeOverrides: { activeItinerary: itinerary },
+      trips: { [TRIP_ID]: trip }
+    })
+    await store.dispatch(replanFromAboard({ autoApply: true }))
+
+    const applied = store.actions.find((a) => a.type === 'START_GO_MODE')
+      ?.payload?.itinerary
+    expect(applied).toBeTruthy()
+    expect(applied.legs[0].to.stop.id).toBe('1:s3')
+    // The plan's own onward legs ride along unchanged.
+    expect(applied.legs[1].mode).toBe('WALK')
+    expect(mockedFetch).not.toHaveBeenCalled()
+  })
+
   it('autoApply keeps the planned alight stop even when a transfer ranks faster', async () => {
     // The rider's active itinerary alights at s3. Give the optimizer a (mock)
     // much-faster onward plan from s4, so its top-ranked candidate is a
