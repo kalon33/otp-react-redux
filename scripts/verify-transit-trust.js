@@ -37,9 +37,28 @@
  * is the app's own behavior on recorded data.
  *
  * Asserts, for the whole replay / the aboard window:
- *   a. zero MISSED_BUS notifications (fixed-code contract; cannot fail on old
- *      code under replay — see tracking-reset note above; the old-code misfire
- *      is covered by the classifyMissedBus unit tests)
+ *   a. no MISSED_BUS for the bus the rider CAUGHT — none once riding is
+ *      established, and none in the window when the caught trip's vehicle is
+ *      at/approaching the boarding stop (derived from the recording: first
+ *      vehicleMatch on the boarded trip, minus a couple minutes of approach).
+ *      A PRE-BOARDING same-route auto-update PASSES — it is designed
+ *      behavior: while deviated on the bike leg the rider genuinely missed
+ *      the originally-planned departure (17:11:48 in this fixture), and the
+ *      rider's rules say auto-update to the SAME route's next departure, no
+ *      prompt. That miss surfaced only after reroute-scope, for two verified
+ *      reasons: (1) the old unscoped quiet deviation replan planned
+ *      GPS->destination and swapped in a whole new itinerary boarding a
+ *      LATER Orange departure (this replay's single old-code 17:04:42 swap),
+ *      so classifyMissedBus always saw a future boarding and never fired —
+ *      54bd4ecb scoped it to the access chain and splices the transit suffix
+ *      back UNCHANGED, keeping the truly-missed 17:11 boarding in the
+ *      itinerary; (2) the old miss-streak fallback dispatched a dead
+ *      non-autoApply reRouteFromCurrentPosition() whose reRoute.status
+ *      side-effect (resolving into state nothing renders since eb74a9d8)
+ *      could sit non-idle and block the idle-gated missed-bus auto-update
+ *      during deviation — 54bd4ecb/3ed7d078 removed it. (The old-code ABOARD
+ *      misfire stays covered by the classifyMissedBus unit tests; it cannot
+ *      re-fire here under replay — see tracking-reset note above.)
  *   b. zero autoApply reroutes (missed-bus / boarded-earlier) and zero
  *      itinerary replacements after boarding
  *   c. riding stays trip 1:1173133 / vehicle 1:8140 for the whole bus leg
@@ -399,14 +418,38 @@ async function main() {
 
   console.log('\n===== ASSERTIONS =====')
 
-  // (a) zero MISSED_BUS notifications across the whole replay
+  // (a) no MISSED_BUS for the bus the rider CAUGHT. Bad = fired (i) at/after
+  // riding was established, or (ii) while the caught trip's vehicle was
+  // at/approaching the boarding stop — window derived from the recorded
+  // events (first vehicleMatch on the boarded trip minus an approach lead),
+  // never hardcoded wall times. A pre-boarding same-route auto-update (the
+  // rider really did miss the planned departure while deviated on the bike
+  // leg) is designed behavior and must PASS — see header.
+  const CAUGHT_BUS_APPROACH_LEAD_MS = 2 * 60 * 1000
   const missed = rec.notifications.filter((n) => n.type === 'MISSED_BUS')
+  const firstCaughtMatch = rec.vehicleMatches.find(
+    (v) => v.tripId === BOARDED.tripId
+  )
+  const approachStartMs =
+    (firstCaughtMatch ? firstCaughtMatch.t : firstRiding.t) -
+    CAUGHT_BUS_APPROACH_LEAD_MS
+  const missedOfCaughtBus = missed.filter(
+    (n) => n.t >= firstRiding.t || n.t >= approachStartMs
+  )
+  const preBoardingMissed = missed.filter((n) => !missedOfCaughtBus.includes(n))
   check(
     'a. no MISSED_BUS notification for a bus the rider caught',
-    missed.length === 0,
-    missed.length
-      ? missed.map((n) => `${fmt(n.t)} "${n.message}"`).join('; ')
-      : 'none fired'
+    missedOfCaughtBus.length === 0,
+    missedOfCaughtBus.length
+      ? `${missedOfCaughtBus
+          .map((n) => `${fmt(n.t)} "${n.message}"`)
+          .join('; ')} (aboard from ${fmt(firstRiding.t)}, caught-bus ` +
+          `approach from ${fmt(approachStartMs)})`
+      : `none aboard/approach (window from ${fmt(approachStartMs)}); ` +
+          `${preBoardingMissed.length} legitimate pre-boarding miss(es)` +
+          (preBoardingMissed.length
+            ? `: ${preBoardingMissed.map((n) => fmt(n.t)).join(', ')}`
+            : '')
   )
 
   // (b) zero autoApply reroutes + zero itinerary replacements after boarding

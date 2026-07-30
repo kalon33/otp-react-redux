@@ -2045,6 +2045,14 @@ export function confirmOnboardAlightStop(option?: any) {
     // beginGoMode resets the vehicle match; re-confirm this bus so tracking
     // stays locked to the vehicle the rider is already aboard.
     reconfirmBoardedVehicle(dispatch, vehicle)
+
+    // Same latent gap verify-boarded-earlier caught on the aboard splice:
+    // live leg times otherwise wait for a position tick, so the synthesized
+    // bus leg would show schedule-anchored times until GPS delivers. Anchor
+    // them to the boarded trip immediately.
+    if (!isReplayActive()) {
+      dispatch(refreshLiveLegTimes())
+    }
   }
 }
 
@@ -2194,6 +2202,50 @@ export function replanFromAboard(
       dispatch(beginGoMode(spliced))
       // beginGoMode resets the vehicle match; re-lock the boarded bus.
       reconfirmBoardedVehicle(dispatch, vehicle)
+
+      // The riding fact justified this replan, but by the time the async
+      // splice lands the fact itself can be GONE: the schedule fetch and
+      // alight optimization take seconds, and if the rider's fixes ran off
+      // the OLD itinerary's short bus leg meanwhile, the off-route clock
+      // (RIDING_OFFROUTE_CLEAR_MS — it counts SIM time, so a 16x run burns
+      // it in seconds) clears the fact. START_GO_MODE's reanchorRiding then
+      // has nothing to carry over, and with no further GPS ticks nothing
+      // re-forms it (verify-boarded-earlier caught exactly this: riding
+      // undefined after the splice). Re-assert the fact anchored to the
+      // spliced bus leg — the rider verifiably being on `tripId` is the
+      // premise of this whole path.
+      const busLegIndex = (spliced.legs || []).findIndex(
+        (l: any) =>
+          l?.transitLeg && (l.trip?.gtfsId === tripId || l.tripId === tripId)
+      )
+      const ridingAfter: RidingState | null =
+        getState().otp?.goMode?.riding ?? null
+      dispatch(
+        setRiding({
+          boardedAt: ridingAfter?.boardedAt ?? riding.boardedAt,
+          headsign:
+            (spliced.legs?.[busLegIndex] as any)?.headsign ??
+            riding.headsign ??
+            null,
+          legIndex: busLegIndex,
+          offRouteSince: null,
+          routeId: riding.routeId ?? null,
+          routeShortName: riding.routeShortName ?? null,
+          tripId,
+          vehicleId: riding.vehicleId ?? vehicle.vehicleId ?? null
+        })
+      )
+
+      // Anchor the trip-overview times to the RIDDEN trip now. Live leg
+      // times are otherwise refreshed only from position ticks
+      // (handlePositionUpdate), and post-splice there may be none for a
+      // while (GPS gap; verify-boarded-earlier's sim ran out of points) —
+      // START_GO_MODE just wiped liveLegTimes, so the overview would sit on
+      // the planned trip's times indefinitely. Skipped under replay like
+      // every live-times poll (replays reproduce recorded data).
+      if (!isReplayActive()) {
+        await dispatch(refreshLiveLegTimes())
+      }
 
       // Same "Trip updated" style as applyAutoReroute — but aboard, the new
       // ALIGHTING is the fact the rider needs (the boarding is under them).

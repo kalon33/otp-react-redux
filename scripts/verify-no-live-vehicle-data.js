@@ -13,6 +13,16 @@
  * vehicles, vehicleMatch.emptyPolls climbs; once it reaches
  * NO_LIVE_VEHICLE_POLLS the header stops saying "Locating" and admits there is
  * no live data. A poll that DOES return vehicles resets the counter.
+ *
+ * Harness note: the "no live vehicles" condition is enforced at the NETWORK
+ * layer — request interception answers every vehiclePositions GraphQL query
+ * with an empty patterns list (same technique as verify-boarded-earlier,
+ * e1bc1631). The previous version mutated transitIndex vehicles empty before
+ * each poll, which RACED the app's real 15s poller: a live response landing
+ * between the mutation and the poll refilled the index (Orange Line
+ * broadcasts in the evening) and the counter was then CORRECTLY reset by the
+ * non-empty-poll path — a script race, not an app bug. With the feed forced
+ * empty on the wire, a non-empty poll is impossible by construction.
  */
 const path = require('path')
 
@@ -122,6 +132,24 @@ async function main() {
     latitude: aboard.lat,
     longitude: aboard.lon
   })
+
+  // From here on, the route has no live vehicles — answer every
+  // vehiclePositions query with an empty feed (see header). Installed BEFORE
+  // beginGoMode so the app's own 15s poller never sees a real vehicle.
+  // Everything else (plans, stop times) passes through untouched.
+  await page.setRequestInterception(true)
+  page.on('request', (req) => {
+    if ((req.postData() || '').includes('vehiclePositions')) {
+      req.respond({
+        body: JSON.stringify({ data: { route: { patterns: [] } } }),
+        contentType: 'application/json',
+        status: 200
+      })
+    } else {
+      req.continue()
+    }
+  })
+
   await page.evaluate(() => window.__beginGoMode(window.__itin))
   await page.waitForFunction(
     () => window.store.getState().otp.goMode.isActive,
@@ -161,17 +189,11 @@ async function main() {
     const goMode = await import('/lib/actions/go-mode.js')
     const dispatch = (a) => window.store.dispatch(a)
     const getState = () => window.store.getState()
-    // Guarantee the "no live vehicles" condition regardless of what the real
-    // feed happens to be doing while this test runs. The one-time version of
-    // this raced the app's own 15s vehicle poll: a live response landing
-    // mid-loop refilled the index with real vehicles (Orange Line broadcasts
-    // in the evening) and the counter was then CORRECTLY reset by the
-    // non-empty-poll path — so re-assert emptiness before every poll.
-    const emptyTheFeed = () => {
-      const idx = getState().otp.transitIndex?.routes || {}
-      if (idx[routeId]) idx[routeId].vehicles = []
-    }
-    emptyTheFeed()
+    // The network interception (installed before beginGoMode) guarantees the
+    // feed is empty — no per-poll state mutation needed. One initial clear
+    // covers anything a poll loaded before interception went live.
+    const idx = getState().otp.transitIndex?.routes || {}
+    if (idx[routeId]) idx[routeId].vehicles = []
     // Zero the counter first — the real 15s poller has been running since Go
     // Mode started, so emptyPolls is whatever it is by now.
     window.store.dispatch({
@@ -180,7 +202,6 @@ async function main() {
     })
     const out = []
     for (let i = 0; i < 8; i++) {
-      emptyTheFeed()
       goMode.performVehicleMatching(routeId)(dispatch, getState)
       await new Promise((resolve) => setTimeout(resolve, 60))
       const g = getState().otp.goMode

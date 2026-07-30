@@ -297,6 +297,16 @@ describe('replanFromAboard (mid-ride aboard-aware replan)', () => {
     expect(trip.stopTimes.map((st: any) => st.stop.id)).toContain(
       applied.legs[0].from.stop.id
     )
+    // Live-times anchor contract (refreshLiveLegTimes): the synthesized leg
+    // must carry the ridden trip's id in BOTH shapes the anchor accepts
+    // (leg.trip.gtfsId and leg.tripId) plus board/alight stop gtfsIds and
+    // names for liveStopArrival's id-then-name lookup — verify-boarded-earlier
+    // caught the spliced trip's overview times never re-anchoring.
+    expect(applied.legs[0].trip).toEqual({ gtfsId: TRIP_ID })
+    expect(applied.legs[0].from.stop.gtfsId).toBeTruthy()
+    expect(applied.legs[0].from.name).toBeTruthy()
+    expect(applied.legs[0].to.stop.gtfsId).toBeTruthy()
+    expect(applied.legs[0].to.name).toBeTruthy()
     // START_GO_MODE settles the reroute bookkeeping back to idle.
     expect(store.getGoMode().reRoute.status).toBe('idle')
     // Confirmation in applyAutoReroute's style; no onboard-UI churn on the
@@ -325,6 +335,49 @@ describe('replanFromAboard (mid-ride aboard-aware replan)', () => {
         vehicleId: 'v-1'
       })
     )
+  })
+
+  it('autoApply re-asserts riding + live times when the fact cleared mid-flight', async () => {
+    // The replan's async work (schedule fetch, alight optimization) takes
+    // seconds; a rider whose fixes ran off the OLD itinerary's bus leg
+    // meanwhile hits the off-route clear, so the fact reanchorRiding would
+    // carry over is gone by the time the splice lands — and with no further
+    // GPS ticks nothing re-forms it or refreshes live leg times
+    // (verify-boarded-earlier: "riding trip undefined", alight n/a).
+    const trip = makeTripFixture()
+    // A real service day so liveStopArrival can build absolute epochs.
+    const serviceDay = Math.floor(Date.now() / 1000) - 3600
+    trip.stopTimes = trip.stopTimes.map((st: any) => ({ ...st, serviceDay }))
+    const store = makeStore({ trips: { [TRIP_ID]: trip } })
+    mockedFetch.mockReturnValue(() => {
+      // The off-route clear lands while the replan is in flight.
+      store.dispatch({ type: 'CLEAR_RIDING' })
+      return Promise.resolve({ error: false, itineraries: [onwardItin()] })
+    })
+    await store.dispatch(
+      replanFromAboard({ autoApply: true, reason: 'boarded-earlier' })
+    )
+
+    // The riding fact is re-asserted, anchored to the spliced bus leg.
+    expect(store.getGoMode().riding).toEqual(
+      expect.objectContaining({
+        legIndex: 0,
+        offRouteSince: null,
+        tripId: TRIP_ID,
+        vehicleId: 'v-1'
+      })
+    )
+    // And the live-times refresh ran against the spliced itinerary — the
+    // ridden trip's leg got an anchored entry without waiting for a GPS tick.
+    const types = store.actions.map((a) => a.type)
+    expect(types.indexOf('SET_LIVE_LEG_TIMES')).toBeGreaterThan(
+      types.indexOf('START_GO_MODE')
+    )
+    const live = store.actions
+      .filter((a) => a.type === 'SET_LIVE_LEG_TIMES')
+      .pop()
+    expect(live?.payload?.[0]?.alightEpoch).not.toBeNull()
+    expect(live?.payload?.[0]?.boardEpoch).not.toBeNull()
   })
 
   it('explicit path populates the onboard UI without touching the live trip', async () => {
