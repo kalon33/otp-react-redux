@@ -5,6 +5,7 @@ import {
   findRidingVehicle,
   findVehicleById,
   findVehicleForTrip,
+  isVehicleRecordFresh,
   refreshConfirmedMatch,
   shouldRebindRidingTrip,
   shouldReplanBoardedEarlier,
@@ -61,13 +62,40 @@ describe('vehicle record lookup', () => {
     expect(findVehicleById(vehicles, null, NOW)).toBeNull()
   })
 
-  it('a record without a feed timestamp gets a null ageSec (never fresh)', () => {
+  it('a record without a feed timestamp gets a null ageSec', () => {
     const record = findVehicleForTrip(
       [vehicle({ seconds: undefined as any })],
       '1:1173133',
       NOW
     )
     expect(record?.ageSec).toBeNull()
+  })
+})
+
+describe('isVehicleRecordFresh', () => {
+  it('accepts a young feed timestamp and rejects a stale one', () => {
+    expect(
+      isVehicleRecordFresh(findVehicleById([vehicle({})], '1:8140', NOW))
+    ).toBe(true)
+    expect(
+      isVehicleRecordFresh(
+        findVehicleById([vehicle({ seconds: NOW / 1000 - 300 })], '1:8140', NOW)
+      )
+    ).toBe(false)
+  })
+
+  it('a null ageSec passes — the live feed publishes lastUpdated: null for in-service vehicles', () => {
+    // Same null policy as headsigns/accuracy: unknown data never blocks. Only
+    // a record the feed KNOWS is old (the 7/29 flap) is rejected.
+    expect(
+      isVehicleRecordFresh(
+        findVehicleById([vehicle({ seconds: undefined as any })], '1:8140', NOW)
+      )
+    ).toBe(true)
+  })
+
+  it('no record at all is never fresh', () => {
+    expect(isVehicleRecordFresh(null)).toBe(false)
   })
 })
 
@@ -229,6 +257,35 @@ describe('shouldReplanBoardedEarlier', () => {
         vehicleRecord: staleRecord
       })
     ).toBe(false)
+  })
+
+  it('a record with no feed timestamp still supports a legitimate replan', () => {
+    // Half the live fleet reports lastUpdated: null — an unknown age must not
+    // permanently block the boarded-earlier fix for riders on those buses.
+    const untimestamped = findVehicleById(
+      [vehicle({ seconds: undefined as any })],
+      '1:8140',
+      NOW
+    )
+    expect(
+      shouldReplanBoardedEarlier({
+        nowMs: NOW,
+        ridingLeg,
+        vehicleMatchState: {
+          consecutiveMatches: 8,
+          match: {
+            confidence: 'high',
+            distanceMeters: 40,
+            label: '8140',
+            lastSeen: NOW,
+            tripHeadsign: 'Orange Burnsville',
+            tripId: '1:trip-earlier-run',
+            vehicleId: '1:8140'
+          }
+        },
+        vehicleRecord: untimestamped
+      })
+    ).toBe(true)
   })
 
   it('being aboard well before the planned bus could exist still proves an earlier run', () => {

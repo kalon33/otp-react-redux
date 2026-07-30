@@ -261,7 +261,12 @@ async function main() {
                 nextStopName: null,
                 patternId: `${routeId}:sim`,
                 routeId,
-                seconds: Math.floor(Date.now() / 1000),
+                // Feed timestamp in the SIM clock domain: simulated fixes
+                // carry simulatedTimeMs in `timestamp`, and the freshness
+                // gates (isVehicleRecordFresh) measure ageSec against the sim
+                // clock too. A wall-clock stamp here goes "stale" within
+                // seconds at 16x and blocks the boarded-earlier replan.
+                seconds: Math.floor((pos.timestamp ?? Date.now()) / 1000),
                 speed: pos.coords.speed ?? 10,
                 stopStatus: 'IN_TRANSIT_TO',
                 tripHeadsign: headsign,

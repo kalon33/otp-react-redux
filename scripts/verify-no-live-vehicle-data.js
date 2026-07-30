@@ -162,9 +162,16 @@ async function main() {
     const dispatch = (a) => window.store.dispatch(a)
     const getState = () => window.store.getState()
     // Guarantee the "no live vehicles" condition regardless of what the real
-    // feed happens to be doing while this test runs.
-    const idx = getState().otp.transitIndex?.routes || {}
-    if (idx[routeId]) idx[routeId].vehicles = []
+    // feed happens to be doing while this test runs. The one-time version of
+    // this raced the app's own 15s vehicle poll: a live response landing
+    // mid-loop refilled the index with real vehicles (Orange Line broadcasts
+    // in the evening) and the counter was then CORRECTLY reset by the
+    // non-empty-poll path — so re-assert emptiness before every poll.
+    const emptyTheFeed = () => {
+      const idx = getState().otp.transitIndex?.routes || {}
+      if (idx[routeId]) idx[routeId].vehicles = []
+    }
+    emptyTheFeed()
     // Zero the counter first — the real 15s poller has been running since Go
     // Mode started, so emptyPolls is whatever it is by now.
     window.store.dispatch({
@@ -173,6 +180,7 @@ async function main() {
     })
     const out = []
     for (let i = 0; i < 8; i++) {
+      emptyTheFeed()
       goMode.performVehicleMatching(routeId)(dispatch, getState)
       await new Promise((resolve) => setTimeout(resolve, 60))
       const g = getState().otp.goMode
@@ -201,7 +209,9 @@ async function main() {
   // Which string renders at which count is asserted in
   // __tests__/components/go-mode/transit-progress.js, where the leg times are
   // not being re-anchored to the next real departure underneath us.
-  if (last.emptyPolls !== 8) {
+  // ">= 8" not "=== 8": the app's own 15s poller can land an extra empty poll
+  // inside the loop window, which only accumulates further.
+  if (last.emptyPolls < 8) {
     problems.push(`emptyPolls should reach 8, got ${last.emptyPolls}`)
   }
 
