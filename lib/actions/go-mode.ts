@@ -2185,7 +2185,28 @@ export function replanFromAboard(
         optimizeAlightFromTrip({ prefsOverride, to, trip, vehicle })
       )
       if (!stillCurrent()) return
-      const best = ranked?.[0]
+      // An AUTO-APPLIED splice keeps the rider's plan: alight where the
+      // active itinerary already alights whenever the boarded trip serves
+      // that stop (same route, earlier bus — it almost always does). The
+      // optimizer's other candidates can legally rank "faster" via a
+      // transfer — especially before the boarded trip broadcasts realtime,
+      // when its schedule-anchored epochs skew the comparison
+      // (verify-boarded-earlier hit a 3-minute-hop splice this way) — but an
+      // automatic update must never invent a route change the rider didn't
+      // ask for. The explicit rider-facing path below keeps the full ranked
+      // choice.
+      const ridingLegForAlight: any =
+        riding.legIndex != null && riding.legIndex >= 0
+          ? legs[riding.legIndex]
+          : null
+      const plannedAlightStopId =
+        ridingLegForAlight?.to?.stop?.gtfsId ??
+        ridingLegForAlight?.to?.stopId ??
+        null
+      const best =
+        (plannedAlightStopId != null &&
+          ranked?.find((r: any) => r.stopId === plannedAlightStopId)) ||
+        ranked?.[0]
       if (!best) {
         // Settle the attempt ('none' stays retryable under the caller's
         // attempt caps); the trip is left untouched.
