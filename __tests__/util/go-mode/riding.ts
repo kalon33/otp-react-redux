@@ -86,6 +86,29 @@ describe('go-mode riding reducer', () => {
     expect(state.riding?.legIndex).toBe(2)
   })
 
+  it('START_GO_MODE with a spliced-bus itinerary re-anchors riding to leg 0', () => {
+    // replanFromAboard's auto-apply swaps in a buildOnboardItinerary splice
+    // whose FIRST leg is the boarded bus (both tripId and trip.gtfsId are
+    // set on the synthesized leg) — riding must re-anchor onto it so alight
+    // detection and live leg times keep tracking the ridden trip.
+    const set = goMode(initial, setRiding(riding))
+    const spliced: any = {
+      legs: [
+        {
+          mode: 'BUS',
+          route: { id: '1:904' },
+          transitLeg: true,
+          trip: { gtfsId: '1:trip-1' },
+          tripId: '1:trip-1'
+        },
+        { mode: 'WALK' }
+      ]
+    }
+    const state = goMode(set, startGoMode({ itinerary: spliced }))
+    expect(state.riding?.legIndex).toBe(0)
+    expect(state.riding?.tripId).toBe('1:trip-1')
+  })
+
   it('START_GO_MODE falls back to routeId, else keeps fact un-anchored', () => {
     const set = goMode(initial, setRiding(riding))
     const byRoute: any = {
