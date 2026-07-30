@@ -51,6 +51,7 @@ import {
   shouldTransitionToNextLeg
 } from '../util/go-mode/position-matching'
 import { getNextStopOnRide } from '../util/go-mode/next-stop'
+import { spliceAccessOntoItinerary } from '../util/go-mode/access-splice'
 import { collectRerouteCandidates } from '../util/go-mode/reroute-candidates'
 import { pickAccessReplanCandidate, pickSameRouteReroute } from '../util/state'
 import type {
@@ -157,11 +158,17 @@ let lastQuietReplanAt = 0
 const QUIET_REPLAN_MIN_INTERVAL_MS = 60000
 
 // Quiet access-leg replans that keep coming back empty (fetch failed, or the
-// never-force-a-route-change picker rejected everything) must not stay silent
-// forever — the rider is off-route and getting no help. After this many
-// consecutive misses the explicit Switch/Keep reroute card takes over.
-const QUIET_REPLAN_MISS_LIMIT = 2
+// never-force-a-route-change picker rejected everything) are counted but
+// settle silently: the ROUTE_DEVIATION notification already fired and the
+// ever-present TripSheet ("View trip & other ways") is the rider's escape
+// hatch — prompting again would be redundant. The streak (scoped AND fallback
+// both came up empty) is kept as bookkeeping for the debug log.
 let quietReplanMissStreak = 0
+
+// The scoped access replan (GPS → boarding stop, single mode) is a
+// point-to-stop query — OTP rarely returns more than 2 distinct paths and the
+// picker takes the fastest anyway, so 3 keeps the fetch light.
+const ACCESS_REPLAN_NUM_ITINERARIES = 3
 
 // A single wild GPS fix (urban multipath) can put the matched distance
 // kilometers off-route for one tick — 5836 m mid-ride on 7/22, while riding
@@ -908,14 +915,18 @@ export function browseFromCurrentPosition(
  * ISOLATED background plan (real OTP results — no fabricated data): no shared
  * currentQuery, no URL change, no active-search churn, so the trip planner the
  * rider may be browsing in the foreground is never disturbed. Results resolve
- * here in the thunk (screen-independent) into goMode.reRoute; TripSheet
- * surfaces them as a Switch/Keep card. Optionally applies a routing profile.
+ * here in the thunk (screen-independent) into goMode.reRoute and are
+ * auto-apply-or-discard: applyAutoReroute swaps in a same-route result, and
+ * anything else settles as bookkeeping (nothing renders goMode.reRoute
+ * candidates since eb74a9d8 replaced the Switch/Keep card with the planner —
+ * manual alternatives live there via browseFromCurrentPosition). Optionally
+ * applies a routing profile.
  */
 export function reRouteFromCurrentPosition(
   options: {
-    // Apply the best result automatically instead of surfacing the
-    // Switch/Keep card — used when the current itinerary is definitively dead
-    // (missed bus) and there is nothing for the rider to decide.
+    // Apply the best result automatically — used when the current itinerary
+    // is definitively dead (missed bus) and there is nothing for the rider to
+    // decide. Without it, results only settle reRoute bookkeeping.
     autoApply?: boolean
     // Restrict an auto-applied result to itineraries boarding this route (the
     // one the rider already chose). Never force a different route on them.
@@ -1054,9 +1065,11 @@ export function reRouteFromCurrentPosition(
  * itinerary is dead, so there is no decision to put to the rider) — but ONLY
  * one that keeps the rider on the route they chose (same route, next
  * departure). Auto-updating must never force a different route or mode; when
- * nothing boards the same route, fall back to the Switch/Keep card so the
- * rider decides. Full re-planning stays behind the explicit
- * "Find another way" button.
+ * nothing boards the same route, the attempt settles via setRerouteResult
+ * (bookkeeping only — no UI renders the candidates since eb74a9d8, but the
+ * 'none'-settle retry semantics are load-bearing for missed-bus retries).
+ * Manual alternatives live in the planner via browseFromCurrentPosition,
+ * behind the explicit "Find another way" button.
  */
 export function applyAutoReroute(
   allItineraries: Itinerary[],
@@ -1076,8 +1089,9 @@ export function applyAutoReroute(
     )
     if (!best) {
       // No same-route option (last run of the day, outside the search
-      // window...): surface the alternatives as the regular card instead of
-      // auto-swapping. The missed-bus push already told the rider.
+      // window...): settle the attempt instead of auto-swapping — 'found'
+      // keeps a later definitive miss from re-firing instantly, 'none' stays
+      // retryable. The missed-bus push already told the rider.
       dispatch(
         setRerouteResult(displayCandidates?.length ? displayCandidates : null)
       )
@@ -1118,10 +1132,16 @@ export function applyAutoReroute(
 
 /**
  * Quietly re-plan the current WALK/BICYCLE access leg when the rider has
- * drifted off it (chosen their own way, car-GPS style): plan current GPS →
- * final destination as an ISOLATED background request (no currentQuery / URL /
- * active-search side effects, so the mobile shell never yanks the rider off
- * the Go Mode screen), then swap the itinerary in without asking. Selection
+ * drifted off it (chosen their own way, car-GPS style). With a transit
+ * boarding still ahead the replan is SCOPED to the access chain: plan current
+ * GPS → the boarding stop in the access mode only, then splice the result
+ * onto the byte-identical transit suffix (spliceAccessOntoItinerary) — the
+ * 7/29 ride's ask: "only reroute the bike leg, don't switch my bus routes".
+ * Only when the scoped plan comes back empty (or nothing qualifies) does it
+ * fall back to the full-trip replan, whose picker still pins the next transit
+ * route. Both fetches are ISOLATED background requests (no currentQuery / URL
+ * / active-search side effects, so the mobile shell never yanks the rider off
+ * the Go Mode screen) and swap the itinerary in without asking. Selection
  * never forces a route change (pickAccessReplanCandidate); when nothing
  * qualifies the trip is left untouched — the explicit reroute button remains
  * the rider's escape hatch.
@@ -1149,20 +1169,93 @@ export function quietReplanAccessLeg() {
     const { modes, modeSettings, numItineraries } = getBasePlanParts(state)
     const routingPreferences = state.otp.currentQuery?.routingPreferences
     const zoned = utcToZonedTime(nowMs, homeTimezone)
+    const date = format(zoned, coreUtils.time.OTP_API_DATE_FORMAT)
+    const time = format(zoned, coreUtils.time.OTP_API_TIME_FORMAT)
+    const from = {
+      category: 'CURRENT_LOCATION',
+      lat: lastPosition.coords.latitude,
+      lon: lastPosition.coords.longitude,
+      name: 'Current location'
+    }
+
+    const currentLegIndex = goMode.routeMatch?.legIndex ?? 0
+    const currentLeg = legs[currentLegIndex]
+    // Index-preserving find (not a slice): the suffix from this index is what
+    // the scoped splice below must keep byte-identical.
+    const boardLegIndex = legs.findIndex(
+      (l: Leg, i: number) => i >= currentLegIndex && l.transitLeg
+    )
+    const nextTransitLeg = boardLegIndex >= 0 ? legs[boardLegIndex] : undefined
+
+    // Rider exited Go Mode / a reroute started while a request was in flight?
+    const stillReplannable = () => {
+      const after = getState().otp?.goMode
+      const statusAfter = after?.reRoute?.status || 'idle'
+      return !!(
+        after?.isActive &&
+        (statusAfter === 'idle' || statusAfter === 'none')
+      )
+    }
+
+    // Primary path with a boarding still ahead: re-plan ONLY the access chain
+    // (GPS → boarding stop, single mode) and keep every transit leg as-is.
+    if (boardLegIndex >= 0 && nextTransitLeg) {
+      const boardPlace = nextTransitLeg.from
+      // Bike plans include their own walk segments, so one mode suffices.
+      const accessMode = legs
+        .slice(currentLegIndex, boardLegIndex)
+        .some((l: Leg) => l.mode === 'BICYCLE')
+        ? 'BICYCLE'
+        : 'WALK'
+      const scoped = {
+        arriveBy: false,
+        date,
+        from,
+        modes: [{ mode: accessMode }],
+        modeSettings,
+        numItineraries: ACCESS_REPLAN_NUM_ITINERARIES,
+        routingPreferences,
+        time,
+        to: {
+          lat: boardPlace.lat,
+          lon: boardPlace.lon,
+          name: boardPlace.name
+        }
+      }
+      const { error, itineraries } = await dispatch(
+        fetchOnboardCandidatePlan(scoped)
+      )
+      if (!stillReplannable()) return
+      // nextTransitRouteId null: a mode-restricted query cannot return
+      // transit, and the picker still refuses to downgrade a biking rider to
+      // walk-only.
+      const best =
+        error || !itineraries?.length
+          ? null
+          : pickAccessReplanCandidate(itineraries, {
+              accessMode,
+              nextTransitRouteId: null
+            })
+      if (best) {
+        quietReplanMissStreak = 0
+        dispatch(
+          beginGoMode(spliceAccessOntoItinerary(itinerary, best, boardLegIndex))
+        )
+        return
+      }
+      // Scoped plan found nothing usable — fall through to the full-trip
+      // replan below (fallback, not default).
+    }
+
     const combo = {
       arriveBy: false,
-      date: format(zoned, coreUtils.time.OTP_API_DATE_FORMAT),
-      from: {
-        category: 'CURRENT_LOCATION',
-        lat: lastPosition.coords.latitude,
-        lon: lastPosition.coords.longitude,
-        name: 'Current location'
-      },
+      date,
+      from,
       modes,
       modeSettings,
       numItineraries,
       routingPreferences,
-      time: format(zoned, coreUtils.time.OTP_API_TIME_FORMAT),
+      time,
       to: {
         lat: destLeg.to.lat,
         lon: destLeg.to.lon,
@@ -1170,22 +1263,13 @@ export function quietReplanAccessLeg() {
       }
     }
 
-    const currentLegIndex = goMode.routeMatch?.legIndex ?? 0
-    const currentLeg = legs[currentLegIndex]
-    const nextTransitLeg = legs
-      .slice(currentLegIndex)
-      .find((l: Leg) => l.transitLeg)
-
     const { error, itineraries } = await dispatch(
       fetchOnboardCandidatePlan(combo)
     )
 
     // Re-check state after the async plan: the rider may have exited Go Mode
     // or a reroute may have started while the request was in flight.
-    const after = getState().otp?.goMode
-    const statusAfter = after?.reRoute?.status || 'idle'
-    if (!after?.isActive || (statusAfter !== 'idle' && statusAfter !== 'none'))
-      return
+    if (!stillReplannable()) return
 
     const best =
       error || !itineraries?.length
@@ -1197,14 +1281,14 @@ export function quietReplanAccessLeg() {
               : null
           })
     if (!best) {
-      // Empty fetch or nothing qualifying under the never-force-a-route-change
-      // rule. Repeated misses mean quiet help isn't coming (e.g. no catchable
-      // same-route departure left from here) — hand the decision to the rider
-      // via the Switch/Keep card instead of staying silent forever.
+      // Empty fetches or nothing qualifying under the
+      // never-force-a-route-change rule. Settle silently: the ROUTE_DEVIATION
+      // notification already fired and the TripSheet is the rider's escape
+      // hatch — the old miss-streak escalation dispatched a non-autoApply
+      // reroute whose Switch/Keep card no UI has rendered since eb74a9d8, so
+      // it only burned a fetch and blocked later auto-updates. The streak
+      // stays as bookkeeping.
       quietReplanMissStreak += 1
-      if (quietReplanMissStreak >= QUIET_REPLAN_MISS_LIMIT) {
-        dispatch(reRouteFromCurrentPosition())
-      }
       return
     }
 
