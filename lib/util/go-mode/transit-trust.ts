@@ -305,13 +305,22 @@ export function shouldReplanBoardedEarlier({
   const plannedTripId =
     (ridingLeg as any)?.trip?.gtfsId || (ridingLeg as any)?.tripId
   const matched = vehicleMatchState?.match
+  // 'confirmed' needs no sustained run: match promotion never produces it —
+  // only an explicit rider confirmation or the riding lock in beginGoMode
+  // does, and refreshConfirmedMatch never re-matches — so a flap cannot reach
+  // it. It also CANNOT satisfy a run: the confirmed-refresh dispatch doesn't
+  // maintain consecutiveMatches, so requiring one made this gate unreachable
+  // exactly when the rider had already told us which bus they're on.
+  const sustained =
+    matched?.confidence === 'confirmed' ||
+    (vehicleMatchState?.consecutiveMatches ?? 0) >=
+      RIDING_REBIND_MIN_CONSECUTIVE
   const tripMismatch =
     (matched?.confidence === 'confirmed' || matched?.confidence === 'high') &&
     matched?.tripId != null &&
     plannedTripId != null &&
     matched.tripId !== plannedTripId &&
-    (vehicleMatchState?.consecutiveMatches ?? 0) >=
-      RIDING_REBIND_MIN_CONSECUTIVE &&
+    sustained &&
     // An opposite-direction same-route vehicle can never be "the earlier bus
     // you boarded".
     headsignsConsistent(

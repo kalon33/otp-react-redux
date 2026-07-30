@@ -231,6 +231,18 @@ async function main() {
 
   // ---- start Go Mode; pin a synthetic vehicle (on the OTHER trip) to the
   // rider so vehicle matching locks onto it ----
+  // Block the app's own vehicle-position fetches from here on: every live
+  // response displaced the injected TEST vehicle for up to 500ms, which
+  // dropped the match and reset consecutiveMatches — the boarded-earlier
+  // gate's sustained-run requirement (RIDING_REBIND_MIN_CONSECUTIVE) then
+  // never accumulated before the 16x sim ended. Aborting the fetch leaves the
+  // injector as the only vehicle source; everything else (plans, stop times)
+  // passes through untouched — the auto-replan still hits the real OTP.
+  await page.setRequestInterception(true)
+  page.on('request', (req) => {
+    if ((req.postData() || '').includes('vehiclePositions')) req.abort()
+    else req.continue()
+  })
   await page.evaluate(() => window.__beginGoMode(window.__plannedItinerary))
   await page.waitForFunction(
     () =>
@@ -240,8 +252,8 @@ async function main() {
   )
   await page.evaluate(
     (routeId, tripId, headsign, vehicleId) => {
-      // Re-inject twice a second: the app's own 15s vehicle poll overwrites
-      // the route's vehicle list with the real feed.
+      // Re-inject twice a second so a fresh record is always present (the
+      // sim clock outruns any single stamp within seconds at 16x).
       const inject = async () => {
         // eslint-disable-next-line import/no-absolute-path
         const api = await import('/lib/actions/api.js')

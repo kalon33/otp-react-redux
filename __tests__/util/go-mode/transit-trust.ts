@@ -259,6 +259,31 @@ describe('shouldReplanBoardedEarlier', () => {
     ).toBe(false)
   })
 
+  it('a rider-confirmed match needs no sustained run — confirmation cannot flap', () => {
+    // The confirmed-refresh path never maintains consecutiveMatches, so a
+    // confirmed match sits at whatever count it was locked with; the rider's
+    // explicit "I'm on this bus" must not be weaker evidence than promotion.
+    expect(
+      shouldReplanBoardedEarlier({
+        nowMs: NOW,
+        ridingLeg,
+        vehicleMatchState: {
+          consecutiveMatches: 0,
+          match: {
+            confidence: 'confirmed',
+            distanceMeters: 0,
+            label: '8140',
+            lastSeen: NOW,
+            tripHeadsign: 'Orange Burnsville',
+            tripId: '1:trip-earlier-run',
+            vehicleId: '1:8140'
+          }
+        },
+        vehicleRecord: freshRecord
+      })
+    ).toBe(true)
+  })
+
   it('a record with no feed timestamp still supports a legitimate replan', () => {
     // Half the live fleet reports lastUpdated: null — an unknown age must not
     // permanently block the boarded-earlier fix for riders on those buses.
