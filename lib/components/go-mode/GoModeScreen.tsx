@@ -40,6 +40,7 @@ import useActiveTripGuards from './use-active-trip-guards'
 interface Props {
   beginGoMode: (itinerary: any) => void
   boardingStopData: any
+  clearOnboard: () => void
   departureOverride: number | null
   endGoMode: () => void
   goMode: GoModeState
@@ -54,6 +55,7 @@ interface Props {
 const GoModeScreen = ({
   beginGoMode,
   boardingStopData,
+  clearOnboard,
   departureOverride,
   endGoMode,
   goMode,
@@ -137,9 +139,12 @@ const GoModeScreen = ({
     setMobileScreen(MobileScreens.SEARCH_FORM)
   }
 
-  // "I'm on the bus" onboard flow: no itinerary yet — show discovery, the bus
-  // picker, and the alight-stop recommendation.
-  if (onboardActive && !goMode.activeItinerary) {
+  // "I'm on the bus" onboard flow: discovery, the bus picker, and the
+  // alight-stop recommendation. Pre-trip there is no itinerary yet and back
+  // exits Go Mode entirely; mid-trip (replanFromAboard's explicit path) the
+  // live trip keeps running underneath, so back just clears the onboard
+  // panel and returns to it untouched.
+  if (onboardActive) {
     return (
       <FullScreenWrapper>
         <MobileNavigationBar
@@ -147,7 +152,9 @@ const GoModeScreen = ({
             defaultMessage: 'On the bus',
             id: 'components.GoMode.onboardTitle'
           })}
-          onBackClicked={handleOnboardExit}
+          onBackClicked={
+            goMode.activeItinerary ? () => clearOnboard() : handleOnboardExit
+          }
           showBackButton
         />
         <ScreenMain>
@@ -446,6 +453,7 @@ const mapStateToProps = (state: any) => {
 
 const mapDispatchToProps = {
   beginGoMode: goModeActions.beginGoMode,
+  clearOnboard: goModeActions.clearOnboard,
   endGoMode: goModeActions.endGoMode,
   pauseGpsSimulation: goModeActions.pauseGpsSimulation,
   resumeGpsSimulation: goModeActions.resumeGpsSimulation,
