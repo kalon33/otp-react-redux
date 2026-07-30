@@ -337,6 +337,43 @@ describe('replanFromAboard (mid-ride aboard-aware replan)', () => {
     )
   })
 
+  it('autoApply keeps the planned alight stop even when a transfer ranks faster', async () => {
+    // The rider's active itinerary alights at s3. Give the optimizer a (mock)
+    // much-faster onward plan from s4, so its top-ranked candidate is a
+    // hop-off-and-transfer — which an AUTOMATIC update must never choose when
+    // the boarded trip serves the planned stop (rider's rule: auto-updates
+    // don't invent route changes; verify-boarded-earlier hit a 3-minute-hop
+    // splice when schedule-anchored epochs skewed the ranking).
+    const trip = makeTripFixture()
+    mockedFetch.mockImplementation(
+      (combo: any) => () =>
+        Promise.resolve({
+          error: false,
+          itineraries: [
+            // Near-instant, walk-free onward plan from the later stop: it
+            // wins rankAlightOptions' arrival scoring (busArrivalEpoch +
+            // duration) and its transfers/walk tie-breaks over staying
+            // aboard to the planned stop.
+            combo.from.name === 'Past Destination'
+              ? { ...onwardItin(), duration: 1, walkDistance: 0 }
+              : onwardItin()
+          ]
+        })
+    )
+    const itinerary = makeItinerary()
+    ;(itinerary.legs[0].to as any).stop = { gtfsId: '1:s3', id: '1:s3' }
+    const store = makeStore({
+      goModeOverrides: { activeItinerary: itinerary },
+      trips: { [TRIP_ID]: trip }
+    })
+    await store.dispatch(replanFromAboard({ autoApply: true }))
+
+    const applied = store.actions.find((a) => a.type === 'START_GO_MODE')
+      ?.payload?.itinerary
+    expect(applied).toBeTruthy()
+    expect(applied.legs[0].to.stop.id).toBe('1:s3')
+  })
+
   it('autoApply re-asserts riding + live times when the fact cleared mid-flight', async () => {
     // The replan's async work (schedule fetch, alight optimization) takes
     // seconds; a rider whose fixes ran off the OLD itinerary's bus leg
