@@ -1,9 +1,23 @@
-import { Layer, Marker, Source, useMap } from 'react-map-gl/maplibre'
+import {
+  Layer,
+  Marker,
+  Source,
+  useControl,
+  useMap
+} from 'react-map-gl/maplibre'
+import { useIntl } from 'react-intl'
 import polyline from '@mapbox/polyline'
 import React, { useEffect, useMemo, useRef } from 'react'
 import styled, { keyframes } from 'styled-components'
+import type { IControl } from 'maplibre-gl'
 import type { Itinerary } from '@opentripplanner/types'
 
+import {
+  decideFollowCamera,
+  FOLLOW_EASE_MS,
+  FOLLOW_ENGAGE_DELAY_MS,
+  isTransitLegMode
+} from '../../util/go-mode/follow-camera'
 import DefaultMap from '../map/default-map'
 import type { RouteMatchResult } from '../../util/go-mode/position-matching'
 
@@ -34,9 +48,12 @@ const UserDot = styled.div`
 interface Props {
   activeLegIndex: number | null
   currentLegIndex: number
+  currentLegMode: string | null
   currentPosition: GeolocationPosition | null
   followUser: boolean
   itinerary: Itinerary
+  onSetFollow: (value: boolean) => void
+  onToggleFollow: () => void
   routeMatch: RouteMatchResult | null
 }
 
@@ -97,6 +114,92 @@ function isWalkLike(mode: string): boolean {
   return mode === 'WALK' || mode === 'BICYCLE'
 }
 
+// Google Maps-style navigation arrow, drawn to sit centered in maplibre's
+// native 29x29 control button. Fill is swapped imperatively by setActive.
+const FOLLOW_ARROW_SVG =
+  '<svg width="29" height="29" viewBox="0 0 29 29" xmlns="http://www.w3.org/2000/svg" fill="#333333" style="display:block"><path d="M14.5 5.5L22 23l-7.5-3.6L7 23z"/></svg>'
+
+/**
+ * Follow-toggle button as a native MapLibre control: it stacks in a
+ * `maplibregl-ctrl-group` beneath the existing locate crosshair (top-left) and
+ * inherits the exact button chrome the other map controls have. The DOM is
+ * imperative (IControl contract), so active state and label are synced from
+ * React via setActive/setLabel.
+ */
+class FollowButtonControl implements IControl {
+  button: HTMLButtonElement | null = null
+  container: HTMLDivElement | null = null
+  private readonly handleClick: () => void
+
+  constructor(handleClick: () => void) {
+    this.handleClick = handleClick
+  }
+
+  onAdd(): HTMLElement {
+    const container = document.createElement('div')
+    container.className = 'maplibregl-ctrl maplibregl-ctrl-group'
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.setAttribute('data-testid', 'go-mode-follow-toggle')
+    button.setAttribute('aria-pressed', 'false')
+    button.innerHTML = FOLLOW_ARROW_SVG
+    button.addEventListener('click', this.handleClick)
+    container.appendChild(button)
+    this.button = button
+    this.container = container
+    return container
+  }
+
+  onRemove(): void {
+    this.button?.removeEventListener('click', this.handleClick)
+    this.container?.remove()
+    this.button = null
+    this.container = null
+  }
+
+  setActive(active: boolean): void {
+    if (!this.button) return
+    this.button.setAttribute('aria-pressed', active ? 'true' : 'false')
+    // MapLibre's own geolocate-active blue, so engaged reads the same as the
+    // native controls' active states.
+    const svg = this.button.querySelector('svg')
+    if (svg) svg.setAttribute('fill', active ? '#33b5e5' : '#333333')
+  }
+
+  setLabel(label: string): void {
+    if (!this.button) return
+    this.button.setAttribute('aria-label', label)
+    this.button.title = label
+  }
+}
+
+const FollowToggleControl = ({
+  active,
+  onToggle
+}: {
+  active: boolean
+  onToggle: () => void
+}) => {
+  const intl = useIntl()
+  // useControl constructs the control exactly once; route clicks through a
+  // ref so the latest handler is always the one invoked.
+  const onToggleRef = useRef(onToggle)
+  onToggleRef.current = onToggle
+  const control = useControl<FollowButtonControl>(
+    () => new FollowButtonControl(() => onToggleRef.current()),
+    { position: 'top-left' }
+  )
+  const label = intl.formatMessage({
+    defaultMessage: 'Follow my location',
+    id: 'components.GoMode.followToggle'
+  })
+  useEffect(() => {
+    control.setActive(active)
+    control.setLabel(label)
+  }, [control, active, label])
+  return null
+}
+
 /**
  * Overlay component rendered inside the map context.
  * Uses useMap() hook to access the map for panning and renders
@@ -104,18 +207,35 @@ function isWalkLike(mode: string): boolean {
  */
 const GoModeMapOverlay = ({
   activeLegIndex,
+  currentLegMode,
   currentPosition,
   followUser,
+  onSetFollow,
+  onToggleFollow,
   routeGeoJson
 }: {
   activeLegIndex: number | null
+  currentLegMode: string | null
   currentPosition: GeolocationPosition | null
   followUser: boolean
+  onSetFollow: (value: boolean) => void
+  onToggleFollow: () => void
   routeGeoJson: GeoJSON.FeatureCollection | null
 }) => {
   const { current: map } = useMap()
   const hasFitBounds = useRef(false)
+  const fitBoundsAt = useRef(0)
   const prevFollowUser = useRef(followUser)
+  // Follow-camera memory (see decideFollowCamera): last fix the camera
+  // accepted, the once-rejected spike awaiting confirmation, and the leg type
+  // the current zoom was chosen for.
+  const prevAccepted = useRef<{
+    lat: number
+    lng: number
+    timestampMs: number
+  } | null>(null)
+  const prevRejectedSpike = useRef<{ lat: number; lng: number } | null>(null)
+  const prevLegTransit = useRef<boolean | null>(null)
 
   // Fit map to itinerary bounds on initial load
   useEffect(() => {
@@ -124,6 +244,9 @@ const GoModeMapOverlay = ({
     if (bounds) {
       map.fitBounds(bounds, { duration: 600, padding: 40 })
       hasFitBounds.current = true
+      // The follow camera waits FOLLOW_ENGAGE_DELAY_MS from here so this
+      // trip-overview animation is never cut off mid-flight.
+      fitBoundsAt.current = Date.now()
     }
   }, [map, routeGeoJson])
 
@@ -140,27 +263,102 @@ const GoModeMapOverlay = ({
     // map to max zoom, where the rider can see the leg but none of its context.
     if (bounds) {
       map.fitBounds(bounds, { duration: 600, maxZoom: 16, padding: 40 })
+      // Explicit camera intent wins over follow: the button visibly reads
+      // off, and one tap brings follow back.
+      onSetFollow(false)
     }
-  }, [activeLegIndex, map, routeGeoJson])
+  }, [activeLegIndex, map, routeGeoJson, onSetFollow])
 
-  // Recenter on the user's position only as a one-shot when followUser is
-  // *newly* enabled (i.e. the user pressed the locate button). We intentionally
-  // do NOT pan on every position update — that made the map fight the user by
-  // constantly yanking the view back to the live GPS point. Ongoing recentering
-  // is handled by the map's built-in geolocate (blue dot) control.
+  // A user gesture that moves the camera means the rider wants to look at
+  // something — stop following (idempotent SET, so a drag never races the
+  // button's toggle). Zoom is deliberately NOT wired: Google behavior is that
+  // pinching adjusts zoom while still following, and per-fix eases omit zoom
+  // so the chosen level sticks. Programmatic moves (fitBounds/easeTo) fire
+  // neither handler.
+  useEffect(() => {
+    if (!map) return
+    // dragstart fires only for user gestures (1- and 2-finger pan).
+    const handleDragStart = () => onSetFollow(false)
+    // rotatestart also fires for programmatic rotations; originalEvent marks
+    // a real gesture.
+    const handleRotateStart = (e: { originalEvent?: Event }) => {
+      if (e.originalEvent) onSetFollow(false)
+    }
+    map.on('dragstart', handleDragStart)
+    map.on('rotatestart', handleRotateStart)
+    // reuseMaps (default-map.tsx) keeps this map instance alive across
+    // remounts — without the symmetric off(), every background/return cycle
+    // would stack another listener.
+    return () => {
+      map.off('dragstart', handleDragStart)
+      map.off('rotatestart', handleRotateStart)
+    }
+  }, [map, onSetFollow])
+
+  // Live follow (7/29 rider request): ease the camera to each accepted fix,
+  // Google Maps style. All accept/reject/zoom decisions live in the pure
+  // decideFollowCamera; this effect only executes them.
   useEffect(() => {
     const justEnabled = followUser && !prevFollowUser.current
     prevFollowUser.current = followUser
-    if (justEnabled && currentPosition && map) {
-      map.panTo([
-        currentPosition.coords.longitude,
-        currentPosition.coords.latitude
-      ])
+    if (justEnabled) {
+      // Re-engage via the button eases to the current fix at leg zoom right
+      // away (a fresh engage) instead of waiting for the next GPS tick.
+      prevAccepted.current = null
+      prevRejectedSpike.current = null
     }
-  }, [currentPosition, followUser, map])
+    if (!followUser || !map || !currentPosition) return
+    // Belt-and-braces on top of the leg-tap disengage: while a tapped leg is
+    // selected its fitBounds owns the camera.
+    if (activeLegIndex != null) return
+    // Let the initial trip-overview fit land first.
+    if (
+      !hasFitBounds.current ||
+      Date.now() - fitBoundsAt.current < FOLLOW_ENGAGE_DELAY_MS
+    ) {
+      return
+    }
+    const { coords, timestamp } = currentPosition
+    const decision = decideFollowCamera({
+      fix: {
+        accuracyM: coords.accuracy ?? null,
+        lat: coords.latitude,
+        lng: coords.longitude,
+        timestampMs: timestamp
+      },
+      legMode: currentLegMode,
+      prevAccepted: prevAccepted.current,
+      prevLegTransit: prevLegTransit.current,
+      prevRejectedSpike: prevRejectedSpike.current
+    })
+    if (decision.move && decision.center) {
+      // No `essential: true` — prefers-reduced-motion degrades the ease to a
+      // jump, which is the right call for a camera that moves every second.
+      map.easeTo({
+        center: decision.center,
+        duration: FOLLOW_EASE_MS,
+        ...(decision.zoom != null && { zoom: decision.zoom })
+      })
+      prevAccepted.current = {
+        lat: coords.latitude,
+        lng: coords.longitude,
+        timestampMs: timestamp
+      }
+      prevRejectedSpike.current = null
+      prevLegTransit.current = isTransitLegMode(currentLegMode)
+    } else if (decision.reason === 'spike-rejected') {
+      prevRejectedSpike.current = {
+        lat: coords.latitude,
+        lng: coords.longitude
+      }
+    }
+  }, [currentPosition, followUser, activeLegIndex, map, currentLegMode])
 
   return (
     <>
+      {/* Follow toggle, stacked under the locate crosshair */}
+      <FollowToggleControl active={followUser} onToggle={onToggleFollow} />
+
       {/* Route Overlay */}
       {routeGeoJson && (
         <Source data={routeGeoJson} id="go-mode-route" type="geojson">
@@ -219,7 +417,7 @@ const GoModeMapOverlay = ({
           latitude={currentPosition.coords.latitude}
           longitude={currentPosition.coords.longitude}
         >
-          <UserDot />
+          <UserDot data-testid="go-mode-user-dot" />
         </Marker>
       )}
     </>
@@ -229,9 +427,12 @@ const GoModeMapOverlay = ({
 const GoModeMap = ({
   activeLegIndex,
   currentLegIndex,
+  currentLegMode,
   currentPosition,
   followUser,
   itinerary,
+  onSetFollow,
+  onToggleFollow,
   routeMatch
 }: Props) => {
   // Two-tick smoothing for the deviation banner, symmetric with the
@@ -278,8 +479,11 @@ const GoModeMap = ({
         {/* Map overlays rendered inside BaseMap's react-map-gl context */}
         <GoModeMapOverlay
           activeLegIndex={activeLegIndex}
+          currentLegMode={currentLegMode}
           currentPosition={currentPosition}
           followUser={followUser}
+          onSetFollow={onSetFollow}
+          onToggleFollow={onToggleFollow}
           routeGeoJson={routeGeoJson}
         />
       </DefaultMap>

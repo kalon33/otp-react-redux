@@ -309,6 +309,7 @@ export const SET_ARRIVED = 'SET_ARRIVED'
 export const SET_DEPARTURE_OVERRIDE = 'SET_DEPARTURE_OVERRIDE'
 export const SET_GO_MODE_ACTIVE_LEG = 'SET_GO_MODE_ACTIVE_LEG'
 export const SET_GO_MODE_BACKGROUNDED = 'SET_GO_MODE_BACKGROUNDED'
+export const SET_MAP_FOLLOW = 'SET_MAP_FOLLOW'
 export const SET_RIDING = 'SET_RIDING'
 export const SET_LIVE_LEG_TIMES = 'SET_LIVE_LEG_TIMES'
 export const SET_NOTIFICATION_CONFIG = 'SET_NOTIFICATION_CONFIG'
@@ -405,6 +406,9 @@ export const setTrackingError = createAction<GeolocationPositionError | null>(
   SET_TRACKING_ERROR
 )
 export const toggleMapFollow = createAction(TOGGLE_MAP_FOLLOW)
+// Idempotent "set" alongside the toggle: auto-disengage (map drag/rotate)
+// must never race the follow button — dispatching false twice stays false.
+export const setMapFollow = createAction<boolean>(SET_MAP_FOLLOW)
 export const setGoModeBackgrounded = createAction<boolean>(
   SET_GO_MODE_BACKGROUNDED
 )
