@@ -210,6 +210,57 @@ export function checkAlightAlerts(
 const BIKE_CUE_DISTANCES = { act: 30, prepare: 120 }
 const WALK_CUE_DISTANCES = { act: 15, prepare: 40 }
 
+// Below this ground speed the rider is not travelling: a parked phone's GPS
+// reads 0–0.6 m/s of pure noise, while a slow walker is already at 1.2 m/s.
+export const MIN_ANNOUNCE_SPEED_MPS = 0.7
+// Consecutive slow ticks before turn cues are held. A leg starts pre-charged at
+// this count — Go Mode is tapped standing still (on 7/31 the first push went out
+// in the same second as START_GO_MODE) so a rider never yet observed moving is
+// parked from tick one — while a rider who WAS moving keeps this many ticks of
+// grace, enough that a red light or a kerb pause never costs them a cue.
+export const STATIONARY_HOLD_TICKS = 3
+
+interface TurnAnnounceState {
+  /** `${cue.index}_${stage}` for every cue already announced on this leg. */
+  announced: Set<string>
+  /** Consecutive ticks whose reported speed was below MIN_ANNOUNCE_SPEED_MPS. */
+  slowTicks: number
+}
+
+// Per-leg turn state, keyed like cueCache/cursorCache in turn-by-turn.ts: the
+// leg object is stable for the life of an itinerary (handlePositionUpdate reads
+// `goMode.activeItinerary.legs[i]` straight from redux — never a per-tick clone;
+// buildLiveItinerary only ever runs in TripSheet), an itinerary swap hands back
+// new leg objects and so a fresh latch, and the whole map is collectable once
+// the trip ends.
+//
+// Why it exists: 7/31 (session ms96ka9s-wc8j1u) the rider stood at the origin 21
+// minutes early — 335 GPS fixes inside a 7 m circle — and got the identical
+// "Turn right on Village Lane" TURN_ALERT pushed to phone and watch 14 times in
+// 7 minutes, every 30.5 s. `wasRecentlySent` is a rate limiter, not a latch: it
+// only remembers the last 30 s, so a cue that stays current re-arms forever (and
+// `sentNotifications` is a rolling 50-entry list that evicts the evidence
+// anyway). The rider: "I specifically asked for notifications to be once".
+let turnState = new WeakMap<Leg, TurnAnnounceState>()
+
+function turnStateFor(leg: Leg): TurnAnnounceState {
+  let state = turnState.get(leg)
+  if (!state) {
+    state = { announced: new Set<string>(), slowTicks: STATIONARY_HOLD_TICKS }
+    turnState.set(leg, state)
+  }
+  return state
+}
+
+/**
+ * Drop every leg's announcement latch and speed history. Test-only: production
+ * lifetime is the leg object itself (new itinerary ⇒ new legs ⇒ clean state),
+ * but unit tests reuse one leg object across cases.
+ */
+export function resetTurnAnnouncements(): void {
+  turnState = new WeakMap<Leg, TurnAnnounceState>()
+}
+
 // Speed-scaled leads, up-only from the static floors above. The 7/29 ride
 // showed on-route bike speeds of 4–7 m/s (occasionally 8–9): at 6.5 m/s the
 // static 120 m prepare was only ~18 s of warning and the 30 m act cue ~4.5 s —
@@ -236,6 +287,15 @@ export function checkUpcomingTurn(
   const isBike = currentLeg.mode === 'BICYCLE'
   if (!isBike && currentLeg.mode !== 'WALK') return null
 
+  // Speed history is kept for every tick on the leg, including the ticks the
+  // guards below discard, so a rejoin hold can't be mistaken for standing still.
+  const state = turnStateFor(currentLeg)
+  const speed = progress.riderSpeedMps
+  // A missing speed counts as moving — never withhold guidance over absent data.
+  // (The 7/31 track's first 15 fixes carried no speed at all.)
+  state.slowTicks =
+    speed != null && speed < MIN_ANNOUNCE_SPEED_MPS ? state.slowTicks + 1 : 0
+
   // A rejoin/jump settle is under way (see selectCueForNavigation): the cue on
   // screen is already correct, but buzzing it now is the 7/29 rejoin burst —
   // the projection's sweep past 822/992/1003 m announced as still ahead.
@@ -246,7 +306,6 @@ export function checkUpcomingTurn(
   if (!cue || distance == null) return null
 
   const floors = isBike ? BIKE_CUE_DISTANCES : WALK_CUE_DISTANCES
-  const speed = progress.riderSpeedMps
   const prepare =
     speed != null && speed > 0
       ? Math.min(
@@ -263,13 +322,32 @@ export function checkUpcomingTurn(
   // Two cues per turn: one with time to react, one at the corner itself.
   const stage = distance <= act ? 'act' : 'prepare'
 
+  // The latch: this turn, this stage, once for the whole life of the leg.
+  // Deliberately permanent — a rider who passes a turn and loops back does not
+  // get re-buzzed for it; the on-screen turn card still shows it.
+  const stageKey = `${cue.index}_${stage}`
+  if (state.announced.has(stageKey)) return null
+
+  // Parked: there is nothing to act on yet, so say nothing until they move —
+  // which is exactly when the cue becomes useful. The act stage at the corner
+  // is exempt while this turn's prepare cue hasn't fired, so a slow walker
+  // easing up to the junction still gets their one cue.
+  const stationary = state.slowTicks > STATIONARY_HOLD_TICKS
+  const firstCueForTurn =
+    stage === 'act' && !state.announced.has(`${cue.index}_prepare`)
+  if (stationary && !firstCueForTurn) return null
+
   // Key on the turn's identity and stage — never the distance, which changes
-  // every GPS tick and would defeat the dedup window entirely.
+  // every GPS tick and would defeat the dedup window entirely. This window is
+  // now only a backstop under the latch above: it covers the rare mid-approach
+  // leg-object replacement, where the latch legitimately starts over.
   const id = generateNotificationId(
     'UPCOMING_TURN',
     `${currentLeg.startTime}_${cue.index}_${stage}`
   )
   if (wasRecentlySent(id, sentNotifications, 30000)) return null
+
+  state.announced.add(stageKey)
 
   // Instruction leads the title: Garmin shows the title prominently and
   // truncates the body, so "Turn left on Bryant Ave S" must not land there.
