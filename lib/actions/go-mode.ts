@@ -3059,8 +3059,13 @@ export function handlePositionUpdate(position: GeolocationPosition) {
           }
         )
         // Raise the highest-value alerts as a system notification on the phone
-        // (native shell only; no-op in a browser). Dedup is already guaranteed
-        // upstream by checkForNotifications, so each fires at most once.
+        // (native shell only; no-op in a browser). Repeat suppression lives in
+        // each individual check, not here: turn cues are latched per (cue,
+        // stage) for the life of the leg in checkUpcomingTurn, with
+        // wasRecentlySent's window as a backstop; the others carry their own
+        // windows. This comment used to claim checkForNotifications guaranteed
+        // "each fires at most once" — it never did and gated nothing, and on
+        // 7/31 a stationary rider got the same turn pushed 14 times in 7 min.
         // Limited to a few types to avoid notification spam.
         if (PUSH_NOTIFICATION_TYPES.has(notification.type)) {
           sendPush({
