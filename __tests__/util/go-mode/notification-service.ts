@@ -10,6 +10,7 @@ import {
   checkUpcomingTurn,
   classifyMissedBus,
   getEffectiveBoardTimeMs,
+  resetTurnAnnouncements,
   shouldAutoReroute,
   triggerVibration,
   wasRecentlySent
@@ -33,6 +34,12 @@ const makeConfig = (overrides: Record<string, any> = {}) => ({
 })
 
 describe('util > go-mode > notification-service', () => {
+  // The turn latch lives for the life of a leg OBJECT; these tests reuse a
+  // handful of leg literals across cases, so clear it between them.
+  beforeEach(() => {
+    resetTurnAnnouncements()
+  })
+
   describe('wasRecentlySent', () => {
     it('should return false for empty sent list', () => {
       const id = `APPROACH_STOP_route5_StopA_${Date.now()}`
@@ -279,8 +286,10 @@ describe('util > go-mode > notification-service', () => {
       const routine = checkUpcomingTurn(turnProgress(100), bikeLeg, [])
       expect(routine!.type).toBe('UPCOMING_TURN')
 
+      // A different turn on the same leg — the latch is per (cue, stage), so
+      // two probes of the SAME cue would be one announcement, not two.
       const notable = checkUpcomingTurn(
-        turnProgress(100, { significant: true }),
+        turnProgress(100, { index: 2, significant: true }),
         bikeLeg,
         []
       )
@@ -379,6 +388,195 @@ describe('util > go-mode > notification-service', () => {
         const result = checkUpcomingTurn(fast, bikeLeg, [])
         expect(result).not.toBeNull()
         expect(result!.id).toContain('_act_')
+      })
+    })
+
+    describe('once per turn — the 7/31 notification storm', () => {
+      // 7/31: the rider stood at the origin 21 minutes early and got the same
+      // "Turn right on Village Lane" pushed 14 times in 7 minutes, one every
+      // 30.5 s, because the only guard was a 30 s window. "I specifically asked
+      // for notifications to be once."
+      let nowMs = 1785516757402
+      let dateNowSpy: jest.SpyInstance
+
+      beforeEach(() => {
+        nowMs = 1785516757402
+        dateNowSpy = jest.spyOn(Date, 'now').mockImplementation(() => nowMs)
+      })
+
+      afterEach(() => {
+        dateNowSpy.mockRestore()
+      })
+
+      it('never announces the same turn and stage twice, however long the wait', () => {
+        const sent: string[] = []
+        const first = checkUpcomingTurn(turnProgress(110), bikeLeg, sent)
+        expect(first).not.toBeNull()
+        sent.push(first!.id)
+
+        // Past the 30 s rate-limiter window — the exact moment the old code
+        // re-armed. Thirteen more of these made up the storm.
+        nowMs += 31000
+        expect(checkUpcomingTurn(turnProgress(108), bikeLeg, sent)).toBeNull()
+        nowMs += 300000
+        expect(checkUpcomingTurn(turnProgress(112), bikeLeg, sent)).toBeNull()
+      })
+
+      it('emits prepare and act exactly once each across a whole approach', () => {
+        const sent: string[] = []
+        const stages: string[] = []
+        // A bike closing on the corner at ~4 m/s, one tick per second.
+        for (let distance = 200; distance >= 0; distance -= 4) {
+          nowMs += 1000
+          const event = checkUpcomingTurn(
+            makeProgress({
+              distanceToNextTurn: distance,
+              nextTurnCue: makeCue(),
+              riderSpeedMps: 4
+            }),
+            bikeLeg,
+            sent
+          )
+          if (event) {
+            sent.push(event.id)
+            stages.push(event.id.split('_')[4])
+          }
+        }
+        expect(stages).toEqual(['prepare', 'act'])
+      })
+
+      it('says nothing to a rider who is standing still, then speaks when they move', () => {
+        const sent: string[] = []
+        const parked = () =>
+          makeProgress({
+            distanceToNextTurn: 53, // the 7/31 rider's pinned distance
+            nextTurnCue: makeCue({ significant: true }),
+            riderSpeedMps: 0.2
+          })
+
+        const events: (string | null)[] = []
+        for (let tick = 0; tick < 8; tick++) {
+          nowMs += 4000
+          const event = checkUpcomingTurn(parked(), bikeLeg, sent)
+          if (event) sent.push(event.id)
+          events.push(event && event.type)
+        }
+        expect(events.filter(Boolean)).toEqual([])
+
+        // They push off. The cue is actionable now, and lands once.
+        nowMs += 4000
+        const moving = makeProgress({
+          distanceToNextTurn: 53,
+          nextTurnCue: makeCue({ significant: true }),
+          riderSpeedMps: 4
+        })
+        const first = checkUpcomingTurn(moving, bikeLeg, sent)
+        expect(first).not.toBeNull()
+        expect(first!.type).toBe('TURN_ALERT')
+        sent.push(first!.id)
+
+        nowMs += 31000
+        expect(checkUpcomingTurn(moving, bikeLeg, sent)).toBeNull()
+      })
+
+      it('gives a rider who stops briefly their cue anyway', () => {
+        // A red light is not being parked: the hold only bites after
+        // STATIONARY_HOLD_TICKS consecutive slow ticks following real motion.
+        const sent: string[] = []
+        nowMs += 1000
+        checkUpcomingTurn(
+          makeProgress({
+            distanceToNextTurn: 300,
+            nextTurnCue: makeCue(),
+            riderSpeedMps: 5
+          }),
+          bikeLeg,
+          sent
+        )
+        nowMs += 1000
+        const atTheLight = checkUpcomingTurn(
+          makeProgress({
+            distanceToNextTurn: 110,
+            nextTurnCue: makeCue(),
+            riderSpeedMps: 0.1
+          }),
+          bikeLeg,
+          sent
+        )
+        expect(atTheLight).not.toBeNull()
+      })
+
+      it('never holds on a missing speed — absent data is not evidence of stillness', () => {
+        // The 7/31 track's first 15 fixes carried speed: null.
+        const sent: string[] = []
+        for (let tick = 0; tick < 6; tick++) {
+          nowMs += 4000
+          checkUpcomingTurn(
+            makeProgress({
+              distanceToNextTurn: 300,
+              nextTurnCue: makeCue(),
+              riderSpeedMps: null
+            }),
+            bikeLeg,
+            sent
+          )
+        }
+        nowMs += 4000
+        const event = checkUpcomingTurn(
+          makeProgress({
+            distanceToNextTurn: 110,
+            nextTurnCue: makeCue(),
+            riderSpeedMps: null
+          }),
+          bikeLeg,
+          sent
+        )
+        expect(event).not.toBeNull()
+      })
+
+      it('still gives a slow walker their one cue at the corner', () => {
+        // Under 0.7 m/s for the whole approach, so the prepare cue is held —
+        // but the act stage at the junction is exempt while nothing has been
+        // said about this turn yet.
+        const sent: string[] = []
+        const creep = (distance: number) =>
+          makeProgress({
+            distanceToNextTurn: distance,
+            nextTurnCue: makeCue(),
+            riderSpeedMps: 0.4
+          })
+
+        const emitted: string[] = []
+        for (const distance of [38, 30, 24, 18, 12, 8, 4]) {
+          nowMs += 4000
+          const event = checkUpcomingTurn(creep(distance), walkLeg, sent)
+          if (event) {
+            sent.push(event.id)
+            emitted.push(event.id.split('_')[4])
+          }
+        }
+        expect(emitted).toEqual(['act'])
+      })
+
+      it('re-arms for a new leg object — the latch lives and dies with the leg', () => {
+        const sent: string[] = []
+        const first = checkUpcomingTurn(turnProgress(110), bikeLeg, sent)
+        expect(first).not.toBeNull()
+        sent.push(first!.id)
+        expect(checkUpcomingTurn(turnProgress(110), bikeLeg, sent)).toBeNull()
+
+        // An itinerary swap (reroute, missed-bus auto-update) hands back new
+        // leg objects; the rider still needs guiding on the replacement leg.
+        // Past the backstop window, since that is what a real swap looks like.
+        nowMs += 31000
+        const replanned = {
+          mode: 'BICYCLE',
+          startTime: 2,
+          to: { name: 'Bus Stop' }
+        } as any
+        expect(
+          checkUpcomingTurn(turnProgress(110), replanned, sent)
+        ).not.toBeNull()
       })
     })
   })
