@@ -52,6 +52,7 @@ interface Props {
   startGpsSimulation: (speedMultiplier?: number) => void
   stopGpsSimulation: () => void
   toggleMapFollow: () => void
+  units: 'imperial' | 'metric'
 }
 
 const GoModeScreen = ({
@@ -68,7 +69,8 @@ const GoModeScreen = ({
   setMobileScreen,
   startGpsSimulation,
   stopGpsSimulation,
-  toggleMapFollow
+  toggleMapFollow,
+  units
 }: Props) => {
   const intl = useIntl()
   const [simSpeed, setSimSpeed] = useState(2)
@@ -258,6 +260,7 @@ const GoModeScreen = ({
           onExit={handleExit}
           onSelectDeparture={setDepartureOverride}
           progress={goMode.progress}
+          units={units}
         />
 
         <GoModeMap
@@ -454,7 +457,8 @@ const mapStateToProps = (state: any) => {
   return {
     boardingStopData,
     departureOverride: goMode?.departureOverride ?? null,
-    goMode
+    goMode,
+    units: state.otp.config?.units || 'imperial'
   }
 }
 

@@ -1,7 +1,8 @@
+import type { IntlShape } from 'react-intl'
 import type { Itinerary, Leg } from '@opentripplanner/types'
 
 import { countStopsAhead, hasDegenerateStopList } from './next-stop'
-import { selectCueForNavigation } from './turn-by-turn'
+import { getNextCueWithIntl, selectCueForNavigation } from './turn-by-turn'
 import type { RouteMatchResult } from './position-matching'
 import type { StepCue } from './turn-by-turn'
 
@@ -356,6 +357,61 @@ export function getWalkingInstruction(
   return {
     distanceToNextTurn: remainingDistance,
     nextInstruction: `Arriving at ${leg.to.name}`
+  }
+}
+
+/**
+ * Get walking-specific navigation information with i18n support for localized turn-by-turn instructions.
+ */
+export function getWalkingInstructionWithIntl(
+  leg: Leg,
+  progressInLeg: number,
+  intl: IntlShape
+): {
+  distanceToNextTurn?: number
+  followingTurnCue?: StepCue
+  nextInstruction?: string
+  nextTurnCue?: StepCue
+} {
+  if (leg.mode !== 'WALK' && leg.mode !== 'BICYCLE') {
+    return {}
+  }
+
+  // Real turn-by-turn when the leg carries usable steps.
+  const { cue, distanceToNextTurn, following } = getNextCueWithIntl(
+    leg,
+    progressInLeg,
+    intl
+  )
+  if (cue) {
+    return {
+      distanceToNextTurn,
+      followingTurnCue: following,
+      nextInstruction: cue.instruction,
+      nextTurnCue: cue
+    }
+  }
+
+  // No steps (OTP omits them for some legs), or every turn is behind the rider
+  // and only the final straight to the destination is left.
+  const remainingDistance = (leg.distance || 0) * (1 - progressInLeg)
+
+  if (progressInLeg < 0.9) {
+    return {
+      distanceToNextTurn: remainingDistance,
+      nextInstruction: intl.formatMessage(
+        { id: 'components.GoMode.turnInstructions.continueTo' },
+        { destination: leg.to.name }
+      )
+    }
+  }
+
+  return {
+    distanceToNextTurn: remainingDistance,
+    nextInstruction: intl.formatMessage(
+      { id: 'GoMode.arrivingAt' },
+      { destination: leg.to.name }
+    )
   }
 }
 
