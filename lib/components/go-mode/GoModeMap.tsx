@@ -435,6 +435,7 @@ const GoModeMap = ({
   onToggleFollow,
   routeMatch
 }: Props) => {
+  const intl = useIntl()
   // Two-tick smoothing for the deviation banner, symmetric with the
   // notification-side input (prevDistanceFromRoute in actions/go-mode): a
   // single off-route GPS spike used to flash "5246m from route" over the map
