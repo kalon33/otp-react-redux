@@ -1,5 +1,4 @@
-import { humanizeDistanceStringImperial, humanizeDistanceStringMetric } from '@opentripplanner/humanize-distance'
-import type { IntlShape } from 'react-intl'
+import { humanizeDistanceStringImperial } from '@opentripplanner/humanize-distance'
 import type { LatLngArray, Leg, Step } from '@opentripplanner/types'
 
 import {
@@ -60,31 +59,6 @@ export interface NextCueResult {
  */
 const NON_TURN_DIRECTIONS = new Set(['CONTINUE', 'DEPART'])
 
-/**
- * Mapping from OTP relativeDirection values to i18n translation keys.
- * These keys are defined in the i18n files under components.GoMode.turnInstructions.
- */
-const DIRECTION_VERB_KEYS: Record<string, string> = {
-  CIRCLE_CLOCKWISE: 'components.GoMode.turnInstructions.takeRoundabout',
-  CIRCLE_COUNTERCLOCKWISE: 'components.GoMode.turnInstructions.takeRoundabout',
-  ELEVATOR: 'components.GoMode.turnInstructions.takeElevator',
-  ENTER_STATION: 'components.GoMode.turnInstructions.enterStation',
-  EXIT_STATION: 'components.GoMode.turnInstructions.exitStation',
-  FOLLOW_SIGNS: 'components.GoMode.turnInstructions.followSigns',
-  HARD_LEFT: 'components.GoMode.turnInstructions.sharpLeft',
-  HARD_RIGHT: 'components.GoMode.turnInstructions.sharpRight',
-  LEFT: 'components.GoMode.turnInstructions.turnLeft',
-  RIGHT: 'components.GoMode.turnInstructions.turnRight',
-  SLIGHTLY_LEFT: 'components.GoMode.turnInstructions.bearLeft',
-  SLIGHTLY_RIGHT: 'components.GoMode.turnInstructions.bearRight',
-  UTURN_LEFT: 'components.GoMode.turnInstructions.uTurn',
-  UTURN_RIGHT: 'components.GoMode.turnInstructions.uTurn'
-}
-
-/**
- * Legacy direction verbs for backward compatibility with tests.
- * @deprecated Use phraseInstructionWithIntl instead for localized strings.
- */
 const DIRECTION_VERBS: Record<string, string> = {
   CIRCLE_CLOCKWISE: 'Take the roundabout',
   CIRCLE_COUNTERCLOCKWISE: 'Take the roundabout',
@@ -113,59 +87,7 @@ const SIGNIFICANT_GAP_SECONDS = 90
 /** Fallback speed when a leg lacks usable duration/distance, in m/s (~4 mph). */
 const FALLBACK_SPEED_MPS = 1.8
 
-/**
- * Distance formatting for cue copy. Uses imperial units (ft, mi) for en-US/en-GB locales,
- * metric units (m, km) for others.
- */
-export function formatCueDistance(meters: number, units: 'imperial' | 'metric' = 'imperial'): string {
-  return units === 'imperial'
-    ? humanizeDistanceStringImperial(meters, true, undefined)
-    : humanizeDistanceStringMetric(meters, undefined)
-}
-
-/**
- * Rider-facing phrasing for a step, using i18n translations.
- * This is the preferred function for UI use, as it returns localized strings.
- */
-export function phraseInstructionWithIntl(
-  step: Step,
-  intl: IntlShape
-): string {
-  const verbKey = DIRECTION_VERB_KEYS[step.relativeDirection]
-  // `bogusName` marks a way OTP couldn't name ("path", "road"); naming it adds
-  // nothing the rider can see from the saddle, so drop it.
-  const street = step.bogusName ? '' : (step.streetName || '').trim()
-
-  if (!verbKey) {
-    // Unknown or non-turn direction — describe the street if we have one.
-    if (street) {
-      return intl.formatMessage(
-        { id: 'components.GoMode.turnInstructions.continueOn' },
-        { street }
-      )
-    }
-    return intl.formatMessage({ id: 'components.GoMode.turnInstructions.continue' })
-  }
-
-  // Get the base translation without street
-  const baseTranslation = intl.formatMessage({ id: verbKey })
-  
-  // If we have a street name, append it with the appropriate preposition
-  // In French: "Tournez à gauche sur {street}", in English: "Turn left on {street}"
-  if (street) {
-    // For French, use " sur {street}", for English " on {street}"
-    // We detect French by checking if the translation contains accented characters or specific words
-    const isFrench = baseTranslation.includes('à') || baseTranslation.includes('é') || baseTranslation.includes('è')
-    const preposition = isFrench ? ' sur ' : ' on '
-    return `${baseTranslation}${preposition}${street}`
-  }
-  return baseTranslation
-}
-
-/**
- * Rider-facing phrasing for a step. Exported for tests and UI reuse.
- * @deprecated Use phraseInstructionWithIntl instead for localized strings.
- */
+/** Rider-facing phrasing for a step. Exported for tests and UI reuse. */
 export function phraseInstruction(step: Step): string {
   const verb = DIRECTION_VERBS[step.relativeDirection]
   // `bogusName` marks a way OTP couldn't name ("path", "road"); naming it adds
@@ -188,17 +110,9 @@ export function asContinuation(instruction: string): string {
   return instruction.charAt(0).toLowerCase() + instruction.slice(1)
 }
 
-/**
- * An instruction reworded to sit mid-sentence, after "then", using i18n.
- * This version handles already-localized strings properly.
- */
-export function asContinuationWithIntl(
-  instruction: string,
-  intl: IntlShape
-): string {
-  // For localized strings, we need to handle the capitalization carefully
-  // Since the instruction is already localized, we just lowercase the first character
-  return instruction.charAt(0).toLowerCase() + instruction.slice(1)
+/** Abbreviated imperial distance ("300 ft", "0.4 mi") for cue copy. */
+export function formatCueDistance(meters: number): string {
+  return humanizeDistanceStringImperial(meters, true)
 }
 
 /**
@@ -265,175 +179,6 @@ interface LegCues {
 // it's swapped out.
 const cueCache = new WeakMap<Leg, LegCues>()
 
-// Separate cache for localized cues, keyed by leg + locale
-const localizedCueCache = new WeakMap<Leg, Map<string, LegCues>>()
-
-/**
- * Build turn cues for a leg using i18n translations.
- * This version accepts an intl context for localized instruction strings.
- */
-export function buildStepIndexWithIntl(
-  leg: Leg,
-  intl: IntlShape
-): StepCue[] {
-  const locale = intl.locale
-  let legLocalizedCues = localizedCueCache.get(leg)
-  if (!legLocalizedCues) {
-    legLocalizedCues = new Map()
-    localizedCueCache.set(leg, legLocalizedCues)
-  }
-
-  const cached = legLocalizedCues.get(locale)
-  if (cached) return cached.cues
-
-  const steps = leg?.steps
-  const polyline = decodeLegGeometry(leg)
-  if (!steps?.length || polyline.length < 2) {
-    const empty = { cues: [], legLength: 0 }
-    legLocalizedCues.set(locale, empty)
-    return empty.cues
-  }
-
-  const cumulative = calculateCumulativeDistances(polyline)
-  const legLength = cumulative[cumulative.length - 1] || 0
-
-  const cues: StepCue[] = []
-  steps.forEach((step) => {
-    const isTurn =
-      !NON_TURN_DIRECTIONS.has(step.relativeDirection) && !step.stayOn
-    if (!isTurn) {
-      // Not a decision point. Its distance still belongs to the rider's current
-      // stretch, so fold it into the cue they're already following rather than
-      // dropping it — otherwise "then in 0.3 mi" under-reports.
-      const previous = cues[cues.length - 1]
-      if (previous) previous.distanceMeters += step.distance || 0
-      return
-    }
-
-    cues.push({
-      distanceMeters: step.distance || 0,
-      index: cues.length,
-      instruction: phraseInstructionWithIntl(step, intl),
-      offsetMeters: offsetAlongPolyline(polyline, cumulative, [
-        step.lat,
-        step.lon
-      ]),
-      relativeDirection: step.relativeDirection,
-      significant: false,
-      streetName: step.streetName
-    })
-  })
-
-  const legSeconds = leg.duration || 0
-  const legMeters = leg.distance || legLength
-  const speedMps =
-    legSeconds > 0 && legMeters > 0
-      ? legMeters / legSeconds
-      : FALLBACK_SPEED_MPS
-
-  markSignificance(cues, speedMps)
-
-  const built = { cues, legLength }
-  legLocalizedCues.set(locale, built)
-  return built.cues
-}
-
-/**
- * Get the next cue for a leg using i18n translations.
- */
-export function getNextCueWithIntl(
-  leg: Leg,
-  progressAlongLeg: number,
-  intl: IntlShape
-): NextCueResult {
-  const cues = buildStepIndexWithIntl(leg, intl)
-  if (!cues.length) return {}
-
-  // We need the leg length to calculate the current offset
-  const polyline = decodeLegGeometry(leg)
-  if (polyline.length < 2) return {}
-
-  const cumulative = calculateCumulativeDistances(polyline)
-  const legLength = cumulative[cumulative.length - 1] || 0
-
-  const currentOffset = Math.max(0, Math.min(1, progressAlongLeg)) * legLength
-
-  // First cue the rider hasn't reached yet. A small tolerance keeps a turn from
-  // flickering back as the announced one when GPS noise nudges progress
-  // backwards across the vertex.
-  const cue = cues.find((c) => c.offsetMeters > currentOffset + 5)
-  if (!cue) return {}
-
-  return {
-    cue,
-    distanceToNextTurn: cue.offsetMeters - currentOffset,
-    following: cues[cue.index + 1]
-  }
-}
-
-/**
- * Build the ordered turn list for an access leg. Returns [] when the leg has no
- * usable steps or geometry — callers fall back to destination-only guidance.
- */
-export function buildStepIndex(leg: Leg): StepCue[] {
-  const cached = cueCache.get(leg)
-  if (cached) return cached.cues
-
-  const steps = leg?.steps
-  const polyline = decodeLegGeometry(leg)
-  if (!steps?.length || polyline.length < 2) {
-    const empty = { cues: [], legLength: 0 }
-    cueCache.set(leg, empty)
-    return empty.cues
-  }
-
-  const cumulative = calculateCumulativeDistances(polyline)
-  const legLength = cumulative[cumulative.length - 1] || 0
-
-  const cues: StepCue[] = []
-  steps.forEach((step) => {
-    const isTurn =
-      !NON_TURN_DIRECTIONS.has(step.relativeDirection) && !step.stayOn
-    if (!isTurn) {
-      // Not a decision point. Its distance still belongs to the rider's current
-      // stretch, so fold it into the cue they're already following rather than
-      // dropping it — otherwise "then in 0.3 mi" under-reports.
-      const previous = cues[cues.length - 1]
-      if (previous) previous.distanceMeters += step.distance || 0
-      return
-    }
-
-    cues.push({
-      distanceMeters: step.distance || 0,
-      index: cues.length,
-      instruction: phraseInstruction(step),
-      offsetMeters: offsetAlongPolyline(polyline, cumulative, [
-        step.lat,
-        step.lon
-      ]),
-      relativeDirection: step.relativeDirection,
-      significant: false,
-      streetName: step.streetName
-    })
-  })
-
-  const legSeconds = leg.duration || 0
-  const legMeters = leg.distance || legLength
-  const speedMps =
-    legSeconds > 0 && legMeters > 0
-      ? legMeters / legSeconds
-      : FALLBACK_SPEED_MPS
-
-  markSignificance(cues, speedMps)
-
-  const built = { cues, legLength }
-  cueCache.set(leg, built)
-  return built.cues
-}
-
-/**
- * Internal function to build and cache leg cues (non-localized version).
- */
 function buildLegCues(leg: Leg): LegCues {
   const cached = cueCache.get(leg)
   if (cached) return cached
@@ -454,6 +199,9 @@ function buildLegCues(leg: Leg): LegCues {
     const isTurn =
       !NON_TURN_DIRECTIONS.has(step.relativeDirection) && !step.stayOn
     if (!isTurn) {
+      // Not a decision point. Its distance still belongs to the rider's current
+      // stretch, so fold it into the cue they're already following rather than
+      // dropping it — otherwise "then in 0.3 mi" under-reports.
       const previous = cues[cues.length - 1]
       if (previous) previous.distanceMeters += step.distance || 0
       return
@@ -488,6 +236,14 @@ function buildLegCues(leg: Leg): LegCues {
 }
 
 /**
+ * Build the ordered turn list for an access leg. Returns [] when the leg has no
+ * usable steps or geometry — callers fall back to destination-only guidance.
+ */
+export function buildStepIndex(leg: Leg): StepCue[] {
+  return buildLegCues(leg).cues
+}
+
+/**
  * The turn to announce for a rider `progressAlongLeg` (0-1) into `leg`, plus
  * the one after it. Returns {} when the leg has no cues left to give.
  */
@@ -509,4 +265,92 @@ export function getNextCue(leg: Leg, progressAlongLeg: number): NextCueResult {
     following: cues[cue.index + 1]
   }
 }
-// force rebuild
+
+/**
+ * A 1 Hz fix at bike speed advances the projection ≤ ~10 m; 100 m in a single
+ * tick is the projection jumping (an off-route rider being dragged along the
+ * polyline), not riding. Also safely above verify-turn-by-turn's ~32 m/tick
+ * sample spacing, so the verify ride never trips it.
+ */
+const MAX_TICK_ADVANCE_M = 100
+/**
+ * Consecutive plausible-advance ticks required before turn announcements
+ * resume after a rejoin or a projection jump. Tick-based rather than
+ * wall-clock so live 1 Hz GPS, replays and the fast verify loop all behave
+ * identically; a backgrounded-GPS gap costs at most this many silent ticks.
+ */
+const PLAUSIBLE_TICKS_TO_RESUME = 2
+
+interface CueCursor {
+  holdTicks: number
+  lastOffsetMeters: number | null
+  lastOnRoute: boolean
+}
+
+// Per-leg navigation state, keyed like cueCache: the leg object is stable for
+// the life of an itinerary and collectable once it's swapped out, so a
+// post-replan leg is a fresh object and starts with a clean cursor.
+const cursorCache = new WeakMap<Leg, CueCursor>()
+
+export interface NavigationCueResult extends NextCueResult {
+  /** Hold turn announcements (not the on-screen/wrist cue) this tick. */
+  announceHold?: boolean
+}
+
+/**
+ * `getNextCue` with route honesty. On the 7/29 ride the rider spent two
+ * minutes on a street parallel to the bike leg (perpendicular distance
+ * flapping around the 100 m on-route threshold) while the nearest-point
+ * projection slid 537 m → 1509 m — sweeping straight past the turns at
+ * 822/992/1003 m. Every tick that dipped back under the threshold could
+ * announce whichever swept-past cue was momentarily "next": "announces turns
+ * after you take them", verbatim.
+ *
+ * So: while `!isOnRoute` the projection is a fiction and no cue is returned at
+ * all; and after a rejoin (or a same-tick projection jump bigger than a rider
+ * can move) announcements are held for a short settle while the cue itself
+ * updates immediately — the screen/wrist shows the correct next turn
+ * passively, only the buzz/toast waits. Backwards movement on-route is NOT a
+ * jump: the 7/29 track itself contains a legitimate backtrack (min 9–12, the
+ * rider rode 500 m out and returned) whose earlier cue must re-announce.
+ */
+export function selectCueForNavigation(
+  leg: Leg,
+  progressAlongLeg: number,
+  isOnRoute: boolean
+): NavigationCueResult {
+  const prev = cursorCache.get(leg)
+
+  if (!isOnRoute) {
+    cursorCache.set(leg, {
+      holdTicks: prev?.holdTicks ?? 0,
+      lastOffsetMeters: prev?.lastOffsetMeters ?? null,
+      lastOnRoute: false
+    })
+    return {}
+  }
+
+  const { legLength } = buildLegCues(leg)
+  const offset = Math.max(0, Math.min(1, progressAlongLeg)) * legLength
+
+  const jumped =
+    prev != null &&
+    (!prev.lastOnRoute ||
+      (prev.lastOffsetMeters != null &&
+        offset - prev.lastOffsetMeters > MAX_TICK_ADVANCE_M))
+
+  const holdTicks = jumped
+    ? PLAUSIBLE_TICKS_TO_RESUME
+    : Math.max(0, (prev?.holdTicks ?? 0) - 1)
+
+  cursorCache.set(leg, {
+    holdTicks,
+    lastOffsetMeters: offset,
+    lastOnRoute: true
+  })
+
+  return {
+    ...getNextCue(leg, progressAlongLeg),
+    announceHold: holdTicks > 0
+  }
+}

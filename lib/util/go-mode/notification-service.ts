@@ -2,6 +2,10 @@ import type { Leg } from '@opentripplanner/types'
 
 import { asContinuation, formatCueDistance } from './turn-by-turn'
 import { calculateDistance } from './position-matching'
+import {
+  VEHICLE_AT_BOARD_STOP_M,
+  VEHICLE_RECORD_STALE_SEC
+} from './transit-trust'
 import type { TripProgress } from './progress-calculator'
 
 export type NotificationType =
@@ -206,6 +210,21 @@ export function checkAlightAlerts(
 const BIKE_CUE_DISTANCES = { act: 30, prepare: 120 }
 const WALK_CUE_DISTANCES = { act: 15, prepare: 40 }
 
+// Speed-scaled leads, up-only from the static floors above. The 7/29 ride
+// showed on-route bike speeds of 4–7 m/s (occasionally 8–9): at 6.5 m/s the
+// static 120 m prepare was only ~18 s of warning and the 30 m act cue ~4.5 s —
+// too late to brake and turn. Scaling by the rider's own speed restores the
+// intended reaction time (25 s ≈ 163 m, 8 s ≈ 52 m at 6.5 m/s); the floors
+// keep walkers and slow riders byte-identical, and the caps keep a downhill
+// 9–10 m/s from announcing a turn blocks early. No usable speed on the fix
+// (null/0, common in the 7/29 track) → floors, i.e. today's behavior.
+const PREPARE_LEAD_SECONDS = 25
+const ACT_LEAD_SECONDS = 8
+export const PREPARE_LEAD_MAX_M = 250
+// Exported: also the tolerance the turn-honesty fixture test allows between an
+// announced turn and the rider's on-route projection.
+export const ACT_LEAD_MAX_M = 60
+
 /**
  * Check if should notify for upcoming turn
  */
@@ -218,11 +237,28 @@ export function checkUpcomingTurn(
   const isBike = currentLeg.mode === 'BICYCLE'
   if (!isBike && currentLeg.mode !== 'WALK') return null
 
+  // A rejoin/jump settle is under way (see selectCueForNavigation): the cue on
+  // screen is already correct, but buzzing it now is the 7/29 rejoin burst —
+  // the projection's sweep past 822/992/1003 m announced as still ahead.
+  if (progress.turnAnnouncementsHeld) return null
+
   const cue = progress.nextTurnCue
   const distance = progress.distanceToNextTurn
   if (!cue || distance == null) return null
 
-  const { act, prepare } = isBike ? BIKE_CUE_DISTANCES : WALK_CUE_DISTANCES
+  const floors = isBike ? BIKE_CUE_DISTANCES : WALK_CUE_DISTANCES
+  const speed = progress.riderSpeedMps
+  const prepare =
+    speed != null && speed > 0
+      ? Math.min(
+          Math.max(floors.prepare, speed * PREPARE_LEAD_SECONDS),
+          PREPARE_LEAD_MAX_M
+        )
+      : floors.prepare
+  const act =
+    speed != null && speed > 0
+      ? Math.min(Math.max(floors.act, speed * ACT_LEAD_SECONDS), ACT_LEAD_MAX_M)
+      : floors.act
   if (distance > prepare) return null
 
   // Two cues per turn: one with time to react, one at the corner itself.
@@ -339,6 +375,13 @@ const MISSED_BUS_AT_STOP_RADIUS_M = 50
 
 /** Everything classifyMissedBus needs to judge the upcoming boarding. */
 export interface MissedBusInput {
+  /** The live record of the vehicle serving the board leg's PLANNED trip —
+   * the bus's own geometry, never the rider's stop proximity. */
+  boardVehicle?: {
+    ageSec: number | null
+    distanceToBoardStopM: number | null
+    nextStopId: string | null
+  } | null
   currentLegIndex: number
   departureOverrideMs: number | null
   legs: Leg[]
@@ -380,6 +423,22 @@ export function getEffectiveBoardTimeMs(
 }
 
 /**
+ * The boarding at stake: index of the first transit leg not yet behind the
+ * rider, or -1 when no transit remains. Exported so the classifyMissedBus
+ * call site can locate the board leg to build `boardVehicle` from — the same
+ * loop must answer in both places or they judge different boardings.
+ */
+export function findBoardLegIndex(
+  legs: Leg[],
+  currentLegIndex: number
+): number {
+  for (let i = currentLegIndex; i < legs.length; i++) {
+    if (isTransitMode(legs[i].mode)) return i
+  }
+  return -1
+}
+
+/**
  * Detect a missed boarding: the next transit departure has passed (plus grace)
  * and the rider is verifiably not aboard. Returns null while there is nothing
  * to miss — rider aboard, departure still ahead, or no upcoming transit leg.
@@ -393,6 +452,7 @@ export function classifyMissedBus(
   input: MissedBusInput
 ): MissedBusContext | null {
   const {
+    boardVehicle,
     currentLegIndex,
     departureOverrideMs,
     legs,
@@ -404,21 +464,18 @@ export function classifyMissedBus(
     vehicleConfidence
   } = input
 
-  // The boarding at stake: first transit leg not yet behind the rider.
-  let boardLegIndex = -1
-  for (let i = currentLegIndex; i < legs.length; i++) {
-    if (isTransitMode(legs[i].mode)) {
-      boardLegIndex = i
-      break
-    }
-  }
+  const boardLegIndex = findBoardLegIndex(legs, currentLegIndex)
   if (boardLegIndex === -1) return null
   const boardLeg = legs[boardLegIndex]
 
-  // Aboard already? The sticky riding fact or a strong vehicle match settles
-  // it. Ground speed at vehicle pace counts too: the realtime feed can mark
-  // the bus departed the instant the rider boards, before matching confirms.
-  if (riding?.legIndex === boardLegIndex) return null
+  // Aboard already? The sticky riding fact means the rider is on a bus they
+  // chose — including the un-anchored legIndex:-1 form an itinerary swap
+  // leaves behind — and a missed-bus classification is never valid until
+  // clearRiding (90s sustained off-route) has dropped it. A strong vehicle
+  // match settles it too, and ground speed at vehicle pace counts: the
+  // realtime feed can mark the bus departed the instant the rider boards,
+  // before matching confirms.
+  if (riding) return null
   if (
     currentLegIndex === boardLegIndex &&
     (vehicleConfidence === 'confirmed' || vehicleConfidence === 'high')
@@ -427,6 +484,24 @@ export function classifyMissedBus(
   }
   if (riderSpeedMps != null && riderSpeedMps > MISSED_BUS_MAX_RIDER_SPEED_MPS) {
     return null
+  }
+
+  // The planned trip's own vehicle outranks a "departed" board epoch: a fresh
+  // record showing the bus still headed to / near the boarding stop means the
+  // epoch is stale, not the bus gone. On 7/29 MISSED_BUS fired while bus 8140
+  // was pulling in 111m from the stop — this measures the BUS against the
+  // stop, never the rider.
+  if (
+    boardVehicle &&
+    boardVehicle.ageSec != null &&
+    boardVehicle.ageSec <= VEHICLE_RECORD_STALE_SEC
+  ) {
+    const boardStopId = (boardLeg.from as any)?.stop?.gtfsId ?? null
+    const atBoardStop =
+      (boardStopId != null && boardVehicle.nextStopId === boardStopId) ||
+      (boardVehicle.distanceToBoardStopM != null &&
+        boardVehicle.distanceToBoardStopM <= VEHICLE_AT_BOARD_STOP_M)
+    if (atBoardStop) return null
   }
 
   const effective = getEffectiveBoardTimeMs(

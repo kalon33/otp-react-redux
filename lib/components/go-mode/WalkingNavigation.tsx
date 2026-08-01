@@ -261,10 +261,13 @@ const WalkingNavigation = ({
           </NavHero>
         )}
         {sub && <NavSub>{sub}</NavSub>}
-        {foot && <NavFoot>{foot}</NavFoot>}
-        {/* Riding to a bus: the departure stays the headline, but the rider
-            still needs to know which way to go to reach the stop. */}
+        {/* Riding to a bus: the departure stays the headline, but the rider's
+            next physical action is the turn — so it renders first, directly
+            under "arrives in", ahead of the ride-to-stop line. As the trailing
+            line it read as more bus info (7/29). While deviated there is no
+            turnLine and the card gracefully shows bus facts only. */}
         {isNextLegTransit && turnLine && <NavFoot>{turnLine}</NavFoot>}
+        {foot && <NavFoot>{foot}</NavFoot>}
 
         {showExtras && (
           <NavExtras>

@@ -258,7 +258,7 @@ const demoSheetStore = {
           currentLegIndex: 0,
           waitTimeAtStop: 180
         },
-        ui: { activeLeg: null, backgrounded: false, mapFollowUser: false }
+        ui: { activeLeg: null, backgrounded: false, mapFollowUser: true }
       },
       ui: { diagramLeg: null }
     }
@@ -353,6 +353,33 @@ const GoModeDemo = (): JSX.Element => (
           onExit={() => undefined}
           onSelectDeparture={() => undefined}
           progress={baseProgress}
+        />
+      </Frame>
+
+      <Frame
+        note="Turn-by-turn on a transit-bound access leg: the turn is the first foot, directly under 'arrives in'; the ride-to-stop line follows. Hero clock + waves untouched."
+        title="Boarding (bike → bus), with turn"
+      >
+        <WalkingNavigation
+          boardingStopData={makeBoardingStopData(true)}
+          leg={{ ...walkLeg, mode: 'BICYCLE' }}
+          nextLeg={busNextLeg}
+          onExit={() => undefined}
+          onSelectDeparture={() => undefined}
+          progress={{
+            ...baseProgress,
+            distanceToNextTurn: 320,
+            nextInstruction: 'Turn right on E Lake Nokomis Pkwy',
+            nextTurnCue: {
+              distanceMeters: 170,
+              index: 1,
+              instruction: 'Turn right on E Lake Nokomis Pkwy',
+              offsetMeters: 822,
+              relativeDirection: 'RIGHT',
+              significant: true,
+              streetName: 'E Lake Nokomis Pkwy'
+            }
+          }}
         />
       </Frame>
 

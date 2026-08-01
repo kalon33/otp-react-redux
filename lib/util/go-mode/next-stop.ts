@@ -47,13 +47,35 @@ function toOrderedStop(place: any): OrderedStop | null {
  * fallback shape some responses use.
  */
 export function orderedStopsOnLeg(leg: any): OrderedStop[] {
-  const intermediates: any[] =
-    (leg?.intermediatePlaces?.length
-      ? leg.intermediatePlaces
-      : leg?.intermediateStops) || []
-  return [...intermediates, leg?.to]
+  const places: any[] = leg?.intermediatePlaces || []
+  const stops: any[] = leg?.intermediateStops || []
+  let intermediates = (places.length ? places : stops)
     .map(toOrderedStop)
     .filter(Boolean) as OrderedStop[]
+  // intermediatePlaces is preferred for its arrival times and gtfsIds, but
+  // some responses carry coordinateless entries that toOrderedStop drops.
+  // Only when entries were actually dropped: if intermediateStops retains
+  // more stops, a full count beats richer metadata (a collapsed list reads
+  // as "1 stop remaining" for the whole leg).
+  if (places.length && intermediates.length < places.length) {
+    const alt = stops.map(toOrderedStop).filter(Boolean) as OrderedStop[]
+    if (alt.length > intermediates.length) intermediates = alt
+  }
+  const alight = toOrderedStop(leg?.to)
+  return alight ? [...intermediates, alight] : intermediates
+}
+
+/**
+ * The leg CLAIMS intermediate stops but the usable list collapsed to just the
+ * alight stop (every entry lacked coordinates) — any count from it is a
+ * permanent "1 stop remaining" and must not be trusted. A leg genuinely
+ * without intermediates is NOT degenerate: 1 stop remaining is then correct.
+ */
+export function hasDegenerateStopList(leg: any): boolean {
+  const claimed =
+    (leg?.intermediatePlaces?.length || 0) +
+    (leg?.intermediateStops?.length || 0)
+  return claimed > 0 && orderedStopsOnLeg(leg).length <= 1
 }
 
 /**
@@ -110,6 +132,9 @@ export function countStopsAhead(
   leg: any,
   progress: number
 ): { nextStopName: string; stopsRemaining: number } | null {
+  // NaN/undefined progress fails every fraction comparison below and lands on
+  // the last stop — reading as "1 stop remaining" off no position fact at all.
+  if (!Number.isFinite(progress)) return null
   const ordered = orderedStopsOnLeg(leg)
   if (!ordered.length) return null
   const fractions = stopFractionsAlongLeg(ordered, decodeLegGeometry(leg))

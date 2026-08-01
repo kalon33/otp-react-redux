@@ -75,6 +75,157 @@ describe('matchUserToVehicle', () => {
     expect(match.vehicleId).toBeNull()
     expect(match.tripId).toBeUndefined()
   })
+
+  // The 7/29 cascade opener: the rider's own bus (8140) outran its stale feed
+  // position to 852m behind, and the OPPOSITE-direction Orange Line across
+  // the freeway (8141, 847m, closing) won the match by 5m. Direction and
+  // incumbent stickiness must each keep 8140 on their own.
+  describe('7/29 regression: stale-feed flap onto the opposing Orange Line', () => {
+    // Rider southbound on I-35W at BRT speed.
+    const RIDER: [number, number] = [44.921, -93.269]
+    const HEADING = 179.5
+    const SPEED = 17.4
+    // ~853m and ~847m north of the rider (lat-only offsets).
+    const own = vehicle({
+      heading: 179,
+      lat: RIDER[0] + 0.00766,
+      tripHeadsign: 'Orange Burnsville',
+      tripId: '1:1173133',
+      vehicleId: '1:8140'
+    })
+    const opposing = vehicle({
+      heading: 2,
+      label: '8141',
+      lat: RIDER[0] + 0.00761,
+      speed: 15,
+      tripHeadsign: 'Orange Downtown Minneapolis',
+      tripId: '1:1082792',
+      vehicleId: '1:8141'
+    })
+    const previous8140 = matchUserToVehicle(
+      RIDER[0],
+      RIDER[1],
+      HEADING,
+      [own],
+      '1:904',
+      null,
+      900,
+      SPEED
+    )
+
+    it("an opposite-direction vehicle never displaces the rider's bus", () => {
+      const match = matchUserToVehicle(
+        RIDER[0],
+        RIDER[1],
+        HEADING,
+        [opposing, own],
+        '1:904',
+        previous8140,
+        900,
+        SPEED
+      )
+      expect(match.vehicleId).toBe('1:8140')
+      expect(match.tripId).toBe('1:1173133')
+    })
+
+    it('an opposing candidate alone yields no match, not a wrong match', () => {
+      const match = matchUserToVehicle(
+        RIDER[0],
+        RIDER[1],
+        HEADING,
+        [opposing],
+        '1:904',
+        null,
+        900,
+        SPEED
+      )
+      expect(match.confidence).toBe('none')
+      expect(match.vehicleId).toBeNull()
+    })
+
+    it('the direction gate is inert while the rider is (near-)stationary', () => {
+      const nearby = vehicle({ heading: 2, lat: RIDER[0] + 0.0002 })
+      const stopped = matchUserToVehicle(
+        RIDER[0],
+        RIDER[1],
+        HEADING,
+        [nearby],
+        '1:904',
+        null,
+        80,
+        0
+      )
+      expect(stopped.vehicleId).toBe('1:8148')
+    })
+
+    it('the direction gate is inert while the vehicle is (near-)stationary', () => {
+      // A bus dwelling at a stop reports garbage headings; never exclude it.
+      const dwelling = vehicle({ heading: 2, lat: RIDER[0] + 0.0002, speed: 0 })
+      const match = matchUserToVehicle(
+        RIDER[0],
+        RIDER[1],
+        HEADING,
+        [dwelling],
+        '1:904',
+        null,
+        80,
+        SPEED
+      )
+      expect(match.vehicleId).toBe('1:8148')
+    })
+  })
+
+  describe('incumbent stickiness', () => {
+    // Two same-route vehicles, headings unusable (stationary rider), so only
+    // the distance margin decides. Feed distances jitter by tens of meters.
+    const RIDER: [number, number] = [44.921, -93.269]
+    const incumbent = vehicle({ lat: RIDER[0] + 0.00449 }) // ~500m
+    const previousMatch = matchUserToVehicle(
+      RIDER[0],
+      RIDER[1],
+      null,
+      [incumbent],
+      '1:904',
+      null,
+      900
+    )
+
+    it('a challenger 5m closer does not displace the incumbent (7/29 flap margin)', () => {
+      const challenger = vehicle({
+        lat: RIDER[0] + 0.00445, // ~495m
+        tripId: '1:trip-other',
+        vehicleId: '1:8200'
+      })
+      const match = matchUserToVehicle(
+        RIDER[0],
+        RIDER[1],
+        null,
+        [challenger, incumbent],
+        '1:904',
+        previousMatch,
+        900
+      )
+      expect(match.vehicleId).toBe('1:8148')
+    })
+
+    it('a challenger 200m closer does switch', () => {
+      const challenger = vehicle({
+        lat: RIDER[0] + 0.0027, // ~300m
+        tripId: '1:trip-other',
+        vehicleId: '1:8200'
+      })
+      const match = matchUserToVehicle(
+        RIDER[0],
+        RIDER[1],
+        null,
+        [challenger, incumbent],
+        '1:904',
+        previousMatch,
+        900
+      )
+      expect(match.vehicleId).toBe('1:8200')
+    })
+  })
 })
 
 describe('findNearbyVehicles', () => {

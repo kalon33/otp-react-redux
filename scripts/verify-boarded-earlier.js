@@ -13,7 +13,10 @@
  *   (3) refreshLiveLegTimes polls the RIDDEN trip for the current leg, so the
  *       trip sheet's times are the rider's actual bus's,
  *   (4) the boarded-earlier auto-replan fires (tripMismatch path) and
- *       auto-applies a same-route itinerary — no card, no prompt.
+ *       auto-applies a SPLICED itinerary that keeps the rider on the boarded
+ *       bus by construction (replanFromAboard → buildOnboardItinerary:
+ *       leg[0].tripId === the ridden trip, boarding at one of that trip's own
+ *       downstream stops) — no card, no prompt, never a different bus.
  *
  * Harness: real app at :9967 (same as verify-auto-anchor), GPS simulation
  * along the planned itinerary, plus a synthetic vehicle-positions feed that
@@ -186,6 +189,7 @@ async function main() {
 
   let other = null
   let otherAlight = null
+  let otherStopIds = null
   const seenTripIds = new Set()
   for (const c of candidates) {
     if (seenTripIds.has(c.tripId)) continue
@@ -207,6 +211,8 @@ async function main() {
     if (alight) {
       other = c
       otherAlight = stEpoch(alight, false)
+      // The spliced replan must board at one of THIS trip's own stops.
+      otherStopIds = sts.map((st) => st.stop.gtfsId)
       break
     }
     // The OTP route is public and rate-limited; don't hammer it.
@@ -231,6 +237,18 @@ async function main() {
 
   // ---- start Go Mode; pin a synthetic vehicle (on the OTHER trip) to the
   // rider so vehicle matching locks onto it ----
+  // Block the app's own vehicle-position fetches from here on: every live
+  // response displaced the injected TEST vehicle for up to 500ms, which
+  // dropped the match and reset consecutiveMatches — the boarded-earlier
+  // gate's sustained-run requirement (RIDING_REBIND_MIN_CONSECUTIVE) then
+  // never accumulated before the 16x sim ended. Aborting the fetch leaves the
+  // injector as the only vehicle source; everything else (plans, stop times)
+  // passes through untouched — the auto-replan still hits the real OTP.
+  await page.setRequestInterception(true)
+  page.on('request', (req) => {
+    if ((req.postData() || '').includes('vehiclePositions')) req.abort()
+    else req.continue()
+  })
   await page.evaluate(() => window.__beginGoMode(window.__plannedItinerary))
   await page.waitForFunction(
     () =>
@@ -240,8 +258,8 @@ async function main() {
   )
   await page.evaluate(
     (routeId, tripId, headsign, vehicleId) => {
-      // Re-inject twice a second: the app's own 15s vehicle poll overwrites
-      // the route's vehicle list with the real feed.
+      // Re-inject twice a second so a fresh record is always present (the
+      // sim clock outruns any single stamp within seconds at 16x).
       const inject = async () => {
         // eslint-disable-next-line import/no-absolute-path
         const api = await import('/lib/actions/api.js')
@@ -261,7 +279,12 @@ async function main() {
                 nextStopName: null,
                 patternId: `${routeId}:sim`,
                 routeId,
-                seconds: Math.floor(Date.now() / 1000),
+                // Feed timestamp in the SIM clock domain: simulated fixes
+                // carry simulatedTimeMs in `timestamp`, and the freshness
+                // gates (isVehicleRecordFresh) measure ageSec against the sim
+                // clock too. A wall-clock stamp here goes "stale" within
+                // seconds at 16x and blocks the boarded-earlier replan.
+                seconds: Math.floor((pos.timestamp ?? Date.now()) / 1000),
                 speed: pos.coords.speed ?? 10,
                 stopStatus: 'IN_TRANSIT_TO',
                 tripHeadsign: headsign,
@@ -343,6 +366,7 @@ async function main() {
     return {
       busIdx,
       newBoard: Number(bus.startTime),
+      newBoardStopId: bus.from?.stop?.gtfsId || bus.from?.stopId,
       newEnd: Number(bus.endTime),
       newTripId: bus.trip?.gtfsId || bus.tripId,
       rerouteCardShowing: (g.reRoute?.candidates || []).length > 0,
@@ -350,16 +374,32 @@ async function main() {
     }
   })
   console.log(
-    `[replan] auto-applied: bus leg now trip ${after.newTripId} ` +
-      `board ${fmt(after.newBoard)} alight ${fmt(after.newEnd)} ` +
-      `(planned board was ${fmt(plan.plannedBoard)}); ` +
+    `[replan] auto-applied splice: leg[${after.busIdx}] now trip ` +
+      `${after.newTripId} boarding ${after.newBoardStopId} ` +
+      `${fmt(after.newBoard)}, alight ${fmt(after.newEnd)} ` +
+      `(planned trip was ${plan.plannedTripId}); ` +
       `card showing: ${after.rerouteCardShowing}`
   )
   if (after.rerouteCardShowing) {
     throw new Error('boarded-earlier surfaced a card — must auto-apply')
   }
-  if (after.newBoard > plan.plannedBoard + 60 * 60000) {
-    throw new Error('replan jumped to a much later departure — wrong bus')
+  // The spliced recovery contract (replanFromAboard): the new itinerary's
+  // FIRST leg IS the physically-boarded bus — an aboard replan can never
+  // take the rider off their line (7/29: orange line).
+  if (after.busIdx !== 0) {
+    throw new Error(
+      `spliced itinerary must start with the bus leg (transit at index ${after.busIdx})`
+    )
+  }
+  if (after.newTripId !== other.tripId) {
+    throw new Error(
+      `leg[0] is trip ${after.newTripId} — expected the boarded bus's trip ${other.tripId}`
+    )
+  }
+  if (otherStopIds && !otherStopIds.includes(after.newBoardStopId)) {
+    throw new Error(
+      `boarding stop ${after.newBoardStopId} is not a downstream stop of trip ${other.tripId}`
+    )
   }
 
   // ---- (3): live leg times for the current leg must track the RIDDEN trip

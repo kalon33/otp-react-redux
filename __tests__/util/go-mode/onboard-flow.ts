@@ -1,9 +1,30 @@
 import {
   beginOnboardFlowAction,
-  stopGoMode
+  browseFromCurrentPosition,
+  replanFromAboard,
+  stopGoMode,
+  stopVehicleTracking
 } from '../../../lib/actions/go-mode'
+import { fetchOnboardCandidatePlan, findTrip } from '../../../lib/actions/apiV2'
 import { mergeCandidateRoutes } from '../../../lib/util/go-mode/onboard-discovery-util'
 import goMode from '../../../lib/reducers/go-mode'
+import type { RidingState } from '../../../lib/actions/go-mode'
+
+jest.mock('../../../lib/actions/apiV2', () => ({
+  ...jest.requireActual('../../../lib/actions/apiV2'),
+  fetchOnboardCandidatePlan: jest.fn(),
+  // beginGoMode pre-fetches stop times and starts vehicle tracking for a
+  // transit first leg — no-op thunks keep the applied-splice tests off the
+  // network.
+  findStopTimesForStop: jest.fn(() => () => Promise.resolve({})),
+  findTrip: jest.fn(() => () => Promise.resolve({})),
+  getBasePlanParts: jest.fn(() => ({
+    modes: [{ mode: 'TRANSIT' }, { mode: 'WALK' }],
+    modeSettings: [],
+    numItineraries: 5
+  })),
+  getVehiclePositionsForRoute: jest.fn(() => () => Promise.resolve({}))
+}))
 
 const initial = goMode(undefined, { type: '@@INIT' })
 
@@ -92,5 +113,393 @@ describe('mergeCandidateRoutes (position-based discovery)', () => {
     expect(
       mergeCandidateRoutes([{ routeId: null }, { routeId: '904' }], [])
     ).toEqual([{ id: '1:904', longName: null, mode: 'BUS', shortName: null }])
+  })
+})
+
+describe('replanFromAboard (mid-ride aboard-aware replan)', () => {
+  const mockedFetch = fetchOnboardCandidatePlan as jest.Mock
+  const mockedFindTrip = findTrip as jest.Mock
+
+  const TRIP_ID = '1:trip-aboard'
+  // Four stops marching north; the rider sits at S2, destination near S3.
+  const stop = (id: string, lat: number, name: string, dep: number) => ({
+    scheduledArrival: dep,
+    scheduledDeparture: dep,
+    serviceDay: 0,
+    stop: { code: id, id, lat, lon: -93.28, name }
+  })
+  const makeTripFixture = () => ({
+    id: TRIP_ID,
+    route: {
+      id: '1:904',
+      longName: 'METRO Orange Line',
+      mode: 'BUS',
+      shortName: 'Orange'
+    },
+    stopTimes: [
+      stop('1:s1', 44.86, 'Knox & 76th St', 100),
+      stop('1:s2', 44.9, 'Mid Stop', 400),
+      stop('1:s3', 44.95, 'Near Destination', 700),
+      stop('1:s4', 44.99, 'Past Destination', 1000)
+    ],
+    tripHeadsign: 'Downtown'
+  })
+
+  const ridingAboard: RidingState = {
+    boardedAt: 1000,
+    headsign: 'Downtown',
+    legIndex: 0,
+    offRouteSince: null,
+    routeId: '1:904',
+    routeShortName: 'Orange',
+    tripId: TRIP_ID,
+    vehicleId: 'v-1'
+  }
+
+  // The live trip whose destination the replan must keep. The bus leg carries
+  // the boarded trip; the walk leg ends at the REAL destination.
+  const makeItinerary = () => ({
+    duration: 1800,
+    endTime: 2000000,
+    legs: [
+      {
+        from: { lat: 44.86, lon: -93.28, name: 'Knox & 76th St' },
+        mode: 'BUS',
+        routeId: '1:904',
+        to: { lat: 44.95, lon: -93.28, name: 'Near Destination' },
+        transitLeg: true,
+        trip: { gtfsId: TRIP_ID },
+        tripId: TRIP_ID
+      },
+      {
+        mode: 'WALK',
+        to: { lat: 44.951, lon: -93.279, name: 'Real Destination' },
+        transitLeg: false
+      }
+    ],
+    startTime: 200000,
+    transfers: 0
+  })
+
+  const onwardItin = () => ({
+    duration: 300,
+    endTime: Date.now() + 900000,
+    legs: [
+      {
+        from: { name: 'Near Destination' },
+        mode: 'WALK',
+        to: { name: 'Real Destination' },
+        transitLeg: false
+      }
+    ],
+    startTime: Date.now() + 600000,
+    walkDistance: 200
+  })
+
+  const makeStore = ({
+    goModeOverrides = {},
+    queryTo = { lat: 10, lon: 20, name: 'Browse destination' },
+    trips = {} as any
+  } = {}) => {
+    let goModeState: any = {
+      ...initial,
+      activeItinerary: makeItinerary(),
+      isActive: true,
+      riding: ridingAboard,
+      tracking: {
+        ...initial.tracking,
+        lastPosition: { coords: { latitude: 44.9, longitude: -93.28 } }
+      },
+      ...goModeOverrides
+    }
+    const actions: any[] = []
+    const getState = () => ({
+      otp: {
+        config: { homeTimezone: 'America/Chicago' },
+        currentQuery: { to: queryTo },
+        goMode: goModeState,
+        transitIndex: { routes: {}, trips }
+      }
+    })
+    const dispatch: any = (action: any) => {
+      if (typeof action === 'function') return action(dispatch, getState)
+      actions.push(action)
+      goModeState = goMode(goModeState, action)
+      return action
+    }
+    return { actions, dispatch, getGoMode: () => goModeState }
+  }
+
+  beforeEach(() => {
+    mockedFetch.mockReset()
+    mockedFindTrip.mockReset()
+    mockedFindTrip.mockReturnValue(() => Promise.resolve({}))
+  })
+  afterEach(() => {
+    // beginGoMode starts the 15s vehicle-position poll for a transit first
+    // leg — clear it so jest can exit.
+    stopVehicleTracking()(() => undefined)
+  })
+
+  it('gates on the verified riding.tripId — no fact, no aboard replan', async () => {
+    const noFact = makeStore({ goModeOverrides: { riding: null } })
+    await noFact.dispatch(replanFromAboard({ autoApply: true }))
+    const routeOnly = makeStore({
+      goModeOverrides: { riding: { ...ridingAboard, tripId: null } }
+    })
+    await routeOnly.dispatch(replanFromAboard({ autoApply: true }))
+
+    expect(noFact.actions).toEqual([])
+    expect(routeOnly.actions).toEqual([])
+    expect(mockedFindTrip).not.toHaveBeenCalled()
+  })
+
+  it('plans to the ACTIVE ITINERARY destination, not currentQuery.to', async () => {
+    mockedFetch.mockReturnValue(() =>
+      Promise.resolve({ error: false, itineraries: [onwardItin()] })
+    )
+    const store = makeStore({
+      queryTo: { lat: 10, lon: 20, name: 'Browse destination' },
+      trips: { [TRIP_ID]: makeTripFixture() }
+    })
+    await store.dispatch(replanFromAboard({ autoApply: true }))
+
+    expect(mockedFetch).toHaveBeenCalled()
+    // Every candidate onward plan targets the trip's real destination — a
+    // mid-trip browse may have rewritten the query to somewhere else.
+    mockedFetch.mock.calls.forEach(([payload]) => {
+      expect(payload.to).toEqual({
+        lat: 44.951,
+        lon: -93.279,
+        name: 'Real Destination'
+      })
+    })
+  })
+
+  it('autoApply splices the BOARDED bus in as leg 0 and re-confirms the vehicle', async () => {
+    const trip = makeTripFixture()
+    mockedFetch.mockReturnValue(() =>
+      Promise.resolve({ error: false, itineraries: [onwardItin()] })
+    )
+    const store = makeStore({ trips: { [TRIP_ID]: trip } })
+    await store.dispatch(
+      replanFromAboard({ autoApply: true, reason: 'boarded-earlier' })
+    )
+
+    const applied = store.actions.find((a) => a.type === 'START_GO_MODE')
+      ?.payload?.itinerary
+    expect(applied).toBeTruthy()
+    // The invariant: an aboard replan can never take the rider off their
+    // line — the first leg IS the physically-boarded trip.
+    expect(applied.legs[0].transitLeg).toBe(true)
+    expect(applied.legs[0].tripId).toBe(TRIP_ID)
+    // ...boarding at one of THAT trip's own stops.
+    expect(trip.stopTimes.map((st: any) => st.stop.id)).toContain(
+      applied.legs[0].from.stop.id
+    )
+    // Live-times anchor contract (refreshLiveLegTimes): the synthesized leg
+    // must carry the ridden trip's id in BOTH shapes the anchor accepts
+    // (leg.trip.gtfsId and leg.tripId) plus board/alight stop gtfsIds and
+    // names for liveStopArrival's id-then-name lookup — verify-boarded-earlier
+    // caught the spliced trip's overview times never re-anchoring.
+    expect(applied.legs[0].trip).toEqual({ gtfsId: TRIP_ID })
+    expect(applied.legs[0].from.stop.gtfsId).toBeTruthy()
+    expect(applied.legs[0].from.name).toBeTruthy()
+    expect(applied.legs[0].to.stop.gtfsId).toBeTruthy()
+    expect(applied.legs[0].to.name).toBeTruthy()
+    // START_GO_MODE settles the reroute bookkeeping back to idle.
+    expect(store.getGoMode().reRoute.status).toBe('idle')
+    // Confirmation in applyAutoReroute's style; no onboard-UI churn on the
+    // automatic path (a non-idle onboard.status would replace the live trip
+    // screen with the onboard panel).
+    expect(
+      store
+        .getGoMode()
+        .notifications.recentNotifications.map((n: any) => n.type)
+    ).toContain('TRIP_UPDATED')
+    const types = store.actions.map((a) => a.type)
+    expect(types).not.toContain('BEGIN_ONBOARD_FLOW')
+    expect(types).not.toContain('SET_ONBOARD_VEHICLE')
+    expect(types).not.toContain('START_ONBOARD_OPTIMIZE')
+    expect(store.getGoMode().onboard.status).toBe('idle')
+
+    // The deferred re-lock lands on the next tick: same bus, confirmed.
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    const confirm = store.actions
+      .filter((a) => a.type === 'CONFIRM_VEHICLE')
+      .pop()
+    expect(confirm?.payload).toEqual(
+      expect.objectContaining({
+        confidence: 'confirmed',
+        tripId: TRIP_ID,
+        vehicleId: 'v-1'
+      })
+    )
+  })
+
+  it('autoApply splices straight to the planned stop when the schedule serves it — no optimizer', async () => {
+    // The primary auto path: the boarded trip's schedule reaches the active
+    // plan's alight stop, so the splice alights exactly there and keeps the
+    // plan's own onward legs — no candidate plans fetched at all.
+    const trip = makeTripFixture()
+    const serviceDay = Math.floor(Date.now() / 1000) - 3600
+    trip.stopTimes = trip.stopTimes.map((st: any) => ({ ...st, serviceDay }))
+    const itinerary = makeItinerary()
+    ;(itinerary.legs[0].to as any).stop = { gtfsId: '1:s3', id: '1:s3' }
+    const store = makeStore({
+      goModeOverrides: { activeItinerary: itinerary },
+      trips: { [TRIP_ID]: trip }
+    })
+    await store.dispatch(replanFromAboard({ autoApply: true }))
+
+    const applied = store.actions.find((a) => a.type === 'START_GO_MODE')
+      ?.payload?.itinerary
+    expect(applied).toBeTruthy()
+    expect(applied.legs[0].to.stop.id).toBe('1:s3')
+    // The plan's own onward legs ride along unchanged.
+    expect(applied.legs[1].mode).toBe('WALK')
+    expect(mockedFetch).not.toHaveBeenCalled()
+  })
+
+  it('autoApply keeps the planned alight stop even when a transfer ranks faster', async () => {
+    // The rider's active itinerary alights at s3. Give the optimizer a (mock)
+    // much-faster onward plan from s4, so its top-ranked candidate is a
+    // hop-off-and-transfer — which an AUTOMATIC update must never choose when
+    // the boarded trip serves the planned stop (rider's rule: auto-updates
+    // don't invent route changes; verify-boarded-earlier hit a 3-minute-hop
+    // splice when schedule-anchored epochs skewed the ranking).
+    const trip = makeTripFixture()
+    mockedFetch.mockImplementation(
+      (combo: any) => () =>
+        Promise.resolve({
+          error: false,
+          itineraries: [
+            // Near-instant, walk-free onward plan from the later stop: it
+            // wins rankAlightOptions' arrival scoring (busArrivalEpoch +
+            // duration) and its transfers/walk tie-breaks over staying
+            // aboard to the planned stop.
+            combo.from.name === 'Past Destination'
+              ? { ...onwardItin(), duration: 1, walkDistance: 0 }
+              : onwardItin()
+          ]
+        })
+    )
+    const itinerary = makeItinerary()
+    ;(itinerary.legs[0].to as any).stop = { gtfsId: '1:s3', id: '1:s3' }
+    const store = makeStore({
+      goModeOverrides: { activeItinerary: itinerary },
+      trips: { [TRIP_ID]: trip }
+    })
+    await store.dispatch(replanFromAboard({ autoApply: true }))
+
+    const applied = store.actions.find((a) => a.type === 'START_GO_MODE')
+      ?.payload?.itinerary
+    expect(applied).toBeTruthy()
+    expect(applied.legs[0].to.stop.id).toBe('1:s3')
+  })
+
+  it('autoApply re-asserts riding + live times when the fact cleared mid-flight', async () => {
+    // The replan's async work (schedule fetch, alight optimization) takes
+    // seconds; a rider whose fixes ran off the OLD itinerary's bus leg
+    // meanwhile hits the off-route clear, so the fact reanchorRiding would
+    // carry over is gone by the time the splice lands — and with no further
+    // GPS ticks nothing re-forms it or refreshes live leg times
+    // (verify-boarded-earlier: "riding trip undefined", alight n/a).
+    const trip = makeTripFixture()
+    // A real service day so liveStopArrival can build absolute epochs.
+    const serviceDay = Math.floor(Date.now() / 1000) - 3600
+    trip.stopTimes = trip.stopTimes.map((st: any) => ({ ...st, serviceDay }))
+    const store = makeStore({ trips: { [TRIP_ID]: trip } })
+    mockedFetch.mockReturnValue(() => {
+      // The off-route clear lands while the replan is in flight.
+      store.dispatch({ type: 'CLEAR_RIDING' })
+      return Promise.resolve({ error: false, itineraries: [onwardItin()] })
+    })
+    await store.dispatch(
+      replanFromAboard({ autoApply: true, reason: 'boarded-earlier' })
+    )
+
+    // The riding fact is re-asserted, anchored to the spliced bus leg.
+    expect(store.getGoMode().riding).toEqual(
+      expect.objectContaining({
+        legIndex: 0,
+        offRouteSince: null,
+        tripId: TRIP_ID,
+        vehicleId: 'v-1'
+      })
+    )
+    // And the live-times refresh ran against the spliced itinerary — the
+    // ridden trip's leg got an anchored entry without waiting for a GPS tick.
+    const types = store.actions.map((a) => a.type)
+    expect(types.indexOf('SET_LIVE_LEG_TIMES')).toBeGreaterThan(
+      types.indexOf('START_GO_MODE')
+    )
+    const live = store.actions
+      .filter((a) => a.type === 'SET_LIVE_LEG_TIMES')
+      .pop()
+    expect(live?.payload?.[0]?.alightEpoch).not.toBeNull()
+    expect(live?.payload?.[0]?.boardEpoch).not.toBeNull()
+  })
+
+  it('explicit path populates the onboard UI without touching the live trip', async () => {
+    const trip = makeTripFixture()
+    mockedFetch.mockReturnValue(() =>
+      Promise.resolve({ error: false, itineraries: [onwardItin()] })
+    )
+    const store = makeStore({ trips: { [TRIP_ID]: trip } })
+    const itineraryBefore = store.getGoMode().activeItinerary
+    await store.dispatch(
+      replanFromAboard({ autoApply: false, reason: 'rider-reroute' })
+    )
+
+    const types = store.actions.map((a) => a.type)
+    // NEVER BEGIN_ONBOARD_FLOW mid-trip: its reducer clears activeItinerary.
+    expect(types).not.toContain('BEGIN_ONBOARD_FLOW')
+    expect(types).not.toContain('START_GO_MODE')
+    expect(store.getGoMode().activeItinerary).toBe(itineraryBefore)
+    // The existing alight-stop UI takes over from here
+    // (confirmOnboardAlightStop works verbatim on this state).
+    expect(store.getGoMode().onboard.status).toBe('ready')
+    expect(store.getGoMode().onboard.vehicle).toEqual(
+      expect.objectContaining({ tripId: TRIP_ID, vehicleId: 'v-1' })
+    )
+    expect(store.getGoMode().onboard.trip).toBe(trip)
+    expect(store.getGoMode().onboard.alightOptions.length).toBeGreaterThan(0)
+    // reRoute was single-flight bookkeeping only — cleared, not 'found'.
+    expect(store.getGoMode().reRoute.status).toBe('idle')
+  })
+
+  it('TripSheet reroutes route through the aboard flow while riding (no planner search)', async () => {
+    const trip = makeTripFixture()
+    mockedFetch.mockReturnValue(() =>
+      Promise.resolve({ error: false, itineraries: [onwardItin()] })
+    )
+    const store = makeStore({ trips: { [TRIP_ID]: trip } })
+    store.dispatch(browseFromCurrentPosition())
+    // browse hands off to the async aboard thunk without awaiting it — let
+    // its (already-resolved) promise chain settle.
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    const types = store.actions.map((a) => a.type)
+    // Verifiably aboard: no currentQuery rewrite, no backgrounding into the
+    // planner — the onboard alight UI answers "other ways from here".
+    expect(types).not.toContain('SET_QUERY_PARAM')
+    expect(types).not.toContain('SET_GO_MODE_BACKGROUNDED')
+    expect(store.getGoMode().onboard.status).toBe('ready')
+  })
+
+  it('settles reRoute to "none" (retryable) when the trip schedule fetch fails', async () => {
+    // findTrip resolves but the store never gains the trip (fetch failed).
+    const store = makeStore({ trips: {} })
+    await store.dispatch(replanFromAboard({ autoApply: true }))
+
+    expect(store.getGoMode().reRoute.status).toBe('none')
+    // Mid-trip failure must not put the onboard flow into 'error' (that
+    // renders the onboard error screen over the live trip).
+    expect(store.getGoMode().onboard.status).toBe('idle')
+    expect(
+      store.actions.find((a) => a.type === 'START_GO_MODE')
+    ).toBeUndefined()
+    expect(mockedFetch).not.toHaveBeenCalled()
   })
 })
