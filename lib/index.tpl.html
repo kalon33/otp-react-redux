@@ -9,7 +9,16 @@
     <meta http-equiv="x-ua-compatible" content="ie=edge">
     <!-- Note: title should be supplied/injected via config.yml -->
     <meta http-equiv="x-ua-compatible" content="ie=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!--
+      Zoom is pinned off, not merely "disabled". Capacitor's iOS default
+      (zoomEnabled: false) does not block a zoom — it lets one begin, then
+      disables the pinch recognizer in scrollViewWillBeginZooming and never
+      re-enables it, so the webview parks at that scale until the app is
+      force-quit. user-scalable=no stops the zoom from ever starting, which is
+      the only way out of that trap. Mobile Safari ignores this directive, so
+      the browser build keeps normal two-way pinch zoom.
+    -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 
     <link href="https://fonts.googleapis.com/css?family=Hind:300,400,500,600,700" rel="stylesheet">
     <title>OpenTripPlanner</title>
