@@ -848,6 +848,7 @@ components:
     errorTimeout: Délai dépassé
     errorUnavailable: Service indisponible
     estimatedArrival: 'Arrivée estimée: {time}'
+    currentLocation: Emplacement actuel
     findAnotherWay: Trouver un autre chemin
     getReady: Préparez-vous
     getReadyNow: Préparez-vous maintenant

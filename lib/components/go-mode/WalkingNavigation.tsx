@@ -11,6 +11,7 @@ import {
   getRouteDepartures,
   getSoonestCatchableMs
 } from '../../util/go-mode/departure-anchor'
+import { formatPlaceName } from '../../util/format-place-name'
 import { getWalkingInstructionWithIntl } from '../../util/go-mode/progress-calculator'
 import type { TripProgress } from '../../util/go-mode/progress-calculator'
 
@@ -102,7 +103,7 @@ const WalkingNavigation = ({
   )
 
   const route = nextLeg?.routeShortName || nextLeg?.routeLongName || ''
-  const stopName = nextLeg?.from?.name || leg.to.name
+  const stopName = formatPlaceName(nextLeg?.from?.name || leg.to.name, intl)
   const isBike = leg.mode === 'BICYCLE'
   const accessEmoji = isBike ? '\ud83d\udeb2' : '\ud83d\udeb6'
 
@@ -229,7 +230,7 @@ const WalkingNavigation = ({
     // foot — nothing else is competing for the space.
     eyebrow = intl.formatMessage(
       { defaultMessage: '{emoji} To {stop}', id: 'components.GoMode.toStop' },
-      { emoji: accessEmoji, stop: leg.to.name }
+      { emoji: accessEmoji, stop: formatPlaceName(leg.to.name, intl) }
     )
     hero = formatMinutes(rideSecondsRemaining)
     sub = turnLine || walkingInstruction.nextInstruction || null

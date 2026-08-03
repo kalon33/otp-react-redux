@@ -2,6 +2,7 @@ import { useIntl } from 'react-intl'
 import React from 'react'
 import type { Itinerary, Leg } from '@opentripplanner/types'
 
+import { formatPlaceName } from '../../util/format-place-name'
 import type { TripProgress } from '../../util/go-mode/progress-calculator'
 
 import {
@@ -143,7 +144,7 @@ const GoModeHeader = ({ itinerary, onExit, progress }: Props) => {
 
     // On transit → show "Get off at [stop]" with arrival time
     if (currentLeg && isTransitMode(currentLeg.mode)) {
-      const stopName = currentLeg.to.name
+      const stopName = formatPlaceName(currentLeg.to.name, intl)
       const arrivalTime = progress.destinationArrivalTime
         ? formatETA(new Date(progress.destinationArrivalTime))
         : ''

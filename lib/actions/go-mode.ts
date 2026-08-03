@@ -7,6 +7,9 @@ import coreUtils from '@opentripplanner/core-utils'
 import polyline from '@mapbox/polyline'
 import type { Itinerary, LatLngArray, Leg } from '@opentripplanner/types'
 
+// Translation key for "Current location" to be used in place names
+const CURRENT_LOCATION_NAME = 'Current location'
+
 import {
   clampNonLiveLegTimes,
   getDownstreamStops,
@@ -834,7 +837,7 @@ function currentPositionOrigin(state: any): {
       category: 'CURRENT_LOCATION',
       lat: lastPosition.coords.latitude,
       lon: lastPosition.coords.longitude,
-      name: 'Current location'
+      name: CURRENT_LOCATION_NAME
     },
     time: coreUtils.time.getCurrentTime(homeTimezone)
   }
@@ -1200,7 +1203,7 @@ export function quietReplanAccessLeg() {
       category: 'CURRENT_LOCATION',
       lat: lastPosition.coords.latitude,
       lon: lastPosition.coords.longitude,
-      name: 'Current location'
+      name: CURRENT_LOCATION_NAME
     }
 
     const currentLegIndex = goMode.routeMatch?.legIndex ?? 0
@@ -1352,7 +1355,7 @@ export function captureRerouteSnapshot() {
       category: 'CURRENT_LOCATION',
       lat: lastPosition.coords.latitude,
       lon: lastPosition.coords.longitude,
-      name: 'Current location'
+      name: CURRENT_LOCATION_NAME
     }
     const to = {
       lat: destLeg.to.lat,

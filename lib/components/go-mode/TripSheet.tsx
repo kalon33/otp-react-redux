@@ -9,6 +9,7 @@ import * as goModeActions from '../../actions/go-mode'
 import * as routingProfileActions from '../../actions/routing-profiles'
 import { buildLiveItinerary } from '../../util/go-mode/live-itinerary'
 import { getModeIcon } from '../../util/go-mode/mode-icon'
+import { formatPlaceName } from '../../util/format-place-name'
 import { IconWithText } from '../util/styledIcon'
 import ItineraryBody from '../narrative/line-itin/connected-itinerary-body'
 import type { LiveLegTime } from '../../actions/go-mode'
@@ -157,6 +158,7 @@ const TripSheet = ({
     const stops = leg.intermediateStops || []
     if (stops.length === 0) return null
     const k = stops.length
+    const intl = useIntl()
     const remaining = progress?.stopsRemaining ?? k + 1
     return (
       <StopList>
@@ -167,13 +169,13 @@ const TripSheet = ({
           return (
             <StopRow $next={next} $passed={passed} key={i}>
               <StopDot $next={next} $passed={passed} />
-              {stop.name}
+              {formatPlaceName(stop.name, intl)}
             </StopRow>
           )
         })}
         <StopRow $next={remaining === 1}>
           <StopDot $next={remaining === 1} />
-          {leg.to.name}
+          {formatPlaceName(leg.to.name, intl)}
         </StopRow>
       </StopList>
     )
