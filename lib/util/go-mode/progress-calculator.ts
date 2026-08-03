@@ -409,7 +409,7 @@ export function getWalkingInstructionWithIntl(
   return {
     distanceToNextTurn: remainingDistance,
     nextInstruction: intl.formatMessage(
-      { id: 'components.GoMode.arrivingAt' },
+      { id: 'components.GoMode.turnInstructions.arrivingAt' },
       { destination: leg.to.name }
     )
   }

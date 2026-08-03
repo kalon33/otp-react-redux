@@ -876,7 +876,7 @@ components:
     rerouteSearching: Recherche en cours...
     rerouteSummary: '{minutes} min · {transfers} correspondance(s) · {walk} m à pied'
     rerouteSwitch: Changer d'itinéraire
-    resetToPlanned: Réinitialiser à l'itinéraire prévu
+    resetToPlanned: Revenir à l'itinéraire initial
     retry: Réessayer
     selectVehicle: Sélectionner un véhicule
     stopsRemainingCompact: '{count, plural, one {1 arrêt restant} other {# arrêts restants}}'
