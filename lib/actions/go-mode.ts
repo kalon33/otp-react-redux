@@ -621,7 +621,7 @@ export function startGoModeTracking(
       getState().otp.config.homeTimezone
     )
     for (const leg of itinerary.legs) {
-      const stopId = (leg as any).from?.stop?.gtfsId
+      const stopId = (leg as any).from?.stop?.gtfsId || (leg as any).from?.stopId
       if (leg.transitLeg && stopId) {
         try {
           dispatch(
@@ -2570,7 +2570,7 @@ export function refreshLiveLegTimes() {
               realtime: prev.alightRealtime ?? prev.realtime
             }
           : null,
-        liveStopArrival(stopTimes, leg.to?.stop?.gtfsId, leg.to?.name),
+        liveStopArrival(stopTimes, leg.to?.stop?.gtfsId || (leg as any).to?.stopId, leg.to?.name),
         nowMs
       )
       const board = mergeLiveTimePoint(
@@ -2580,7 +2580,7 @@ export function refreshLiveLegTimes() {
               realtime: prev.boardRealtime ?? prev.realtime
             }
           : null,
-        liveStopArrival(stopTimes, leg.from?.stop?.gtfsId, leg.from?.name),
+        liveStopArrival(stopTimes, leg.from?.stop?.gtfsId || (leg as any).from?.stopId, leg.from?.name),
         nowMs
       )
       if (alight || board) {
@@ -2879,7 +2879,7 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         (anchorLeg?.mode === 'WALK' || anchorLeg?.mode === 'BICYCLE') &&
         anchorNextLeg?.transitLeg
       ) {
-        const boardingStopId = (anchorNextLeg as any)?.from?.stop?.gtfsId
+        const boardingStopId = (anchorNextLeg as any)?.from?.stop?.gtfsId || (anchorNextLeg as any)?.from?.stopId
         if (boardingStopId) {
           // Re-poll the boarding stop's departures — the trip-start snapshot
           // goes stale, and an earlier bus only ever shows up here.

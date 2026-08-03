@@ -438,10 +438,11 @@ const mapStateToProps = (state: any) => {
       currentLegIndex < legs.length - 1 ? legs[currentLegIndex + 1] : undefined
 
     // The boarding stop times are pre-fetched in beginGoMode keyed by the stop's
-    // gtfsId (leg.from.stop.gtfsId). The plan query's leg `from` block exposes
-    // the gtfsId under `from.stop.gtfsId` — there is no `from.stopId` — so we
-    // must look the store up by the same gtfsId, else boardingStopData is always
-    // null and the card silently falls back to OTP's planned (scheduled) time.
+    // gtfsId (leg.from.stop.gtfsId) or stopId (leg.from.stopId). The plan query's leg
+    // `from` block exposes the gtfsId under `from.stop.gtfsId`, but some responses may
+    // only have `from.stopId`. We must look the store up by the same key used in
+    // startGoModeTracking, else boardingStopData is always null and the card
+    // silently falls back to OTP's planned (scheduled) time.
     const boardingStopId =
       (nextLeg as any)?.from?.stop?.gtfsId || (nextLeg as any)?.from?.stopId
     if (
