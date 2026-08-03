@@ -56,6 +56,26 @@ export const StyledDateTimeSelector = styled(DateTimeSelector)`
   div {
     max-width: 33%;
   }
+
+  /*
+    iOS auto-zooms any focused input rendered below 16px. In the app that zoom
+    is now blocked outright (see the viewport meta in index.tpl.html), but
+    mobile Safari ignores user-scalable=no, so on the browser build the rider
+    still gets yanked in every time they tap the date. These two inputs are the
+    only sub-16px text fields in the app — the location fields already render
+    at 17px — so 16px here is the whole fix. It's the iOS threshold, not a
+    design choice.
+
+    The 33% cap was sized for 14px text and clips the date to "08/02/202" at
+    16px on a 320px-wide screen, so it widens to suit. DateTimeSelector always
+    renders exactly two divs (time, date), leaving 10% for the gap.
+  */
+  @media (pointer: coarse) {
+    font-size: 16px;
+    div {
+      max-width: 45%;
+    }
+  }
 `
 
 export const UnpaddedList = styled.ul`
