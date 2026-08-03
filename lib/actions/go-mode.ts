@@ -1570,6 +1570,17 @@ export function discoverNearbyVehicles(attempt = 0) {
           })
         )
         routes = getState().otp?.transitIndex?.nearbyRoutes || []
+        // If still no routes, try a very large radius as a last resort
+        if (!routes.length) {
+          await dispatch(
+            findRoutesNearby({
+              lat,
+              lon,
+              radius: 3000 // 3km radius as a final fallback
+            })
+          )
+          routes = getState().otp?.transitIndex?.nearbyRoutes || []
+        }
       }
     }
 

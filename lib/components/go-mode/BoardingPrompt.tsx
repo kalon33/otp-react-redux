@@ -141,13 +141,21 @@ const BoardingPrompt = ({
               <VehicleOptionRow key={route.id}>
                 <VehicleInfo>
                   <VehicleLabel>
-                    {intl.formatMessage(
-                      {
-                        defaultMessage: 'Route {route}',
-                        id: 'components.GoMode.routeOption'
-                      },
-                      { route: route.shortName || route.longName || route.id }
-                    )}
+                    {route.shortName && route.longName
+                      ? intl.formatMessage(
+                          {
+                            defaultMessage: '{shortName} - {longName}',
+                            id: 'components.GoMode.routeOptionWithLongName'
+                          },
+                          { shortName: route.shortName, longName: route.longName }
+                        )
+                      : intl.formatMessage(
+                          {
+                            defaultMessage: 'Route {route}',
+                            id: 'components.GoMode.routeOption'
+                          },
+                          { route: route.shortName || route.longName || route.id }
+                        )}
                   </VehicleLabel>
                 </VehicleInfo>
                 <VehicleSelectButton
@@ -164,8 +172,8 @@ const BoardingPrompt = ({
         ) : (
           <VehicleDetail style={{ marginBottom: 12, textAlign: 'center' }}>
             {intl.formatMessage({
-              defaultMessage: 'No buses detected nearby',
-              id: 'components.GoMode.noBusesNearby'
+              defaultMessage: 'No buses or routes detected nearby. Try moving closer to a bus stop.',
+              id: 'components.GoMode.noBusesOrRoutesNearby'
             })}
           </VehicleDetail>
         )}
