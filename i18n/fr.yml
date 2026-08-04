@@ -852,6 +852,7 @@ components:
     findAnotherWay: Trouver un autre chemin
     getReady: Préparez-vous
     getReadyNow: Préparez-vous maintenant
+    gotOffHere: Je suis descendu ici
     gpsError: Erreur GPS
     gpsErrorTitle: Erreur de positionnement
     header:
