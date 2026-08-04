@@ -226,14 +226,14 @@ const TripSheet = ({
                       '{count, plural, one {# stop} other {# stops}} to {dest}',
                     id: 'components.GoMode.legStopsTo'
                   },
-                  { count: stopCount, dest: currentLeg.to.name }
+                  { count: stopCount, dest: formatPlaceName(currentLeg.to.name, intl) }
                 )
               : intl.formatMessage(
                   {
                     defaultMessage: 'to {dest}',
                     id: 'components.GoMode.legTo'
                   },
-                  { dest: currentLeg.to.name }
+                  { dest: formatPlaceName(currentLeg.to.name, intl) }
                 )}
           </LegSubtitle>
           {isTransit && renderCurrentStops(currentLeg)}

@@ -62,6 +62,7 @@ export function getLegRouteId(leg?: Leg | null): string | null {
   return (
     (route && typeof route === 'object' ? route.id || route.gtfsId : null) ||
     (leg as any)?.routeId ||
+    (leg as any)?.routeShortName ||
     null
   )
 }
