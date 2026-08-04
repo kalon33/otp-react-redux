@@ -448,7 +448,10 @@ const mapStateToProps = (state: any) => {
     // startGoModeTracking, else boardingStopData is always null and the card
     // silently falls back to OTP's planned (scheduled) time.
     const boardingStopId =
-      (nextLeg as any)?.from?.stop?.gtfsId || (nextLeg as any)?.from?.stopId
+      (nextLeg as any)?.from?.stop?.gtfsId ||
+      (nextLeg as any)?.from?.stopId ||
+      (nextLeg as any)?.to?.stop?.gtfsId ||
+      (nextLeg as any)?.to?.stopId
     // Check if next leg is a transit leg (either via transitLeg flag or mode check)
     const isNextLegTransit =
       nextLeg?.transitLeg ||
