@@ -77,9 +77,9 @@ export function getRouteDepartures(
   stopData: any,
   routeId: string | null
 ): RouteDeparture[] {
-  if (!stopData || !routeId) return []
+  if (!stopData) return []
   try {
-    return mergeAndSortStopTimes(stopData)
+    const departures = mergeAndSortStopTimes(stopData)
       .map((st: any) => {
         const live =
           LIVE_REALTIME_STATES.has(st.realtimeState) &&
@@ -91,8 +91,13 @@ export function getRouteDepartures(
           routeId: st.route?.gtfsId || st.trip?.route?.gtfsId
         }
       })
-      .filter((d: RouteDeparture) => d.routeId === routeId)
       .sort((a: RouteDeparture, b: RouteDeparture) => a.depMs - b.depMs)
+    
+    // If no routeId specified, return all departures
+    if (!routeId) return departures
+    
+    // Otherwise filter by routeId
+    return departures.filter((d: RouteDeparture) => d.routeId === routeId)
   } catch {
     return []
   }
