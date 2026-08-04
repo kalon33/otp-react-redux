@@ -445,10 +445,14 @@ const mapStateToProps = (state: any) => {
     // silently falls back to OTP's planned (scheduled) time.
     const boardingStopId =
       (nextLeg as any)?.from?.stop?.gtfsId || (nextLeg as any)?.from?.stopId
+    // Check if next leg is a transit leg (either via transitLeg flag or mode check)
+    const isNextLegTransit =
+      nextLeg?.transitLeg ||
+      ['BUS', 'RAIL', 'SUBWAY', 'TRAM', 'FERRY'].includes(nextLeg?.mode)
     if (
       currentLeg &&
       (currentLeg.mode === 'WALK' || currentLeg.mode === 'BICYCLE') &&
-      nextLeg?.transitLeg &&
+      isNextLegTransit &&
       boardingStopId
     ) {
       boardingStopData = state.otp.transitIndex?.stops?.[boardingStopId] || null

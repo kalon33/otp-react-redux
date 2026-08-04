@@ -838,6 +838,9 @@ components:
     switcher: Sélecteur de vues
   WelcomeScreen:
     prompt: Où désirez-vous aller ?
+  components:
+    GoMode:
+      currentLocation: Emplacement actuel
   GoMode:
     arrivingSoon: Arrivée prochaine
     boardingQuestion: Êtes-vous à bord ?
