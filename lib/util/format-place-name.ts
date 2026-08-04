@@ -7,6 +7,7 @@ import type { IntlShape } from 'react-intl'
  * Known static place names that need translation
  */
 const STATIC_PLACE_NAMES: Record<string, string> = {
+  '(Current Location)': 'components.GoMode.currentLocation',
   'Current location': 'components.GoMode.currentLocation'
 }
 
