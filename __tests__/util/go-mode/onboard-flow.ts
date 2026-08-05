@@ -1,6 +1,7 @@
 import {
   beginOnboardFlowAction,
   browseFromCurrentPosition,
+  buildOnboardItinerary,
   replanFromAboard,
   stopGoMode,
   stopVehicleTracking
@@ -423,8 +424,29 @@ describe('replanFromAboard (mid-ride aboard-aware replan)', () => {
     // ...and the container never claims to end before the bus leg does.
     expect(applied.endTime).toBeGreaterThanOrEqual(bus.endTime)
     expect(applied.duration).toBeGreaterThan(0)
-    // The floor is the remaining SCHEDULED running time (s2 -> s3 = 300 s).
+    // The substitute is the remaining SCHEDULED running time (s2 -> s3 = 300s).
     expect(bus.endTime - bus.startTime).toBe(300000)
+  })
+
+  it('leaves a bus running AHEAD of schedule alone', () => {
+    // The guard is for inversions only. A realtime arrival that is merely
+    // earlier than the schedule is a bus running ahead — exactly the truth
+    // realtime exists to tell, and substituting the schedule there would make
+    // the app quietly pessimistic on every early bus.
+    const trip = makeTripFixture()
+    const now = Date.now()
+    const ahead = now + 60000 // 60s out; the schedule says 300s
+    const built: any = buildOnboardItinerary(
+      trip,
+      { nextStopId: '1:s2' },
+      {
+        busArrivalEpoch: ahead,
+        itinerary: onwardItin() as any,
+        stopId: '1:s3'
+      },
+      null
+    )
+    expect(built.legs[0].endTime).toBe(ahead)
   })
 
   it('does not swap or notify when the splice is the trip the rider is already on', async () => {
