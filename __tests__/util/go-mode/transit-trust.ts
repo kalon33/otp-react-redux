@@ -220,6 +220,7 @@ describe('shouldReplanBoardedEarlier', () => {
       shouldReplanBoardedEarlier({
         nowMs: NOW,
         ridingLeg,
+        ridingTripId: '1:trip-earlier-run',
         vehicleMatchState: {
           consecutiveMatches: 8,
           match: {
@@ -242,6 +243,7 @@ describe('shouldReplanBoardedEarlier', () => {
       shouldReplanBoardedEarlier({
         nowMs: NOW,
         ridingLeg,
+        ridingTripId: '1:trip-earlier-run',
         vehicleMatchState: {
           consecutiveMatches: 8,
           match: {
@@ -267,6 +269,7 @@ describe('shouldReplanBoardedEarlier', () => {
       shouldReplanBoardedEarlier({
         nowMs: NOW,
         ridingLeg,
+        ridingTripId: '1:trip-earlier-run',
         vehicleMatchState: {
           consecutiveMatches: 0,
           match: {
@@ -296,6 +299,7 @@ describe('shouldReplanBoardedEarlier', () => {
       shouldReplanBoardedEarlier({
         nowMs: NOW,
         ridingLeg,
+        ridingTripId: '1:trip-earlier-run',
         vehicleMatchState: {
           consecutiveMatches: 8,
           match: {
@@ -322,6 +326,72 @@ describe('shouldReplanBoardedEarlier', () => {
         vehicleRecord: null
       })
     ).toBe(true)
+  })
+
+  describe('the trigger reads the identity the remedy will use', () => {
+    // 8/2: match.tripId drifted onto the ghost's trip every poll while
+    // riding.tripId stayed frozen at the trip the rider actually boarded —
+    // which is also the trip the planned leg names. replanFromAboard splices
+    // from riding.tripId, so it could never satisfy a trigger reading
+    // match.tripId: nine byte-identical itineraries, nine pushes, and no
+    // cooldown could have terminated it.
+    const armedByMatchAlone = {
+      nowMs: NOW,
+      ridingLeg,
+      vehicleMatchState: {
+        consecutiveMatches: 0,
+        match: {
+          confidence: 'confirmed' as const,
+          distanceMeters: 0,
+          label: '8223',
+          lastSeen: NOW,
+          tripHeadsign: 'Orange Burnsville',
+          tripId: '1:1191630',
+          vehicleId: '1:8223'
+        }
+      },
+      vehicleRecord: freshRecord
+    }
+
+    it('does not fire when the riding fact still names the planned trip', () => {
+      expect(
+        shouldReplanBoardedEarlier({
+          ...armedByMatchAlone,
+          ridingTripId: '1:1173133'
+        })
+      ).toBe(false)
+    })
+
+    it('does not fire when there is no riding trip to splice from', () => {
+      expect(
+        shouldReplanBoardedEarlier({ ...armedByMatchAlone, ridingTripId: null })
+      ).toBe(false)
+    })
+
+    it('is self-terminating: false once the splice has landed', () => {
+      // After a successful replan the bus leg IS the ridden trip, so planned
+      // and riding agree and the trigger cannot re-arm on the next tick.
+      expect(
+        shouldReplanBoardedEarlier({
+          nowMs: NOW,
+          ridingLeg: { ...ridingLeg, trip: { gtfsId: '1:trip-earlier-run' } },
+          ridingTripId: '1:trip-earlier-run',
+          vehicleMatchState: {
+            consecutiveMatches: 8,
+            match: {
+              confidence: 'high',
+              distanceMeters: 40,
+              label: '8140',
+              lastSeen: NOW,
+              tripHeadsign: 'Orange Burnsville',
+              tripId: '1:1191630',
+              vehicleId: '1:8140'
+            }
+          },
+          vehicleRecord: freshRecord
+        })
+      ).toBe(false)
+    })
   })
 })
 

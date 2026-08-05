@@ -319,11 +319,15 @@ export function shouldRebindRidingTrip(
 export function shouldReplanBoardedEarlier({
   nowMs,
   ridingLeg,
+  ridingTripId,
   vehicleMatchState,
   vehicleRecord
 }: {
   nowMs: number
   ridingLeg: Leg
+  /** The sticky riding fact's trip — the identity replanFromAboard will
+   * actually build its splice from. See the trigger/remedy note below. */
+  ridingTripId?: string | null
   vehicleMatchState: {
     consecutiveMatches?: number
     match?: VehicleMatchResult | null
@@ -348,6 +352,17 @@ export function shouldReplanBoardedEarlier({
     matched?.tripId != null &&
     plannedTripId != null &&
     matched.tripId !== plannedTripId &&
+    // Gate on the identity the REMEDY will use, not just the one the trigger
+    // sees. replanFromAboard splices from riding.tripId, which is frozen once
+    // a vehicle is confirmed (shouldRebindRidingTrip is dead-gated on
+    // consecutiveMatches), while match.tripId is rewritten every poll. On 8/2
+    // that mismatch made the replan unable to ever satisfy its own trigger —
+    // all nine applied itineraries were byte-identical — so no cooldown could
+    // have terminated it. With this conjunct the loop is self-terminating by
+    // construction: after a successful splice legs[busLeg].tripId ===
+    // riding.tripId, so the trigger is false on the next tick.
+    ridingTripId != null &&
+    ridingTripId !== plannedTripId &&
     sustained &&
     // An opposite-direction same-route vehicle can never be "the earlier bus
     // you boarded".

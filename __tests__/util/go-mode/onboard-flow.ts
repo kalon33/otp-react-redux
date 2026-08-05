@@ -361,6 +361,39 @@ describe('replanFromAboard (mid-ride aboard-aware replan)', () => {
     expect(mockedFetch).not.toHaveBeenCalled()
   })
 
+  it('does not swap or notify when the splice is the trip the rider is already on', async () => {
+    // The 8/2 loop: nine auto-applied itineraries, all byte-identical, each
+    // with its own high-priority "Trip updated" push quoting an arrival time
+    // already in the past. The TRIP_UPDATED id embeds Date.now(), so the
+    // reducer's id dedupe can never catch these — suppression has to happen
+    // before the swap.
+    const trip = makeTripFixture()
+    const serviceDay = Math.floor(Date.now() / 1000) - 3600
+    trip.stopTimes = trip.stopTimes.map((st: any) => ({ ...st, serviceDay }))
+    const itinerary = makeItinerary()
+    ;(itinerary.legs[0].to as any).stop = { gtfsId: '1:s3', id: '1:s3' }
+    const store = makeStore({
+      goModeOverrides: { activeItinerary: itinerary },
+      trips: { [TRIP_ID]: trip }
+    })
+    // First pass: the splice differs from the plan (the plan boards at Knox &
+    // 76th; the splice boards where the bus is now), so it applies.
+    await store.dispatch(replanFromAboard({ autoApply: true }))
+    expect(
+      store.actions.find((a) => a.type === 'START_GO_MODE')?.payload?.itinerary
+    ).toBeTruthy()
+
+    // Second pass against the itinerary the first one produced: nothing to
+    // change, so no swap and no buzz.
+    const before = store.actions.length
+    await store.dispatch(replanFromAboard({ autoApply: true }))
+    const after = store.actions.slice(before).map((a) => a.type)
+    expect(after).not.toContain('START_GO_MODE')
+    expect(after).not.toContain('ADD_NOTIFICATION')
+    // Settled as 'none' — retryable, so a genuine change later still lands.
+    expect(store.getGoMode().reRoute.status).toBe('none')
+  })
+
   it('autoApply keeps the planned alight stop even when a transfer ranks faster', async () => {
     // The rider's active itinerary alights at s3. Give the optimizer a (mock)
     // much-faster onward plan from s4, so its top-ranked candidate is a

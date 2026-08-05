@@ -52,7 +52,10 @@ import {
 } from '../util/go-mode/position-matching'
 import { getNextStopOnRide } from '../util/go-mode/next-stop'
 import { spliceAccessOntoItinerary } from '../util/go-mode/access-splice'
-import { collectRerouteCandidates } from '../util/go-mode/reroute-candidates'
+import {
+  collectRerouteCandidates,
+  itinerarySignature
+} from '../util/go-mode/reroute-candidates'
 import { pickAccessReplanCandidate, pickSameRouteReroute } from '../util/state'
 import type {
   AlightContext,
@@ -1120,6 +1123,14 @@ export function applyAutoReroute(
       dispatch(
         setRerouteResult(displayCandidates?.length ? displayCandidates : null)
       )
+      return
+    }
+
+    // A swap that changes nothing is not an update. Settling as 'none' keeps
+    // it retryable; what it does not do is buzz the rider. See the note on
+    // the same guard in replanFromAboard.
+    if (itinerarySignature(best) === itinerarySignature(goMode.activeItinerary)) {
+      dispatch(setRerouteResult(null))
       return
     }
 
@@ -2245,6 +2256,26 @@ export function replanFromAboard(
         best,
         getState().otp?.goMode?.tracking?.lastPosition || null
       )
+
+      // The last line before the rider's trip is replaced: if the splice is
+      // materially the same trip they are already on, do not swap and do not
+      // notify. On 8/2 all nine auto-applied itineraries were byte-identical
+      // — the trigger read match.tripId while the remedy built from the
+      // frozen riding.tripId, so the replan could never satisfy itself. The
+      // conjunct in shouldReplanBoardedEarlier fixes that specific loop; this
+      // guard makes the whole CLASS non-recurring, whatever arms it next.
+      // Suppressing here rather than at the notification layer is deliberate:
+      // the TRIP_UPDATED id embeds Date.now(), so the reducer's id-based
+      // dedupe can never catch these, and a notification-level dedupe would
+      // be cleared by START_GO_MODE anyway.
+      // Compare against the itinerary that is live NOW, not the one captured
+      // before the schedule fetch — that is the one about to be replaced.
+      const activeNow = getState().otp?.goMode?.activeItinerary ?? itinerary
+      if (itinerarySignature(spliced) === itinerarySignature(activeNow)) {
+        dispatch(setRerouteResult(null))
+        return
+      }
+
       dispatch(beginGoMode(spliced))
       // beginGoMode resets the vehicle match; re-lock the boarded bus.
       reconfirmBoardedVehicle(dispatch, vehicle)
@@ -3227,7 +3258,13 @@ export function handlePositionUpdate(position: GeolocationPosition) {
           return false
         const ridingLeg = itinerary.legs[riding.legIndex]
         if (!ridingLeg?.transitLeg) return false
-        const boardingKey = `${riding.legIndex}:${riding.boardedAt ?? ''}`
+        // Key the latch on facts that SURVIVE an auto-apply. legIndex is
+        // exactly the field the splice rewrites, so on 8/2 every successful
+        // replan minted a fresh key and reset the attempt counter — the cap
+        // never held. tripId and boardedAt are both preserved by setRiding
+        // across the splice, and both change on a genuine re-board, since
+        // TRANSITION_LEG clears riding on alight.
+        const boardingKey = `${riding.tripId ?? ''}:${riding.boardedAt ?? ''}`
         if (
           earlyBoardReplan?.key === boardingKey &&
           (earlyBoardReplan.attempts >= EARLY_BOARD_REPLAN_MAX_ATTEMPTS ||
@@ -3261,6 +3298,7 @@ export function handlePositionUpdate(position: GeolocationPosition) {
           !shouldReplanBoardedEarlier({
             nowMs: currentTime.getTime(),
             ridingLeg: ridingLeg as Leg,
+            ridingTripId: riding.tripId,
             vehicleMatchState: goMode.vehicleMatch,
             vehicleRecord: matchedRecord
           })

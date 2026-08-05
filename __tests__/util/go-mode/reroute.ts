@@ -8,7 +8,10 @@ import {
   startGoMode,
   startReroute
 } from '../../../lib/actions/go-mode'
-import { collectRerouteCandidates } from '../../../lib/util/go-mode/reroute-candidates'
+import {
+  collectRerouteCandidates,
+  itinerarySignature
+} from '../../../lib/util/go-mode/reroute-candidates'
 import { fetchOnboardCandidatePlan } from '../../../lib/actions/apiV2'
 import { pickSameRouteReroute } from '../../../lib/util/state'
 import goMode from '../../../lib/reducers/go-mode'
@@ -156,6 +159,62 @@ describe('collectRerouteCandidates', () => {
     expect(collectRerouteCandidates([])).toEqual([])
     expect(collectRerouteCandidates(null)).toEqual([])
     expect(collectRerouteCandidates(undefined)).toEqual([])
+  })
+})
+
+describe('itinerarySignature', () => {
+  const T = 1785364020000 // on a minute boundary, so jitter stays in-bucket
+  const orange = (over: any = {}) =>
+    ({
+      legs: [
+        {
+          from: { name: 'I-35W & Lake St Station' },
+          mode: 'BUS',
+          routeId: '1:904',
+          startTime: T,
+          to: { name: 'I-35W & 46th St Station' },
+          transitLeg: true,
+          trip: { gtfsId: '1:1201789' },
+          ...over
+        }
+      ]
+    } as any)
+
+  it('calls two itineraries the same through live-time jitter', () => {
+    // The 8/2 loop applied the same trip nine times; each splice carried
+    // second-level realtime jitter that a hash of live times would treat as a
+    // new trip. Minute buckets are what make "materially the same" hold.
+    expect(itinerarySignature(orange())).toBe(
+      itinerarySignature(orange({ startTime: T + 20000 }))
+    )
+  })
+
+  it('still separates two departures of the same route', () => {
+    expect(itinerarySignature(orange())).not.toBe(
+      itinerarySignature(
+        orange({ startTime: T + 600000, trip: { gtfsId: '1:1201790' } })
+      )
+    )
+  })
+
+  it('separates a genuinely different plan', () => {
+    expect(itinerarySignature(orange())).not.toBe(
+      itinerarySignature(orange({ routeId: '1:18', to: { name: 'Nicollet' } }))
+    )
+  })
+
+  it('reads the route id in both leg shapes', () => {
+    // A synthesized onboard leg carries route as an object; a planner leg
+    // carries the flattened id. Comparing across those two provenances is
+    // exactly what the auto-apply guard does.
+    expect(
+      itinerarySignature(orange({ route: { id: '1:904' }, routeId: undefined }))
+    ).toBe(itinerarySignature(orange()))
+  })
+
+  it('is empty for nothing at all', () => {
+    expect(itinerarySignature(null)).toBe('')
+    expect(itinerarySignature(undefined)).toBe('')
   })
 })
 
