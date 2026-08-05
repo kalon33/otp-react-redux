@@ -1978,17 +1978,21 @@ export function buildOnboardItinerary(
   // busLegStart is Date.now() while best.busArrivalEpoch can be a realtime
   // prediction already behind the clock — on 8/2 that produced legs whose
   // endTime preceded their startTime by 114s, 175s and 268s, and a "Trip
-  // updated — arriving 9:23 PM" push sent at 9:24. Floor the arrival at the
-  // remaining SCHEDULED running time from here, which is the least we can
-  // honestly claim the rest of the ride will take.
-  const scheduledRunMs = Math.max(
-    0,
-    (stopTimes[alightIdx].scheduledDeparture - anchorSd) * 1000
-  )
-  const busLegEnd = Math.max(
-    Number(best.busArrivalEpoch),
-    busLegStart + scheduledRunMs
-  )
+  // updated — arriving 9:23 PM" push sent at 9:24. Only then substitute the
+  // remaining SCHEDULED running time, the least we can honestly claim the
+  // rest of the ride will take.
+  //
+  // Strictly an inversion guard, NOT a floor: a realtime arrival that is
+  // merely EARLIER than schedule is a bus running ahead, which is exactly the
+  // kind of truth realtime exists to tell. Flooring against the schedule
+  // there would quietly make the app 30s pessimistic on every early bus
+  // (caught by verify-rest-of-trip-times).
+  const arrivalEpoch = Number(best.busArrivalEpoch)
+  const busLegEnd =
+    Number.isFinite(arrivalEpoch) && arrivalEpoch > busLegStart
+      ? arrivalEpoch
+      : busLegStart +
+        Math.max(0, (stopTimes[alightIdx].scheduledDeparture - anchorSd) * 1000)
 
   const routeId = vehicle?.routeId || trip.route?.id || null
   const mode = trip.route?.mode || gtfsTypeToMode(trip.route?.type)
