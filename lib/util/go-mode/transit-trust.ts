@@ -2,6 +2,7 @@ import type { Leg } from '@opentripplanner/types'
 
 import { calculateDistance, matchPositionToRoute } from './position-matching'
 import { orderedStopsOnLeg } from './next-stop'
+import { hasUsablePosition } from './vehicle-matching'
 import type { RouteMatchResult } from './position-matching'
 import type { VehicleMatchResult, VehiclePosition } from './vehicle-matching'
 
@@ -94,7 +95,12 @@ export function findVehicleById(
   nowMs: number
 ): VehicleRecordLookup | null {
   if (!vehicles || vehicleId == null) return null
-  const vehicle = vehicles.find((v) => v.vehicleId === vehicleId)
+  // Prefer a record that actually carries a position — one vehicleId can have
+  // several, and the coordinateless ghost is often first (see 8/2 note on
+  // refreshConfirmedMatch). Falling back to any record keeps this honest about
+  // presence when the feed publishes nothing better.
+  const forVehicle = vehicles.filter((v) => v.vehicleId === vehicleId)
+  const vehicle = forVehicle.find(hasUsablePosition) ?? forVehicle[0]
   return vehicle ? toRecord(vehicle, nowMs) : null
 }
 
@@ -138,6 +144,13 @@ export function findRidingVehicle(
  * staleness was invisible and nextStopId was useless as a progress source.
  * Null when the vehicle is absent from the feed — the caller dispatches
  * nothing and lastSeen ages honestly.
+ *
+ * One vehicleId can have MORE THAN ONE record: on 8/2 Metro Transit published
+ * a coordinateless ghost for 1:8223's next block trip alongside the live one,
+ * and taking the first match copied the ghost's tripId into the confirmed
+ * match every tick — which armed the boarded-earlier replan forever. So pick
+ * deliberately: a record that says where the bus is, and among those the one
+ * still serving the trip we already believed.
  */
 export function refreshConfirmedMatch(
   previousMatch: VehicleMatchResult,
@@ -147,19 +160,34 @@ export function refreshConfirmedMatch(
   nowMs: number
 ): VehicleMatchResult | null {
   if (!vehicles || previousMatch.vehicleId == null) return null
-  const vehicle = vehicles.find((v) => v.vehicleId === previousMatch.vehicleId)
-  if (!vehicle) return null
+  const forVehicle = vehicles.filter(
+    (v) => v.vehicleId === previousMatch.vehicleId && hasUsablePosition(v)
+  )
+  if (forVehicle.length === 0) return null
+  const vehicle =
+    forVehicle.find((v) => v.tripId === previousMatch.tripId) ?? forVehicle[0]
   return {
     ...previousMatch,
-    distanceMeters: calculateDistance(
-      riderLat,
-      riderLon,
-      vehicle.lat,
-      vehicle.lon
+    // Sub-metre precision on a GTFS-RT position is noise; this value is only
+    // ever displayed or threshold-compared. No proximity filter here: a
+    // confirmed match is the rider's own assertion, and a large distance is
+    // information (the feed is lying), not grounds to drop the match —
+    // VEHICLE_MATCH_FRESH_MS already handles staleness.
+    distanceMeters: Math.round(
+      calculateDistance(riderLat, riderLon, vehicle.lat, vehicle.lon)
     ),
     lastSeen: nowMs,
     nextStopId: vehicle.nextStopId ?? previousMatch.nextStopId,
-    tripId: vehicle.tripId ?? previousMatch.tripId
+    // Headsign travels WITH the trip id. shouldReplanBoardedEarlier's
+    // opposite-direction guard compares tripHeadsign against the leg; before
+    // 8/2 the id was refreshed and the headsign was not, so the guard passed
+    // on confirmation-time data while the id underneath had drifted.
+    ...(vehicle.tripId != null && vehicle.tripId !== previousMatch.tripId
+      ? {
+          tripHeadsign: vehicle.tripHeadsign ?? null,
+          tripId: vehicle.tripId
+        }
+      : { tripId: vehicle.tripId ?? previousMatch.tripId })
   }
 }
 

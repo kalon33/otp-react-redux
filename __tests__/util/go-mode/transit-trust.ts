@@ -412,6 +412,80 @@ describe('refreshConfirmedMatch', () => {
     expect(refreshed?.nextStopId).toBe('1:stop-old')
     expect(refreshed?.tripId).toBe('1:1173133')
   })
+
+  describe('the 8/2 twin-record feed', () => {
+    // Metro Transit published TWO records for vehicle 1:8223 at 21:23:18 — a
+    // ghost for the bus's next block trip (null island, "Orange Burnsville")
+    // listed BEFORE the live one. Taking the first match copied the ghost's
+    // tripId into the confirmed match every tick, which armed the
+    // boarded-earlier replan and swapped the itinerary nine times in an hour.
+    const ghost = vehicle({
+      lat: 0,
+      lon: 0,
+      nextStopId: undefined as any,
+      tripHeadsign: 'Orange Burnsville',
+      tripId: '1:1191630',
+      vehicleId: '1:8223'
+    })
+    const live = vehicle({
+      lat: 44.8637085,
+      lon: -93.3022919,
+      nextStopId: '1:56828',
+      tripHeadsign: 'Orange Downtown Minneapolis',
+      tripId: '1:1201789',
+      vehicleId: '1:8223'
+    })
+    const aboard: VehicleMatchResult = {
+      ...confirmed,
+      nextStopId: '1:56828',
+      tripHeadsign: 'Orange Downtown Minneapolis',
+      tripId: '1:1201789',
+      vehicleId: '1:8223'
+    }
+
+    it('takes the live record even when the ghost is listed first', () => {
+      const refreshed = refreshConfirmedMatch(
+        aboard,
+        [ghost, live],
+        44.8637085,
+        -93.3022919,
+        NOW
+      )
+      expect(refreshed?.tripId).toBe('1:1201789')
+      expect(refreshed?.nextStopId).toBe('1:56828')
+      // Not 10,267,729 — the haversine from Minneapolis to null island.
+      expect(refreshed?.distanceMeters).toBe(0)
+    })
+
+    it('returns null when only coordinateless records exist', () => {
+      // "Vehicle absent" is the honest answer: lastSeen ages instead of the
+      // match looking healthy at a fabricated position.
+      expect(
+        refreshConfirmedMatch(aboard, [ghost], 44.8637085, -93.3022919, NOW)
+      ).toBeNull()
+    })
+
+    it('refreshes tripHeadsign whenever it refreshes tripId', () => {
+      // The opposite-direction guard in shouldReplanBoardedEarlier compares
+      // tripHeadsign against the leg. A refreshed id with a stale headsign
+      // makes that guard judge confirmation-time data against a drifted id.
+      const rebound = refreshConfirmedMatch(
+        aboard,
+        [
+          vehicle({
+            tripHeadsign: 'Orange Burnsville',
+            tripId: '1:1191630',
+            vehicleId: '1:8223'
+          })
+        ],
+        44.86,
+        -93.28,
+        NOW
+      )
+      expect(rebound?.tripId).toBe('1:1191630')
+      expect(rebound?.tripHeadsign).toBe('Orange Burnsville')
+    })
+  })
 })
 
 // A straight south-running transit leg, ~11km of geometry with the stops
