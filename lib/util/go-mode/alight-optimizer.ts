@@ -154,13 +154,29 @@ export function clampNonLiveLegTimes<
       next = { ...next, alightEpoch: nowMs }
       changed = true
     }
+    let boardRaised = false
     if (
       !(t.boardRealtime ?? t.realtime) &&
       t.boardEpoch != null &&
       t.boardEpoch < nowMs
     ) {
       next = { ...next, boardEpoch: nowMs }
+      boardRaised = true
       changed = true
+    }
+    // Raising the board time past a still-past alight time inverts the leg —
+    // the rider would be shown arriving before they got on. Carry the alight
+    // with it. Scoped to the raise we just made: everywhere else board and
+    // alight are deliberately independent, and a merely-late live pair is
+    // honest data, not an inversion. (8/2: this shape drove the
+    // once-per-second SET_LIVE_LEG_TIMES churn through the whole ride.)
+    if (
+      boardRaised &&
+      next.alightEpoch != null &&
+      next.boardEpoch != null &&
+      next.alightEpoch < next.boardEpoch
+    ) {
+      next = { ...next, alightEpoch: next.boardEpoch }
     }
     out[idx] = next
   }

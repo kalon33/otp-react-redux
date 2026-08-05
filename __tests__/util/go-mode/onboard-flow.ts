@@ -361,6 +361,42 @@ describe('replanFromAboard (mid-ride aboard-aware replan)', () => {
     expect(mockedFetch).not.toHaveBeenCalled()
   })
 
+  it('never synthesizes a bus leg that arrives before it departs', async () => {
+    // busLegStart is Date.now() while busArrivalEpoch can be a realtime
+    // prediction already behind the clock. On 8/2 that produced legs whose
+    // endTime preceded their startTime by up to 268s, and a "Trip updated —
+    // arriving 9:23 PM" push sent at 9:24. An arrival that has already passed
+    // is not evidence the rider has arrived.
+    const trip = makeTripFixture()
+    // Realtime arrivals ten minutes in the past for every stop.
+    const pastDay = Math.floor(Date.now() / 1000) - 600
+    trip.stopTimes = trip.stopTimes.map((st: any) => ({
+      ...st,
+      realtimeArrival: 0,
+      realtimeState: 'UPDATED',
+      serviceDay: pastDay
+    }))
+    const itinerary = makeItinerary()
+    ;(itinerary.legs[0].to as any).stop = { gtfsId: '1:s3', id: '1:s3' }
+    const store = makeStore({
+      goModeOverrides: { activeItinerary: itinerary },
+      trips: { [TRIP_ID]: trip }
+    })
+    await store.dispatch(replanFromAboard({ autoApply: true }))
+
+    const applied = store.actions.find((a) => a.type === 'START_GO_MODE')
+      ?.payload?.itinerary
+    expect(applied).toBeTruthy()
+    const bus = applied.legs[0]
+    expect(bus.endTime).toBeGreaterThan(bus.startTime)
+    expect(bus.duration).toBeGreaterThan(0)
+    // ...and the container never claims to end before the bus leg does.
+    expect(applied.endTime).toBeGreaterThanOrEqual(bus.endTime)
+    expect(applied.duration).toBeGreaterThan(0)
+    // The floor is the remaining SCHEDULED running time (s2 -> s3 = 300 s).
+    expect(bus.endTime - bus.startTime).toBe(300000)
+  })
+
   it('does not swap or notify when the splice is the trip the rider is already on', async () => {
     // The 8/2 loop: nine auto-applied itineraries, all byte-identical, each
     // with its own high-priority "Trip updated" push quoting an arrival time

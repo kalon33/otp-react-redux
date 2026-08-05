@@ -173,4 +173,23 @@ describe('buildLiveItinerary', () => {
     expect(original.legs[1].startTime).toBe(SCHED_BOARD)
     expect(original.legs[1].endTime).toBe(SCHED_ALIGHT)
   })
+
+  it('never shows a leg arriving before it departs', () => {
+    // Board and alight are applied independently, so a board time later than
+    // the alight prediction inverts the leg (8/2: -114s, -175s, -268s). The
+    // rider can't arrive early by boarding late — keep the planned run.
+    const live: Record<number, LiveLegTime> = {
+      1: {
+        alightEpoch: SCHED_ALIGHT - 40 * 60 * 1000, // behind the board time
+        alightRealtime: true,
+        boardEpoch: SCHED_BOARD + 3 * 60 * 1000,
+        boardRealtime: true,
+        realtime: true
+      }
+    }
+    const leg = buildLiveItinerary(itinerary(), live).legs[1] as any
+    expect(leg.startTime).toBe(SCHED_BOARD + 3 * 60 * 1000)
+    expect(leg.endTime).toBe(SCHED_BOARD + 33 * 60 * 1000)
+    expect(leg.endTime).toBeGreaterThan(leg.startTime)
+  })
 })

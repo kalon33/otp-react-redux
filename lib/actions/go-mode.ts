@@ -1974,6 +1974,22 @@ export function buildOnboardItinerary(
     })
   }
 
+  // An arrival that has already passed is not evidence the rider has arrived.
+  // busLegStart is Date.now() while best.busArrivalEpoch can be a realtime
+  // prediction already behind the clock — on 8/2 that produced legs whose
+  // endTime preceded their startTime by 114s, 175s and 268s, and a "Trip
+  // updated — arriving 9:23 PM" push sent at 9:24. Floor the arrival at the
+  // remaining SCHEDULED running time from here, which is the least we can
+  // honestly claim the rest of the ride will take.
+  const scheduledRunMs = Math.max(
+    0,
+    (stopTimes[alightIdx].scheduledDeparture - anchorSd) * 1000
+  )
+  const busLegEnd = Math.max(
+    Number(best.busArrivalEpoch),
+    busLegStart + scheduledRunMs
+  )
+
   const routeId = vehicle?.routeId || trip.route?.id || null
   const mode = trip.route?.mode || gtfsTypeToMode(trip.route?.type)
 
@@ -1982,8 +1998,8 @@ export function buildOnboardItinerary(
     // spliceAccessOntoItinerary's walkDistance recompute and the leg merge
     // both read it, so the lie outlives this function.
     distance: polylineLength(geomSlice),
-    duration: (best.busArrivalEpoch - busLegStart) / 1000,
-    endTime: best.busArrivalEpoch,
+    duration: (busLegEnd - busLegStart) / 1000,
+    endTime: busLegEnd,
     // Every real OTP leg carries this (empty when the agency has no Fares V2
     // data). Omitting it crashes the fare table, which does
     // `transitLegs.flatMap(leg => leg.fareProducts)` and then reads
@@ -2035,10 +2051,14 @@ export function buildOnboardItinerary(
   const legs = mergeAdjacentSameTripLegs([busLeg, ...(onward.legs || [])])
   const transitLegCount = legs.filter((l: any) => l.transitLeg).length
 
+  // Same clamp at the container: the onward plan was fetched against the
+  // pre-clamp arrival, so its endTime can also sit behind the bus leg's.
+  const itineraryEnd = Math.max(Number(onward.endTime), busLegEnd)
+
   return {
     ...onward,
-    duration: (onward.endTime - busLegStart) / 1000,
-    endTime: onward.endTime,
+    duration: (itineraryEnd - busLegStart) / 1000,
+    endTime: itineraryEnd,
     legs,
     startTime: busLegStart,
     transfers: Math.max(0, transitLegCount - 1)
