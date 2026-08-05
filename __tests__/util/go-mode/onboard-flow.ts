@@ -302,7 +302,9 @@ describe('replanFromAboard (mid-ride aboard-aware replan)', () => {
     // (leg.trip.gtfsId and leg.tripId) plus board/alight stop gtfsIds and
     // names for liveStopArrival's id-then-name lookup — verify-boarded-earlier
     // caught the spliced trip's overview times never re-anchoring.
-    expect(applied.legs[0].trip).toEqual({ gtfsId: TRIP_ID })
+    expect(applied.legs[0].trip).toEqual(
+      expect.objectContaining({ gtfsId: TRIP_ID })
+    )
     expect(applied.legs[0].from.stop.gtfsId).toBeTruthy()
     expect(applied.legs[0].from.name).toBeTruthy()
     expect(applied.legs[0].to.stop.gtfsId).toBeTruthy()
@@ -359,6 +361,34 @@ describe('replanFromAboard (mid-ride aboard-aware replan)', () => {
     // The plan's own onward legs ride along unchanged.
     expect(applied.legs[1].mode).toBe('WALK')
     expect(mockedFetch).not.toHaveBeenCalled()
+  })
+
+  it('flattens the synthesized leg like every planner leg', async () => {
+    // GoModeMap reads leg.routeColor and itinerary-summary reads it too —
+    // neither looks inside leg.route — so the hand-built leg drew the Orange
+    // Line in default blue on 8/2.
+    const trip = makeTripFixture()
+    ;(trip.route as any).color = 'F68B1F'
+    ;(trip.route as any).textColor = 'FFFFFF'
+    ;(trip.route as any).type = 3
+    mockedFetch.mockReturnValue(() =>
+      Promise.resolve({ error: false, itineraries: [onwardItin()] })
+    )
+    const store = makeStore({ trips: { [TRIP_ID]: trip } })
+    await store.dispatch(replanFromAboard({ autoApply: true }))
+
+    const bus = store.actions.find((a) => a.type === 'START_GO_MODE')?.payload
+      ?.itinerary?.legs[0]
+    expect(bus.routeColor).toBe('F68B1F')
+    expect(bus.routeTextColor).toBe('FFFFFF')
+    expect(bus.routeId).toBe('1:904')
+    // The converter collapses route to a shortName STRING; apiV2 restores the
+    // object for transit legs, and so must this — skipping it makes the leg
+    // diverge from planner-sourced legs in a way only the map shows.
+    expect(typeof bus.route).toBe('object')
+    expect(bus.route.color).toBe('F68B1F')
+    // A synthesized leg is always first: nothing to interline with.
+    expect(bus.interlineWithPreviousLeg).toBe(false)
   })
 
   it('never synthesizes a bus leg that arrives before it departs', async () => {

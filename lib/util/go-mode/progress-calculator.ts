@@ -243,7 +243,11 @@ export function getTransitProgress(
       return {
         ...transitCtx.vehicleStops,
         stopsSource: 'vehicle-stop',
-        stopsTrusted: true
+        // Consult `degenerate` like the gps and vehicle branches above. The
+        // spec 'a degenerate stop list is never trusted, whatever the source'
+        // already asserted this; it was passing only because it never
+        // exercised this branch.
+        stopsTrusted: !degenerate
       }
     }
     // Every trusted source came up empty: the even-spacing estimate below is
@@ -551,6 +555,55 @@ export function shouldAlertForApproachingStop(
 
   // Alert when 2 stops away from destination
   return stopsRemaining === 2
+}
+
+/** Same window the alight NOTIFICATION uses for its 'prepare' stage. */
+const ALIGHT_BANNER_URGENT_SECONDS = 120
+
+/**
+ * Should the GET READY banner be up, and how loudly?
+ *
+ * The count alone is not enough. On 8/2 stopsRemaining was 1 from the first
+ * tick to the last — both legs of the split ride were single-hop, so the count
+ * was arithmetically honest and hasDegenerateStopList was false, which is why
+ * the trust gate never saved the banner. It showed "GET READY! Next stop is
+ * yours!" for a 30-minute ride.
+ *
+ * So don't depend on the count MOVING. checkAlightAlerts solved the identical
+ * problem for notifications by abandoning the level test for time ("
+ * stopsRemaining sits at 1 for the whole final inter-stop segment"); this
+ * follows it. Today's gates are kept verbatim, then an ETA is required.
+ *
+ * Pure and React-free so it is unit testable. When no ETA is available at all,
+ * falls through to today's behavior rather than going silent.
+ */
+export function alightBannerLevel(
+  progress: {
+    destinationArrivalTime?: number | null
+    status?: string
+    stopsRemaining?: number
+    stopsTrusted?: boolean
+  },
+  nowMs: number
+): 'urgent' | 'warning' | null {
+  const stops = progress.stopsRemaining
+  if (stops !== 1 && stops !== 2) return null
+  if (progress.stopsTrusted === false) return null
+  if (progress.status === 'deviated') return null
+
+  const eta = progress.destinationArrivalTime
+  // No ETA to judge by — today's behavior, which is the gentle part.
+  if (eta == null) return stops === 1 ? 'urgent' : 'warning'
+
+  // Can't be negative-by-inversion: the leg-time clamps guarantee endTime
+  // never precedes startTime.
+  const etaSeconds = (Number(eta) - nowMs) / 1000
+  if (!Number.isFinite(etaSeconds)) return stops === 1 ? 'urgent' : 'warning'
+
+  if (stops === 1) {
+    return etaSeconds <= ALIGHT_BANNER_URGENT_SECONDS ? 'urgent' : null
+  }
+  return etaSeconds <= ALIGHT_BANNER_URGENT_SECONDS * 2 ? 'warning' : null
 }
 
 /**

@@ -1993,7 +1993,7 @@ export function buildOnboardItinerary(
   const routeId = vehicle?.routeId || trip.route?.id || null
   const mode = trip.route?.mode || gtfsTypeToMode(trip.route?.type)
 
-  const busLeg: any = {
+  const rawBusLeg: any = {
     // Measured along the sliced polyline, not 0. A zero distance propagates:
     // spliceAccessOntoItinerary's walkDistance recompute and the leg merge
     // both read it, so the lie outlives this function.
@@ -2019,11 +2019,18 @@ export function buildOnboardItinerary(
     // length of the encoded string. Nothing reads it today; free correctness.
     legGeometry: { length: geomSlice.length, points: geomPoints },
     mode,
+    // GraphQL shape, so convertGraphQLResponseToLegacy below can flatten it
+    // the same way it flattens every planner leg — findTrip already fetches
+    // all of these (its `id` IS the gtfsId, via an alias).
+    agency: trip.route?.agency,
     route: {
       color: trip.route?.color,
+      gtfsId: routeId,
       id: routeId,
       longName: trip.route?.longName,
-      shortName: trip.route?.shortName
+      shortName: trip.route?.shortName,
+      textColor: trip.route?.textColor,
+      type: trip.route?.type
     },
     routeLongName: trip.route?.longName,
     routeShortName: trip.route?.shortName,
@@ -2038,9 +2045,32 @@ export function buildOnboardItinerary(
     transitLeg: true,
     // Carry the boarded trip's id so refreshLiveLegTimes can re-poll this
     // leg's GTFS-RT mid-ride (it skips legs without a trip id).
-    trip: { gtfsId: trip.id },
+    trip: { gtfsId: trip.id, tripHeadsign: trip.tripHeadsign },
     tripId: trip.id
   }
+
+  // Flatten exactly like every planner leg. GoModeMap reads leg.routeColor and
+  // itinerary-summary reads it too — neither looks inside leg.route — so the
+  // hand-built leg drew the Orange Line in default blue on 8/2. Don't hand-copy
+  // the fields; the repo already has the normalizer, applied to every real leg
+  // in convertPlanResponseItineraries.
+  const busLeg: any = {
+    ...coreUtils.itinerary.convertGraphQLResponseToLegacy(rawBusLeg),
+    // The converter collapses route to a shortName STRING. apiV2 restores the
+    // object for transit legs; skipping that here would make this leg diverge
+    // from planner-sourced legs in a way unit tests miss and only the map
+    // shows. Orange Line has no shortName at all, so the string would be null.
+    route: rawBusLeg.route,
+    // A synthesized leg is always first — there is no previous leg to interline
+    // with.
+    interlineWithPreviousLeg: false,
+    // Honest: only true when busArrivalEpoch came from realtime data.
+    realTime: !!(best as any).realtime
+  }
+  // Deliberately NOT decorated with getRouteColorBasedOnSettings: this
+  // deployment comments transitOperators out of app-config.yml, so it resolves
+  // to the raw GTFS F68B1F anyway. Plumbing config into a pure builder to
+  // reach the same value is cost without benefit.
 
   // Merge rather than prepend. OTP's onward plan from the alight stop can
   // legitimately begin with THIS SAME TRIP continuing — the route bias at the

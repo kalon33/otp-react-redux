@@ -8,6 +8,7 @@ import {
   displayVehicleLabel,
   NO_LIVE_VEHICLE_POLLS
 } from '../../util/go-mode/vehicle-matching'
+import { alightBannerLevel } from '../../util/go-mode/progress-calculator'
 import { getModeIcon } from '../../util/go-mode/mode-icon'
 import { VEHICLE_MATCH_FRESH_MS } from '../../util/go-mode/transit-trust'
 import type { TripProgress } from '../../util/go-mode/progress-calculator'
@@ -58,10 +59,12 @@ const TransitProgress = ({
   // itinerary the rider never chose.
   const stopsTrusted = progress.stopsTrusted !== false
 
-  const shouldShowAlert =
-    (progress.stopsRemaining === 2 || progress.stopsRemaining === 1) &&
-    stopsTrusted &&
-    progress.status !== 'deviated'
+  // Those gates are necessary but not sufficient. On 8/2 stopsRemaining was a
+  // perfectly honest 1 for a 30-minute ride (both legs of the split were
+  // single-hop), so nothing above could suppress the banner and "GET READY!
+  // Next stop is yours!" stayed up the whole way. alightBannerLevel adds the
+  // ETA test — the same move checkAlightAlerts already made for notifications.
+  const alertLevel = alightBannerLevel(progress, Date.now())
 
   // The badge is a live claim ("On Bus…"), so it also needs a recent feed
   // sighting — a confirmed match whose vehicle left the feed keeps its
@@ -166,11 +169,9 @@ const TransitProgress = ({
       </RouteHeader>
 
       {/* Get Ready Alert */}
-      {shouldShowAlert && (
-        <AlertBanner
-          $severity={progress.stopsRemaining === 1 ? 'urgent' : 'warning'}
-        >
-          {progress.stopsRemaining === 1
+      {alertLevel && (
+        <AlertBanner $severity={alertLevel}>
+          {alertLevel === 'urgent'
             ? intl.formatMessage({
                 defaultMessage: '🔔 GET READY! Next stop is yours!',
                 id: 'components.GoMode.getReadyNow'
