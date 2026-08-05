@@ -97,18 +97,21 @@ async function main() {
 
   // The defect's own input, straight from the recording: prove the twin
   // records the whole chain hung on are actually in this fixture.
-  const twins = fixture.vehicleSnapshots.filter((snap) => {
-    const forVehicle = (snap.vehicles || []).filter(
+  const recordsFor = (snap) =>
+    ((snap.payload && snap.payload.vehicles) || snap.vehicles || []).filter(
       (v) => v.vehicleId === '1:8223'
     )
-    return forVehicle.length > 1
+  const twins = fixture.vehicleSnapshots.filter((s) => recordsFor(s).length > 1)
+  const ghostFirst = twins.filter((s) => {
+    const first = recordsFor(s)[0]
+    return !first.lat || !first.lon
   })
-  const ghostFirst = twins.filter((snap) => {
-    const forVehicle = (snap.vehicles || []).filter(
-      (v) => v.vehicleId === '1:8223'
+  if (twins.length === 0) {
+    throw new Error(
+      'fixture carries no twin records for 1:8223 — this script would pass ' +
+        'vacuously; the defect input is gone or the snapshot shape changed'
     )
-    return !forVehicle[0].lat || !forVehicle[0].lon
-  })
+  }
   console.log(
     `[setup] ${twins.length} snapshot(s) carry two records for 1:8223; ` +
       `the coordinateless ghost (${GHOST_TRIP}) is listed FIRST in ` +
