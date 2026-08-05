@@ -20,7 +20,7 @@ const LEG = {
 }
 const PROGRESS = { stopsRemaining: 4 }
 
-function renderWith(emptyPolls, match = null) {
+function renderWith(emptyPolls, match = null, progress = PROGRESS) {
   const state = getMockInitialState()
   state.otp.goMode = {
     ...(state.otp.goMode || {}),
@@ -28,7 +28,7 @@ function renderWith(emptyPolls, match = null) {
   }
   return mockWithProvider(
     TransitProgress,
-    { leg: LEG, progress: PROGRESS },
+    { leg: LEG, progress },
     state
   ).wrapper.text()
 }
@@ -79,5 +79,30 @@ describe('components > go-mode > TransitProgress', () => {
   // this leg with no boarding alerts for the next bus; they say so themselves.
   it('offers a manual "I got off here"', () => {
     expect(renderWith(6)).toContain('I got off here')
+  })
+
+  // The GET READY banner. On 8/2 stopsRemaining was an honest 1 for a
+  // half-hour ride (a single-hop leg), so the count alone could never gate it.
+  describe('the GET READY banner', () => {
+    const oneStop = (etaMs) => ({
+      destinationArrivalTime: Date.now() + etaMs,
+      stopsRemaining: 1
+    })
+
+    it('stays down at 1 stop with the stop still 25 minutes out', () => {
+      expect(renderWith(6, null, oneStop(25 * 60000))).not.toContain(
+        'GET READY'
+      )
+    })
+
+    it('comes up once the stop is actually close', () => {
+      expect(renderWith(6, null, oneStop(60000))).toContain('GET READY')
+    })
+
+    it('never comes up from an untrusted count, however close', () => {
+      expect(
+        renderWith(6, null, { ...oneStop(60000), stopsTrusted: false })
+      ).not.toContain('GET READY')
+    })
   })
 })

@@ -1,7 +1,9 @@
 import {
   findNearbyVehicles,
+  hasUsablePosition,
   matchUserToVehicle
 } from '../../../lib/util/go-mode/vehicle-matching'
+import { calculateDistance } from '../../../lib/util/go-mode/position-matching'
 import type { VehiclePosition } from '../../../lib/util/go-mode/vehicle-matching'
 
 // Two Orange Line vehicles on I-35W: one at the rider, one ~2 km behind.
@@ -233,5 +235,42 @@ describe('findNearbyVehicles', () => {
     const nearby = findNearbyVehicles(44.921, -93.269, [vehicle({})], 200)
     expect(nearby).toHaveLength(1)
     expect(nearby[0].tripId).toBe('1:trip-early')
+  })
+
+  it('never surfaces a coordinateless ghost as a nearby option', () => {
+    // Infinity from calculateDistance is what does this: the ghost loses every
+    // `<=` comparison instead of scoring a 10,000km "distance".
+    const nearby = findNearbyVehicles(
+      44.921,
+      -93.269,
+      [vehicle({ lat: 0, lon: 0, vehicleId: '1:8223-ghost' }), vehicle({})],
+      200
+    )
+    expect(nearby.map((v) => v.vehicleId)).toEqual(['1:8148'])
+  })
+})
+
+describe('hasUsablePosition', () => {
+  it('rejects the 8/2 null-island ghost and keeps the live record', () => {
+    expect(hasUsablePosition(vehicle({ lat: 0, lon: 0 }))).toBe(false)
+    expect(hasUsablePosition({ lat: 44.86, lon: null })).toBe(false)
+    expect(hasUsablePosition(null)).toBe(false)
+    expect(hasUsablePosition(vehicle({}))).toBe(true)
+  })
+})
+
+describe('calculateDistance', () => {
+  it('returns Infinity, not a plausible number, for missing coordinates', () => {
+    // A null coerced to 0 used to produce 10,267,729m — Minneapolis to null
+    // island — which reads as a real position rather than as missing data.
+    expect(calculateDistance(44.86, -93.28, null as any, null as any)).toBe(
+      Infinity
+    )
+    expect(
+      calculateDistance(44.86, -93.28, undefined as any, -93.28)
+    ).toBe(Infinity)
+    // A genuine 0/0 coordinate is still arithmetic, not an error — the
+    // hasUsablePosition filter is what rejects null island.
+    expect(calculateDistance(0, 0, 0, 0)).toBe(0)
   })
 })

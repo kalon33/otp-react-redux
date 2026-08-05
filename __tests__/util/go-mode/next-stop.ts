@@ -38,10 +38,21 @@ describe('countStopsAhead', () => {
     })
   })
 
-  it('reports 1 stop remaining at saturated progress', () => {
-    // Unchanged math; getTransitProgress gates the trust of a saturated
-    // count upstream (stale-fix regression).
+  it('reports 0 remaining at saturated progress — the rider is AT the stop', () => {
+    // Was asserted as 1, latching "1 stop remaining" forever once progress
+    // saturated. Progress past the final stop's fraction means the rider is
+    // at or past the alight stop, so none are still ahead — the same rule
+    // AT_STOP_EPSILON already states for every other stop on the leg.
+    // (2026-08-02 Orange Line ride.)
     expect(countStopsAhead(leg, 1)).toEqual({
+      nextStopName: 'Destination',
+      stopsRemaining: 0
+    })
+  })
+
+  it('still reports 1 on the genuine final approach', () => {
+    // The companion to the case above: not yet at the stop, one to go.
+    expect(countStopsAhead(leg, 0.99)).toEqual({
       nextStopName: 'Destination',
       stopsRemaining: 1
     })
