@@ -220,6 +220,7 @@ describe('shouldReplanBoardedEarlier', () => {
       shouldReplanBoardedEarlier({
         nowMs: NOW,
         ridingLeg,
+        ridingTripId: '1:trip-earlier-run',
         vehicleMatchState: {
           consecutiveMatches: 8,
           match: {
@@ -242,6 +243,7 @@ describe('shouldReplanBoardedEarlier', () => {
       shouldReplanBoardedEarlier({
         nowMs: NOW,
         ridingLeg,
+        ridingTripId: '1:trip-earlier-run',
         vehicleMatchState: {
           consecutiveMatches: 8,
           match: {
@@ -267,6 +269,7 @@ describe('shouldReplanBoardedEarlier', () => {
       shouldReplanBoardedEarlier({
         nowMs: NOW,
         ridingLeg,
+        ridingTripId: '1:trip-earlier-run',
         vehicleMatchState: {
           consecutiveMatches: 0,
           match: {
@@ -296,6 +299,7 @@ describe('shouldReplanBoardedEarlier', () => {
       shouldReplanBoardedEarlier({
         nowMs: NOW,
         ridingLeg,
+        ridingTripId: '1:trip-earlier-run',
         vehicleMatchState: {
           consecutiveMatches: 8,
           match: {
@@ -322,6 +326,72 @@ describe('shouldReplanBoardedEarlier', () => {
         vehicleRecord: null
       })
     ).toBe(true)
+  })
+
+  describe('the trigger reads the identity the remedy will use', () => {
+    // 8/2: match.tripId drifted onto the ghost's trip every poll while
+    // riding.tripId stayed frozen at the trip the rider actually boarded —
+    // which is also the trip the planned leg names. replanFromAboard splices
+    // from riding.tripId, so it could never satisfy a trigger reading
+    // match.tripId: nine byte-identical itineraries, nine pushes, and no
+    // cooldown could have terminated it.
+    const armedByMatchAlone = {
+      nowMs: NOW,
+      ridingLeg,
+      vehicleMatchState: {
+        consecutiveMatches: 0,
+        match: {
+          confidence: 'confirmed' as const,
+          distanceMeters: 0,
+          label: '8223',
+          lastSeen: NOW,
+          tripHeadsign: 'Orange Burnsville',
+          tripId: '1:1191630',
+          vehicleId: '1:8223'
+        }
+      },
+      vehicleRecord: freshRecord
+    }
+
+    it('does not fire when the riding fact still names the planned trip', () => {
+      expect(
+        shouldReplanBoardedEarlier({
+          ...armedByMatchAlone,
+          ridingTripId: '1:1173133'
+        })
+      ).toBe(false)
+    })
+
+    it('does not fire when there is no riding trip to splice from', () => {
+      expect(
+        shouldReplanBoardedEarlier({ ...armedByMatchAlone, ridingTripId: null })
+      ).toBe(false)
+    })
+
+    it('is self-terminating: false once the splice has landed', () => {
+      // After a successful replan the bus leg IS the ridden trip, so planned
+      // and riding agree and the trigger cannot re-arm on the next tick.
+      expect(
+        shouldReplanBoardedEarlier({
+          nowMs: NOW,
+          ridingLeg: { ...ridingLeg, trip: { gtfsId: '1:trip-earlier-run' } },
+          ridingTripId: '1:trip-earlier-run',
+          vehicleMatchState: {
+            consecutiveMatches: 8,
+            match: {
+              confidence: 'high',
+              distanceMeters: 40,
+              label: '8140',
+              lastSeen: NOW,
+              tripHeadsign: 'Orange Burnsville',
+              tripId: '1:1191630',
+              vehicleId: '1:8140'
+            }
+          },
+          vehicleRecord: freshRecord
+        })
+      ).toBe(false)
+    })
   })
 })
 
@@ -411,6 +481,80 @@ describe('refreshConfirmedMatch', () => {
     )
     expect(refreshed?.nextStopId).toBe('1:stop-old')
     expect(refreshed?.tripId).toBe('1:1173133')
+  })
+
+  describe('the 8/2 twin-record feed', () => {
+    // Metro Transit published TWO records for vehicle 1:8223 at 21:23:18 — a
+    // ghost for the bus's next block trip (null island, "Orange Burnsville")
+    // listed BEFORE the live one. Taking the first match copied the ghost's
+    // tripId into the confirmed match every tick, which armed the
+    // boarded-earlier replan and swapped the itinerary nine times in an hour.
+    const ghost = vehicle({
+      lat: 0,
+      lon: 0,
+      nextStopId: undefined as any,
+      tripHeadsign: 'Orange Burnsville',
+      tripId: '1:1191630',
+      vehicleId: '1:8223'
+    })
+    const live = vehicle({
+      lat: 44.8637085,
+      lon: -93.3022919,
+      nextStopId: '1:56828',
+      tripHeadsign: 'Orange Downtown Minneapolis',
+      tripId: '1:1201789',
+      vehicleId: '1:8223'
+    })
+    const aboard: VehicleMatchResult = {
+      ...confirmed,
+      nextStopId: '1:56828',
+      tripHeadsign: 'Orange Downtown Minneapolis',
+      tripId: '1:1201789',
+      vehicleId: '1:8223'
+    }
+
+    it('takes the live record even when the ghost is listed first', () => {
+      const refreshed = refreshConfirmedMatch(
+        aboard,
+        [ghost, live],
+        44.8637085,
+        -93.3022919,
+        NOW
+      )
+      expect(refreshed?.tripId).toBe('1:1201789')
+      expect(refreshed?.nextStopId).toBe('1:56828')
+      // Not 10,267,729 — the haversine from Minneapolis to null island.
+      expect(refreshed?.distanceMeters).toBe(0)
+    })
+
+    it('returns null when only coordinateless records exist', () => {
+      // "Vehicle absent" is the honest answer: lastSeen ages instead of the
+      // match looking healthy at a fabricated position.
+      expect(
+        refreshConfirmedMatch(aboard, [ghost], 44.8637085, -93.3022919, NOW)
+      ).toBeNull()
+    })
+
+    it('refreshes tripHeadsign whenever it refreshes tripId', () => {
+      // The opposite-direction guard in shouldReplanBoardedEarlier compares
+      // tripHeadsign against the leg. A refreshed id with a stale headsign
+      // makes that guard judge confirmation-time data against a drifted id.
+      const rebound = refreshConfirmedMatch(
+        aboard,
+        [
+          vehicle({
+            tripHeadsign: 'Orange Burnsville',
+            tripId: '1:1191630',
+            vehicleId: '1:8223'
+          })
+        ],
+        44.86,
+        -93.28,
+        NOW
+      )
+      expect(rebound?.tripId).toBe('1:1191630')
+      expect(rebound?.tripHeadsign).toBe('Orange Burnsville')
+    })
   })
 })
 

@@ -134,6 +134,17 @@ export function buildLiveItinerary(
       }
     }
 
+    // board and alight are applied independently, so a live board time that
+    // has moved later than a live alight time (or an alight prediction that
+    // has fallen behind) leaves a leg arriving before it departs. Keep the
+    // planned running time in that case — the rider can't arrive early by
+    // boarding late.
+    if (Number(next.endTime) < Number(next.startTime)) {
+      const plannedRun = Number(leg.endTime) - Number(leg.startTime)
+      next.endTime =
+        Number(next.startTime) + (Number.isFinite(plannedRun) ? Math.max(0, plannedRun) : 0)
+    }
+
     return next as Leg
   })
   return live

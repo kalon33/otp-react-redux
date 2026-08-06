@@ -1,6 +1,7 @@
 import { encode } from '@mapbox/polyline'
 
 import {
+  alightBannerLevel,
   calculateExpectedProgress,
   calculateOverallProgress,
   calculateTimeRemaining,
@@ -744,6 +745,24 @@ describe('getTransitProgress with a trust context', () => {
     expect(result.stopsTrusted).toBe(false)
   })
 
+  it('...including from the vehicle-stop source', () => {
+    // The branch the spec above claimed to cover but never actually reached:
+    // it returned stopsTrusted: true unconditionally, unlike gps and vehicle.
+    const degenerate = {
+      intermediatePlaces: [{ name: 'No Coords A' }, { name: 'No Coords B' }],
+      legGeometry: leg.legGeometry,
+      mode: 'BUS',
+      to: leg.to
+    } as any
+    const result = getTransitProgress(degenerate, 0.2, {
+      riderTrusted: false,
+      vehicleProgress: null,
+      vehicleStops: { nextStopName: 'From the feed', stopsRemaining: 1 }
+    })
+    expect(result.stopsSource).toBe('vehicle-stop')
+    expect(result.stopsTrusted).toBe(false)
+  })
+
   it('calculateTripProgress threads the ctx through to the transit info', () => {
     const itinerary = {
       endTime: '2026-07-29T17:55:00',
@@ -769,5 +788,67 @@ describe('getTransitProgress with a trust context', () => {
     expect(progress.stopsSource).toBe('vehicle')
     expect(progress.stopsTrusted).toBe(true)
     expect(progress.stopsRemaining).toBe(4)
+  })
+})
+
+describe('alightBannerLevel', () => {
+  const NOW = 1785723900000
+
+  it('stays silent at 1 stop when the stop is half an hour away', () => {
+    // The 8/2 signature exactly: an honest stopsRemaining of 1 on a single-hop
+    // leg, held for the whole ride, with "GET READY! Next stop is yours!" up
+    // the entire time. No count-based gate could have caught this.
+    expect(
+      alightBannerLevel(
+        { destinationArrivalTime: NOW + 30 * 60000, stopsRemaining: 1 },
+        NOW
+      )
+    ).toBeNull()
+  })
+
+  it('fires urgent at 1 stop inside the alight window', () => {
+    expect(
+      alightBannerLevel(
+        { destinationArrivalTime: NOW + 60000, stopsRemaining: 1 },
+        NOW
+      )
+    ).toBe('urgent')
+  })
+
+  it('fires warning at 2 stops inside twice the window', () => {
+    expect(
+      alightBannerLevel(
+        { destinationArrivalTime: NOW + 180000, stopsRemaining: 2 },
+        NOW
+      )
+    ).toBe('warning')
+    expect(
+      alightBannerLevel(
+        { destinationArrivalTime: NOW + 600000, stopsRemaining: 2 },
+        NOW
+      )
+    ).toBeNull()
+  })
+
+  it('keeps every gate that was already there', () => {
+    const near = { destinationArrivalTime: NOW + 60000, stopsRemaining: 1 }
+    expect(alightBannerLevel({ ...near, stopsTrusted: false }, NOW)).toBeNull()
+    expect(alightBannerLevel({ ...near, status: 'deviated' }, NOW)).toBeNull()
+    expect(alightBannerLevel({ ...near, stopsRemaining: 0 }, NOW)).toBeNull()
+    expect(alightBannerLevel({ ...near, stopsRemaining: 4 }, NOW)).toBeNull()
+    expect(alightBannerLevel({ ...near, stopsRemaining: undefined }, NOW)).toBeNull()
+  })
+
+  it('falls through to the old behavior when there is no ETA at all', () => {
+    // The gentle part: no ETA is a reason to keep doing what we did, not to
+    // go silent on a rider who may genuinely be about to miss their stop.
+    expect(alightBannerLevel({ stopsRemaining: 1 }, NOW)).toBe('urgent')
+    expect(alightBannerLevel({ stopsRemaining: 2 }, NOW)).toBe('warning')
+    expect(
+      alightBannerLevel(
+        { destinationArrivalTime: NaN, stopsRemaining: 1 },
+        NOW
+      )
+    ).toBe('urgent')
   })
 })

@@ -12,6 +12,7 @@ const CURRENT_LOCATION_NAME = 'Current location'
 
 import {
   clampNonLiveLegTimes,
+  findStopTimeIndex,
   getDownstreamStops,
   hasLiveArrival,
   liveStopArrival,
@@ -55,7 +56,15 @@ import {
 } from '../util/go-mode/position-matching'
 import { getNextStopOnRide } from '../util/go-mode/next-stop'
 import { spliceAccessOntoItinerary } from '../util/go-mode/access-splice'
-import { collectRerouteCandidates } from '../util/go-mode/reroute-candidates'
+import {
+  mergeAdjacentSameTripLegs,
+  normalizeGoModeItinerary,
+  polylineLength
+} from '../util/go-mode/leg-merge'
+import {
+  collectRerouteCandidates,
+  itinerarySignature
+} from '../util/go-mode/reroute-candidates'
 import { pickAccessReplanCandidate, pickSameRouteReroute } from '../util/state'
 import type {
   AlightContext,
@@ -519,8 +528,15 @@ function getTrackingIntervalForLeg(leg: Leg | undefined): number {
 /**
  * Start Go Mode tracking for an itinerary
  */
-export function beginGoMode(itinerary: Itinerary) {
+export function beginGoMode(rawItinerary: Itinerary) {
   return async function (dispatch: any, getState: any) {
+    // The one choke point every itinerary entering Go Mode passes through —
+    // onboard confirm, aboard replan, auto-reroute, quiet access replan, the
+    // explicit reroute apply, session restore and the normal start. Returns
+    // the input reference when nothing merges, so a clean itinerary stays
+    // object-identical and spliceAccessOntoItinerary's same-objects promise
+    // (the 7/29 "only reroute the bike leg" fix) still holds.
+    const itinerary = normalizeGoModeItinerary(rawItinerary) as Itinerary
     // Set state and navigate to Go Mode screen synchronously first,
     // before any async work, to avoid race with the GoModeScreen useEffect
     // that redirects away when isActive is false.
@@ -1123,6 +1139,14 @@ export function applyAutoReroute(
       dispatch(
         setRerouteResult(displayCandidates?.length ? displayCandidates : null)
       )
+      return
+    }
+
+    // A swap that changes nothing is not an update. Settling as 'none' keeps
+    // it retryable; what it does not do is buzz the rider. See the note on
+    // the same guard in replanFromAboard.
+    if (itinerarySignature(best) === itinerarySignature(goMode.activeItinerary)) {
+      dispatch(setRerouteResult(null))
       return
     }
 
@@ -1851,7 +1875,14 @@ function optimizeAlightFromTrip(options: {
 export function buildOnboardItinerary(
   trip: any,
   vehicle: any,
-  best: { busArrivalEpoch: number; itinerary: Itinerary; stopId: string },
+  best: {
+    busArrivalEpoch: number
+    itinerary: Itinerary
+    stopId: string
+    /** Alight stop NAME, for the twin-feed id fallback — see
+     * findStopTimeIndex. Optional: callers that never had one are unchanged. */
+    stopName?: string | null
+  },
   lastPosition: GeolocationPosition | null
 ): Itinerary {
   const stopTimes = trip.stopTimes || []
@@ -1879,7 +1910,12 @@ export function buildOnboardItinerary(
     })
   }
 
-  let alightIdx = stopTimes.findIndex((st: any) => st.stop?.id === best.stopId)
+  // Same id-then-name resolution liveStopArrival used to produce
+  // best.busArrivalEpoch. When the two disagreed — a twin-feed stop id that
+  // only the name lookup resolves — this fell through to `boardIdx + 1` and
+  // collapsed the whole ride to a single stop pair carrying a perfectly valid
+  // arrival time, which is most of what made 8/2's leg split look plausible.
+  let alightIdx = findStopTimeIndex(stopTimes, best.stopId, best.stopName)
   if (alightIdx < 0) {
     alightIdx = Math.min(boardIdx + 1, stopTimes.length - 1)
   }
@@ -1912,6 +1948,7 @@ export function buildOnboardItinerary(
 
   // Slice the trip geometry between boarding and alight stops.
   let geomPoints = trip.geometry?.points || ''
+  let geomSlice: [number, number][] = []
   try {
     const decoded = trip.geometry?.points
       ? polyline.decode(trip.geometry.points)
@@ -1929,7 +1966,8 @@ export function buildOnboardItinerary(
         alightStop.lon,
         startGeo
       )
-      geomPoints = polyline.encode(decoded.slice(startGeo, endGeo + 1))
+      geomSlice = decoded.slice(startGeo, endGeo + 1) as [number, number][]
+      geomPoints = polyline.encode(geomSlice)
     }
   } catch {
     // Keep the full geometry on failure — guidance still works.
@@ -1950,13 +1988,36 @@ export function buildOnboardItinerary(
     })
   }
 
+  // An arrival that has already passed is not evidence the rider has arrived.
+  // busLegStart is Date.now() while best.busArrivalEpoch can be a realtime
+  // prediction already behind the clock — on 8/2 that produced legs whose
+  // endTime preceded their startTime by 114s, 175s and 268s, and a "Trip
+  // updated — arriving 9:23 PM" push sent at 9:24. Only then substitute the
+  // remaining SCHEDULED running time, the least we can honestly claim the
+  // rest of the ride will take.
+  //
+  // Strictly an inversion guard, NOT a floor: a realtime arrival that is
+  // merely EARLIER than schedule is a bus running ahead, which is exactly the
+  // kind of truth realtime exists to tell. Flooring against the schedule
+  // there would quietly make the app 30s pessimistic on every early bus
+  // (caught by verify-rest-of-trip-times).
+  const arrivalEpoch = Number(best.busArrivalEpoch)
+  const busLegEnd =
+    Number.isFinite(arrivalEpoch) && arrivalEpoch > busLegStart
+      ? arrivalEpoch
+      : busLegStart +
+        Math.max(0, (stopTimes[alightIdx].scheduledDeparture - anchorSd) * 1000)
+
   const routeId = vehicle?.routeId || trip.route?.id || null
   const mode = trip.route?.mode || gtfsTypeToMode(trip.route?.type)
 
-  const busLeg: any = {
-    distance: 0,
-    duration: (best.busArrivalEpoch - busLegStart) / 1000,
-    endTime: best.busArrivalEpoch,
+  const rawBusLeg: any = {
+    // Measured along the sliced polyline, not 0. A zero distance propagates:
+    // spliceAccessOntoItinerary's walkDistance recompute and the leg merge
+    // both read it, so the lie outlives this function.
+    distance: polylineLength(geomSlice),
+    duration: (busLegEnd - busLegStart) / 1000,
+    endTime: busLegEnd,
     // Every real OTP leg carries this (empty when the agency has no Fares V2
     // data). Omitting it crashes the fare table, which does
     // `transitLegs.flatMap(leg => leg.fareProducts)` and then reads
@@ -1972,13 +2033,22 @@ export function buildOnboardItinerary(
     },
     headsign: trip.tripHeadsign,
     intermediatePlaces,
-    legGeometry: { length: geomPoints.length, points: geomPoints },
+    // OTP's convention for legGeometry.length is the POINT COUNT, not the
+    // length of the encoded string. Nothing reads it today; free correctness.
+    legGeometry: { length: geomSlice.length, points: geomPoints },
     mode,
+    // GraphQL shape, so convertGraphQLResponseToLegacy below can flatten it
+    // the same way it flattens every planner leg — findTrip already fetches
+    // all of these (its `id` IS the gtfsId, via an alias).
+    agency: trip.route?.agency,
     route: {
       color: trip.route?.color,
+      gtfsId: routeId,
       id: routeId,
       longName: trip.route?.longName,
-      shortName: trip.route?.shortName
+      shortName: trip.route?.shortName,
+      textColor: trip.route?.textColor,
+      type: trip.route?.type
     },
     routeLongName: trip.route?.longName,
     routeShortName: trip.route?.shortName,
@@ -1993,17 +2063,50 @@ export function buildOnboardItinerary(
     transitLeg: true,
     // Carry the boarded trip's id so refreshLiveLegTimes can re-poll this
     // leg's GTFS-RT mid-ride (it skips legs without a trip id).
-    trip: { gtfsId: trip.id },
+    trip: { gtfsId: trip.id, tripHeadsign: trip.tripHeadsign },
     tripId: trip.id
   }
 
-  const legs = [busLeg, ...(onward.legs || [])]
+  // Flatten exactly like every planner leg. GoModeMap reads leg.routeColor and
+  // itinerary-summary reads it too — neither looks inside leg.route — so the
+  // hand-built leg drew the Orange Line in default blue on 8/2. Don't hand-copy
+  // the fields; the repo already has the normalizer, applied to every real leg
+  // in convertPlanResponseItineraries.
+  const busLeg: any = {
+    ...coreUtils.itinerary.convertGraphQLResponseToLegacy(rawBusLeg),
+    // The converter collapses route to a shortName STRING. apiV2 restores the
+    // object for transit legs; skipping that here would make this leg diverge
+    // from planner-sourced legs in a way unit tests miss and only the map
+    // shows. Orange Line has no shortName at all, so the string would be null.
+    route: rawBusLeg.route,
+    // A synthesized leg is always first — there is no previous leg to interline
+    // with.
+    interlineWithPreviousLeg: false,
+    // Honest: only true when busArrivalEpoch came from realtime data.
+    realTime: !!(best as any).realtime
+  }
+  // Deliberately NOT decorated with getRouteColorBasedOnSettings: this
+  // deployment comments transitOperators out of app-config.yml, so it resolves
+  // to the raw GTFS F68B1F anyway. Plumbing config into a pure builder to
+  // reach the same value is cost without benefit.
+
+  // Merge rather than prepend. OTP's onward plan from the alight stop can
+  // legitimately begin with THIS SAME TRIP continuing — the route bias at the
+  // fetch (otherThanPreferredRoutesPenalty: 900) is why, and that bias is
+  // correct behavior, not a bug. Prepending was the bug: on 8/2 it rendered
+  // one continuous Orange Line ride as two legs with a fake 5-minute transfer
+  // at 66th St and the fare charged twice.
+  const legs = mergeAdjacentSameTripLegs([busLeg, ...(onward.legs || [])])
   const transitLegCount = legs.filter((l: any) => l.transitLeg).length
+
+  // Same clamp at the container: the onward plan was fetched against the
+  // pre-clamp arrival, so its endTime can also sit behind the bus leg's.
+  const itineraryEnd = Math.max(Number(onward.endTime), busLegEnd)
 
   return {
     ...onward,
-    duration: (onward.endTime - busLegStart) / 1000,
-    endTime: onward.endTime,
+    duration: (itineraryEnd - busLegStart) / 1000,
+    endTime: itineraryEnd,
     legs,
     startTime: busLegStart,
     transfers: Math.max(0, transitLegCount - 1)
@@ -2234,7 +2337,11 @@ export function replanFromAboard(
             ...itinerary,
             legs: legs.slice((riding.legIndex as number) + 1)
           },
-          stopId: plannedAlightStopId
+          stopId: plannedAlightStopId,
+          // liveStopArrival resolved the epoch above by id-OR-name; the
+          // builder must resolve the same stop the same way or it silently
+          // falls back to boardIdx + 1.
+          stopName: ridingLegForAlight?.to?.name ?? null
         }
       } else {
         const ranked = await dispatch(
@@ -2259,6 +2366,26 @@ export function replanFromAboard(
         best,
         getState().otp?.goMode?.tracking?.lastPosition || null
       )
+
+      // The last line before the rider's trip is replaced: if the splice is
+      // materially the same trip they are already on, do not swap and do not
+      // notify. On 8/2 all nine auto-applied itineraries were byte-identical
+      // — the trigger read match.tripId while the remedy built from the
+      // frozen riding.tripId, so the replan could never satisfy itself. The
+      // conjunct in shouldReplanBoardedEarlier fixes that specific loop; this
+      // guard makes the whole CLASS non-recurring, whatever arms it next.
+      // Suppressing here rather than at the notification layer is deliberate:
+      // the TRIP_UPDATED id embeds Date.now(), so the reducer's id-based
+      // dedupe can never catch these, and a notification-level dedupe would
+      // be cleared by START_GO_MODE anyway.
+      // Compare against the itinerary that is live NOW, not the one captured
+      // before the schedule fetch — that is the one about to be replaced.
+      const activeNow = getState().otp?.goMode?.activeItinerary ?? itinerary
+      if (itinerarySignature(spliced) === itinerarySignature(activeNow)) {
+        dispatch(setRerouteResult(null))
+        return
+      }
+
       dispatch(beginGoMode(spliced))
       // beginGoMode resets the vehicle match; re-lock the boarded bus.
       reconfirmBoardedVehicle(dispatch, vehicle)
@@ -3243,7 +3370,13 @@ export function handlePositionUpdate(position: GeolocationPosition) {
           return false
         const ridingLeg = itinerary.legs[riding.legIndex]
         if (!ridingLeg?.transitLeg) return false
-        const boardingKey = `${riding.legIndex}:${riding.boardedAt ?? ''}`
+        // Key the latch on facts that SURVIVE an auto-apply. legIndex is
+        // exactly the field the splice rewrites, so on 8/2 every successful
+        // replan minted a fresh key and reset the attempt counter — the cap
+        // never held. tripId and boardedAt are both preserved by setRiding
+        // across the splice, and both change on a genuine re-board, since
+        // TRANSITION_LEG clears riding on alight.
+        const boardingKey = `${riding.tripId ?? ''}:${riding.boardedAt ?? ''}`
         if (
           earlyBoardReplan?.key === boardingKey &&
           (earlyBoardReplan.attempts >= EARLY_BOARD_REPLAN_MAX_ATTEMPTS ||
@@ -3277,6 +3410,7 @@ export function handlePositionUpdate(position: GeolocationPosition) {
           !shouldReplanBoardedEarlier({
             nowMs: currentTime.getTime(),
             ridingLeg: ridingLeg as Leg,
+            ridingTripId: riding.tripId,
             vehicleMatchState: goMode.vehicleMatch,
             vehicleRecord: matchedRecord
           })
@@ -4280,7 +4414,15 @@ export function replayTrip(
       fixture.itinerary.legs?.[0]?.from ||
       getState().otp?.currentQuery?.from ||
       null
-    dispatch(startGoMode({ itinerary: fixture.itinerary, originalFrom }))
+    // Same normalization beginGoMode applies. This path bypasses beginGoMode,
+    // so without it a replay would exercise different code than the live app
+    // and the verification scripts would prove nothing.
+    dispatch(
+      startGoMode({
+        itinerary: normalizeGoModeItinerary(fixture.itinerary) as Itinerary,
+        originalFrom
+      })
+    )
     dispatch(setMobileScreen(MobileScreens.GO_MODE))
 
     // Set up tracking machinery (stop-time prefetch, vehicle tracking, window

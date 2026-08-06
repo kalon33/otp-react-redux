@@ -39,6 +39,32 @@ export function hasLiveArrival(st: TripStopTime): boolean {
 }
 
 /**
+ * Where a stop sits in this trip's own stop list: exact id first, then the
+ * stop NAME. Shared stations exist under several GTFS feeds (e.g. Burnsville
+ * Transit Station is both 1:xxxx and MVTA's 2:31929), and a plan leg may
+ * reference the twin feed's id — an exact-id-only match then never finds it.
+ * Returns -1 when neither resolves.
+ *
+ * liveStopArrival and buildOnboardItinerary's alight resolution share this.
+ * They used to differ, which was a real defect: liveStopArrival would resolve
+ * a twin-feed stop by name and hand back a valid arrival epoch for a stopId
+ * the builder's id-only findIndex never matched — so the builder fell through
+ * to `boardIdx + 1` and silently collapsed the whole ride to one stop pair.
+ */
+export function findStopTimeIndex(
+  stopTimes: TripStopTime[],
+  stopGtfsId: string | null | undefined,
+  stopName?: string | null
+): number {
+  if (!stopGtfsId && !stopName) return -1
+  const byId = stopGtfsId
+    ? stopTimes.findIndex((s) => s.stop?.id === stopGtfsId)
+    : -1
+  if (byId >= 0) return byId
+  return stopName ? stopTimes.findIndex((s) => s.stop?.name === stopName) : -1
+}
+
+/**
  * The absolute epoch (ms) a trip reaches a given stop, preferring OTP's live
  * (GPS-fed) realtimeArrival and falling back to the schedule. Returns null when
  * the stop isn't in this trip's stop times or has no usable time. Used to keep
@@ -50,14 +76,8 @@ export function liveStopArrival(
   stopName?: string | null
 ): { epoch: number; realtime: boolean } | null {
   if (!stopGtfsId && !stopName) return null
-  // Exact id first; fall back to the stop NAME within this trip's own stop
-  // list. Shared stations exist under several GTFS feeds (e.g. Burnsville
-  // Transit Station is both 1:xxxx and MVTA's 2:31929), and a plan leg may
-  // reference the twin feed's id — an exact-id-only match then never finds
-  // live data for the leg.
-  const st =
-    stopTimes.find((s) => stopGtfsId && s.stop?.id === stopGtfsId) ||
-    (stopName ? stopTimes.find((s) => s.stop?.name === stopName) : undefined)
+  const idx = findStopTimeIndex(stopTimes, stopGtfsId, stopName)
+  const st = idx >= 0 ? stopTimes[idx] : undefined
   // serviceDay <= 0 means the stop times carry no service-date context (OTP's
   // dateless trip.stoptimes returns -1) — an absolute epoch would be garbage.
   if (!st || st.serviceDay == null || st.serviceDay <= 0) return null
@@ -134,13 +154,29 @@ export function clampNonLiveLegTimes<
       next = { ...next, alightEpoch: nowMs }
       changed = true
     }
+    let boardRaised = false
     if (
       !(t.boardRealtime ?? t.realtime) &&
       t.boardEpoch != null &&
       t.boardEpoch < nowMs
     ) {
       next = { ...next, boardEpoch: nowMs }
+      boardRaised = true
       changed = true
+    }
+    // Raising the board time past a still-past alight time inverts the leg —
+    // the rider would be shown arriving before they got on. Carry the alight
+    // with it. Scoped to the raise we just made: everywhere else board and
+    // alight are deliberately independent, and a merely-late live pair is
+    // honest data, not an inversion. (8/2: this shape drove the
+    // once-per-second SET_LIVE_LEG_TIMES churn through the whole ride.)
+    if (
+      boardRaised &&
+      next.alightEpoch != null &&
+      next.boardEpoch != null &&
+      next.alightEpoch < next.boardEpoch
+    ) {
+      next = { ...next, alightEpoch: next.boardEpoch }
     }
     out[idx] = next
   }

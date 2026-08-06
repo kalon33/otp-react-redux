@@ -109,6 +109,30 @@ describe('go-mode riding reducer', () => {
     expect(state.riding?.tripId).toBe('1:trip-1')
   })
 
+  it('re-anchors across the leg merge, which shifts every downstream index', () => {
+    // normalizeGoModeItinerary collapses two legs of one trip into one, so a
+    // riding fact anchored at legIndex 2 on the split itinerary must land at 1
+    // on the merged one. Nothing carries the old index over — reanchorRiding
+    // re-derives it from tripId, which is what makes the merge safe at the
+    // beginGoMode boundary despite riding.legIndex, progress.currentLegIndex
+    // and the TRANSITION_LEG comparison all being index-based.
+    const set = goMode(initial, setRiding({ ...riding, legIndex: 2 }))
+    const mergedItinerary: any = {
+      legs: [
+        { mode: 'WALK' },
+        {
+          mode: 'BUS',
+          transitLeg: true,
+          trip: { gtfsId: '1:trip-1' },
+          tripId: '1:trip-1'
+        },
+        { mode: 'BICYCLE' }
+      ]
+    }
+    const state = goMode(set, startGoMode({ itinerary: mergedItinerary }))
+    expect(state.riding?.legIndex).toBe(1)
+  })
+
   it('START_GO_MODE falls back to routeId, else keeps fact un-anchored', () => {
     const set = goMode(initial, setRiding(riding))
     const byRoute: any = {

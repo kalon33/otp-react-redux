@@ -58,6 +58,23 @@ export interface NearbyVehicleOption {
 
 // --- Functions ---
 
+/**
+ * Does this feed record actually say where the vehicle is?
+ *
+ * Metro Transit publishes a second record for the same vehicleId covering the
+ * bus's NEXT block trip, with `lat: 0, lon: 0` and no next stop — on 8/2 the
+ * ghost for 1:8223 (trip 1:1191630, "Orange Burnsville") sat alongside the
+ * live record (1:1201789, "Orange Downtown Minneapolis") and, being first in
+ * the array, won every `.find()` by vehicleId. Null island is not a position:
+ * a record without usable coordinates is useless to every consumer, so it
+ * never enters the store.
+ */
+export function hasUsablePosition(
+  vehicle: { lat?: number | null; lon?: number | null } | null | undefined
+): boolean {
+  return !!vehicle && !!vehicle.lat && !!vehicle.lon
+}
+
 // How stale a GTFS-RT vehicle position is assumed to be, worst case. Feeds are
 // polled every 10-30s and carry their own reporting latency; a rider moving at
 // speed v can legitimately be up to v * LAG ahead of "their" vehicle's last

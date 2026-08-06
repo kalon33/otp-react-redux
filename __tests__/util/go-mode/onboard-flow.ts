@@ -1,6 +1,7 @@
 import {
   beginOnboardFlowAction,
   browseFromCurrentPosition,
+  buildOnboardItinerary,
   replanFromAboard,
   stopGoMode,
   stopVehicleTracking
@@ -302,7 +303,9 @@ describe('replanFromAboard (mid-ride aboard-aware replan)', () => {
     // (leg.trip.gtfsId and leg.tripId) plus board/alight stop gtfsIds and
     // names for liveStopArrival's id-then-name lookup — verify-boarded-earlier
     // caught the spliced trip's overview times never re-anchoring.
-    expect(applied.legs[0].trip).toEqual({ gtfsId: TRIP_ID })
+    expect(applied.legs[0].trip).toEqual(
+      expect.objectContaining({ gtfsId: TRIP_ID })
+    )
     expect(applied.legs[0].from.stop.gtfsId).toBeTruthy()
     expect(applied.legs[0].from.name).toBeTruthy()
     expect(applied.legs[0].to.stop.gtfsId).toBeTruthy()
@@ -359,6 +362,124 @@ describe('replanFromAboard (mid-ride aboard-aware replan)', () => {
     // The plan's own onward legs ride along unchanged.
     expect(applied.legs[1].mode).toBe('WALK')
     expect(mockedFetch).not.toHaveBeenCalled()
+  })
+
+  it('flattens the synthesized leg like every planner leg', async () => {
+    // GoModeMap reads leg.routeColor and itinerary-summary reads it too —
+    // neither looks inside leg.route — so the hand-built leg drew the Orange
+    // Line in default blue on 8/2.
+    const trip = makeTripFixture()
+    ;(trip.route as any).color = 'F68B1F'
+    ;(trip.route as any).textColor = 'FFFFFF'
+    ;(trip.route as any).type = 3
+    mockedFetch.mockReturnValue(() =>
+      Promise.resolve({ error: false, itineraries: [onwardItin()] })
+    )
+    const store = makeStore({ trips: { [TRIP_ID]: trip } })
+    await store.dispatch(replanFromAboard({ autoApply: true }))
+
+    const bus = store.actions.find((a) => a.type === 'START_GO_MODE')?.payload
+      ?.itinerary?.legs[0]
+    expect(bus.routeColor).toBe('F68B1F')
+    expect(bus.routeTextColor).toBe('FFFFFF')
+    expect(bus.routeId).toBe('1:904')
+    // The converter collapses route to a shortName STRING; apiV2 restores the
+    // object for transit legs, and so must this — skipping it makes the leg
+    // diverge from planner-sourced legs in a way only the map shows.
+    expect(typeof bus.route).toBe('object')
+    expect(bus.route.color).toBe('F68B1F')
+    // A synthesized leg is always first: nothing to interline with.
+    expect(bus.interlineWithPreviousLeg).toBe(false)
+  })
+
+  it('never synthesizes a bus leg that arrives before it departs', async () => {
+    // busLegStart is Date.now() while busArrivalEpoch can be a realtime
+    // prediction already behind the clock. On 8/2 that produced legs whose
+    // endTime preceded their startTime by up to 268s, and a "Trip updated —
+    // arriving 9:23 PM" push sent at 9:24. An arrival that has already passed
+    // is not evidence the rider has arrived.
+    const trip = makeTripFixture()
+    // Realtime arrivals ten minutes in the past for every stop.
+    const pastDay = Math.floor(Date.now() / 1000) - 600
+    trip.stopTimes = trip.stopTimes.map((st: any) => ({
+      ...st,
+      realtimeArrival: 0,
+      realtimeState: 'UPDATED',
+      serviceDay: pastDay
+    }))
+    const itinerary = makeItinerary()
+    ;(itinerary.legs[0].to as any).stop = { gtfsId: '1:s3', id: '1:s3' }
+    const store = makeStore({
+      goModeOverrides: { activeItinerary: itinerary },
+      trips: { [TRIP_ID]: trip }
+    })
+    await store.dispatch(replanFromAboard({ autoApply: true }))
+
+    const applied = store.actions.find((a) => a.type === 'START_GO_MODE')
+      ?.payload?.itinerary
+    expect(applied).toBeTruthy()
+    const bus = applied.legs[0]
+    expect(bus.endTime).toBeGreaterThan(bus.startTime)
+    expect(bus.duration).toBeGreaterThan(0)
+    // ...and the container never claims to end before the bus leg does.
+    expect(applied.endTime).toBeGreaterThanOrEqual(bus.endTime)
+    expect(applied.duration).toBeGreaterThan(0)
+    // The substitute is the remaining SCHEDULED running time (s2 -> s3 = 300s).
+    expect(bus.endTime - bus.startTime).toBe(300000)
+  })
+
+  it('leaves a bus running AHEAD of schedule alone', () => {
+    // The guard is for inversions only. A realtime arrival that is merely
+    // earlier than the schedule is a bus running ahead — exactly the truth
+    // realtime exists to tell, and substituting the schedule there would make
+    // the app quietly pessimistic on every early bus.
+    const trip = makeTripFixture()
+    const now = Date.now()
+    const ahead = now + 60000 // 60s out; the schedule says 300s
+    const built: any = buildOnboardItinerary(
+      trip,
+      { nextStopId: '1:s2' },
+      {
+        busArrivalEpoch: ahead,
+        itinerary: onwardItin() as any,
+        stopId: '1:s3'
+      },
+      null
+    )
+    expect(built.legs[0].endTime).toBe(ahead)
+  })
+
+  it('does not swap or notify when the splice is the trip the rider is already on', async () => {
+    // The 8/2 loop: nine auto-applied itineraries, all byte-identical, each
+    // with its own high-priority "Trip updated" push quoting an arrival time
+    // already in the past. The TRIP_UPDATED id embeds Date.now(), so the
+    // reducer's id dedupe can never catch these — suppression has to happen
+    // before the swap.
+    const trip = makeTripFixture()
+    const serviceDay = Math.floor(Date.now() / 1000) - 3600
+    trip.stopTimes = trip.stopTimes.map((st: any) => ({ ...st, serviceDay }))
+    const itinerary = makeItinerary()
+    ;(itinerary.legs[0].to as any).stop = { gtfsId: '1:s3', id: '1:s3' }
+    const store = makeStore({
+      goModeOverrides: { activeItinerary: itinerary },
+      trips: { [TRIP_ID]: trip }
+    })
+    // First pass: the splice differs from the plan (the plan boards at Knox &
+    // 76th; the splice boards where the bus is now), so it applies.
+    await store.dispatch(replanFromAboard({ autoApply: true }))
+    expect(
+      store.actions.find((a) => a.type === 'START_GO_MODE')?.payload?.itinerary
+    ).toBeTruthy()
+
+    // Second pass against the itinerary the first one produced: nothing to
+    // change, so no swap and no buzz.
+    const before = store.actions.length
+    await store.dispatch(replanFromAboard({ autoApply: true }))
+    const after = store.actions.slice(before).map((a) => a.type)
+    expect(after).not.toContain('START_GO_MODE')
+    expect(after).not.toContain('ADD_NOTIFICATION')
+    // Settled as 'none' — retryable, so a genuine change later still lands.
+    expect(store.getGoMode().reRoute.status).toBe('none')
   })
 
   it('autoApply keeps the planned alight stop even when a transfer ranks faster', async () => {

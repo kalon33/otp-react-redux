@@ -140,8 +140,18 @@ export function countStopsAhead(
   const fractions = stopFractionsAlongLeg(ordered, decodeLegGeometry(leg))
   if (!fractions) return null
   const clamped = Math.max(0, Math.min(1, progress))
-  let idx = fractions.findIndex((f) => f > clamped + AT_STOP_EPSILON)
-  if (idx === -1) idx = ordered.length - 1
+  const idx = fractions.findIndex((f) => f > clamped + AT_STOP_EPSILON)
+  if (idx === -1) {
+    // Progress is past the last stop's fraction, so the rider is AT or past
+    // the alight stop and zero stops are still ahead. Pinning idx to the last
+    // stop reported a permanent "1 stop remaining" instead — not a display
+    // policy but wrong arithmetic, and the opposite of what AT_STOP_EPSILON's
+    // own rule says (the stop you are AT doesn't count as still ahead).
+    return {
+      nextStopName: ordered[ordered.length - 1].name,
+      stopsRemaining: 0
+    }
+  }
   return {
     nextStopName: ordered[idx].name,
     stopsRemaining: ordered.length - idx

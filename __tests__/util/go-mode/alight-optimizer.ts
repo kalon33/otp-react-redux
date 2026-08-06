@@ -324,6 +324,40 @@ describe('clampNonLiveLegTimes', () => {
     expect(out?.[1]).toBe(fresh)
     expect(out?.[2].alightEpoch).toBe(NOW)
   })
+
+  it('carries the alight along when raising the board past it', () => {
+    // 8/2: raising a non-live board time to now while a live alight sat in
+    // the past showed the rider arriving before they got on, and re-fired
+    // SET_LIVE_LEG_TIMES once a second for the whole ride.
+    const times = {
+      1: entry({
+        alightEpoch: NOW - 60000,
+        alightRealtime: true,
+        boardEpoch: NOW - 90000,
+        boardRealtime: false
+      })
+    }
+    const out = clampNonLiveLegTimes(times, NOW)
+    expect(out?.[1].boardEpoch).toBe(NOW)
+    expect(out?.[1].alightEpoch).toBe(NOW)
+  })
+
+  it('leaves a merely-late live pair alone — that is honest data', () => {
+    expect(
+      clampNonLiveLegTimes(
+        {
+          1: entry({
+            alightEpoch: NOW - 6000,
+            alightRealtime: true,
+            boardEpoch: NOW - 60000,
+            boardRealtime: true,
+            realtime: true
+          })
+        },
+        NOW
+      )
+    ).toBeNull()
+  })
 })
 
 describe('liveStopArrival name fallback', () => {
