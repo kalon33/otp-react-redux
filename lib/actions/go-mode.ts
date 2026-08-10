@@ -77,7 +77,7 @@ import {
   setReplayClock
 } from '../util/go-mode/replay/replay-engine'
 import { isTripRecordingEnabled } from '../util/debug-log'
-import { fetchOnboardCandidateRoutes } from '../util/go-mode/onboard-discovery'
+import { fetchOnboardContext } from '../util/go-mode/onboard-discovery'
 import {
   hasNativeGps,
   restartNativeGps,
@@ -1142,7 +1142,9 @@ export function applyAutoReroute(
     // A swap that changes nothing is not an update. Settling as 'none' keeps
     // it retryable; what it does not do is buzz the rider. See the note on
     // the same guard in replanFromAboard.
-    if (itinerarySignature(best) === itinerarySignature(goMode.activeItinerary)) {
+    if (
+      itinerarySignature(best) === itinerarySignature(goMode.activeItinerary)
+    ) {
       dispatch(setRerouteResult(null))
       return
     }
@@ -1565,12 +1567,23 @@ export function discoverNearbyVehicles(attempt = 0) {
     // sidecar's /api/onboard endpoints). Stop-radius discovery survives only
     // as the last-resort fallback when the sidecar is unreachable — it found
     // nothing three times mid-I-35W on the 2026-07-12 ride.
-    let routes: Array<{ id: string }> = []
-    const candidates = await fetchOnboardCandidateRoutes(
+    let routes: Array<{
+      color?: string | null
+      id: string
+      longName?: string | null
+      shortName?: string | null
+      textColor?: string | null
+    }> = []
+    const context = await fetchOnboardContext(
       lat,
       lon,
       speedAdjustedRadius(750, pos.coords.speed)
     )
+    const candidates = context?.routes
+    // vehicleId -> {direction, headsign}; empty when the sidecar is unreachable
+    // and the stop-radius fallback runs, in which case the picker simply shows
+    // no direction rather than guessing one.
+    const vehicleDetails = context?.vehicleDetails || {}
     if (candidates?.length) {
       routes = candidates
       // Same shape findRoutesNearby stores — keeps the boarding prompt's
@@ -1609,15 +1622,24 @@ export function discoverNearbyVehicles(attempt = 0) {
     // and are sparse, so a tight radius silently matched nothing. When still none
     // are detected, the prompt offers manual route selection (confirmOnboardRoute).
     const routesIndex = getState().otp?.transitIndex?.routes || {}
-    const allVehicles = routes.flatMap(
-      (r: { id: string }) => routesIndex[r.id]?.vehicles || []
+    // Carry each route's rider-facing identity onto its vehicles while we still
+    // know which route they came from — the feed records themselves have no
+    // route name or color, and matching them back up afterwards would have to
+    // guess at feed-prefixed vs bare ids.
+    const allVehicles = routes.flatMap((r) =>
+      (routesIndex[r.id]?.vehicles || []).map((v: Record<string, unknown>) => ({
+        ...v,
+        routeColor: r.color ?? null,
+        routeName: r.shortName || r.longName || null,
+        routeTextColor: r.textColor ?? null
+      }))
     )
     const nearby = findNearbyVehicles(
       lat,
       lon,
       allVehicles,
       speedAdjustedRadius(750, pos.coords.speed)
-    )
+    ).map((v) => ({ ...v, ...(vehicleDetails[v.vehicleId] || {}) }))
 
     dispatch({ payload: nearby, type: UPDATE_NEARBY_VEHICLES })
     dispatch(setOnboardStatus('awaiting-selection'))
@@ -1998,18 +2020,27 @@ export function buildOnboardItinerary(
   const mode = trip.route?.mode || gtfsTypeToMode(trip.route?.type)
 
   const rawBusLeg: any = {
+    // GraphQL shape, so convertGraphQLResponseToLegacy below can flatten it
+    // the same way it flattens every planner leg — findTrip already fetches
+    // all of these (its `id` IS the gtfsId, via an alias).
+    agency: trip.route?.agency,
+
     // Measured along the sliced polyline, not 0. A zero distance propagates:
     // spliceAccessOntoItinerary's walkDistance recompute and the leg merge
     // both read it, so the lie outlives this function.
     distance: polylineLength(geomSlice),
+
     duration: (busLegEnd - busLegStart) / 1000,
+
     endTime: busLegEnd,
+
     // Every real OTP leg carries this (empty when the agency has no Fares V2
     // data). Omitting it crashes the fare table, which does
     // `transitLegs.flatMap(leg => leg.fareProducts)` and then reads
     // `.product` off each entry — a missing array lands `undefined` in that
     // list and takes the whole trip-details panel down.
     fareProducts: [],
+
     from: {
       lat: boardStop.lat,
       lon: boardStop.lon,
@@ -2017,16 +2048,16 @@ export function buildOnboardItinerary(
       stop: { code: boardStop.code, gtfsId: boardStop.id, id: boardStop.id },
       stopId: boardStop.id
     },
+
     headsign: trip.tripHeadsign,
+
     intermediatePlaces,
+
     // OTP's convention for legGeometry.length is the POINT COUNT, not the
     // length of the encoded string. Nothing reads it today; free correctness.
     legGeometry: { length: geomSlice.length, points: geomPoints },
+
     mode,
-    // GraphQL shape, so convertGraphQLResponseToLegacy below can flatten it
-    // the same way it flattens every planner leg — findTrip already fetches
-    // all of these (its `id` IS the gtfsId, via an alias).
-    agency: trip.route?.agency,
     route: {
       color: trip.route?.color,
       gtfsId: routeId,
@@ -2060,16 +2091,19 @@ export function buildOnboardItinerary(
   // in convertPlanResponseItineraries.
   const busLeg: any = {
     ...coreUtils.itinerary.convertGraphQLResponseToLegacy(rawBusLeg),
+
+    // A synthesized leg is always first — there is no previous leg to interline
+    // with.
+    interlineWithPreviousLeg: false,
+
+    // Honest: only true when busArrivalEpoch came from realtime data.
+    realTime: !!(best as any).realtime,
+
     // The converter collapses route to a shortName STRING. apiV2 restores the
     // object for transit legs; skipping that here would make this leg diverge
     // from planner-sourced legs in a way unit tests miss and only the map
     // shows. Orange Line has no shortName at all, so the string would be null.
-    route: rawBusLeg.route,
-    // A synthesized leg is always first — there is no previous leg to interline
-    // with.
-    interlineWithPreviousLeg: false,
-    // Honest: only true when busArrivalEpoch came from realtime data.
-    realTime: !!(best as any).realtime
+    route: rawBusLeg.route
   }
   // Deliberately NOT decorated with getRouteColorBasedOnSettings: this
   // deployment comments transitOperators out of app-config.yml, so it resolves

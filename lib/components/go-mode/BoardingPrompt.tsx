@@ -11,6 +11,8 @@ import {
   BoardingSheet,
   BoardingSubtitle,
   BoardingTitle,
+  RouteBadge,
+  RouteDirection,
   VehicleDetail,
   VehicleInfo,
   VehicleLabel,
@@ -19,10 +21,17 @@ import {
 } from './styled'
 
 interface NearbyRoute {
+  color?: string | null
   id: string
   longName?: string | null
   shortName?: string | null
+  textColor?: string | null
 }
+
+/** Metro Transit's local-bus purple — the fallback when a route carries no
+ * color of its own, so a badge is never rendered unpainted. */
+const DEFAULT_ROUTE_COLOR = '#771473'
+const DEFAULT_ROUTE_TEXT_COLOR = '#ffffff'
 
 interface Props {
   confirmOnboardRoute: (routeId: string) => void
@@ -42,6 +51,31 @@ const BoardingPrompt = ({
   routeName
 }: Props) => {
   const intl = useIntl()
+
+  /** NB/SB/EB/WB as a word. Anything unexpected is passed through as-is
+   * rather than dropped — a raw code still beats no direction at all. */
+  const directionLabel = (code?: string | null): string | null => {
+    if (!code) return null
+    const messages: Record<string, string> = {
+      EB: intl.formatMessage({
+        defaultMessage: 'Eastbound',
+        id: 'components.GoMode.directionEB'
+      }),
+      NB: intl.formatMessage({
+        defaultMessage: 'Northbound',
+        id: 'components.GoMode.directionNB'
+      }),
+      SB: intl.formatMessage({
+        defaultMessage: 'Southbound',
+        id: 'components.GoMode.directionSB'
+      }),
+      WB: intl.formatMessage({
+        defaultMessage: 'Westbound',
+        id: 'components.GoMode.directionWB'
+      })
+    }
+    return messages[code.toUpperCase()] || code
+  }
 
   if (!goMode.boardingPrompt.shown) return null
 
@@ -77,45 +111,64 @@ const BoardingPrompt = ({
           nearbyVehicles.map((vehicle) => (
             <VehicleOptionRow key={vehicle.vehicleId}>
               <VehicleInfo>
+                {/* Route first, direction beside it: the two things a rider
+                    can check against the sign on the bus they are sitting in.
+                    The fleet number moves to the bottom line — it is only
+                    useful for telling two identical runs apart. */}
                 <VehicleLabel>
-                  {vehicle.tripHeadsign
-                    ? intl.formatMessage(
+                  <RouteBadge
+                    $bg={vehicle.routeColor || DEFAULT_ROUTE_COLOR}
+                    $fg={vehicle.routeTextColor || DEFAULT_ROUTE_TEXT_COLOR}
+                  >
+                    {vehicle.routeName ||
+                      intl.formatMessage(
                         {
-                          defaultMessage: 'Bus #{label} → {headsign}',
-                          id: 'components.GoMode.busLabelHeadsign'
-                        },
-                        {
-                          headsign: vehicle.tripHeadsign,
-                          label: vehicle.label || vehicle.vehicleId
-                        }
-                      )
-                    : intl.formatMessage(
-                        {
-                          defaultMessage: 'Bus #{label}',
+                          defaultMessage: 'Bus {label}',
                           id: 'components.GoMode.busLabel'
                         },
                         { label: vehicle.label || vehicle.vehicleId }
                       )}
+                  </RouteBadge>
+                  {directionLabel(vehicle.direction) && (
+                    <RouteDirection>
+                      {directionLabel(vehicle.direction)}
+                    </RouteDirection>
+                  )}
                 </VehicleLabel>
+                {(vehicle.headsign || vehicle.tripHeadsign) && (
+                  <VehicleDetail>
+                    {intl.formatMessage(
+                      {
+                        defaultMessage: 'to {headsign}',
+                        id: 'components.GoMode.busHeadsign'
+                      },
+                      { headsign: vehicle.headsign || vehicle.tripHeadsign }
+                    )}
+                  </VehicleDetail>
+                )}
                 <VehicleDetail>
                   {vehicle.nextStopName
                     ? intl.formatMessage(
                         {
                           defaultMessage:
-                            'Next stop: {stop} - {distance}m away',
+                            'Next stop: {stop} - {distance}m away · #{label}',
                           id: 'components.GoMode.vehicleDetail'
                         },
                         {
                           distance: Math.round(vehicle.distanceMeters),
+                          label: vehicle.label || vehicle.vehicleId,
                           stop: vehicle.nextStopName
                         }
                       )
                     : intl.formatMessage(
                         {
-                          defaultMessage: '{distance}m away',
+                          defaultMessage: '{distance}m away · #{label}',
                           id: 'components.GoMode.vehicleDistance'
                         },
-                        { distance: Math.round(vehicle.distanceMeters) }
+                        {
+                          distance: Math.round(vehicle.distanceMeters),
+                          label: vehicle.label || vehicle.vehicleId
+                        }
                       )}
                 </VehicleDetail>
               </VehicleInfo>
@@ -141,13 +194,12 @@ const BoardingPrompt = ({
               <VehicleOptionRow key={route.id}>
                 <VehicleInfo>
                   <VehicleLabel>
-                    {intl.formatMessage(
-                      {
-                        defaultMessage: 'Route {route}',
-                        id: 'components.GoMode.routeOption'
-                      },
-                      { route: route.shortName || route.longName || route.id }
-                    )}
+                    <RouteBadge
+                      $bg={route.color || DEFAULT_ROUTE_COLOR}
+                      $fg={route.textColor || DEFAULT_ROUTE_TEXT_COLOR}
+                    >
+                      {route.shortName || route.longName || route.id}
+                    </RouteBadge>
                   </VehicleLabel>
                 </VehicleInfo>
                 <VehicleSelectButton

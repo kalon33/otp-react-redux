@@ -796,9 +796,28 @@ export const VehicleInfo = styled.div`
 `
 
 export const VehicleLabel = styled.div`
+  align-items: center;
+  display: flex;
   font-size: 16px;
   font-weight: 500;
+  gap: 8px;
+  min-width: 0;
+`
+
+/** The route as the agency paints it. Most local routes share one purple, so
+ * the NUMBER carries the identity and the color is confirmation — only the
+ * METRO lines are distinguishable by color alone. */
+export const RouteBadge = styled.span<{ $bg: string; $fg: string }>`
+  background-color: ${(props) => props.$bg};
+  border-radius: 4px;
+  color: ${(props) => props.$fg};
+  /* The badge IS the identity — it keeps its full width and the direction
+     beside it gives way first. "METRO Orange Li…" helps nobody. */
+  flex: 0 0 auto;
+  font-size: 15px;
+  font-weight: 700;
   overflow: hidden;
+  padding: 3px 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
 `

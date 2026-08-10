@@ -84,7 +84,13 @@ describe('onboard flow keeps what the app already knows', () => {
 describe('mergeCandidateRoutes (position-based discovery)', () => {
   it('puts live-vehicle routes first, then shape routes, deduped, prefixed', () => {
     const vehicles = [
-      { distanceMeters: 120, longName: 'METRO Orange Line', routeId: '904' },
+      {
+        color: '#F68B1F',
+        distanceMeters: 120,
+        longName: 'METRO Orange Line',
+        routeId: '904',
+        textColor: '#000000'
+      },
       { distanceMeters: 300, mode: 'BUS', routeId: '4', shortName: '4' },
       { distanceMeters: 500, routeId: '904' } // second Orange bus — dedupe
     ]
@@ -94,13 +100,29 @@ describe('mergeCandidateRoutes (position-based discovery)', () => {
     ]
     expect(mergeCandidateRoutes(vehicles, routes)).toEqual([
       {
+        color: '#F68B1F',
         id: '1:904',
         longName: 'METRO Orange Line',
         mode: 'BUS',
-        shortName: null
+        shortName: null,
+        textColor: '#000000'
       },
-      { id: '1:4', longName: null, mode: 'BUS', shortName: '4' },
-      { id: '1:467', longName: null, mode: 'BUS', shortName: '467' }
+      {
+        color: null,
+        id: '1:4',
+        longName: null,
+        mode: 'BUS',
+        shortName: '4',
+        textColor: null
+      },
+      {
+        color: null,
+        id: '1:467',
+        longName: null,
+        mode: 'BUS',
+        shortName: '467',
+        textColor: null
+      }
     ])
   })
 
@@ -113,7 +135,16 @@ describe('mergeCandidateRoutes (position-based discovery)', () => {
   it('skips entries without a routeId (vehicles heading to layover)', () => {
     expect(
       mergeCandidateRoutes([{ routeId: null }, { routeId: '904' }], [])
-    ).toEqual([{ id: '1:904', longName: null, mode: 'BUS', shortName: null }])
+    ).toEqual([
+      {
+        color: null,
+        id: '1:904',
+        longName: null,
+        mode: 'BUS',
+        shortName: null,
+        textColor: null
+      }
+    ])
   })
 })
 

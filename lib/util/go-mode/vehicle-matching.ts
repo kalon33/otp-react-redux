@@ -11,6 +11,8 @@ export const NO_LIVE_VEHICLE_POLLS = 6
 // --- Types ---
 
 export interface VehiclePosition {
+  /** NB/SB/EB/WB, from the onboard API's trips table. */
+  direction?: string | null
   heading: number
   label: string
   lat: number
@@ -18,7 +20,13 @@ export interface VehiclePosition {
   nextStopId: string
   nextStopName: string
   patternId: string
+  /** Route badge colors, attached by the caller from the nearby-routes
+   * lookup — the vehicle feed itself carries no route styling. */
+  routeColor?: string | null
   routeId?: string
+  /** The rider-facing route identity ("18", "METRO Orange Line"). */
+  routeName?: string | null
+  routeTextColor?: string | null
   seconds: number // lastUpdated epoch seconds
   speed: number
   stopStatus: string
@@ -44,12 +52,16 @@ export interface VehicleMatchResult {
 }
 
 export interface NearbyVehicleOption {
+  direction?: string | null
   distanceMeters: number
   heading: number
   label: string
   nextStopId: string
   nextStopName: string
+  routeColor?: string | null
   routeId?: string
+  routeName?: string | null
+  routeTextColor?: string | null
   speed: number
   tripHeadsign?: string
   tripId?: string
@@ -129,12 +141,16 @@ export function findNearbyVehicles(
 ): NearbyVehicleOption[] {
   return vehicles
     .map((v) => ({
+      direction: v.direction,
       distanceMeters: calculateDistance(userLat, userLon, v.lat, v.lon),
       heading: v.heading,
       label: v.label,
       nextStopId: v.nextStopId,
       nextStopName: v.nextStopName,
+      routeColor: v.routeColor,
       routeId: v.routeId,
+      routeName: v.routeName,
+      routeTextColor: v.routeTextColor,
       speed: v.speed,
       tripHeadsign: v.tripHeadsign,
       tripId: v.tripId,
