@@ -681,6 +681,15 @@ components:
   WelcomeScreen:
     prompt: 您想要去哪裡？
   GoMode:
+
+    directionEB: 東向
+    directionNB: 北向
+    directionSB: 南向
+    directionWB: 西向
+    busHeadsign: '終點站: {headsign}'
+    noBusesOrRoutesNearby: 附近未檢測到公車或路線。請嘗試靠近公車站。
+
+
     noBusesNearby: Components Gomode Nobusesnearby
     boardingSubtitle: Components Gomode Boardingsubtitle
     rerouteOk: Components Gomode Rerouteok

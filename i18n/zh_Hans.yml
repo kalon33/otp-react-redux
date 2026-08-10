@@ -735,6 +735,15 @@ components:
   WelcomeScreen:
     prompt: 您想去哪里？
   GoMode:
+
+    directionEB: 东向
+    directionNB: 北向
+    directionSB: 南向
+    directionWB: 西向
+    busHeadsign: '终点站: {headsign}'
+    noBusesOrRoutesNearby: 附近未检测到公交车或路线。请尝试靠近公交车站。
+
+
     noBusesNearby: Components Gomode Nobusesnearby
     boardingSubtitle: Components Gomode Boardingsubtitle
     rerouteOk: Components Gomode Rerouteok

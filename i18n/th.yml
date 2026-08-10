@@ -1,3 +1,11 @@
 components:
   TermsOfUsePane:
     termsOfServiceStatement: ""
+
+  GoMode:
+    directionEB: ทิศตะวันออก
+    directionNB: ทิศเหนือ
+    directionSB: ทิศใต้
+    directionWB: ทิศตะวันตก
+    busHeadsign: 'ปลายทาง: {headsign}'
+    noBusesOrRoutesNearby: ไม่พบรถบัสหรือเส้นทางใกล้เคียง ลองเข้าใกล้ป้ายรถบัสมากขึ้น

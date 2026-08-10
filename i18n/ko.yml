@@ -743,6 +743,15 @@ components:
   WelcomeScreen:
     prompt: 어디로 가고 싶으신가요?
   GoMode:
+
+    directionEB: 동쪽 방향
+    directionNB: 북쪽 방향
+    directionSB: 남쪽 방향
+    directionWB: 서쪽 방향
+    busHeadsign: '행선지: {headsign}'
+    noBusesOrRoutesNearby: 근처에 버스나 노선이 감지되지 않습니다. 버스 정류장 nearby로 이동해 보세요.
+
+
     noBusesNearby: Components Gomode Nobusesnearby
     boardingSubtitle: Components Gomode Boardingsubtitle
     rerouteOk: Components Gomode Rerouteok

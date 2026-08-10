@@ -818,6 +818,15 @@ components:
   WelcomeScreen:
     prompt: Bạn muốn đi đâu?
   GoMode:
+
+    directionEB: Hướng Đông
+    directionNB: Hướng Bắc
+    directionSB: Hướng Nam
+    directionWB: Hướng Tây
+    busHeadsign: 'Điểm đến: {headsign}'
+    noBusesOrRoutesNearby: Không phát hiện xe buýt hoặc tuyến đường gần đó. Hãy thử di chuyển gần hơn đến trạm xe buýt.
+
+
     noBusesNearby: Components Gomode Nobusesnearby
     boardingSubtitle: Components Gomode Boardingsubtitle
     rerouteOk: Components Gomode Rerouteok

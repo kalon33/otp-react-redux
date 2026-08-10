@@ -810,6 +810,15 @@ components:
   WelcomeScreen:
     prompt: Куда вы хотите отправиться?
   GoMode:
+
+    directionEB: Восточное направление
+    directionNB: Северное направление
+    directionSB: Южное направление
+    directionWB: Западное направление
+    busHeadsign: 'Маршрут: {headsign}'
+    noBusesOrRoutesNearby: Рядом не обнаружено автобусов или маршрутов. Попробуйте подойти ближе к автобусной остановке.
+
+
     noBusesNearby: Components Gomode Nobusesnearby
     boardingSubtitle: Components Gomode Boardingsubtitle
     rerouteOk: Components Gomode Rerouteok

@@ -127,3 +127,11 @@ components:
     preferredRoutes: Tercih edilen rotaları seçin...
   AfterSignInScreen:
     mainTitle: Yönlendiriliyor...
+
+  GoMode:
+    directionEB: Doğu yönü
+    directionNB: Kuzey yönü
+    directionSB: Güney yönü
+    directionWB: Batı yönü
+    busHeadsign: 'Güzergah: {headsign}'
+    noBusesOrRoutesNearby: Yakında otobüs veya hat tespit edilmedi. Otobüs duraklarına daha yakın yaklaşmayı deneyin.

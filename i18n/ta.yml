@@ -877,3 +877,11 @@ util:
       பணி எதுவும் இருக்கலாம், அல்லது உங்கள் தொடக்க அல்லது இறுதி புள்ளி
       பாதுகாப்பாக அணுக முடியாது.
     noTripFoundWithReason: "{noTripFound} {reason}"
+
+  GoMode:
+    directionEB: கிழக்கு திசை
+    directionNB: வடக்கு திசை
+    directionSB: தெற்கு திசை
+    directionWB: மேற்கு திசை
+    busHeadsign: 'முகவரி: {headsign}'
+    noBusesOrRoutesNearby: அருகில் பேருந்துகள் அல்லது வட்டங்கள் கண்டறியப்படவில்லை. பேருந்து நிறுத்தத்திற்கு அருகில் செல்ல முயற்சிக்கவும்.

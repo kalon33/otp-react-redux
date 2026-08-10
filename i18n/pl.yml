@@ -20,3 +20,11 @@ components:
     myAccount: Moje konto
     signIn: Zaloguj
     signOut: Wyloguj
+
+  GoMode:
+    directionEB: Kierunek Wschód
+    directionNB: Kierunek Północ
+    directionSB: Kierunek Południe
+    directionWB: Kierunek Zachód
+    busHeadsign: 'Kierunek: {headsign}'
+    noBusesOrRoutesNearby: Nie wykryto autobusów ani tras w pobliżu. Spróbuj podejść bliżej przystanku autobusowego.

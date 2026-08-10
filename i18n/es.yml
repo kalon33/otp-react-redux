@@ -866,3 +866,11 @@ util:
       especificada o en el momento especificado, o es posible que su punto de
       inicio o final no sea accesible de manera segura.
     noTripFoundWithReason: "{noTripFound} {reason}"
+
+  GoMode:
+    directionEB: Sentido Este
+    directionNB: Sentido Norte
+    directionSB: Sentido Sur
+    directionWB: Sentido Oeste
+    busHeadsign: 'Destino: {headsign}'
+    noBusesOrRoutesNearby: No se detectaron autobuses o rutas cercanos. Intente acercarse a una parada de autobús.
