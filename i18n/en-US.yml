@@ -823,6 +823,11 @@ components:
     arrivesIn: Arriving in {time}
     arrivingSoon: Arriving soon
     boardingQuestion: Are you on board?
+    directionEB: Eastbound
+    directionNB: Northbound
+    directionSB: Southbound
+    directionWB: Westbound
+    noBusesOrRoutesNearby: No buses or routes detected nearby. Try moving closer to a bus stop.
     boardingSubtitle: Confirm that you are on the bus
     browsePlanner: Open trip planner
     busLabel: Bus

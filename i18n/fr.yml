@@ -844,6 +844,11 @@ components:
   GoMode:
     arrivingSoon: Arrivée prochaine
     boardingQuestion: Êtes-vous à bord ?
+    directionEB: Direction Est
+    directionNB: Direction Nord
+    directionSB: Direction Sud
+    directionWB: Direction Ouest
+    noBusesOrRoutesNearby: Aucun bus ou ligne détecté à proximité. Essayez de vous rapprocher d'un arrêt de bus.
     boardingSubtitle: Confirmez que vous êtes dans le bus
     busLabel: Bus
     confirmExit: Confirmer la sortie
