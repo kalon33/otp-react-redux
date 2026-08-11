@@ -17,7 +17,8 @@ const path = require('path')
 const puppeteer = require('puppeteer')
 
 const APP = process.env.APP_URL || 'http://localhost:9967/'
-const API = process.env.OTP_API || 'https://tre.hopto.org:9966/otp/gtfs/v1'
+const API =
+  process.env.OTP_API || 'https://api.transit-nav.com:9966/otp/gtfs/v1'
 const OUT = process.env.OUT_DIR || __dirname
 // Vite dev output is untranspiled; puppeteer's bundled Chromium is too old for
 // it -- default to the system Chrome.
