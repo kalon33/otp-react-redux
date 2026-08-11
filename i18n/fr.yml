@@ -317,6 +317,7 @@ components:
     orAlternatives: ou autres lignes dans la même direction
     originallyScheduledTime: (initialement {originalTime})
     singleModeItineraryDescription: Trajet de {time} {mode}
+    startTrip: Commencer le trajet
     timeWalking: "{time} de marche"
   MobilityProfile:
     DevicesPane:

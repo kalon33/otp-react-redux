@@ -188,6 +188,14 @@ components:
     setAsDefault: Set as default
     submodeSelectorLabel: Select travel modes and submodes
     tripOptions: Trip Options
+    nlPreferencesApplied: 'Applied: {summary}'
+    nlPreferencesApply: Apply
+    nlPreferencesError: Could not interpret that try rephrasing
+    nlPreferencesHeader: Describe your needs
+    nlPreferencesLoading: Thinking...
+    nlPreferencesPlaceholder: e.g. bad knee today, avoid transfers
+    routingProfileHeader: Routing profile
+    routingProfileLabel: Optimize routing for
   BatchSettings:
     destination: destination
     invalidModeSelection: >-
@@ -298,6 +306,7 @@ components:
     orAlternatives: or other routes in the same direction
     originallyScheduledTime: (originally {originalTime})
     singleModeItineraryDescription: "{time} {mode} itinerary"
+    startTrip: Start Trip
     timeWalking: "{time} walking"
   MobilityProfile:
     DevicesPane:
