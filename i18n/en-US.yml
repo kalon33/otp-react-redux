@@ -144,6 +144,14 @@ common:
       {hours, plural, =0 {} other {# hr }}{minutes} min { seconds, plural, =0 {}
       other {# sec}}
 components:
+
+  RoutingProfiles:
+    fastest: Fastest
+    minimize-walking: Minimize Walking
+    stay-seated: Stay Seated
+    bike-forward: Bike Forward
+    avoid-biking: Avoid Biking
+    reliable-transfers: Reliable Transfers
   A11yPrefs:
     accessibilityRoutingByDefault: Prefer accessible trips by default
   AccountSetupFinishPane:
