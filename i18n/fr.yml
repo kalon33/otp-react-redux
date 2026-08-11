@@ -205,6 +205,14 @@ components:
     setAsDefault: Définir ces options par défaut
     submodeSelectorLabel: Sélectionnez vos modes et sous-modes de déplacement
     tripOptions: Options concernant le trajet
+    nlPreferencesApplied: "Appliqué : {summary}"
+    nlPreferencesApply: Appliquer
+    nlPreferencesError: Impossible d'interpréter cela — essayez de reformuler
+    nlPreferencesHeader: Décrivez vos besoins
+    nlPreferencesLoading: Réflexion…
+    nlPreferencesPlaceholder: ex. genou douloureux aujourd'hui, éviter les correspondances
+    routingProfileHeader: Profil de routage
+    routingProfileLabel: Optimiser le routage pour
   BatchSettings:
     destination: destination
     invalidModeSelection: >-
