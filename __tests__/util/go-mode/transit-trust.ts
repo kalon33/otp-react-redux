@@ -6,6 +6,7 @@ import {
   findVehicleById,
   findVehicleForTrip,
   isVehicleRecordFresh,
+  matchProvesAboard,
   refreshConfirmedMatch,
   shouldRebindRidingTrip,
   shouldReplanBoardedEarlier,
@@ -668,5 +669,46 @@ describe('assessRiderGpsTrust', () => {
 
   it('distrusts a low-accuracy fix (150m)', () => {
     expect(assessRiderGpsTrust({ ...sound, accuracy: 150 })).toBe(false)
+  })
+})
+
+describe('matchProvesAboard (8/9: a trip you got off is not a trip you are on)', () => {
+  // The real 8/9 identities: confirmed at 19:24:38, alighted 19:27:43, and the
+  // onboard flow re-read the match at 19:29:13.
+  const match = {
+    confidence: 'confirmed' as const,
+    tripId: '1:1085482',
+    vehicleId: '1:8150'
+  }
+
+  it('trusts a confirmed match when nothing has been alighted from', () => {
+    expect(matchProvesAboard(match, null)).toBe(true)
+  })
+
+  it('rejects the trip the rider just got off (8/9)', () => {
+    expect(
+      matchProvesAboard(match, { tripId: '1:1085482', vehicleId: '1:8150' })
+    ).toBe(false)
+  })
+
+  it('rejects the same bus under a different trip id', () => {
+    // Metro Transit republishes a vehicle against its next block trip; the
+    // physical bus is still the one the rider stepped off.
+    expect(
+      matchProvesAboard(match, { tripId: '1:other', vehicleId: '1:8150' })
+    ).toBe(false)
+  })
+
+  it('still trusts a match for a genuinely different bus', () => {
+    expect(
+      matchProvesAboard(match, { tripId: '1:earlier', vehicleId: '1:8140' })
+    ).toBe(true)
+  })
+
+  it('is not evidence without a trip id', () => {
+    expect(matchProvesAboard({ tripId: null, vehicleId: '1:8150' }, null)).toBe(
+      false
+    )
+    expect(matchProvesAboard(null, null)).toBe(false)
   })
 })

@@ -1,8 +1,10 @@
 import {
+  advanceToLeg,
   clearRiding,
   setRiding,
   startGoMode,
   stopGoMode,
+  stopVehicleTracking,
   transitionLeg
 } from '../../../lib/actions/go-mode'
 import { getNextStopOnRide } from '../../../lib/util/go-mode/next-stop'
@@ -147,6 +149,47 @@ describe('go-mode riding reducer', () => {
     expect(state.riding?.tripId).toBe('1:trip-1')
   })
 
+  it('records WHICH trip the rider got off (8/9)', () => {
+    const set = goMode(initial, setRiding(riding))
+    const alighted = goMode(set, transitionLeg({ legIndex: 2 }))
+    expect(alighted.alightedFrom).toEqual({
+      tripId: '1:trip-1',
+      vehicleId: 'v-42'
+    })
+    // Not an alight, not a record.
+    expect(goMode(set, transitionLeg({ legIndex: 1 })).alightedFrom).toBeNull()
+  })
+
+  it('the alight fact outlives STOP_GO_MODE, like the match it disproves (8/9)', () => {
+    // STOP_GO_MODE keeps a confirmed vehicleMatch on purpose. If the alight
+    // were dropped here, exiting Go Mode after getting off would hand the next
+    // onboard flow the match without the fact that disproves it.
+    const alighted = goMode(
+      goMode(initial, setRiding(riding)),
+      transitionLeg({ legIndex: 2 })
+    )
+    expect(goMode(alighted, stopGoMode()).alightedFrom).toEqual({
+      tripId: '1:trip-1',
+      vehicleId: 'v-42'
+    })
+  })
+
+  it('boarding again clears it — a new assertion outranks the old alight', () => {
+    const alighted = goMode(
+      goMode(initial, setRiding(riding)),
+      transitionLeg({ legIndex: 2 })
+    )
+    expect(goMode(alighted, setRiding(riding)).alightedFrom).toBeNull()
+    expect(
+      goMode(alighted, {
+        payload: { confidence: 'confirmed', tripId: '1:trip-9' },
+        type: 'CONFIRM_VEHICLE'
+      }).alightedFrom
+    ).toBeNull()
+    // Clearing the riding fact is not boarding.
+    expect(goMode(alighted, clearRiding()).alightedFrom).not.toBeNull()
+  })
+
   it('STOP_GO_MODE preserves riding — exiting a screen is not alighting', () => {
     // 7/12: the rider backed out of Go Mode and immediately reopened the
     // onboard flow; with riding wiped the app forgot the confirmed bus and
@@ -253,5 +296,90 @@ describe('getNextStopOnRide', () => {
       getNextStopOnRide(buildState(0.1, { legIndex: -1 }), 1500)
     ).toBeNull()
     expect(getNextStopOnRide(buildState(0.1, { legIndex: 0 }), 1500)).toBeNull()
+  })
+})
+
+describe('advanceToLeg tears vehicle tracking down on the leg it lands on (8/9)', () => {
+  // The 8/9 shape exactly: bus leg 0, bike leg 1, and by the time the GPS-driven
+  // transition dispatches, the matcher has ALREADY moved routeMatch.legIndex to
+  // 1. Reading the leg being left from that index made `previousLeg` the bike
+  // leg, so the transit teardown was skipped and the confirmed match for
+  // vehicle 1:8150 outlived the alight by 90 s — which the onboard flow then
+  // read as proof the rider was still aboard.
+  const itinerary: any = {
+    legs: [
+      {
+        mode: 'BUS',
+        route: { id: '1:904' },
+        transitLeg: true,
+        trip: { gtfsId: '1:1085482' }
+      },
+      { mode: 'BICYCLE', transitLeg: false }
+    ]
+  }
+
+  const makeStore = (routeMatchLegIndex: number) => {
+    let state: any = {
+      ...goMode(initial, {
+        payload: {
+          confidence: 'confirmed',
+          label: '8150',
+          lastSeen: 1786321742376,
+          nextStopId: '1:53311',
+          routeId: '1:904',
+          tripId: '1:1085482',
+          vehicleId: '1:8150'
+        },
+        type: 'CONFIRM_VEHICLE'
+      }),
+      activeItinerary: itinerary,
+      isActive: true,
+      routeMatch: { legIndex: routeMatchLegIndex }
+    }
+    const types: string[] = []
+    const getState = () => ({ otp: { config: {}, goMode: state } })
+    const dispatch: any = (action: any) => {
+      if (typeof action === 'function') return action(dispatch, getState)
+      types.push(action.type)
+      state = goMode(state, action)
+      return action
+    }
+    return { dispatch, getGoMode: () => state, types }
+  }
+
+  afterEach(() => {
+    stopVehicleTracking()(() => undefined)
+  })
+
+  it('clears the match when the matcher has already advanced (the 8/9 miss)', () => {
+    const store = makeStore(1)
+    store.dispatch(advanceToLeg(1))
+    expect(store.types).toContain('CLEAR_VEHICLE_MATCH')
+    expect(store.getGoMode().vehicleMatch.match).toBeNull()
+  })
+
+  it('clears it just the same when the matcher is still on the bus leg', () => {
+    const store = makeStore(0)
+    store.dispatch(advanceToLeg(1))
+    expect(store.getGoMode().vehicleMatch.match).toBeNull()
+  })
+
+  it('leaves a walk-to-walk transition alone — nothing to tear down', () => {
+    let state: any = {
+      ...initial,
+      activeItinerary: { legs: [{ mode: 'WALK' }, { mode: 'WALK' }] },
+      isActive: true,
+      routeMatch: { legIndex: 0 }
+    }
+    const types: string[] = []
+    const getState = () => ({ otp: { config: {}, goMode: state } })
+    const dispatch: any = (action: any) => {
+      if (typeof action === 'function') return action(dispatch, getState)
+      types.push(action.type)
+      state = goMode(state, action)
+      return action
+    }
+    dispatch(advanceToLeg(1))
+    expect(types).not.toContain('CLEAR_VEHICLE_MATCH')
   })
 })

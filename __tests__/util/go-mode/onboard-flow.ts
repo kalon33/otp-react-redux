@@ -459,6 +459,49 @@ describe('replanFromAboard (mid-ride aboard-aware replan)', () => {
     expect(bus.endTime - bus.startTime).toBe(300000)
   })
 
+  it('never starts a trip whose legs run backwards, not just leg 0 (8/9)', async () => {
+    // The 8/2 guard fixed the SYNTHESIZED leg and the container. On 8/9 the
+    // grafted onward legs kept the times they were planned with, so leg 1
+    // started 680,170 ms before leg 0 ended and the trip sheet read 7:29 PM
+    // above 7:18 PM. Assert the whole itinerary, end to end through the real
+    // thunk chain.
+    const trip = makeTripFixture()
+    const pastDay = Math.floor(Date.now() / 1000) - 600
+    trip.stopTimes = trip.stopTimes.map((st: any) => ({
+      ...st,
+      realtimeArrival: 0,
+      realtimeState: 'UPDATED',
+      serviceDay: pastDay
+    }))
+    const itinerary = makeItinerary()
+    ;(itinerary.legs[0].to as any).stop = { gtfsId: '1:s3', id: '1:s3' }
+    const store = makeStore({
+      goModeOverrides: { activeItinerary: itinerary },
+      trips: { [TRIP_ID]: trip }
+    })
+    await store.dispatch(replanFromAboard({ autoApply: true }))
+
+    const applied = store.actions.find((a) => a.type === 'START_GO_MODE')
+      ?.payload?.itinerary
+    expect(applied).toBeTruthy()
+    expect(applied.legs.length).toBeGreaterThan(1)
+    // Only legs the fixture gives real times to — the onward stub carries none.
+    const timed = applied.legs.filter(
+      (l: any) =>
+        Number.isFinite(Number(l.startTime)) &&
+        Number.isFinite(Number(l.endTime))
+    )
+    expect(timed.length).toBeGreaterThan(0)
+    expect(timed.filter((l: any) => l.endTime < l.startTime)).toEqual([])
+    const gaps = timed
+      .slice(1)
+      .map((l: any, i: number) => l.startTime - timed[i].endTime)
+    expect(gaps.filter((g: number) => g < 0)).toEqual([])
+    expect(applied.endTime).toBeGreaterThanOrEqual(
+      timed[timed.length - 1].endTime
+    )
+  })
+
   it('leaves a bus running AHEAD of schedule alone', () => {
     // The guard is for inversions only. A realtime arrival that is merely
     // earlier than the schedule is a bus running ahead — exactly the truth
@@ -653,5 +696,140 @@ describe('replanFromAboard (mid-ride aboard-aware replan)', () => {
       store.actions.find((a) => a.type === 'START_GO_MODE')
     ).toBeUndefined()
     expect(mockedFetch).not.toHaveBeenCalled()
+  })
+
+  // --- Backlog item 4 (8/9): an automatic update keeps the rider's route ---
+
+  /** The 8/9 shape: bus, bike, the rider's chosen D Line, bike. */
+  const makeItineraryWithOnwardBus = () => ({
+    duration: 1800,
+    endTime: 2000000,
+    legs: [
+      {
+        from: { lat: 44.86, lon: -93.28, name: 'Knox & 76th St' },
+        mode: 'BUS',
+        routeId: '1:904',
+        to: { lat: 44.95, lon: -93.28, name: 'Near Destination' },
+        transitLeg: true,
+        trip: { gtfsId: TRIP_ID },
+        tripId: TRIP_ID
+      },
+      { mode: 'BICYCLE', to: { name: 'D Line stop' }, transitLeg: false },
+      {
+        mode: 'BUS',
+        routeId: '1:924',
+        to: { name: 'Lyndale & 36th' },
+        transitLeg: true
+      },
+      {
+        mode: 'BICYCLE',
+        to: { lat: 44.951, lon: -93.279, name: 'Real Destination' },
+        transitLeg: false
+      }
+    ],
+    startTime: 200000,
+    transfers: 1
+  })
+
+  /** An onward plan that puts the rider on `routeId` after they get off. */
+  const onwardOnRoute = (routeId: string, durationS: number) => ({
+    duration: durationS,
+    endTime: Date.now() + 600000 + durationS * 1000,
+    legs: [
+      {
+        from: { name: 'Near Destination' },
+        mode: 'WALK',
+        to: { name: 'Transfer stop' },
+        transitLeg: false
+      },
+      {
+        from: { name: 'Transfer stop' },
+        mode: 'BUS',
+        routeId,
+        to: { name: 'Real Destination' },
+        transitLeg: true
+      }
+    ],
+    startTime: Date.now() + 600000,
+    transfers: 0,
+    walkDistance: 200
+  })
+
+  it('an auto-applied splice keeps the rider on the route they chose (8/9)', async () => {
+    // Route 5 is four minutes faster. On 8/9 that ranking is exactly what
+    // handed the rider a different line; automatic means same route.
+    mockedFetch.mockReturnValue(() =>
+      Promise.resolve({
+        error: false,
+        itineraries: [onwardOnRoute('1:5', 1329), onwardOnRoute('1:924', 1583)]
+      })
+    )
+    const store = makeStore({
+      goModeOverrides: { activeItinerary: makeItineraryWithOnwardBus() },
+      trips: { [TRIP_ID]: makeTripFixture() }
+    })
+    await store.dispatch(replanFromAboard({ autoApply: true }))
+
+    const started = store.actions.find((a) => a.type === 'START_GO_MODE')
+    expect(started).toBeDefined()
+    const routes = (started.payload.itinerary.legs || [])
+      .filter((l: any) => l.transitLeg)
+      .map((l: any) => l.routeId || l.route?.id)
+    // The boarded bus, then the rider's own D Line — never route 5.
+    expect(routes).toEqual(['1:904', '1:924'])
+  })
+
+  it('does not auto-apply at all when nothing onward runs their route (8/9)', async () => {
+    mockedFetch.mockReturnValue(() =>
+      Promise.resolve({
+        error: false,
+        itineraries: [onwardOnRoute('1:5', 900)]
+      })
+    )
+    const store = makeStore({
+      goModeOverrides: { activeItinerary: makeItineraryWithOnwardBus() },
+      trips: { [TRIP_ID]: makeTripFixture() }
+    })
+    await store.dispatch(replanFromAboard({ autoApply: true }))
+
+    // Settled and retryable, trip untouched — a faster route the rider did
+    // not pick is not an automatic update, it is a forced route change.
+    expect(
+      store.actions.find((a) => a.type === 'START_GO_MODE')
+    ).toBeUndefined()
+    expect(store.getGoMode().reRoute.status).toBe('none')
+  })
+
+  it('keeps the route to preserve on the leg AFTER the bus, not the bus (8/9)', async () => {
+    mockedFetch.mockReturnValue(() =>
+      Promise.resolve({
+        error: false,
+        itineraries: [onwardOnRoute('1:924', 900)]
+      })
+    )
+    const store = makeStore({
+      goModeOverrides: { activeItinerary: makeItineraryWithOnwardBus() },
+      trips: { [TRIP_ID]: makeTripFixture() }
+    })
+    await store.dispatch(replanFromAboard({ autoApply: true }))
+
+    // riding.routeId (1:904) used to be written here: a constraint the rider
+    // is already satisfying, which is to say no constraint at all.
+    expect(
+      store.actions.find((a) => a.type === 'START_REROUTE')?.payload.keepRouteId
+    ).toBe('1:924')
+  })
+
+  it('leaves a bus-then-walk trip on the old behaviour — no route to keep', async () => {
+    // The unchanged fixture itinerary ends on foot: nothing downstream to
+    // preserve, so the fastest plan still wins and still applies.
+    mockedFetch.mockReturnValue(() =>
+      Promise.resolve({ error: false, itineraries: [onwardItin()] })
+    )
+    const store = makeStore({ trips: { [TRIP_ID]: makeTripFixture() } })
+    await store.dispatch(replanFromAboard({ autoApply: true }))
+
+    expect(store.getGoMode().reRoute.keepRouteId).toBeNull()
+    expect(store.actions.find((a) => a.type === 'START_GO_MODE')).toBeDefined()
   })
 })

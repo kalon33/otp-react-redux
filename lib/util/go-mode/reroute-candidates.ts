@@ -37,6 +37,42 @@ export function itinerarySignature(
 }
 
 /**
+ * The route the rider is planning to catch NEXT — the first transit leg after
+ * the one they are riding. This is the identity an automatic update has to
+ * preserve: the boarded route is already settled (they are on it), and the
+ * standing rule is about the leg they have not boarded yet.
+ *
+ * Two ways to say "which leg are they on", because the two callers know
+ * different things. Mid-ride there is a leg index (`riding.legIndex`), so the
+ * search simply starts after it. In the pre-trip onboard flow there is no leg
+ * index yet — the rider has just told us they are aboard — so `boardedRouteId`
+ * skips a LEADING transit leg of that same route, which is the bus they are on.
+ *
+ * Returns null when there is no onward transit leg — a bus-then-walk itinerary
+ * has nothing to preserve, and null means "no constraint" to every caller.
+ */
+export function onwardTransitRouteId(
+  itinerary: Itinerary | null | undefined,
+  {
+    afterLegIndex = -1,
+    boardedRouteId = null
+  }: { afterLegIndex?: number; boardedRouteId?: string | null } = {}
+): string | null {
+  const legs = itinerary?.legs || []
+  let skippedBoarded = false
+  for (let i = Math.max(0, afterLegIndex + 1); i < legs.length; i++) {
+    if (!legs[i]?.transitLeg) continue
+    const routeId = getLegRouteId(legs[i])
+    if (!skippedBoarded && boardedRouteId && routeId === boardedRouteId) {
+      skippedBoarded = true
+      continue
+    }
+    return routeId
+  }
+  return null
+}
+
+/**
  * Collect re-route itineraries into a browsable list: de-duplicated, sorted
  * shortest-duration first, capped to a handful. The plan response can surface
  * the same option more than once; collapse by a lightweight leg signature

@@ -2,7 +2,7 @@
 /**
  * Live end-to-end verification of the on-bus ranked-options fix (item 3).
  *
- * Drives the real app at :9967 (Vite dev, live OTP behind tre.hopto.org:9966):
+ * Drives the real app at :9967 (Vite dev, live OTP behind api.transit-nav.com:9966):
  *  1. finds a live Orange Line vehicle via the real OTP GraphQL API
  *  2. seeds sticky `riding` state for that trip + a destination (the exact
  *     post-fix-1 mid-ride situation) and geolocation at the bus position
@@ -17,7 +17,8 @@ const path = require('path')
 const puppeteer = require('puppeteer')
 
 const APP = process.env.APP_URL || 'http://localhost:9967/'
-const API = process.env.OTP_API || 'https://tre.hopto.org:9966/otp/gtfs/v1'
+const API =
+  process.env.OTP_API || 'https://api.transit-nav.com:9966/otp/gtfs/v1'
 const OUT = process.env.OUT_DIR || __dirname
 // Vite dev output is untranspiled; puppeteer's bundled Chromium is too old for
 // it -- default to the system Chrome.

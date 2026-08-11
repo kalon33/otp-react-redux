@@ -26,7 +26,8 @@
 const puppeteer = require('puppeteer')
 
 const APP = process.env.APP_URL || 'http://localhost:9967/'
-const API = process.env.OTP_API || 'https://tre.hopto.org:9966/otp/gtfs/v1'
+const API =
+  process.env.OTP_API || 'https://api.transit-nav.com:9966/otp/gtfs/v1'
 const OUT = process.env.OUT_DIR || __dirname
 const CHROME =
   process.env.PUPPETEER_EXECUTABLE_PATH || '/opt/google/chrome/chrome'
@@ -358,17 +359,30 @@ async function main() {
     },
     { polling: 500, timeout: 240000 }
   )
-  const after = await page.evaluate(() => {
+  const after = await page.evaluate(async () => {
+    // eslint-disable-next-line import/no-absolute-path
+    const rc = await import('/lib/util/go-mode/reroute-candidates.ts')
     const g = window.store.getState().otp.goMode
     const legs = g.activeItinerary?.legs || []
     const busIdx = legs.findIndex((l) => l.transitLeg)
     const bus = legs[busIdx] || {}
+    const boardedRouteId = g.riding?.routeId ?? null
     return {
       busIdx,
+      // The route the rider had chosen for the leg AFTER the bus, and the one
+      // the applied splice actually leaves them on. An automatic update may
+      // not change it (8/9 item 4).
+      keepRouteId: g.reRoute?.keepRouteId ?? null,
       newBoard: Number(bus.startTime),
       newBoardStopId: bus.from?.stop?.gtfsId || bus.from?.stopId,
       newEnd: Number(bus.endTime),
       newTripId: bus.trip?.gtfsId || bus.tripId,
+      onwardAfter: rc.onwardTransitRouteId(g.activeItinerary, {
+        boardedRouteId
+      }),
+      onwardPlanned: rc.onwardTransitRouteId(window.__plannedItinerary, {
+        boardedRouteId
+      }),
       rerouteCardShowing: (g.reRoute?.candidates || []).length > 0,
       reRouteStatus: g.reRoute?.status
     }
@@ -400,6 +414,33 @@ async function main() {
     throw new Error(
       `boarding stop ${after.newBoardStopId} is not a downstream stop of trip ${other.tripId}`
     )
+  }
+
+  // ---- (2b): an automatic update may not change the rider's ONWARD route.
+  // Whether this leg gets exercised depends on the itinerary OTP handed us —
+  // say which, rather than passing quietly on a trip that never had a second
+  // transit leg to lose (8/9 item 4). ----
+  if (!after.onwardPlanned) {
+    console.log(
+      '[route-keep] not exercised: the planned trip ends on foot after the ' +
+        'bus, so there is no onward route to preserve'
+    )
+  } else {
+    console.log(
+      `[route-keep] planned onward route ${after.onwardPlanned}, ` +
+        `keepRouteId ${after.keepRouteId}, applied ${after.onwardAfter}`
+    )
+    if (after.keepRouteId !== after.onwardPlanned) {
+      throw new Error(
+        `reroute kept ${after.keepRouteId} — expected the onward route ${after.onwardPlanned}`
+      )
+    }
+    if (after.onwardAfter !== after.onwardPlanned) {
+      throw new Error(
+        `auto-applied splice put the rider on ${after.onwardAfter} — ` +
+          `they chose ${after.onwardPlanned}`
+      )
+    }
   }
 
   // ---- (3): live leg times for the current leg must track the RIDDEN trip
