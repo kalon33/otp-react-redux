@@ -298,6 +298,18 @@ function findAnchorIndex(
  * anchored to `nowMs` at the bus's next stop so the estimate still self-corrects
  * for delay already accrued (rather than relying on absolute GTFS service-day
  * times that may have drifted).
+ *
+ * A live arrival is discarded when it is INVERTED — behind the clock, or behind
+ * a stop the bus has not reached yet. 2026-08-09: on trip 1:1085482 stop
+ * 1:53313 came back UPDATED with arrivalDelay 0 (19:20:00) while the three
+ * stops AFTER it carried 664/617/605 s of delay, so the feed claimed the bus
+ * would reach it 9m13.9s before the moment we read it. That epoch is what
+ * fetchCandidatePlan sends as the onward plan's departure time, so OTP planned
+ * from the past and offered a route 22 that had already gone.
+ *
+ * Strictly an inversion guard, NOT a floor — the same rule as the bus-leg guard
+ * in buildOnboardItinerary. A live arrival merely EARLIER than schedule is a bus
+ * running ahead, which is exactly what realtime exists to tell us.
  */
 export function getDownstreamStops(
   trip: TripSchedule | null,
@@ -313,13 +325,31 @@ export function getDownstreamStops(
   const anchorDeparture = stopTimes[anchorIdx].scheduledDeparture
 
   const downstream: DownstreamStop[] = []
+  // The last arrival we accepted, so a stop cannot be reached before the stop
+  // before it. Seeded to nowMs: nothing ahead of the bus is already behind us.
+  let prevEpoch = nowMs
   for (let i = anchorIdx; i < stopTimes.length; i++) {
     const st = stopTimes[i]
     if (!st.stop || st.stop.lat == null || st.stop.lon == null) continue
+    const scheduleEpoch =
+      nowMs + (st.scheduledDeparture - anchorDeparture) * 1000
     const live = hasLiveArrival(st)
-    const busArrivalEpoch = live
+    const liveEpoch = live
       ? ((st.serviceDay as number) + (st.realtimeArrival as number)) * 1000
-      : nowMs + (st.scheduledDeparture - anchorDeparture) * 1000
+      : null
+    // Inversion, not earliness: a live arrival is kept unless it lands before
+    // the last stop we accepted (prevEpoch starts at nowMs, so this also
+    // rejects anything already behind the clock). An arrival merely earlier
+    // than SCHEDULE is a bus running ahead and passes straight through.
+    //
+    // The schedule fallback is floored to prevEpoch as well, so once a live
+    // neighbour reveals accrued delay the schedule-only stops after it inherit
+    // it instead of being re-anchored to an undelayed now.
+    const useLive = liveEpoch != null && liveEpoch >= prevEpoch
+    const busArrivalEpoch = useLive
+      ? liveEpoch
+      : Math.max(scheduleEpoch, prevEpoch)
+    prevEpoch = busArrivalEpoch
     downstream.push({
       busArrivalEpoch,
       distanceToDest: calculateDistance(
@@ -328,7 +358,7 @@ export function getDownstreamStops(
         dest.lat,
         dest.lon
       ),
-      realtime: live,
+      realtime: useLive,
       scheduledDeparture: st.scheduledDeparture,
       stop: st.stop,
       stopIndexInTrip: i
@@ -412,6 +442,48 @@ export interface AlightOption {
 const TIE_MS = 180000
 
 /**
+ * How far before the rider is off the bus an onward plan may depart and still
+ * count as catchable. The same 60 s call as DEPARTURE_OVERDUE_GRACE_MS in
+ * departure-anchor.ts, deliberately a separate constant — that one means "a
+ * departure you are a minute late for is still worth walking to", this one
+ * means "a plan that left a minute ago is still catchable".
+ */
+const REACHABLE_TOLERANCE_MS = 60000
+
+/**
+ * Can the rider actually make this onward plan? They are on the bus until
+ * busArrivalEpoch, so a plan that departed before then is a plan for someone
+ * else.
+ *
+ * 2026-08-09: a poisoned realtime arrival anchored the query 9 minutes in the
+ * past, and OTP honestly returned buses departing from that past moment — two
+ * route 22s leaving at 19:20:01. Note which clause catches that: the `nowMs`
+ * one. The busArrivalEpoch clause is inert there, because OTP did respect the
+ * (lying) depart-after time it was given. Both are kept; they guard different
+ * failures.
+ *
+ * getDownstreamStops now keeps the anchor honest, so this is the backstop for
+ * the next feed anomaly of a shape we have not seen.
+ *
+ * Fails OPEN on a non-finite startTime. OTP always sets one, so its absence
+ * means synthetic data — and a backstop that silently deletes every option on
+ * an unexpected shape is worse than the bug it guards. (Not the same posture as
+ * isUsableItinerary, which fails closed on a missing walkDistance; there the
+ * missing field IS the thing being judged.)
+ */
+function isReachableItinerary(
+  itin: Itinerary,
+  busArrivalEpoch: number,
+  nowMs: number | null
+): boolean {
+  const start = Number(itin.startTime)
+  if (!Number.isFinite(start)) return true
+  if (start + REACHABLE_TOLERANCE_MS < busArrivalEpoch) return false
+  if (nowMs != null && start + REACHABLE_TOLERANCE_MS < nowMs) return false
+  return true
+}
+
+/**
  * Whether an onward itinerary is worth offering. A plan with a transit leg
  * always is. A walk-only plan is kept only when the walk is short — OTP returns
  * a walk-the-whole-way itinerary as a fallback even from a far stop, which we
@@ -471,14 +543,16 @@ export function rankAlightOptions(
   results: AlightCandidateResult[],
   {
     limit = 5,
+    nowMs = null,
     walkOnlyMax = 1200
-  }: { limit?: number; walkOnlyMax?: number } = {}
+  }: { limit?: number; nowMs?: number | null; walkOnlyMax?: number } = {}
 ): AlightOption[] {
   const scored: Array<AlightOption & { arrival: number }> = []
   results.forEach((r) => {
     if (!r || r.error) return
     ;(r.itineraries || []).forEach((itin) => {
       if (!isUsableItinerary(itin, walkOnlyMax)) return
+      if (!isReachableItinerary(itin, r.busArrivalEpoch, nowMs)) return
       scored.push({
         arrival: scoreAlightOption(r.busArrivalEpoch, itin),
         busArrivalEpoch: r.busArrivalEpoch,
@@ -516,7 +590,10 @@ export function rankAlightOptions(
  */
 export function pickBestAlightOption(
   results: AlightCandidateResult[],
-  { walkOnlyMax = 1200 }: { walkOnlyMax?: number } = {}
+  {
+    nowMs = null,
+    walkOnlyMax = 1200
+  }: { nowMs?: number | null; walkOnlyMax?: number } = {}
 ): AlightOption | null {
-  return rankAlightOptions(results, { walkOnlyMax })[0] ?? null
+  return rankAlightOptions(results, { nowMs, walkOnlyMax })[0] ?? null
 }

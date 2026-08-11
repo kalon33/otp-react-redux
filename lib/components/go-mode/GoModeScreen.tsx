@@ -108,15 +108,18 @@ const GoModeScreen = ({
   // ReturnToTripBanner so the guards survive backgrounding).
   useActiveTripGuards(goMode.isActive)
 
+  // Every path that ENDS the trip asks first. Shared so the two of them cannot
+  // drift — on 8/9 only one of them asked.
+  const confirmStopTracking = () =>
+    window.confirm(
+      intl.formatMessage({
+        defaultMessage: 'Are you sure you want to stop tracking this trip?',
+        id: 'components.GoMode.confirmExit'
+      })
+    )
+
   const handleExit = () => {
-    if (
-      window.confirm(
-        intl.formatMessage({
-          defaultMessage: 'Are you sure you want to stop tracking this trip?',
-          id: 'components.GoMode.confirmExit'
-        })
-      )
-    ) {
+    if (confirmStopTracking()) {
       endGoMode()
       setMobileScreen(MobileScreens.RESULTS_SUMMARY)
     }
@@ -129,9 +132,16 @@ const GoModeScreen = ({
     }
   }
 
+  // Back out of the onboard flow PRE-TRIP. BEGIN_ONBOARD_FLOW has already
+  // nulled activeItinerary, so this ends Go Mode outright — it has to ask.
+  // On 8/9 the rider hit back twice, 19:21:36 and 19:21:51, and Go Mode
+  // stopped silently both times. (Mid-ride is a different branch below: back
+  // there only dismisses the panel, and must stay silent.)
   const handleOnboardExit = () => {
-    endGoMode()
-    setMobileScreen(MobileScreens.SEARCH_FORM)
+    if (confirmStopTracking()) {
+      endGoMode()
+      setMobileScreen(MobileScreens.SEARCH_FORM)
+    }
   }
 
   // Trip complete: the rider dismisses the arrival card themselves — landing
