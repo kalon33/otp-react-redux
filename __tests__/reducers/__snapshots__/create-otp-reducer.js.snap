@@ -38,6 +38,7 @@ Object {
   },
   "goMode": Object {
     "activeItinerary": null,
+    "alightedFrom": null,
     "arrivedAt": null,
     "boardingPrompt": Object {
       "lastDismissedAt": null,
@@ -58,6 +59,7 @@ Object {
       "alightOptions": Array [],
       "bestAlightStop": null,
       "candidates": Array [],
+      "keepRouteId": null,
       "status": "idle",
       "trip": null,
       "vehicle": null,

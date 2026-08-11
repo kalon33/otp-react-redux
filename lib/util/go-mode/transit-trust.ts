@@ -1,8 +1,8 @@
 import type { Leg } from '@opentripplanner/types'
 
 import { calculateDistance, matchPositionToRoute } from './position-matching'
-import { orderedStopsOnLeg } from './next-stop'
 import { hasUsablePosition } from './vehicle-matching'
+import { orderedStopsOnLeg } from './next-stop'
 import type { RouteMatchResult } from './position-matching'
 import type { VehicleMatchResult, VehiclePosition } from './vehicle-matching'
 
@@ -134,6 +134,36 @@ export function findRidingVehicle(
   return (
     findVehicleById(vehicles, riding.vehicleId, nowMs) ??
     findVehicleForTrip(vehicles, riding.tripId, nowMs)
+  )
+}
+
+/**
+ * Is a confirmed vehicle match still evidence that the rider is ABOARD?
+ *
+ * A confirmed match is the rider's own assertion and outlives a lot on purpose
+ * — STOP_GO_MODE keeps it, session restore keeps it — but it does not outlive
+ * getting off. 8/9 19:29:13: the rider alighted at 19:27:43, and 90 s later the
+ * onboard flow read the surviving match for trip 1:1085482 as proof they were
+ * still on it and put them back on that bus. Alighting from a trip disproves a
+ * match for that same trip (by trip OR by vehicle: a match re-anchored to the
+ * bus's next block trip is the same physical bus they stepped off).
+ *
+ * Deliberately NOT a distance or motion test. On 8/9 the bus was 118 m away and
+ * closing — 19 s later it was 4 m away — so proximity would have blocked a bus
+ * the rider may well have been boarding. What they had stopped doing is riding
+ * THAT trip; what they might do next is the rider's to say.
+ */
+export function matchProvesAboard(
+  match: { tripId?: string | null; vehicleId?: string | null } | null,
+  alightedFrom: { tripId?: string | null; vehicleId?: string | null } | null
+): boolean {
+  if (!match?.tripId) return false
+  if (!alightedFrom) return true
+  if (alightedFrom.tripId != null && alightedFrom.tripId === match.tripId) {
+    return false
+  }
+  return !(
+    alightedFrom.vehicleId != null && alightedFrom.vehicleId === match.vehicleId
   )
 }
 
