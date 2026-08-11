@@ -1,6 +1,7 @@
 import type { Itinerary } from '@opentripplanner/types'
 
 import { calculateDistance } from './position-matching'
+import { getLegRouteId } from './departure-anchor'
 
 // --- Types ---
 
@@ -497,16 +498,39 @@ function isUsableItinerary(itin: Itinerary, walkOnlyMax: number): boolean {
 }
 
 /**
+ * The route an onward plan puts the rider on — its first transit leg. That is
+ * the leg the rider chose when they planned the trip, and the one an alight
+ * option can silently replace.
+ */
+export function onwardRouteOfItinerary(itinerary: Itinerary): string | null {
+  const leg = (itinerary.legs || []).find((l) => l.transitLeg)
+  return leg ? getLegRouteId(leg) : null
+}
+
+/**
  * Order two scored options: earlier total arrival wins, but ties (within
- * TIE_MS) break on fewer transfers, then less walking, then earlier arrival —
- * biasing toward staying on the current bus to a convenient stop rather than
- * getting off early to shave a few seconds. Returns <0 when `a` is better.
+ * TIE_MS) break on the rider's own route first, then fewer transfers, then less
+ * walking, then earlier arrival — biasing toward staying on the current bus to
+ * a convenient stop rather than getting off early to shave a few seconds.
+ * Returns <0 when `a` is better.
+ *
+ * The keepRouteId clause is deliberately INSIDE the tie window: the rider's
+ * chosen route wins when the difference is noise, and a genuinely faster
+ * alternative still ranks above it and stays visible. Never dropping it is
+ * rankAlightOptions' job, not this comparator's.
  */
 function compareAlightOptions(
   a: AlightOption & { arrival: number },
-  b: AlightOption & { arrival: number }
+  b: AlightOption & { arrival: number },
+  keepRouteId: string | null = null
 ): number {
   if (Math.abs(a.arrival - b.arrival) <= TIE_MS) {
+    if (keepRouteId) {
+      const dK =
+        Number(onwardRouteOfItinerary(b.itinerary) === keepRouteId) -
+        Number(onwardRouteOfItinerary(a.itinerary) === keepRouteId)
+      if (dK !== 0) return dK
+    }
     const dT = (a.itinerary.transfers ?? 0) - (b.itinerary.transfers ?? 0)
     if (dT !== 0) return dT
     const dW = (a.itinerary.walkDistance ?? 0) - (b.itinerary.walkDistance ?? 0)
@@ -538,14 +562,26 @@ function journeySignature(stopId: string, itinerary: Itinerary): string {
  * fewer transfers, then less walking. Every usable itinerary from every stop is
  * a candidate (the rider doesn't care which stop, just the best journeys);
  * near-identical journeys are deduped and the list is capped at `limit`.
+ *
+ * `keepRouteId` is the route the rider already chose for the leg after this
+ * bus. It never filters — it wins ties, and it holds the last slot so the cap
+ * cannot cut it. Losing the chosen route to a display limit is the same failure
+ * applyAutoReroute fixed by searching collectRerouteCandidates(all, 50) instead
+ * of the five it shows.
  */
 export function rankAlightOptions(
   results: AlightCandidateResult[],
   {
+    keepRouteId = null,
     limit = 5,
     nowMs = null,
     walkOnlyMax = 1200
-  }: { limit?: number; nowMs?: number | null; walkOnlyMax?: number } = {}
+  }: {
+    keepRouteId?: string | null
+    limit?: number
+    nowMs?: number | null
+    walkOnlyMax?: number
+  } = {}
 ): AlightOption[] {
   const scored: Array<AlightOption & { arrival: number }> = []
   results.forEach((r) => {
@@ -564,22 +600,39 @@ export function rankAlightOptions(
     })
   })
 
-  scored.sort(compareAlightOptions)
+  scored.sort((a, b) => compareAlightOptions(a, b, keepRouteId))
+
+  const strip = (option: AlightOption & { arrival: number }): AlightOption => ({
+    busArrivalEpoch: option.busArrivalEpoch,
+    itinerary: option.itinerary,
+    realtime: option.realtime,
+    stopId: option.stopId,
+    stopName: option.stopName
+  })
 
   const seen = new Set<string>()
   const ranked: AlightOption[] = []
+  const deduped: Array<AlightOption & { arrival: number }> = []
   for (const option of scored) {
     const sig = journeySignature(option.stopId, option.itinerary)
     if (seen.has(sig)) continue
     seen.add(sig)
-    ranked.push({
-      busArrivalEpoch: option.busArrivalEpoch,
-      itinerary: option.itinerary,
-      realtime: option.realtime,
-      stopId: option.stopId,
-      stopName: option.stopName
-    })
-    if (ranked.length >= limit) break
+    deduped.push(option)
+    if (ranked.length < limit) ranked.push(strip(option))
+  }
+
+  // The chosen route holds a slot. It is already ranked ahead of anything it
+  // ties with; if it is genuinely slower than `limit` alternatives it lands in
+  // the last one rather than vanishing. Replacing the last entry keeps the list
+  // exactly as long as the caller asked for.
+  if (keepRouteId && ranked.length >= limit) {
+    const alreadyKept = ranked.some(
+      (o) => onwardRouteOfItinerary(o.itinerary) === keepRouteId
+    )
+    const chosen = deduped.find(
+      (o) => onwardRouteOfItinerary(o.itinerary) === keepRouteId
+    )
+    if (!alreadyKept && chosen) ranked[ranked.length - 1] = strip(chosen)
   }
   return ranked
 }
@@ -596,4 +649,27 @@ export function pickBestAlightOption(
   }: { nowMs?: number | null; walkOnlyMax?: number } = {}
 ): AlightOption | null {
   return rankAlightOptions(results, { nowMs, walkOnlyMax })[0] ?? null
+}
+
+/**
+ * From ranked alight options, the best one that keeps the rider on the route
+ * they already chose. Returns null when nothing onward runs that route — the
+ * caller must then ASK rather than apply, because an automatic update that
+ * picks a different route is the one thing the rider has ruled out.
+ *
+ * The AlightOption twin of pickSameRouteReroute (lib/util/state.js): same
+ * contract, but it returns the option rather than the itinerary, because the
+ * alight stop it carries is half the answer. The options arrive already sorted,
+ * so "best" is simply the first match.
+ */
+export function pickSameRouteAlight(
+  options: AlightOption[] | null | undefined,
+  routeId: string | null | undefined
+): AlightOption | null {
+  if (!routeId) return null
+  return (
+    (options || []).find(
+      (o) => onwardRouteOfItinerary(o.itinerary) === routeId
+    ) ?? null
+  )
 }

@@ -29,6 +29,10 @@ const END_TIME_GRACE_MS = 45 * 60 * 1000
  */
 export interface GoModeSession {
   activeItinerary: any
+  // The trip the rider last GOT OFF. Saved for the same reason vehicleMatch is
+  // — and it must travel WITH it: restoring a confirmed match without the fact
+  // that disproves it is how a reload would re-open the 8/9 hole.
+  alightedFrom?: { tripId: string | null; vehicleId: string | null } | null
   // Whether the rider had stepped out to the planner (ReturnToTripBanner
   // showing) — restored so a reload doesn't force the Go Mode screen back.
   backgrounded?: boolean
@@ -83,6 +87,7 @@ export function saveGoModeSession(goMode: GoModeState): void {
 
   const session: GoModeSession = {
     activeItinerary: goMode.activeItinerary,
+    alightedFrom: goMode.alightedFrom ?? null,
     backgrounded: !!goMode.ui?.backgrounded,
     departureOverride: goMode.departureOverride ?? null,
     originalFrom: goMode.originalFrom ?? null,

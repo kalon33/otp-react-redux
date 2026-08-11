@@ -99,6 +99,10 @@ export interface OnboardState {
   alightOptions: OnboardAlightOption[]
   bestAlightStop: OnboardAlightOption | null
   candidates: OnboardCandidate[]
+  /** The route the rider already chose for the leg after this bus, captured
+   * when the flow opened (BEGIN_ONBOARD_FLOW nulls activeItinerary, so it
+   * cannot be re-derived later). Ranks its options up, never filters. */
+  keepRouteId: string | null
   status:
     | 'idle'
     | 'discovering'
@@ -113,6 +117,15 @@ export interface OnboardState {
 
 export interface GoModeState {
   activeItinerary: Itinerary | null
+
+  /**
+   * The trip the rider most recently GOT OFF, kept until they assert a vehicle
+   * again. `riding` is cleared on alighting but a confirmed vehicleMatch can
+   * outlive it (STOP_GO_MODE and session restore both preserve one on purpose),
+   * and on 8/9 that stale assertion put the rider back on the bus they had
+   * just left. Presence here means "not evidence of being aboard".
+   */
+  alightedFrom: { tripId: string | null; vehicleId: string | null } | null
 
   /** Epoch ms when trip progress first read completed; null while en route.
    * While set, position ticks quiesce and the arrival card is shown. */
@@ -225,6 +238,8 @@ export interface GoModeState {
 const defaultState: GoModeState = {
   activeItinerary: null,
 
+  alightedFrom: null,
+
   arrivedAt: null,
 
   boardingPrompt: {
@@ -249,6 +264,7 @@ const defaultState: GoModeState = {
     alightOptions: [],
     bestAlightStop: null,
     candidates: [],
+    keepRouteId: null,
     status: 'idle',
     trip: null,
     vehicle: null
@@ -385,6 +401,7 @@ const goMode = handleActions<GoModeState, any>(
       isActive: true,
       onboard: {
         ...defaultState.onboard,
+        keepRouteId: action.payload?.keepRouteId ?? null,
         status: 'discovering' as const
       },
       originalFrom: action.payload?.originalFrom ?? null,
@@ -433,6 +450,9 @@ const goMode = handleActions<GoModeState, any>(
 
     [CONFIRM_VEHICLE]: (state, action) => ({
       ...state,
+      // Confirming a vehicle is the rider (or a trusted match) asserting they
+      // are aboard again — that outranks whatever they last got off.
+      alightedFrom: null,
       boardingPrompt: {
         ...state.boardingPrompt,
         shown: false
@@ -579,6 +599,7 @@ const goMode = handleActions<GoModeState, any>(
 
     [SET_RIDING]: (state, action) => ({
       ...state,
+      alightedFrom: action.payload ? null : state.alightedFrom,
       riding: action.payload
     }),
 
@@ -685,6 +706,11 @@ const goMode = handleActions<GoModeState, any>(
 
     [STOP_GO_MODE]: (state) => ({
       ...defaultState,
+      // Getting OFF a bus is just as physical, and it has to survive alongside
+      // the confirmed match below — otherwise exiting Go Mode after an alight
+      // hands the next onboard flow the match without the fact that disproves
+      // it, which is the 8/9 hole through a different door.
+      alightedFrom: state.alightedFrom,
       // Being aboard a bus is a physical fact; exiting the Go Mode screen
       // doesn't change it. On 7/12 the rider backed out and immediately
       // reopened "I'm on the bus" — with riding wiped here, the flow forgot
@@ -729,6 +755,16 @@ const goMode = handleActions<GoModeState, any>(
 
       return {
         ...state,
+        // Remember WHICH trip they got off. A confirmed vehicleMatch can
+        // outlive riding (STOP_GO_MODE and session restore keep one on
+        // purpose), and beginOnboardFlow used to treat that as proof the rider
+        // was aboard — 8/9, 90 s after this very transition.
+        alightedFrom: alighted
+          ? {
+              tripId: state.riding?.tripId ?? null,
+              vehicleId: state.riding?.vehicleId ?? null
+            }
+          : state.alightedFrom,
         departureOverride: null,
         riding: alighted ? null : state.riding,
         routeMatch: state.routeMatch
