@@ -863,6 +863,148 @@ components:
     switcher: Sélecteur de vues
   WelcomeScreen:
     prompt: Où désirez-vous aller ?
+  GoMode:
+    altOption: Option alternative
+    arrivedDone: Arrivé
+    arrivedTitle: Vous êtes arrivé
+    arrivesIn: Arrivée dans {time}
+    arrivingSoon: Arrivée prochaine
+    boardingQuestion: Êtes-vous à bord ?
+    boardingSubtitle: Confirmez que vous êtes dans le bus
+    browsePlanner: Ouvrir le planificateur
+    busLabel: Bus
+    busLabelHeadsign: 'Direction: {headsign}'
+    busNotBroadcasting: Le bus ne diffuse pas sa position
+    changeBus: Changer de bus
+    confirmExit: Confirmer la sortie
+    currentLocation: Emplacement actuel
+    deviationWarning: 'Attention: déviation possible'
+    directionEB: Direction Est
+    directionNB: Direction Nord
+    directionSB: Direction Sud
+    directionWB: Direction Ouest
+    distanceMAway: "À {distance} m"
+    errorPermissionDenied: Permission refusée
+    errorTimeout: Délai dépassé
+    errorUnavailable: Service indisponible
+    estimatedArrival: 'Arrivée estimée: {time}'
+    findAnotherWay: Trouver un autre chemin
+    findingBestStop: Recherche du meilleur arrêt...
+    findingBestStopToGetOff: "Recherche du meilleur arrêt pour descendre…"
+    findingYourBus: Recherche de votre bus...
+    getReady: Préparez-vous
+    getReadyNow: Préparez-vous maintenant
+    gotOffHere: Je suis descendu ici
+    gpsError: Erreur GPS
+    gpsErrorTitle: Erreur de positionnement
+    goModeIsLive: "Go Mode est actif — suivi de votre bus"
+    header:
+      getOffAt: Descendre à {stop}
+      getOffAtTime: Descendre à {stop} à {time}
+      nextDeparture: 'Prochain départ: {time}'
+      routeDepartsIn: Ligne {route} part dans {time}
+    hoursHMin: "{hours}h {mins}m"
+    hoursMinutesRemaining: '{hours}h {minutes}min restantes'
+    legBike: 'Vélo: {distance} m'
+    legStopsTo: '{count, plural, one {# arrêt} other {# arrêts}} vers {dest}'
+    legTo: vers {dest}
+    legWait: "⏳ {mins} min d'attente"
+    legWalk: 'Marche: {distance} m'
+    liveBanner: Suivi en direct
+    loading: Début du trajet...
+    loadingSchedule: Chargement des horaires...
+    loadingScheduleForYourBus: "Chargement des horaires pour votre bus…"
+    locatingBus: Localisation du bus...
+    minsMin: "{mins} min"
+    minutesRemaining: '{minutes} min restantes'
+    nextDeparture: Prochain départ
+    nextDepartureNoInfo: Prochain départ
+    noBusesNearby: Aucun bus à proximité
+    noBusesOrRoutesNearby: Aucun bus ou ligne détecté à proximité. Essayez de vous rapprocher d'un arrêt de bus.
+    noLiveBusDetected: "Aucun bus en temps réel détecté — choisissez votre ligne :"
+    noLiveVehicleData: "Pas de données bus en temps réel — suivi par GPS"
+    notYet: Pas encore
+    offAtStop: Descendre à {stop}
+    offAtTime: "Descendre à {time}"
+    onBus: Dans le bus
+    onBusButton: Je suis déjà dans le bus
+    onboardCancel: Annuler
+    onboardError: Erreur lors de l'embarquement
+    onboardTitle: À bord
+    openTripSheet: Ouvrir les détails du trajet
+    pickYourBus: Choisissez votre bus
+    pickYourRoute: Choisissez votre ligne
+    remaining: Restant
+    rerouteFound: Nouvel itinéraire trouvé
+    rerouteKeep: Garder cet itinéraire
+    rerouteNone: Aucun nouvel itinéraire
+    rerouteNlError: Erreur de recherche
+    rerouteNlLabel: Message pour le conducteur
+    rerouteNlPlaceholder: Envoyer un message...
+    rerouteNlSend: Envoyer
+    rerouteOk: OK
+    rerouteSearchHere: Rechercher ici
+    rerouteSearching: Recherche en cours...
+    rerouteSummary: '{minutes} min · {transfers} correspondance(s) · {walk} m à pied'
+    rerouteSwitch: Changer d'itinéraire
+    resetToPlanned: Revenir à l'itinéraire initial
+    restOfTrip: Reste du trajet
+    retry: Réessayer
+    rideToStop: Monter à {stop}
+    routeInTime: "{route} dans {time}"
+    routeLabel: "Ligne {route}"
+    routeOption: Option de ligne
+    selectVehicle: Sélectionner un véhicule
+    sheetHandleLabel: Faire glisser pour plus d'options
+    stopsRemainingCompact: '{count, plural, one {1 arrêt restant} other {# arrêts restants}}'
+    thisOne: "Celui-ci"
+    toStop: Vers {stop}
+    trackingBus: Suivi du bus
+    tripSheetHeading: Détails du trajet
+    tripSheetTitle: Votre trajet
+    useThisDeparture: Utiliser ce départ
+    vehicleDetail: 'Détails du véhicule: {detail}'
+    vehicleDistance: À {distance} m
+    waitingGPS: Acquisition du signal GPS...
+    walkToStop: Marchez jusqu'à {stop}
+    whereDoYouWantToGetOff: "Où souhaitez-vous descendre ?"
+    whereToAlight: Où descendre ?
+    whichBusAreYouOn: "Sur quel bus êtes-vous ? Sélectionnez-le ci-dessous."
+    couldNotWorkOutYourBus: "Impossible de déterminer votre bus. Réessayer ?"
+    areYouOnTheBus: "Êtes-vous dans le bus ?"
+    lookingForRouteNearby: "Recherche de la ligne {route} à proximité"
+    busLabelOnly: "Bus n°{label}"
+    returnBannerArrived: Arrivé
+    returnBannerLive: Suivi en direct
+    returnBannerNoProgress: Aucune progression
+    chooseBus: Choisir le bus
+    lessWalking: Moins de marche
+    fewerTransfers: Moins de correspondances
+    avoidBiking: Éviter le vélo
+    fastest: Le plus rapide
+    nextLegTransit: Prochaine étape en transport
+    nextLegWalk: Prochaine étape à pied
+    waitAtStop: Attendre à l'arrêt
+    walking: Marche
+    turnInstructions:
+      bearLeft: Prendre à gauche
+      bearRight: Prendre à droite
+      continue: Continuer
+      continueOn: "Continuer sur {street}"
+      continueTo: "Continuer jusqu'à {destination}"
+      enterStation: Entrer dans la station
+      exitStation: Sortir de la station
+      followSigns: Suivre les panneaux
+      sharpLeft: Tournez à gauche de manière abrupte
+      sharpRight: Tournez à droite de manière abrupte
+      takeElevator: Prendre l'ascenseur
+      takeRoundabout: Prendre le rond-point
+      turnLeft: Tournez à gauche
+      turnRight: Tournez à droite
+      uTurn: Demi-tour
+      arrivingAt: "Arrivée à {destination}"
+    hurryWarning: Dépêchez-vous !
+    cancel: Annuler
 config:
   accessModes:
     car_hail: Course en voiture

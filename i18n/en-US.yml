@@ -815,6 +815,148 @@ components:
     switcher: Switcher
   WelcomeScreen:
     prompt: Where do you want to go?
+  GoMode:
+    altOption: Alternative option
+    arrivedDone: Arrived
+    arrivedTitle: You have arrived
+    arrivesIn: Arriving in {time}
+    arrivingSoon: Arriving soon
+    boardingQuestion: Are you on board?
+    boardingSubtitle: Confirm that you are on the bus
+    browsePlanner: Open trip planner
+    busLabel: Bus
+    busLabelHeadsign: 'Headsign: {headsign}'
+    busNotBroadcasting: Bus is not broadcasting its position
+    changeBus: Change bus
+    confirmExit: Confirm exit
+    currentLocation: Current location
+    deviationWarning: 'Warning: Possible deviation'
+    directionEB: Eastbound
+    directionNB: Northbound
+    directionSB: Southbound
+    directionWB: Westbound
+    distanceMAway: "{distance} m away"
+    errorPermissionDenied: Permission denied
+    errorTimeout: Timeout error
+    errorUnavailable: Service unavailable
+    estimatedArrival: 'Estimated arrival: {time}'
+    findAnotherWay: Find another way
+    findingBestStop: Finding best stop...
+    findingBestStopToGetOff: "Finding best stop to get off…"
+    findingYourBus: Finding your bus...
+    getReady: Get ready
+    getReadyNow: Get ready now
+    gotOffHere: I got off here
+    gpsError: GPS error
+    gpsErrorTitle: Positioning error
+    goModeIsLive: "Go Mode is active — tracking your bus"
+    header:
+      getOffAt: Get off at {stop}
+      getOffAtTime: Get off at {stop} at {time}
+      nextDeparture: 'Next departure: {time}'
+      routeDepartsIn: Route {route} departs in {time}
+    hoursHMin: "{hours}h {mins}m"
+    hoursMinutesRemaining: '{hours}h {minutes}min remaining'
+    legBike: 'Bike: {distance} m'
+    legStopsTo: '{count, plural, one {# stop} other {# stops}} to {dest}'
+    legTo: to {dest}
+    legWait: "⏳ {mins} min wait"
+    legWalk: 'Walk: {distance} m'
+    liveBanner: Live tracking
+    loading: Starting trip...
+    loadingSchedule: Loading schedule...
+    loadingScheduleForYourBus: "Loading schedule for your bus…"
+    locatingBus: Locating bus...
+    minsMin: "{mins} min"
+    minutesRemaining: '{minutes} min remaining'
+    nextDeparture: Next departure
+    nextDepartureNoInfo: Next departure
+    noBusesNearby: No buses nearby
+    noBusesOrRoutesNearby: No buses or routes detected nearby. Try moving closer to a bus stop.
+    noLiveBusDetected: "No live bus detected — choose your route:"
+    noLiveVehicleData: "No live vehicle data — GPS tracking"
+    notYet: Not yet
+    offAtStop: Get off at {stop}
+    offAtTime: "Get off at {time}"
+    onBus: On the bus
+    onBusButton: I'm already on the bus
+    onboardCancel: Cancel
+    onboardError: Error boarding
+    onboardTitle: Onboard
+    openTripSheet: Open trip details
+    pickYourBus: Choose your bus
+    pickYourRoute: Choose your route
+    remaining: Remaining
+    rerouteFound: New itinerary found
+    rerouteKeep: Keep this itinerary
+    rerouteNone: No new itinerary
+    rerouteNlError: Search error
+    rerouteNlLabel: Message for driver
+    rerouteNlPlaceholder: Send a message...
+    rerouteNlSend: Send
+    rerouteOk: OK
+    rerouteSearchHere: Search here
+    rerouteSearching: Searching...
+    rerouteSummary: '{minutes} min · {transfers} transfer(s) · {walk} m walk'
+    rerouteSwitch: Switch itinerary
+    resetToPlanned: Return to original itinerary
+    restOfTrip: Rest of trip
+    retry: Retry
+    rideToStop: Ride to {stop}
+    routeInTime: "{route} in {time}"
+    routeLabel: "Route {route}"
+    routeOption: Route option
+    selectVehicle: Select vehicle
+    sheetHandleLabel: Drag for more options
+    stopsRemainingCompact: '{count, plural, one {1 stop remaining} other {# stops remaining}}'
+    thisOne: "This one"
+    toStop: To {stop}
+    trackingBus: Tracking bus
+    tripSheetHeading: Trip details
+    tripSheetTitle: Your trip
+    useThisDeparture: Use this departure
+    vehicleDetail: 'Vehicle details: {detail}'
+    vehicleDistance: {distance} m away
+    waitingGPS: Acquiring GPS signal...
+    walkToStop: Walk to {stop}
+    whereDoYouWantToGetOff: "Where do you want to get off?"
+    whereToAlight: Where to alight?
+    whichBusAreYouOn: "Which bus are you on? Select below."
+    couldNotWorkOutYourBus: "Could not determine your bus. Retry?"
+    areYouOnTheBus: "Are you on the bus?"
+    lookingForRouteNearby: "Looking for route {route} nearby"
+    busLabelOnly: "Bus #{label}"
+    returnBannerArrived: Arrived
+    returnBannerLive: Live tracking
+    returnBannerNoProgress: No progress
+    chooseBus: Choose bus
+    lessWalking: Less walking
+    fewerTransfers: Fewer transfers
+    avoidBiking: Avoid biking
+    fastest: Fastest
+    nextLegTransit: Next leg by transit
+    nextLegWalk: Next leg by walking
+    waitAtStop: Wait at stop
+    walking: Walking
+    turnInstructions:
+      bearLeft: Bear left
+      bearRight: Bear right
+      continue: Continue
+      continueOn: "Continue on {street}"
+      continueTo: "Continue to {destination}"
+      enterStation: Enter station
+      exitStation: Exit station
+      followSigns: Follow signs
+      sharpLeft: Sharp left
+      sharpRight: Sharp right
+      takeElevator: Take elevator
+      takeRoundabout: Take roundabout
+      turnLeft: Turn left
+      turnRight: Turn right
+      uTurn: U-turn
+      arrivingAt: "Arriving at {destination}"
+    hurryWarning: Hurry up!
+    cancel: Cancel
 config:
   accessModes:
     car_hail: Ride Hail
