@@ -2,7 +2,8 @@ import { encode } from '@mapbox/polyline'
 
 import {
   mergeAdjacentSameTripLegs,
-  normalizeGoModeItinerary
+  normalizeGoModeItinerary,
+  repairLegTimeInversions
 } from '../../../lib/util/go-mode/leg-merge'
 import { orderedStopsOnLeg } from '../../../lib/util/go-mode/next-stop'
 
@@ -116,7 +117,9 @@ describe('mergeAdjacentSameTripLegs — the 8/2 split ride', () => {
     expect(merged[0].to.name).toBe('I-35W & 46th St Station')
     expect(merged[0].startTime).toBe(1785723831588)
     expect(merged[0].endTime).toBe(1785724293000)
-    expect(merged[0].duration).toBeCloseTo((1785724293000 - 1785723831588) / 1000)
+    expect(merged[0].duration).toBeCloseTo(
+      (1785724293000 - 1785723831588) / 1000
+    )
   })
 
   it('keeps the junction stop, so the stop counter has something to count', () => {
@@ -158,8 +161,16 @@ describe('mergeAdjacentSameTripLegs — the 8/2 split ride', () => {
 
 describe('mergeAdjacentSameTripLegs — what must NOT merge', () => {
   const cases: Array<[string, any, any]> = [
-    ['different trips', legA(), legB({ trip: { gtfsId: '1:other' }, tripId: '1:other' })],
-    ['no trip id at all', legA({ trip: null, tripId: null }), legB({ trip: null, tripId: null })],
+    [
+      'different trips',
+      legA(),
+      legB({ trip: { gtfsId: '1:other' }, tripId: '1:other' })
+    ],
+    [
+      'no trip id at all',
+      legA({ trip: null, tripId: null }),
+      legB({ trip: null, tripId: null })
+    ],
     [
       'non-contiguous (a loop route serving the trip twice)',
       legA(),
@@ -270,5 +281,161 @@ describe('normalizeGoModeItinerary', () => {
     expect(normalizeGoModeItinerary(clean)).toBe(clean)
     expect(normalizeGoModeItinerary(null)).toBeNull()
     expect(normalizeGoModeItinerary({ legs: [] } as any)).toEqual({ legs: [] })
+  })
+})
+
+describe('repairLegTimeInversions — the 8/9 backwards itinerary', () => {
+  /** Legs as {start, end} ms pairs, with a duration OTP would have set. */
+  const legsOf = (pairs: Array<[number, number]>) =>
+    pairs.map(([startTime, endTime], i) => ({
+      duration: (endTime - startTime) / 1000,
+      endTime,
+      mode: i % 2 ? 'BUS' : 'WALK',
+      startTime,
+      transitLeg: i % 2 === 1
+    }))
+
+  const itin = (pairs: Array<[number, number]>, extra: any = {}) => ({
+    duration: (pairs[pairs.length - 1][1] - pairs[0][0]) / 1000,
+    endTime: pairs[pairs.length - 1][1],
+    legs: legsOf(pairs),
+    startTime: pairs[0][0],
+    ...extra
+  })
+
+  it('returns the input REFERENCE when every leg starts after the last one ended', () => {
+    const clean = itin([
+      [1000, 2000],
+      [2500, 4000]
+    ]) as any
+    expect(repairLegTimeInversions(clean)).toBe(clean)
+    expect(repairLegTimeInversions(null)).toBeNull()
+    expect(repairLegTimeInversions({ legs: [] } as any)).toEqual({ legs: [] })
+  })
+
+  it('shifts the offending leg and everything after it, preserving each leg’s own duration', () => {
+    const out: any = repairLegTimeInversions(
+      itin([
+        [1000, 5000],
+        [2000, 3000],
+        [3500, 4000]
+      ]) as any
+    )
+    // Leg 1 was 3000ms early, so it and leg 2 both move +3000.
+    expect(out.legs.map((l: any) => [l.startTime, l.endTime])).toEqual([
+      [1000, 5000],
+      [5000, 6000],
+      [6500, 7000]
+    ])
+    expect(out.legs.map((l: any) => l.endTime - l.startTime)).toEqual([
+      4000, 1000, 500
+    ])
+  })
+
+  it('leaves leg 0 exactly where it is, and moves the container end with the legs', () => {
+    const before = itin([
+      [1000, 5000],
+      [2000, 3000]
+    ]) as any
+    const out: any = repairLegTimeInversions(before)
+    expect(out.legs[0]).toBe(before.legs[0])
+    expect(out.startTime).toBe(1000)
+    expect(out.endTime).toBe(6000)
+    expect(out.duration).toBe(5)
+  })
+
+  it('carries the whole tail forward, preserving the gaps between legs', () => {
+    const out: any = repairLegTimeInversions(
+      itin([
+        [1000, 5000],
+        [2000, 3000],
+        [9000, 9500]
+      ]) as any
+    )
+    // Leg 2 moves too, even though it already sat after the shifted leg 1 —
+    // the 6000ms wait the rider was promised between them is preserved, not
+    // silently eaten.
+    expect(out.legs[2].startTime).toBe(12000)
+    expect(out.legs[2].startTime - out.legs[1].endTime).toBe(6000)
+  })
+
+  it('passes a leg with unusable times through untouched', () => {
+    const broken = itin([
+      [1000, 5000],
+      [2000, 3000]
+    ]) as any
+    broken.legs.push({ endTime: null, mode: 'WALK', startTime: undefined })
+    const out: any = repairLegTimeInversions(broken)
+    expect(out.legs[2]).toBe(broken.legs[2])
+    // ...and it does not drag the container end back with it.
+    expect(out.endTime).toBe(6000)
+  })
+
+  it('recomputes waitingTime only when it was already there', () => {
+    const withWait: any = repairLegTimeInversions(
+      itin(
+        [
+          [1000, 5000],
+          [2000, 3000]
+        ],
+        { waitingTime: 0 }
+      ) as any
+    )
+    // Span 5000ms, legs move 5000ms of it, so the shift is pure wait: 0s.
+    expect(withWait.waitingTime).toBe(0)
+    const without: any = repairLegTimeInversions(
+      itin([
+        [1000, 5000],
+        [2000, 3000]
+      ]) as any
+    )
+    expect(without.waitingTime).toBeUndefined()
+  })
+
+  it('repairs the recorded option’s 680,170 ms inversion (8/9)', () => {
+    // Straight off the wire: fixture.onboard.result.payload[3], the route 22
+    // that had already left. Leg 0 is the live bus leg ending 19:31:21.170;
+    // leg 1 claims to depart 19:20:01.
+    const recorded: any = {
+      duration: 1770,
+      endTime: 1786322971000,
+      legs: legsOf([
+        [1786321761170, 1786321881170],
+        [1786321201000, 1786321368000],
+        [1786321368000, 1786322185000],
+        [1786322185000, 1786322971000]
+      ]),
+      startTime: 1786321761170
+    }
+    const durations = recorded.legs.map((l: any) => l.endTime - l.startTime)
+    const out: any = repairLegTimeInversions(recorded)
+
+    expect(out).not.toBe(recorded)
+    const gaps = out.legs
+      .slice(1)
+      .map((l: any, i: number) => l.startTime - out.legs[i].endTime)
+    expect(gaps.filter((g: number) => g < 0)).toEqual([])
+    expect(out.legs.map((l: any) => l.endTime - l.startTime)).toEqual(durations)
+    // Everything after leg 0 moves forward by exactly the recorded gap.
+    expect(out.legs[1].startTime - recorded.legs[1].startTime).toBe(680170)
+    expect(out.endTime).toBe(1786322971000 + 680170)
+    expect(out.startTime).toBe(1786321761170)
+  })
+
+  it('leaves the D Line option, which was never inverted, object-identical (8/9)', () => {
+    // fixture.onboard.result.payload[2]: its gap is +256,830 ms — a real
+    // 4m16.8s wait at the stop, not an inversion. Nothing to repair.
+    const dLine: any = {
+      duration: 1583,
+      endTime: 1786323721000,
+      legs: legsOf([
+        [1786321761170, 1786321881170],
+        [1786322138000, 1786322423000],
+        [1786322423000, 1786323346000],
+        [1786323346000, 1786323721000]
+      ]),
+      startTime: 1786321761170
+    }
+    expect(repairLegTimeInversions(dLine)).toBe(dLine)
   })
 })

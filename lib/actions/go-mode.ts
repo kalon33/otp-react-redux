@@ -56,7 +56,8 @@ import { spliceAccessOntoItinerary } from '../util/go-mode/access-splice'
 import {
   mergeAdjacentSameTripLegs,
   normalizeGoModeItinerary,
-  polylineLength
+  polylineLength,
+  repairLegTimeInversions
 } from '../util/go-mode/leg-merge'
 import {
   collectRerouteCandidates,
@@ -311,6 +312,9 @@ export const CLEAR_RIDING = 'CLEAR_RIDING'
 export const CLEAR_VEHICLE_MATCH = 'CLEAR_VEHICLE_MATCH'
 export const CONFIRM_VEHICLE = 'CONFIRM_VEHICLE'
 export const DISMISS_BOARDING_PROMPT = 'DISMISS_BOARDING_PROMPT'
+// Recording only, like REROUTE_SNAPSHOT: no reducer consumes either, they
+// exist to put a request/response pair in the debug stream for build-fixture.
+export const ONBOARD_CANDIDATE_SNAPSHOT = 'ONBOARD_CANDIDATE_SNAPSHOT'
 export const PAUSE_GPS_SIMULATION = 'PAUSE_GPS_SIMULATION'
 export const REROUTE_SNAPSHOT = 'REROUTE_SNAPSHOT'
 export const RESUME_GPS_SIMULATION = 'RESUME_GPS_SIMULATION'
@@ -1712,9 +1716,35 @@ function fetchCandidatePlan(
       time: format(zoned, coreUtils.time.OTP_API_TIME_FORMAT),
       to: { lat: ctx.to.lat, lon: ctx.to.lon, name: ctx.to.name }
     }
-    const { error, itineraries } = await dispatch(
+    const { error, itineraries, query, response, variables } = await dispatch(
       fetchOnboardCandidatePlan(combo)
     )
+    // Recording only. These five plans are what the optimizer actually ranks,
+    // and until now nothing kept them: fetchOnboardCandidatePlan resolves
+    // through a local promise rather than dispatching ROUTING_RESPONSE, so
+    // build-fixture.js never saw one. That is why the 8/9 fixture carries the
+    // onboard trip and the ranked result but cannot replay the step between
+    // them — its proof had to be written as a unit test instead
+    // (__tests__/util/go-mode/alight-backwards-0809.ts). Keyed by the stop the
+    // plan departs from, which is what a replay has to match on: five
+    // simultaneous plans differ only by origin.
+    if (isTripRecordingEnabled()) {
+      dispatch({
+        payload: {
+          request: {
+            busArrivalEpoch,
+            from: combo.from,
+            query,
+            stopId: stop.id,
+            to: combo.to,
+            variables
+          },
+          response,
+          tMs: getCurrentTime().getTime()
+        },
+        type: ONBOARD_CANDIDATE_SNAPSHOT
+      })
+    }
     return {
       busArrivalEpoch,
       error,
@@ -1790,6 +1820,14 @@ function optimizeAlightFromTrip(options: {
           lon: lastPosition.coords.longitude
         }
       : null
+    // Wall clock on purpose, NOT getCurrentTime(). During a GPS simulation the
+    // sim clock starts at the itinerary's start and advances by SCHEDULE deltas
+    // while playback scales wall time by up to 25x, so it runs ahead of real
+    // time — while the candidate plans verify-boarded-earlier and
+    // verify-onboard-options fetch come from the live OTP server at real now.
+    // Feeding sim time to the reachability check below would reject those
+    // legitimate plans and break both gates. The guard has to be right for the
+    // live app, which is the only place it runs against a real feed.
     const nowMs = Date.now()
 
     const downstream = getDownstreamStops(
@@ -1846,7 +1884,7 @@ function optimizeAlightFromTrip(options: {
       candidates.map((c) => dispatch(fetchCandidatePlan(c, ctx)))
     )
 
-    const ranked = rankAlightOptions(results, { walkOnlyMax })
+    const ranked = rankAlightOptions(results, { nowMs, walkOnlyMax })
     // Decorate each option with the itinerary the rider actually gets on tap
     // (current-bus leg prepended, transfers recounted, real bike legs) so the
     // results list displays exactly what confirmOnboardAlightStop will start.
@@ -2123,14 +2161,19 @@ export function buildOnboardItinerary(
   // pre-clamp arrival, so its endTime can also sit behind the bus leg's.
   const itineraryEnd = Math.max(Number(onward.endTime), busLegEnd)
 
-  return {
+  // Repair here too, not only at beginGoMode. This return feeds the option
+  // cards' displayItinerary, so without it the 8/9 card read "7:31 PM" above
+  // "7:20 PM" BEFORE the rider tapped anything. The repaired card's duration
+  // then disagrees with the score it was ranked on — which only happens for
+  // options isReachableItinerary already drops.
+  return repairLegTimeInversions({
     ...onward,
     duration: (itineraryEnd - busLegStart) / 1000,
     endTime: itineraryEnd,
     legs,
     startTime: busLegStart,
     transfers: Math.max(0, transitLegCount - 1)
-  } as Itinerary
+  } as Itinerary) as Itinerary
 }
 
 /**

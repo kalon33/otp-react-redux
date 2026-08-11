@@ -76,15 +76,15 @@ function haversine(
   const Δφ = ((lat2 - lat1) * Math.PI) / 180
   const Δλ = ((lon2 - lon1) * Math.PI) / 180
   const h =
-    Math.sin(Δφ / 2) ** 2 +
-    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2
+    Math.sin(Δφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2
   return EARTH_RADIUS_M * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h))
 }
 
 /** Metres along a decoded polyline. */
 export function polylineLength(points: [number, number][]): number {
   let total = 0
-  for (let i = 1; i < points.length; i++) total += haversine(points[i - 1], points[i])
+  for (let i = 1; i < points.length; i++)
+    total += haversine(points[i - 1], points[i])
   return total
 }
 
@@ -143,7 +143,10 @@ function junctionPlace(a: any, b: any): any {
 /** Which intermediate key a leg actually used — orderedStopsOnLeg prefers
  * intermediatePlaces and falls back to intermediateStops, so keep whichever
  * shape the data arrived in. */
-function intermediateKey(a: any, b: any): 'intermediatePlaces' | 'intermediateStops' {
+function intermediateKey(
+  a: any,
+  b: any
+): 'intermediatePlaces' | 'intermediateStops' {
   if (a.intermediatePlaces || b.intermediatePlaces) return 'intermediatePlaces'
   if (a.intermediateStops || b.intermediateStops) return 'intermediateStops'
   return 'intermediatePlaces'
@@ -181,15 +184,13 @@ function mergeTwo(a: any, b: any): any {
     // Every scalar the rules below don't name: prefer a's, fill a's holes
     // from b. That is what repairs the synthesized leg from the real one.
     ...b,
-    ...Object.fromEntries(
-      Object.entries(a).filter(([, v]) => v != null)
-    ),
+    ...Object.fromEntries(Object.entries(a).filter(([, v]) => v != null)),
     distance,
     duration: (Number(endTime) - Number(startTime)) / 1000,
     endTime,
     ...(fareProducts ? { fareProducts } : {}),
-    from: a.from,
     [dropped]: undefined,
+    from: a.from,
     [key]: intermediates,
     legGeometry: geometry,
     realTime: !!a.realTime || !!b.realTime,
@@ -204,7 +205,9 @@ function mergeTwo(a: any, b: any): any {
  * Collapse every run of consecutive legs serving one trip into a single leg.
  * Returns the input array itself when nothing merges.
  */
-export function mergeAdjacentSameTripLegs(legs: Leg[] | null | undefined): Leg[] {
+export function mergeAdjacentSameTripLegs(
+  legs: Leg[] | null | undefined
+): Leg[] {
   if (!legs?.length) return legs || []
   let changed = false
   const out: any[] = [legs[0]]
@@ -218,6 +221,119 @@ export function mergeAdjacentSameTripLegs(legs: Leg[] | null | undefined): Leg[]
     }
   }
   return changed ? (out as Leg[]) : legs
+}
+
+/**
+ * Shift any leg that starts before the previous one ends forward until it
+ * doesn't, carrying the rest of the itinerary with it and preserving each leg's
+ * own duration. Returns the input reference untouched when the itinerary is
+ * already monotonic.
+ *
+ * 2026-08-09: the onboard optimizer grafted an onward plan anchored to a
+ * poisoned realtime arrival onto the live bus leg, so leg 1 started 680,170 ms
+ * BEFORE leg 0 ended and the trip sheet read 7:29 PM above 7:18 PM. The cause is
+ * fixed upstream in getDownstreamStops; this is the boundary that makes the
+ * symptom impossible whatever the next feed does.
+ *
+ * Repairs rather than refuses: refusing would leave a rider mid-ride with no
+ * trip at all. The console.warn is the tripwire — telemetry captures console
+ * lines, and a new redux action would be silently dropped unless added to
+ * create-otp-reducer's explicit case list.
+ *
+ * Called ONLY from buildOnboardItinerary, where the whole grafted tail hangs
+ * off one anchor and shifting it is exactly right. Deliberately NOT called from
+ * beginGoMode, which looked like the natural boundary and is not: an access
+ * replan legitimately produces a walk leg that overruns the next bus's
+ * departure — the rider may miss it, and the app must say so rather than invent
+ * a later bus. That path also promises its suffix legs are the SAME objects
+ * (the 7/29 "only reroute the bike leg" fix), which any repair would break.
+ * `quietReplanAccessLeg (…) applies the splice: suffix legs are the ORIGINAL
+ * objects` in __tests__/util/go-mode/reroute.ts is the test that says so.
+ *
+ * Also not part of normalizeGoModeItinerary, whose documented invariant is that
+ * startTime/endTime never move.
+ */
+export function repairLegTimeInversions(
+  itinerary: Itinerary | null | undefined
+): Itinerary | null | undefined {
+  const legs = itinerary?.legs
+  if (!legs?.length) return itinerary
+
+  let shiftMs = 0
+  let prevEnd: number | null = null
+  const repaired: Leg[] = []
+  const inversions: Array<{ byMs: number; leg: number }> = []
+
+  for (let i = 0; i < legs.length; i++) {
+    const leg: any = legs[i]
+    const start = Number(leg.startTime)
+    const end = Number(leg.endTime)
+    if (!Number.isFinite(start) || !Number.isFinite(end)) {
+      repaired.push(leg)
+      prevEnd = null
+      continue
+    }
+    if (prevEnd != null && start + shiftMs < prevEnd) {
+      inversions.push({ byMs: prevEnd - (start + shiftMs), leg: i })
+      shiftMs = prevEnd - start
+    }
+    if (shiftMs === 0) {
+      repaired.push(leg)
+      prevEnd = end
+      continue
+    }
+    // Preserve the leg's own duration: both ends move by the same amount.
+    const nextStart = start + shiftMs
+    const nextEnd = end + shiftMs
+    repaired.push({ ...leg, endTime: nextEnd, startTime: nextStart })
+    prevEnd = nextEnd
+  }
+
+  if (!inversions.length) return itinerary
+
+  // eslint-disable-next-line no-console
+  console.warn(
+    '[go-mode] repaired itinerary leg time inversion(s):',
+    inversions
+      .map((inv) => `leg ${inv.leg} started ${inv.byMs}ms early`)
+      .join('; ')
+  )
+
+  // Max over every finite leg end, not just the last leg's — a trailing leg
+  // with non-finite times would otherwise erase the recomputed end.
+  const legEnd = repaired.reduce(
+    (max: number, l: any) =>
+      Number.isFinite(Number(l.endTime))
+        ? Math.max(max, Number(l.endTime))
+        : max,
+    -Infinity
+  )
+  const from: any = itinerary
+  const next: any = { ...from, legs: repaired }
+  if (Number.isFinite(legEnd)) {
+    next.endTime = Math.max(Number(from.endTime) || legEnd, legEnd)
+    // Duration runs from the itinerary's own start: leg 0 never moves, so the
+    // start is by construction unchanged.
+    const start = Number.isFinite(Number(from.startTime))
+      ? Number(from.startTime)
+      : Number(repaired[0]?.startTime)
+    if (Number.isFinite(start)) {
+      next.duration = (Number(next.endTime) - start) / 1000
+      if (from.waitingTime != null) {
+        // Same definition normalizeGoModeItinerary uses: whatever the span
+        // isn't spent moving. The shift lengthens the wait, not the legs.
+        const moving = repaired.reduce(
+          (sum: number, l: any) => sum + (Number(l.duration) || 0),
+          0
+        )
+        next.waitingTime = Math.max(
+          0,
+          (Number(next.endTime) - start) / 1000 - moving
+        )
+      }
+    }
+  }
+  return next as Itinerary
 }
 
 /**

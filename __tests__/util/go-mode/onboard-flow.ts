@@ -459,6 +459,49 @@ describe('replanFromAboard (mid-ride aboard-aware replan)', () => {
     expect(bus.endTime - bus.startTime).toBe(300000)
   })
 
+  it('never starts a trip whose legs run backwards, not just leg 0 (8/9)', async () => {
+    // The 8/2 guard fixed the SYNTHESIZED leg and the container. On 8/9 the
+    // grafted onward legs kept the times they were planned with, so leg 1
+    // started 680,170 ms before leg 0 ended and the trip sheet read 7:29 PM
+    // above 7:18 PM. Assert the whole itinerary, end to end through the real
+    // thunk chain.
+    const trip = makeTripFixture()
+    const pastDay = Math.floor(Date.now() / 1000) - 600
+    trip.stopTimes = trip.stopTimes.map((st: any) => ({
+      ...st,
+      realtimeArrival: 0,
+      realtimeState: 'UPDATED',
+      serviceDay: pastDay
+    }))
+    const itinerary = makeItinerary()
+    ;(itinerary.legs[0].to as any).stop = { gtfsId: '1:s3', id: '1:s3' }
+    const store = makeStore({
+      goModeOverrides: { activeItinerary: itinerary },
+      trips: { [TRIP_ID]: trip }
+    })
+    await store.dispatch(replanFromAboard({ autoApply: true }))
+
+    const applied = store.actions.find((a) => a.type === 'START_GO_MODE')
+      ?.payload?.itinerary
+    expect(applied).toBeTruthy()
+    expect(applied.legs.length).toBeGreaterThan(1)
+    // Only legs the fixture gives real times to — the onward stub carries none.
+    const timed = applied.legs.filter(
+      (l: any) =>
+        Number.isFinite(Number(l.startTime)) &&
+        Number.isFinite(Number(l.endTime))
+    )
+    expect(timed.length).toBeGreaterThan(0)
+    expect(timed.filter((l: any) => l.endTime < l.startTime)).toEqual([])
+    const gaps = timed
+      .slice(1)
+      .map((l: any, i: number) => l.startTime - timed[i].endTime)
+    expect(gaps.filter((g: number) => g < 0)).toEqual([])
+    expect(applied.endTime).toBeGreaterThanOrEqual(
+      timed[timed.length - 1].endTime
+    )
+  })
+
   it('leaves a bus running AHEAD of schedule alone', () => {
     // The guard is for inversions only. A realtime arrival that is merely
     // earlier than the schedule is a bus running ahead — exactly the truth
