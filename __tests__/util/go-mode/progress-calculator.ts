@@ -630,6 +630,44 @@ describe('getUpcomingTransitTiming', () => {
     expect(t.plannedDepartureTime).toBe(busLeg.startTime)
   })
 
+  it('a live prediction moves the wait — a late bus is not a wait you keep', () => {
+    // The feed says the planned 20-min bus is now 26 min out.
+    const liveMs = NOW.getTime() + 26 * 60000
+    const t = getUpcomingTransitTiming(NOW, walkLeg, busLeg, 0.5, null, liveMs)
+    expect(t.timeUntilNextDeparture).toBeCloseTo(1560)
+    // 5 min of walking left, so the slack at the stop grew by the same 6 min.
+    expect(t.waitTimeAtStop).toBeCloseTo(1260)
+    expect(t.effectiveDepartureMs).toBe(liveMs)
+    // Crucially NOT flagged as overridden: the rider chose nothing, and the
+    // flag drives a "reset" affordance in WalkingNavigation.
+    expect(t.departureIsOverridden).toBe(false)
+    expect(t.plannedDepartureTime).toBe(busLeg.startTime)
+  })
+
+  it('a rider-selected departure still outranks the live prediction', () => {
+    // liveLegTimes follows the PLANNED leg's trip, which is not the bus the
+    // rider picked — so the pick wins.
+    const overrideMs = NOW.getTime() + 8 * 60000
+    const liveMs = NOW.getTime() + 26 * 60000
+    const t = getUpcomingTransitTiming(
+      NOW,
+      walkLeg,
+      busLeg,
+      0.5,
+      overrideMs,
+      liveMs
+    )
+    expect(t.effectiveDepartureMs).toBe(overrideMs)
+    expect(t.timeUntilNextDeparture).toBeCloseTo(480)
+    expect(t.departureIsOverridden).toBe(true)
+  })
+
+  it('falls back to the plan when there is no live figure', () => {
+    const t = getUpcomingTransitTiming(NOW, walkLeg, busLeg, 0.5, null, null)
+    expect(t.effectiveDepartureMs).toBe(busLeg.startTime)
+    expect(t.timeUntilNextDeparture).toBeCloseTo(1200)
+  })
+
   it('reports the destination arrival on transit legs', () => {
     const t = getUpcomingTransitTiming(NOW, busLeg, undefined, 0.2)
     expect(t.destinationArrivalTime).toBe(busLeg.endTime)
@@ -836,7 +874,9 @@ describe('alightBannerLevel', () => {
     expect(alightBannerLevel({ ...near, status: 'deviated' }, NOW)).toBeNull()
     expect(alightBannerLevel({ ...near, stopsRemaining: 0 }, NOW)).toBeNull()
     expect(alightBannerLevel({ ...near, stopsRemaining: 4 }, NOW)).toBeNull()
-    expect(alightBannerLevel({ ...near, stopsRemaining: undefined }, NOW)).toBeNull()
+    expect(
+      alightBannerLevel({ ...near, stopsRemaining: undefined }, NOW)
+    ).toBeNull()
   })
 
   it('falls through to the old behavior when there is no ETA at all', () => {
@@ -845,10 +885,7 @@ describe('alightBannerLevel', () => {
     expect(alightBannerLevel({ stopsRemaining: 1 }, NOW)).toBe('urgent')
     expect(alightBannerLevel({ stopsRemaining: 2 }, NOW)).toBe('warning')
     expect(
-      alightBannerLevel(
-        { destinationArrivalTime: NaN, stopsRemaining: 1 },
-        NOW
-      )
+      alightBannerLevel({ destinationArrivalTime: NaN, stopsRemaining: 1 }, NOW)
     ).toBe('urgent')
   })
 })

@@ -54,13 +54,33 @@ describe('util > go-mode > pacing-card', () => {
     expect(next?.state).toBe('tight')
   })
 
-  it('shows no card off a bike leg or without a transit leg ahead', () => {
-    expect(
-      tick(null, T0, 900, 120, { currentLeg: { mode: 'WALK' } }).post
-    ).toBeNull()
+  it('shows no card off an access leg or without a transit leg ahead', () => {
+    // Aboard the bus: the pacing question is already answered.
+    expect(tick(null, T0, 900, 120, { currentLeg: busLeg }).post).toBeNull()
     expect(
       tick(null, T0, 900, 120, { nextLeg: { mode: 'BICYCLE' } }).post
     ).toBeNull()
+  })
+
+  it('covers WALK legs too, with the verb and icon swapped', () => {
+    const walkLeg = { mode: 'WALK', startTime: 1000 } as any
+    const { next, post } = tick(null, T0, 900, 120, { currentLeg: walkLeg })
+    expect(post).not.toBeNull()
+    expect(post?.title).toBe('🚶 13 min walk · 2 min wait')
+    expect(post?.passive).toBe(false)
+    expect(next?.state).toBe('tight')
+  })
+
+  it('paces a walk leg on the same cadence as a bike leg', () => {
+    const walkLeg = { mode: 'WALK', startTime: 1000 } as any
+    const opts = { currentLeg: walkLeg }
+    const first = tick(null, T0, 900, 300, opts).next
+    // Under the 2-min move / 90 s floor: silent, exactly as on a bike.
+    expect(tick(first, T0 + 30_000, 900, 480, opts).post).toBeNull()
+    // A worsening edge still jumps the floor and alerts.
+    const worse = tick(first, T0 + 20_000, 900, -30, opts)
+    expect(worse.post?.passive).toBe(false)
+    expect(worse.post?.title).toBe('🚶 16 min walk · −1 min wait')
   })
 
   it('clears the card once the data goes away (boarded)', () => {

@@ -3,12 +3,16 @@ import type { Leg } from '@opentripplanner/types'
 import type { TripProgress } from './progress-calculator'
 
 /**
- * The sticky bike-pacing card: one notification (stable id, so iOS replaces it
- * in place) that rides on the wrist during a BICYCLE access leg and answers
- * "should I go fast or slow?" — time left riding, the bus being chased, and
- * the buffer at the stop. Requested on the 7/22 ride: "how much time is left
- * on my bike ride and how much I'll have to wait at the stop … so I can know
- * if I should go Fast or slow."
+ * The sticky pacing card: one notification (stable id, so iOS replaces it in
+ * place) that rides on the wrist during an access leg and answers "should I go
+ * fast or slow?" — time left travelling, the bus being chased, and the buffer
+ * at the stop. Requested on the 7/22 ride: "how much time is left on my bike
+ * ride and how much I'll have to wait at the stop … so I can know if I should
+ * go Fast or slow."
+ *
+ * Bike and WALK legs both qualify. The question the card answers is the same
+ * one on foot — a walker who can miss a bus by ninety seconds needs to know it
+ * as much as a cyclist does — so the only difference is the verb and the icon.
  *
  * Cadence is deliberately gentle: post once when the leg becomes current,
  * then re-post only when the buffer moves ≥2 min or crosses a pacing edge
@@ -57,22 +61,27 @@ export function classifyBuffer(waitSeconds: number): PacingState {
   return 'comfortable'
 }
 
-// Rider-confirmed copy: ride time left and projected wait, NOTHING else. A
+// Rider-confirmed copy: travel time left and projected wait, NOTHING else. A
 // negative wait shows with its minus sign — "−2 min wait" says everything
 // "go fast" did without adding words. Urgency still arrives as the buzz on a
-// worsening pacing edge; the glance stays two numbers.
+// worsening pacing edge; the glance stays two numbers. (The words the rider
+// asked for — hurry, take your time — live on the departure-drift alert, which
+// fires on a change and has room to explain itself.)
 function composePost(
-  rideMin: number,
+  travelMin: number,
   bufferMin: number,
   state: PacingState,
-  passive: boolean
+  passive: boolean,
+  walking: boolean
 ): PacingCardPost {
   const wait = bufferMin < 0 ? `−${-bufferMin}` : `${bufferMin}`
+  const icon = walking ? '🚶' : '🚲'
+  const verb = walking ? 'walk' : 'ride'
   return {
     message: '',
     passive,
     priority: state === 'atRisk' ? 1 : 0,
-    title: `🚲 ${rideMin} min ride · ${wait} min wait`
+    title: `${icon} ${travelMin} min ${verb} · ${wait} min wait`
   }
 }
 
@@ -96,8 +105,9 @@ export function evaluatePacingCard(
   const wait = progress.waitTimeAtStop
   const due = progress.timeUntilNextDeparture
 
+  const walking = currentLeg?.mode === 'WALK'
   if (
-    currentLeg?.mode !== 'BICYCLE' ||
+    (currentLeg?.mode !== 'BICYCLE' && !walking) ||
     !nextLeg?.transitLeg ||
     wait == null ||
     due == null
@@ -105,7 +115,7 @@ export function evaluatePacingCard(
     return { next: null, post: null }
   }
 
-  const rideMin = Math.max(0, Math.round((due - wait) / 60))
+  const travelMin = Math.max(0, Math.round((due - wait) / 60))
   // Negative waits round AWAY from zero: 30 s short is "−1 min wait", never a
   // false "0 min wait".
   const bufferMin = wait < 0 ? Math.floor(wait / 60) : Math.round(wait / 60)
@@ -130,6 +140,6 @@ export function evaluatePacingCard(
   const passive = !freshLeg && !worsened
   return {
     next: { bufferMin, legKey, postedAtMs: nowMs, state },
-    post: composePost(rideMin, bufferMin, state, passive)
+    post: composePost(travelMin, bufferMin, state, passive, walking)
   }
 }

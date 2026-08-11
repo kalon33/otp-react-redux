@@ -21,6 +21,10 @@ export type NotificationType =
   | 'MISSED_BUS'
   | 'TRIP_COMPLETE'
   | 'TRIP_UPDATED'
+  // The bus being travelled toward has moved ≥2 min from the estimate in force
+  // when the boarding became current. Raised by departure-drift.ts, which owns
+  // the baseline state a check function here could not hold.
+  | 'DEPARTURE_CHANGED'
 
 export interface NotificationConfig {
   enabled: boolean
