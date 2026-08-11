@@ -37,6 +37,20 @@ interface ReplayFixture {
   }>
   itinerary: any
   meta: { [k: string]: any; endMs: number; startMs: number }
+  // The onboard ("I'm already on a bus") flow's own inputs and output.
+  onboard?: { result: any; trip: any }
+  // The onward plan per candidate alight stop — the input the ranking was
+  // computed from, keyed by the stop the plan departs from. Recorded since
+  // 2026-08-10; fixtures older than that carry `onboard.result` but not the
+  // plans behind it, which is why the 8/9 backwards-itinerary proof is a unit
+  // test (__tests__/util/go-mode/alight-backwards-0809.ts) and not a replay.
+  // Serving these back is what a builder-level replay gate needs next.
+  onboardCandidatePlans?: Array<{
+    request?: any
+    response: any
+    stopId?: string
+    tMs: number
+  }>
   // Periodic "alternatives to finish the trip" captured during recording, served
   // by nearest sim-time so a reroute at moment T yields the alternatives real at T.
   rerouteSnapshots?: Array<{ request?: any; response: any; tMs: number }>

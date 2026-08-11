@@ -312,6 +312,9 @@ export const CLEAR_RIDING = 'CLEAR_RIDING'
 export const CLEAR_VEHICLE_MATCH = 'CLEAR_VEHICLE_MATCH'
 export const CONFIRM_VEHICLE = 'CONFIRM_VEHICLE'
 export const DISMISS_BOARDING_PROMPT = 'DISMISS_BOARDING_PROMPT'
+// Recording only, like REROUTE_SNAPSHOT: no reducer consumes either, they
+// exist to put a request/response pair in the debug stream for build-fixture.
+export const ONBOARD_CANDIDATE_SNAPSHOT = 'ONBOARD_CANDIDATE_SNAPSHOT'
 export const PAUSE_GPS_SIMULATION = 'PAUSE_GPS_SIMULATION'
 export const REROUTE_SNAPSHOT = 'REROUTE_SNAPSHOT'
 export const RESUME_GPS_SIMULATION = 'RESUME_GPS_SIMULATION'
@@ -1713,9 +1716,35 @@ function fetchCandidatePlan(
       time: format(zoned, coreUtils.time.OTP_API_TIME_FORMAT),
       to: { lat: ctx.to.lat, lon: ctx.to.lon, name: ctx.to.name }
     }
-    const { error, itineraries } = await dispatch(
+    const { error, itineraries, query, response, variables } = await dispatch(
       fetchOnboardCandidatePlan(combo)
     )
+    // Recording only. These five plans are what the optimizer actually ranks,
+    // and until now nothing kept them: fetchOnboardCandidatePlan resolves
+    // through a local promise rather than dispatching ROUTING_RESPONSE, so
+    // build-fixture.js never saw one. That is why the 8/9 fixture carries the
+    // onboard trip and the ranked result but cannot replay the step between
+    // them — its proof had to be written as a unit test instead
+    // (__tests__/util/go-mode/alight-backwards-0809.ts). Keyed by the stop the
+    // plan departs from, which is what a replay has to match on: five
+    // simultaneous plans differ only by origin.
+    if (isTripRecordingEnabled()) {
+      dispatch({
+        payload: {
+          request: {
+            busArrivalEpoch,
+            from: combo.from,
+            query,
+            stopId: stop.id,
+            to: combo.to,
+            variables
+          },
+          response,
+          tMs: getCurrentTime().getTime()
+        },
+        type: ONBOARD_CANDIDATE_SNAPSHOT
+      })
+    }
     return {
       busArrivalEpoch,
       error,
