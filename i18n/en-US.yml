@@ -842,7 +842,7 @@ components:
     altOption: Alternative option
     arrivedDone: Arrived
     arrivedTitle: You have arrived
-    arrivesIn: Arriving in {time}
+    arrivesIn: 'Arriving in {time}'
     arrivingSoon: Arriving soon
     boardingQuestion: Are you on board?
     boardingSubtitle: Confirm that you are on the bus
@@ -874,15 +874,15 @@ components:
     gpsErrorTitle: Positioning error
     goModeIsLive: "Go Mode is active — tracking your bus"
     header:
-      getOffAt: Get off at {stop}
-      getOffAtTime: Get off at {stop} at {time}
+      getOffAt: 'Get off at {stop}'
+      getOffAtTime: 'Get off at {stop} at {time}'
       nextDeparture: 'Next departure: {time}'
-      routeDepartsIn: Route {route} departs in {time}
+      routeDepartsIn: 'Route {route} departs in {time}'
     hoursHMin: "{hours}h {mins}m"
     hoursMinutesRemaining: '{hours}h {minutes}min remaining'
     legBike: 'Bike: {distance} m'
     legStopsTo: '{count, plural, one {# stop} other {# stops}} to {dest}'
-    legTo: to {dest}
+    legTo: 'to {dest}'
     legWait: "⏳ {mins} min wait"
     legWalk: 'Walk: {distance} m'
     liveBanner: Live tracking
@@ -899,7 +899,7 @@ components:
     noLiveBusDetected: "No live bus detected — choose your route:"
     noLiveVehicleData: "No live vehicle data — GPS tracking"
     notYet: Not yet
-    offAtStop: Get off at {stop}
+    offAtStop: 'Get off at {stop}'
     offAtTime: "Get off at {time}"
     onBus: On the bus
     onBusButton: I'm already on the bus
@@ -925,7 +925,7 @@ components:
     resetToPlanned: Return to original itinerary
     restOfTrip: Rest of trip
     retry: Retry
-    rideToStop: Ride to {stop}
+    rideToStop: 'Ride to {stop}'
     routeInTime: "{route} in {time}"
     routeLabel: "Route {route}"
     routeOption: Route option
@@ -933,15 +933,15 @@ components:
     sheetHandleLabel: Drag for more options
     stopsRemainingCompact: '{count, plural, one {1 stop remaining} other {# stops remaining}}'
     thisOne: "This one"
-    toStop: To {stop}
+    toStop: 'To {stop}'
     trackingBus: Tracking bus
     tripSheetHeading: Trip details
     tripSheetTitle: Your trip
     useThisDeparture: Use this departure
     vehicleDetail: 'Vehicle details: {detail}'
-    vehicleDistance: {distance} m away
+    vehicleDistance: '{distance} m away'
     waitingGPS: Acquiring GPS signal...
-    walkToStop: Walk to {stop}
+    walkToStop: 'Walk to {stop}'
     whereDoYouWantToGetOff: "Where do you want to get off?"
     whereToAlight: Where to alight?
     whichBusAreYouOn: "Which bus are you on? Select below."

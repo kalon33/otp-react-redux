@@ -890,7 +890,7 @@ components:
     altOption: Option alternative
     arrivedDone: Arrivé
     arrivedTitle: Vous êtes arrivé
-    arrivesIn: Arrivée dans {time}
+    arrivesIn: 'Arrivée dans {time}'
     arrivingSoon: Arrivée prochaine
     boardingQuestion: Êtes-vous à bord ?
     boardingSubtitle: Confirmez que vous êtes dans le bus
@@ -923,9 +923,9 @@ components:
     goModeIsLive: "Go Mode est actif — suivi de votre bus"
     header:
       getOffAt: Descendre à {stop}
-      getOffAtTime: Descendre à {stop} à {time}
+      getOffAtTime: 'Descendre à {stop} à {time}'
       nextDeparture: 'Prochain départ: {time}'
-      routeDepartsIn: Ligne {route} part dans {time}
+      routeDepartsIn: 'Ligne {route} part dans {time}'
     hoursHMin: "{hours}h {mins}m"
     hoursMinutesRemaining: '{hours}h {minutes}min restantes'
     legBike: 'Vélo: {distance} m'
