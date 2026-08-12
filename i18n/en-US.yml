@@ -143,6 +143,12 @@ common:
     tripDurationFormat: >-
       {hours, plural, =0 {} other {# hr }}{minutes} min { seconds, plural, =0 {}
       other {# sec}}
+fastest: Fastest
+minimize-walking: Minimize Walking
+stay-seated: Stay Seated
+bike-forward: Bike Forward
+avoid-biking: Avoid Biking
+reliable-transfers: Reliable Transfers
 components:
 
   RoutingProfiles:
