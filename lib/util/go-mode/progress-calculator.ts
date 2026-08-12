@@ -25,6 +25,10 @@ export interface TripProgress {
   // Epoch ms — arrival at current transit leg's destination
   destinationArrivalTime?: number
   distanceToNextTurn?: number
+  // Epoch ms — the departure the wait math actually ran on (override, else the
+  // live prediction, else the plan). One number for the pacing card, the drift
+  // check and waitTimeAtStop to quote, so they can never disagree.
+  effectiveDepartureMs?: number
   // 0-100%
   estimatedArrival: Date
   // The turn after `nextTurnCue`, for a "then …" line
@@ -423,16 +427,27 @@ export function getWalkingInstructionWithIntl(
  * Get timing info for upcoming transit connections.
  * On walking legs approaching transit: departure countdown + wait time.
  * On transit legs: destination arrival time.
+ *
+ * `liveBoardMs` is the boarding leg's live GTFS-realtime prediction (from
+ * refreshLiveLegTimes), and it is what makes the wait honest: the plan's board
+ * time never moves, so without it a bus running six minutes late still reads as
+ * on time all the way to the stop, and the pacing card keeps saying hurry.
+ *
+ * A rider-selected departure still outranks it. `liveLegTimes` tracks the
+ * PLANNED leg's trip id, so once the rider picks a different bus that live
+ * epoch describes a vehicle they are not taking.
  */
 export function getUpcomingTransitTiming(
   currentTime: Date,
   currentLeg: Leg,
   nextLeg: Leg | undefined,
   progressInLeg: number,
-  departureOverrideMs?: number | null
+  departureOverrideMs?: number | null,
+  liveBoardMs?: number | null
 ): {
   departureIsOverridden?: boolean
   destinationArrivalTime?: number
+  effectiveDepartureMs?: number
   plannedDepartureTime?: number
   timeUntilNextDeparture?: number
   waitTimeAtStop?: number
@@ -450,8 +465,13 @@ export function getUpcomingTransitTiming(
       nextLeg.mode === 'SUBWAY' ||
       nextLeg.mode === 'TRAM')
   ) {
-    const plannedDepartureTime = nextLeg.startTime
-    const effectiveDeparture = departureOverrideMs || nextLeg.startTime
+    // Leg times are `number | string` in @opentripplanner/types; coerce at the
+    // boundary the way the rest of Go Mode does (Number(leg.startTime)) so the
+    // arithmetic below and the returned epochs are honestly typed.
+    const plannedDepartureTime = Number(nextLeg.startTime)
+    const effectiveDeparture = Number(
+      departureOverrideMs || liveBoardMs || nextLeg.startTime
+    )
     const remainingWalkSeconds =
       (currentLeg.duration || 0) * (1 - progressInLeg)
     const timeUntilNextDeparture =
@@ -459,7 +479,11 @@ export function getUpcomingTransitTiming(
     const waitTimeAtStop = timeUntilNextDeparture - remainingWalkSeconds
 
     return {
+      // Strictly the rider's own pick — a live prediction is the same bus at a
+      // new time, not a different departure, and flagging it here would put a
+      // "reset" affordance (WalkingNavigation) on a choice nobody made.
       departureIsOverridden: !!departureOverrideMs,
+      effectiveDepartureMs: effectiveDeparture,
       plannedDepartureTime,
       timeUntilNextDeparture,
       waitTimeAtStop
@@ -510,7 +534,8 @@ export function calculateTripProgress(
   routeMatch: RouteMatchResult | null,
   departureOverrideMs?: number | null,
   transitCtx?: TransitTrustContext,
-  riderSpeedMps?: number | null
+  riderSpeedMps?: number | null,
+  liveBoardMs?: number | null
 ): TripProgress {
   const legs = itinerary.legs
   const currentLegIndex = routeMatch?.legIndex || 0
@@ -573,7 +598,8 @@ export function calculateTripProgress(
     currentLeg,
     nextLeg,
     progressInCurrentLeg,
-    departureOverrideMs
+    departureOverrideMs,
+    liveBoardMs
   )
 
   // Measured schedule delay at the rider's current position (real GPS progress

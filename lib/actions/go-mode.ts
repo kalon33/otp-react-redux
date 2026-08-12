@@ -114,6 +114,8 @@ import {
   evaluatePacingCard
 } from '../util/go-mode/pacing-card'
 import { asContinuation } from '../util/go-mode/turn-by-turn'
+import { evaluateDepartureDrift } from '../util/go-mode/departure-drift'
+import type { DepartureBaselineState } from '../util/go-mode/departure-drift'
 import type { PacingCardState } from '../util/go-mode/pacing-card'
 
 import {
@@ -222,9 +224,14 @@ let earlyBoardReplan: {
 // tick. Null when no card is showing.
 let lastTurnCardKey: string | null = null
 
-// What the sticky bike-pacing card last showed (see pacing-card.ts). Null when
-// no card is showing.
+// What the sticky pacing card last showed (see pacing-card.ts). Null when no
+// card is showing.
 let lastPacingCard: PacingCardState | null = null
+
+// The boarding being watched for departure jumps, and what the rider was last
+// told about it (see departure-drift.ts). Module state for the same reason
+// lastPacingCard is: it must survive a tick but never a trip.
+let lastDepartureBaseline: DepartureBaselineState | null = null
 
 // A leg transition is side-effectful (vehicle tracking, GPS interval restart,
 // departure-override reset), so it must run once per leg. The route match is
@@ -783,6 +790,7 @@ export function endGoMode() {
     lastTurnCardKey = null
     if (lastPacingCard !== null) cancelPush(PACING_CARD_NOTIFICATION_ID)
     lastPacingCard = null
+    lastDepartureBaseline = null
     earlyBoardReplan = null
     lastTransitionedLegIndex = null
     missedBusRerouteAttempt = null
@@ -2807,6 +2815,9 @@ const PUSH_NOTIFICATION_TYPES = new Set<NotificationType>([
   'CONNECTION_WARNING',
   'ARRIVING_STOP',
   'MISSED_BUS',
+  // The bus moved while the rider was on their way to it — the one thing they
+  // cannot see from the pavement, and the reason they asked for this.
+  'DEPARTURE_CHANGED',
   // Only the turns worth interrupting for; routine ones arrive as
   // UPCOMING_TURN, which is deliberately absent here and reaches the rider
   // through the silent turn card below instead. A paired watch gets one
@@ -2921,6 +2932,10 @@ export function advanceToLeg(legIndex: number) {
     // New leg = new upcoming boarding = a fresh auto-anchor decision.
     manualDepartureLock = false
     lastAutoAnchorMs = null
+    // And a fresh departure baseline. The boardingKey carries the leg index so
+    // this is belt-and-braces, but it keeps a finished boarding's figures from
+    // riding along for the rest of the trip.
+    lastDepartureBaseline = null
     // A new leg is also a fresh quiet-replan slate — an egress leg must not
     // inherit the access leg's miss streak.
     quietReplanMissStreak = 0
@@ -3130,6 +3145,23 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       }
     }
 
+    // The live GTFS-realtime prediction for the boarding the rider is heading
+    // toward. Believed ONLY when the feed genuinely flagged it live: a non-live
+    // epoch is clamped forward to `now` by mergeLiveTimePoint /
+    // clampNonLiveLegTimes, so trusting it would read as a bus perpetually
+    // about to leave. Without this the wait math runs on a departure time that
+    // cannot move, and a bus running six minutes late reaches the pacing card
+    // as if it were on time.
+    const boardingLegIndex = routeMatch.legIndex + 1
+    const boardingLeg: any = itinerary.legs[boardingLegIndex]
+    const liveBoarding = goMode.liveLegTimes?.[boardingLegIndex]
+    const liveBoardMs =
+      boardingLeg?.transitLeg &&
+      liveBoarding?.boardRealtime &&
+      liveBoarding.boardEpoch != null
+        ? liveBoarding.boardEpoch
+        : null
+
     const progress = calculateTripProgress(
       currentTime,
       itinerary,
@@ -3139,7 +3171,8 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       // The fix's own ground speed lets turn-announcement leads scale with how
       // fast the rider is actually moving (7/29: 6.5 m/s made the static 120 m
       // prepare an 18 s warning).
-      position.coords.speed ?? null
+      position.coords.speed ?? null,
+      liveBoardMs
     )
 
     dispatch(updateProgress(progress))
@@ -3362,6 +3395,47 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         goMode.notifications?.sentNotifications || []
       )
     if (missedEvent) notifications.push(missedEvent)
+
+    // Has the bus the rider is travelling toward moved? Judged out here rather
+    // than inside checkForNotifications because the answer needs a baseline
+    // held across ticks — the same reason classifyMissedBus lives out here.
+    //
+    // Skipped entirely on a tick that already raised MISSED_BUS or LEAVE_SOON:
+    // both say the actionable thing, and a second buzz would only dilute them.
+    // Skipping rather than discarding also keeps the baseline intact, so a
+    // drift that is still real re-alerts on the next tick.
+    const supersedesDrift = notifications.some(
+      (n) => n.type === 'MISSED_BUS' || n.type === 'LEAVE_SOON'
+    )
+    if (
+      !supersedesDrift &&
+      getState().otp.config.goMode?.departureDrift !== false
+    ) {
+      const onAccessLeg =
+        currentLeg?.mode === 'WALK' || currentLeg?.mode === 'BICYCLE'
+      const boardingTripId =
+        boardingLeg?.trip?.gtfsId || boardingLeg?.tripId || null
+      const drift = evaluateDepartureDrift(lastDepartureBaseline, {
+        boardingKey:
+          onAccessLeg && boardingLeg?.transitLeg && boardingTripId
+            ? `${boardingLegIndex}:${boardingTripId}:${
+                departureOverride ?? 'plan'
+              }`
+            : null,
+        // A rider-selected departure is a DIFFERENT bus from the one
+        // liveLegTimes follows (it keys off the planned leg's trip id), so
+        // there is no honest live figure to watch and nothing to report.
+        liveDepartureMs: departureOverride == null ? liveBoardMs : null,
+        nowMs: currentTime.getTime(),
+        routeName:
+          boardingLeg?.routeShortName ||
+          boardingLeg?.routeLongName ||
+          'Your bus',
+        waitSeconds: progress.waitTimeAtStop ?? null
+      })
+      lastDepartureBaseline = drift.next
+      if (drift.alert) notifications.push(drift.alert)
+    }
 
     // Show notifications. Always record them in state (so replay assertions and
     // the debug log see the sequence), but suppress the real-world side effects
