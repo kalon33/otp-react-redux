@@ -216,6 +216,12 @@ components:
     nlPreferencesHeader: Describe your needs
     nlPreferencesLoading: Thinking…
     nlPreferencesPlaceholder: e.g. bad knee today, avoid transfers
+    routeLockAny: Any route
+    routeLockChip: Only {route}
+    routeLockDetail: Only trips on {route}, biking to and from it
+    routeLockLabel: Ride only this route
+    routeLockNotFound: No route called “{route}” — nothing was locked.
+    routeLockNotUsed: Doesn’t use {route}
     routingProfileHeader: Routing profile
     routingProfileLabel: Optimize routing for
     saveAndReturn: Save and return

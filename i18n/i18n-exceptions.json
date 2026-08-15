@@ -67,6 +67,12 @@
     ]
   },
   "ignoredIds": [
-    "otpUi.TripDetails.title"
+    "otpUi.TripDetails.title",
+    "components.BatchSearchScreen.routeLockAny",
+    "components.BatchSearchScreen.routeLockChip",
+    "components.BatchSearchScreen.routeLockDetail",
+    "components.BatchSearchScreen.routeLockLabel",
+    "components.BatchSearchScreen.routeLockNotFound",
+    "components.BatchSearchScreen.routeLockNotUsed"
   ]
 }

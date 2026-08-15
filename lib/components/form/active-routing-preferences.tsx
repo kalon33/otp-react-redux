@@ -7,11 +7,11 @@ import styled from 'styled-components'
 import * as routingProfileActions from '../../actions/routing-profiles'
 import { AppReduxState } from '../../util/state-types'
 import {
-  DEFAULT_PROFILE_ID,
   PreferenceSummary,
   RoutingPreferences,
   summarizePreferences
 } from '../../util/routing-profiles'
+import type { RouteLock } from '../../util/route-lock'
 
 const Container = styled.div`
   align-items: center;
@@ -65,14 +65,16 @@ const ClearButton = styled.button`
  */
 const ActiveRoutingPreferences = ({
   clearPreferences,
-  preferences
+  preferences,
+  routeLock
 }: {
   clearPreferences: () => void
   preferences?: RoutingPreferences
+  routeLock?: RouteLock
 }): JSX.Element | null => {
   const intl = useIntl()
   const summary: PreferenceSummary[] = summarizePreferences(preferences)
-  if (summary.length === 0) return null
+  if (summary.length === 0 && !routeLock) return null
 
   return (
     <Container
@@ -84,6 +86,19 @@ const ActiveRoutingPreferences = ({
       <LabelText>
         <FormattedMessage id="components.ActiveRoutingPreferences.label" />
       </LabelText>
+      {routeLock && (
+        <Chip
+          title={intl.formatMessage(
+            { id: 'components.BatchSearchScreen.routeLockDetail' },
+            { route: routeLock.label }
+          )}
+        >
+          <FormattedMessage
+            id="components.BatchSearchScreen.routeLockChip"
+            values={{ route: routeLock.label }}
+          />
+        </Chip>
+      )}
       {summary.map((item) => (
         <Chip key={item.phrase} title={item.detail}>
           {item.phrase}
@@ -98,14 +113,14 @@ const ActiveRoutingPreferences = ({
 }
 
 const mapStateToProps = (state: AppReduxState) => ({
-  preferences: state.otp.currentQuery?.routingPreferences
+  preferences: state.otp.currentQuery?.routingPreferences,
+  routeLock: state.otp.currentQuery?.routeLock
 })
 
 const mapDispatchToProps = {
-  // Reset to the default profile with no custom levers; this re-searches when
-  // the query is valid, just like applying a preference does.
-  clearPreferences: () =>
-    routingProfileActions.setRoutingPreferences({}, DEFAULT_PROFILE_ID)
+  // Reset to the default profile with no custom levers and no route lock; this
+  // re-searches once when the query is valid, just like applying a preference.
+  clearPreferences: routingProfileActions.clearRoutingPreferences
 }
 
 export default connect(
