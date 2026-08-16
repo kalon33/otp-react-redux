@@ -1,1 +1,8 @@
-{}
+_id: ar
+GoMode:
+    directionEB: الاتجاه الشرقي
+    directionNB: الاتجاه الشمالي
+    directionSB: الاتجاه الجنوبي
+    directionWB: الاتجاه الغربي
+    busHeadsign: 'الوجهة: {headsign}'
+    noBusesOrRoutesNearby: لم يتم اكتشاف أي حافلات أو طرق قريبة. حاول الاقتراب من محطة حافلات.

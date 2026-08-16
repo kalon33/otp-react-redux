@@ -1,4 +1,7 @@
+import { encode } from '@mapbox/polyline'
+
 import {
+  alightBannerLevel,
   calculateExpectedProgress,
   calculateOverallProgress,
   calculateTimeRemaining,
@@ -251,6 +254,73 @@ describe('util > go-mode > progress-calculator', () => {
       } as any
       expect(getTransitProgress(leg, 0.5)).toEqual({})
     })
+
+    describe('with leg geometry (unevenly spaced stops)', () => {
+      // Orange-Line shape: a straight leg whose stops bunch at the far end —
+      // one early stop at 20% of the distance, then nothing until a cluster at
+      // 85/90/95%, alighting at 100%. Even spacing would badly miscount here.
+      const line: [number, number][] = []
+      for (let i = 0; i <= 20; i++) line.push([i * 0.005, 0])
+      const stopAt = (lat: number, name: string) => ({ lat, lon: 0, name })
+      const leg = {
+        intermediateStops: [
+          stopAt(0.02, 'Early Stop'),
+          stopAt(0.085, 'Cluster A'),
+          stopAt(0.09, 'Cluster B'),
+          stopAt(0.095, 'Cluster C')
+        ],
+        legGeometry: { points: encode(line, 5) },
+        mode: 'BUS',
+        to: { lat: 0.1, lon: 0, name: 'Destination' }
+      } as any
+
+      it('counts every stop ahead early in the leg', () => {
+        expect(getTransitProgress(leg, 0.1)).toEqual({
+          nextStopName: 'Early Stop',
+          stopsRemaining: 5
+        })
+      })
+
+      it('still counts the whole tail cluster mid-leg', () => {
+        // Even spacing says floor(0.5 × 5) = 2 stops passed; in reality only
+        // one stop is behind the rider at half the distance.
+        expect(getTransitProgress(leg, 0.5)).toEqual({
+          nextStopName: 'Cluster A',
+          stopsRemaining: 4
+        })
+      })
+
+      it('does not report the alight stop as next while cluster stops remain', () => {
+        // The 7/22 ride bug: at 90% of the distance the header said "1 stop
+        // remaining" with two cluster stops still ahead of the rider.
+        expect(getTransitProgress(leg, 0.9)).toEqual({
+          nextStopName: 'Cluster C',
+          stopsRemaining: 2
+        })
+      })
+
+      it('reports the alight stop once past the cluster', () => {
+        expect(getTransitProgress(leg, 0.99)).toEqual({
+          nextStopName: 'Destination',
+          stopsRemaining: 1
+        })
+      })
+
+      it('prefers intermediatePlaces when present', () => {
+        const placesLeg = {
+          ...leg,
+          intermediatePlaces: [
+            stopAt(0.085, 'Places A'),
+            stopAt(0.09, 'Places B'),
+            stopAt(0.095, 'Places C')
+          ]
+        }
+        expect(getTransitProgress(placesLeg, 0.5)).toEqual({
+          nextStopName: 'Places A',
+          stopsRemaining: 4
+        })
+      })
+    })
   })
 
   describe('getWalkingInstruction', () => {
@@ -291,6 +361,19 @@ describe('util > go-mode > progress-calculator', () => {
 
       const result = getWalkingInstruction(leg, 0.5)
       expect(result.nextInstruction).toContain('Continue to Station')
+    })
+
+    it('returns nothing at all while the rider is off the route', () => {
+      const leg = {
+        distance: 1000,
+        mode: 'BICYCLE',
+        to: { name: 'Station' }
+      } as any
+
+      // No turn fields AND no "Continue to" filler: off the plan, that line is
+      // exactly the stale guidance the 7/29 rider shouldn't have seen. The
+      // deviation toast and the quiet replan own this state.
+      expect(getWalkingInstruction(leg, 0.5, false)).toEqual({})
     })
   })
 
@@ -442,6 +525,78 @@ describe('util > go-mode > progress-calculator', () => {
 
       expect(result.status).toBe('deviated')
       expect(result.currentLegIndex).toBe(0)
+      // A null match reads as deviated, and deviated access legs carry no turn
+      // guidance at all — the projection behind it is a fiction (7/29).
+      expect(result.nextInstruction).toBeUndefined()
+      expect(result.nextTurnCue).toBeUndefined()
+      expect(result.distanceToNextTurn).toBeUndefined()
+    })
+
+    it('carries no turn fields while the rider is off the route', () => {
+      const legs = makeLegs([1000], [300], ['BICYCLE'])
+      const itinerary = makeItinerary(
+        legs,
+        '2026-01-28T10:00:00',
+        '2026-01-28T10:05:00'
+      )
+
+      const result = calculateTripProgress(
+        new Date('2026-01-28T10:02:00'),
+        itinerary,
+        {
+          distanceFromRoute: 150,
+          isOnRoute: false,
+          legIndex: 0,
+          nearestPoint: [44.92, -93.27] as [number, number],
+          progressAlongLeg: 0.4,
+          progressAlongSegment: 0.5,
+          segmentIndex: 1
+        }
+      )
+
+      expect(result.status).toBe('deviated')
+      expect(result.nextInstruction).toBeUndefined()
+      expect(result.nextTurnCue).toBeUndefined()
+      expect(result.distanceToNextTurn).toBeUndefined()
+    })
+
+    it('passes the rider speed through for lead scaling', () => {
+      const legs = makeLegs([1000], [300], ['BICYCLE'])
+      const itinerary = makeItinerary(
+        legs,
+        '2026-01-28T10:00:00',
+        '2026-01-28T10:05:00'
+      )
+
+      const result = calculateTripProgress(
+        new Date('2026-01-28T10:02:00'),
+        itinerary,
+        {
+          distanceFromRoute: 5,
+          isOnRoute: true,
+          legIndex: 0,
+          nearestPoint: [44.92, -93.27] as [number, number],
+          progressAlongLeg: 0.4,
+          progressAlongSegment: 0.5,
+          segmentIndex: 1
+        },
+        undefined,
+        undefined,
+        6.5
+      )
+
+      expect(result.riderSpeedMps).toBe(6.5)
+
+      // No speed on the fix → the field stays absent (floors apply downstream).
+      const noSpeed = calculateTripProgress(
+        new Date('2026-01-28T10:02:00'),
+        itinerary,
+        null,
+        undefined,
+        undefined,
+        null
+      )
+      expect(noSpeed.riderSpeedMps).toBeUndefined()
     })
   })
 })
@@ -475,6 +630,44 @@ describe('getUpcomingTransitTiming', () => {
     expect(t.plannedDepartureTime).toBe(busLeg.startTime)
   })
 
+  it('a live prediction moves the wait — a late bus is not a wait you keep', () => {
+    // The feed says the planned 20-min bus is now 26 min out.
+    const liveMs = NOW.getTime() + 26 * 60000
+    const t = getUpcomingTransitTiming(NOW, walkLeg, busLeg, 0.5, null, liveMs)
+    expect(t.timeUntilNextDeparture).toBeCloseTo(1560)
+    // 5 min of walking left, so the slack at the stop grew by the same 6 min.
+    expect(t.waitTimeAtStop).toBeCloseTo(1260)
+    expect(t.effectiveDepartureMs).toBe(liveMs)
+    // Crucially NOT flagged as overridden: the rider chose nothing, and the
+    // flag drives a "reset" affordance in WalkingNavigation.
+    expect(t.departureIsOverridden).toBe(false)
+    expect(t.plannedDepartureTime).toBe(busLeg.startTime)
+  })
+
+  it('a rider-selected departure still outranks the live prediction', () => {
+    // liveLegTimes follows the PLANNED leg's trip, which is not the bus the
+    // rider picked — so the pick wins.
+    const overrideMs = NOW.getTime() + 8 * 60000
+    const liveMs = NOW.getTime() + 26 * 60000
+    const t = getUpcomingTransitTiming(
+      NOW,
+      walkLeg,
+      busLeg,
+      0.5,
+      overrideMs,
+      liveMs
+    )
+    expect(t.effectiveDepartureMs).toBe(overrideMs)
+    expect(t.timeUntilNextDeparture).toBeCloseTo(480)
+    expect(t.departureIsOverridden).toBe(true)
+  })
+
+  it('falls back to the plan when there is no live figure', () => {
+    const t = getUpcomingTransitTiming(NOW, walkLeg, busLeg, 0.5, null, null)
+    expect(t.effectiveDepartureMs).toBe(busLeg.startTime)
+    expect(t.timeUntilNextDeparture).toBeCloseTo(1200)
+  })
+
   it('reports the destination arrival on transit legs', () => {
     const t = getUpcomingTransitTiming(NOW, busLeg, undefined, 0.2)
     expect(t.destinationArrivalTime).toBe(busLeg.endTime)
@@ -483,5 +676,216 @@ describe('getUpcomingTransitTiming', () => {
   it('returns nothing for non-transit connections', () => {
     const bikeLeg = { duration: 300, mode: 'BICYCLE' } as any
     expect(getUpcomingTransitTiming(NOW, walkLeg, bikeLeg, 0.5)).toEqual({})
+  })
+})
+
+describe('getTransitProgress with a trust context', () => {
+  // Straight geometry, one early stop and a tail cluster (see the geometry
+  // describe above); progress 0.5 puts the rider between them.
+  const line: [number, number][] = []
+  for (let i = 0; i <= 20; i++) line.push([i * 0.005, 0])
+  const stopAt = (lat: number, name: string) => ({ lat, lon: 0, name })
+  const leg = {
+    intermediateStops: [
+      stopAt(0.02, 'Early Stop'),
+      stopAt(0.085, 'Cluster A'),
+      stopAt(0.09, 'Cluster B'),
+      stopAt(0.095, 'Cluster C')
+    ],
+    legGeometry: { points: encode(line, 5) },
+    mode: 'BUS',
+    to: { lat: 0.1, lon: 0, name: 'Destination' }
+  } as any
+
+  it('without a ctx, returns the legacy result exactly — no trust fields', () => {
+    // Back-compat pin: legacy callers (demo harness, tests) see byte-identical
+    // output, so untouched paths cannot regress.
+    expect(getTransitProgress(leg, 0.5)).toEqual({
+      nextStopName: 'Cluster A',
+      stopsRemaining: 4
+    })
+  })
+
+  it('sound rider GPS drives the count: source gps, trusted', () => {
+    expect(
+      getTransitProgress(leg, 0.5, {
+        riderTrusted: true,
+        vehicleProgress: null,
+        vehicleStops: null
+      })
+    ).toEqual({
+      nextStopName: 'Cluster A',
+      stopsRemaining: 4,
+      stopsSource: 'gps',
+      stopsTrusted: true
+    })
+  })
+
+  it("distrusted rider GPS falls to the bus's own position: source vehicle, trusted", () => {
+    // The rider's fix says 0.93 of the leg (stale/garbage); the bus's own
+    // feed position projects to 0.3 — the bus wins.
+    expect(
+      getTransitProgress(leg, 0.93, {
+        riderTrusted: false,
+        vehicleProgress: 0.3,
+        vehicleStops: null
+      })
+    ).toEqual({
+      nextStopName: 'Cluster A',
+      stopsRemaining: 4,
+      stopsSource: 'vehicle',
+      stopsTrusted: true
+    })
+  })
+
+  it("the feed's next-stop fact is the next fallback: source vehicle-stop", () => {
+    expect(
+      getTransitProgress(leg, 0.93, {
+        riderTrusted: false,
+        vehicleProgress: null,
+        vehicleStops: { nextStopName: 'Cluster B', stopsRemaining: 3 }
+      })
+    ).toEqual({
+      nextStopName: 'Cluster B',
+      stopsRemaining: 3,
+      stopsSource: 'vehicle-stop',
+      stopsTrusted: true
+    })
+  })
+
+  it('with every trusted source empty, the count is an untrusted schedule guess', () => {
+    // The stale-fix regression: the count may render on passive surfaces but
+    // must never light the GET READY banner.
+    const result = getTransitProgress(leg, 0.93, {
+      riderTrusted: false,
+      vehicleProgress: null,
+      vehicleStops: null
+    })
+    expect(result.stopsTrusted).toBe(false)
+    expect(result.stopsSource).toBe('schedule')
+  })
+
+  it('a degenerate stop list is never trusted, whatever the source', () => {
+    // Claims intermediates, but every entry lacks coordinates: the count can
+    // only ever be "1 stop remaining" (the 7/29 permanent GET READY shape).
+    const degenerate = {
+      intermediatePlaces: [{ name: 'No Coords A' }, { name: 'No Coords B' }],
+      legGeometry: leg.legGeometry,
+      mode: 'BUS',
+      to: leg.to
+    } as any
+    const result = getTransitProgress(degenerate, 0.2, {
+      riderTrusted: true,
+      vehicleProgress: null,
+      vehicleStops: null
+    })
+    expect(result.stopsRemaining).toBe(1)
+    expect(result.stopsTrusted).toBe(false)
+  })
+
+  it('...including from the vehicle-stop source', () => {
+    // The branch the spec above claimed to cover but never actually reached:
+    // it returned stopsTrusted: true unconditionally, unlike gps and vehicle.
+    const degenerate = {
+      intermediatePlaces: [{ name: 'No Coords A' }, { name: 'No Coords B' }],
+      legGeometry: leg.legGeometry,
+      mode: 'BUS',
+      to: leg.to
+    } as any
+    const result = getTransitProgress(degenerate, 0.2, {
+      riderTrusted: false,
+      vehicleProgress: null,
+      vehicleStops: { nextStopName: 'From the feed', stopsRemaining: 1 }
+    })
+    expect(result.stopsSource).toBe('vehicle-stop')
+    expect(result.stopsTrusted).toBe(false)
+  })
+
+  it('calculateTripProgress threads the ctx through to the transit info', () => {
+    const itinerary = {
+      endTime: '2026-07-29T17:55:00',
+      legs: [{ ...leg, distance: 11000, duration: 1200 }],
+      startTime: '2026-07-29T17:27:00'
+    } as any
+    const routeMatch = {
+      distanceFromRoute: 10,
+      isOnRoute: true,
+      legIndex: 0,
+      nearestPoint: [0.05, 0] as [number, number],
+      progressAlongLeg: 0.5,
+      progressAlongSegment: 0.5,
+      segmentIndex: 10
+    }
+    const progress = calculateTripProgress(
+      new Date('2026-07-29T17:40:00'),
+      itinerary,
+      routeMatch,
+      null,
+      { riderTrusted: false, vehicleProgress: 0.3, vehicleStops: null }
+    )
+    expect(progress.stopsSource).toBe('vehicle')
+    expect(progress.stopsTrusted).toBe(true)
+    expect(progress.stopsRemaining).toBe(4)
+  })
+})
+
+describe('alightBannerLevel', () => {
+  const NOW = 1785723900000
+
+  it('stays silent at 1 stop when the stop is half an hour away', () => {
+    // The 8/2 signature exactly: an honest stopsRemaining of 1 on a single-hop
+    // leg, held for the whole ride, with "GET READY! Next stop is yours!" up
+    // the entire time. No count-based gate could have caught this.
+    expect(
+      alightBannerLevel(
+        { destinationArrivalTime: NOW + 30 * 60000, stopsRemaining: 1 },
+        NOW
+      )
+    ).toBeNull()
+  })
+
+  it('fires urgent at 1 stop inside the alight window', () => {
+    expect(
+      alightBannerLevel(
+        { destinationArrivalTime: NOW + 60000, stopsRemaining: 1 },
+        NOW
+      )
+    ).toBe('urgent')
+  })
+
+  it('fires warning at 2 stops inside twice the window', () => {
+    expect(
+      alightBannerLevel(
+        { destinationArrivalTime: NOW + 180000, stopsRemaining: 2 },
+        NOW
+      )
+    ).toBe('warning')
+    expect(
+      alightBannerLevel(
+        { destinationArrivalTime: NOW + 600000, stopsRemaining: 2 },
+        NOW
+      )
+    ).toBeNull()
+  })
+
+  it('keeps every gate that was already there', () => {
+    const near = { destinationArrivalTime: NOW + 60000, stopsRemaining: 1 }
+    expect(alightBannerLevel({ ...near, stopsTrusted: false }, NOW)).toBeNull()
+    expect(alightBannerLevel({ ...near, status: 'deviated' }, NOW)).toBeNull()
+    expect(alightBannerLevel({ ...near, stopsRemaining: 0 }, NOW)).toBeNull()
+    expect(alightBannerLevel({ ...near, stopsRemaining: 4 }, NOW)).toBeNull()
+    expect(
+      alightBannerLevel({ ...near, stopsRemaining: undefined }, NOW)
+    ).toBeNull()
+  })
+
+  it('falls through to the old behavior when there is no ETA at all', () => {
+    // The gentle part: no ETA is a reason to keep doing what we did, not to
+    // go silent on a rider who may genuinely be about to miss their stop.
+    expect(alightBannerLevel({ stopsRemaining: 1 }, NOW)).toBe('urgent')
+    expect(alightBannerLevel({ stopsRemaining: 2 }, NOW)).toBe('warning')
+    expect(
+      alightBannerLevel({ destinationArrivalTime: NaN, stopsRemaining: 1 }, NOW)
+    ).toBe('urgent')
   })
 })

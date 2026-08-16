@@ -58,5 +58,27 @@ describe('lib > reducers > create-otp-reducer', () => {
       type: 'START_GO_MODE'
     })
     expect(restarted.goMode.arrivedAt).toBeNull()
+
+    // SET_MAP_FOLLOW round-trip: a map drag auto-disengages follow (false)
+    // and the follow button re-engages it (true). Follow defaults on, so the
+    // disengage is the leg that proves delegation.
+    expect(initial.goMode.ui.mapFollowUser).toBe(true)
+    const disengaged = reducer(initial, {
+      payload: false,
+      type: 'SET_MAP_FOLLOW'
+    })
+    expect(disengaged.goMode.ui.mapFollowUser).toBe(false)
+    expect(
+      reducer(disengaged, { payload: true, type: 'SET_MAP_FOLLOW' }).goMode.ui
+        .mapFollowUser
+    ).toBe(true)
+
+    // A quiet background replan re-fires START_GO_MODE mid-trip; it must not
+    // re-engage follow over the rider's explicit disengage.
+    const replanned = reducer(disengaged, {
+      payload: { itinerary: { legs: [] }, originalFrom: null },
+      type: 'START_GO_MODE'
+    })
+    expect(replanned.goMode.ui.mapFollowUser).toBe(false)
   })
 })

@@ -68,7 +68,6 @@ components:
     planTripTooltip: Planlegg tur
   CallTakerPanel:
     advancedOptions: Avanserte innstillinger
-    groupSize: "Gruppestørrelse:"
   DateTimeOptions:
     now: Nå
   DeleteUser:
@@ -140,3 +139,11 @@ components:
     keepSession: Fortsett økt
   StackedPaneDisplay:
     savePreferences: Lagre innstillinger
+
+  GoMode:
+    directionEB: Østgående
+    directionNB: Nordgående
+    directionSB: Sørgående
+    directionWB: Vestgående
+    busHeadsign: 'Retning: {headsign}'
+    noBusesOrRoutesNearby: Ingen busser eller ruter oppdaget i nærheten. Prøv å flytte nærmere en busstopp.

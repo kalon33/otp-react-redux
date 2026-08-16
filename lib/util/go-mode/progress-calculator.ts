@@ -1,7 +1,8 @@
 import type { IntlShape } from 'react-intl'
 import type { Itinerary, Leg } from '@opentripplanner/types'
 
-import { getNextCue, getNextCueWithIntl } from './turn-by-turn'
+import { countStopsAhead, hasDegenerateStopList } from './next-stop'
+import { getNextCueWithIntl, selectCueForNavigation } from './turn-by-turn'
 import type { RouteMatchResult } from './position-matching'
 import type { StepCue } from './turn-by-turn'
 
@@ -24,6 +25,10 @@ export interface TripProgress {
   // Epoch ms — arrival at current transit leg's destination
   destinationArrivalTime?: number
   distanceToNextTurn?: number
+  // Epoch ms — the departure the wait math actually ran on (override, else the
+  // live prediction, else the plan). One number for the pacing card, the drift
+  // check and waitTimeAtStop to quote, so they can never disagree.
+  effectiveDepartureMs?: number
   // 0-100%
   estimatedArrival: Date
   // The turn after `nextTurnCue`, for a "then …" line
@@ -38,14 +43,28 @@ export interface TripProgress {
   overallProgress: number
   // Epoch ms — the originally planned departure time from itinerary
   plannedDepartureTime?: number
+  // The rider's own GPS ground speed in m/s, when the fix carries one. Lets
+  // announcement leads scale with how fast the rider actually moves.
+  riderSpeedMps?: number
   // seconds
   status: TripStatus
 
   // Transit-specific
   stopsRemaining?: number
+  // What produced stopsRemaining. Only set by trust-assessed paths (the
+  // vehicle-sourced producers land with the trust plumbing); absent means a
+  // legacy trusted path.
+  stopsSource?: 'gps' | 'vehicle' | 'vehicle-stop' | 'schedule'
+  // False when the stop count is a guess (stale fix, degenerate stop list) —
+  // consumers must not alert on it. Absent = not assessed, treated as
+  // trusted so untouched legacy paths don't regress.
+  stopsTrusted?: boolean
   timeRemaining: number
   // Seconds until next transit leg departs (walking legs only)
   timeUntilNextDeparture?: number
+  // True while turn announcements are settling after a rejoin/projection jump
+  // (see selectCueForNavigation) — the cue itself stays current and passive.
+  turnAnnouncementsHeld?: boolean
   // Seconds of estimated wait at next stop (walking legs only)
   waitTimeAtStop?: number
 }
@@ -166,24 +185,111 @@ export function calculateExpectedProgress(
   return Math.max(0, Math.min(100, progress))
 }
 
+const STOP_COUNT_MODES = new Set(['BUS', 'RAIL', 'TRAM', 'SUBWAY'])
+
 /**
- * Get transit-specific progress information
+ * Trust-assessed inputs for stop counting on the leg the rider is aboard,
+ * built per tick in handlePositionUpdate. All nullable and entirely optional:
+ * callers without them (legacy paths, demo harness) get today's behavior
+ * with no trust fields set.
+ */
+export interface TransitTrustContext {
+  /** The rider's own fix is sound (fresh, accurate, on THIS leg's route) —
+   * see assessRiderGpsTrust. */
+  riderTrusted: boolean
+  /** The bus's own feed position projected onto the leg (0-1), when fresh and
+   * on the leg's geometry. */
+  vehicleProgress: number | null
+  /** Feed nextStopId resolved against the leg's stop list — exact identity,
+   * no geometry. */
+  vehicleStops: { nextStopName: string; stopsRemaining: number } | null
+}
+
+/**
+ * Get transit-specific progress information. Without a trust context this is
+ * the legacy rider-GPS count, unchanged. With one, sources are tried in trust
+ * order — sound rider GPS, then the bus's own position, then the feed's
+ * next-stop fact — and the result says what produced it; only the final
+ * even-spacing guess is marked untrusted. On 7/29 a stale rider fix kept
+ * counting stops off the wrong position; the bus knew better all along.
  */
 export function getTransitProgress(
+  leg: Leg,
+  progressInLeg: number,
+  transitCtx?: TransitTrustContext
+): {
+  nextStopName?: string
+  stopsRemaining?: number
+  stopsSource?: 'gps' | 'vehicle' | 'vehicle-stop' | 'schedule'
+  stopsTrusted?: boolean
+} {
+  if (!STOP_COUNT_MODES.has(leg.mode as string)) {
+    return {}
+  }
+
+  if (transitCtx) {
+    // A leg that claims intermediate stops but whose usable list collapsed to
+    // just the alight stop can only ever say "1 stop remaining" — geometric
+    // counts from it are never trusted (see hasDegenerateStopList).
+    const degenerate = hasDegenerateStopList(leg)
+    if (transitCtx.riderTrusted) {
+      const counted = countStopsAhead(leg, progressInLeg)
+      if (counted) {
+        return { ...counted, stopsSource: 'gps', stopsTrusted: !degenerate }
+      }
+    }
+    if (transitCtx.vehicleProgress != null) {
+      const counted = countStopsAhead(leg, transitCtx.vehicleProgress)
+      if (counted) {
+        return { ...counted, stopsSource: 'vehicle', stopsTrusted: !degenerate }
+      }
+    }
+    if (transitCtx.vehicleStops != null) {
+      return {
+        ...transitCtx.vehicleStops,
+        stopsSource: 'vehicle-stop',
+        // Consult `degenerate` like the gps and vehicle branches above. The
+        // spec 'a degenerate stop list is never trusted, whatever the source'
+        // already asserted this; it was passing only because it never
+        // exercised this branch.
+        stopsTrusted: !degenerate
+      }
+    }
+    // Every trusted source came up empty: the even-spacing estimate below is
+    // a schedule guess — shown nowhere that alerts, per stopsTrusted.
+    return {
+      ...legacyStopEstimate(leg, progressInLeg),
+      stopsSource: 'schedule',
+      stopsTrusted: false
+    }
+  }
+
+  return legacyStopEstimate(leg, progressInLeg)
+}
+
+/**
+ * The pre-trust stop count: geometry-measured positions when available, an
+ * even-spacing estimate over the raw stop list otherwise. Kept verbatim so
+ * ctx-less callers behave byte-identically.
+ */
+function legacyStopEstimate(
   leg: Leg,
   progressInLeg: number
 ): {
   nextStopName?: string
   stopsRemaining?: number
 } {
-  if (!leg.intermediateStops || (leg.mode !== 'BUS' && leg.mode !== 'RAIL')) {
-    return {}
-  }
+  // Count from each stop's measured position on the leg geometry — stops sit
+  // unevenly along a leg, so a progress-fraction estimate miscounts badly
+  // (see countStopsAhead).
+  const counted = countStopsAhead(leg, progressInLeg)
+  if (counted) return counted
 
+  // No usable geometry or stop coordinates: even-spacing estimate over the
+  // raw stop list is the best guess left.
   const stops = leg.intermediateStops
+  if (!stops) return {}
   const totalStops = stops.length + 1 // +1 for destination stop
-
-  // Estimate which stop we're approaching based on progress
   const stopIndex = Math.floor(progressInLeg * totalStops)
 
   if (stopIndex < stops.length) {
@@ -201,29 +307,47 @@ export function getTransitProgress(
 }
 
 /**
- * Get walking-specific navigation information
+ * Get walking-specific navigation information.
+ *
+ * `isOnRoute` defaults to true so legacy callers keep today's behavior; pass
+ * the real route-match verdict to get honest guidance. Off the route the
+ * nearest-point projection is a fiction (on 7/29 it swept past three turns
+ * while the rider rode a parallel street), so no turn fields come back at all
+ * — not even the "Continue to X" filler, which is exactly the stale line the
+ * rider shouldn't see while off the plan. The deviation toast and the quiet
+ * replan own that state.
  */
 export function getWalkingInstruction(
   leg: Leg,
-  progressInLeg: number
+  progressInLeg: number,
+  isOnRoute = true
 ): {
   distanceToNextTurn?: number
   followingTurnCue?: StepCue
   nextInstruction?: string
   nextTurnCue?: StepCue
+  turnAnnouncementsHeld?: boolean
 } {
   if (leg.mode !== 'WALK' && leg.mode !== 'BICYCLE') {
     return {}
   }
 
-  // Real turn-by-turn when the leg carries usable steps.
-  const { cue, distanceToNextTurn, following } = getNextCue(leg, progressInLeg)
+  // Real turn-by-turn when the leg carries usable steps. Always consulted so
+  // the per-leg cursor sees every tick, including off-route ones.
+  const { announceHold, cue, distanceToNextTurn, following } =
+    selectCueForNavigation(leg, progressInLeg, isOnRoute)
+
+  if (!isOnRoute) {
+    return {}
+  }
+
   if (cue) {
     return {
       distanceToNextTurn,
       followingTurnCue: following,
       nextInstruction: cue.instruction,
-      nextTurnCue: cue
+      nextTurnCue: cue,
+      turnAnnouncementsHeld: announceHold
     }
   }
 
@@ -245,7 +369,7 @@ export function getWalkingInstruction(
 }
 
 /**
- * Get walking-specific navigation information with i18n support
+ * Get walking-specific navigation information with i18n support for localized turn-by-turn instructions.
  */
 export function getWalkingInstructionWithIntl(
   leg: Leg,
@@ -293,28 +417,37 @@ export function getWalkingInstructionWithIntl(
   return {
     distanceToNextTurn: remainingDistance,
     nextInstruction: intl.formatMessage(
-      { id: 'GoMode.arrivingAt' },
+      { id: 'components.GoMode.turnInstructions.arrivingAt' },
       { destination: leg.to.name }
     )
   }
 }
 
-
-
 /**
  * Get timing info for upcoming transit connections.
  * On walking legs approaching transit: departure countdown + wait time.
  * On transit legs: destination arrival time.
+ *
+ * `liveBoardMs` is the boarding leg's live GTFS-realtime prediction (from
+ * refreshLiveLegTimes), and it is what makes the wait honest: the plan's board
+ * time never moves, so without it a bus running six minutes late still reads as
+ * on time all the way to the stop, and the pacing card keeps saying hurry.
+ *
+ * A rider-selected departure still outranks it. `liveLegTimes` tracks the
+ * PLANNED leg's trip id, so once the rider picks a different bus that live
+ * epoch describes a vehicle they are not taking.
  */
 export function getUpcomingTransitTiming(
   currentTime: Date,
   currentLeg: Leg,
   nextLeg: Leg | undefined,
   progressInLeg: number,
-  departureOverrideMs?: number | null
+  departureOverrideMs?: number | null,
+  liveBoardMs?: number | null
 ): {
   departureIsOverridden?: boolean
   destinationArrivalTime?: number
+  effectiveDepartureMs?: number
   plannedDepartureTime?: number
   timeUntilNextDeparture?: number
   waitTimeAtStop?: number
@@ -332,8 +465,13 @@ export function getUpcomingTransitTiming(
       nextLeg.mode === 'SUBWAY' ||
       nextLeg.mode === 'TRAM')
   ) {
-    const plannedDepartureTime = nextLeg.startTime
-    const effectiveDeparture = departureOverrideMs || nextLeg.startTime
+    // Leg times are `number | string` in @opentripplanner/types; coerce at the
+    // boundary the way the rest of Go Mode does (Number(leg.startTime)) so the
+    // arithmetic below and the returned epochs are honestly typed.
+    const plannedDepartureTime = Number(nextLeg.startTime)
+    const effectiveDeparture = Number(
+      departureOverrideMs || liveBoardMs || nextLeg.startTime
+    )
     const remainingWalkSeconds =
       (currentLeg.duration || 0) * (1 - progressInLeg)
     const timeUntilNextDeparture =
@@ -341,7 +479,11 @@ export function getUpcomingTransitTiming(
     const waitTimeAtStop = timeUntilNextDeparture - remainingWalkSeconds
 
     return {
+      // Strictly the rider's own pick — a live prediction is the same bus at a
+      // new time, not a different departure, and flagging it here would put a
+      // "reset" affordance (WalkingNavigation) on a choice nobody made.
       departureIsOverridden: !!departureOverrideMs,
+      effectiveDepartureMs: effectiveDeparture,
       plannedDepartureTime,
       timeUntilNextDeparture,
       waitTimeAtStop
@@ -390,93 +532,10 @@ export function calculateTripProgress(
   currentTime: Date,
   itinerary: Itinerary,
   routeMatch: RouteMatchResult | null,
-  departureOverrideMs?: number | null
-): TripProgress {
-  const legs = itinerary.legs
-  const currentLegIndex = routeMatch?.legIndex || 0
-  const progressInCurrentLeg = routeMatch?.progressAlongLeg || 0
-
-  const overallProgress = calculateOverallProgress(
-    currentLegIndex,
-    progressInCurrentLeg,
-    legs
-  )
-
-  const timeRemaining = calculateTimeRemaining(
-    currentTime,
-    itinerary,
-    currentLegIndex,
-    progressInCurrentLeg
-  )
-
-  const estimatedArrival = estimateArrival(currentTime, timeRemaining)
-
-  const startTime = new Date(itinerary.startTime)
-  const endTime = new Date(itinerary.endTime)
-  const totalDuration = (endTime.getTime() - startTime.getTime()) / 1000
-
-  const expectedProgress = calculateExpectedProgress(
-    startTime,
-    currentTime,
-    totalDuration
-  )
-
-  const status = determineTripStatus(
-    routeMatch,
-    expectedProgress,
-    overallProgress
-  )
-
-  const currentLeg = legs[currentLegIndex]
-  const currentLegProgress = progressInCurrentLeg * 100
-
-  // Get mode-specific progress info
-  const transitInfo = getTransitProgress(currentLeg, progressInCurrentLeg)
-  const walkingInfo = getWalkingInstruction(currentLeg, progressInCurrentLeg)
-
-  // Get upcoming transit timing
-  const nextLeg =
-    currentLegIndex < legs.length - 1 ? legs[currentLegIndex + 1] : undefined
-  const timingInfo = getUpcomingTransitTiming(
-    currentTime,
-    currentLeg,
-    nextLeg,
-    progressInCurrentLeg,
-    departureOverrideMs
-  )
-
-  // Measured schedule delay at the rider's current position (real GPS progress
-  // vs the current leg's scheduled timing). Feeds connection-risk detection.
-  const delay = computeCurrentDelay(
-    currentLeg,
-    progressInCurrentLeg,
-    currentTime
-  )
-
-  return {
-    currentLegIndex,
-    currentLegProgress,
-    currentTime,
-    delay,
-    estimatedArrival,
-    overallProgress,
-    status,
-    timeRemaining,
-    ...transitInfo,
-    ...walkingInfo,
-    ...timingInfo
-  }
-}
-
-/**
- * Calculate trip progress with i18n support for localized turn-by-turn instructions.
- */
-export function calculateTripProgressWithIntl(
-  currentTime: Date,
-  itinerary: Itinerary,
-  routeMatch: RouteMatchResult | null,
   departureOverrideMs?: number | null,
-  intl?: IntlShape
+  transitCtx?: TransitTrustContext,
+  riderSpeedMps?: number | null,
+  liveBoardMs?: number | null
 ): TripProgress {
   const legs = itinerary.legs
   const currentLegIndex = routeMatch?.legIndex || 0
@@ -517,10 +576,19 @@ export function calculateTripProgressWithIntl(
   const currentLegProgress = progressInCurrentLeg * 100
 
   // Get mode-specific progress info
-  const transitInfo = getTransitProgress(currentLeg, progressInCurrentLeg)
-  const walkingInfo = intl
-    ? getWalkingInstructionWithIntl(currentLeg, progressInCurrentLeg, intl)
-    : getWalkingInstruction(currentLeg, progressInCurrentLeg)
+  const transitInfo = getTransitProgress(
+    currentLeg,
+    progressInCurrentLeg,
+    transitCtx
+  )
+  // Route honesty: a null match already reads as 'deviated' above, and the
+  // same suppression applies — no turn guidance from a projection the rider
+  // isn't actually on.
+  const walkingInfo = getWalkingInstruction(
+    currentLeg,
+    progressInCurrentLeg,
+    routeMatch?.isOnRoute ?? false
+  )
 
   // Get upcoming transit timing
   const nextLeg =
@@ -530,7 +598,8 @@ export function calculateTripProgressWithIntl(
     currentLeg,
     nextLeg,
     progressInCurrentLeg,
-    departureOverrideMs
+    departureOverrideMs,
+    liveBoardMs
   )
 
   // Measured schedule delay at the rider's current position (real GPS progress
@@ -548,6 +617,7 @@ export function calculateTripProgressWithIntl(
     delay,
     estimatedArrival,
     overallProgress,
+    riderSpeedMps: riderSpeedMps ?? undefined,
     status,
     timeRemaining,
     ...transitInfo,
@@ -567,6 +637,55 @@ export function shouldAlertForApproachingStop(
 
   // Alert when 2 stops away from destination
   return stopsRemaining === 2
+}
+
+/** Same window the alight NOTIFICATION uses for its 'prepare' stage. */
+const ALIGHT_BANNER_URGENT_SECONDS = 120
+
+/**
+ * Should the GET READY banner be up, and how loudly?
+ *
+ * The count alone is not enough. On 8/2 stopsRemaining was 1 from the first
+ * tick to the last — both legs of the split ride were single-hop, so the count
+ * was arithmetically honest and hasDegenerateStopList was false, which is why
+ * the trust gate never saved the banner. It showed "GET READY! Next stop is
+ * yours!" for a 30-minute ride.
+ *
+ * So don't depend on the count MOVING. checkAlightAlerts solved the identical
+ * problem for notifications by abandoning the level test for time ("
+ * stopsRemaining sits at 1 for the whole final inter-stop segment"); this
+ * follows it. Today's gates are kept verbatim, then an ETA is required.
+ *
+ * Pure and React-free so it is unit testable. When no ETA is available at all,
+ * falls through to today's behavior rather than going silent.
+ */
+export function alightBannerLevel(
+  progress: {
+    destinationArrivalTime?: number | null
+    status?: string
+    stopsRemaining?: number
+    stopsTrusted?: boolean
+  },
+  nowMs: number
+): 'urgent' | 'warning' | null {
+  const stops = progress.stopsRemaining
+  if (stops !== 1 && stops !== 2) return null
+  if (progress.stopsTrusted === false) return null
+  if (progress.status === 'deviated') return null
+
+  const eta = progress.destinationArrivalTime
+  // No ETA to judge by — today's behavior, which is the gentle part.
+  if (eta == null) return stops === 1 ? 'urgent' : 'warning'
+
+  // Can't be negative-by-inversion: the leg-time clamps guarantee endTime
+  // never precedes startTime.
+  const etaSeconds = (Number(eta) - nowMs) / 1000
+  if (!Number.isFinite(etaSeconds)) return stops === 1 ? 'urgent' : 'warning'
+
+  if (stops === 1) {
+    return etaSeconds <= ALIGHT_BANNER_URGENT_SECONDS ? 'urgent' : null
+  }
+  return etaSeconds <= ALIGHT_BANNER_URGENT_SECONDS * 2 ? 'warning' : null
 }
 
 /**

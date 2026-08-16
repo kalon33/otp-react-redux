@@ -4,9 +4,27 @@ import TransitiveCanvasOverlay from '@opentripplanner/transitive-overlay'
 
 import { AppReduxState } from '../../util/state-types'
 import { getActiveLeg, getTransitiveData } from '../../util/state'
+import { GoModeState } from '../../reducers/go-mode'
 import { TransitiveConfig } from '../../util/config-types'
 
 type Props = TransitiveConfig & IntlShape
+
+/**
+ * Whether the planner's transitive (itinerary paths) overlay should be hidden
+ * because the rider is on the Go Mode screen: GoModeMap wraps DefaultMap,
+ * which always mounts this overlay, so the LAST planner search kept drawing
+ * as a stale ghost under the live trip (7/29 ride). While the trip is
+ * backgrounded (browsing the planner mid-trip) the overlay shows the
+ * planner's own current search and must keep rendering. Exported for unit
+ * tests (mirrors shouldIgnoreEndpointDrag). Note: if a future layout mounted
+ * the planner map and Go Mode simultaneously this would hide the planner's
+ * overlay too — acceptable for this single-rider mobile app.
+ */
+export function hidePlannerItineraryOverlay(
+  goMode: GoModeState | null | undefined
+): boolean {
+  return !!goMode?.isActive && !goMode?.ui?.backgrounded
+}
 
 // connect to the redux store
 const mapStateToProps = (state: AppReduxState, ownProps: Props) => {
@@ -19,6 +37,11 @@ const mapStateToProps = (state: AppReduxState, ownProps: Props) => {
   // or the route viewer, so include a route being viewed as a condition
   // for hiding
   if (state.otp.ui.mainPanelContent !== null && viewedRoute) {
+    return {}
+  }
+
+  // On the Go Mode screen the planner's paths are a stale ghost — hide them.
+  if (hidePlannerItineraryOverlay(state.otp.goMode)) {
     return {}
   }
 

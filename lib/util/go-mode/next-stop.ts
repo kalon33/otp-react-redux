@@ -41,6 +41,124 @@ function toOrderedStop(place: any): OrderedStop | null {
 }
 
 /**
+ * The leg's stops in travel order: intermediates then the alight stop.
+ * intermediatePlaces (planned + synthesized onboard itineraries) carries
+ * arrival times and gtfsIds; intermediateStops (name/lat/lon only) is the
+ * fallback shape some responses use.
+ */
+export function orderedStopsOnLeg(leg: any): OrderedStop[] {
+  const places: any[] = leg?.intermediatePlaces || []
+  const stops: any[] = leg?.intermediateStops || []
+  let intermediates = (places.length ? places : stops)
+    .map(toOrderedStop)
+    .filter(Boolean) as OrderedStop[]
+  // intermediatePlaces is preferred for its arrival times and gtfsIds, but
+  // some responses carry coordinateless entries that toOrderedStop drops.
+  // Only when entries were actually dropped: if intermediateStops retains
+  // more stops, a full count beats richer metadata (a collapsed list reads
+  // as "1 stop remaining" for the whole leg).
+  if (places.length && intermediates.length < places.length) {
+    const alt = stops.map(toOrderedStop).filter(Boolean) as OrderedStop[]
+    if (alt.length > intermediates.length) intermediates = alt
+  }
+  const alight = toOrderedStop(leg?.to)
+  return alight ? [...intermediates, alight] : intermediates
+}
+
+/**
+ * The leg CLAIMS intermediate stops but the usable list collapsed to just the
+ * alight stop (every entry lacked coordinates) — any count from it is a
+ * permanent "1 stop remaining" and must not be trusted. A leg genuinely
+ * without intermediates is NOT degenerate: 1 stop remaining is then correct.
+ */
+export function hasDegenerateStopList(leg: any): boolean {
+  const claimed =
+    (leg?.intermediatePlaces?.length || 0) +
+    (leg?.intermediateStops?.length || 0)
+  return claimed > 0 && orderedStopsOnLeg(leg).length <= 1
+}
+
+/**
+ * Fraction (0..1) along the leg geometry at which each stop sits. Monotonic
+ * scan: stops appear along the geometry in travel order, so each nearest-point
+ * search resumes where the previous stop landed. Null when the geometry is
+ * unusable (fewer than two points or zero length).
+ */
+export function stopFractionsAlongLeg(
+  stops: { lat: number; lon: number }[],
+  polyline: [number, number][]
+): number[] | null {
+  if (polyline.length < 2) return null
+  const cumulative = calculateCumulativeDistances(polyline)
+  const total = cumulative[cumulative.length - 1]
+  if (!(total > 0)) return null
+  const fractions: number[] = []
+  let searchFrom = 0
+  for (const stop of stops) {
+    let bestIdx = searchFrom
+    let bestDist = Infinity
+    for (let i = searchFrom; i < polyline.length; i++) {
+      const d = calculateDistance(
+        stop.lat,
+        stop.lon,
+        polyline[i][0],
+        polyline[i][1]
+      )
+      if (d < bestDist) {
+        bestDist = d
+        bestIdx = i
+      }
+    }
+    searchFrom = bestIdx
+    fractions.push(cumulative[bestIdx] / total)
+  }
+  return fractions
+}
+
+// Epsilon on leg-progress comparisons so the stop the bus is currently AT
+// (doors open) doesn't count as still ahead.
+const AT_STOP_EPSILON = 0.005
+
+/**
+ * How many stops are still ahead of the rider on the leg (the alight stop
+ * counts as 1), plus the name of the nearest one. Stops sit unevenly along a
+ * leg — a freeway BRT runs stopless for miles, then downtown stops bunch at
+ * the end — so the count comes from each stop's measured position on the
+ * geometry; an even-spacing estimate reports "1 stop remaining" with a whole
+ * downtown cluster still ahead. Null when the leg has no stops with
+ * coordinates or no usable geometry.
+ */
+export function countStopsAhead(
+  leg: any,
+  progress: number
+): { nextStopName: string; stopsRemaining: number } | null {
+  // NaN/undefined progress fails every fraction comparison below and lands on
+  // the last stop — reading as "1 stop remaining" off no position fact at all.
+  if (!Number.isFinite(progress)) return null
+  const ordered = orderedStopsOnLeg(leg)
+  if (!ordered.length) return null
+  const fractions = stopFractionsAlongLeg(ordered, decodeLegGeometry(leg))
+  if (!fractions) return null
+  const clamped = Math.max(0, Math.min(1, progress))
+  const idx = fractions.findIndex((f) => f > clamped + AT_STOP_EPSILON)
+  if (idx === -1) {
+    // Progress is past the last stop's fraction, so the rider is AT or past
+    // the alight stop and zero stops are still ahead. Pinning idx to the last
+    // stop reported a permanent "1 stop remaining" instead — not a display
+    // policy but wrong arithmetic, and the opposite of what AT_STOP_EPSILON's
+    // own rule says (the stop you are AT doesn't count as still ahead).
+    return {
+      nextStopName: ordered[ordered.length - 1].name,
+      stopsRemaining: 0
+    }
+  }
+  return {
+    nextStopName: ordered[idx].name,
+    stopsRemaining: ordered.length - idx
+  }
+}
+
+/**
  * Compute the next stop ahead on the transit leg the rider is aboard, or null
  * when the sticky riding state isn't anchored to a transit leg. Position along
  * the leg comes from the live route match (GPS projected onto the leg
@@ -62,17 +180,7 @@ export function getNextStopOnRide(
   const leg: any = itinerary.legs?.[riding.legIndex]
   if (!leg?.transitLeg) return null
 
-  // Ordered stops remaining relevant: intermediates then the alight stop.
-  // intermediatePlaces (planned + synthesized onboard itineraries) carries
-  // arrival times and gtfsIds; intermediateStops (name/lat/lon only) is the
-  // fallback shape some responses use.
-  const intermediates: any[] =
-    (leg.intermediatePlaces?.length
-      ? leg.intermediatePlaces
-      : leg.intermediateStops) || []
-  const ordered = [...intermediates, leg.to]
-    .map(toOrderedStop)
-    .filter(Boolean) as OrderedStop[]
+  const ordered = orderedStopsOnLeg(leg)
   if (!ordered.length) return null
 
   // Fraction of the leg already covered. Trust the live route match when it is
@@ -84,38 +192,11 @@ export function getNextStopOnRide(
       : null
 
   let next: OrderedStop | null = null
-  const polyline = decodeLegGeometry(leg)
-  if (progress != null && polyline.length >= 2) {
-    const cumulative = calculateCumulativeDistances(polyline)
-    const total = cumulative[cumulative.length - 1]
-    if (total > 0) {
-      // Monotonic scan: stops appear along the geometry in travel order, so
-      // resume each nearest-point search where the previous stop landed.
-      let searchFrom = 0
-      for (const stop of ordered) {
-        let bestIdx = searchFrom
-        let bestDist = Infinity
-        for (let i = searchFrom; i < polyline.length; i++) {
-          const d = calculateDistance(
-            stop.lat,
-            stop.lon,
-            polyline[i][0],
-            polyline[i][1]
-          )
-          if (d < bestDist) {
-            bestDist = d
-            bestIdx = i
-          }
-        }
-        searchFrom = bestIdx
-        const fraction = cumulative[bestIdx] / total
-        // Small epsilon so the stop the bus is currently at isn't offered as
-        // "next" a second time while doors are still open.
-        if (fraction > progress + 0.005) {
-          next = stop
-          break
-        }
-      }
+  if (progress != null) {
+    const fractions = stopFractionsAlongLeg(ordered, decodeLegGeometry(leg))
+    if (fractions) {
+      const idx = fractions.findIndex((f) => f > progress + AT_STOP_EPSILON)
+      if (idx !== -1) next = ordered[idx]
     }
   }
 

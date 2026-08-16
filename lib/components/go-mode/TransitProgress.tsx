@@ -4,8 +4,13 @@ import React from 'react'
 import type { Leg } from '@opentripplanner/types'
 
 import * as goModeActions from '../../actions/go-mode'
+import {
+  displayVehicleLabel,
+  NO_LIVE_VEHICLE_POLLS
+} from '../../util/go-mode/vehicle-matching'
+import { alightBannerLevel } from '../../util/go-mode/progress-calculator'
 import { getModeIcon } from '../../util/go-mode/mode-icon'
-import { NO_LIVE_VEHICLE_POLLS } from '../../util/go-mode/vehicle-matching'
+import { VEHICLE_MATCH_FRESH_MS } from '../../util/go-mode/transit-trust'
 import type { TripProgress } from '../../util/go-mode/progress-calculator'
 import type { VehicleMatchResult } from '../../util/go-mode/vehicle-matching'
 
@@ -47,12 +52,28 @@ const TransitProgress = ({
 }: Props) => {
   const intl = useIntl()
 
-  const shouldShowAlert =
-    progress.stopsRemaining === 2 || progress.stopsRemaining === 1
+  // Only an assessed distrust suppresses (stopsTrusted is unset on legacy
+  // trusted paths); a deviated route match means the count is being measured
+  // against a leg the rider may not be on. On 7/29 a cascade of wrong replans
+  // put a GET READY banner up off legIndex 0 / stopsRemaining 1 of an
+  // itinerary the rider never chose.
+  const stopsTrusted = progress.stopsTrusted !== false
 
+  // Those gates are necessary but not sufficient. On 8/2 stopsRemaining was a
+  // perfectly honest 1 for a 30-minute ride (both legs of the split were
+  // single-hop), so nothing above could suppress the banner and "GET READY!
+  // Next stop is yours!" stayed up the whole way. alightBannerLevel adds the
+  // ETA test — the same move checkAlightAlerts already made for notifications.
+  const alertLevel = alightBannerLevel(progress, Date.now())
+
+  // The badge is a live claim ("On Bus…"), so it also needs a recent feed
+  // sighting — a confirmed match whose vehicle left the feed keeps its
+  // confidence but its lastSeen ages (see performVehicleMatching), and the
+  // honest thing to show then is the locating/no-live-data line below.
   const isTracking =
-    vehicleMatch?.confidence === 'confirmed' ||
-    vehicleMatch?.confidence === 'high'
+    (vehicleMatch?.confidence === 'confirmed' ||
+      vehicleMatch?.confidence === 'high') &&
+    Date.now() - (vehicleMatch?.lastSeen ?? 0) < VEHICLE_MATCH_FRESH_MS
 
   return (
     <TransitContainer>
@@ -70,8 +91,10 @@ const TransitProgress = ({
         <ModeIcon>{getModeIcon(leg.mode)}</ModeIcon>
         <div style={{ flex: 1, minWidth: 0 }}>
           <RouteName>{leg.routeShortName || leg.routeLongName}</RouteName>
-          {/* Compact stops remaining */}
-          {progress.stopsRemaining !== undefined &&
+          {/* Compact stops remaining — never shown from an untrusted count;
+              an approximate substitute would just be fake data. */}
+          {stopsTrusted &&
+            progress.stopsRemaining !== undefined &&
             progress.stopsRemaining > 0 && (
               <RouteDirection>
                 {intl.formatMessage(
@@ -95,61 +118,60 @@ const TransitProgress = ({
                       defaultMessage: 'On Bus #{label}',
                       id: 'components.GoMode.onBus'
                     },
-                    { label: vehicleMatch.label }
+                    { label: displayVehicleLabel(vehicleMatch.label) }
                   )
                 : intl.formatMessage(
                     {
                       defaultMessage: 'Tracking Bus #{label}',
                       id: 'components.GoMode.trackingBus'
                     },
-                    { label: vehicleMatch.label }
+                    { label: displayVehicleLabel(vehicleMatch.label) }
                   )}
             </VehicleTrackingBadge>
           )}
-          {!isTracking &&
-            vehicleMatch?.confidence !== 'confirmed' &&
-            leg.transitLeg && (
-              <LocatingIndicator>
-                {typeof leg.startTime === 'number' && leg.startTime > Date.now()
-                  ? // Before the leg's scheduled start the vehicle usually is
-                    // not broadcasting AT ALL yet — an endless "Locating…"
-                    // reads as a bug. Say what is actually happening.
-                    intl.formatMessage(
-                      {
-                        defaultMessage:
-                          'Bus not broadcasting yet — scheduled {time}',
-                        id: 'components.GoMode.busNotBroadcasting'
-                      },
-                      {
-                        time: intl.formatTime(leg.startTime, {
-                          hour: 'numeric',
-                          minute: '2-digit'
-                        })
-                      }
-                    )
-                  : emptyPolls >= NO_LIVE_VEHICLE_POLLS
-                  ? // The route publishes no live vehicle positions (or the
-                    // feed is down). Stop promising a match that will never
-                    // arrive — stop progress still comes from GPS.
-                    intl.formatMessage({
-                      defaultMessage: 'No live bus data — tracking by GPS',
-                      id: 'components.GoMode.noLiveVehicleData'
-                    })
-                  : intl.formatMessage({
-                      defaultMessage: 'Locating your bus...',
-                      id: 'components.GoMode.locatingBus'
-                    })}
-              </LocatingIndicator>
-            )}
+          {/* A fresh confirmed/high match renders the badge above; anything
+              else — including a confirmed match gone stale — gets the honest
+              status line. */}
+          {!isTracking && leg.transitLeg && (
+            <LocatingIndicator>
+              {typeof leg.startTime === 'number' && leg.startTime > Date.now()
+                ? // Before the leg's scheduled start the vehicle usually is
+                  // not broadcasting AT ALL yet — an endless "Locating…"
+                  // reads as a bug. Say what is actually happening.
+                  intl.formatMessage(
+                    {
+                      defaultMessage:
+                        'Bus not broadcasting yet — scheduled {time}',
+                      id: 'components.GoMode.busNotBroadcasting'
+                    },
+                    {
+                      time: intl.formatTime(leg.startTime, {
+                        hour: 'numeric',
+                        minute: '2-digit'
+                      })
+                    }
+                  )
+                : emptyPolls >= NO_LIVE_VEHICLE_POLLS
+                ? // The route publishes no live vehicle positions (or the
+                  // feed is down). Stop promising a match that will never
+                  // arrive — stop progress still comes from GPS.
+                  intl.formatMessage({
+                    defaultMessage: 'No live bus data — tracking by GPS',
+                    id: 'components.GoMode.noLiveVehicleData'
+                  })
+                : intl.formatMessage({
+                    defaultMessage: 'Locating your bus...',
+                    id: 'components.GoMode.locatingBus'
+                  })}
+            </LocatingIndicator>
+          )}
         </div>
       </RouteHeader>
 
       {/* Get Ready Alert */}
-      {shouldShowAlert && (
-        <AlertBanner
-          $severity={progress.stopsRemaining === 1 ? 'urgent' : 'warning'}
-        >
-          {progress.stopsRemaining === 1
+      {alertLevel && (
+        <AlertBanner $severity={alertLevel}>
+          {alertLevel === 'urgent'
             ? intl.formatMessage({
                 defaultMessage: '🔔 GET READY! Next stop is yours!',
                 id: 'components.GoMode.getReadyNow'

@@ -1,11 +1,17 @@
+import FakeTimers from '@sinonjs/fake-timers'
+
 import {
   clearReroute,
+  quietReplanAccessLeg,
   reRouteFromCurrentPosition,
   setRerouteResult,
   startGoMode,
   startReroute
 } from '../../../lib/actions/go-mode'
-import { collectRerouteCandidates } from '../../../lib/util/go-mode/reroute-candidates'
+import {
+  collectRerouteCandidates,
+  itinerarySignature
+} from '../../../lib/util/go-mode/reroute-candidates'
 import { fetchOnboardCandidatePlan } from '../../../lib/actions/apiV2'
 import { pickSameRouteReroute } from '../../../lib/util/state'
 import goMode from '../../../lib/reducers/go-mode'
@@ -13,6 +19,9 @@ import goMode from '../../../lib/reducers/go-mode'
 jest.mock('../../../lib/actions/apiV2', () => ({
   ...jest.requireActual('../../../lib/actions/apiV2'),
   fetchOnboardCandidatePlan: jest.fn(),
+  // beginGoMode pre-fetches stop times for transit boarding stops — a no-op
+  // thunk keeps the applied-splice tests off the network.
+  findStopTimesForStop: jest.fn(() => () => Promise.resolve({})),
   getBasePlanParts: jest.fn(() => ({
     modes: [{ mode: 'TRANSIT' }, { mode: 'WALK' }],
     modeSettings: [],
@@ -150,6 +159,62 @@ describe('collectRerouteCandidates', () => {
     expect(collectRerouteCandidates([])).toEqual([])
     expect(collectRerouteCandidates(null)).toEqual([])
     expect(collectRerouteCandidates(undefined)).toEqual([])
+  })
+})
+
+describe('itinerarySignature', () => {
+  const T = 1785364020000 // on a minute boundary, so jitter stays in-bucket
+  const orange = (over: any = {}) =>
+    ({
+      legs: [
+        {
+          from: { name: 'I-35W & Lake St Station' },
+          mode: 'BUS',
+          routeId: '1:904',
+          startTime: T,
+          to: { name: 'I-35W & 46th St Station' },
+          transitLeg: true,
+          trip: { gtfsId: '1:1201789' },
+          ...over
+        }
+      ]
+    } as any)
+
+  it('calls two itineraries the same through live-time jitter', () => {
+    // The 8/2 loop applied the same trip nine times; each splice carried
+    // second-level realtime jitter that a hash of live times would treat as a
+    // new trip. Minute buckets are what make "materially the same" hold.
+    expect(itinerarySignature(orange())).toBe(
+      itinerarySignature(orange({ startTime: T + 20000 }))
+    )
+  })
+
+  it('still separates two departures of the same route', () => {
+    expect(itinerarySignature(orange())).not.toBe(
+      itinerarySignature(
+        orange({ startTime: T + 600000, trip: { gtfsId: '1:1201790' } })
+      )
+    )
+  })
+
+  it('separates a genuinely different plan', () => {
+    expect(itinerarySignature(orange())).not.toBe(
+      itinerarySignature(orange({ routeId: '1:18', to: { name: 'Nicollet' } }))
+    )
+  })
+
+  it('reads the route id in both leg shapes', () => {
+    // A synthesized onboard leg carries route as an object; a planner leg
+    // carries the flattened id. Comparing across those two provenances is
+    // exactly what the auto-apply guard does.
+    expect(
+      itinerarySignature(orange({ route: { id: '1:904' }, routeId: undefined }))
+    ).toBe(itinerarySignature(orange()))
+  })
+
+  it('is empty for nothing at all', () => {
+    expect(itinerarySignature(null)).toBe('')
+    expect(itinerarySignature(undefined)).toBe('')
   })
 })
 
@@ -302,6 +367,284 @@ describe('reRouteFromCurrentPosition (isolated pipeline)', () => {
       (a) => a.type === 'START_REROUTE'
     )?.payload
     expect(started.startedAtMs).toBeGreaterThanOrEqual(before)
+  })
+})
+
+describe('quietReplanAccessLeg (leg-scoped with full-trip fallback)', () => {
+  const mockedFetch = fetchOnboardCandidatePlan as jest.Mock
+  const T = 1785400000000
+  // The thunk throttles on a module-level wall clock (60s between replans) —
+  // march a mocked Date forward so every test gets a fresh window. Direct
+  // @sinonjs/fake-timers (Date only, real setTimeout): jest.setSystemTime is
+  // unusable here — duplicated @jest/fake-timers copies fail its instanceof
+  // guard.
+  let clock = T
+  let dateFaker: FakeTimers.InstalledClock | undefined
+
+  const advanceClock = (ms: number) => {
+    clock += ms
+    dateFaker?.setSystemTime(clock)
+  }
+
+  // A bike → bus → walk trip (the 7/29 shape). Fresh objects per store so the
+  // suffix-identity assertions are per-test.
+  const makeTrip = () => {
+    const bikeLeg = {
+      distance: 2000,
+      endTime: T + 600000,
+      mode: 'BICYCLE',
+      startTime: T,
+      transitLeg: false
+    } as any
+    const busLeg = {
+      distance: 8000,
+      endTime: T + 1560000,
+      from: {
+        lat: 44.86,
+        lon: -93.3,
+        name: 'Knox & 76th St',
+        stop: { gtfsId: '1:12345' }
+      },
+      mode: 'BUS',
+      routeId: '1:904',
+      startTime: T + 660000,
+      transitLeg: true
+    } as any
+    const walkLeg = {
+      distance: 300,
+      endTime: T + 1800000,
+      mode: 'WALK',
+      startTime: T + 1560000,
+      to: { lat: 44.98, lon: -93.27, name: 'Destination' },
+      transitLeg: false
+    } as any
+    return {
+      busLeg,
+      itinerary: {
+        duration: 1800,
+        endTime: T + 1800000,
+        legs: [bikeLeg, busLeg, walkLeg],
+        startTime: T,
+        transfers: 0
+      },
+      walkLeg
+    }
+  }
+
+  const makeStore = (trip: ReturnType<typeof makeTrip>) => {
+    let goModeState: any = {
+      ...initial,
+      activeItinerary: trip.itinerary,
+      isActive: true,
+      routeMatch: { legIndex: 0 },
+      tracking: {
+        ...initial.tracking,
+        lastPosition: { coords: { latitude: 44.85, longitude: -93.31 } }
+      }
+    }
+    const actions: any[] = []
+    const getState = () => ({
+      otp: {
+        config: { homeTimezone: 'America/Chicago' },
+        currentQuery: {},
+        goMode: goModeState
+      }
+    })
+    const dispatch: any = (action: any) => {
+      if (typeof action === 'function') return action(dispatch, getState)
+      actions.push(action)
+      goModeState = goMode(goModeState, action)
+      return action
+    }
+    return { actions, dispatch, getGoMode: () => goModeState }
+  }
+
+  beforeEach(() => {
+    mockedFetch.mockReset()
+    dateFaker = FakeTimers.install({ now: clock, toFake: ['Date'] })
+    advanceClock(600000)
+  })
+  afterEach(() => {
+    dateFaker?.uninstall()
+    dateFaker = undefined
+  })
+
+  it('scopes the query to the access chain: GPS → boarding stop, bike mode only', async () => {
+    const trip = makeTrip()
+    const newBike = {
+      distance: 2400,
+      endTime: T + 700000,
+      mode: 'BICYCLE',
+      startTime: T + 160000,
+      transitLeg: false
+    }
+    mockedFetch.mockReturnValue(() =>
+      Promise.resolve({
+        error: false,
+        itineraries: [
+          {
+            duration: 540,
+            endTime: T + 700000,
+            legs: [newBike],
+            startTime: T + 160000
+          }
+        ]
+      })
+    )
+    const store = makeStore(trip)
+    await store.dispatch(quietReplanAccessLeg())
+
+    expect(mockedFetch).toHaveBeenCalledTimes(1)
+    const payload = mockedFetch.mock.calls[0][0]
+    // To the BOARDING STOP, not the destination — the bus legs are not up for
+    // re-planning ("only reroute the bike leg, don't switch my bus routes").
+    expect(payload.to).toEqual({
+      lat: 44.86,
+      lon: -93.3,
+      name: 'Knox & 76th St'
+    })
+    expect(payload.modes).toEqual([{ mode: 'BICYCLE' }])
+    expect(payload.numItineraries).toBe(3)
+  })
+
+  it('applies the splice: suffix legs are the ORIGINAL objects', async () => {
+    const trip = makeTrip()
+    const newBike = {
+      distance: 2400,
+      endTime: T + 700000,
+      mode: 'BICYCLE',
+      startTime: T + 160000,
+      transitLeg: false
+    }
+    mockedFetch.mockReturnValue(() =>
+      Promise.resolve({
+        error: false,
+        itineraries: [
+          {
+            duration: 540,
+            endTime: T + 700000,
+            legs: [newBike],
+            startTime: T + 160000
+          }
+        ]
+      })
+    )
+    const store = makeStore(trip)
+    await store.dispatch(quietReplanAccessLeg())
+
+    const applied = store.actions.find((a) => a.type === 'START_GO_MODE')
+      ?.payload?.itinerary
+    expect(applied).toBeTruthy()
+    expect(applied.legs).toHaveLength(3)
+    expect(applied.legs[0]).toBe(newBike)
+    // Identity, not equality: same objects ⇒ same times/stops/routes — a
+    // later bus can never be invented by an access replan.
+    expect(applied.legs[1]).toBe(trip.busLeg)
+    expect(applied.legs[2]).toBe(trip.walkLeg)
+    expect(applied.endTime).toBe(T + 1800000)
+  })
+
+  it('falls back to the full-trip replan when the scoped plan is empty', async () => {
+    const trip = makeTrip()
+    const sameRoute = {
+      duration: 1700,
+      legs: [
+        { mode: 'BICYCLE', transitLeg: false },
+        {
+          mode: 'BUS',
+          routeId: '1:904',
+          startTime: T + 900000,
+          transitLeg: true
+        }
+      ]
+    }
+    const otherRoute = {
+      duration: 1400,
+      legs: [
+        { mode: 'BICYCLE', transitLeg: false },
+        {
+          mode: 'BUS',
+          routeId: '1:18',
+          startTime: T + 800000,
+          transitLeg: true
+        }
+      ]
+    }
+    mockedFetch
+      .mockReturnValueOnce(() =>
+        Promise.resolve({ error: false, itineraries: [] })
+      )
+      .mockReturnValueOnce(() =>
+        Promise.resolve({ error: false, itineraries: [otherRoute, sameRoute] })
+      )
+    const store = makeStore(trip)
+    await store.dispatch(quietReplanAccessLeg())
+
+    expect(mockedFetch).toHaveBeenCalledTimes(2)
+    const fallbackPayload = mockedFetch.mock.calls[1][0]
+    // The fallback is today's full-trip replan: destination, full mode set.
+    expect(fallbackPayload.to).toEqual({
+      lat: 44.98,
+      lon: -93.27,
+      name: 'Destination'
+    })
+    expect(fallbackPayload.modes).toEqual([
+      { mode: 'TRANSIT' },
+      { mode: 'WALK' }
+    ])
+    // Only a picker-approved (same next route) result may apply.
+    const applied = store.actions.find((a) => a.type === 'START_GO_MODE')
+      ?.payload?.itinerary
+    expect(applied).toBe(sameRoute)
+  })
+
+  it('leaves the trip alone when the fallback boards a different route', async () => {
+    const trip = makeTrip()
+    const otherRoute = {
+      duration: 1400,
+      legs: [
+        { mode: 'BICYCLE', transitLeg: false },
+        {
+          mode: 'BUS',
+          routeId: '1:18',
+          startTime: T + 800000,
+          transitLeg: true
+        }
+      ]
+    }
+    mockedFetch
+      .mockReturnValueOnce(() =>
+        Promise.resolve({ error: false, itineraries: [] })
+      )
+      .mockReturnValueOnce(() =>
+        Promise.resolve({ error: false, itineraries: [otherRoute] })
+      )
+    const store = makeStore(trip)
+    await store.dispatch(quietReplanAccessLeg())
+
+    expect(
+      store.actions.find((a) => a.type === 'START_GO_MODE')
+    ).toBeUndefined()
+  })
+
+  it('miss streak settles silently — no dead non-autoApply reroute fetch (A4)', async () => {
+    const trip = makeTrip()
+    // Every fetch (scoped + fallback, twice over) comes back empty: the old
+    // escalation dispatched reRouteFromCurrentPosition() on the second miss,
+    // whose Switch/Keep card nothing has rendered since eb74a9d8 — it must
+    // stay gone.
+    mockedFetch.mockReturnValue(() =>
+      Promise.resolve({ error: false, itineraries: [] })
+    )
+    const store = makeStore(trip)
+    await store.dispatch(quietReplanAccessLeg())
+    advanceClock(61000)
+    await store.dispatch(quietReplanAccessLeg())
+
+    expect(mockedFetch).toHaveBeenCalledTimes(4)
+    const types = store.actions.map((a) => a.type)
+    expect(types).not.toContain('START_REROUTE')
+    expect(store.getGoMode().reRoute.status).toBe('idle')
   })
 })
 

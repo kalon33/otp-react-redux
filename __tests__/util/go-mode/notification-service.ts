@@ -10,6 +10,7 @@ import {
   checkUpcomingTurn,
   classifyMissedBus,
   getEffectiveBoardTimeMs,
+  resetTurnAnnouncements,
   shouldAutoReroute,
   triggerVibration,
   wasRecentlySent
@@ -33,6 +34,12 @@ const makeConfig = (overrides: Record<string, any> = {}) => ({
 })
 
 describe('util > go-mode > notification-service', () => {
+  // The turn latch lives for the life of a leg OBJECT; these tests reuse a
+  // handful of leg literals across cases, so clear it between them.
+  beforeEach(() => {
+    resetTurnAnnouncements()
+  })
+
   describe('wasRecentlySent', () => {
     it('should return false for empty sent list', () => {
       const id = `APPROACH_STOP_route5_StopA_${Date.now()}`
@@ -279,8 +286,10 @@ describe('util > go-mode > notification-service', () => {
       const routine = checkUpcomingTurn(turnProgress(100), bikeLeg, [])
       expect(routine!.type).toBe('UPCOMING_TURN')
 
+      // A different turn on the same leg — the latch is per (cue, stage), so
+      // two probes of the SAME cue would be one announcement, not two.
       const notable = checkUpcomingTurn(
-        turnProgress(100, { significant: true }),
+        turnProgress(100, { index: 2, significant: true }),
         bikeLeg,
         []
       )
@@ -315,6 +324,260 @@ describe('util > go-mode > notification-service', () => {
       )
       expect(other).not.toBeNull()
       expect(other!.title).toBe('Turn right on Oak')
+    })
+
+    it('stays silent while announcements are held, even inside act range', () => {
+      // A rejoin/jump settle (7/29): the on-screen cue is right, the buzz
+      // waits until the projection proves plausible.
+      const held = makeProgress({
+        distanceToNextTurn: 10,
+        nextTurnCue: makeCue(),
+        turnAnnouncementsHeld: true
+      })
+      expect(checkUpcomingTurn(held, bikeLeg, [])).toBeNull()
+      expect(checkUpcomingTurn(held, walkLeg, [])).toBeNull()
+    })
+
+    describe('speed-scaled leads', () => {
+      it('widens the bike prepare lead at real riding speed', () => {
+        // 7/29 on-route speed: at 7 m/s the static 120 m floor is ~17 s of
+        // warning; the scaled lead (7 × 25 = 175 m) catches a cue at 160 m.
+        const fast = makeProgress({
+          distanceToNextTurn: 160,
+          nextTurnCue: makeCue(),
+          riderSpeedMps: 7
+        })
+        expect(checkUpcomingTurn(fast, bikeLeg, [])).not.toBeNull()
+        // Static leads would not have fired here.
+        const noSpeed = makeProgress({
+          distanceToNextTurn: 160,
+          nextTurnCue: makeCue()
+        })
+        expect(checkUpcomingTurn(noSpeed, bikeLeg, [])).toBeNull()
+      })
+
+      it('leaves a walker unchanged — the floors win at walking speed', () => {
+        // 1.4 × 25 = 35 m, under the 40 m walk floor: byte-identical behavior.
+        const walker = makeProgress({
+          distanceToNextTurn: 100,
+          nextTurnCue: makeCue(),
+          riderSpeedMps: 1.4
+        })
+        expect(checkUpcomingTurn(walker, walkLeg, [])).toBeNull()
+      })
+
+      it('caps the leads so a downhill sprint cannot announce blocks early', () => {
+        // 10 × 25 = 250 m — exactly the cap; anything beyond stays silent.
+        const downhill = (distance: number) =>
+          makeProgress({
+            distanceToNextTurn: distance,
+            nextTurnCue: makeCue(),
+            riderSpeedMps: 10
+          })
+        expect(checkUpcomingTurn(downhill(260), bikeLeg, [])).toBeNull()
+        expect(checkUpcomingTurn(downhill(240), bikeLeg, [])).not.toBeNull()
+      })
+
+      it('scales the act stage too, within its own cap', () => {
+        // 7 × 8 = 56 m: an act-stage cue at 50 m instead of the static 30 m.
+        const fast = makeProgress({
+          distanceToNextTurn: 50,
+          nextTurnCue: makeCue(),
+          riderSpeedMps: 7
+        })
+        const result = checkUpcomingTurn(fast, bikeLeg, [])
+        expect(result).not.toBeNull()
+        expect(result!.id).toContain('_act_')
+      })
+    })
+
+    describe('once per turn — the 7/31 notification storm', () => {
+      // 7/31: the rider stood at the origin 21 minutes early and got the same
+      // "Turn right on Village Lane" pushed 14 times in 7 minutes, one every
+      // 30.5 s, because the only guard was a 30 s window. "I specifically asked
+      // for notifications to be once."
+      let nowMs = 1785516757402
+      let dateNowSpy: jest.SpyInstance
+
+      beforeEach(() => {
+        nowMs = 1785516757402
+        dateNowSpy = jest.spyOn(Date, 'now').mockImplementation(() => nowMs)
+      })
+
+      afterEach(() => {
+        dateNowSpy.mockRestore()
+      })
+
+      it('never announces the same turn and stage twice, however long the wait', () => {
+        const sent: string[] = []
+        const first = checkUpcomingTurn(turnProgress(110), bikeLeg, sent)
+        expect(first).not.toBeNull()
+        sent.push(first!.id)
+
+        // Past the 30 s rate-limiter window — the exact moment the old code
+        // re-armed. Thirteen more of these made up the storm.
+        nowMs += 31000
+        expect(checkUpcomingTurn(turnProgress(108), bikeLeg, sent)).toBeNull()
+        nowMs += 300000
+        expect(checkUpcomingTurn(turnProgress(112), bikeLeg, sent)).toBeNull()
+      })
+
+      it('emits prepare and act exactly once each across a whole approach', () => {
+        const sent: string[] = []
+        const stages: string[] = []
+        // A bike closing on the corner at ~4 m/s, one tick per second.
+        for (let distance = 200; distance >= 0; distance -= 4) {
+          nowMs += 1000
+          const event = checkUpcomingTurn(
+            makeProgress({
+              distanceToNextTurn: distance,
+              nextTurnCue: makeCue(),
+              riderSpeedMps: 4
+            }),
+            bikeLeg,
+            sent
+          )
+          if (event) {
+            sent.push(event.id)
+            stages.push(event.id.split('_')[4])
+          }
+        }
+        expect(stages).toEqual(['prepare', 'act'])
+      })
+
+      it('says nothing to a rider who is standing still, then speaks when they move', () => {
+        const sent: string[] = []
+        const parked = () =>
+          makeProgress({
+            distanceToNextTurn: 53, // the 7/31 rider's pinned distance
+            nextTurnCue: makeCue({ significant: true }),
+            riderSpeedMps: 0.2
+          })
+
+        const events: (string | null)[] = []
+        for (let tick = 0; tick < 8; tick++) {
+          nowMs += 4000
+          const event = checkUpcomingTurn(parked(), bikeLeg, sent)
+          if (event) sent.push(event.id)
+          events.push(event && event.type)
+        }
+        expect(events.filter(Boolean)).toEqual([])
+
+        // They push off. The cue is actionable now, and lands once.
+        nowMs += 4000
+        const moving = makeProgress({
+          distanceToNextTurn: 53,
+          nextTurnCue: makeCue({ significant: true }),
+          riderSpeedMps: 4
+        })
+        const first = checkUpcomingTurn(moving, bikeLeg, sent)
+        expect(first).not.toBeNull()
+        expect(first!.type).toBe('TURN_ALERT')
+        sent.push(first!.id)
+
+        nowMs += 31000
+        expect(checkUpcomingTurn(moving, bikeLeg, sent)).toBeNull()
+      })
+
+      it('gives a rider who stops briefly their cue anyway', () => {
+        // A red light is not being parked: the hold only bites after
+        // STATIONARY_HOLD_TICKS consecutive slow ticks following real motion.
+        const sent: string[] = []
+        nowMs += 1000
+        checkUpcomingTurn(
+          makeProgress({
+            distanceToNextTurn: 300,
+            nextTurnCue: makeCue(),
+            riderSpeedMps: 5
+          }),
+          bikeLeg,
+          sent
+        )
+        nowMs += 1000
+        const atTheLight = checkUpcomingTurn(
+          makeProgress({
+            distanceToNextTurn: 110,
+            nextTurnCue: makeCue(),
+            riderSpeedMps: 0.1
+          }),
+          bikeLeg,
+          sent
+        )
+        expect(atTheLight).not.toBeNull()
+      })
+
+      it('never holds on a missing speed — absent data is not evidence of stillness', () => {
+        // The 7/31 track's first 15 fixes carried speed: null.
+        const sent: string[] = []
+        for (let tick = 0; tick < 6; tick++) {
+          nowMs += 4000
+          checkUpcomingTurn(
+            makeProgress({
+              distanceToNextTurn: 300,
+              nextTurnCue: makeCue(),
+              riderSpeedMps: null
+            }),
+            bikeLeg,
+            sent
+          )
+        }
+        nowMs += 4000
+        const event = checkUpcomingTurn(
+          makeProgress({
+            distanceToNextTurn: 110,
+            nextTurnCue: makeCue(),
+            riderSpeedMps: null
+          }),
+          bikeLeg,
+          sent
+        )
+        expect(event).not.toBeNull()
+      })
+
+      it('still gives a slow walker their one cue at the corner', () => {
+        // Under 0.7 m/s for the whole approach, so the prepare cue is held —
+        // but the act stage at the junction is exempt while nothing has been
+        // said about this turn yet.
+        const sent: string[] = []
+        const creep = (distance: number) =>
+          makeProgress({
+            distanceToNextTurn: distance,
+            nextTurnCue: makeCue(),
+            riderSpeedMps: 0.4
+          })
+
+        const emitted: string[] = []
+        for (const distance of [38, 30, 24, 18, 12, 8, 4]) {
+          nowMs += 4000
+          const event = checkUpcomingTurn(creep(distance), walkLeg, sent)
+          if (event) {
+            sent.push(event.id)
+            emitted.push(event.id.split('_')[4])
+          }
+        }
+        expect(emitted).toEqual(['act'])
+      })
+
+      it('re-arms for a new leg object — the latch lives and dies with the leg', () => {
+        const sent: string[] = []
+        const first = checkUpcomingTurn(turnProgress(110), bikeLeg, sent)
+        expect(first).not.toBeNull()
+        sent.push(first!.id)
+        expect(checkUpcomingTurn(turnProgress(110), bikeLeg, sent)).toBeNull()
+
+        // An itinerary swap (reroute, missed-bus auto-update) hands back new
+        // leg objects; the rider still needs guiding on the replacement leg.
+        // Past the backstop window, since that is what a real swap looks like.
+        nowMs += 31000
+        const replanned = {
+          mode: 'BICYCLE',
+          startTime: 2,
+          to: { name: 'Bus Stop' }
+        } as any
+        expect(
+          checkUpcomingTurn(turnProgress(110), replanned, sent)
+        ).not.toBeNull()
+      })
     })
   })
 
@@ -885,6 +1148,13 @@ describe('shouldAutoReroute', () => {
     )
   })
 
+  it("retries after a settled empty attempt ('none') — one dud reroute must not disable deviation response for the rest of the ride", () => {
+    expect(shouldAutoReroute([makeEvent('ROUTE_DEVIATION')], 'none')).toBe(true)
+    expect(shouldAutoReroute([makeEvent('CONNECTION_WARNING')], 'none')).toBe(
+      true
+    )
+  })
+
   it('ignores non-triggering notifications', () => {
     expect(shouldAutoReroute([makeEvent('APPROACH_STOP')], 'idle')).toBe(false)
     expect(shouldAutoReroute([], 'idle')).toBe(false)
@@ -897,7 +1167,8 @@ describe('missed-bus detection', () => {
   const STOP = {
     lat: 44.817,
     lon: -93.31039,
-    name: 'Old Shakopee Rd & Queen Ave S'
+    name: 'Old Shakopee Rd & Queen Ave S',
+    stop: { gtfsId: '1:stop-queen' }
   }
   // ~23m from the stop (today's ride: rider pinned near, not at, the stop)
   const NEAR_STOP: [number, number] = [44.816793, -93.310211]
@@ -1028,6 +1299,93 @@ describe('missed-bus detection', () => {
           baseInput({ nowMs: BOARD + 200000, riding: { legIndex: 1 } })
         )
       ).toBeNull()
+    })
+
+    it('riding held on a PRIOR leg still means aboard — no miss for a later boarding', () => {
+      // 7/29: the riding fact is the rider's chosen bus; while it is held (it
+      // only clears after 90s sustained off-route) no boarding anywhere in
+      // the trip can be "missed", including a downstream transfer.
+      const legs = [
+        ...makeLegs(),
+        {
+          duration: 300,
+          endTime: BOARD + 1200000,
+          from: { lat: 44.825177, lon: -93.302367, name: 'City Hall' },
+          mode: 'BUS',
+          routeShortName: '539',
+          startTime: BOARD + 900000,
+          to: { lat: 44.84, lon: -93.29, name: 'Southdale TC' },
+          transitLeg: true
+        }
+      ]
+      expect(
+        classifyMissedBus(
+          baseInput({
+            currentLegIndex: 2,
+            legs,
+            nowMs: BOARD + 1200000,
+            riding: { legIndex: 1 }
+          })
+        )
+      ).toBeNull()
+    })
+
+    it('riding un-anchored (legIndex -1) after an itinerary swap -> null', () => {
+      expect(
+        classifyMissedBus(
+          baseInput({ nowMs: BOARD + 200000, riding: { legIndex: -1 } })
+        )
+      ).toBeNull()
+    })
+
+    it("planned trip's vehicle still bound for the boarding stop -> null (17:27 on 7/29)", () => {
+      // The realtime epoch says "departed" but the bus's own fresh record is
+      // still heading to the boarding stop — the epoch is stale, not the bus.
+      expect(
+        classifyMissedBus(
+          baseInput({
+            boardVehicle: {
+              ageSec: 20,
+              distanceToBoardStopM: null,
+              nextStopId: '1:stop-queen'
+            },
+            liveLegTimes: { 1: { boardEpoch: BOARD, realtime: true } },
+            nowMs: BOARD + 100000
+          })
+        )
+      ).toBeNull()
+    })
+
+    it("planned trip's vehicle within the stop radius -> null", () => {
+      expect(
+        classifyMissedBus(
+          baseInput({
+            boardVehicle: {
+              ageSec: 20,
+              distanceToBoardStopM: 120,
+              nextStopId: null
+            },
+            liveLegTimes: { 1: { boardEpoch: BOARD, realtime: true } },
+            nowMs: BOARD + 100000
+          })
+        )
+      ).toBeNull()
+    })
+
+    it('a stale vehicle record is not evidence — classification proceeds', () => {
+      const ctx = classifyMissedBus(
+        baseInput({
+          boardVehicle: {
+            ageSec: 300,
+            distanceToBoardStopM: 111,
+            nextStopId: '1:stop-queen'
+          },
+          liveLegTimes: { 1: { boardEpoch: BOARD, realtime: true } },
+          nowMs: BOARD + 100000
+        })
+      )
+      expect(ctx?.definitive).toBe(true)
+      expect(ctx?.realtime).toBe(true)
     })
 
     it('strong vehicle match on the boarding leg -> null', () => {

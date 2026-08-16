@@ -193,7 +193,7 @@ export default defineConfig({
     react()
   ],
   server: {
-    allowedHosts: ['tre.hopto.org'],
+    allowedHosts: ['api.transit-nav.com', 'tre.hopto.org'],
     host: '0.0.0.0',
     port: 9967,
     proxy: {

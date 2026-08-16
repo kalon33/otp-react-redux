@@ -4,6 +4,14 @@ import type { LatLngArray, Leg } from '@opentripplanner/types'
 /**
  * Calculate distance between two lat/lng points using Haversine formula
  * @returns distance in meters
+ *
+ * A non-finite coordinate yields Infinity, not a number. Before 8/2 a null
+ * coerced to 0 and the haversine happily returned 10,267,729m — the distance
+ * from Minneapolis to null island — which read as a real (if absurd) position
+ * rather than as missing data. Infinity specifically, NOT NaN: every caller
+ * compares with `<` or `<=`, and NaN would silently flip all of them to false.
+ * Infinity makes a coordinateless vehicle lose every comparison, which is the
+ * intent.
  */
 export function calculateDistance(
   lat1: number,
@@ -11,6 +19,14 @@ export function calculateDistance(
   lat2: number,
   lon2: number
 ): number {
+  if (
+    !Number.isFinite(lat1) ||
+    !Number.isFinite(lon1) ||
+    !Number.isFinite(lat2) ||
+    !Number.isFinite(lon2)
+  ) {
+    return Infinity
+  }
   const R = 6371000 // Earth's radius in meters
   const φ1 = (lat1 * Math.PI) / 180
   const φ2 = (lat2 * Math.PI) / 180

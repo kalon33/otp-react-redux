@@ -1,5 +1,6 @@
 import {
   clampNonLiveLegTimes,
+  getDownstreamStops,
   liveStopArrival,
   mergeLiveTimePoint,
   pickBestAlightOption,
@@ -45,7 +46,147 @@ const candidate = (
   stopName: extra.stopName ?? 'Stop'
 })
 
+/** Transit itinerary that departs at a given moment (reachability tests). */
+const departing = (startTime: number, duration = 600) =>
+  ({ ...transitItin(duration), startTime } as any)
+
+const SERVICE_DAY = 1_700_000_000
+
+/**
+ * One stop of a trip, `dep` seconds into the service day. `live` gives it a
+ * realtime arrival; `delay` shifts that arrival off the schedule.
+ */
+const stopTime = (
+  id: string,
+  dep: number,
+  { delay = 0, live = false, serviceDay = SERVICE_DAY } = {}
+) =>
+  ({
+    arrivalDelay: delay,
+    realtimeArrival: live ? dep + delay : undefined,
+    realtimeState: live ? 'UPDATED' : 'SCHEDULED',
+    scheduledArrival: dep,
+    scheduledDeparture: dep,
+    serviceDay,
+    stop: { id, lat: 44.97 + dep / 1e6, lon: -93.27, name: id }
+  } as any)
+
 const T0 = 1_700_000_000_000
+
+describe('getDownstreamStops', () => {
+  // Anchor on the vehicle's next stop so the tests do not depend on geometry.
+  const stops = (sts: any[], nowMs: number) =>
+    getDownstreamStops(
+      { stopTimes: sts } as any,
+      { nextStopId: sts[0].stop.id },
+      null,
+      { lat: 45.03, lon: -93.31 },
+      nowMs
+    )
+
+  const NOW = SERVICE_DAY * 1000 + 69_480_000 // stop A's scheduled moment
+
+  it('anchors the schedule fallback to now at the vehicle’s next stop', () => {
+    const out = stops(
+      [stopTime('A', 69480), stopTime('B', 69600), stopTime('C', 69720)],
+      NOW
+    )
+    expect(out.map((s) => s.busArrivalEpoch)).toEqual([
+      NOW,
+      NOW + 120_000,
+      NOW + 240_000
+    ])
+    expect(out.every((s) => s.realtime === false)).toBe(true)
+  })
+
+  it('keeps a live arrival that is merely earlier than schedule — the bus is running ahead', () => {
+    const out = stops(
+      [stopTime('A', 69480), stopTime('B', 69600, { delay: -60, live: true })],
+      NOW
+    )
+    expect(out[1].busArrivalEpoch).toBe(NOW + 60_000)
+    expect(out[1].realtime).toBe(true)
+  })
+
+  it('drops a live arrival that lands before the clock, and stops calling it live (8/9)', () => {
+    // 1:53313's shape: UPDATED, delay 0, so its arrival is its scheduled time
+    // — already 9 minutes gone by the time the app reads it.
+    const out = stops(
+      [stopTime('A', 69480), stopTime('B', 69600, { live: true })],
+      NOW + 540_000
+    )
+    expect(out[1].busArrivalEpoch).toBeGreaterThanOrEqual(NOW + 540_000)
+    expect(out[1].realtime).toBe(false)
+  })
+
+  it('drops a live arrival that lands before the stop ahead of it (8/9)', () => {
+    // B is late and honest; C claims to be reached before B.
+    const out = stops(
+      [
+        stopTime('A', 69480),
+        stopTime('B', 69600, { delay: 660, live: true }),
+        stopTime('C', 69720, { live: true })
+      ],
+      NOW
+    )
+    expect(out[2].busArrivalEpoch).toBeGreaterThanOrEqual(
+      out[1].busArrivalEpoch
+    )
+    expect(out[2].realtime).toBe(false)
+  })
+
+  it('floors the schedule fallback to the last accepted arrival, so a late bus’s un-updated stops inherit the delay', () => {
+    const out = stops(
+      [
+        stopTime('A', 69480),
+        stopTime('B', 69600, { delay: 660, live: true }),
+        stopTime('C', 69720)
+      ],
+      NOW
+    )
+    // Without the floor C would be re-anchored to an undelayed now + 240s and
+    // land 7 minutes before the stop before it.
+    expect(out[2].busArrivalEpoch).toBeGreaterThanOrEqual(
+      out[1].busArrivalEpoch
+    )
+  })
+
+  it('demotes only the poisoned stop — the live figures after it survive (8/9)', () => {
+    const out = stops(
+      [
+        stopTime('A', 69480),
+        stopTime('B', 69600, { live: true }),
+        stopTime('C', 69660, { delay: 664, live: true })
+      ],
+      NOW + 540_000
+    )
+    expect(out[1].realtime).toBe(false)
+    expect(out[2].realtime).toBe(true)
+    expect(out[2].busArrivalEpoch).toBe((SERVICE_DAY + 69660 + 664) * 1000)
+  })
+
+  it('never returns a stop the bus reaches before the one ahead of it', () => {
+    const out = stops(
+      [
+        stopTime('A', 69480),
+        stopTime('B', 69600, { live: true }),
+        stopTime('C', 69660, { delay: 664, live: true }),
+        stopTime('D', 69780)
+      ],
+      NOW + 540_000
+    )
+    const epochs = out.map((s) => s.busArrivalEpoch)
+    expect(epochs).toEqual([...epochs].sort((a, b) => a - b))
+  })
+
+  it('skips stops with no coordinates without advancing the arrival floor', () => {
+    const blind = stopTime('B', 69600)
+    blind.stop.lat = null
+    const out = stops([stopTime('A', 69480), blind, stopTime('C', 69720)], NOW)
+    expect(out.map((s) => s.stop.id)).toEqual(['A', 'C'])
+    expect(out[1].busArrivalEpoch).toBe(NOW + 240_000)
+  })
+})
 
 describe('pickBestAlightOption', () => {
   it('returns null when there are no candidates', () => {
@@ -155,6 +296,40 @@ describe('rankAlightOptions', () => {
     const b = candidate(T0, [transitItin(1800)], { stopId: 'B' })
     const best = pickBestAlightOption([a, b])
     expect(rankAlightOptions([a, b])[0].stopId).toBe(best?.stopId)
+  })
+
+  it('drops an onward plan that departs before the rider is off the bus', () => {
+    // The bus reaches the stop at T0+600s; this plan left 10 minutes earlier.
+    const gone = candidate(T0 + 600_000, [departing(T0)], { stopId: 'A' })
+    const ok = candidate(T0 + 600_000, [departing(T0 + 660_000)], {
+      stopId: 'B'
+    })
+    expect(rankAlightOptions([gone, ok]).map((o) => o.stopId)).toEqual(['B'])
+  })
+
+  it('drops a plan that departed before now, whatever the bus arrival claims (8/9)', () => {
+    // The shape of the 8/9 failure: busArrivalEpoch is itself a lie already
+    // behind the clock, so the plan agrees with it and only `now` disputes it.
+    const past = candidate(T0 - 540_000, [departing(T0 - 540_000)], {
+      stopId: 'A'
+    })
+    expect(rankAlightOptions([past])).toHaveLength(1)
+    expect(rankAlightOptions([past], { nowMs: T0 })).toEqual([])
+  })
+
+  it('keeps a plan departing inside the one-minute grace', () => {
+    const late = candidate(T0 + 600_000, [departing(T0 + 540_001)], {
+      stopId: 'A'
+    })
+    expect(rankAlightOptions([late], { nowMs: T0 })).toHaveLength(1)
+  })
+
+  it('keeps an itinerary with no startTime rather than dropping every option', () => {
+    // OTP always sets startTime; its absence means synthetic data. Failing
+    // closed here would empty the option list on any unexpected shape.
+    expect(
+      rankAlightOptions([candidate(T0, [transitItin(600)])], { nowMs: T0 })
+    ).toHaveLength(1)
   })
 })
 
@@ -323,6 +498,40 @@ describe('clampNonLiveLegTimes', () => {
     const out = clampNonLiveLegTimes(times, NOW)
     expect(out?.[1]).toBe(fresh)
     expect(out?.[2].alightEpoch).toBe(NOW)
+  })
+
+  it('carries the alight along when raising the board past it', () => {
+    // 8/2: raising a non-live board time to now while a live alight sat in
+    // the past showed the rider arriving before they got on, and re-fired
+    // SET_LIVE_LEG_TIMES once a second for the whole ride.
+    const times = {
+      1: entry({
+        alightEpoch: NOW - 60000,
+        alightRealtime: true,
+        boardEpoch: NOW - 90000,
+        boardRealtime: false
+      })
+    }
+    const out = clampNonLiveLegTimes(times, NOW)
+    expect(out?.[1].boardEpoch).toBe(NOW)
+    expect(out?.[1].alightEpoch).toBe(NOW)
+  })
+
+  it('leaves a merely-late live pair alone — that is honest data', () => {
+    expect(
+      clampNonLiveLegTimes(
+        {
+          1: entry({
+            alightEpoch: NOW - 6000,
+            alightRealtime: true,
+            boardEpoch: NOW - 60000,
+            boardRealtime: true,
+            realtime: true
+          })
+        },
+        NOW
+      )
+    ).toBeNull()
   })
 })
 

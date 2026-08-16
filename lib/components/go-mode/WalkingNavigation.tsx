@@ -11,6 +11,7 @@ import {
   getRouteDepartures,
   getSoonestCatchableMs
 } from '../../util/go-mode/departure-anchor'
+import { formatPlaceName } from '../../util/format-place-name'
 import { getWalkingInstructionWithIntl } from '../../util/go-mode/progress-calculator'
 import type { TripProgress } from '../../util/go-mode/progress-calculator'
 
@@ -102,7 +103,7 @@ const WalkingNavigation = ({
   )
 
   const route = nextLeg?.routeShortName || nextLeg?.routeLongName || ''
-  const stopName = nextLeg?.from?.name || leg.to.name
+  const stopName = formatPlaceName(nextLeg?.from?.name || leg.to.name, intl)
   const isBike = leg.mode === 'BICYCLE'
   const accessEmoji = isBike ? '\ud83d\udeb2' : '\ud83d\udeb6'
 
@@ -229,7 +230,7 @@ const WalkingNavigation = ({
     // foot — nothing else is competing for the space.
     eyebrow = intl.formatMessage(
       { defaultMessage: '{emoji} To {stop}', id: 'components.GoMode.toStop' },
-      { emoji: accessEmoji, stop: leg.to.name }
+      { emoji: accessEmoji, stop: formatPlaceName(leg.to.name, intl) }
     )
     hero = formatMinutes(rideSecondsRemaining)
     sub = turnLine || walkingInstruction.nextInstruction || null
@@ -261,10 +262,13 @@ const WalkingNavigation = ({
           </NavHero>
         )}
         {sub && <NavSub>{sub}</NavSub>}
-        {foot && <NavFoot>{foot}</NavFoot>}
-        {/* Riding to a bus: the departure stays the headline, but the rider
-            still needs to know which way to go to reach the stop. */}
+        {/* Riding to a bus: the departure stays the headline, but the rider's
+            next physical action is the turn — so it renders first, directly
+            under "arrives in", ahead of the ride-to-stop line. As the trailing
+            line it read as more bus info (7/29). While deviated there is no
+            turnLine and the card gracefully shows bus facts only. */}
         {isNextLegTransit && turnLine && <NavFoot>{turnLine}</NavFoot>}
+        {foot && <NavFoot>{foot}</NavFoot>}
 
         {showExtras && (
           <NavExtras>
@@ -285,7 +289,9 @@ const WalkingNavigation = ({
                   alt: { departureMs: number; realtime: boolean },
                   idx: number
                 ) => {
-                  const minsAway = Math.round((alt.departureMs - nowMs) / 60000)
+                  const minsAway = alt.departureMs && nowMs
+                    ? Math.round((alt.departureMs - nowMs) / 60000)
+                    : null
                   return (
                     <AlternativeDeparture key={idx}>
                       <span
@@ -297,19 +303,26 @@ const WalkingNavigation = ({
                           whiteSpace: 'nowrap' as const
                         }}
                       >
-                        {intl.formatMessage(
-                          {
-                            defaultMessage: 'Next: {time} ({mins} min away)',
-                            id: 'components.GoMode.nextDeparture'
-                          },
-                          {
-                            mins: minsAway,
-                            time: (
-                              <RealtimeTime live={alt.realtime}>
-                                {formatClockTime(alt.departureMs)}
-                              </RealtimeTime>
-                            )
-                          }
+                        {minsAway !== null && alt.departureMs ? (
+                          intl.formatMessage(
+                            {
+                              defaultMessage: 'Next: {time} ({mins} min away)',
+                              id: 'components.GoMode.nextDeparture'
+                            },
+                            {
+                              mins: minsAway,
+                              time: (
+                                <RealtimeTime live={alt.realtime || false}>
+                                  {formatClockTime(alt.departureMs)}
+                                </RealtimeTime>
+                              )
+                            }
+                          )
+                        ) : (
+                          intl.formatMessage({
+                            defaultMessage: 'Next departure',
+                            id: 'components.GoMode.nextDepartureNoInfo'
+                          })
                         )}
                       </span>
                       <UseNextButton

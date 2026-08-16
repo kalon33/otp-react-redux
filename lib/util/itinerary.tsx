@@ -84,7 +84,9 @@ export function getItineraryDefaultMonitoredDays(
   return dayOfWeek === 0 || dayOfWeek === 6 ? WEEKEND_DAYS : WEEKDAYS
 }
 
-function legLocationsAreEqual(legLocation: Place, other: Place) {
+/** Two leg endpoints at the same coordinates. Exported for the go-mode leg
+ * merge, whose contiguity check needs the same notion of "same place". */
+export function legLocationsAreEqual(legLocation: Place, other: Place) {
   return (
     !!legLocation &&
     !!other &&

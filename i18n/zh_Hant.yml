@@ -8,25 +8,6 @@ actions:
     couldNotFindCallError: 找不到通話。正在取消儲存查詢請求。
     fetchCallsError: 擷取通話時發生錯誤：{err}
     queryFetchError: 擷取查詢時發生錯誤：{err}
-  fieldTrip:
-    addNoteError: 新增實地考察備註時發生錯誤：
-    confirmOverwriteItineraries: "此動作將覆蓋此請求之前規劃的{outbound, select,\n true {外出}\n other\
-      \ {返回}\n }預定行程。您想繼續嗎？\n"
-    deleteItinerariesError: 刪除實地考察計畫時發生錯誤：
-    deleteNoteError: 刪除實地考察備註時發生錯誤：
-    editSubmitterNotesError: 編輯提交者備註時發生錯誤：
-    fetchFieldTripError: 擷取實地考察時發生錯誤：{err}
-    fetchFieldTripsError: 擷取實地考察時發生錯誤：{err}
-    fetchTripsForDateError: 擷取實地考察行程日期的行程時發生錯誤：{err}
-    incompatibleTripDateError: 規劃的行程日期 ({tripDate}) 並非請求的行程日期 ({requestDate})
-    itineraryCapacityError: 無法儲存計畫：因為一或多輛車的容量不足，此計畫無法儲存。請重新規劃您的行程。
-    maxTripRequestsExceeded: 行程請求數量過多，沒有有效結果
-    saveItinerariesError: 無法儲存預定行程：{err}
-    setDateError: 設定日期時發生錯誤：
-    setGroupSizeError: 設定群組大小時發生錯誤：
-    setPaymentError: 設定付款資訊時發生錯誤：
-    setRequestStatusError: 設定請求狀態時發生錯誤：
-    setTimeError: 'Error setting time:'
   location:
     deniedAccessAlert: "系統已封鎖您存取地點的權限。\n若要使用目前的地點，請從瀏覽器啟用地點權限，然後再重新載入頁面。 \n"
     geolocationNotSupportedError: 您的瀏覽器不支援地理位置
@@ -171,7 +152,6 @@ components:
   AppMenu:
     callHistory: 通話記錄
     closeMenu: 關閉功能表
-    fieldTrip: 實地考察
     mailables: 可郵寄
     openMenu: 開啟功能表
     skipNavigation: 跳過導航
@@ -662,10 +642,8 @@ components:
     endOfTrip: 行程到此結束
     header: 行程檢視器
     listOfRouteStops: 此路線上的車站清單
-    routeHeader: 路線：<strong>{routeShortName}</strong> {routeLongName}
     startOfTrip: 行程從這裡開始
     tripDescription: 在 {boardAtStop} 上車，在 {disembarkAtStop} 下車
-    viewStop: 檢視
   UserAccountScreen:
     confirmDelete: 您確定要刪除使用者帳戶嗎？一旦刪除，就無法復原。
     errorUpdatingProfile: 更新設定檔時發生錯誤。
@@ -701,6 +679,15 @@ components:
   WelcomeScreen:
     prompt: 您想要去哪裡？
   GoMode:
+
+    directionEB: 東向
+    directionNB: 北向
+    directionSB: 南向
+    directionWB: 西向
+    busHeadsign: '終點站: {headsign}'
+    noBusesOrRoutesNearby: 附近未檢測到公車或路線。請嘗試靠近公車站。
+
+
     noBusesNearby: Components Gomode Nobusesnearby
     boardingSubtitle: Components Gomode Boardingsubtitle
     rerouteOk: Components Gomode Rerouteok

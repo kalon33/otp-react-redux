@@ -5,6 +5,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import * as goModeActions from '../../actions/go-mode'
 import * as uiActions from '../../actions/ui'
 import { MobileScreens } from '../../actions/ui-constants'
+import { formatPlaceName } from '../../util/format-place-name'
 import MobileNavigationBar from '../mobile/navigation-bar'
 import type { GoModeState } from '../../reducers/go-mode'
 
@@ -40,30 +41,36 @@ import useActiveTripGuards from './use-active-trip-guards'
 interface Props {
   beginGoMode: (itinerary: any) => void
   boardingStopData: any
+  clearOnboard: () => void
   departureOverride: number | null
   endGoMode: () => void
   goMode: GoModeState
   pauseGpsSimulation: () => void
   resumeGpsSimulation: () => void
   setDepartureOverride: (epochMs: number | null) => void
+  setMapFollow: (value: boolean) => void
   setMobileScreen: (screen: number) => void
   startGpsSimulation: (speedMultiplier?: number) => void
   stopGpsSimulation: () => void
+  toggleMapFollow: () => void
   units: 'imperial' | 'metric'
 }
 
 const GoModeScreen = ({
   beginGoMode,
   boardingStopData,
+  clearOnboard,
   departureOverride,
   endGoMode,
   goMode,
   pauseGpsSimulation,
   resumeGpsSimulation,
   setDepartureOverride,
+  setMapFollow,
   setMobileScreen,
   startGpsSimulation,
   stopGpsSimulation,
+  toggleMapFollow,
   units
 }: Props) => {
   const intl = useIntl()
@@ -82,7 +89,7 @@ const GoModeScreen = ({
     (window.location.search.includes('sim=1') ||
       window.localStorage?.getItem('goModeSim') === '1')
 
-  // Only leave Go Mode once a trip has genuinely ended \u2014 never during the entry
+  // Only leave Go Mode once a trip has genuinely ended — never during the entry
   // transition. Bouncing on the first render was kicking riders straight back to
   // results the instant they hit "Start Trip".
   const hasBeenActiveRef = useRef(false)
@@ -104,15 +111,18 @@ const GoModeScreen = ({
   // ReturnToTripBanner so the guards survive backgrounding).
   useActiveTripGuards(goMode.isActive)
 
+  // Every path that ENDS the trip asks first. Shared so the two of them cannot
+  // drift — on 8/9 only one of them asked.
+  const confirmStopTracking = () =>
+    window.confirm(
+      intl.formatMessage({
+        defaultMessage: 'Are you sure you want to stop tracking this trip?',
+        id: 'components.GoMode.confirmExit'
+      })
+    )
+
   const handleExit = () => {
-    if (
-      window.confirm(
-        intl.formatMessage({
-          defaultMessage: 'Are you sure you want to stop tracking this trip?',
-          id: 'components.GoMode.confirmExit'
-        })
-      )
-    ) {
+    if (confirmStopTracking()) {
       endGoMode()
       setMobileScreen(MobileScreens.RESULTS_SUMMARY)
     }
@@ -125,12 +135,19 @@ const GoModeScreen = ({
     }
   }
 
+  // Back out of the onboard flow PRE-TRIP. BEGIN_ONBOARD_FLOW has already
+  // nulled activeItinerary, so this ends Go Mode outright — it has to ask.
+  // On 8/9 the rider hit back twice, 19:21:36 and 19:21:51, and Go Mode
+  // stopped silently both times. (Mid-ride is a different branch below: back
+  // there only dismisses the panel, and must stay silent.)
   const handleOnboardExit = () => {
-    endGoMode()
-    setMobileScreen(MobileScreens.SEARCH_FORM)
+    if (confirmStopTracking()) {
+      endGoMode()
+      setMobileScreen(MobileScreens.SEARCH_FORM)
+    }
   }
 
-  // Trip complete: the rider dismisses the arrival card themselves \u2014 landing
+  // Trip complete: the rider dismisses the arrival card themselves — landing
   // on the home screen, not a stale results list. (Both dispatches happen in
   // one handler, so the parent swaps screens before the inactive-redirect
   // effect can route to RESULTS_SUMMARY.)
@@ -139,9 +156,12 @@ const GoModeScreen = ({
     setMobileScreen(MobileScreens.SEARCH_FORM)
   }
 
-  // "I'm on the bus" onboard flow: no itinerary yet \u2014 show discovery, the bus
-  // picker, and the alight-stop recommendation.
-  if (onboardActive && !goMode.activeItinerary) {
+  // "I'm on the bus" onboard flow: discovery, the bus picker, and the
+  // alight-stop recommendation. Pre-trip there is no itinerary yet and back
+  // exits Go Mode entirely; mid-trip (replanFromAboard's explicit path) the
+  // live trip keeps running underneath, so back just clears the onboard
+  // panel and returns to it untouched.
+  if (onboardActive) {
     return (
       <FullScreenWrapper>
         <MobileNavigationBar
@@ -149,7 +169,9 @@ const GoModeScreen = ({
             defaultMessage: 'On the bus',
             id: 'components.GoMode.onboardTitle'
           })}
-          onBackClicked={handleOnboardExit}
+          onBackClicked={
+            goMode.activeItinerary ? () => clearOnboard() : handleOnboardExit
+          }
           showBackButton
         />
         <ScreenMain>
@@ -255,9 +277,12 @@ const GoModeScreen = ({
         <GoModeMap
           activeLegIndex={goMode.ui.activeLeg}
           currentLegIndex={goMode.progress.currentLegIndex}
+          currentLegMode={currentLeg?.mode ?? null}
           currentPosition={goMode.tracking.lastPosition}
           followUser={goMode.ui.mapFollowUser}
           itinerary={goMode.activeItinerary}
+          onSetFollow={setMapFollow}
+          onToggleFollow={toggleMapFollow}
           routeMatch={goMode.routeMatch}
         />
 
@@ -275,14 +300,17 @@ const GoModeScreen = ({
             <RerouteCard role="status">
               <RerouteCardTitle>
                 {intl.formatMessage({
-                  defaultMessage: "\ud83c\udf89 You've arrived!",
+                  defaultMessage: "🎉 You've arrived!",
                   id: 'components.GoMode.arrivedTitle'
                 })}
               </RerouteCardTitle>
               <RerouteSummary>
-                {goMode.activeItinerary.legs[
-                  goMode.activeItinerary.legs.length - 1
-                ]?.to?.name || ''}
+                {formatPlaceName(
+                  goMode.activeItinerary.legs[
+                    goMode.activeItinerary.legs.length - 1
+                  ]?.to?.name || '',
+                  intl
+                )}
               </RerouteSummary>
               <RerouteActions>
                 <RerouteSwitchButton onClick={handleArrivedDone} type="button">
@@ -320,7 +348,7 @@ const GoModeScreen = ({
               aria-label="Toggle simulation toolbar"
               onClick={() => setSimToolbarOpen(!simToolbarOpen)}
             >
-              {simToolbarOpen ? 'DEV \u25bc' : 'DEV \u25b2'}
+              {simToolbarOpen ? 'DEV ▼' : 'DEV ▲'}
             </SimToggle>
             {simToolbarOpen && (
               <SimToolbar aria-label="GPS simulation controls" role="toolbar">
@@ -424,16 +452,24 @@ const mapStateToProps = (state: any) => {
       currentLegIndex < legs.length - 1 ? legs[currentLegIndex + 1] : undefined
 
     // The boarding stop times are pre-fetched in beginGoMode keyed by the stop's
-    // gtfsId (leg.from.stop.gtfsId). The plan query's leg `from` block exposes
-    // the gtfsId under `from.stop.gtfsId` \u2014 there is no `from.stopId` \u2014 so we
-    // must look the store up by the same gtfsId, else boardingStopData is always
-    // null and the card silently falls back to OTP's planned (scheduled) time.
+    // gtfsId (leg.from.stop.gtfsId) or stopId (leg.from.stopId). The plan query's leg
+    // `from` block exposes the gtfsId under `from.stop.gtfsId`, but some responses may
+    // only have `from.stopId`. We must look the store up by the same key used in
+    // startGoModeTracking, else boardingStopData is always null and the card
+    // silently falls back to OTP's planned (scheduled) time.
     const boardingStopId =
-      (nextLeg as any)?.from?.stop?.gtfsId || (nextLeg as any)?.from?.stopId
+      (nextLeg as any)?.from?.stop?.gtfsId ||
+      (nextLeg as any)?.from?.stopId ||
+      (nextLeg as any)?.to?.stop?.gtfsId ||
+      (nextLeg as any)?.to?.stopId
+    // Check if next leg is a transit leg (either via transitLeg flag or mode check)
+    const isNextLegTransit =
+      nextLeg?.transitLeg ||
+      ['BUS', 'RAIL', 'SUBWAY', 'TRAM', 'FERRY'].includes(nextLeg?.mode)
     if (
       currentLeg &&
       (currentLeg.mode === 'WALK' || currentLeg.mode === 'BICYCLE') &&
-      nextLeg?.transitLeg &&
+      isNextLegTransit &&
       boardingStopId
     ) {
       boardingStopData = state.otp.transitIndex?.stops?.[boardingStopId] || null
@@ -450,13 +486,16 @@ const mapStateToProps = (state: any) => {
 
 const mapDispatchToProps = {
   beginGoMode: goModeActions.beginGoMode,
+  clearOnboard: goModeActions.clearOnboard,
   endGoMode: goModeActions.endGoMode,
   pauseGpsSimulation: goModeActions.pauseGpsSimulation,
   resumeGpsSimulation: goModeActions.resumeGpsSimulation,
   setDepartureOverride: goModeActions.selectDeparture,
+  setMapFollow: goModeActions.setMapFollow,
   setMobileScreen: uiActions.setMobileScreen,
   startGpsSimulation: goModeActions.startGpsSimulation,
-  stopGpsSimulation: goModeActions.stopGpsSimulation
+  stopGpsSimulation: goModeActions.stopGpsSimulation,
+  toggleMapFollow: goModeActions.toggleMapFollow
 }
 
 export default connect(mapStateToProps, mapDispatchToProps)(GoModeScreen)
