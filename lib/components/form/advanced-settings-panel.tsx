@@ -27,7 +27,9 @@ import React, {
 } from 'react'
 import styled from 'styled-components'
 
+import * as apiActions from '../../actions/api'
 import * as formActions from '../../actions/form'
+import * as routeLockActions from '../../actions/route-lock'
 import * as routingProfileActions from '../../actions/routing-profiles'
 import * as userActions from '../../actions/user'
 import { AppReduxState } from '../../util/state-types'
@@ -47,6 +49,7 @@ import { getDependentName } from '../../util/user'
 import { IconWithText } from '../util/styledIcon'
 import { invisibleCss } from '../util/invisible-a11y-label'
 import { PersistenceConfig } from '../../util/config-types'
+import { LockableRoute, routeLockLabel } from '../../util/route-lock'
 import { toastPromise } from '../util/toasts'
 import { User } from '../user/types'
 import BackButton from '../util/back-button'
@@ -232,6 +235,7 @@ const AdvancedSettingsPanel = ({
   createOrUpdateUser,
   currentQuery,
   enabledModeButtons,
+  findRoutesIfNeeded,
   getDependentUserInfo,
   handlePlanTrip,
   innerRef,
@@ -241,9 +245,11 @@ const AdvancedSettingsPanel = ({
   modeSettingDefinitions,
   modeSettingValues,
   persistence,
+  routes,
   saveAndReturnButton,
   setCloseAdvancedSettingsWithDelay,
   setQueryParam,
+  setRouteLock,
   user
 }: {
   applyPreferencesFromText: (text: string) => Promise<any>
@@ -253,6 +259,7 @@ const AdvancedSettingsPanel = ({
   createOrUpdateUser: (user: User, intl: IntlShape) => Promise<number>
   currentQuery: any
   enabledModeButtons: string[]
+  findRoutesIfNeeded: () => void
   getDependentUserInfo: (userIds: string[], intl: IntlShape) => void
   handlePlanTrip: () => void
   innerRef: RefObject<HTMLDivElement>
@@ -262,9 +269,11 @@ const AdvancedSettingsPanel = ({
   modeSettingDefinitions: ModeSetting[]
   modeSettingValues: ModeSettingValues
   persistence?: PersistenceConfig
+  routes?: Record<string, LockableRoute>
   saveAndReturnButton?: boolean
   setCloseAdvancedSettingsWithDelay: () => void
   setQueryParam: (evt: any) => void
+  setRouteLock: (routeId?: string | null) => void
   user: User
 }): JSX.Element => {
   const intl = useIntl()
@@ -273,7 +282,7 @@ const AdvancedSettingsPanel = ({
     useState<string>(currentQuery.forEmail || loggedInUser?.email)
   const [nlText, setNlText] = useState('')
   const [nlStatus, setNlStatus] = useState<
-    'idle' | 'loading' | 'applied' | 'error'
+    'idle' | 'loading' | 'applied' | 'error' | 'routeMissing'
   >('idle')
   const [nlSummary, setNlSummary] = useState('')
   const dependents = useMemo(
@@ -288,6 +297,48 @@ const AdvancedSettingsPanel = ({
       getDependentUserInfo(dependents, intl)
     }
   }, [dependents, getDependentUserInfo, intl, mobilityProfile])
+
+  // The route picker needs the whole route index; ask for it once on open.
+  useEffect(() => {
+    findRoutesIfNeeded()
+  }, [findRoutesIfNeeded])
+
+  const routeLockOptions = useMemo(() => {
+    const named = Object.entries(routes || {})
+      // Vehicle-position updates stash bare {vehicles} entries under a route id;
+      // those aren't pickable routes.
+      .filter(([, route]) => route.shortName || route.longName)
+      .map(([id, route]) => ({
+        sortOrder: route.sortOrder ?? Number.MAX_SAFE_INTEGER,
+        text: route.longName
+          ? `${routeLockLabel({ ...route, id })} — ${route.longName}`
+          : routeLockLabel({ ...route, id }),
+        value: id
+      }))
+      .sort(
+        (a, b) =>
+          a.sortOrder - b.sortOrder ||
+          a.text.localeCompare(b.text, undefined, {
+            numeric: true
+          })
+      )
+    return [
+      {
+        text: intl.formatMessage({
+          id: 'components.BatchSearchScreen.routeLockAny'
+        }),
+        value: ''
+      },
+      ...named.map(({ text, value }) => ({ text, value }))
+    ]
+  }, [intl, routes])
+
+  const onRouteLockChange = useCallback(
+    (evt: QueryParamChangeEvent) => {
+      setRouteLock((evt.routeLock as string) || null)
+    },
+    [setRouteLock]
+  )
 
   const baseColor = getBaseColor()
   const accentColor = baseColor || blue[900]
@@ -392,17 +443,33 @@ const AdvancedSettingsPanel = ({
     if (!text) return
     setNlStatus('loading')
     try {
-      const prefs = await applyPreferencesFromText(text)
-      setNlSummary(
-        Object.entries(prefs)
-          .map(([key, value]) => `${key}: ${value}`)
-          .join(', ')
+      const { lock, preferences, routeQuery } = await applyPreferencesFromText(
+        text
       )
+      // A route the rider named but the graph doesn't have is worth saying out
+      // loud — the levers still applied, but the trip they asked for didn't.
+      if (routeQuery && !lock) {
+        setNlSummary(routeQuery)
+        setNlStatus('routeMissing')
+        return
+      }
+      const parts = Object.entries(preferences).map(
+        ([key, value]) => `${key}: ${value}`
+      )
+      if (lock) {
+        parts.unshift(
+          intl.formatMessage(
+            { id: 'components.BatchSearchScreen.routeLockChip' },
+            { route: lock.label }
+          )
+        )
+      }
+      setNlSummary(parts.join(', '))
       setNlStatus('applied')
     } catch {
       setNlStatus('error')
     }
-  }, [applyPreferencesFromText, nlText])
+  }, [applyPreferencesFromText, intl, nlText])
   return (
     <PanelOverlay className="advanced-settings" ref={innerRef}>
       <HeaderContainer>
@@ -431,6 +498,15 @@ const AdvancedSettingsPanel = ({
             value: profile.id
           }))}
           value={currentQuery.activeProfileId || DEFAULT_PROFILE_ID}
+        />
+        <RoutingProfileDropdown
+          label={intl.formatMessage({
+            id: 'components.BatchSearchScreen.routeLockLabel'
+          })}
+          name="routeLock"
+          onChange={onRouteLockChange}
+          options={routeLockOptions}
+          value={currentQuery.routeLock?.id || ''}
         />
       </RoutingProfileContainer>
       <NlPreferencesContainer>
@@ -468,6 +544,14 @@ const AdvancedSettingsPanel = ({
             <FormattedMessage
               id="components.BatchSearchScreen.nlPreferencesApplied"
               values={{ summary: nlSummary }}
+            />
+          </NlStatus>
+        )}
+        {nlStatus === 'routeMissing' && (
+          <NlStatus>
+            <FormattedMessage
+              id="components.BatchSearchScreen.routeLockNotFound"
+              values={{ route: nlSummary }}
             />
           </NlStatus>
         )}
@@ -593,6 +677,7 @@ const mapStateToProps = (state: AppReduxState) => {
     modeSettingDefinitions: state.otp?.modeSettingDefinitions || [],
     modeSettingValues,
     persistence: state.otp.config?.persistence,
+    routes: state.otp.transitIndex?.routes,
     saveAndReturnButton,
     user
   }
@@ -602,8 +687,10 @@ const mapDispatchToProps = {
   createOrUpdateUser: userActions.createOrUpdateUser,
   applyPreferencesFromText: routingProfileActions.applyPreferencesFromText,
   applyRoutingProfile: routingProfileActions.applyRoutingProfile,
+  findRoutesIfNeeded: apiActions.findRoutesIfNeeded,
   getDependentUserInfo: userActions.getDependentUserInfo,
-  setQueryParam: formActions.setQueryParam
+  setQueryParam: formActions.setQueryParam,
+  setRouteLock: routeLockActions.setRouteLock
 }
 
 export default connect(

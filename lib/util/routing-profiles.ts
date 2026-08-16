@@ -208,7 +208,11 @@ export function summarizePreferences(
  * Bookkeeping keys we stash in currentQuery (so they round-trip through the
  * query pipeline) but must NOT send to OTP as GraphQL variables.
  */
-export const NON_OTP_QUERY_KEYS = ['activeProfileId', 'routingPreferences']
+export const NON_OTP_QUERY_KEYS = [
+  'activeProfileId',
+  'routeLock',
+  'routingPreferences'
+]
 
 /**
  * Merge clamped routing preferences onto already-generated GraphQL variables.
@@ -267,17 +271,42 @@ export function extendPlanQueryWithLevers(query: string): string {
 /** Path of the login-gated preferences endpoint (same origin, proxied by nginx). */
 export const PREFERENCES_API_PATH = '/api/preferences'
 
+/** What the preferences endpoint can tell us about a rider's request. */
+export interface PreferencesAnswer {
+  preferences: RoutingPreferences
+  /**
+   * A transit route the rider asked to ride and nothing else, in their own
+   * words ("18", "Orange Line"). Not an id — the caller resolves it against the
+   * OTP route index. Absent when they named no route.
+   */
+  routeQuery?: string
+}
+
+// Mirrors ROUTE_QUERY_RE in transitnav/preferences_api.py: a plain route name,
+// nothing that could be markup or an injected id.
+const ROUTE_QUERY_RE = /^[A-Za-z0-9][A-Za-z0-9 .-]*$/
+const MAX_ROUTE_QUERY_CHARS = 40
+
+/** Keep a route name only if it still looks like one on this side too. */
+function cleanRouteQuery(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  if (!trimmed || trimmed.length > MAX_ROUTE_QUERY_CHARS) return undefined
+  return ROUTE_QUERY_RE.test(trimmed) ? trimmed : undefined
+}
+
 /**
  * POST a plain-language description to the (login-gated) preferences endpoint
- * and return the clamped routing levers. Same-origin fetch, so the nginx Basic
- * Auth credential rides along automatically; levers are re-clamped client-side
- * (defense in depth). Throws on failure. Shared by the search-form box and the
- * Go Mode mid-trip re-route.
+ * and return the clamped routing levers, plus any route the rider asked to be
+ * held to. Same-origin fetch, so the nginx Basic Auth credential rides along
+ * automatically; both halves are re-validated client-side (defense in depth).
+ * Throws when the answer is empty on both counts. Shared by the search-form box
+ * and the Go Mode mid-trip re-route.
  */
 export async function postPreferences(
   url: string,
   text: string
-): Promise<RoutingPreferences> {
+): Promise<PreferencesAnswer> {
   const response = await fetch(url, {
     body: JSON.stringify({ text }),
     headers: { 'Content-Type': 'application/json' },
@@ -287,9 +316,10 @@ export async function postPreferences(
     throw new Error(`Preferences API returned ${response.status}`)
   }
   const data = await response.json()
-  const prefs = clampPreferences(data?.preferences)
-  if (Object.keys(prefs).length === 0) {
+  const preferences = clampPreferences(data?.preferences)
+  const routeQuery = cleanRouteQuery(data?.routeQuery)
+  if (Object.keys(preferences).length === 0 && !routeQuery) {
     throw new Error('No usable preferences returned')
   }
-  return prefs
+  return { preferences, routeQuery }
 }
