@@ -215,12 +215,6 @@
     "components.GoMode.lessWalking",
     "components.GoMode.fewerTransfers",
     "components.GoMode.avoidBiking",
-    "components.GoMode.fastest",
-    "components.BatchSearchScreen.routeLockAny",
-    "components.BatchSearchScreen.routeLockChip",
-    "components.BatchSearchScreen.routeLockDetail",
-    "components.BatchSearchScreen.routeLockLabel",
-    "components.BatchSearchScreen.routeLockNotFound",
-    "components.BatchSearchScreen.routeLockNotUsed"
+    "components.GoMode.fastest"
   ]
 }

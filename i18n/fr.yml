@@ -225,6 +225,12 @@ components:
     nlPreferencesHeader: Décrivez vos besoins
     nlPreferencesLoading: Réflexion…
     nlPreferencesPlaceholder: ex. genou douloureux aujourd'hui, éviter les correspondances
+    routeLockAny: N'importe quelle ligne
+    routeLockChip: 'Uniquement {route}'
+    routeLockDetail: 'Uniquement les trajets sur {route}, à vélo pour y accéder et en repartir'
+    routeLockLabel: Emprunter uniquement cette ligne
+    routeLockNotFound: 'Aucune ligne appelée « {route} » — rien n''a été verrouillé.'
+    routeLockNotUsed: 'N''utilise pas {route}'
     routingProfileHeader: Profil de routage
     routingProfileLabel: Optimiser le routage pour
   BatchSettings:
