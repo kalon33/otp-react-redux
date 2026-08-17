@@ -42,10 +42,22 @@ export const ROUTE_LOCK_MODES = [{ mode: 'TRANSIT' }, { mode: 'BICYCLE' }]
  * Measured against the live graph on one Bloomington -> downtown query: at low
  * bike reluctance the planner pedals almost the whole way and reduces the named
  * route to a token hop (732m of the 18 at 0.1), because pedalling is cheap next
- * to waiting. At 5 the same query rides 6.6km of it — the trip the rider
- * actually described.
+ * to waiting.
+ *
+ * 5 was the original floor and is NOT enough. The itineraries that ride the
+ * route properly do exist at 5, but they rank below the ones that pedal past
+ * it, so they fall outside the numItineraries: 10 the app asks for and never
+ * reach the rider. That makes the lock look broken only sometimes — it depends
+ * on where the realtime feed has the buses at that second. Measured on the live
+ * graph, same query, minutes apart: 23:26 rel=5 -> best 471m ridden (and 13.2km
+ * at rel=10); 23:31 rel=5 -> 13.2km. Same at numItineraries: 20, rel=5 -> 13.2km,
+ * which is what identifies it as ranking truncation rather than routing.
+ *
+ * 10 is the value verified to hold in the failing moment. Values between 6 and 9
+ * were only ever sampled while the query was already healthy, so they are
+ * untested against the condition that matters.
  */
-export const ROUTE_LOCK_MIN_BIKE_RELUCTANCE = 5
+export const ROUTE_LOCK_MIN_BIKE_RELUCTANCE = 10
 
 /**
  * The rider's levers, adjusted so the locked route can carry the trip.
