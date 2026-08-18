@@ -459,7 +459,7 @@ components:
     nearbyListIntro: Liste de {count} entités à proximité.
     nothingNearby: Aucun lieu à proximité.
     nothingNearbyHeader: Hors de portée
-    searchNearby: Search nearby...
+    searchNearby: Rechercher à proximité...
     spacesAvailable: "{spacesAvailable} emplacements libres disponibles"
   NewAccountWizard:
     createNewAccount: Créez un nouveau compte
