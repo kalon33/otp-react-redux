@@ -57,6 +57,11 @@ import { getNextStopOnRide } from '../util/go-mode/next-stop'
 import { spliceAccessOntoItinerary } from '../util/go-mode/access-splice'
 import { legAlight } from '../util/go-mode/live-itinerary'
 import {
+  buildBannedRoutes,
+  ROUTE_LOCK_MODES,
+  withRouteLockPrefs
+} from '../util/route-lock'
+import {
   mergeAdjacentSameTripLegs,
   normalizeGoModeItinerary,
   polylineLength,
@@ -1083,6 +1088,38 @@ export function reRouteFromCurrentPosition(
       // No caller-specified preferences: default a mid-ride re-plan to the
       // stay-seated profile so transfers away from the boarded bus cost extra.
       payload.routingPreferences = getRoutingProfile('stay-seated')?.prefs
+    }
+
+    // A named route outlives the search it was named in.
+    //
+    // "Only take the 18" was a search-time setting only: Go Mode re-routes build
+    // an isolated payload and deliberately never touch currentQuery, so the ban
+    // did not ride along and the lock silently evaporated the first time the app
+    // re-planned mid-trip — the rider ended up on whatever came, having asked
+    // for one route by name. If they said it, it holds until they clear it.
+    //
+    // Rebuilt from the live route index rather than reusing currentQuery.banned:
+    // the index is the authority on which routes exist, and a ban list is only
+    // correct if it is the complete complement of the kept route.
+    const routeLock = state.otp?.currentQuery?.routeLock
+    if (routeLock?.id) {
+      const banned = buildBannedRoutes(
+        state.otp?.transitIndex?.routes,
+        routeLock.id
+      )
+      if (banned) {
+        payload.banned = { routes: banned }
+        // Bike both ends: naming one route only makes sense with a personal
+        // vehicle filling the gaps (see util/route-lock).
+        payload.modes = ROUTE_LOCK_MODES
+        payload.routingPreferences = withRouteLockPrefs(
+          payload.routingPreferences
+        )
+        // The stay-seated/preferred bias is about keeping the rider on the bus
+        // they are on. Under a lock the named route already decides that, and a
+        // preference for a now-banned route is just noise in the query.
+        if (payload.preferred?.routes !== routeLock.id) delete payload.preferred
+      }
     }
 
     // The plan fetch is written to never reject, but a WebView suspension can
