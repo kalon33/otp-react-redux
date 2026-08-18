@@ -393,9 +393,16 @@ export const transitionLeg = createAction<{ legIndex: number }>(TRANSITION_LEG)
 /** Live (or schedule-fallback) times for a transit leg, keyed by leg index. */
 export interface LiveLegTime {
   alightEpoch: number | null
+  /**
+   * Whether alightEpoch came from the feed rather than the timetable — this is
+   * the estimate, not a prediction, so it must NOT be styled live.
+   */
+  alightProjected?: boolean
   /** Whether alightEpoch is a live prediction (drives the pulsing icon). */
   alightRealtime?: boolean
   boardEpoch: number | null
+  /** Mirrors alightProjected. */
+  boardProjected?: boolean
   /** Whether boardEpoch is a live prediction. */
   boardRealtime?: boolean
   /** Legacy any-field-live flag; display code should use the per-field ones. */
@@ -2845,6 +2852,10 @@ export function refreshLiveLegTimes() {
     const prevTimes: Record<number, LiveLegTime> = goMode.liveLegTimes || {}
     const liveTimes: Record<number, LiveLegTime> = {}
     const nowMs = getCurrentTime().getTime()
+    const lp = goMode.tracking?.lastPosition
+    const lastPos = lp
+      ? { lat: lp.coords.latitude, lon: lp.coords.longitude }
+      : null
 
     const riding = goMode.riding
     for (let i = currentLegIndex; i < legs.length; i++) {
@@ -2868,6 +2879,20 @@ export function refreshLiveLegTimes() {
         getState().otp?.transitIndex?.trips?.[tripId]?.stopTimes || []
       if (!stopTimes.length) continue
 
+      // Where this bus actually is, but ONLY for the leg the rider is
+      // verifiably aboard. With it, a stop that has no realtime is projected
+      // forward from the bus's current position instead of falling back to an
+      // absolute timetable moment that has already passed. For a leg not yet
+      // boarded there is no such anchor and the timetable is the honest answer.
+      const anchor =
+        riding?.legIndex === i
+          ? {
+              nextStopId: goMode.vehicleMatch?.match?.nextStopId ?? null,
+              nowMs,
+              userPos: lastPos
+            }
+          : null
+
       // Merge each field against its previous value so a realtime dropout
       // (liveStopArrival falling back to the schedule) can never walk a
       // displayed time backwards or keep styling it live.
@@ -2879,7 +2904,7 @@ export function refreshLiveLegTimes() {
               realtime: prev.alightRealtime ?? prev.realtime
             }
           : null,
-        liveStopArrival(stopTimes, leg.to?.stop?.gtfsId || (leg as any).to?.stopId, leg.to?.name),
+        liveStopArrival(stopTimes, leg.to?.stop?.gtfsId || (leg as any).to?.stopId, leg.to?.name, anchor),
         nowMs
       )
       const board = mergeLiveTimePoint(
@@ -2889,14 +2914,21 @@ export function refreshLiveLegTimes() {
               realtime: prev.boardRealtime ?? prev.realtime
             }
           : null,
-        liveStopArrival(stopTimes, leg.from?.stop?.gtfsId || (leg as any).from?.stopId, leg.from?.name),
+        liveStopArrival(
+          stopTimes,
+          leg.from?.stop?.gtfsId || (leg as any).from?.stopId,
+          leg.from?.name,
+          anchor
+        ),
         nowMs
       )
       if (alight || board) {
         liveTimes[i] = {
           alightEpoch: alight?.epoch ?? null,
+          alightProjected: !!alight?.projected,
           alightRealtime: !!alight?.realtime,
           boardEpoch: board?.epoch ?? null,
+          boardProjected: !!board?.projected,
           boardRealtime: !!board?.realtime,
           realtime: !!(alight?.realtime || board?.realtime)
         }

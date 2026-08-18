@@ -66,10 +66,17 @@ async function runSearch(page, routeId) {
     routeId
   )
 
+  // EVERY search, not some. setRouteLock replans on its own (it passes a fresh
+  // randId to setQueryParam whenever the query is already valid), so the
+  // routingQuery above is the SECOND search of the pair — two plan queries go
+  // out per call. Waiting for `some` let the first one settle while the second
+  // was still in flight, and the `pop()` below then read a search whose
+  // response was still empty, reporting "no itineraries at all" for a lock that
+  // was working. That is the 2026-08-16 nightly failure.
   await page.waitForFunction(
     () => {
-      const searches = window.store.getState().otp.searches || {}
-      return Object.values(searches).some((s) => s.pending === 0)
+      const searches = Object.values(window.store.getState().otp.searches || {})
+      return searches.length > 0 && searches.every((s) => s.pending === 0)
     },
     { polling: 500, timeout: 90000 }
   )

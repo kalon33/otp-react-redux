@@ -126,7 +126,13 @@ describe('withRouteLockPrefs', () => {
   })
 
   it('leaves a higher bike reluctance alone', () => {
-    expect(withRouteLockPrefs({ bikeReluctance: 9 }).bikeReluctance).toBe(9)
+    // Relative to the floor, not a literal: a rider who is already more
+    // reluctant to pedal than the lock requires keeps their own value, whatever
+    // the floor is raised to next.
+    const above = ROUTE_LOCK_MIN_BIKE_RELUCTANCE + 1
+    expect(withRouteLockPrefs({ bikeReluctance: above }).bikeReluctance).toBe(
+      above
+    )
   })
 
   it('keeps every other lever the rider chose', () => {
