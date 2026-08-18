@@ -165,13 +165,11 @@ export interface GoModeState {
   progress: TripProgress | null
 
   reRoute: {
-    // Apply the best result without asking (definitive missed bus) instead of
-    // surfacing the Switch/Keep card.
+    // Apply the best result without asking (definitive missed bus). There is
+    // no Switch/Keep card: applyAutoReroute takes the itineraries as
+    // arguments, so this slice carries only the search's status, never its
+    // results.
     autoApply: boolean
-    // The single best candidate (kept for callers that only need one).
-    candidate: Itinerary | null
-    // All browsable alternatives, shortest-duration first.
-    candidates: Itinerary[]
     // Auto-apply may only pick itineraries boarding this route — the one the
     // rider already chose. Null = no constraint (manual re-routes).
     keepRouteId: string | null
@@ -276,8 +274,6 @@ const defaultState: GoModeState = {
 
   reRoute: {
     autoApply: false,
-    candidate: null,
-    candidates: [],
     keepRouteId: null,
     reason: null,
     searchId: null,
@@ -578,21 +574,18 @@ const goMode = handleActions<GoModeState, any>(
 
     [SET_REROUTE_RESULT]: (state, action) => {
       // Payload is the full list of alternatives (or null/[] for "none").
-      const candidates: Itinerary[] = Array.isArray(action.payload)
-        ? action.payload
-        : action.payload
-        ? [action.payload]
-        : []
+      // Only its emptiness is kept: nothing reads the itineraries back out.
+      const found: boolean = Array.isArray(action.payload)
+        ? action.payload.length > 0
+        : action.payload != null
       return {
         ...state,
         reRoute: {
           ...state.reRoute,
-          // Results resolved into a card (or "none") — the auto-apply moment,
-          // if there was one, has passed.
+          // Results resolved (or "none") — the auto-apply moment, if there
+          // was one, has passed.
           autoApply: false,
-          candidate: candidates[0] ?? null,
-          candidates,
-          status: candidates.length > 0 ? ('found' as const) : ('none' as const)
+          status: found ? ('found' as const) : ('none' as const)
         }
       }
     },
@@ -694,8 +687,6 @@ const goMode = handleActions<GoModeState, any>(
       ...state,
       reRoute: {
         autoApply: !!action.payload.autoApply,
-        candidate: null,
-        candidates: [],
         keepRouteId: action.payload.keepRouteId ?? null,
         reason: action.payload.reason ?? null,
         searchId: action.payload.searchId,

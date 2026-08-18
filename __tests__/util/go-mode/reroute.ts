@@ -35,8 +35,6 @@ describe('go-mode re-route reducer', () => {
   it('starts with an idle reRoute state', () => {
     expect(initial.reRoute).toEqual({
       autoApply: false,
-      candidate: null,
-      candidates: [],
       keepRouteId: null,
       reason: null,
       searchId: null,
@@ -49,8 +47,6 @@ describe('go-mode re-route reducer', () => {
     const state = goMode(initial, startReroute({ searchId: 'abc' }))
     expect(state.reRoute).toEqual({
       autoApply: false,
-      candidate: null,
-      candidates: [],
       keepRouteId: null,
       reason: null,
       searchId: 'abc',
@@ -92,12 +88,11 @@ describe('go-mode re-route reducer', () => {
     expect(state.reRoute.status).toBe('none')
   })
 
-  it('SET_REROUTE_RESULT with an itinerary -> found + candidate', () => {
+  it('SET_REROUTE_RESULT with an itinerary -> found', () => {
     const searching = goMode(initial, startReroute({ searchId: 'abc' }))
     const itin = { duration: 1200 } as any
     const state = goMode(searching, setRerouteResult(itin))
     expect(state.reRoute.status).toBe('found')
-    expect(state.reRoute.candidate).toBe(itin)
     // searchId is preserved across the result.
     expect(state.reRoute.searchId).toBe('abc')
   })
@@ -106,7 +101,6 @@ describe('go-mode re-route reducer', () => {
     const searching = goMode(initial, startReroute({ searchId: 'abc' }))
     const state = goMode(searching, setRerouteResult(null))
     expect(state.reRoute.status).toBe('none')
-    expect(state.reRoute.candidate).toBeNull()
   })
 
   it('CLEAR_REROUTE resets to idle', () => {
@@ -117,8 +111,6 @@ describe('go-mode re-route reducer', () => {
     const state = goMode(found, clearReroute())
     expect(state.reRoute).toEqual({
       autoApply: false,
-      candidate: null,
-      candidates: [],
       keepRouteId: null,
       reason: null,
       searchId: null,
@@ -289,7 +281,6 @@ describe('reRouteFromCurrentPosition (isolated pipeline)', () => {
     expect(types).not.toContain('ROUTING_REQUEST')
     expect(types).toContain('START_REROUTE')
     expect(store.getGoMode().reRoute.status).toBe('found')
-    expect(store.getGoMode().reRoute.candidates).toEqual(itineraries)
   })
 
   it('resolves to "none" on an error or empty plan', async () => {

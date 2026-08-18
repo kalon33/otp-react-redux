@@ -68,8 +68,6 @@ Object {
     "progress": null,
     "reRoute": Object {
       "autoApply": false,
-      "candidate": null,
-      "candidates": Array [],
       "keepRouteId": null,
       "reason": null,
       "searchId": null,
