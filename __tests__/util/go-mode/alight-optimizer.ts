@@ -565,3 +565,92 @@ describe('liveStopArrival name fallback', () => {
     expect(liveStopArrival(stopTimes, '2:31929', 'Somewhere Else')).toBeNull()
   })
 })
+
+describe('liveStopArrival projection for a schedule-only trip', () => {
+  // A three-stop run, 5 minutes between stops, no realtime anywhere. The bus is
+  // at stop B; the rider gets off at C. serviceDay is chosen so the timetable
+  // moments sit in the PAST relative to `now` — i.e. the bus is running late,
+  // which is exactly when the old absolute-epoch answer went wrong.
+  const DAY = 1783771200
+  const A = 36000 // 10:00:00 on the service day
+  const B = 36300 // 10:05:00
+  const C = 36600 // 10:10:00
+  const NOW = (DAY + C) * 1000 + 240_000 // 10:14 — four minutes down on B->C
+
+  const stopTimes = [
+    {
+      scheduledArrival: A,
+      scheduledDeparture: A,
+      serviceDay: DAY,
+      stop: { id: 's:A', lat: 44.9, lon: -93.3, name: 'A' }
+    },
+    {
+      scheduledArrival: B,
+      scheduledDeparture: B,
+      serviceDay: DAY,
+      stop: { id: 's:B', lat: 44.95, lon: -93.28, name: 'B' }
+    },
+    {
+      scheduledArrival: C,
+      scheduledDeparture: C,
+      serviceDay: DAY,
+      stop: { id: 's:C', lat: 45.0, lon: -93.26, name: 'C' }
+    }
+  ] as any[]
+
+  const anchor = { nextStopId: 's:B', nowMs: NOW, userPos: null }
+
+  it('without an anchor, keeps the absolute timetable moment', () => {
+    // Unchanged behaviour for a leg the rider has not boarded: "now" says
+    // nothing about where that bus is.
+    expect(liveStopArrival(stopTimes, 's:C', 'C')).toEqual({
+      epoch: (DAY + C) * 1000,
+      realtime: false
+    })
+  })
+
+  it('projects a downstream stop forward from where the bus is', () => {
+    // B -> C is 5 scheduled minutes, so from now the rider arrives in 5 minutes
+    // — not at a 10:10 that passed four minutes ago.
+    expect(liveStopArrival(stopTimes, 's:C', 'C', anchor)).toEqual({
+      epoch: NOW + 300_000,
+      projected: true,
+      realtime: false
+    })
+  })
+
+  it('never projects into the past, however late the bus is', () => {
+    const veryLate = { ...anchor, nowMs: NOW + 3_600_000 }
+    const hit = liveStopArrival(stopTimes, 's:C', 'C', veryLate)
+    expect(hit!.epoch).toBeGreaterThan(veryLate.nowMs)
+  })
+
+  it('leaves a stop the bus has already passed on the timetable', () => {
+    // A is behind the anchor. It really did happen in the past; projecting
+    // would invent a future for something already done.
+    expect(liveStopArrival(stopTimes, 's:A', 'A', anchor)).toEqual({
+      epoch: (DAY + A) * 1000,
+      realtime: false
+    })
+  })
+
+  it('still prefers realtime over any projection', () => {
+    const withLive = stopTimes.map((st, i) =>
+      i === 2
+        ? { ...st, realtimeArrival: C + 120, realtimeState: 'UPDATED' }
+        : st
+    )
+    expect(liveStopArrival(withLive, 's:C', 'C', anchor)).toEqual({
+      epoch: (DAY + C + 120) * 1000,
+      realtime: true
+    })
+  })
+
+  it('a fresh projection supersedes a stale one rather than being held back', () => {
+    // "Never walk backwards" exists to stop a schedule fallback dragging a live
+    // time into the past — not to freeze an estimate being recomputed each poll.
+    const stale = { epoch: NOW + 300_000, projected: true, realtime: false }
+    const fresher = { epoch: NOW + 120_000, projected: true, realtime: false }
+    expect(mergeLiveTimePoint(stale, fresher, NOW)).toEqual(fresher)
+  })
+})

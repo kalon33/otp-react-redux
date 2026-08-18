@@ -7,6 +7,8 @@ const TRANSIT_MODES = new Set(['BUS', 'FERRY', 'RAIL', 'SUBWAY', 'TRAM'])
 
 interface TimePoint {
   epoch: number | string | undefined
+  /** Schedule shifted to where the bus actually is — an estimate, not a feed. */
+  projected?: boolean
   realtime: boolean
 }
 
@@ -30,6 +32,7 @@ export function legAlight(
     // alight, which kept styling a schedule-fallback alight time as live.
     return {
       epoch: live.alightEpoch,
+      projected: live.alightProjected,
       realtime: live.alightRealtime ?? live.realtime
     }
   }
@@ -46,6 +49,7 @@ export function legBoard(
   if (TRANSIT_MODES.has(leg.mode) && live?.boardEpoch) {
     return {
       epoch: live.boardEpoch,
+      projected: live.boardProjected,
       realtime: live.boardRealtime ?? live.realtime
     }
   }
@@ -112,6 +116,9 @@ export function buildLiveItinerary(
     // `time - delay * 1000` to show the scheduled time struck through, and an
     // undefined delay renders that as "Invalid Date".
     const boardMs = Number(board.epoch)
+    if (!board.realtime && board.projected && Number.isFinite(boardMs)) {
+      next.startTime = boardMs
+    }
     if (board.realtime && Number.isFinite(boardMs)) {
       const scheduled = Number(leg.startTime)
       next.startTime = boardMs
@@ -132,6 +139,18 @@ export function buildLiveItinerary(
       } else {
         next.arrivalDelay = 0
       }
+    } else if (alight.projected && Number.isFinite(alightMs)) {
+      // A projected time DOES get shown — the alternative is the plan's
+      // build-time arrival, frozen at the moment the trip was planned and
+      // wrong by however late the bus has since become (3m41s on the 8/16
+      // run). What it does not get is `realTime`: this is the timetable
+      // shifted to where the bus is, not something the feed said, and styling
+      // it live would claim a confidence nobody has. Leaving realTime false is
+      // the honest signal, and the delay fields stay untouched so the striking
+      // -through of a "scheduled" time never fires on an estimate.
+      const scheduled = Number(leg.endTime)
+      next.endTime = alightMs
+      if (Number.isFinite(scheduled)) shift = alightMs - scheduled
     }
 
     // board and alight are applied independently, so a live board time that
@@ -142,7 +161,8 @@ export function buildLiveItinerary(
     if (Number(next.endTime) < Number(next.startTime)) {
       const plannedRun = Number(leg.endTime) - Number(leg.startTime)
       next.endTime =
-        Number(next.startTime) + (Number.isFinite(plannedRun) ? Math.max(0, plannedRun) : 0)
+        Number(next.startTime) +
+        (Number.isFinite(plannedRun) ? Math.max(0, plannedRun) : 0)
     }
 
     return next as Leg

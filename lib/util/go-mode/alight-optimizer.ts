@@ -71,11 +71,25 @@ export function findStopTimeIndex(
  * the stop isn't in this trip's stop times or has no usable time. Used to keep
  * the trip-overview transit rows current mid-ride.
  */
+/**
+ * Where the bus actually is right now, for projecting the rest of its run.
+ *
+ * Supplied ONLY for the trip the rider is verifiably aboard. For a leg they
+ * have not boarded yet, "now" says nothing about where that bus is, and the
+ * absolute timetable is the honest answer.
+ */
+export interface TripAnchor {
+  nextStopId?: string | null
+  nowMs: number
+  userPos: LatLon | null
+}
+
 export function liveStopArrival(
   stopTimes: TripStopTime[],
   stopGtfsId: string | null | undefined,
-  stopName?: string | null
-): { epoch: number; realtime: boolean } | null {
+  stopName?: string | null,
+  anchor?: TripAnchor | null
+): { epoch: number; projected?: boolean; realtime: boolean } | null {
   if (!stopGtfsId && !stopName) return null
   const idx = findStopTimeIndex(stopTimes, stopGtfsId, stopName)
   const st = idx >= 0 ? stopTimes[idx] : undefined
@@ -89,13 +103,38 @@ export function liveStopArrival(
       realtime: true
     }
   }
-  if (st.scheduledArrival != null) {
-    return {
-      epoch: (st.serviceDay + st.scheduledArrival) * 1000,
-      realtime: false
+  if (st.scheduledArrival == null) return null
+
+  // No realtime for this stop. The absolute timetable epoch is the WRONG answer
+  // for a bus already running late: it is a moment that has passed, so
+  // mergeLiveTimePoint clamps it to nowMs and it then tracks the clock instead
+  // of predicting anything. getDownstreamStops has always projected instead —
+  // now + the scheduled running time still ahead — and this is the same basis,
+  // so the trip sheet and the alight optimizer stop disagreeing about one stop.
+  //
+  // Only forwards. A stop BEHIND the anchor is history: the bus really did pass
+  // it in the past, and projecting would invent a future for something already
+  // done.
+  if (anchor) {
+    const anchorIdx = findAnchorIndex(
+      stopTimes,
+      anchor.nextStopId,
+      anchor.userPos
+    )
+    const anchorDeparture = stopTimes[anchorIdx]?.scheduledDeparture
+    if (anchorDeparture != null && idx >= anchorIdx) {
+      return {
+        epoch: anchor.nowMs + (st.scheduledArrival - anchorDeparture) * 1000,
+        projected: true,
+        realtime: false
+      }
     }
   }
-  return null
+
+  return {
+    epoch: (st.serviceDay + st.scheduledArrival) * 1000,
+    realtime: false
+  }
 }
 
 /**
@@ -109,14 +148,23 @@ export function liveStopArrival(
  * arrive in the past) and honestly flagged non-live.
  */
 export function mergeLiveTimePoint(
-  prev: { epoch: number; realtime: boolean } | null,
-  next: { epoch: number; realtime: boolean } | null,
+  prev: { epoch: number; projected?: boolean; realtime: boolean } | null,
+  next: { epoch: number; projected?: boolean; realtime: boolean } | null,
   nowMs: number
-): { epoch: number; realtime: boolean } | null {
+): { epoch: number; projected?: boolean; realtime: boolean } | null {
   if (next?.realtime) return next
+  // A fresh projection is anchored to where the bus is NOW, so it supersedes a
+  // stale one rather than being held back by "never walk backwards" — that rule
+  // exists to stop a schedule fallback dragging a live time into the past, not
+  // to freeze an estimate that is being recomputed every poll.
+  if (next?.projected) return next
   const kept = prev ?? next
   if (!kept) return null
-  return { epoch: Math.max(kept.epoch, nowMs), realtime: false }
+  return {
+    epoch: Math.max(kept.epoch, nowMs),
+    projected: kept.projected,
+    realtime: false
+  }
 }
 
 /**
