@@ -127,6 +127,7 @@ import {
   evaluatePacingCard
 } from '../util/go-mode/pacing-card'
 import { evaluateTurnCard } from '../util/go-mode/turn-card'
+import { evaluateMissedBusRecovery } from '../util/go-mode/missed-bus-recovery'
 import { evaluateDepartureDrift } from '../util/go-mode/departure-drift'
 import type { DepartureBaselineState } from '../util/go-mode/departure-drift'
 import type { PacingCardState } from '../util/go-mode/pacing-card'
@@ -247,12 +248,6 @@ const REROUTE_FETCH_TIMEOUT_MS = 45000
 // cleared by the position tick — covers the timeout timer itself being lost
 // to a suspension.
 const REROUTE_STUCK_MS = 90000
-// A definitive missed bus retries the same-route auto-update on its own
-// schedule: the notification's 30-minute dedup must not gate trip recovery.
-// Retries only while the previous attempt failed outright ('idle'/'none'),
-// never over a card the rider is looking at.
-const MISSED_BUS_REROUTE_RETRY_MS = 60000
-const MISSED_BUS_REROUTE_MAX_ATTEMPTS = 5
 
 // Minimum progress along a transit leg before GPS alone establishes
 // aboard-ness. isOnRoute is true within 250m of the leg — including while
@@ -3518,52 +3513,27 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       reRouteStatus = 'idle'
     }
 
-    // Track auto-update attempts per missed departure: the notification's
-    // 30-minute dedup must not gate trip recovery, so a definitive miss keeps
-    // its own retry schedule while attempts fail outright ('idle'/'none') —
-    // never over a card the rider is looking at, and capped so a dead network
-    // doesn't retry forever.
-    if (
-      missedCtx?.definitive &&
-      session.missedBusRerouteAttempt?.departureMs !==
-        missedCtx.effectiveBoardMs
-    ) {
-      session.missedBusRerouteAttempt = {
-        attempts: 0,
-        departureMs: missedCtx.effectiveBoardMs,
-        lastAtMs: 0
+    // Whether a missed bus re-plans now, whether the result is applied without
+    // asking, and the per-departure retry schedule all live in
+    // util/go-mode/missed-bus-recovery.ts.
+    const recovery = evaluateMissedBusRecovery(
+      session.missedBusRerouteAttempt,
+      {
+        justRaised: missedEvent != null,
+        missed: missedCtx,
+        // Wall clock, not currentTime: the retry schedule is about how long the
+        // rider has really been stranded, and this is what the inline version
+        // used. It does mean a sped-up replay does not reproduce the retry
+        // cadence faithfully — see the note in missed-bus-recovery.ts.
+        nowMs: Date.now(),
+        reRouteStatus
       }
-    }
-    const missedRetryDue =
-      missedCtx?.definitive &&
-      session.missedBusRerouteAttempt != null &&
-      (reRouteStatus === 'idle' || reRouteStatus === 'none') &&
-      session.missedBusRerouteAttempt.attempts <
-        MISSED_BUS_REROUTE_MAX_ATTEMPTS &&
-      Date.now() - session.missedBusRerouteAttempt.lastAtMs >=
-        MISSED_BUS_REROUTE_RETRY_MS
-
-    // A detected missed bus re-plans immediately: definitively missed (the
-    // realtime feed says the bus left, or the rider clearly isn't at the stop)
-    // auto-updates to the SAME route's next departure — no prompt, no route
-    // change — while an ambiguous miss surfaces the regular Switch/Keep card.
-    if (
-      missedCtx &&
-      (missedEvent
-        ? // A definitive miss also supersedes an already-showing card — those
-          // alternatives were computed for an itinerary that is now dead. Only
-          // an in-flight search is left to resolve on its own.
-          reRouteStatus === 'idle' ||
-          (missedCtx.definitive && reRouteStatus !== 'searching')
-        : missedRetryDue)
-    ) {
-      if (missedCtx.definitive && session.missedBusRerouteAttempt) {
-        session.missedBusRerouteAttempt.attempts += 1
-        session.missedBusRerouteAttempt.lastAtMs = Date.now()
-      }
+    )
+    session.missedBusRerouteAttempt = recovery.next
+    if (recovery.replan && missedCtx) {
       dispatch(
         reRouteFromCurrentPosition({
-          autoApply: missedCtx.definitive,
+          autoApply: recovery.autoApply,
           keepRouteId: getLegRouteId(
             itinerary.legs[missedCtx.boardLegIndex] as Leg
           ),

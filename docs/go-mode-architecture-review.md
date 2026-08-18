@@ -269,7 +269,7 @@ predicted, and two slices of step 3. `lib/actions/go-mode.ts` is **4,840 →
 | 0 — delete dead code | **done** | `GoModeHeader.tsx`, 5 orphan styled exports, `reRoute.candidate(s)` |
 | 1 — move what was never an action | **half** | geometry → `util/go-mode/geometry.ts`; simulation **blocked**, see below |
 | 2 — move the types | **done** | `util/go-mode/types.ts`; the util layer no longer imports upward at all |
-| 3 — make the tick testable | **started** | slices done: the turn card, the pacing card |
+| 3 — make the tick testable | **started** | slices done: the turn card, the pacing card, missed-bus recovery |
 | 4 — give the hidden state a home | **done** | `util/go-mode/trip-session.ts`; the 92-line teardown is now one line |
 | 5 — split the onboard flow | **blocked**, see below |
 
@@ -314,7 +314,29 @@ Checked to have teeth: zeroing the two cadence constants makes it post on all
 
 The lesson for the remaining slices: where a pure module already exists, the
 work is only pulling the last decisions out of the thunk. Where it doesn't
-(missed-bus, auto-anchor, deviation), it is the turn-card shape of job.
+(auto-anchor, deviation), it is the turn-card shape of job.
+
+**Slice 3 — missed-bus recovery**, and the first slice with no fixture to hold
+it against. Detection was already pure (`classifyMissedBus`); what was inline
+was the *recovery policy* — re-plan now or not, apply without asking or surface
+a card, and the per-departure retry schedule whose whole point is that the
+MISSED_BUS alert's 30-minute dedup must not gate trip recovery. The attempt
+record was being mutated in place across three branches. It is now
+`evaluateMissedBusRecovery` in `util/go-mode/missed-bus-recovery.ts`.
+
+None of the six recorded rides is a missed-bus ride, and the fixtures carry no
+recorded notifications, so there is no replay to drive this one. Two things
+stand in for it: ten unit tests over the policy, and a **differential check** —
+the new function compared against a faithful transcription of the old inline
+code across 1,920 combinations of status, definitiveness, attempt record and
+clock, agreeing on all three outputs. That transcription was then deleted
+rather than kept, because a copy of dead logic rots into false confidence.
+
+One thing found and deliberately not fixed: the retry schedule reads wall-clock
+`Date.now()` while every other clock in the tick is simulation-aware, so a
+replay at 8× does not reproduce the retry cadence. Changing it changes what the
+verify scripts replay, so it is documented in both places and left for a
+deliberate decision.
 
 ### Two corrections to this review
 

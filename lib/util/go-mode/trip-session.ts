@@ -16,6 +16,7 @@
  * scoped in actions/go-mode.ts rather than change behaviour silently.
  */
 import type { DepartureBaselineState } from './departure-drift'
+import type { MissedBusAttempt } from './missed-bus-recovery'
 import type { PacingCardState } from './pacing-card'
 import type { TimedSimulationPoint } from './geometry'
 
@@ -84,13 +85,8 @@ export interface TripSession {
    */
   manualDepartureLock: boolean
 
-  /** A definitive missed bus retries the same-route auto-update on its own
-   * schedule; the notification's 30-minute dedup must not gate recovery. */
-  missedBusRerouteAttempt: {
-    attempts: number
-    departureMs: number
-    lastAtMs: number
-  } | null
+  /** Retry bookkeeping for the missed departure being recovered from. */
+  missedBusRerouteAttempt: MissedBusAttempt | null
 
   /**
    * A single wild GPS fix (urban multipath) can put the matched distance
