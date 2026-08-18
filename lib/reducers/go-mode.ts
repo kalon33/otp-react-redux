@@ -44,7 +44,7 @@ import {
   UPDATE_TRACKING_INTERVAL,
   UPDATE_VEHICLE_MATCH
 } from '../actions/go-mode'
-import type { LiveLegTime, RidingState } from '../actions/go-mode'
+import type { LiveLegTime, RidingState } from '../util/go-mode/types'
 import type {
   NearbyVehicleOption,
   VehicleMatchResult

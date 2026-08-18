@@ -11,7 +11,7 @@ import { buildLiveItinerary } from '../../util/go-mode/live-itinerary'
 import { getModeIcon } from '../../util/go-mode/mode-icon'
 import { IconWithText } from '../util/styledIcon'
 import ItineraryBody from '../narrative/line-itin/connected-itinerary-body'
-import type { LiveLegTime } from '../../actions/go-mode'
+import type { LiveLegTime } from '../../util/go-mode/types'
 import type { TripProgress } from '../../util/go-mode/progress-calculator'
 
 import {

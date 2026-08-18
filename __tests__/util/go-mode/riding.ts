@@ -9,7 +9,7 @@ import {
 } from '../../../lib/actions/go-mode'
 import { getNextStopOnRide } from '../../../lib/util/go-mode/next-stop'
 import goMode from '../../../lib/reducers/go-mode'
-import type { RidingState } from '../../../lib/actions/go-mode'
+import type { RidingState } from '../../../lib/util/go-mode/types'
 
 const initial = goMode(undefined, { type: '@@INIT' })
 

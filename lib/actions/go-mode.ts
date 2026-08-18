@@ -54,6 +54,13 @@ import {
   shouldTransitionToNextLeg
 } from '../util/go-mode/position-matching'
 import { getNextStopOnRide } from '../util/go-mode/next-stop'
+import {
+  extractItineraryTimedPoints,
+  findClosestPolylineIndex,
+  haversineDistance
+} from '../util/go-mode/geometry'
+import type { TimedSimulationPoint } from '../util/go-mode/geometry'
+import type { LiveLegTime, RidingState } from '../util/go-mode/types'
 import { spliceAccessOntoItinerary } from '../util/go-mode/access-splice'
 import { legAlight } from '../util/go-mode/live-itinerary'
 import {
@@ -286,19 +293,6 @@ interface ReplayGpsFix {
   tMs: number
 }
 
-// GPS simulation state
-interface TimedSimulationPoint {
-  // ms before advancing to next point (at 1x speed)
-  // Optional recorded fix metadata (trip replay only). When present these are
-  // played back verbatim so vehicle-matching heading/speed logic sees the real
-  // values instead of the synthetic defaults used for itinerary-derived sims.
-  accuracy?: number | null
-  coord: [number, number]
-  delayMs: number
-  heading?: number | null
-  speed?: number | null
-}
-
 let gpsSimulationTimeoutId: ReturnType<typeof setTimeout> | null = null
 let simulationPointIndex = 0
 let simulationCoords: TimedSimulationPoint[] = []
@@ -378,6 +372,10 @@ export const SET_ONBOARD_VEHICLE = 'SET_ONBOARD_VEHICLE'
 export const START_ONBOARD_OPTIMIZE = 'START_ONBOARD_OPTIMIZE'
 
 // Simple action creators
+// Types moved to util/go-mode/types.ts; re-exported so existing imports of
+// `LiveLegTime` / `RidingState` from this module keep working.
+export type { LiveLegTime, RidingState } from '../util/go-mode/types'
+
 export const clearVehicleMatch = createAction(CLEAR_VEHICLE_MATCH)
 export const dismissBoardingPrompt = createAction(DISMISS_BOARDING_PROMPT)
 export const showBoardingPromptAction = createAction(SHOW_BOARDING_PROMPT)
@@ -393,24 +391,6 @@ export const updateRouteMatch = createAction<RouteMatchResult | null>(
 export const updateProgress = createAction<TripProgress>(UPDATE_PROGRESS)
 export const transitionLeg = createAction<{ legIndex: number }>(TRANSITION_LEG)
 
-/** Live (or schedule-fallback) times for a transit leg, keyed by leg index. */
-export interface LiveLegTime {
-  alightEpoch: number | null
-  /**
-   * Whether alightEpoch came from the feed rather than the timetable — this is
-   * the estimate, not a prediction, so it must NOT be styled live.
-   */
-  alightProjected?: boolean
-  /** Whether alightEpoch is a live prediction (drives the pulsing icon). */
-  alightRealtime?: boolean
-  boardEpoch: number | null
-  /** Mirrors alightProjected. */
-  boardProjected?: boolean
-  /** Whether boardEpoch is a live prediction. */
-  boardRealtime?: boolean
-  /** Legacy any-field-live flag; display code should use the per-field ones. */
-  realtime: boolean
-}
 export const setLiveLegTimes =
   createAction<Record<number, LiveLegTime>>(SET_LIVE_LEG_TIMES)
 
@@ -418,27 +398,6 @@ export const setLiveLegTimes =
 // at their destination and Go Mode shows the arrival card until they dismiss.
 export const setArrived = createAction<number>(SET_ARRIVED)
 
-/**
- * The durable "rider is aboard this vehicle" fact. Unlike routeMatch (a
- * per-GPS-tick snapshot) and vehicleMatch (reset by each new trip/search),
- * this survives new searches and itinerary switches so the app never asks
- * the rider which bus they're on mid-ride. Cleared when the rider alights
- * (leg transition past the bus leg), Go Mode stops, or the rider stays
- * off-route long enough that the fact is evidently no longer true.
- */
-export interface RidingState {
-  /** Epoch ms when aboard-ness was first established. */
-  boardedAt: number
-  headsign: string | null
-  /** Transit leg index in activeItinerary; -1 = not anchored to a leg. */
-  legIndex: number
-  /** Epoch ms of the first consecutive off-route tick; null while on route. */
-  offRouteSince: number | null
-  routeId: string | null
-  routeShortName: string | null
-  tripId: string | null
-  vehicleId: string | null
-}
 export const setRiding = createAction<RidingState>(SET_RIDING)
 export const clearRiding = createAction(CLEAR_RIDING)
 export const addNotification = createAction<NotificationEvent>(ADD_NOTIFICATION)
@@ -4282,197 +4241,11 @@ export function updateNotificationSettings(config: {
 }
 
 /**
- * Haversine distance in meters between two [lat, lng] points.
- */
-function haversineDistance(a: [number, number], b: [number, number]): number {
-  const toRad = (deg: number) => (deg * Math.PI) / 180
-  const R = 6371000
-  const dLat = toRad(b[0] - a[0])
-  const dLon = toRad(b[1] - a[1])
-  const sinLat = Math.sin(dLat / 2)
-  const sinLon = Math.sin(dLon / 2)
-  const h =
-    sinLat * sinLat +
-    Math.cos(toRad(a[0])) * Math.cos(toRad(b[0])) * sinLon * sinLon
-  return 2 * R * Math.asin(Math.sqrt(h))
-}
-
-/**
- * Find the index of the polyline point closest to a given [lat, lng],
- * searching from startIdx onward.
- */
-function findClosestPolylineIndex(
-  decoded: Array<[number, number]>,
-  lat: number,
-  lon: number,
-  startIdx: number
-): number {
   let bestIdx = startIdx
   let bestDist = Infinity
   for (let i = startIdx; i < decoded.length; i++) {
-    const d = haversineDistance(decoded[i], [lat, lon])
-    if (d < bestDist) {
-      bestDist = d
-      bestIdx = i
-    }
-  }
-  return bestIdx
-}
-
-interface IntermediatePlace {
-  arrivalTime: number
-  departureTime: number
-  lat: number
-  lon: number
-  name: string
-  stop?: { code: string; gtfsId: string; id: string }
-}
-
-/**
- * Build timed simulation points for a transit leg using stop schedule data.
- * Each polyline segment between stops gets timing derived from the timetable.
- */
-function buildTransitTimedPoints(
-  leg: Leg,
-  decoded: Array<[number, number]>,
-  places: IntermediatePlace[]
-): TimedSimulationPoint[] {
-  const points: TimedSimulationPoint[] = []
-
-  // Build stop sequence: leg origin, intermediate places, leg destination
-  const stops: Array<{
-    arrivalTime: number
-    departureTime: number
-    lat: number
-    lon: number
-    name: string
-  }> = []
-
-  // Origin
-  const legFrom = (leg as any).from
-  stops.push({
-    arrivalTime: leg.startTime,
-    departureTime: leg.startTime,
-    lat: legFrom?.lat ?? decoded[0][0],
-    lon: legFrom?.lon ?? decoded[0][1],
-    name: legFrom?.name ?? 'Origin'
-  })
-
-  // Intermediate places
-  for (const p of places) {
-    stops.push({
-      arrivalTime: p.arrivalTime,
-      departureTime: p.departureTime,
-      lat: p.lat,
-      lon: p.lon,
-      name: p.name
-    })
-  }
-
-  // Destination
-  const legTo = (leg as any).to
-  stops.push({
-    arrivalTime: leg.endTime,
-    departureTime: leg.endTime,
-    lat: legTo?.lat ?? decoded[decoded.length - 1][0],
-    lon: legTo?.lon ?? decoded[decoded.length - 1][1],
-    name: legTo?.name ?? 'Destination'
-  })
-
-  // Map each stop to its nearest polyline index
-  const stopPolyIndices: number[] = []
   let searchFrom = 0
   for (const stop of stops) {
-    const idx = findClosestPolylineIndex(
-      decoded,
-      stop.lat,
-      stop.lon,
-      searchFrom
-    )
-    stopPolyIndices.push(idx)
-    searchFrom = idx
-  }
-
-  // Build timed points for each segment between consecutive stops
-  for (let s = 0; s < stops.length - 1; s++) {
-    const fromIdx = stopPolyIndices[s]
-    const toIdx = stopPolyIndices[s + 1]
-    const travelTimeMs = stops[s + 1].arrivalTime - stops[s].departureTime
-    const segmentPointCount = Math.max(1, toIdx - fromIdx)
-    const delayPerPoint = Math.max(50, travelTimeMs / segmentPointCount)
-
-    // Add travel points for this segment
-    const endIdx = s < stops.length - 2 ? toIdx : toIdx + 1 // include final point on last segment
-    for (let i = fromIdx; i < endIdx && i < decoded.length; i++) {
-      // Skip duplicate of previous segment's last point
-      if (s > 0 && i === fromIdx) continue
-      points.push({ coord: decoded[i], delayMs: delayPerPoint })
-    }
-
-    // Add dwell time at the arrival stop (except for the final destination)
-    if (s < stops.length - 2) {
-      const dwellMs = stops[s + 1].departureTime - stops[s + 1].arrivalTime
-      if (dwellMs > 0) {
-        // Add a dwell point at the stop location
-        points.push({ coord: decoded[toIdx], delayMs: dwellMs })
-      }
-    }
-  }
-
-  // Handle edge case: if no points were generated, fall back to even distribution
-  if (points.length === 0) {
-    const delayMs = (leg.duration * 1000) / decoded.length
-    for (const coord of decoded) {
-      points.push({ coord, delayMs: Math.max(50, delayMs) })
-    }
-  }
-
-  console.info(
-    `[Go Mode] Transit leg "${stops[0].name}" → "${
-      stops[stops.length - 1].name
-    }": ` +
-      `${stops.length} stops, ${points.length} simulation points, ` +
-      `${Math.round((leg.duration * 1000) / 1000)}s scheduled duration`
-  )
-
-  return points
-}
-
-/**
- * Extract timed simulation points from an itinerary.
- * Transit legs with intermediatePlaces use schedule-aware timing.
- * Walk/bike legs use even time distribution.
- */
-function extractItineraryTimedPoints(
-  itinerary: Itinerary
-): TimedSimulationPoint[] {
-  const points: TimedSimulationPoint[] = []
-  for (const leg of itinerary.legs) {
-    if (!leg.legGeometry?.points) continue
-    try {
-      const decoded = polyline.decode(leg.legGeometry.points)
-      if (decoded.length === 0) continue
-
-      const places = (leg as any).intermediatePlaces as
-        | IntermediatePlace[]
-        | undefined
-      if (leg.transitLeg && places && places.length > 0) {
-        points.push(...buildTransitTimedPoints(leg, decoded, places))
-      } else {
-        // Non-transit or no schedule data: even distribution
-        const delayMs = Math.max(50, (leg.duration * 1000) / decoded.length)
-        for (const coord of decoded) {
-          points.push({ coord, delayMs })
-        }
-      }
-    } catch {
-      // Skip legs with invalid geometry
-    }
-  }
-  return points
-}
-
-/**
  * Create a mock GeolocationPosition from lat/lng coordinates.
  * `fix` carries recorded accuracy/heading/speed during trip replay; when absent
  * (itinerary-derived sim) synthetic defaults are used.
