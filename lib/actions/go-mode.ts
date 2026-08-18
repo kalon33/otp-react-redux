@@ -25,6 +25,7 @@ import {
   checkMissedBus,
   classifyMissedBus,
   findBoardLegIndex,
+  resetTurnAnnouncements,
   shouldAutoReroute,
   showNotification
 } from '../util/go-mode/notification-service'
@@ -719,6 +720,16 @@ export function endGoMode() {
     stopNativeGps()
     if (session.lastTurnCardKey !== null) cancelPush(TURN_CARD_NOTIFICATION_ID)
     if (session.lastPacingCard !== null) cancelPush(PACING_CARD_NOTIFICATION_ID)
+    // The per-leg turn-announcement latch lives in notification-service, keyed
+    // on the leg OBJECT, and is permanent for that object's life — which
+    // assumes a new trip brings new legs. False on the retry path, where
+    // handleRetry re-enters beginGoMode with the same itinerary and
+    // normalizeGoModeItinerary hands back the same legs; without this reset
+    // every cue already announced stays silent for the whole retried trip.
+    // Here and not in beginGoMode: a quiet access replan re-enters there
+    // mid-trip with the transit legs deliberately object-identical, and
+    // re-arming then is the 7/31 notification storm again.
+    resetTurnAnnouncements()
 
     // ...and then the trip's state goes in one line. Anything added to
     // TripSession is cleared by this automatically — which is the point.
