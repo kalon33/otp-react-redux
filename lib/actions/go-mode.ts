@@ -55,6 +55,7 @@ import {
 } from '../util/go-mode/position-matching'
 import { getNextStopOnRide } from '../util/go-mode/next-stop'
 import { spliceAccessOntoItinerary } from '../util/go-mode/access-splice'
+import { legAlight } from '../util/go-mode/live-itinerary'
 import {
   mergeAdjacentSameTripLegs,
   normalizeGoModeItinerary,
@@ -2870,8 +2871,15 @@ export function refreshLiveLegTimes() {
       // forward from the bus's current position instead of falling back to an
       // absolute timetable moment that has already passed. For a leg not yet
       // boarded there is no such anchor and the timetable is the honest answer.
+      // Keyed on the TRIP, not the leg index. The onboard "I'm already on a
+      // bus" flow sets riding.legIndex to -1 until a route match exists
+      // (setRiding at :3954 and :4184 both pass routeMatch?.legIndex ?? -1), so
+      // a legIndex test is false exactly when the rider is most certainly
+      // aboard — the projection below never fired on the flow it was built for.
+      // tripId is set at every setRiding call site, and these stopTimes ARE
+      // that trip's, so matching on it is both correct and stricter.
       const anchor =
-        riding?.legIndex === i
+        riding?.tripId && riding.tripId === tripId
           ? {
               nextStopId: goMode.vehicleMatch?.match?.nextStopId ?? null,
               nowMs,
@@ -3180,6 +3188,20 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         ? liveBoarding.boardEpoch
         : null
 
+    // The live arrival at the leg the rider is ON. legAlight resolves
+    // live -> projected -> plan in one place, so the header, the alight banner
+    // and the notification ETA all read the same number instead of the header
+    // quietly using the plan's frozen endTime.
+    const liveAlightMs = itinerary.legs[routeMatch.legIndex]?.transitLeg
+      ? Number(
+          legAlight(
+            routeMatch.legIndex,
+            itinerary.legs[routeMatch.legIndex],
+            goMode.liveLegTimes || {}
+          ).epoch
+        )
+      : null
+
     const progress = calculateTripProgress(
       currentTime,
       itinerary,
@@ -3190,7 +3212,8 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       // fast the rider is actually moving (7/29: 6.5 m/s made the static 120 m
       // prepare an 18 s warning).
       position.coords.speed ?? null,
-      liveBoardMs
+      liveBoardMs,
+      Number.isFinite(liveAlightMs) ? liveAlightMs : null
     )
 
     dispatch(updateProgress(progress))
@@ -3318,10 +3341,13 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     // read as "arriving now" on every tick. Schedule data falls back to the
     // plan leg's own endTime, and GPS distance backs both up at the kerb.
     const liveAlight = goMode.liveLegTimes?.[routeMatch.legIndex]
-    const alightEpochMs =
-      liveAlight?.alightRealtime && liveAlight.alightEpoch != null
-        ? liveAlight.alightEpoch
-        : Number(currentLeg?.endTime)
+    // Same value the header and the alight banner use. This used to be a
+    // hand-rolled copy that honoured only alightRealtime, so it ignored a
+    // projected time entirely and could disagree with the banner about when
+    // the rider gets off.
+    const alightEpochMs = Number.isFinite(liveAlightMs)
+      ? (liveAlightMs as number)
+      : Number(currentLeg?.endTime)
     const alightContext: AlightContext = {
       distanceMetres:
         currentLeg?.to?.lat != null && currentLeg?.to?.lon != null
