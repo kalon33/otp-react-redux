@@ -379,6 +379,38 @@ The benefit is tested by dropping 7/22's 5836 m multipath fix into the same real
 series, where it never reaches the deviation check at all. Saying "the smoothing
 removes spikes" would have been a claim this ride does not support.
 
+### Step 3 is done — and it changes the recommendation
+
+All five slices are in. `handlePositionUpdate` no longer decides anything about
+the two sticky cards, missed buses, anchoring or drift: it reads state, calls
+pure functions, and applies what they hand back. Every one of those decisions is
+now reachable from jest, and four of the five are held against recorded rides.
+
+But the honest measurement: the tick went **756 → 666 lines**. Ninety lines, for
+five slices. 24% of what is left is comments (the expensive ones, worth keeping);
+the other ~477 lines are almost entirely *plumbing* — assembling inputs from the
+store, and applying results. Still 19 `dispatch(` calls and 7 `getState()` reads,
+the same as before.
+
+**So do not build `planTick`.** The original recommendation was to collapse the
+whole tick into one pure `planTick(input) → TickIntent[]`. Having done the five
+slices, that now looks like the wrong next move: the decisions are already out,
+and what a single `planTick` would move is the plumbing — which is exactly the
+part that cannot be pure. The anchor's stop-times poll happens *mid-tick*, with a
+store read on either side of it; several inputs are assembled from `getState()`
+at the moment they are needed. Forcing that behind one pure signature would mean
+either passing the whole store in, or an intent language rich enough to express
+"go and fetch this, then continue" — a worse thing than what is there now.
+
+The remaining lever is different and smaller: the tick reads the store seven
+times as it goes. Assembling that once at the top would make the function
+readable in one pass, and is worth doing when someone next has reason to be in
+there. It is not worth a dedicated project.
+
+What the five slices actually bought is what the review asked for: the riskiest
+logic in the app is now proven by recorded rides instead of by re-running a
+flaky script until it passes. That was the goal, not the line count.
+
 ### Two corrections to this review
 
 1. **`pulseOpacity` was not dead.** It is used twice inside `styled.ts` itself;
