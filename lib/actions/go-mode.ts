@@ -3487,25 +3487,22 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       cancelPush(TURN_CARD_NOTIFICATION_ID)
     }
 
-    // The sticky bike-pacing card (id 2, alongside the turn card): ride time
-    // left, the bus being chased, and the buffer at the stop, so the rider
-    // knows whether to go fast or slow. All cadence decisions live in
-    // evaluatePacingCard.
-    if (!replaying && getState().otp.config.goMode?.pacingCard !== false) {
-      const evaluated = evaluatePacingCard(session.lastPacingCard, {
-        currentLeg,
-        nextLeg,
-        nowMs: currentTime.getTime(),
-        progress
-      })
-      if (evaluated.post) {
-        sendPush({ id: PACING_CARD_NOTIFICATION_ID, ...evaluated.post })
-      } else if (!evaluated.next && session.lastPacingCard) {
-        // Boarded (or the leg no longer leads to transit) — drop the card so
-        // the wrist stops advising a ride that's over.
-        cancelPush(PACING_CARD_NOTIFICATION_ID)
-      }
-      session.lastPacingCard = evaluated.next
+    // The sticky pacing card (id 2, alongside the turn card): ride time left,
+    // the bus being chased, and the buffer at the stop, so the rider knows
+    // whether to go fast or slow. Every decision — cadence, clearing, and the
+    // enable gate — lives in util/go-mode/pacing-card.ts.
+    const pacingCard = evaluatePacingCard(session.lastPacingCard, {
+      currentLeg,
+      enabled: !replaying && getState().otp.config.goMode?.pacingCard !== false,
+      nextLeg,
+      nowMs: currentTime.getTime(),
+      progress
+    })
+    session.lastPacingCard = pacingCard.next
+    if (pacingCard.post) {
+      sendPush({ id: PACING_CARD_NOTIFICATION_ID, ...pacingCard.post })
+    } else if (pacingCard.clear) {
+      cancelPush(PACING_CARD_NOTIFICATION_ID)
     }
 
     // A reroute stuck at 'searching' (both the fetch and its timeout timer

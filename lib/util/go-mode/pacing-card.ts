@@ -85,23 +85,38 @@ function composePost(
   }
 }
 
+export interface PacingCardDecision {
+  /** True when the card on the wrist should be cancelled. */
+  clear: boolean
+  /** The card state to carry into the next tick (null = no card showing). */
+  next: PacingCardState | null
+  /** The card to post, or null to leave the wrist alone. */
+  post: PacingCardPost | null
+}
+
 /**
- * Decide whether the pacing card should (re)post this tick.
+ * Decide what the pacing card should do this tick.
  *
- * Returns the card state to carry forward (null = no card should be showing;
- * the caller cancels the notification) and, when due, the notification to
- * post. Pure — all clocks come in via nowMs, so the cadence is unit-testable.
+ * Pure — all clocks come in via nowMs, so the cadence is unit-testable, and
+ * the caller only pushes what it is handed. Same shape as evaluateTurnCard.
  */
 export function evaluatePacingCard(
   prev: PacingCardState | null,
   input: {
     currentLeg: Leg | undefined
+    /** False while replaying, or when config.goMode.pacingCard is off. */
+    enabled: boolean
     nextLeg: Leg | undefined
     nowMs: number
     progress: TripProgress
   }
-): { next: PacingCardState | null; post: PacingCardPost | null } {
-  const { currentLeg, nextLeg, nowMs, progress } = input
+): PacingCardDecision {
+  const { currentLeg, enabled, nextLeg, nowMs, progress } = input
+
+  // Disabled means untouched — not cleared. A replay must not cancel a card
+  // the live trip put on the rider's wrist.
+  if (!enabled) return { clear: false, next: prev, post: null }
+
   const wait = progress.waitTimeAtStop
   const due = progress.timeUntilNextDeparture
 
@@ -112,7 +127,10 @@ export function evaluatePacingCard(
     wait == null ||
     due == null
   ) {
-    return { next: null, post: null }
+    // Boarded, or the leg no longer leads to transit: drop the card so the
+    // wrist stops advising a ride that is over. Nothing to clear if no card
+    // was showing.
+    return { clear: prev != null, next: null, post: null }
   }
 
   const travelMin = Math.max(0, Math.round((due - wait) / 60))
@@ -132,13 +150,14 @@ export function evaluatePacingCard(
       Math.abs(bufferMin - prev.bufferMin) >= REPOST_BUFFER_DELTA_MIN)
 
   if (!freshLeg && !worsened && !(intervalOk && changedEnough)) {
-    return { next: prev, post: null }
+    return { clear: false, next: prev, post: null }
   }
 
   // The initial post and worsening edges alert; everything else updates the
   // existing wrist entry silently.
   const passive = !freshLeg && !worsened
   return {
+    clear: false,
     next: { bufferMin, legKey, postedAtMs: nowMs, state },
     post: composePost(travelMin, bufferMin, state, passive, walking)
   }
