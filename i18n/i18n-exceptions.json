@@ -73,6 +73,8 @@
     "components.BatchSearchScreen.routeLockDetail",
     "components.BatchSearchScreen.routeLockLabel",
     "components.BatchSearchScreen.routeLockNotFound",
-    "components.BatchSearchScreen.routeLockNotUsed"
+    "components.BatchSearchScreen.routeLockNotUsed",
+    "components.DiagnosticsNotice.body",
+    "components.DiagnosticsNotice.dismiss"
   ]
 }
