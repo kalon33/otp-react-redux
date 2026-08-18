@@ -1,6 +1,6 @@
 import { connect } from 'react-redux'
 import { replace } from 'connected-react-router'
-import { User, withAuthenticationRequired } from '@auth0/auth0-react'
+import { withAuthenticationRequired } from '@auth0/auth0-react'
 import React, { Component, ReactElement } from 'react'
 
 import * as uiActions from '../../actions/ui'
@@ -15,6 +15,7 @@ import { RETURN_TO_CURRENT_ROUTE } from '../../util/ui'
 import AppFrame from '../app/app-frame'
 import PopupWrapper from '../app/popup'
 
+import { User } from './types'
 import SubNav from './sub-nav'
 import withLoggedInUserSupport from './with-logged-in-user-support'
 

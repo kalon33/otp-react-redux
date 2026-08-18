@@ -193,6 +193,29 @@ components:
     message: >-
       Si la page ne s'affiche pas après quelques secondes, <redirectLink>cliquez
       ici</redirectLink>.
+  ActiveRoutingPreferences:
+    avoidBiking: Éviter le vélo
+    avoidingBiking: Évite le vélo
+    bikeForward: Vélo vers l'avant
+    briskerWalking: Marche plus rapide
+    clear: Effacer
+    fasterBiking: Vélo plus rapide
+    fastest: Le plus rapide
+    fewerTransfers: Moins de correspondances
+    gentlerWalking: Marche plus douce
+    label: Préférences de routage
+    lessWaiting: Moins d'attente
+    lessWalking: Moins de marche
+    longerTransferBuffer: Marge de correspondance plus longue
+    minimizeWalking: Minimiser la marche
+    moreBiking: Plus de vélo
+    moreTransfers: Plus de correspondances
+    moreWalking: Plus de marche
+    okayWaiting: Attente correcte
+    reliableTransfers: Correspondances fiables
+    shorterTransferBuffer: Marge de correspondance plus courte
+    slowerBiking: Vélo plus lent
+    staySeated: Rester assis
   AppMenu:
     callHistory: Historique des appels
     closeMenu: Fermer le menu
@@ -200,6 +223,8 @@ components:
     networkConnectionLost: Erreur de connexion réseau
     networkConnectionRestored: Connexion réseau restaurée
     openMenu: Ouvrir le menu
+    shareDiagnosticsOff: 'Partager les diagnostics : Non'
+    shareDiagnosticsOn: 'Partager les diagnostics : Oui'
     skipNavigation: Sauter la navigation
   BackToTripPlanner:
     backToTripPlanner: Retour au planificateur de trajets
@@ -333,10 +358,13 @@ components:
     stations: Arrêts et stations
     stops: Arrêts et stations
     streets: Plan des rues
+    realtimeStops: Arrêts en temps réel
+    'OTP-UI-stopsAndStations': Arrêts & Stations
   MapillaryFrame:
     title: Vue panoramique
   MetroUI:
     arriveAt: Vous arrivez à
+    confirmSwitchTrip: Basculer votre trajet actif vers cette ligne ? Votre guidage actuel sera mis à jour.
     fare: "{fare}"
     itineraryDescription: Trajet de {time} par les lignes {routes}
     itinerarySummary: Partez à {stopName} | {cost}
@@ -346,6 +374,8 @@ components:
     originallyScheduledTime: (initialement {originalTime})
     singleModeItineraryDescription: Trajet de {time} {mode}
     startTrip: Commencer le trajet
+    switchTrip: Basculer vers ce trajet
+    timeBiking: "{time} à vélo"
     timeWalking: "{time} de marche"
   MobilityProfile:
     DevicesPane:
@@ -902,6 +932,7 @@ components:
     boardingSubtitle: Confirmez que vous êtes dans le bus
     browsePlanner: Ouvrir le planificateur
     busLabel: Bus
+    busHeadsign: 'vers {headsign}'
     busLabelHeadsign: 'Direction: {headsign}'
     busNotBroadcasting: Le bus ne diffuse pas sa position
     changeBus: Changer de bus
@@ -917,6 +948,7 @@ components:
     errorTimeout: Délai dépassé
     errorUnavailable: Service indisponible
     estimatedArrival: 'Arrivée estimée: {time}'
+    followToggle: Suivre ma position
     findAnotherWay: Trouver un autre chemin
     findingBestStop: Recherche du meilleur arrêt...
     findingBestStopToGetOff: "Recherche du meilleur arrêt pour descendre…"
@@ -983,11 +1015,14 @@ components:
     routeInTime: "{route} dans {time}"
     routeLabel: "Ligne {route}"
     routeOption: Option de ligne
+    routeOptionWithLongName: '{route} — {longName}'
     selectVehicle: Sélectionner un véhicule
     sheetHandleLabel: Faire glisser pour plus d'options
     stopsRemainingCompact: '{count, plural, one {1 arrêt restant} other {# arrêts restants}}'
     thisOne: "Celui-ci"
     toStop: Vers {stop}
+    theBus: le bus
+    thenTurn: 'puis {turn}'
     trackingBus: Suivi du bus
     tripSheetHeading: Détails du trajet
     tripSheetTitle: Votre trajet

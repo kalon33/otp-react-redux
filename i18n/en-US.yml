@@ -176,6 +176,29 @@ components:
     message: >-
       If the page doesn't load after a few seconds, <redirectLink>click
       here</redirectLink>.
+  ActiveRoutingPreferences:
+    avoidBiking: Avoid biking
+    avoidingBiking: Avoiding biking
+    bikeForward: Bike forward
+    briskerWalking: Brisker walking
+    clear: Clear
+    fasterBiking: Faster biking
+    fastest: Fastest
+    fewerTransfers: Fewer transfers
+    gentlerWalking: Gentler walking
+    label: Routing preferences
+    lessWaiting: Less waiting
+    lessWalking: Less walking
+    longerTransferBuffer: Longer transfer buffer
+    minimizeWalking: Minimize walking
+    moreBiking: More biking
+    moreTransfers: More transfers
+    moreWalking: More walking
+    okayWaiting: Okay waiting
+    reliableTransfers: Reliable transfers
+    shorterTransferBuffer: Shorter transfer buffer
+    slowerBiking: Slower biking
+    staySeated: Stay seated
   AppMenu:
     callHistory: Call History
     closeMenu: Close Menu
@@ -183,6 +206,8 @@ components:
     networkConnectionLost: Network connection lost
     networkConnectionRestored: Network connection restored
     openMenu: Open Menu
+    shareDiagnosticsOff: 'Share diagnostics: Off'
+    shareDiagnosticsOn: 'Share diagnostics: On'
     skipNavigation: Skip navigation
   BackToTripPlanner:
     backToTripPlanner: Back to trip planner
@@ -314,10 +339,13 @@ components:
     stations: Transit Stations
     stops: Transit Stops
     streets: Streets
+    realtimeStops: Realtime Stops
+    'OTP-UI-stopsAndStations': Stops & Stations
   MapillaryFrame:
     title: Imagery of the street
   MetroUI:
     arriveAt: You arrive
+    confirmSwitchTrip: Switch your active trip to this route? Your current guidance will update.
     fare: "{fare}"
     itineraryDescription: "{time} itinerary using {routes}"
     itinerarySummary: from {stopName} | {cost}
@@ -327,6 +355,8 @@ components:
     originallyScheduledTime: (originally {originalTime})
     singleModeItineraryDescription: "{time} {mode} itinerary"
     startTrip: Start Trip
+    switchTrip: Switch to this trip
+    timeBiking: "{time} biking"
     timeWalking: "{time} walking"
   MobilityProfile:
     DevicesPane:
@@ -854,6 +884,7 @@ components:
     boardingSubtitle: Confirm that you are on the bus
     browsePlanner: Open trip planner
     busLabel: Bus
+    busHeadsign: 'to {headsign}'
     busLabelHeadsign: 'Headsign: {headsign}'
     busNotBroadcasting: Bus is not broadcasting its position
     changeBus: Change bus
@@ -869,6 +900,7 @@ components:
     errorTimeout: Timeout error
     errorUnavailable: Service unavailable
     estimatedArrival: 'Estimated arrival: {time}'
+    followToggle: Follow my location
     findAnotherWay: Find another way
     findingBestStop: Finding best stop...
     findingBestStopToGetOff: "Finding best stop to get off…"
@@ -935,11 +967,14 @@ components:
     routeInTime: "{route} in {time}"
     routeLabel: "Route {route}"
     routeOption: Route option
+    routeOptionWithLongName: '{route} — {longName}'
     selectVehicle: Select vehicle
     sheetHandleLabel: Drag for more options
     stopsRemainingCompact: '{count, plural, one {1 stop remaining} other {# stops remaining}}'
     thisOne: "This one"
     toStop: 'To {stop}'
+    theBus: the bus
+    thenTurn: 'then {turn}'
     trackingBus: Tracking bus
     tripSheetHeading: Trip details
     tripSheetTitle: Your trip

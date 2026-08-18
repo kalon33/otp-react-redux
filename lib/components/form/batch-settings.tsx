@@ -94,17 +94,17 @@ function BatchSettings({
 
   const processedModeButtons = useMemo(
     () =>
-      modeButtonOptions.map(
-        pipe(
+      modeButtonOptions.map((button, index) => {
+        const processed = pipe(
           addModeButtonIcon(ModeIcon),
-          setModeButtonEnabled(enabledModeButtons),
-          (button: ModeButtonDefinition, index: number) => ({
-            ...button,
-            // Ensure each button has a unique key for React list rendering
-            key: button.key || button.mode || `mode-button-${index}`
-          })
-        )
-      ),
+          setModeButtonEnabled(enabledModeButtons)
+        )(button)
+        return {
+          ...processed,
+          // Ensure each button has a unique key for React list rendering
+          key: processed.key || `mode-button-${index}`
+        }
+      }),
     [modeButtonOptions, ModeIcon, enabledModeButtons]
   )
 

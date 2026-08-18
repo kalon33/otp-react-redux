@@ -135,14 +135,14 @@ const BoardingPrompt = ({
                     </RouteDirection>
                   )}
                 </VehicleLabel>
-                {(vehicle.headsign || vehicle.tripHeadsign) && (
+                {vehicle.tripHeadsign && (
                   <VehicleDetail>
                     {intl.formatMessage(
                       {
                         defaultMessage: 'to {headsign}',
                         id: 'components.GoMode.busHeadsign'
                       },
-                      { headsign: vehicle.headsign || vehicle.tripHeadsign }
+                      { headsign: vehicle.tripHeadsign }
                     )}
                   </VehicleDetail>
                 )}

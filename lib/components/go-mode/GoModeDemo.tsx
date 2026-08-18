@@ -362,6 +362,7 @@ const GoModeDemo = (): JSX.Element => (
       >
         <WalkingNavigation
           boardingStopData={makeBoardingStopData(true)}
+          units="imperial"
           leg={{ ...walkLeg, mode: 'BICYCLE' }}
           nextLeg={busNextLeg}
           onExit={() => undefined}

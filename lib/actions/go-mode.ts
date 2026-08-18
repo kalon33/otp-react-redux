@@ -1644,7 +1644,7 @@ export function discoverNearbyVehicles(attempt = 0) {
     // vehicleId -> {direction, headsign}; empty when the sidecar is unreachable
     // and the stop-radius fallback runs, in which case the picker simply shows
     // no direction rather than guessing one.
-    const vehicleDetails = context?.vehicleDetails || {}
+    const vehicleDetails: Record<string, any> = context?.vehicleDetails || {}
     if (candidates?.length) {
       routes = candidates
       // Same shape findRoutesNearby stores — keeps the boarding prompt's

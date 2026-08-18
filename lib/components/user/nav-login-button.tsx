@@ -1,7 +1,6 @@
 /* eslint-disable jsx-a11y/no-noninteractive-tabindex */
 import { Dropdown } from '@opentripplanner/building-blocks'
 import { FormattedMessage, useIntl } from 'react-intl'
-import { User } from '@auth0/auth0-react'
 import { User as UserIcon } from '@styled-icons/fa-regular/User'
 import React, { HTMLAttributes } from 'react'
 import styled from 'styled-components'
@@ -28,11 +27,19 @@ type LinkData = {
   url: string
 }
 
+/** The subset of the Auth0 user profile this component reads. */
+interface Auth0Profile {
+  email: string
+  name?: string
+  nickname?: string
+  picture?: string
+}
+
 interface Props extends HTMLAttributes<HTMLElement> {
   links: LinkData[]
   onSignInClick: () => void
   onSignOutClick: () => void
-  profile?: User | null
+  profile?: Auth0Profile | null
 }
 
 /**

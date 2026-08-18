@@ -10,7 +10,7 @@ interface Props extends HTMLAttributes<HTMLDivElement> {
   footer?: ReactNode
   header?: ReactNode
   height?: string
-  onClickClose?: () => null
+  onClickClose?: () => void
   scroll?: boolean
 }
 

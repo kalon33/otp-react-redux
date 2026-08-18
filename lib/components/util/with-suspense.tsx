@@ -8,7 +8,7 @@ export default function withSuspense<T>(
 ): ComponentType<T> {
   const suspensedComponent = (props: T): JSX.Element => (
     <Suspense fallback={<span />}>
-      <WrappedComponent {...props} />
+      <WrappedComponent {...(props as T & { children?: React.ReactNode })} />
     </Suspense>
   )
 

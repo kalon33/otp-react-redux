@@ -22,7 +22,7 @@ type Props = {
   }
   fetchQueries: (callId: string, intl: IntlShape) => void
   searches: Array<any>
-  toggleCallHistory: () => null
+  toggleCallHistory: () => void
 } & WrappedComponentProps
 
 function CallHistoryWindow(props: Props) {
