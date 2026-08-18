@@ -117,6 +117,49 @@ describe('util > go-mode > progress-calculator', () => {
       expect(result).toBe(300) // 5 minutes remaining
     })
 
+    it('ticks down with the clock, not with GPS', () => {
+      // The old implementation accepted currentTime and never read it, so the
+      // number only moved when the rider did. Standing still at a red light,
+      // "time remaining" froze.
+      const legs = makeLegs([1000, 1000], [300, 300])
+      const itinerary = makeItinerary(
+        legs,
+        '2026-01-28T10:00:00',
+        '2026-01-28T10:10:00'
+      )
+      const early = calculateTimeRemaining(
+        new Date('2026-01-28T10:02:00'),
+        itinerary,
+        0,
+        0.4
+      )
+      const later = calculateTimeRemaining(
+        new Date('2026-01-28T10:04:00'),
+        itinerary,
+        0,
+        0.4 // identical GPS progress
+      )
+      expect(early - later).toBeCloseTo(120)
+    })
+
+    it('never reports a ride ending on another day', () => {
+      // 2048 minutes reached the header because the span carried an overnight
+      // wait. A countdown against a real arrival cannot express that.
+      const legs = makeLegs([1000, 1000], [300, 300])
+      const itinerary = makeItinerary(
+        legs,
+        '2026-01-28T10:00:00',
+        '2026-01-28T10:10:00'
+      )
+      const result = calculateTimeRemaining(
+        new Date('2026-01-28T10:00:00'),
+        itinerary,
+        0,
+        0
+      )
+      expect(result).toBeLessThan(6 * 60 * 60)
+    })
+
     it('should never return negative values', () => {
       const legs = makeLegs([1000], [300])
       const itinerary = makeItinerary(
@@ -503,7 +546,14 @@ describe('util > go-mode > progress-calculator', () => {
       expect(result.currentLegIndex).toBe(1)
       expect(result.overallProgress).toBeGreaterThan(0)
       expect(result.overallProgress).toBeLessThan(100)
+      // Bounded, not merely positive: the old span-based value returned 2048
+      // minutes for a 15-minute ride and `toBeGreaterThan(0)` waved it through.
       expect(result.timeRemaining).toBeGreaterThan(0)
+      expect(result.timeRemaining).toBeLessThanOrEqual(
+        (new Date(itinerary.endTime).getTime() -
+          new Date(itinerary.startTime).getTime()) /
+          1000
+      )
       expect(result.estimatedArrival).toBeInstanceOf(Date)
       expect(result.status).toBeDefined()
       expect(result.currentLegProgress).toBeCloseTo(50)
@@ -669,8 +719,27 @@ describe('getUpcomingTransitTiming', () => {
   })
 
   it('reports the destination arrival on transit legs', () => {
+    // No live figure supplied — the plan's endTime is the right fallback.
     const t = getUpcomingTransitTiming(NOW, busLeg, undefined, 0.2)
     expect(t.destinationArrivalTime).toBe(busLeg.endTime)
+  })
+
+  it('prefers the live arrival over the plan on transit legs', () => {
+    // This is the assertion whose absence let the header quote a build-time
+    // arrival all the way through. destinationArrivalTime drives
+    // alightBannerLevel, so a bus four minutes late was firing GET READY four
+    // minutes early — with every test green.
+    const late = Number(busLeg.endTime) + 240_000
+    const t = getUpcomingTransitTiming(
+      NOW,
+      busLeg,
+      undefined,
+      0.2,
+      null,
+      null,
+      late
+    )
+    expect(t.destinationArrivalTime).toBe(late)
   })
 
   it('returns nothing for non-transit connections', () => {

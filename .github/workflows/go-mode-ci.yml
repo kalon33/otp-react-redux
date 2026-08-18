@@ -14,14 +14,16 @@ name: Go Mode CI
 
 on:
   push:
-    branches: 
+    branches:
       - feature/go-mode
+      - main
       - mistral
       - mistral2
       - working
   pull_request:
     branches:
       - feature/go-mode
+      - main
       - mistral
       - mistral2
       - working

@@ -142,6 +142,7 @@ stay-seated: Posto a sedere mantenuto
 bike-forward: Bici in avanti
 avoid-biking: Evitare la bici
 reliable-transfers: Corrispondenze affidabili
+accessible: Accessibile
 components:
   RoutingProfiles:
     fastest: Più veloce
@@ -150,6 +151,7 @@ components:
     bike-forward: Bici in avanti
     avoid-biking: Evitare la bici
     reliable-transfers: Corrispondenze affidabili
+    accessible: Accessibile
   A11yPrefs:
     accessibilityRoutingByDefault: Preferisci viaggi accessibili per impostazione predefinita
   AccountSetupFinishPane:

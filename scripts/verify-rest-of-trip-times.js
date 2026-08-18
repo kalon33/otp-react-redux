@@ -239,7 +239,15 @@ async function main() {
       busIdx,
       currentLegIndex: g.progress?.currentLegIndex,
       destinationArrivalTime: g.progress?.destinationArrivalTime,
+      legTripId: bus.trip?.gtfsId || bus.tripId || null,
       liveLegTimes: g.liveLegTimes,
+      liveTimesForBus: g.liveLegTimes?.[busIdx] || null,
+      // Everything still to come AFTER the bus: timeRemaining counts to the
+      // destination, not to the alight, so the two differ by exactly this.
+      onwardDurationSec: legs
+        .slice(busIdx + 1)
+        .reduce((acc, l) => acc + (l.duration || 0), 0),
+      ridingLegIndex: g.riding?.legIndex,
       ridingTripId: g.riding?.tripId,
       timeRemaining: g.progress?.timeRemaining
     }
@@ -300,6 +308,7 @@ async function main() {
   const nextOtherTrip = deps.find((d) => d.tripId !== tripId)
 
   const liveAlight = app.liveLegTimes?.[app.busIdx]?.alightEpoch ?? null
+  const liveTimes = app.liveTimesForBus
 
   console.log('\n===== COMPARISON (all America/Chicago) =====')
   console.log(
@@ -385,9 +394,97 @@ async function main() {
 
   await browser.close()
 
-  const pass = dLive != null && dLive <= 30
-  if (!pass)
-    throw new Error('liveLegTimes missing or drifted >30s from boarded-trip RT')
+  // ---- judge ------------------------------------------------------------
+  //
+  // The old assertion compared the app's alight time against the ABSOLUTE
+  // timetable and demanded 30s. For a schedule-only trip that measures how late
+  // the bus is, not whether the app is right: the app deliberately projects
+  // from where the bus actually is, so on a bus running 65s down the two differ
+  // by exactly 65s and the check failed a working app. Judge against the basis
+  // the app actually used.
+  const t = liveTimes || {}
+  const basis = t.alightRealtime
+    ? 'live'
+    : t.alightProjected
+    ? 'projected'
+    : 'plan'
+  console.log(`\napp's basis for the alight time: ${basis}`)
+  console.log(
+    `  riding.tripId=${app.ridingTripId} legIndex=${app.ridingLegIndex} ` +
+      `leg.tripId=${app.legTripId} projected=${t.alightProjected} realtime=${t.alightRealtime}`
+  )
+
+  const failures = []
+
+  if (liveAlight == null) {
+    failures.push('liveLegTimes carried no alight time at all')
+  } else if (basis === 'live') {
+    // Feed against feed, same basis. Widened from 30s because the app polls and
+    // the script queries at different moments, and Metro Transit publishes then
+    // withdraws predictions between the two (8/18: app live, script's later
+    // query schedule-only, 65s apart with neither being wrong).
+    if (dLive > 90)
+      failures.push(`live alight drifted ${dLive.toFixed(0)}s from feed truth`)
+  } else {
+    // A projection is now + remaining scheduled running time. It can never sit
+    // in the past, and it can never be EARLIER than the timetable — a bus that
+    // is late does not arrive early. Those two invariants are the real contract;
+    // the exact value is a function of lateness and is not knowable here.
+    if (liveAlight < nowMs - 5000)
+      failures.push(`projected alight ${fmt(liveAlight)} is in the past`)
+    if (liveAlight < truthEpoch - 60_000)
+      failures.push(
+        `projected alight ${fmt(
+          liveAlight
+        )} is earlier than the timetable ${fmt(truthEpoch)}`
+      )
+  }
+
+  // The header must agree with the trip sheet. It used to read the plan's
+  // build-time endTime while liveLegTimes held the live figure, so the banner
+  // and the rest-of-trip row disagreed by minutes.
+  if (app.destinationArrivalTime != null && liveAlight != null) {
+    const dAgree = Math.abs(app.destinationArrivalTime - liveAlight) / 1000
+    console.log(`header vs trip sheet: ${dAgree.toFixed(0)}s apart`)
+    if (dAgree > 60)
+      failures.push(
+        `header ETA and liveLegTimes disagree by ${dAgree.toFixed(0)}s`
+      )
+  }
+
+  // timeRemaining used to be plan-span minus plan-moving-time: it carried every
+  // wait in the itinerary and printed 2048 min for a 15-minute ride, unasserted.
+  if (app.timeRemaining != null) {
+    const mins = app.timeRemaining / 60
+    if (!(mins >= 0 && mins < 360))
+      failures.push(
+        `timeRemaining is ${mins.toFixed(0)} min — not a plausible ride`
+      )
+    // timeRemaining counts to the DESTINATION; truthEpoch is the alight. The
+    // gap between them is the onward legs, so bound it by those rather than
+    // pretending the ride ends when the rider steps off.
+    const toAlight = (truthEpoch - nowMs) / 1000
+    const onward = app.onwardDurationSec || 0
+    console.log(
+      `timeRemaining ${mins.toFixed(0)} min vs ${(toAlight / 60).toFixed(
+        0
+      )} min to alight ` + `+ ${(onward / 60).toFixed(0)} min onward`
+    )
+    if (toAlight > 0 && app.timeRemaining < toAlight - 120)
+      failures.push(
+        `timeRemaining ${mins.toFixed(0)} min is less than the ${(
+          toAlight / 60
+        ).toFixed(0)} min to the alight`
+      )
+    if (toAlight > 0 && app.timeRemaining > toAlight + onward + 900)
+      failures.push(
+        `timeRemaining ${mins.toFixed(
+          0
+        )} min exceeds alight + onward legs by more than 15 min`
+      )
+  }
+
+  if (failures.length) throw new Error(failures.join('; '))
   console.log('\nPASS: rest-of-trip times track the boarded trip')
 }
 

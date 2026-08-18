@@ -58,6 +58,12 @@ import {
 } from '../util/go-mode/position-matching'
 import { getNextStopOnRide } from '../util/go-mode/next-stop'
 import { spliceAccessOntoItinerary } from '../util/go-mode/access-splice'
+import { legAlight } from '../util/go-mode/live-itinerary'
+import {
+  buildBannedRoutes,
+  ROUTE_LOCK_MODES,
+  withRouteLockPrefs
+} from '../util/route-lock'
 import {
   mergeAdjacentSameTripLegs,
   normalizeGoModeItinerary,
@@ -1085,6 +1091,38 @@ export function reRouteFromCurrentPosition(
       // No caller-specified preferences: default a mid-ride re-plan to the
       // stay-seated profile so transfers away from the boarded bus cost extra.
       payload.routingPreferences = getRoutingProfile('stay-seated')?.prefs
+    }
+
+    // A named route outlives the search it was named in.
+    //
+    // "Only take the 18" was a search-time setting only: Go Mode re-routes build
+    // an isolated payload and deliberately never touch currentQuery, so the ban
+    // did not ride along and the lock silently evaporated the first time the app
+    // re-planned mid-trip — the rider ended up on whatever came, having asked
+    // for one route by name. If they said it, it holds until they clear it.
+    //
+    // Rebuilt from the live route index rather than reusing currentQuery.banned:
+    // the index is the authority on which routes exist, and a ban list is only
+    // correct if it is the complete complement of the kept route.
+    const routeLock = state.otp?.currentQuery?.routeLock
+    if (routeLock?.id) {
+      const banned = buildBannedRoutes(
+        state.otp?.transitIndex?.routes,
+        routeLock.id
+      )
+      if (banned) {
+        payload.banned = { routes: banned }
+        // Bike both ends: naming one route only makes sense with a personal
+        // vehicle filling the gaps (see util/route-lock).
+        payload.modes = ROUTE_LOCK_MODES
+        payload.routingPreferences = withRouteLockPrefs(
+          payload.routingPreferences
+        )
+        // The stay-seated/preferred bias is about keeping the rider on the bus
+        // they are on. Under a lock the named route already decides that, and a
+        // preference for a now-banned route is just noise in the query.
+        if (payload.preferred?.routes !== routeLock.id) delete payload.preferred
+      }
     }
 
     // The plan fetch is written to never reject, but a WebView suspension can
@@ -2884,8 +2922,15 @@ export function refreshLiveLegTimes() {
       // forward from the bus's current position instead of falling back to an
       // absolute timetable moment that has already passed. For a leg not yet
       // boarded there is no such anchor and the timetable is the honest answer.
+      // Keyed on the TRIP, not the leg index. The onboard "I'm already on a
+      // bus" flow sets riding.legIndex to -1 until a route match exists
+      // (setRiding at :3954 and :4184 both pass routeMatch?.legIndex ?? -1), so
+      // a legIndex test is false exactly when the rider is most certainly
+      // aboard — the projection below never fired on the flow it was built for.
+      // tripId is set at every setRiding call site, and these stopTimes ARE
+      // that trip's, so matching on it is both correct and stricter.
       const anchor =
-        riding?.legIndex === i
+        riding?.tripId && riding.tripId === tripId
           ? {
               nextStopId: goMode.vehicleMatch?.match?.nextStopId ?? null,
               nowMs,
@@ -3194,6 +3239,20 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         ? liveBoarding.boardEpoch
         : null
 
+    // The live arrival at the leg the rider is ON. legAlight resolves
+    // live -> projected -> plan in one place, so the header, the alight banner
+    // and the notification ETA all read the same number instead of the header
+    // quietly using the plan's frozen endTime.
+    const liveAlightMs = itinerary.legs[routeMatch.legIndex]?.transitLeg
+      ? Number(
+          legAlight(
+            routeMatch.legIndex,
+            itinerary.legs[routeMatch.legIndex],
+            goMode.liveLegTimes || {}
+          ).epoch
+        )
+      : null
+
     const progress = calculateTripProgress(
       currentTime,
       itinerary,
@@ -3204,7 +3263,8 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       // fast the rider is actually moving (7/29: 6.5 m/s made the static 120 m
       // prepare an 18 s warning).
       position.coords.speed ?? null,
-      liveBoardMs
+      liveBoardMs,
+      Number.isFinite(liveAlightMs) ? liveAlightMs : null
     )
 
     dispatch(updateProgress(progress))
@@ -3332,10 +3392,13 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     // read as "arriving now" on every tick. Schedule data falls back to the
     // plan leg's own endTime, and GPS distance backs both up at the kerb.
     const liveAlight = goMode.liveLegTimes?.[routeMatch.legIndex]
-    const alightEpochMs =
-      liveAlight?.alightRealtime && liveAlight.alightEpoch != null
-        ? liveAlight.alightEpoch
-        : Number(currentLeg?.endTime)
+    // Same value the header and the alight banner use. This used to be a
+    // hand-rolled copy that honoured only alightRealtime, so it ignored a
+    // projected time entirely and could disagree with the banner about when
+    // the rider gets off.
+    const alightEpochMs = Number.isFinite(liveAlightMs)
+      ? (liveAlightMs as number)
+      : Number(currentLeg?.endTime)
     const alightContext: AlightContext = {
       distanceMetres:
         currentLeg?.to?.lat != null && currentLeg?.to?.lon != null

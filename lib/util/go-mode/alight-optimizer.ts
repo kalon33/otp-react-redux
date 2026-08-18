@@ -520,6 +520,13 @@ const REACHABLE_TOLERANCE_MS = 60000
  * isUsableItinerary, which fails closed on a missing walkDistance; there the
  * missing field IS the thing being judged.)
  */
+/**
+ * How far past the alight an onward plan may still end. Generous on purpose —
+ * a long suburban wait is a real answer — but short of a service-day rollover,
+ * which is the thing that was being offered.
+ */
+const MAX_ONWARD_HORIZON_MS = 6 * 60 * 60 * 1000
+
 function isReachableItinerary(
   itin: Itinerary,
   busArrivalEpoch: number,
@@ -529,6 +536,15 @@ function isReachableItinerary(
   if (!Number.isFinite(start)) return true
   if (start + REACHABLE_TOLERANCE_MS < busArrivalEpoch) return false
   if (nowMs != null && start + REACHABLE_TOLERANCE_MS < nowMs) return false
+  // ...and not so far out that it is really tomorrow's trip. Only the lower
+  // bound existed, so an onward connection on the NEXT service day was a legal,
+  // rankable option: its overnight gap landed in the itinerary span and
+  // timeRemaining reported 34 hours for a ride ending in fifteen minutes. A
+  // rider getting off a bus is choosing what to do next, not next morning.
+  const end = Number(itin.endTime)
+  if (Number.isFinite(end) && end - busArrivalEpoch > MAX_ONWARD_HORIZON_MS) {
+    return false
+  }
   return true
 }
 

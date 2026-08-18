@@ -15,6 +15,7 @@ import NavLoginButtonAuth0 from '../user/nav-login-button-auth0'
 
 import { NetworkConnectionBanner } from './network-connection-banner'
 import AppMenu, { Icon } from './app-menu'
+import DiagnosticsNotice from './diagnostics-notice'
 import LocaleSelector from './locale-selector'
 import NavbarItem from './nav-item'
 import ReturnToTripBanner from './return-to-trip-banner'
@@ -164,6 +165,7 @@ const DesktopNav = ({
       </Navbar>
       <NetworkConnectionBanner networkConnectionLost={networkConnectionLost} />
       <ReturnToTripBanner />
+      <DiagnosticsNotice />
     </header>
   )
 }

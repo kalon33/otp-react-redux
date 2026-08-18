@@ -94,6 +94,26 @@ export const ROUTING_PROFILES: RoutingProfile[] = [
     id: 'reliable-transfers',
     label: 'reliable-transfers',
     prefs: { minTransferTime: 300, transferPenalty: 180 }
+  },
+  {
+    // The seventh profile from the original plan, and the only one never built.
+    // Not "minimize walking" with a different name: that profile shortens the
+    // walk and leaves everything else alone, which still hands someone a
+    // four-minute transfer and a brisk pace. This one says the whole trip is
+    // slower and every joint in it needs slack — a short walk taken slowly, a
+    // transfer with room to make it, and a strong preference for staying put
+    // over changing vehicles at all. Every value sits inside LEVER_RANGES.
+    description:
+      'Short, unhurried walks, generous transfer time, and as few vehicle ' +
+      'changes as possible.',
+    id: 'accessible',
+    label: 'Accessible',
+    prefs: {
+      minTransferTime: 600,
+      transferPenalty: 900,
+      walkReluctance: 12,
+      walkSpeed: 0.9
+    }
   }
 ]
 

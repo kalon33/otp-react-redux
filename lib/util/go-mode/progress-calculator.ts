@@ -108,29 +108,56 @@ export function calculateTimeRemaining(
   currentTime: Date,
   itinerary: Itinerary,
   currentLegIndex: number,
+  progressInCurrentLeg: number,
+  liveTripEndMs?: number | null
+): number {
+  // A countdown against the clock, not plan-span arithmetic.
+  //
+  // This used to return (itinerary span) - (plan moving time consumed). Three
+  // things were wrong with that at once: the span is wall-clock so it carried
+  // every WAIT in the itinerary including wait the rider had already served;
+  // `currentTime` was accepted and never used, so the number only moved when
+  // GPS moved rather than ticking down; and Math.max(0, ...) clamped only the
+  // bottom, so an onward plan whose connection landed on the next service day
+  // propagated upward in silence. It printed 2048 min — 34 hours — for a ride
+  // that ended in fifteen minutes, and nothing asserted on it.
+  //
+  // Anchored on the live end of the trip it cannot do that: the answer is
+  // bounded by a real arrival time that the feed keeps current.
+  const end =
+    liveTripEndMs ??
+    legEndFallback(itinerary, currentLegIndex, progressInCurrentLeg)
+  return Math.max(0, (end - currentTime.getTime()) / 1000)
+}
+
+/**
+ * Plan-time end of the trip, for when no live arrival is known yet.
+ *
+ * Deliberately the itinerary's own endTime rather than the old span
+ * subtraction: it is a real moment, so the countdown above stays a countdown.
+ */
+function legEndFallback(
+  itinerary: Itinerary,
+  currentLegIndex: number,
   progressInCurrentLeg: number
 ): number {
-  const endTime = new Date(itinerary.endTime)
-  const startTime = new Date(itinerary.startTime)
-  const totalDuration = (endTime.getTime() - startTime.getTime()) / 1000 // seconds
-
-  // Calculate expected time elapsed based on leg progress
-  const legs = itinerary.legs
-  let expectedElapsed = 0
-
-  for (let i = 0; i < currentLegIndex; i++) {
-    expectedElapsed += legs[i].duration || 0
-  }
-
+  // `new Date`, not `Number`. Itinerary times are `number | string` in
+  // @opentripplanner/types and the fixtures use ISO strings; Number('2026-...')
+  // is NaN, which silently fell through to the leg-sum branch and returned a
+  // countdown measured from the wrong century.
+  const end = new Date(itinerary.endTime as string | number).getTime()
+  if (Number.isFinite(end)) return end
+  // No usable container end: rebuild one from the legs still ahead.
+  const legs = itinerary.legs || []
+  let remaining = 0
   if (currentLegIndex < legs.length) {
-    const currentLeg = legs[currentLegIndex]
-    expectedElapsed += (currentLeg.duration || 0) * progressInCurrentLeg
+    remaining +=
+      (legs[currentLegIndex].duration || 0) * (1 - progressInCurrentLeg)
   }
-
-  // Simple calculation: remaining = total - expected elapsed
-  const remaining = totalDuration - expectedElapsed
-
-  return Math.max(0, remaining)
+  for (let i = currentLegIndex + 1; i < legs.length; i++) {
+    remaining += legs[i].duration || 0
+  }
+  return Date.now() + remaining * 1000
 }
 
 /**
@@ -443,7 +470,8 @@ export function getUpcomingTransitTiming(
   nextLeg: Leg | undefined,
   progressInLeg: number,
   departureOverrideMs?: number | null,
-  liveBoardMs?: number | null
+  liveBoardMs?: number | null,
+  liveAlightMs?: number | null
 ): {
   departureIsOverridden?: boolean
   destinationArrivalTime?: number
@@ -491,7 +519,12 @@ export function getUpcomingTransitTiming(
   }
 
   if (isTransit) {
-    return { destinationArrivalTime: currentLeg.endTime }
+    // The live arrival, not the plan's. currentLeg.endTime is the build-time
+    // anchor, frozen when the trip was planned — and this value feeds
+    // alightBannerLevel below, so a bus running four minutes late was firing
+    // GET READY four minutes early. liveAlightMs comes from legAlight, which
+    // already resolves live -> projected -> plan in one place.
+    return { destinationArrivalTime: liveAlightMs ?? currentLeg.endTime }
   }
 
   return {}
@@ -535,7 +568,8 @@ export function calculateTripProgress(
   departureOverrideMs?: number | null,
   transitCtx?: TransitTrustContext,
   riderSpeedMps?: number | null,
-  liveBoardMs?: number | null
+  liveBoardMs?: number | null,
+  liveAlightMs?: number | null
 ): TripProgress {
   const legs = itinerary.legs
   const currentLegIndex = routeMatch?.legIndex || 0
@@ -547,11 +581,22 @@ export function calculateTripProgress(
     legs
   )
 
+  // The live end of the trip: the live/projected alight of the current transit
+  // leg plus whatever legs follow it. Anything downstream of a live figure is
+  // still plan-time, which is the honest best guess for legs not yet started.
+  const liveTripEndMs =
+    liveAlightMs != null
+      ? legs
+          .slice(currentLegIndex + 1)
+          .reduce((acc, l) => acc + (l.duration || 0) * 1000, liveAlightMs)
+      : null
+
   const timeRemaining = calculateTimeRemaining(
     currentTime,
     itinerary,
     currentLegIndex,
-    progressInCurrentLeg
+    progressInCurrentLeg,
+    liveTripEndMs
   )
 
   const estimatedArrival = estimateArrival(currentTime, timeRemaining)
@@ -599,7 +644,8 @@ export function calculateTripProgress(
     nextLeg,
     progressInCurrentLeg,
     departureOverrideMs,
-    liveBoardMs
+    liveBoardMs,
+    liveAlightMs
   )
 
   // Measured schedule delay at the rider's current position (real GPS progress

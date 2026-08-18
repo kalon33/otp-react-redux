@@ -212,6 +212,7 @@
     "bike-forward",
     "avoid-biking",
     "reliable-transfers",
+    "accessible",
     "components.GoMode.lessWalking",
     "components.GoMode.fewerTransfers",
     "components.GoMode.avoidBiking",
@@ -240,6 +241,7 @@
     "components.GoMode.thisOne",
     "components.GoMode.whereDoYouWantToGetOff",
     "components.GoMode.whichBusAreYouOn",
+    "components.RoutingProfiles.accessible",
     "components.RoutingProfiles.avoid-biking",
     "components.RoutingProfiles.bike-forward",
     "components.RoutingProfiles.fastest",
@@ -248,6 +250,8 @@
     "components.RoutingProfiles.stay-seated",
     "components.TransitVehicleOverlay.incoming_at",
     "components.TransitVehicleOverlay.in_transit_to",
-    "components.TransitVehicleOverlay.stopped_at"
+    "components.TransitVehicleOverlay.stopped_at",
+    "components.DiagnosticsNotice.body",
+    "components.DiagnosticsNotice.dismiss"
   ]
 }
