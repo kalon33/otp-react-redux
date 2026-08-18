@@ -269,7 +269,7 @@ predicted, and two slices of step 3. `lib/actions/go-mode.ts` is **4,840 →
 | 0 — delete dead code | **done** | `GoModeHeader.tsx`, 5 orphan styled exports, `reRoute.candidate(s)` |
 | 1 — move what was never an action | **half** | geometry → `util/go-mode/geometry.ts`; simulation **blocked**, see below |
 | 2 — move the types | **done** | `util/go-mode/types.ts`; the util layer no longer imports upward at all |
-| 3 — make the tick testable | **started** | slices done: the turn card, the pacing card, missed-bus recovery |
+| 3 — make the tick testable | **started** | slices done: turn card, pacing card, missed-bus recovery, auto-anchor |
 | 4 — give the hidden state a home | **done** | `util/go-mode/trip-session.ts`; the 92-line teardown is now one line |
 | 5 — split the onboard flow | **blocked**, see below |
 
@@ -337,6 +337,30 @@ One thing found and deliberately not fixed: the retry schedule reads wall-clock
 replay at 8× does not reproduce the retry cadence. Changing it changes what the
 verify scripts replay, so it is documented in both places and left for a
 deliberate decision.
+
+**Slice 4 — the auto-anchor**, and the best fixture test of the set. The pure
+helpers already existed (`getSoonestCatchableMs`, `shouldAdoptAnchor`); what was
+inline was the composite decision, wrapped around a network dispatch with a
+store read on either side. It is now `anchorBoardingStopId` (what to poll) plus
+`evaluateDepartureAnchor` (what to do with the answer), so the thunk polls and
+applies but decides nothing.
+
+The 7/31 recording carries **21 `findStopTimesForStop` snapshots of the boarding
+stop** — the very data the anchor reads after its poll — so this replays against
+the 34 departures Metro Transit really published for route 539 that afternoon.
+Two findings from that: on the recorded ride the anchor **never fires**, because
+the plan had already picked the soonest catchable 539 (which is the right
+behaviour and now pinned); and given the same real feed, had the plan targeted
+the *next* 539 half an hour later, the anchor moves the rider up to the one they
+can still make.
+
+One deliberate behaviour change: the planned board time was read with
+`Number(leg.startTime)`, which is `NaN` for an ISO string and would silently
+disable the anchor. It now uses `epochMs`. Exactly one of the eight tests flips
+when that is reverted, which is how it was checked. The rest of the extraction
+was proved with a differential run against a transcription of the old inline
+block — 810 combinations of lock, override, carried anchor, ride time and clock
+over the real departures, agreeing every time.
 
 ### Two corrections to this review
 

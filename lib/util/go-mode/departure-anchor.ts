@@ -10,6 +10,7 @@
  */
 import type { Leg } from '@opentripplanner/types'
 
+import { epochMs } from './time'
 import { mergeAndSortStopTimes } from '../stop-times'
 
 // OTP realtimeState values that mean the time reflects live vehicle data
@@ -144,4 +145,90 @@ export function shouldAdoptAnchor(
     return false
   }
   return effectiveDepartureMs - candidateMs >= AUTO_ANCHOR_MIN_GAIN_MS
+}
+
+/**
+ * The boarding stop whose departures the anchor needs this tick, or null when
+ * the anchor does not apply — it runs only while the rider is on a walk/bike
+ * leg heading into a transit leg.
+ *
+ * Separate from the decision below because the caller has to go and fetch the
+ * departures in between: the trip-start snapshot goes stale, and an earlier bus
+ * only ever shows up in a fresh poll.
+ */
+export function anchorBoardingStopId(
+  currentLeg: Leg | undefined,
+  nextLeg: Leg | undefined
+): string | null {
+  const onAccessLeg =
+    currentLeg?.mode === 'WALK' || currentLeg?.mode === 'BICYCLE'
+  if (!onAccessLeg || !nextLeg?.transitLeg) return null
+  return (nextLeg as any)?.from?.stop?.gtfsId ?? null
+}
+
+export interface AnchorDecision {
+  /** The departure to anchor to, or null to leave the override alone. */
+  anchorMs: number | null
+  /** The last auto-anchored departure, to carry into the next tick. */
+  next: number | null
+}
+
+/**
+ * Decide whether to move the rider onto an earlier same-route departure.
+ *
+ * `prev` is the departure this anchor last chose — the caller keeps it so it
+ * can tell its own override apart from one the rider picked by hand. A manual
+ * pick (or a reset) sets `manualLock` and the anchor stays out of the way for
+ * the rest of that boarding.
+ */
+export function evaluateDepartureAnchor(
+  prev: number | null,
+  input: {
+    /** goMode.departureOverride — the departure currently in force. */
+    departureOverride: number | null
+    /** Departures at the boarding stop for the boarding route, sorted. */
+    departures: RouteDeparture[]
+    /** True once the rider has chosen a departure themselves. */
+    manualLock: boolean
+    nowMs: number
+    /** The boarding leg's planned start; `number | string` on the wire. */
+    plannedBoardMs: number | string | null | undefined
+    /** Seconds of walking/riding left before reaching the stop. */
+    rideSecondsRemaining: number
+  }
+): AnchorDecision {
+  const {
+    departureOverride,
+    departures,
+    manualLock,
+    nowMs,
+    plannedBoardMs,
+    rideSecondsRemaining
+  } = input
+
+  // Never fight the rider's own choice, and never overwrite an override this
+  // anchor did not set.
+  if (manualLock) return { anchorMs: null, next: prev }
+  if (departureOverride != null && departureOverride !== prev) {
+    return { anchorMs: null, next: prev }
+  }
+
+  const soonest = getSoonestCatchableMs(
+    departures,
+    nowMs,
+    rideSecondsRemaining,
+    DEPARTURE_OVERDUE_GRACE_MS
+  )
+
+  // Measured against the departure currently in force, never the plan's — see
+  // shouldAdoptAnchor for the 7/22 ride that rule comes from. epochMs rather
+  // than Number(): the planned board time is `number | string`, and Number()
+  // on an ISO string is NaN, which would silently disable the anchor.
+  const effectiveDeparture = departureOverride ?? epochMs(plannedBoardMs)
+  if (!shouldAdoptAnchor(soonest, effectiveDeparture)) {
+    return { anchorMs: null, next: prev }
+  }
+  if (soonest === departureOverride) return { anchorMs: null, next: prev }
+
+  return { anchorMs: soonest, next: soonest }
 }

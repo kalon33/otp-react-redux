@@ -109,11 +109,10 @@ import {
   stopNativeGps
 } from '../util/go-mode/native-gps'
 import {
-  DEPARTURE_OVERDUE_GRACE_MS,
+  anchorBoardingStopId,
   currentServiceDate,
-  getRouteDepartures,
-  getSoonestCatchableMs,
-  shouldAdoptAnchor
+  evaluateDepartureAnchor,
+  getRouteDepartures
 } from '../util/go-mode/departure-anchor'
 import {
   TURN_CARD_NOTIFICATION_ID,
@@ -3198,68 +3197,51 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       session.lastLiveLegTimesAt = nowMs
       dispatch(refreshLiveLegTimes())
 
-      // Auto-anchor: while walking/biking toward a transit boarding, target
-      // the soonest same-route departure the rider can actually catch — the
-      // planned itinerary may board a much later trip (e.g. a later-departing
-      // itinerary was activated), and the wait/notification math must track
-      // the real bus. The header already displays this value; this writes it
-      // into departureOverride so progress + missed-bus agree with it. A
-      // manual pick or reset (selectDeparture) locks auto-anchoring off.
+      // Auto-anchor: while walking/biking toward a transit boarding, target the
+      // soonest same-route departure the rider can actually catch — the planned
+      // itinerary may board a much later trip, and the wait/notification math
+      // must track the real bus. Writing it into departureOverride is what makes
+      // progress, the pacing card and missed-bus all agree on which bus that is.
+      // Every rule lives in util/go-mode/departure-anchor.ts.
       const anchorLeg = itinerary.legs[routeMatch.legIndex]
       const anchorNextLeg = itinerary.legs[routeMatch.legIndex + 1]
-      if (
-        (anchorLeg?.mode === 'WALK' || anchorLeg?.mode === 'BICYCLE') &&
-        anchorNextLeg?.transitLeg
-      ) {
-        const boardingStopId = (anchorNextLeg as any)?.from?.stop?.gtfsId
-        if (boardingStopId) {
-          // Re-poll the boarding stop's departures — the trip-start snapshot
-          // goes stale, and an earlier bus only ever shows up here.
-          try {
-            dispatch(
-              findStopTimesForStop({
-                date: currentServiceDate(
-                  currentTime.getTime(),
-                  getState().otp.config.homeTimezone
-                ),
-                forceFetch: true,
-                stopId: boardingStopId
-              })
-            )
-          } catch {
-            // Best-effort; the anchor below uses whatever is in the store.
-          }
+      const boardingStopId = anchorBoardingStopId(anchorLeg, anchorNextLeg)
+      if (boardingStopId) {
+        // Re-poll the boarding stop's departures first — the trip-start
+        // snapshot goes stale, and an earlier bus only ever shows up here.
+        try {
+          dispatch(
+            findStopTimesForStop({
+              date: currentServiceDate(
+                currentTime.getTime(),
+                getState().otp.config.homeTimezone
+              ),
+              forceFetch: true,
+              stopId: boardingStopId
+            })
+          )
+        } catch {
+          // Best-effort; the decision below uses whatever is in the store.
+        }
 
-          if (
-            !session.manualDepartureLock &&
-            (departureOverride == null ||
-              departureOverride === session.lastAutoAnchorMs)
-          ) {
-            const stopData =
-              getState().otp.transitIndex?.stops?.[boardingStopId]
-            const rideSecondsRemaining = Math.max(
-              0,
-              (anchorLeg.duration || 0) *
-                (1 - (progress.currentLegProgress || 0) / 100)
-            )
-            const soonest = getSoonestCatchableMs(
-              getRouteDepartures(stopData, getLegRouteId(anchorNextLeg)),
-              currentTime.getTime(),
-              rideSecondsRemaining,
-              DEPARTURE_OVERDUE_GRACE_MS
-            )
-            // Measured against the departure currently in force, never the
-            // plan's — see shouldAdoptAnchor.
-            const effectiveDeparture =
-              departureOverride ?? Number(anchorNextLeg.startTime)
-            if (
-              shouldAdoptAnchor(soonest, effectiveDeparture) &&
-              soonest !== departureOverride
-            ) {
-              session.lastAutoAnchorMs = soonest
-              dispatch(setDepartureOverride(soonest))
-            }
-          }
+        const anchor = evaluateDepartureAnchor(session.lastAutoAnchorMs, {
+          departureOverride,
+          departures: getRouteDepartures(
+            getState().otp.transitIndex?.stops?.[boardingStopId],
+            getLegRouteId(anchorNextLeg)
+          ),
+          manualLock: session.manualDepartureLock,
+          nowMs: currentTime.getTime(),
+          plannedBoardMs: anchorNextLeg?.startTime,
+          rideSecondsRemaining: Math.max(
+            0,
+            (anchorLeg?.duration || 0) *
+              (1 - (progress.currentLegProgress || 0) / 100)
+          )
+        })
+        session.lastAutoAnchorMs = anchor.next
+        if (anchor.anchorMs != null) {
+          dispatch(setDepartureOverride(anchor.anchorMs))
         }
       }
     } else if (!isReplayActive()) {
