@@ -155,3 +155,34 @@ describe('routing-profiles', () => {
     })
   })
 })
+
+describe('the profile set as a whole', () => {
+  it('offers all seven profiles the plan specified', () => {
+    // Accessible was listed in docs/routing-profiles-plan.md B1 and never
+    // built, so the picker quietly offered six.
+    expect(ROUTING_PROFILES.map((p) => p.id)).toEqual([
+      'fastest',
+      'minimize-walking',
+      'stay-seated',
+      'bike-forward',
+      'avoid-biking',
+      'reliable-transfers',
+      'accessible'
+    ])
+  })
+
+  it('every profile sits inside its own clamp ranges', () => {
+    // A profile whose value is outside LEVER_RANGES would be silently clamped
+    // to something other than what it says it is.
+    for (const profile of ROUTING_PROFILES) {
+      for (const [lever, value] of Object.entries(profile.prefs)) {
+        const [min, max] = LEVER_RANGES[lever as keyof typeof LEVER_RANGES]
+        expect({ lever, profile: profile.id, value }).toEqual({
+          lever,
+          profile: profile.id,
+          value: Math.min(max, Math.max(min, value as number))
+        })
+      }
+    }
+  })
+})
