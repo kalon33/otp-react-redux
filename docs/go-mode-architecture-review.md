@@ -260,16 +260,16 @@ will be spread over ten files that can each be fixed and typechecked alone.
 ## Status — updated 2026-08-18, after the first pass
 
 Steps **0, 1 (part), 2 and 4** have landed, along with the §2 bug this review
-predicted. `lib/actions/go-mode.ts` is **4,840 → 4,549** lines and its 24
-module-level `let`s are down to **4**. Tests **697 → 712**, TypeScript errors
-**63 → 61**, jest / lint / production build all green.
+predicted, and two slices of step 3. `lib/actions/go-mode.ts` is **4,840 →
+4,546** lines and its 24 module-level `let`s are down to **4**. Tests **697 →
+719**, TypeScript errors **63 → 61**, jest / lint / production build all green.
 
 | Step | State | Result |
 | --- | --- | --- |
 | 0 — delete dead code | **done** | `GoModeHeader.tsx`, 5 orphan styled exports, `reRoute.candidate(s)` |
 | 1 — move what was never an action | **half** | geometry → `util/go-mode/geometry.ts`; simulation **blocked**, see below |
 | 2 — move the types | **done** | `util/go-mode/types.ts`; the util layer no longer imports upward at all |
-| 3 — make the tick testable | **started** | first slice: the turn card → `util/go-mode/turn-card.ts` |
+| 3 — make the tick testable | **started** | slices done: the turn card, the pacing card |
 | 4 — give the hidden state a home | **done** | `util/go-mode/trip-session.ts`; the 92-line teardown is now one line |
 | 5 — split the onboard flow | **blocked**, see below |
 
@@ -297,8 +297,24 @@ could not have been written before: the logic was inline in the thunk, reachable
 only from a live OTP backend. It runs in 1.1 seconds.
 
 The remaining slices follow the same shape, which is the one `pacing-card.ts`
-already established: `evaluateX(prev, input) → { next, post }`, pure, clock
-injected, thunk applies.
+already established: `evaluateX(prev, input) → { clear, next, post }`, pure,
+clock injected, thunk applies.
+
+**Slice 2 — the pacing card**, and a note on what these slices actually cost.
+`evaluatePacingCard` had been pure since it was written, so this one was small:
+only the enable gate and the clear were still inline. Moving them gave it the
+same `{ clear, next, post }` shape as the turn card, and let
+`pacing-card-0731.ts` drive the whole decision from the recorded ride — the
+7/31 trip is `BICYCLE → BUS → BICYCLE`, so it is the right ride for a card that
+answers "should I go fast or slow?". Over the seven minutes that pushed the
+same turn alert 14 times, the pacing card buzzes once and rewrites itself
+silently three times (wait 21 → 19 → 17 → 15), never inside its 90 s floor.
+Checked to have teeth: zeroing the two cadence constants makes it post on all
+335 fixes and fails three of five assertions.
+
+The lesson for the remaining slices: where a pure module already exists, the
+work is only pulling the last decisions out of the thunk. Where it doesn't
+(missed-bus, auto-anchor, deviation), it is the turn-card shape of job.
 
 ### Two corrections to this review
 
