@@ -215,8 +215,10 @@ either build or drop `reRoute.candidate(s)`. ~230 lines, zero risk, minutes.
 **2 — Move the types.** `RidingState`, `LiveLegTime` and friends →
 `util/go-mode/types.ts`. Removes the only upward import in the util layer.
 
-**3 — The one that matters: make the tick testable.** Extract the decision half
-of `handlePositionUpdate` into a pure function in the util layer:
+**3 — The one that matters: make the tick testable.** *(All five slices landed —
+turn card, pacing card, missed-bus recovery, auto-anchor, deviation. What
+follows is the shape they were done in.)* Extract the decision half of
+`handlePositionUpdate` into a pure function in the util layer:
 
 ```ts
 // util/go-mode/tick.ts
@@ -269,7 +271,7 @@ predicted, and two slices of step 3. `lib/actions/go-mode.ts` is **4,840 →
 | 0 — delete dead code | **done** | `GoModeHeader.tsx`, 5 orphan styled exports, `reRoute.candidate(s)` |
 | 1 — move what was never an action | **half** | geometry → `util/go-mode/geometry.ts`; simulation **blocked**, see below |
 | 2 — move the types | **done** | `util/go-mode/types.ts`; the util layer no longer imports upward at all |
-| 3 — make the tick testable | **started** | slices done: turn card, pacing card, missed-bus recovery, auto-anchor |
+| 3 — make the tick testable | **all five slices in** | turn card, pacing card, missed-bus recovery, auto-anchor, deviation |
 | 4 — give the hidden state a home | **done** | `util/go-mode/trip-session.ts`; the 92-line teardown is now one line |
 | 5 — split the onboard flow | **blocked**, see below |
 
@@ -361,6 +363,21 @@ when that is reverted, which is how it was checked. The rest of the extraction
 was proved with a differential run against a transcription of the old inline
 block — 810 combinations of lock, override, carried anchor, ride time and clock
 over the real departures, agreeing every time.
+
+**Slice 5 — deviation**, the last one. Detection was already pure; the two
+decisions either side of it were not. `smoothDistanceFromRoute` is the
+one-tick-glitch suppressor (deviation is judged on the smaller of this tick's
+and last tick's matched distance), `shouldQuietReplanAccessLeg` decides whether
+the drift is the kind to quietly re-plan around, and `quietReplanAdmitted` is
+the debounce that was a guard clause inside the re-plan thunk.
+
+The 7/29 ride turned out to say something more interesting than expected. It
+drifts twice — 90 and 164 consecutive ticks past 100 m — and contains **not one
+single-tick spike**. So it exercises only the *cost* of the smoothing: each
+sustained excursion is recognised exactly one tick late, 90 → 89 and 164 → 163.
+The benefit is tested by dropping 7/22's 5836 m multipath fix into the same real
+series, where it never reaches the deviation check at all. Saying "the smoothing
+removes spikes" would have been a claim this ride does not support.
 
 ### Two corrections to this review
 

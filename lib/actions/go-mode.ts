@@ -26,7 +26,6 @@ import {
   classifyMissedBus,
   findBoardLegIndex,
   resetTurnAnnouncements,
-  shouldAutoReroute,
   showNotification
 } from '../util/go-mode/notification-service'
 import {
@@ -127,6 +126,11 @@ import {
 } from '../util/go-mode/pacing-card'
 import { evaluateTurnCard } from '../util/go-mode/turn-card'
 import { evaluateMissedBusRecovery } from '../util/go-mode/missed-bus-recovery'
+import {
+  quietReplanAdmitted,
+  shouldQuietReplanAccessLeg,
+  smoothDistanceFromRoute
+} from '../util/go-mode/deviation'
 import { evaluateDepartureDrift } from '../util/go-mode/departure-drift'
 import type { DepartureBaselineState } from '../util/go-mode/departure-drift'
 import type { PacingCardState } from '../util/go-mode/pacing-card'
@@ -181,11 +185,6 @@ const REROUTE_SNAPSHOT_INTERVAL_MS = 90000
 // the overview current without hammering OTP. Reset to 0 per trip so the first
 // tick fetches immediately.
 const LIVE_LEG_TIMES_INTERVAL_MS = 20000
-
-// Debounce for the quiet access-leg replan (bike/walk deviation): a swap
-// restarts route matching from the new itinerary, so give the rider time to
-// converge onto it before considering another replan.
-const QUIET_REPLAN_MIN_INTERVAL_MS = 60000
 
 // Quiet access-leg replans that keep coming back empty (fetch failed, or the
 // never-force-a-route-change picker rejected everything) are counted but
@@ -1179,13 +1178,16 @@ export function quietReplanAccessLeg() {
     const legs = itinerary?.legs || []
     const destLeg = legs[legs.length - 1]
     if (!goMode?.isActive || !itinerary || !lastPosition || !destLeg) return
-    // 'none' (settled empty attempt) is as replannable as 'idle' — see
-    // shouldAutoReroute.
-    const statusNow = goMode.reRoute?.status || 'idle'
-    if (statusNow !== 'idle' && statusNow !== 'none') return
-
     const nowMs = getCurrentTime().getTime()
-    if (nowMs - session.lastQuietReplanAt < QUIET_REPLAN_MIN_INTERVAL_MS) return
+    if (
+      !quietReplanAdmitted({
+        lastReplanAtMs: session.lastQuietReplanAt,
+        nowMs,
+        reRouteStatus: goMode.reRoute?.status || 'idle'
+      })
+    ) {
+      return
+    }
     session.lastQuietReplanAt = nowMs
 
     const { homeTimezone } = state.otp.config
@@ -3298,13 +3300,14 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         : null
     }
 
-    // Deviation input is the smaller of this tick's and last tick's matched
-    // distance (see session.prevDistanceFromRoute above).
-    const persistedDistanceFromRoute = Math.min(
-      routeMatch.distanceFromRoute,
-      session.prevDistanceFromRoute ?? 0
+    // Deviation is judged on the smaller of this tick's and last tick's matched
+    // distance, so one wild fix cannot read as drift — see deviation.ts.
+    const smoothed = smoothDistanceFromRoute(
+      session.prevDistanceFromRoute,
+      routeMatch.distanceFromRoute
     )
-    session.prevDistanceFromRoute = routeMatch.distanceFromRoute
+    const persistedDistanceFromRoute = smoothed.distance
+    session.prevDistanceFromRoute = smoothed.next
 
     const notifications = checkForNotifications(
       progress,
@@ -3607,29 +3610,14 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       // the aboard replan keeps the rider on the physically-boarded trip by
       // construction.
       dispatch(replanFromAboard({ autoApply: true, reason: 'boarded-earlier' }))
-    } else if (shouldAutoReroute(notifications, reRouteStatus)) {
-      // No connection-warning exclusion here: checkConnectionWarning only ever
-      // fires on transit legs, so on a walk/bike leg it could never be
-      // present — the old check was dead code that read like a policy.
-      const offAccessLeg =
-        currentLeg &&
-        !currentLeg.transitLeg &&
-        (currentLeg.mode === 'WALK' || currentLeg.mode === 'BICYCLE') &&
-        notifications.some((n) => n.type === 'ROUTE_DEVIATION')
-      if (offAccessLeg) {
-        // Drifted off a walk/bike leg: the rider chose their own way. Quietly
-        // re-plan the access path from where they are (car-GPS style) — no
-        // card, no screen change; same-route rule enforced by the picker.
-        dispatch(quietReplanAccessLeg())
-      }
-      // Connection at risk or off-route on a transit leg: nothing automatic
-      // beyond the notification that already fired. An auto-swap here would
-      // change downstream routes without the rider's consent, and the old
-      // non-autoApply fetch resolved into state nothing renders since
-      // eb74a9d8 — it only burned a plan fetch and blocked later
-      // auto-updates. The rider's tap on the TripSheet lands in the
-      // aboard-aware flow (replanFromAboard) whenever they are verifiably on
-      // a bus.
+    } else if (
+      shouldQuietReplanAccessLeg({ currentLeg, notifications, reRouteStatus })
+    ) {
+      // Drifted off a walk/bike leg: the rider chose their own way. Quietly
+      // re-plan the access path from where they are (car-GPS style) — no card,
+      // no screen change; same-route rule enforced by the picker. Why a transit
+      // leg gets nothing automatic is in deviation.ts.
+      dispatch(quietReplanAccessLeg())
     }
   }
 }
