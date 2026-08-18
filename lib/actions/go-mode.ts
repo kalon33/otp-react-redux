@@ -126,7 +126,7 @@ import {
   PACING_CARD_NOTIFICATION_ID,
   evaluatePacingCard
 } from '../util/go-mode/pacing-card'
-import { asContinuation } from '../util/go-mode/turn-by-turn'
+import { evaluateTurnCard } from '../util/go-mode/turn-card'
 import { evaluateDepartureDrift } from '../util/go-mode/departure-drift'
 import type { DepartureBaselineState } from '../util/go-mode/departure-drift'
 import type { PacingCardState } from '../util/go-mode/pacing-card'
@@ -3472,51 +3472,19 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       }
     })
 
-    // The sticky per-turn card. ONE notification (fixed id, so iOS replaces it
-    // in place rather than stacking), posted once when a turn becomes current
-    // and held unchanged until the rider passes it — then swapped for the next
-    // turn. It carries the instruction only, no live distance: the smooth
-    // countdown lives on the phone screen (WalkingNavigation), while the wrist
-    // wants a stable "what's my next move" glance that doesn't churn. Passive,
-    // because the turns that deserve a buzz already went out as TURN_ALERT.
-    //
-    // This reaches any paired watch over ANCS — see native-notify.ts. Keyed on
-    // the cue's identity (leg + index), so it writes ~once per turn, not once
-    // per GPS tick.
-    if (!replaying && getState().otp.config.goMode?.turnCard !== false) {
-      const cue = progress.nextTurnCue
-      if (cue) {
-        const cardKey = `${currentLeg?.startTime}_${cue.index}`
-        if (cardKey !== lastTurnCardKey) {
-          lastTurnCardKey = cardKey
-          const then = progress.followingTurnCue
-            ? `then ${asContinuation(progress.followingTurnCue.instruction)}`
-            : ''
-          sendPush({
-            id: TURN_CARD_NOTIFICATION_ID,
-            message: then,
-            passive: true,
-            title: cue.instruction
-          })
-        }
-      } else if (
-        lastTurnCardKey !== null &&
-        !(
-          progress.status === 'deviated' &&
-          (currentLeg?.mode === 'WALK' || currentLeg?.mode === 'BICYCLE')
-        )
-      ) {
-        // No turn to show anymore (boarded a bus, or trip ended). Clear the
-        // stale card so the wrist stops displaying a turn that no longer holds.
-        // While DEVIATED on an access leg, freeze instead: on 7/29 the rider's
-        // perpendicular distance flapped around the 100 m on-route threshold
-        // for two minutes, and clearing each off-route tick would churn
-        // cancel→repost on the wrist. The frozen turn is still the rider's
-        // last known move; boarding, trip end and genuine on-route cue
-        // exhaustion all still clear it.
-        lastTurnCardKey = null
-        cancelPush(TURN_CARD_NOTIFICATION_ID)
-      }
+    // The sticky per-turn card on the rider's wrist — what to show and when to
+    // swap or clear it is decided in util/go-mode/turn-card.ts, which carries
+    // the reasoning and the rides behind it.
+    const turnCard = evaluateTurnCard(session.lastTurnCardKey, {
+      currentLeg,
+      enabled: !replaying && getState().otp.config.goMode?.turnCard !== false,
+      progress
+    })
+    session.lastTurnCardKey = turnCard.next
+    if (turnCard.post) {
+      sendPush({ id: TURN_CARD_NOTIFICATION_ID, ...turnCard.post })
+    } else if (turnCard.clear) {
+      cancelPush(TURN_CARD_NOTIFICATION_ID)
     }
 
     // The sticky bike-pacing card (id 2, alongside the turn card): ride time
