@@ -60,6 +60,8 @@ import {
   haversineDistance
 } from '../util/go-mode/geometry'
 import type { TimedSimulationPoint } from '../util/go-mode/geometry'
+import { createTripSession } from '../util/go-mode/trip-session'
+import type { TripSession } from '../util/go-mode/trip-session'
 import type { LiveLegTime, RidingState } from '../util/go-mode/types'
 import { spliceAccessOntoItinerary } from '../util/go-mode/access-splice'
 import { legAlight } from '../util/go-mode/live-itinerary'
@@ -142,18 +144,16 @@ import { MobileScreens } from './ui-constants'
 import { setMobileScreen } from './ui'
 import { setQueryParam } from './form'
 
-// Module-scoped GPS polling interval ID (replaces window.__goModeIntervalId)
-let gpsPollingIntervalId: ReturnType<typeof setInterval> | null = null
-
-// Module-scoped vehicle position polling interval ID
-let vehiclePositionIntervalId: ReturnType<typeof setInterval> | null = null
+// The mutable state of the trip in progress. One object, one lifetime: created
+// here for the first trip of the page, replaced wholesale by endGoMode. See
+// util/go-mode/trip-session.ts for why it is not 21 loose `let`s any more.
+let session: TripSession = createTripSession()
 
 // Native fix-staleness watchdog. iOS occasionally wedges a background
 // location watcher without erroring (7/29: minutes of silence mid-ride while
 // the trip state aged in place); the only recovery is tearing the watcher
 // down and starting a new one. Wall-clock, because the whole point is
 // detecting that the position stream — the app's heartbeat — has died.
-let gpsWatchdogIntervalId: ReturnType<typeof setInterval> | null = null
 let lastFixAtMs = 0
 // 45s of silence on a ~1/s stream before restarting — never churns a healthy
 // watcher, still recovers within one missed traffic light.
@@ -162,16 +162,15 @@ const GPS_WATCHDOG_MS = 45000
 const GPS_WATCHDOG_POLL_MS = 30000
 
 function stopGpsWatchdog() {
-  if (gpsWatchdogIntervalId) {
-    clearInterval(gpsWatchdogIntervalId)
-    gpsWatchdogIntervalId = null
+  if (session.gpsWatchdogIntervalId) {
+    clearInterval(session.gpsWatchdogIntervalId)
+    session.gpsWatchdogIntervalId = null
   }
 }
 
 // Reroute-snapshot capture interval (recording only). Periodically records the
 // "alternatives to finish the trip" as a request/response pair so a replay can
 // surface them by timestamp for debugging. See captureRerouteSnapshot.
-let rerouteSnapshotIntervalId: ReturnType<typeof setInterval> | null = null
 // How often to capture; each tick is a real isolated plan() call.
 const REROUTE_SNAPSHOT_INTERVAL_MS = 90000
 
@@ -180,13 +179,11 @@ const REROUTE_SNAPSHOT_INTERVAL_MS = 90000
 // re-fetching each upcoming trip's schedule that often is wasteful — 20s keeps
 // the overview current without hammering OTP. Reset to 0 per trip so the first
 // tick fetches immediately.
-let lastLiveLegTimesAt = 0
 const LIVE_LEG_TIMES_INTERVAL_MS = 20000
 
 // Debounce for the quiet access-leg replan (bike/walk deviation): a swap
 // restarts route matching from the new itinerary, so give the rider time to
 // converge onto it before considering another replan.
-let lastQuietReplanAt = 0
 const QUIET_REPLAN_MIN_INTERVAL_MS = 60000
 
 // Quiet access-leg replans that keep coming back empty (fetch failed, or the
@@ -195,7 +192,6 @@ const QUIET_REPLAN_MIN_INTERVAL_MS = 60000
 // ever-present TripSheet ("View trip & other ways") is the rider's escape
 // hatch — prompting again would be redundant. The streak (scoped AND fallback
 // both came up empty) is kept as bookkeeping for the debug log.
-let quietReplanMissStreak = 0
 
 // The scoped access replan (GPS → boarding stop, single mode) is a
 // point-to-stop query — OTP rarely returns more than 2 distinct paths and the
@@ -207,15 +203,12 @@ const ACCESS_REPLAN_NUM_ITINERARIES = 3
 // the bus dead on its line. Deviation handling only sees a distance that
 // exceeded reality on the PREVIOUS tick too, so one-tick glitches vanish and
 // sustained drift passes through one tick late.
-let prevDistanceFromRoute: number | null = null
 
 // Auto-anchor bookkeeping (see the throttled block in handlePositionUpdate).
 // The rider's explicit departure pick (or "Reset to planned") must never be
 // fought by the auto-anchor, so a manual selectDeparture locks auto-anchoring
-// off for the current boarding. lastAutoAnchorMs lets the anchor keep chasing
+// off for the current boarding. session.lastAutoAnchorMs lets the anchor keep chasing
 // the live feed while the current override is its own.
-let manualDepartureLock = false
-let lastAutoAnchorMs: number | null = null
 
 // The boarded-earlier replan retries per boarding (spaced, capped) rather than
 // one-shot: a single lost fetch used to strand the whole ride on the planned
@@ -223,30 +216,21 @@ let lastAutoAnchorMs: number | null = null
 // the actual trip, so the trigger condition itself disappears.
 const EARLY_BOARD_REPLAN_RETRY_MS = 60000
 const EARLY_BOARD_REPLAN_MAX_ATTEMPTS = 3
-let earlyBoardReplan: {
-  attempts: number
-  key: string
-  lastAtMs: number
-} | null = null
 
 // Identity (leg + cue index) of the turn currently on the sticky card, so it is
 // re-posted only when the turn itself changes — once per turn, not once per GPS
 // tick. Null when no card is showing.
-let lastTurnCardKey: string | null = null
 
 // What the sticky pacing card last showed (see pacing-card.ts). Null when no
 // card is showing.
-let lastPacingCard: PacingCardState | null = null
 
 // The boarding being watched for departure jumps, and what the rider was last
 // told about it (see departure-drift.ts). Module state for the same reason
-// lastPacingCard is: it must survive a tick but never a trip.
-let lastDepartureBaseline: DepartureBaselineState | null = null
+// session.lastPacingCard is: it must survive a tick but never a trip.
 
 // A leg transition is side-effectful (vehicle tracking, GPS interval restart,
 // departure-override reset), so it must run once per leg. The route match is
 // recomputed from raw position on every tick and cannot carry that fact.
-let lastTransitionedLegIndex: number | null = null
 
 // How long the rider must stay off-route before the sticky "riding" fact is
 // dropped. GPS noise and tunnels produce transient off-route ticks; only a
@@ -268,20 +252,12 @@ const REROUTE_STUCK_MS = 90000
 // never over a card the rider is looking at.
 const MISSED_BUS_REROUTE_RETRY_MS = 60000
 const MISSED_BUS_REROUTE_MAX_ATTEMPTS = 5
-let missedBusRerouteAttempt: {
-  attempts: number
-  departureMs: number
-  lastAtMs: number
-} | null = null
 
 // Minimum progress along a transit leg before GPS alone establishes
 // aboard-ness. isOnRoute is true within 250m of the leg — including while
 // still waiting at the boarding stop — so require clear movement along the
 // leg (or a confirmed/high vehicle match, which skips this gate).
 const RIDING_MIN_PROGRESS = 0.05
-
-// Module-scoped visibilitychange handler for cleanup
-let visibilityChangeHandler: (() => void) | null = null
 
 // A single recorded GPS fix from a replay fixture (see build-fixture.js).
 interface ReplayGpsFix {
@@ -293,12 +269,7 @@ interface ReplayGpsFix {
   tMs: number
 }
 
-let gpsSimulationTimeoutId: ReturnType<typeof setTimeout> | null = null
-let simulationPointIndex = 0
-let simulationCoords: TimedSimulationPoint[] = []
 let simulationSpeedMultiplier = 1
-let simulationActive = false
-let simulatedTimeMs = 0 // epoch ms — the "current time" in simulation-land
 
 // Trip replay: the transit route currently being tracked. During replay the
 // wall-clock 15s vehicle poll is disabled; vehicle snapshots are instead
@@ -312,8 +283,8 @@ let replayTrackedRouteId: string | null = null
  * During live GPS tracking, returns real wall-clock time.
  */
 function getCurrentTime(): Date {
-  if (simulationActive && simulatedTimeMs > 0) {
-    return new Date(simulatedTimeMs)
+  if (session.simulationActive && session.simulatedTimeMs > 0) {
+    return new Date(session.simulatedTimeMs)
   }
   return new Date()
 }
@@ -434,7 +405,7 @@ export const setDepartureOverride = createAction<number | null>(
  */
 export function selectDeparture(epochMs: number | null) {
   return function (dispatch: any) {
-    manualDepartureLock = true
+    session.manualDepartureLock = true
     dispatch(setDepartureOverride(epochMs))
   }
 }
@@ -616,7 +587,7 @@ export function startGoModeTracking(
   return async function (dispatch: any, getState: any) {
     // A reroute or missed-bus auto-update swaps the itinerary without going
     // through endGoMode, so clear the per-leg transition guard here too.
-    lastTransitionedLegIndex = null
+    session.lastTransitionedLegIndex = null
 
     // Pre-fetch stop times for all transit boarding stops
     const today = currentServiceDate(
@@ -658,8 +629,8 @@ export function startGoModeTracking(
     // Together these make a "rider stands still through the departure"
     // scenario reproducible in seconds.
     w.__advanceSimulatedTime = (ms: number) => {
-      if (simulationActive && simulatedTimeMs > 0) {
-        simulatedTimeMs += ms
+      if (session.simulationActive && session.simulatedTimeMs > 0) {
+        session.simulatedTimeMs += ms
       }
     }
     w.__pingPosition = () => {
@@ -722,63 +693,36 @@ export function endGoMode() {
     const originalFrom = goMode?.originalFrom
     const currentFrom = currentQuery?.from
 
-    // Clean up GPS polling interval
-    if (gpsPollingIntervalId) {
-      clearInterval(gpsPollingIntervalId)
-      gpsPollingIntervalId = null
+    // Everything the session HOLDS ON TO outside itself has to be released
+    // before the session goes: timers keep firing, the listener keeps the
+    // handler alive, and the two sticky cards live on the rider's phone (and
+    // their watch) until they are cancelled.
+    if (session.gpsPollingIntervalId)
+      clearInterval(session.gpsPollingIntervalId)
+    if (session.vehiclePositionIntervalId) {
+      clearInterval(session.vehiclePositionIntervalId)
     }
-
-    // Stop the native background-location stream (iOS shell) — ends the blue
-    // location indicator and the battery draw between trips — and its
-    // watchdog, which would otherwise restart the stream it just lost.
+    if (session.gpsSimulationTimeoutId) {
+      clearTimeout(session.gpsSimulationTimeoutId)
+    }
+    if (session.visibilityChangeHandler) {
+      document.removeEventListener(
+        'visibilitychange',
+        session.visibilityChangeHandler
+      )
+    }
     stopGpsWatchdog()
-    stopNativeGps()
-
-    // Clean up vehicle position polling
-    if (vehiclePositionIntervalId) {
-      clearInterval(vehiclePositionIntervalId)
-      vehiclePositionIntervalId = null
-    }
-
-    // Stop reroute-snapshot capture (recording sessions)
     stopRerouteSnapshotCapture()
+    // Stop the native background-location stream (iOS shell) — ends the blue
+    // location indicator and the battery draw between trips. Its watchdog is
+    // already down, so it can't restart the stream it just lost.
+    stopNativeGps()
+    if (session.lastTurnCardKey !== null) cancelPush(TURN_CARD_NOTIFICATION_ID)
+    if (session.lastPacingCard !== null) cancelPush(PACING_CARD_NOTIFICATION_ID)
 
-    // Reset the live-leg-times throttle so the next trip fetches immediately.
-    lastLiveLegTimesAt = 0
-
-    // Reset the quiet-replan debounce — a new trip is a fresh slate.
-    lastQuietReplanAt = 0
-    quietReplanMissStreak = 0
-    prevDistanceFromRoute = null
-
-    // Reset auto-anchor bookkeeping — a new trip is a new decision.
-    manualDepartureLock = false
-    lastAutoAnchorMs = null
-    // Clear the sticky turn card so it doesn't linger on the wrist post-trip.
-    if (lastTurnCardKey !== null) cancelPush(TURN_CARD_NOTIFICATION_ID)
-    lastTurnCardKey = null
-    if (lastPacingCard !== null) cancelPush(PACING_CARD_NOTIFICATION_ID)
-    lastPacingCard = null
-    lastDepartureBaseline = null
-    earlyBoardReplan = null
-    lastTransitionedLegIndex = null
-    missedBusRerouteAttempt = null
-
-    // Clean up visibilitychange listener
-    if (visibilityChangeHandler) {
-      document.removeEventListener('visibilitychange', visibilityChangeHandler)
-      visibilityChangeHandler = null
-    }
-
-    // Clean up GPS simulation state
-    if (gpsSimulationTimeoutId) {
-      clearTimeout(gpsSimulationTimeoutId)
-      gpsSimulationTimeoutId = null
-    }
-    simulationActive = false
-    simulationPointIndex = 0
-    simulationCoords = []
-    simulatedTimeMs = 0
+    // ...and then the trip's state goes in one line. Anything added to
+    // TripSession is cleared by this automatically — which is the point.
+    session = createTripSession()
 
     // Remove console simulation helpers
     const w = window as any
@@ -1236,8 +1180,8 @@ export function quietReplanAccessLeg() {
     if (statusNow !== 'idle' && statusNow !== 'none') return
 
     const nowMs = getCurrentTime().getTime()
-    if (nowMs - lastQuietReplanAt < QUIET_REPLAN_MIN_INTERVAL_MS) return
-    lastQuietReplanAt = nowMs
+    if (nowMs - session.lastQuietReplanAt < QUIET_REPLAN_MIN_INTERVAL_MS) return
+    session.lastQuietReplanAt = nowMs
 
     const { homeTimezone } = state.otp.config
     const { modes, modeSettings, numItineraries } = getBasePlanParts(state)
@@ -1311,7 +1255,7 @@ export function quietReplanAccessLeg() {
               nextTransitRouteId: null
             })
       if (best) {
-        quietReplanMissStreak = 0
+        session.quietReplanMissStreak = 0
         dispatch(
           beginGoMode(spliceAccessOntoItinerary(itinerary, best, boardLegIndex))
         )
@@ -1362,11 +1306,11 @@ export function quietReplanAccessLeg() {
       // reroute whose Switch/Keep card no UI has rendered since eb74a9d8, so
       // it only burned a fetch and blocked later auto-updates. The streak
       // stays as bookkeeping.
-      quietReplanMissStreak += 1
+      session.quietReplanMissStreak += 1
       return
     }
 
-    quietReplanMissStreak = 0
+    session.quietReplanMissStreak = 0
     dispatch(beginGoMode(best))
   }
 }
@@ -1444,7 +1388,7 @@ export function captureRerouteSnapshot() {
  * localStorage.otpRerouteSnapshotMs for testing.
  */
 function startRerouteSnapshotCapture(dispatch: any) {
-  if (rerouteSnapshotIntervalId) return
+  if (session.rerouteSnapshotIntervalId) return
   let intervalMs = REROUTE_SNAPSHOT_INTERVAL_MS
   try {
     const override = Number(
@@ -1454,15 +1398,15 @@ function startRerouteSnapshotCapture(dispatch: any) {
   } catch {
     // ignore
   }
-  rerouteSnapshotIntervalId = setInterval(() => {
+  session.rerouteSnapshotIntervalId = setInterval(() => {
     dispatch(captureRerouteSnapshot())
   }, intervalMs)
 }
 
 function stopRerouteSnapshotCapture() {
-  if (rerouteSnapshotIntervalId) {
-    clearInterval(rerouteSnapshotIntervalId)
-    rerouteSnapshotIntervalId = null
+  if (session.rerouteSnapshotIntervalId) {
+    clearInterval(session.rerouteSnapshotIntervalId)
+    session.rerouteSnapshotIntervalId = null
   }
 }
 
@@ -2662,10 +2606,10 @@ export function startPositionTracking() {
     // (the whole reason the shell exists) at ~1/s — see native-gps.ts.
     if (hasNativeGps()) {
       const onNativePosition = (position: GeolocationPosition) => {
-        if (!simulationActive) dispatch(handlePositionUpdate(position))
+        if (!session.simulationActive) dispatch(handlePositionUpdate(position))
       }
       const onNativeError = (error: Error) => {
-        if (!simulationActive) dispatch(setTrackingError(error as any))
+        if (!session.simulationActive) dispatch(setTrackingError(error as any))
       }
       startNativeGps(onNativePosition, onNativeError)
       // Watchdog on the stream itself: a wedged watcher delivers no fix and no
@@ -2674,8 +2618,9 @@ export function startPositionTracking() {
       // a mid-trip itinerary switch comes back through here.
       stopGpsWatchdog()
       lastFixAtMs = Date.now()
-      gpsWatchdogIntervalId = setInterval(() => {
-        if (simulationActive || !getState().otp?.goMode?.isActive) return
+      session.gpsWatchdogIntervalId = setInterval(() => {
+        if (session.simulationActive || !getState().otp?.goMode?.isActive)
+          return
         const silenceMs = Date.now() - lastFixAtMs
         if (silenceMs > GPS_WATCHDOG_MS) {
           // console.warn feeds the debug-log sink (installGlobalErrorCapture),
@@ -2720,15 +2665,15 @@ export function startPositionTracking() {
     // Use polling instead of watchPosition to avoid conflicts with react-map-gl
     const pollPosition = () => {
       // Skip real GPS updates while simulation is running
-      if (simulationActive) return
+      if (session.simulationActive) return
       navigator.geolocation.getCurrentPosition(
         (position) => {
           // Double-check: simulation may have started while getCurrentPosition was pending
-          if (simulationActive) return
+          if (session.simulationActive) return
           dispatch(handlePositionUpdate(position))
         },
         (error) => {
-          if (simulationActive) return
+          if (session.simulationActive) return
           dispatch(setTrackingError(error))
         },
         options
@@ -2756,13 +2701,13 @@ export function startPositionTracking() {
         initialResolved = true
         clearTimeout(initialTimeout)
         // Skip if simulation started while waiting for initial GPS fix
-        if (simulationActive) return
+        if (session.simulationActive) return
         dispatch(handlePositionUpdate(position))
       },
       (error) => {
         initialResolved = true
         clearTimeout(initialTimeout)
-        if (simulationActive) return
+        if (session.simulationActive) return
         dispatch(setTrackingError(error))
       },
       { ...options, timeout: 15000 }
@@ -2771,26 +2716,32 @@ export function startPositionTracking() {
     // Set up polling interval. A mid-trip itinerary switch (rider switch or
     // missed-bus auto-update) re-enters here with a poll already running —
     // replace it, never stack a second one.
-    if (gpsPollingIntervalId) {
-      clearInterval(gpsPollingIntervalId)
-      gpsPollingIntervalId = null
+    if (session.gpsPollingIntervalId) {
+      clearInterval(session.gpsPollingIntervalId)
+      session.gpsPollingIntervalId = null
     }
     const state = getState()
     const interval = state.otp?.goMode?.tracking?.interval || 8000
     const intervalId = setInterval(pollPosition, interval)
 
     // Store interval ID in module-scoped variable for cleanup
-    gpsPollingIntervalId = intervalId
+    session.gpsPollingIntervalId = intervalId
 
     // Re-acquire position when tab regains focus (background tab suspension recovery)
-    if (!visibilityChangeHandler) {
-      visibilityChangeHandler = () => {
-        if (document.visibilityState === 'visible' && gpsPollingIntervalId) {
+    if (!session.visibilityChangeHandler) {
+      session.visibilityChangeHandler = () => {
+        if (
+          document.visibilityState === 'visible' &&
+          session.gpsPollingIntervalId
+        ) {
           // Immediately poll position when returning from background
           pollPosition()
         }
       }
-      document.addEventListener('visibilitychange', visibilityChangeHandler)
+      document.addEventListener(
+        'visibilitychange',
+        session.visibilityChangeHandler
+      )
     }
   }
 }
@@ -2932,7 +2883,7 @@ export function refreshLiveLegTimes() {
 /**
  * Move the trip on to `legIndex`. Side-effectful — it clears the anchored
  * departure, swaps vehicle tracking, and restarts the position watcher at the
- * new leg's polling rate — so it must run once per leg; `lastTransitionedLegIndex`
+ * new leg's polling rate — so it must run once per leg; `session.lastTransitionedLegIndex`
  * is the guard, and setting it here is what keeps the automatic path from
  * re-running the same transition on the following tick.
  *
@@ -2948,19 +2899,19 @@ export function advanceToLeg(legIndex: number) {
     const legs = itinerary.legs || []
     if (legIndex < 0 || legIndex >= legs.length) return
 
-    lastTransitionedLegIndex = legIndex
+    session.lastTransitionedLegIndex = legIndex
     dispatch(transitionLeg({ legIndex }))
 
     // New leg = new upcoming boarding = a fresh auto-anchor decision.
-    manualDepartureLock = false
-    lastAutoAnchorMs = null
+    session.manualDepartureLock = false
+    session.lastAutoAnchorMs = null
     // And a fresh departure baseline. The boardingKey carries the leg index so
     // this is belt-and-braces, but it keeps a finished boarding's figures from
     // riding along for the rest of the trip.
-    lastDepartureBaseline = null
+    session.lastDepartureBaseline = null
     // A new leg is also a fresh quiet-replan slate — an egress leg must not
     // inherit the access leg's miss streak.
-    quietReplanMissStreak = 0
+    session.quietReplanMissStreak = 0
 
     // Update tracking interval for new leg
     const newLeg = legs[legIndex]
@@ -2986,10 +2937,10 @@ export function advanceToLeg(legIndex: number) {
     }
 
     // Restart tracking with new interval (but not during simulation)
-    if (!simulationActive) {
-      if (gpsPollingIntervalId) {
-        clearInterval(gpsPollingIntervalId)
-        gpsPollingIntervalId = null
+    if (!session.simulationActive) {
+      if (session.gpsPollingIntervalId) {
+        clearInterval(session.gpsPollingIntervalId)
+        session.gpsPollingIntervalId = null
       }
       dispatch(startPositionTracking())
     }
@@ -3118,7 +3069,7 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     const previousLegIndex = goMode.routeMatch?.legIndex || 0
     if (
       shouldTransitionToNextLeg(routeMatch, previousLegIndex) &&
-      routeMatch.legIndex !== lastTransitionedLegIndex
+      routeMatch.legIndex !== session.lastTransitionedLegIndex
     ) {
       dispatch(advanceToLeg(routeMatch.legIndex))
     }
@@ -3137,7 +3088,7 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     const legForProgress: any = itinerary.legs[routeMatch.legIndex]
     if (legForProgress?.transitLeg) {
       const fixAgeMs =
-        simulationActive || isReplayActive()
+        session.simulationActive || isReplayActive()
           ? 0
           : Date.now() - position.timestamp
       const ridingVehicle = findRidingVehicle(
@@ -3236,9 +3187,9 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     const nowMs = Date.now()
     if (
       !isReplayActive() &&
-      nowMs - lastLiveLegTimesAt > LIVE_LEG_TIMES_INTERVAL_MS
+      nowMs - session.lastLiveLegTimesAt > LIVE_LEG_TIMES_INTERVAL_MS
     ) {
-      lastLiveLegTimesAt = nowMs
+      session.lastLiveLegTimesAt = nowMs
       dispatch(refreshLiveLegTimes())
 
       // Auto-anchor: while walking/biking toward a transit boarding, target
@@ -3274,9 +3225,9 @@ export function handlePositionUpdate(position: GeolocationPosition) {
           }
 
           if (
-            !manualDepartureLock &&
+            !session.manualDepartureLock &&
             (departureOverride == null ||
-              departureOverride === lastAutoAnchorMs)
+              departureOverride === session.lastAutoAnchorMs)
           ) {
             const stopData =
               getState().otp.transitIndex?.stops?.[boardingStopId]
@@ -3299,7 +3250,7 @@ export function handlePositionUpdate(position: GeolocationPosition) {
               shouldAdoptAnchor(soonest, effectiveDeparture) &&
               soonest !== departureOverride
             ) {
-              lastAutoAnchorMs = soonest
+              session.lastAutoAnchorMs = soonest
               dispatch(setDepartureOverride(soonest))
             }
           }
@@ -3360,12 +3311,12 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     }
 
     // Deviation input is the smaller of this tick's and last tick's matched
-    // distance (see prevDistanceFromRoute above).
+    // distance (see session.prevDistanceFromRoute above).
     const persistedDistanceFromRoute = Math.min(
       routeMatch.distanceFromRoute,
-      prevDistanceFromRoute ?? 0
+      session.prevDistanceFromRoute ?? 0
     )
-    prevDistanceFromRoute = routeMatch.distanceFromRoute
+    session.prevDistanceFromRoute = routeMatch.distanceFromRoute
 
     const notifications = checkForNotifications(
       progress,
@@ -3453,7 +3404,7 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         currentLeg?.mode === 'WALK' || currentLeg?.mode === 'BICYCLE'
       const boardingTripId =
         boardingLeg?.trip?.gtfsId || boardingLeg?.tripId || null
-      const drift = evaluateDepartureDrift(lastDepartureBaseline, {
+      const drift = evaluateDepartureDrift(session.lastDepartureBaseline, {
         boardingKey:
           onAccessLeg && boardingLeg?.transitLeg && boardingTripId
             ? `${boardingLegIndex}:${boardingTripId}:${
@@ -3471,7 +3422,7 @@ export function handlePositionUpdate(position: GeolocationPosition) {
           'Your bus',
         waitSeconds: progress.waitTimeAtStop ?? null
       })
-      lastDepartureBaseline = drift.next
+      session.lastDepartureBaseline = drift.next
       if (drift.alert) notifications.push(drift.alert)
     }
 
@@ -3562,7 +3513,7 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     // knows whether to go fast or slow. All cadence decisions live in
     // evaluatePacingCard.
     if (!replaying && getState().otp.config.goMode?.pacingCard !== false) {
-      const evaluated = evaluatePacingCard(lastPacingCard, {
+      const evaluated = evaluatePacingCard(session.lastPacingCard, {
         currentLeg,
         nextLeg,
         nowMs: currentTime.getTime(),
@@ -3570,12 +3521,12 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       })
       if (evaluated.post) {
         sendPush({ id: PACING_CARD_NOTIFICATION_ID, ...evaluated.post })
-      } else if (!evaluated.next && lastPacingCard) {
+      } else if (!evaluated.next && session.lastPacingCard) {
         // Boarded (or the leg no longer leads to transit) — drop the card so
         // the wrist stops advising a ride that's over.
         cancelPush(PACING_CARD_NOTIFICATION_ID)
       }
-      lastPacingCard = evaluated.next
+      session.lastPacingCard = evaluated.next
     }
 
     // A reroute stuck at 'searching' (both the fetch and its timeout timer
@@ -3598,9 +3549,10 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     // doesn't retry forever.
     if (
       missedCtx?.definitive &&
-      missedBusRerouteAttempt?.departureMs !== missedCtx.effectiveBoardMs
+      session.missedBusRerouteAttempt?.departureMs !==
+        missedCtx.effectiveBoardMs
     ) {
-      missedBusRerouteAttempt = {
+      session.missedBusRerouteAttempt = {
         attempts: 0,
         departureMs: missedCtx.effectiveBoardMs,
         lastAtMs: 0
@@ -3608,10 +3560,11 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     }
     const missedRetryDue =
       missedCtx?.definitive &&
-      missedBusRerouteAttempt != null &&
+      session.missedBusRerouteAttempt != null &&
       (reRouteStatus === 'idle' || reRouteStatus === 'none') &&
-      missedBusRerouteAttempt.attempts < MISSED_BUS_REROUTE_MAX_ATTEMPTS &&
-      Date.now() - missedBusRerouteAttempt.lastAtMs >=
+      session.missedBusRerouteAttempt.attempts <
+        MISSED_BUS_REROUTE_MAX_ATTEMPTS &&
+      Date.now() - session.missedBusRerouteAttempt.lastAtMs >=
         MISSED_BUS_REROUTE_RETRY_MS
 
     // A detected missed bus re-plans immediately: definitively missed (the
@@ -3628,9 +3581,9 @@ export function handlePositionUpdate(position: GeolocationPosition) {
           (missedCtx.definitive && reRouteStatus !== 'searching')
         : missedRetryDue)
     ) {
-      if (missedCtx.definitive && missedBusRerouteAttempt) {
-        missedBusRerouteAttempt.attempts += 1
-        missedBusRerouteAttempt.lastAtMs = Date.now()
+      if (missedCtx.definitive && session.missedBusRerouteAttempt) {
+        session.missedBusRerouteAttempt.attempts += 1
+        session.missedBusRerouteAttempt.lastAtMs = Date.now()
       }
       dispatch(
         reRouteFromCurrentPosition({
@@ -3668,9 +3621,10 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         // TRANSITION_LEG clears riding on alight.
         const boardingKey = `${riding.tripId ?? ''}:${riding.boardedAt ?? ''}`
         if (
-          earlyBoardReplan?.key === boardingKey &&
-          (earlyBoardReplan.attempts >= EARLY_BOARD_REPLAN_MAX_ATTEMPTS ||
-            Date.now() - earlyBoardReplan.lastAtMs <
+          session.earlyBoardReplan?.key === boardingKey &&
+          (session.earlyBoardReplan.attempts >=
+            EARLY_BOARD_REPLAN_MAX_ATTEMPTS ||
+            Date.now() - session.earlyBoardReplan.lastAtMs <
               EARLY_BOARD_REPLAN_RETRY_MS)
         ) {
           return false
@@ -3707,10 +3661,10 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         ) {
           return false
         }
-        earlyBoardReplan = {
+        session.earlyBoardReplan = {
           attempts:
-            earlyBoardReplan?.key === boardingKey
-              ? earlyBoardReplan.attempts + 1
+            session.earlyBoardReplan?.key === boardingKey
+              ? session.earlyBoardReplan.attempts + 1
               : 1,
           key: boardingKey,
           lastAtMs: Date.now()
@@ -3719,7 +3673,7 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       })()
     ) {
       // Every trust gate lives above (shouldReplanBoardedEarlier IIFE,
-      // rebind hysteresis, attempt caps, earlyBoardReplan bookkeeping) —
+      // rebind hysteresis, attempt caps, session.earlyBoardReplan bookkeeping) —
       // only the dispatched recovery changed. The old keepRouteId point-plan
       // could still legally board the same route at a different station;
       // the aboard replan keeps the rider on the physically-boarded trip by
@@ -3758,9 +3712,9 @@ export function handlePositionUpdate(position: GeolocationPosition) {
 export function startVehicleTracking(routeId: string) {
   return function (dispatch: any) {
     // Clean up any existing interval
-    if (vehiclePositionIntervalId) {
-      clearInterval(vehiclePositionIntervalId)
-      vehiclePositionIntervalId = null
+    if (session.vehiclePositionIntervalId) {
+      clearInterval(session.vehiclePositionIntervalId)
+      session.vehiclePositionIntervalId = null
     }
 
     // Fetch immediately, then every 15 seconds
@@ -3772,7 +3726,7 @@ export function startVehicleTracking(routeId: string) {
       // stays deterministic. Just remember which route to refresh.
       replayTrackedRouteId = routeId
     } else {
-      vehiclePositionIntervalId = setInterval(() => {
+      session.vehiclePositionIntervalId = setInterval(() => {
         dispatch(getVehiclePositionsForRoute(routeId))
         dispatch(performVehicleMatching(routeId))
       }, 15000)
@@ -3790,9 +3744,9 @@ export function startVehicleTracking(routeId: string) {
  */
 export function stopVehicleTracking() {
   return function (dispatch: any) {
-    if (vehiclePositionIntervalId) {
-      clearInterval(vehiclePositionIntervalId)
-      vehiclePositionIntervalId = null
+    if (session.vehiclePositionIntervalId) {
+      clearInterval(session.vehiclePositionIntervalId)
+      session.vehiclePositionIntervalId = null
     }
     replayTrackedRouteId = null
     dispatch(clearVehicleMatch())
@@ -4241,11 +4195,6 @@ export function updateNotificationSettings(config: {
 }
 
 /**
-  let bestIdx = startIdx
-  let bestDist = Infinity
-  for (let i = startIdx; i < decoded.length; i++) {
-  let searchFrom = 0
-  for (const stop of stops) {
  * Create a mock GeolocationPosition from lat/lng coordinates.
  * `fix` carries recorded accuracy/heading/speed during trip replay; when absent
  * (itinerary-derived sim) synthetic defaults are used.
@@ -4266,7 +4215,9 @@ function createMockPosition(
       speed: fix?.speed ?? null
     },
     timestamp:
-      simulationActive && simulatedTimeMs > 0 ? simulatedTimeMs : Date.now()
+      session.simulationActive && session.simulatedTimeMs > 0
+        ? session.simulatedTimeMs
+        : Date.now()
   } as GeolocationPosition
 }
 
@@ -4275,41 +4226,44 @@ function createMockPosition(
  * Each point has its own delay (derived from schedule or even distribution).
  */
 function scheduleNextSimulationPoint(dispatch: any) {
-  if (!simulationActive || simulationPointIndex >= simulationCoords.length) {
-    simulationActive = false
-    gpsSimulationTimeoutId = null
+  if (
+    !session.simulationActive ||
+    session.simulationPointIndex >= session.simulationCoords.length
+  ) {
+    session.simulationActive = false
+    session.gpsSimulationTimeoutId = null
     dispatch({ type: STOP_GPS_SIMULATION })
     console.info('[Go Mode] GPS simulation complete')
     return
   }
 
-  const point = simulationCoords[simulationPointIndex]
+  const point = session.simulationCoords[session.simulationPointIndex]
   const delay = Math.max(50, point.delayMs / simulationSpeedMultiplier)
 
-  gpsSimulationTimeoutId = setTimeout(() => {
-    if (!simulationActive) return
+  session.gpsSimulationTimeoutId = setTimeout(() => {
+    if (!session.simulationActive) return
 
     // Advance the simulated clock by the un-scaled delay (actual schedule time)
-    simulatedTimeMs += point.delayMs
+    session.simulatedTimeMs += point.delayMs
 
     // Replay: keep the fixture clock in step and refresh the recorded vehicle
     // snapshot for the current sim time BEFORE matching runs in
     // handlePositionUpdate, so vehicle matching sees sim-time-aligned positions
     // (the wall-clock 15s poll is disabled during replay for determinism).
     if (isReplayActive()) {
-      setReplayClock(simulatedTimeMs)
+      setReplayClock(session.simulatedTimeMs)
       if (replayTrackedRouteId) {
         dispatch(getVehiclePositionsForRoute(replayTrackedRouteId))
       }
     }
 
-    const cur = simulationCoords[simulationPointIndex]
+    const cur = session.simulationCoords[session.simulationPointIndex]
     dispatch(
       handlePositionUpdate(createMockPosition(cur.coord[0], cur.coord[1], cur))
     )
-    simulationPointIndex++
+    session.simulationPointIndex++
     dispatch({
-      payload: { pointIndex: simulationPointIndex },
+      payload: { pointIndex: session.simulationPointIndex },
       type: UPDATE_SIMULATION_PROGRESS
     })
 
@@ -4339,25 +4293,25 @@ export function startGpsSimulation(speedMultiplier = 1) {
     }
 
     // Clean up any existing simulation
-    if (gpsSimulationTimeoutId) {
-      clearTimeout(gpsSimulationTimeoutId)
-      gpsSimulationTimeoutId = null
+    if (session.gpsSimulationTimeoutId) {
+      clearTimeout(session.gpsSimulationTimeoutId)
+      session.gpsSimulationTimeoutId = null
     }
 
     // Clean up real GPS tracking if running. The native watchdog goes with it
     // — simulated ticks would look like GPS silence and trigger restarts.
-    if (gpsPollingIntervalId) {
-      clearInterval(gpsPollingIntervalId)
-      gpsPollingIntervalId = null
+    if (session.gpsPollingIntervalId) {
+      clearInterval(session.gpsPollingIntervalId)
+      session.gpsPollingIntervalId = null
     }
     stopGpsWatchdog()
 
     // Store in module scope for pause/resume
-    simulationCoords = timedPoints
-    simulationPointIndex = 0
+    session.simulationCoords = timedPoints
+    session.simulationPointIndex = 0
     simulationSpeedMultiplier = speedMultiplier
-    simulationActive = true
-    simulatedTimeMs = itinerary.startTime // begin simulated clock at itinerary start
+    session.simulationActive = true
+    session.simulatedTimeMs = itinerary.startTime // begin simulated clock at itinerary start
 
     console.info(
       `[Go Mode] Starting schedule-aware GPS simulation: ${timedPoints.length} points, ` +
@@ -4374,9 +4328,9 @@ export function startGpsSimulation(speedMultiplier = 1) {
     dispatch(
       handlePositionUpdate(createMockPosition(first.coord[0], first.coord[1]))
     )
-    simulationPointIndex = 1
+    session.simulationPointIndex = 1
     dispatch({
-      payload: { pointIndex: simulationPointIndex },
+      payload: { pointIndex: session.simulationPointIndex },
       type: UPDATE_SIMULATION_PROGRESS
     })
 
@@ -4390,15 +4344,15 @@ export function startGpsSimulation(speedMultiplier = 1) {
  */
 export function stopGpsSimulation() {
   return function (dispatch: any, getState: any) {
-    if (gpsSimulationTimeoutId) {
-      clearTimeout(gpsSimulationTimeoutId)
-      gpsSimulationTimeoutId = null
+    if (session.gpsSimulationTimeoutId) {
+      clearTimeout(session.gpsSimulationTimeoutId)
+      session.gpsSimulationTimeoutId = null
     }
-    simulationActive = false
+    session.simulationActive = false
 
-    simulationPointIndex = 0
-    simulationCoords = []
-    simulatedTimeMs = 0
+    session.simulationPointIndex = 0
+    session.simulationCoords = []
+    session.simulatedTimeMs = 0
 
     dispatch({ type: STOP_GPS_SIMULATION })
 
@@ -4447,44 +4401,47 @@ export function startTrackReplay(
       return
     }
 
-    if (gpsSimulationTimeoutId) {
-      clearTimeout(gpsSimulationTimeoutId)
-      gpsSimulationTimeoutId = null
+    if (session.gpsSimulationTimeoutId) {
+      clearTimeout(session.gpsSimulationTimeoutId)
+      session.gpsSimulationTimeoutId = null
     }
-    if (gpsPollingIntervalId) {
-      clearInterval(gpsPollingIntervalId)
-      gpsPollingIntervalId = null
+    if (session.gpsPollingIntervalId) {
+      clearInterval(session.gpsPollingIntervalId)
+      session.gpsPollingIntervalId = null
     }
     // Replay drives positions itself; the native watchdog would read the
     // recorded track as GPS silence.
     stopGpsWatchdog()
 
-    simulationCoords = trackToTimedPoints(track)
-    simulationPointIndex = 0
+    session.simulationCoords = trackToTimedPoints(track)
+    session.simulationPointIndex = 0
     simulationSpeedMultiplier = speedMultiplier
-    simulationActive = true
-    simulatedTimeMs = startMs ?? track[0].tMs
-    setReplayClock(simulatedTimeMs)
+    session.simulationActive = true
+    session.simulatedTimeMs = startMs ?? track[0].tMs
+    setReplayClock(session.simulatedTimeMs)
 
     console.info(
-      `[Go Mode] Starting trip replay: ${simulationCoords.length} fixes, ` +
+      `[Go Mode] Starting trip replay: ${session.simulationCoords.length} fixes, ` +
         `speed ${speedMultiplier}x`
     )
 
     dispatch({
-      payload: { speedMultiplier, totalPoints: simulationCoords.length },
+      payload: {
+        speedMultiplier,
+        totalPoints: session.simulationCoords.length
+      },
       type: START_GPS_SIMULATION
     })
 
-    const first = simulationCoords[0]
+    const first = session.simulationCoords[0]
     dispatch(
       handlePositionUpdate(
         createMockPosition(first.coord[0], first.coord[1], first)
       )
     )
-    simulationPointIndex = 1
+    session.simulationPointIndex = 1
     dispatch({
-      payload: { pointIndex: simulationPointIndex },
+      payload: { pointIndex: session.simulationPointIndex },
       type: UPDATE_SIMULATION_PROGRESS
     })
 
@@ -4546,14 +4503,14 @@ export function replayTrip(
  */
 export function stopReplay() {
   return function (dispatch: any) {
-    if (gpsSimulationTimeoutId) {
-      clearTimeout(gpsSimulationTimeoutId)
-      gpsSimulationTimeoutId = null
+    if (session.gpsSimulationTimeoutId) {
+      clearTimeout(session.gpsSimulationTimeoutId)
+      session.gpsSimulationTimeoutId = null
     }
-    simulationActive = false
-    simulationPointIndex = 0
-    simulationCoords = []
-    simulatedTimeMs = 0
+    session.simulationActive = false
+    session.simulationPointIndex = 0
+    session.simulationCoords = []
+    session.simulatedTimeMs = 0
     replayTrackedRouteId = null
     dispatch({ type: STOP_GPS_SIMULATION })
     dispatch(endGoMode())
@@ -4567,15 +4524,15 @@ export function stopReplay() {
  */
 export function pauseGpsSimulation() {
   return function (dispatch: any) {
-    if (gpsSimulationTimeoutId) {
-      clearTimeout(gpsSimulationTimeoutId)
-      gpsSimulationTimeoutId = null
+    if (session.gpsSimulationTimeoutId) {
+      clearTimeout(session.gpsSimulationTimeoutId)
+      session.gpsSimulationTimeoutId = null
     }
-    simulationActive = false
+    session.simulationActive = false
 
     dispatch({ type: PAUSE_GPS_SIMULATION })
     console.info(
-      `[Go Mode] GPS simulation paused at point ${simulationPointIndex}/${simulationCoords.length}`
+      `[Go Mode] GPS simulation paused at point ${session.simulationPointIndex}/${session.simulationCoords.length}`
     )
   }
 }
@@ -4593,19 +4550,19 @@ export function resumeGpsSimulation() {
       return
     }
 
-    if (simulationPointIndex >= simulationCoords.length) {
+    if (session.simulationPointIndex >= session.simulationCoords.length) {
       console.warn('[Go Mode] Cannot resume — simulation already complete')
       dispatch({ type: STOP_GPS_SIMULATION })
       return
     }
 
     simulationSpeedMultiplier = sim.speedMultiplier
-    simulationActive = true
+    session.simulationActive = true
 
     dispatch({ type: RESUME_GPS_SIMULATION })
 
     console.info(
-      `[Go Mode] GPS simulation resumed at point ${simulationPointIndex}/${simulationCoords.length}`
+      `[Go Mode] GPS simulation resumed at point ${session.simulationPointIndex}/${session.simulationCoords.length}`
     )
 
     scheduleNextSimulationPoint(dispatch)
