@@ -452,6 +452,9 @@ export interface AppConfig {
   phoneFormatOptions: PhoneFormatConfig
   popups?: PopupConfig
   reportIssue?: ReportIssueConfig
+  /** The rider's mid-ride console, linked from the app menu with this
+   * device's id appended. Unset to hide the menu item. */
+  rideConsoleUrl?: string
   routeModeOverrides?: Record<string, string>
   routeViewer?: RouteViewerConfig
   /** Approx delay in seconds to reset the UI to an initial URL if there is no user activity */

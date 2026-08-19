@@ -1,7 +1,7 @@
 import styled, { css, keyframes } from 'styled-components'
 
 // Shared animations
-export const pulseOpacity = keyframes`
+const pulseOpacity = keyframes`
   0%, 100% {
     opacity: 1;
   }
@@ -189,35 +189,10 @@ export const WalkingContainer = styled.div`
   padding: 6px 12px;
 `
 
-export const NavigationInstruction = styled.div<{ $highlight: boolean }>`
-  background-color: ${(props) => (props.$highlight ? '#e3f2fd' : '#f5f5f5')};
-  border-left: 4px solid
-    ${(props) => (props.$highlight ? '#2196F3' : '#9e9e9e')};
-  border-radius: 8px;
-  margin-bottom: 16px;
-  padding: 16px;
-`
-
-export const InstructionText = styled.div`
-  font-size: 16px;
-  font-weight: 500;
-  margin-bottom: 8px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-`
-
 export const DistanceDisplay = styled.div`
   color: #2196f3;
   font-size: 24px;
   font-weight: bold;
-`
-
-export const NextLegPreview = styled.div`
-  background-color: #fff3e0;
-  border-left: 4px solid #ff9800;
-  border-radius: 4px;
-  padding: 12px;
 `
 
 // --- Single navigation card (access leg → transit) ------------------------
@@ -386,21 +361,6 @@ export const NavExtras = styled.div`
   border-top: 1px solid #eee;
   margin-top: 10px;
   padding-top: 8px;
-`
-
-export const SmallProgressTrack = styled.div`
-  background-color: #e0e0e0;
-  border-radius: 3px;
-  height: 6px;
-  overflow: hidden;
-  width: 100%;
-`
-
-export const SmallProgressFill = styled.div<{ $width: number }>`
-  background-color: #4caf50;
-  height: 100%;
-  transition: width 0.3s ease;
-  width: ${(props) => props.$width}%;
 `
 
 // Alternative departure styles

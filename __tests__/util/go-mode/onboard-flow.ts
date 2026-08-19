@@ -9,7 +9,7 @@ import {
 import { fetchOnboardCandidatePlan, findTrip } from '../../../lib/actions/apiV2'
 import { mergeCandidateRoutes } from '../../../lib/util/go-mode/onboard-discovery-util'
 import goMode from '../../../lib/reducers/go-mode'
-import type { RidingState } from '../../../lib/actions/go-mode'
+import type { RidingState } from '../../../lib/util/go-mode/types'
 
 jest.mock('../../../lib/actions/apiV2', () => ({
   ...jest.requireActual('../../../lib/actions/apiV2'),

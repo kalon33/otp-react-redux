@@ -1,7 +1,7 @@
 import clone from 'clone'
 import type { Itinerary, Leg } from '@opentripplanner/types'
 
-import type { LiveLegTime } from '../../actions/go-mode'
+import type { LiveLegTime } from './types'
 
 const TRANSIT_MODES = new Set(['BUS', 'FERRY', 'RAIL', 'SUBWAY', 'TRAM'])
 

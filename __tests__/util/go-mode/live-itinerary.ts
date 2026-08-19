@@ -1,5 +1,5 @@
 import { buildLiveItinerary } from '../../../lib/util/go-mode/live-itinerary'
-import type { LiveLegTime } from '../../../lib/actions/go-mode'
+import type { LiveLegTime } from '../../../lib/util/go-mode/types'
 
 // 4:52 walk -> 5:00/5:30 bus -> 5:35 walk. Plain round numbers so a delay is
 // obvious by inspection.
