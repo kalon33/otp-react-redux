@@ -76,6 +76,8 @@
     "components.BatchSearchScreen.routeLockNotUsed",
     "components.DiagnosticsNotice.body",
     "components.DiagnosticsNotice.dismiss",
+    "components.ServerUnreachable.forMinutes",
+    "components.ServerUnreachable.now",
     "otpUi.TripDetails.title"
   ]
 }
