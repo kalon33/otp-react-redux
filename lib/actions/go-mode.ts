@@ -423,8 +423,13 @@ export const setRerouteResult = createAction<Itinerary[] | Itinerary | null>(
 )
 export const clearReroute = createAction(CLEAR_REROUTE)
 
-export const beginOnboardFlowAction =
-  createAction<{ originalFrom?: any }>(BEGIN_ONBOARD_FLOW)
+export const beginOnboardFlowAction = createAction<{
+  /** The route the rider already chose for the leg after this bus. The reducer
+   * reads this (it is what ranks the rider's own route up in the alight
+   * options); the type simply never said so. */
+  keepRouteId?: string | null
+  originalFrom?: any
+}>(BEGIN_ONBOARD_FLOW)
 export const clearOnboard = createAction(CLEAR_ONBOARD)
 export const setOnboardStatus = createAction<string>(SET_ONBOARD_STATUS)
 export const setOnboardVehicle = createAction<{
@@ -1589,7 +1594,7 @@ export function discoverNearbyVehicles(attempt = 0) {
     // vehicleId -> {direction, headsign}; empty when the sidecar is unreachable
     // and the stop-radius fallback runs, in which case the picker simply shows
     // no direction rather than guessing one.
-    const vehicleDetails = context?.vehicleDetails || {}
+    const vehicleDetails: Record<string, any> = context?.vehicleDetails || {}
     if (candidates?.length) {
       routes = candidates
       // Same shape findRoutesNearby stores — keeps the boarding prompt's

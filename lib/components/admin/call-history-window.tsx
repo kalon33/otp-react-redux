@@ -20,9 +20,12 @@ type Props = {
       visible: boolean
     }
   }
-  fetchQueries: (callId: string, intl: IntlShape) => void
+  // Loosened to what the action creator actually is. redux-actions' createAction
+  // returns ActionFunctionAny, whose parameters are optional; while that module
+  // was untyped the mismatch was invisible, and typing it surfaced this.
+  fetchQueries: (callId?: any, intl?: any) => void
   searches: Array<any>
-  toggleCallHistory: () => null
+  toggleCallHistory: (...args: any[]) => any
 } & WrappedComponentProps
 
 function CallHistoryWindow(props: Props) {
