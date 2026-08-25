@@ -438,8 +438,10 @@ components:
     LOCATION_NOT_FOUND:
       body: >-
         {inputFields} {inputFieldsCount, plural, =0 {} one {location is} other
-        {locations are}} not near any streets.
-      header: Location not accessible
+        {locations are}} outside the area we have street data for, which covers
+        the Twin Cities metro. If you are inside the metro your device may have
+        given a poor location fix — try setting the point by address instead.
+      header: Outside the routable area
     NO_STOPS_IN_RANGE:
       body: >-
         {inputFields} {inputFieldsCount, plural, =0 {} one {location is} other
