@@ -157,7 +157,7 @@ describe('routing-profiles', () => {
 })
 
 describe('the profile set as a whole', () => {
-  it('offers all seven profiles the plan specified', () => {
+  it('offers all eight profiles the picker exposes', () => {
     // Accessible was listed in docs/routing-profiles-plan.md B1 and never
     // built, so the picker quietly offered six.
     expect(ROUTING_PROFILES.map((p) => p.id)).toEqual([
@@ -166,6 +166,7 @@ describe('the profile set as a whole', () => {
       'stay-seated',
       'bike-forward',
       'avoid-biking',
+      'stay-aboard',
       'reliable-transfers',
       'accessible'
     ])

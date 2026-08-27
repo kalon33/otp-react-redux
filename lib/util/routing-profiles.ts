@@ -89,6 +89,27 @@ export const ROUTING_PROFILES: RoutingProfile[] = [
     prefs: { bikeReluctance: 8 }
   },
   {
+    // "Avoid biking" was the only thing close to this, and it is the wrong
+    // instrument: it prices every bike minute high, so it also throws away the
+    // access bike that got the rider to transit in the first place. What the
+    // rider actually objects to is being put back on the bike BETWEEN
+    // vehicles — the 2.3-mile Lake St hop between the 465 and the 94 that OTP
+    // inserts because at the default bikeReluctance of 2 a minute of riding
+    // costs about a minute of standing at a stop, so filling dead time with
+    // miles is free in its arithmetic. Hence the pairing: bikeReluctance high
+    // enough that riding is no longer free filler, waitReluctance BELOW 1 so
+    // sitting still is the cheap way to spend that time, and a transfer
+    // penalty so a vehicle change has to earn itself. Measured on
+    // Bloomington -> Oakdale at 13:00: 8.0 bike miles -> 4.4, same 15:03
+    // arrival, and the useful 1.4-mile access bike survives.
+    description:
+      'Bikes to the first stop and from the last, but stays aboard rather ' +
+      'than hopping off to ride between vehicles.',
+    id: 'stay-aboard',
+    label: 'Stay on board',
+    prefs: { bikeReluctance: 5, transferPenalty: 600, waitReluctance: 0.6 }
+  },
+  {
     description:
       'Builds in extra transfer buffer for more reliable connections.',
     id: 'reliable-transfers',
