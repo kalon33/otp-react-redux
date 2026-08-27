@@ -8,9 +8,11 @@ import { DaysOfWeek } from '../../util/monitored-trip'
 export interface UserSavedLocation {
   address?: string
   icon?: string
+  id?: string
   lat?: number
   lon?: number
   name?: string
+  timestamp?: number
   type?: string
 }
 

@@ -194,6 +194,7 @@ components:
     closeMenu: Close Menu
     fieldTrip: Field Trip
     mailables: Mailables
+    myPlaces: My places
     networkConnectionLost: Network connection lost
     networkConnectionRestored: Network connection restored
     openMenu: Open Menu
@@ -504,9 +505,6 @@ components:
       notifications.
   Place:
     deleteThisPlace: Delete this place
-    enterAlert: >
-      Enter origin/destination in the form (or set via map click)  and click the
-      resulting marker to set as {placeType} location.
   PlaceEditor:
     addressPrompt: "Address:"
     genericLocationPlaceholder: Search for location
@@ -568,6 +566,9 @@ components:
     saveTripText: Save trip
     signInText: Log in to save trip
     signInTooltip: Please log in to save trip.
+  SavedPlacesScreen:
+    heading: Saved places
+    saveThisPlace: Save this place
   SavedTripEditor:
     deleteSavedTrip: Delete
     editSavedTrip: Edit saved trip

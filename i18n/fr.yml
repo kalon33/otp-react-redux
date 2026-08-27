@@ -213,6 +213,7 @@ components:
     closeMenu: Fermer le menu
     fieldTrip: Groupes scolaires
     mailables: Prêt-à-poster
+    myPlaces: Mes lieux
     networkConnectionLost: Erreur de connexion réseau
     networkConnectionRestored: Connexion réseau restaurée
     openMenu: Ouvrir le menu
@@ -518,10 +519,6 @@ components:
       recevoir des notifications par SMS.
   Place:
     deleteThisPlace: Supprimer ce lieu
-    enterAlert: >
-      Entrez votre point de départ/destination dans le formulaire (ou cliquez
-      sur la carte), puis cliquez sur le marqueur qui apparaît afin de définir
-      votre {placeType}.
   PlaceEditor:
     addressPrompt: "Adresse :"
     genericLocationPlaceholder: Adresse du lieu
@@ -584,6 +581,9 @@ components:
     saveTripText: Enregistrer
     signInText: Connectez-vous pour enregistrer
     signInTooltip: Veuillez vous connecter pour enregistrer ce trajet.
+  SavedPlacesScreen:
+    heading: Lieux enregistrés
+    saveThisPlace: Enregistrer ce lieu
   SavedTripEditor:
     deleteSavedTrip: Supprimer ce trajet
     editSavedTrip: Modifier un trajet enregistré
