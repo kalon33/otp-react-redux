@@ -496,6 +496,20 @@ export function computeCurrentDelay(
     return undefined
   }
 
+  // A leg that has not started yet has no delay to measure. Position along it
+  // is spatial — GPS can put the rider partway down a leg's polyline while its
+  // scheduled window is still entirely in the future, which happens whenever a
+  // re-plan briefly makes an itinerary active whose departure is hours out.
+  // Subtracting a future scheduled time from now would then report the whole
+  // pre-departure wait as if the rider were that far AHEAD of schedule: on
+  // 2026-08-27 a rider 14.85% along a leg departing in 7,037s got a delay of
+  // -7000.6s and an arrival two hours late (4:57 PM against a true ~3:00 PM),
+  // with status still "on_track" so nothing flagged it.
+  //
+  // The wait itself is not lost — getUpcomingTransitTiming already reports it
+  // as waitTimeAtStop, which is the same gap named correctly.
+  if (currentTime.getTime() < start) return undefined
+
   const clamped = Math.max(0, Math.min(1, progressInLeg))
   const scheduledMsAtPosition = start + clamped * (end - start)
 

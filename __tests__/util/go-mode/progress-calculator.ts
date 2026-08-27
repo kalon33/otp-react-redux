@@ -505,6 +505,38 @@ describe('util > go-mode > progress-calculator', () => {
       const result = computeCurrentDelay(leg, 1.5, new Date(end))
       expect(result).toBeCloseTo(0)
     })
+
+    it('should return undefined for a leg that has not started', () => {
+      // Position along a leg is spatial: GPS can put the rider partway down the
+      // polyline while the leg's scheduled window is still in the future.
+      expect(computeCurrentDelay(leg, 0.15, new Date(start - 60000))).toBe(
+        undefined
+      )
+    })
+
+    it('should not report a pre-departure wait as being ahead of schedule', () => {
+      // The 2026-08-27 case: a re-plan briefly made an itinerary active whose
+      // departure was 7,037s out while the rider was already 14.85% along the
+      // access leg's geometry. The old arithmetic called that -7000s of delay,
+      // i.e. nearly two hours AHEAD, and fed it to the notification service.
+      const departsIn = 7037_000
+      const future = {
+        endTime: start + departsIn + 600000,
+        mode: 'BUS',
+        startTime: start + departsIn
+      } as any
+      expect(computeCurrentDelay(future, 0.1485, new Date(start))).toBe(
+        undefined
+      )
+    })
+
+    it('should start measuring the moment the leg begins', () => {
+      // The guard must not swallow a real delay one tick after departure.
+      expect(computeCurrentDelay(leg, 0, new Date(start))).toBeCloseTo(0)
+      expect(computeCurrentDelay(leg, 0, new Date(start + 30000))).toBeCloseTo(
+        30
+      )
+    })
   })
 
   describe('calculateTripProgress', () => {
