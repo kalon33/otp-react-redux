@@ -59,6 +59,7 @@ type AppMenuProps = {
   popupTarget?: string
   resetAndToggleCallHistory?: () => void
   resetAndToggleFieldTrips?: () => void
+  rideConsoleDeviceIds?: string[]
   rideConsoleUrl?: string
   setLocale: (locale: string) => void
   setPopupContent: (url: string) => void
@@ -179,6 +180,7 @@ class AppMenu extends Component<
       popupTarget,
       resetAndToggleCallHistory,
       resetAndToggleFieldTrips,
+      rideConsoleDeviceIds,
       rideConsoleUrl,
       setLocale,
       toggleMailables,
@@ -203,6 +205,17 @@ class AppMenu extends Component<
         subMenuDivider: false
       }
     ]
+
+    // The console is tailnet-gated server-side, so on any device not on the
+    // owner's tailnet the link is a dead 403 — and native builds default
+    // diagnostics ON, so without the allowlist every TestFlight install would
+    // show a button that cannot work.
+    const showRideConsole =
+      this.state.diagnosticsOn &&
+      !!getDeviceId() &&
+      !!rideConsoleUrl &&
+      (!rideConsoleDeviceIds ||
+        rideConsoleDeviceIds.includes(getDeviceId() as string))
 
     const { isPaneOpen } = this.state
     const { SvgIcon } = this.context
@@ -346,7 +359,7 @@ class AppMenu extends Component<
                 the rider's bookmark works on every later trip. Without it the
                 server can only serve whoever reported last — which, with two
                 riders out, is the other one. */}
-            {this.state.diagnosticsOn && getDeviceId() && rideConsoleUrl && (
+            {showRideConsole && (
               <AppMenuItem
                 href={`${rideConsoleUrl}?device=${encodeURIComponent(
                   getDeviceId() as string
@@ -377,6 +390,7 @@ const mapStateToProps = (state: AppReduxState) => {
     extraMenuItems,
     language,
     popups,
+    rideConsoleDeviceIds,
     rideConsoleUrl,
     translateExternalLinks
   } = state.otp.config
@@ -389,6 +403,7 @@ const mapStateToProps = (state: AppReduxState) => {
     languageOptions: getLanguageOptions(language),
     mailablesEnabled: isModuleEnabled(state, Modules.MAILABLES),
     popupTarget: popups?.launchers?.sidebarLink,
+    rideConsoleDeviceIds,
     rideConsoleUrl,
     translateExternalLinks
   }

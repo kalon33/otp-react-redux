@@ -431,6 +431,11 @@ export interface AppConfig {
   phoneFormatOptions: PhoneFormatConfig
   popups?: PopupConfig
   reportIssue?: ReportIssueConfig
+  /** Device ids allowed to see the ride-console menu item. Unset shows it to
+   * every diagnostics-on device; set, it shows only on the listed devices.
+   * The server's tailnet gate still decides who can actually open the page —
+   * this only keeps the dead link out of everyone else's menu. */
+  rideConsoleDeviceIds?: string[]
   /** The rider's mid-ride console, linked from the app menu with this
    * device's id appended. Unset to hide the menu item. */
   rideConsoleUrl?: string
