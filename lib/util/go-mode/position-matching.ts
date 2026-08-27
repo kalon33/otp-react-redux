@@ -1,4 +1,8 @@
 import { decode } from '@mapbox/polyline'
+// Aliased: matchPositionToRoute below has its own local `isTransitLeg`, a
+// mode-based guess used to widen the on-route threshold. The two are not
+// equivalent and reconciling them is its own change, so keep the names apart.
+import { isTransitLeg as legIsTransit } from '@opentripplanner/core-utils/lib/itinerary'
 import type { LatLngArray, Leg } from '@opentripplanner/types'
 
 /**
@@ -243,10 +247,52 @@ export function matchPositionToRoute(
  * standing on the curb onto the bus. (Matching only ever searches forward, so
  * that advance is unrecoverable.) Actual boarding is established by the riding
  * state, which wants a vehicle match or real progress along the transit leg.
+ *
+ * Index order alone is still not enough, because an access leg and the transit
+ * leg that follows it SHARE an endpoint: a rider waiting at the boarding stop
+ * sits on both polylines at once, so the matcher can honestly return the
+ * transit leg while the bus is still hours away. On 2026-08-27 Go Mode started
+ * on a trip whose 465 boarded at 20:17Z, and 82ms later — at 18:19Z, with the
+ * rider standing at the stop — advanced onto that leg and pushed "Walk to 6th
+ * St S & 2nd Ave", a stop 17km away. Since matching only ever searches forward,
+ * that advance is unrecoverable without a re-plan.
+ *
+ * So a transit leg additionally has to be plausibly boardable: the rider is
+ * already riding it, or its board time is at hand.
  */
+export const TRANSIT_BOARD_EARLY_MS = 5 * 60 * 1000
+
+export type TransitionGate = {
+  /** Live board epoch for the target leg, when one is known. */
+  boardEpoch?: number | null
+  /** True when the riding state already places the rider on the target leg. */
+  isRiding?: boolean
+  nowMs?: number
+  /** The leg the match wants to move to — itinerary.legs[match.legIndex]. */
+  targetLeg?: Leg
+}
 export function shouldTransitionToNextLeg(
   match: RouteMatchResult,
-  currentLegIndex: number
+  currentLegIndex: number,
+  gate?: TransitionGate
 ): boolean {
-  return match.legIndex > currentLegIndex
+  if (match.legIndex <= currentLegIndex) return false
+  if (!gate) return true
+
+  const { boardEpoch, isRiding, nowMs, targetLeg } = gate
+
+  // Aboard is aboard: the riding state is the stronger fact and outranks the
+  // clock, which is what lets a rider who caught an earlier run move on.
+  if (isRiding) return true
+
+  // Callers that supply no clock or no leg keep the old index-order behaviour.
+  if (!targetLeg || nowMs == null) return true
+  if (!legIsTransit(targetLeg)) return true
+
+  // Prefer the live board time; a bus running late should not pull the rider
+  // onto its leg on the strength of the plan alone.
+  const board = Number(boardEpoch ?? targetLeg.startTime)
+  if (!Number.isFinite(board)) return true
+
+  return nowMs >= board - TRANSIT_BOARD_EARLY_MS
 }

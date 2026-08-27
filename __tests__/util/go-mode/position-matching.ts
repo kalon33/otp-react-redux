@@ -209,5 +209,100 @@ describe('util > go-mode > position-matching', () => {
     it('should return false when on the last leg', () => {
       expect(shouldTransitionToNextLeg(matchOn(2, 0.99), 2)).toBe(false)
     })
+
+    describe('the transit board-time gate', () => {
+      const NOW = new Date('2026-08-27T18:19:43Z').getTime()
+      const busLeg = (startTime: number) =>
+        ({
+          mode: 'BUS',
+          routeShortName: '465',
+          startTime,
+          to: { name: '2 Av S at 6 St S NE corner' },
+          transitLeg: true
+        } as any)
+      const walkLeg = {
+        mode: 'WALK',
+        to: { name: 'I-35W & 98th Street Station Gate E' }
+      } as any
+
+      // 2026-08-27: Go Mode started on a trip whose 465 boarded at 20:17Z. The
+      // rider was standing at the boarding stop, which is the shared endpoint
+      // of the access and transit legs, so the matcher returned leg 1 — and
+      // 82ms after START_GO_MODE the trip advanced onto a bus two hours out.
+      it('should not board a transit leg that is hours away', () => {
+        const board = new Date('2026-08-27T20:17:00Z').getTime()
+        expect(
+          shouldTransitionToNextLeg(matchOn(1, 0.01), 0, {
+            nowMs: NOW,
+            targetLeg: busLeg(board)
+          })
+        ).toBe(false)
+      })
+
+      it('should board once the departure is at hand', () => {
+        const board = NOW + 4 * 60 * 1000
+        expect(
+          shouldTransitionToNextLeg(matchOn(1, 0.01), 0, {
+            nowMs: NOW,
+            targetLeg: busLeg(board)
+          })
+        ).toBe(true)
+      })
+
+      it('should let the riding state override the clock', () => {
+        // A rider who caught an earlier run is aboard whatever the plan says.
+        const board = new Date('2026-08-27T20:17:00Z').getTime()
+        expect(
+          shouldTransitionToNextLeg(matchOn(1, 0.01), 0, {
+            isRiding: true,
+            nowMs: NOW,
+            targetLeg: busLeg(board)
+          })
+        ).toBe(true)
+      })
+
+      it('should prefer the live board time over the plan', () => {
+        // Plan says now; the feed says the bus is an hour late. Don't advance.
+        expect(
+          shouldTransitionToNextLeg(matchOn(1, 0.01), 0, {
+            boardEpoch: NOW + 60 * 60 * 1000,
+            nowMs: NOW,
+            targetLeg: busLeg(NOW)
+          })
+        ).toBe(false)
+      })
+
+      it('should never gate a walking leg on a board time', () => {
+        expect(
+          shouldTransitionToNextLeg(matchOn(1, 0.01), 0, {
+            nowMs: NOW,
+            targetLeg: walkLeg
+          })
+        ).toBe(true)
+      })
+
+      it('should keep index-order behaviour when the caller supplies no gate', () => {
+        const board = new Date('2026-08-27T20:17:00Z').getTime()
+        expect(shouldTransitionToNextLeg(matchOn(1, 0.01), 0)).toBe(true)
+        expect(
+          shouldTransitionToNextLeg(matchOn(1, 0.01), 0, {
+            targetLeg: busLeg(board)
+          })
+        ).toBe(true)
+      })
+
+      it('should advance when the leg has no usable start time', () => {
+        expect(
+          shouldTransitionToNextLeg(matchOn(1, 0.01), 0, {
+            nowMs: NOW,
+            targetLeg: {
+              mode: 'BUS',
+              to: { name: 'x' },
+              transitLeg: true
+            } as any
+          })
+        ).toBe(true)
+      })
+    })
   })
 })

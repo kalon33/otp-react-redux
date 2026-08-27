@@ -3080,7 +3080,12 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     // cannot carry that fact itself.
     const previousLegIndex = goMode.routeMatch?.legIndex || 0
     if (
-      shouldTransitionToNextLeg(routeMatch, previousLegIndex) &&
+      shouldTransitionToNextLeg(routeMatch, previousLegIndex, {
+        boardEpoch: goMode.liveLegTimes?.[routeMatch.legIndex]?.boardEpoch,
+        isRiding: riding?.legIndex === routeMatch.legIndex,
+        nowMs: getCurrentTime().getTime(),
+        targetLeg: matchedLeg
+      }) &&
       routeMatch.legIndex !== session.lastTransitionedLegIndex
     ) {
       dispatch(advanceToLeg(routeMatch.legIndex))
