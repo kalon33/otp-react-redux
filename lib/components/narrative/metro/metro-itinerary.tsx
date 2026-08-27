@@ -43,6 +43,7 @@ import DepartureTimesList, {
 } from './departure-times-list'
 import MetroItineraryRoutes from './metro-itinerary-routes'
 import RouteBlock from './route-block'
+import SameShapeVariants from './same-shape-variants'
 
 const { ensureAtLeastOneMinute } = coreUtils.time
 
@@ -568,6 +569,10 @@ class MetroItinerary extends NarrativeItinerary {
                       </>
                     )}
                   </span>
+                  <SameShapeVariants
+                    itinerary={itinerary}
+                    setActiveItinerary={setActiveItinerary}
+                  />
                   {showInlineItinerarySummary && (
                     <>
                       {' '}

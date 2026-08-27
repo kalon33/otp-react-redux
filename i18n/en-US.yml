@@ -339,8 +339,12 @@ components:
     multipleOptions: Multiple Options
     orAlternatives: or other routes in the same direction
     originallyScheduledTime: (originally {originalTime})
+    sameShapeVariants: "{count, plural, one {# option} other {# options}}"
     singleModeItineraryDescription: "{time} {mode} itinerary"
     timeWalking: "{time} walking"
+    variantBiking: "{distance} biking"
+    variantShown: currently shown
+    variantWalking: "{distance} walking"
   MobilityProfile:
     DevicesPane:
       devices:
