@@ -10,6 +10,7 @@ import {
   checkUpcomingTurn,
   classifyMissedBus,
   getEffectiveBoardTimeMs,
+  resetConnectionWarnings,
   resetTurnAnnouncements,
   shouldAutoReroute,
   triggerVibration,
@@ -34,10 +35,12 @@ const makeConfig = (overrides: Record<string, any> = {}) => ({
 })
 
 describe('util > go-mode > notification-service', () => {
-  // The turn latch lives for the life of a leg OBJECT; these tests reuse a
-  // handful of leg literals across cases, so clear it between them.
+  // The turn latch and the connection-warning baseline both live for the life
+  // of a leg OBJECT; these tests reuse a handful of leg literals across cases,
+  // so clear them between them.
   beforeEach(() => {
     resetTurnAnnouncements()
+    resetConnectionWarnings()
   })
 
   describe('wasRecentlySent', () => {
@@ -663,6 +666,70 @@ describe('util > go-mode > notification-service', () => {
     })
   })
 
+  describe('checkDelayAlert staleness', () => {
+    // 2026-08-27: "94 is running about 3 min late" fired 64 seconds after the
+    // rider stepped off the 94 at Rice Park. matchPositionToRoute only searches
+    // forward, so between physically alighting and the leg transition firing,
+    // the finished bus leg keeps accruing delay.
+    const busLeg = {
+      mode: 'BUS',
+      routeShortName: '94',
+      to: { name: 'Rice' }
+    } as any
+    const bikeLeg = { mode: 'BICYCLE', to: { name: 'Helmo' } } as any
+
+    it('stays quiet about a leg the rider has already left', () => {
+      expect(
+        checkDelayAlert(
+          makeProgress({ currentLegIndex: 3, delay: 240 }),
+          busLeg,
+          [],
+          [bikeLeg, bikeLeg, busLeg, bikeLeg] // rider is on leg 3 now
+        )
+      ).toBeNull()
+    })
+
+    it('still alerts about the leg the rider IS on', () => {
+      const alert = checkDelayAlert(
+        makeProgress({
+          currentLegIndex: 2,
+          currentLegProgress: 40,
+          delay: 240
+        }),
+        busLeg,
+        [],
+        [bikeLeg, bikeLeg, busLeg, bikeLeg]
+      )
+      expect(alert).not.toBeNull()
+      expect(alert!.message).toContain('94')
+    })
+
+    it('stays quiet once the leg is essentially over', () => {
+      expect(
+        checkDelayAlert(
+          makeProgress({
+            currentLegIndex: 2,
+            currentLegProgress: 99.5,
+            delay: 240
+          }),
+          busLeg,
+          [],
+          [bikeLeg, bikeLeg, busLeg, bikeLeg]
+        )
+      ).toBeNull()
+    })
+
+    it('is unchanged when the caller supplies no legs', () => {
+      expect(
+        checkDelayAlert(
+          makeProgress({ currentLegIndex: 2, delay: 240 }),
+          busLeg,
+          []
+        )
+      ).not.toBeNull()
+    })
+  })
+
   describe('checkTripComplete', () => {
     it('should return notification when status is completed', () => {
       const progress = makeProgress({
@@ -721,6 +788,60 @@ describe('util > go-mode > notification-service', () => {
         startTime: T + 900000
       }
     ] as any[]
+
+    // 2026-08-27, Rice Park: the rider was warned FOUR times about the same
+    // Gold Line connection — "about 56s", 102s, 120s, then 19s — and three of
+    // those fired while the margin was IMPROVING as they closed on the stop.
+    // Slack is recomputed every tick from progress.delay, which swings, and
+    // nothing remembered what had already been said. The 120s dedup window is
+    // exactly CONNECTION_SLACK_THRESHOLD_SECONDS, so it re-armed as fast as
+    // the situation could change.
+    it('warns once, then stays quiet while the margin recovers', () => {
+      // Slack here = 300s - delay - 120s transfer. delay 240 -> 60s slack.
+      const warn = checkConnectionWarning(
+        makeProgress({ currentLegIndex: 0, delay: 240 }),
+        connectionLegs,
+        0,
+        []
+      )
+      expect(warn).not.toBeNull()
+
+      // Margin improving: 120s, then 150s of slack. Neither is news.
+      expect(
+        checkConnectionWarning(
+          makeProgress({ currentLegIndex: 0, delay: 180 }),
+          connectionLegs,
+          0,
+          []
+        )
+      ).toBeNull()
+      expect(
+        checkConnectionWarning(
+          makeProgress({ currentLegIndex: 0, delay: 150 }),
+          connectionLegs,
+          0,
+          []
+        )
+      ).toBeNull()
+    })
+
+    it('warns again once the margin genuinely deteriorates', () => {
+      checkConnectionWarning(
+        makeProgress({ currentLegIndex: 0, delay: 240 }), // 60s slack
+        connectionLegs,
+        0,
+        []
+      )
+      // Down to 15s of slack — a real worsening, worth saying.
+      const worse = checkConnectionWarning(
+        makeProgress({ currentLegIndex: 0, delay: 285 }),
+        connectionLegs,
+        0,
+        []
+      )
+      expect(worse).not.toBeNull()
+      expect(worse!.type).toBe('CONNECTION_WARNING')
+    })
 
     it('should warn when the connection will be missed', () => {
       // 10 min late: projected arrival (+20min) is past the +15min departure

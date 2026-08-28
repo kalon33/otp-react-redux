@@ -821,6 +821,22 @@ function connectionWarningCopy(
  * own real-time delay is not yet accounted for — the warning is therefore
  * conservative and may over-warn if the connection is also late).
  */
+/** How much the margin must deteriorate before the rider is told again. */
+const CONNECTION_REWARN_WORSEN_SECONDS = 30
+
+interface ConnectionWarnState {
+  warnedSlackSeconds: number
+}
+let connectionWarnState = new WeakMap<Leg, ConnectionWarnState>()
+
+/**
+ * Drop every connection's warned-margin baseline. Test-only, exactly like
+ * resetTurnAnnouncements: in production the lifetime is the leg object.
+ */
+export function resetConnectionWarnings(): void {
+  connectionWarnState = new WeakMap<Leg, ConnectionWarnState>()
+}
+
 export function checkConnectionWarning(
   progress: TripProgress,
   legs: Leg[],
@@ -860,6 +876,30 @@ export function checkConnectionWarning(
 
   if (wasRecentlySent(id, sentNotifications, 120000)) return null
 
+  // Only warn again when the margin has actually got WORSE.
+  //
+  // Slack is recomputed from scratch every tick out of progress.delay, which
+  // swings tick to tick, and nothing remembered what had already been said. On
+  // 2026-08-27 the rider was warned four times about the same Gold Line
+  // connection at Rice Park — "about 56s", then 102s, then 120s, then 19s —
+  // three of them while the margin was IMPROVING as they closed on the stop.
+  // The 120s dedup window could not help: it is exactly
+  // CONNECTION_SLACK_THRESHOLD_SECONDS, so the alert re-armed as fast as the
+  // situation could change.
+  //
+  // State is keyed on the connecting leg object, the same trick
+  // resetTurnAnnouncements uses: a new itinerary means new legs, so a swap
+  // clears the baseline without anything having to remember to.
+  const previouslyWarned = connectionWarnState.get(nextTransitLeg)
+  if (
+    previouslyWarned &&
+    slackSeconds >
+      previouslyWarned.warnedSlackSeconds - CONNECTION_REWARN_WORSEN_SECONDS
+  ) {
+    return null
+  }
+  connectionWarnState.set(nextTransitLeg, { warnedSlackSeconds: slackSeconds })
+
   const { message, title } = connectionWarningCopy(
     routeName,
     stopName,
@@ -892,9 +932,25 @@ const DELAY_ALERT_THRESHOLD_SECONDS = 180
 export function checkDelayAlert(
   progress: TripProgress,
   currentLeg: Leg,
-  sentNotifications: string[]
+  sentNotifications: string[],
+  /** Legs of the active itinerary, so the alert can tell it is still on one. */
+  legs?: Leg[]
 ): NotificationEvent | null {
   if (!isTransitMode(currentLeg.mode)) return null
+
+  // Is this leg still the one the rider is on?
+  //
+  // The function's whole world was progress.delay and whatever leg it was
+  // handed, so it could not tell a bus the rider is sitting on from one they
+  // have already left. matchPositionToRoute only searches forward, so between
+  // physically stepping off and the leg transition firing, the finished bus
+  // leg keeps accruing delay — and on 2026-08-27 it announced "94 is running
+  // about 3 min late" 64 seconds AFTER the rider got off it at Rice Park.
+  if (legs && legs[progress.currentLegIndex] !== currentLeg) return null
+
+  // Near the end of a leg the rider is arriving, not riding: a delay they can
+  // no longer do anything about is noise.
+  if ((progress.currentLegProgress ?? 0) >= 99) return null
 
   const delaySeconds = progress.delay ?? 0
   if (delaySeconds < DELAY_ALERT_THRESHOLD_SECONDS) return null
@@ -1026,7 +1082,7 @@ export function checkForNotifications(
   if (!connectionWarning) {
     pushIf(
       notifications,
-      checkDelayAlert(progress, currentLeg, sentNotifications)
+      checkDelayAlert(progress, currentLeg, sentNotifications, legs)
     )
   }
 
