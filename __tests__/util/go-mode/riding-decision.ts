@@ -1,6 +1,7 @@
 import {
   decideRiding,
   firstEstablishmentIsCorroborated,
+  RIDING_ESTABLISH_MAX_DISTANCE_M,
   RIDING_ESTABLISH_MIN_SPEED_MPS,
   RIDING_MIN_PROGRESS
 } from '../../../lib/util/go-mode/riding'
@@ -89,6 +90,73 @@ describe('util > go-mode > riding decision', () => {
         }
       })
       expect(d.kind).toBe('set')
+    })
+  })
+
+  describe('the 2026-08-27 parallel-street false boarding', () => {
+    // The morning ride: a rider BIKING to the stop on a street 248m from the
+    // 539's shape. The matcher's transit corridor is 250m — deliberately wide,
+    // sparse polylines demand it — so isOnRoute flipped true, progress crept
+    // past RIDING_MIN_PROGRESS, and GPS alone declared them aboard. That armed
+    // a boarded-earlier auto-replan which deleted the bike leg they were
+    // actually riding. Establishment from GPS alone now has to be near the
+    // shape; a trusted vehicle match, and any fact already held, do not.
+    it('refuses to establish from GPS alone at the corridor edge', () => {
+      const d = decide({
+        routeMatch: onLeg({ distanceFromRoute: 248, progressAlongLeg: 0.12 }),
+        vehicleMatch: null
+      })
+      expect(d.kind).toBe('none')
+    })
+
+    it('establishes from GPS alone close to the shape', () => {
+      const d = decide({
+        routeMatch: onLeg({
+          distanceFromRoute: RIDING_ESTABLISH_MAX_DISTANCE_M - 60,
+          progressAlongLeg: 0.12
+        }),
+        vehicleMatch: null
+      })
+      expect(d.kind).toBe('set')
+    })
+
+    it('lets a trusted vehicle match establish even at the corridor edge', () => {
+      // The boarded-earlier rescue: a confirmed match on the planned trip is
+      // direct evidence and must not be blocked by projection distance.
+      const d = decide({
+        routeMatch: onLeg({ distanceFromRoute: 248, progressAlongLeg: 0.12 }),
+        vehicleMatch: {
+          consecutiveMatches: 3,
+          match: match({
+            tripHeadsign: 'Downtown St Paul',
+            tripId: '1:1177858'
+          })
+        }
+      })
+      expect(d.kind).toBe('set')
+    })
+
+    it('keeps refreshing a held fact anywhere inside the wide corridor', () => {
+      // Retention is exempt: a rider already aboard projecting 200m from a
+      // sparse shape must keep the fact fresh (and clear a stale offRouteSince
+      // stamp), or the sustained-off-route timer inherits bogus elapsed time.
+      const prev = {
+        boardedAt: NOW - 600000,
+        headsign: 'Downtown St Paul',
+        legIndex: 2,
+        offRouteSince: NOW - 60000,
+        routeId: '1:94',
+        routeShortName: '94',
+        tripId: '1:1177858',
+        vehicleId: '1:1786'
+      }
+      const d = decide({
+        prevRiding: prev,
+        routeMatch: onLeg({ distanceFromRoute: 200, progressAlongLeg: 0.4 }),
+        vehicleMatch: null
+      })
+      expect(d.kind).toBe('set')
+      expect(d.kind === 'set' && d.riding.offRouteSince).toBeNull()
     })
   })
 

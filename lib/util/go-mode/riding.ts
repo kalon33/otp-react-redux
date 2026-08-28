@@ -18,6 +18,21 @@ import type { VehicleMatchResult } from './vehicle-matching'
 export const RIDING_MIN_PROGRESS = 0.05
 
 /**
+ * GPS alone may only ESTABLISH riding within this distance of the leg's shape.
+ *
+ * The matcher's transit corridor is 250m because sparse polylines demand it —
+ * but that is a statement about the match being usable, not about the rider
+ * being on a bus. On 2026-08-27 a rider biking a street 248m from a parallel
+ * bus route crossed RIDING_MIN_PROGRESS and was declared aboard, which armed a
+ * boarded-earlier auto-replan that threw away the bike leg they were actually
+ * on. A trusted vehicle match is exempt: it is direct evidence, and it is what
+ * keeps the boarded-earlier rescue working. Retention is also exempt — a rider
+ * already established keeps the wide corridor, so an urban canyon does not
+ * shed the fact (only the sustained off-route timer does).
+ */
+export const RIDING_ESTABLISH_MAX_DISTANCE_M = 100
+
+/**
  * Rider ground speed that corroborates "I am on a moving vehicle" when nothing
  * else does. Deliberately above a brisk walk and below traffic speed: the point
  * is only to separate a rider standing at a kerb from one being carried.
@@ -142,8 +157,15 @@ export function decideRiding(input: RidingDecisionInput): RidingDecision {
   const match = vehicleMatch?.match ?? null
   const vehicleTrusted =
     match?.confidence === 'confirmed' || match?.confidence === 'high'
-  const aboard =
-    vehicleTrusted || routeMatch.progressAlongLeg >= RIDING_MIN_PROGRESS
+  // A fact already held keeps the matcher's wide corridor — refreshes and the
+  // offRouteSince reset must not pause just because the rider projects far
+  // from a sparse shape. Only a NEW claim of aboard-ness from GPS alone has to
+  // meet the tight distance.
+  const gpsPlausiblyAboard =
+    routeMatch.progressAlongLeg >= RIDING_MIN_PROGRESS &&
+    (prevRiding != null ||
+      routeMatch.distanceFromRoute <= RIDING_ESTABLISH_MAX_DISTANCE_M)
+  const aboard = vehicleTrusted || gpsPlausiblyAboard
   if (!aboard) return { kind: 'none' }
 
   // The trip the rider is ACTUALLY on: a trusted vehicle match knows its

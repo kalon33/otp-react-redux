@@ -1,7 +1,10 @@
 import type { Leg } from '@opentripplanner/types'
 
 import { asContinuation, formatCueDistance } from './turn-by-turn'
-import { calculateDistance } from './position-matching'
+import {
+  calculateDistance,
+  MATCH_CORRIDOR_TRANSIT_M
+} from './position-matching'
 import { hasArrivedAtDestination } from './progress-calculator'
 import {
   VEHICLE_AT_BOARD_STOP_M,
@@ -733,7 +736,19 @@ export function checkRouteDeviation(
   // every extra second spent off-route is another block to backtrack — so react
   // sooner. Still generous enough to absorb GPS scatter and a parallel bike
   // path running alongside the planned street.
-  const threshold = currentLeg?.mode === 'BICYCLE' ? 120 : 200
+  //
+  // On a transit leg the threshold is the matcher's own corridor: on
+  // 2026-08-27 the matcher said on-route at 248m while this check pushed
+  // "you are 239m from the planned route" — two answers to the same question,
+  // 9m apart. Pushing "off route" while the matcher holds isOnRoute is the one
+  // forbidden disagreement; walk/bike merely being more patient than the 100m
+  // corridor is fine.
+  const threshold =
+    currentLeg?.mode === 'BICYCLE'
+      ? 120
+      : isTransitMode(currentLeg?.mode)
+      ? MATCH_CORRIDOR_TRANSIT_M
+      : 200
 
   if (distanceFromRoute > threshold) {
     // Stable context: the measured distance changes every GPS tick, so it must

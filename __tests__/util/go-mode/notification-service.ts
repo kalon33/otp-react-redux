@@ -646,6 +646,22 @@ describe('util > go-mode > notification-service', () => {
       ).toBeNull()
     })
 
+    it('never pushes off-route while the matcher still says on-route', () => {
+      // 2026-08-27, 13:14:02-04: the matcher held isOnRoute at 248m (its
+      // transit corridor is 250m) while this check pushed "You are 239m from
+      // the planned route". One question, two answers, 9m apart. The transit
+      // threshold is now the matcher's own corridor.
+      const busLeg = { mode: 'BUS' } as any
+      expect(checkRouteDeviation(239, [], busLeg)).toBeNull()
+      expect(checkRouteDeviation(250, [], busLeg)).toBeNull()
+    })
+
+    it('still flags a genuine deviation beyond the transit corridor', () => {
+      const result = checkRouteDeviation(260, [], { mode: 'BUS' } as any)
+      expect(result).not.toBeNull()
+      expect(result!.type).toBe('ROUTE_DEVIATION')
+    })
+
     it('should dedup repeated deviations even as the distance changes', () => {
       const sent: string[] = []
       let fired = 0

@@ -168,6 +168,16 @@ export interface RouteMatchResult {
  */
 export const BACKWARD_JUMP_HYSTERESIS_M = 5
 
+// These corridors answer "is this match usable", nothing more. Transit shapes
+// are sparse enough that a rider genuinely aboard can project 200m+ from the
+// polyline, so the corridor must stay wide — but that makes isOnRoute far too
+// weak to mean "plausibly aboard this vehicle". Anything deciding aboard-ness
+// or off-route-ness needs its own, tighter figure (see riding.ts and
+// checkRouteDeviation), derived from or reconciled with these so the matcher
+// and its consumers can never disagree about the same metre.
+export const MATCH_CORRIDOR_TRANSIT_M = 250
+export const MATCH_CORRIDOR_ACTIVE_M = 100
+
 export function matchPositionToRoute(
   currentPosition: LatLngArray,
   legs: Leg[],
@@ -229,7 +239,9 @@ export function matchPositionToRoute(
 
         // Use wider threshold for transit legs (sparser polylines)
         const isTransitLeg = leg.mode !== 'WALK' && leg.mode !== 'BICYCLE'
-        const onRouteThreshold = isTransitLeg ? 250 : 100
+        const onRouteThreshold = isTransitLeg
+          ? MATCH_CORRIDOR_TRANSIT_M
+          : MATCH_CORRIDOR_ACTIVE_M
 
         const progressAlongLeg =
           totalLegDistance > 0 ? totalDistanceAlongLeg / totalLegDistance : 0
