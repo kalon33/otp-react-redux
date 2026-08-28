@@ -29,6 +29,7 @@ import {
   getNextStopOnRide
 } from '../util/go-mode/next-stop'
 import {
+  checkBoardVehicleApproach,
   checkForNotifications,
   checkMissedBus,
   classifyMissedBus,
@@ -2794,6 +2795,11 @@ const PUSH_NOTIFICATION_TYPES = new Set<NotificationType>([
   'CONNECTION_WARNING',
   'ARRIVING_STOP',
   'MISSED_BUS',
+  // The rider's own bus closing on the boarding stop while they are still
+  // walking or biking to it. Both stages are act-now: the rider asked to be
+  // told, and a toast they cannot see from the pavement tells nobody.
+  'BOARD_BUS_APPROACHING',
+  'BOARD_BUS_ARRIVING',
   // The bus moved while the rider was on their way to it — the one thing they
   // cannot see from the pavement, and the reason they asked for this.
   'DEPARTURE_CHANGED',
@@ -3308,6 +3314,27 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       session.lastLiveLegTimesAt = nowMs
       dispatch(refreshLiveLegTimes())
 
+      // While the rider is on an access leg nothing else polls the boarding
+      // route's vehicles — startVehicleTracking runs only on transit legs —
+      // so the board-vehicle alert below would starve without its own poll.
+      // Same 20s cadence as the rest of this block; the api layer's URL
+      // throttle absorbs any overlap. Read-only: no vehicle MATCHING happens
+      // while walking, this only fills the store the alert reads from.
+      const accessLegNow: any = itinerary.legs[routeMatch.legIndex]
+      if (accessLegNow?.mode === 'WALK' || accessLegNow?.mode === 'BICYCLE') {
+        const pollBoardLegIndex = findBoardLegIndex(
+          itinerary.legs,
+          routeMatch.legIndex
+        )
+        const pollBoardRouteId =
+          pollBoardLegIndex >= 0
+            ? getLegRouteId(itinerary.legs[pollBoardLegIndex])
+            : null
+        if (pollBoardRouteId) {
+          dispatch(getVehiclePositionsForRoute(pollBoardRouteId))
+        }
+      }
+
       // Auto-anchor: while walking/biking toward a transit boarding, target the
       // soonest same-route departure the rider can actually catch — the planned
       // itinerary may board a much later trip, and the wait/notification math
@@ -3450,22 +3477,25 @@ export function handlePositionUpdate(position: GeolocationPosition) {
           currentTime.getTime()
         )
       : null
+    // One reading of the planned trip's vehicle, shared by the missed-bus
+    // classifier and the board-vehicle alert so they judge the same evidence.
+    const boardVehicleInfo = boardVehicleRecord
+      ? {
+          ageSec: boardVehicleRecord.ageSec,
+          distanceToBoardStopM:
+            boardLeg?.from?.lat != null && boardLeg?.from?.lon != null
+              ? calculateDistance(
+                  boardVehicleRecord.vehicle.lat,
+                  boardVehicleRecord.vehicle.lon,
+                  boardLeg.from.lat,
+                  boardLeg.from.lon
+                )
+              : null,
+          nextStopId: boardVehicleRecord.vehicle.nextStopId ?? null
+        }
+      : null
     const missedCtx = classifyMissedBus({
-      boardVehicle: boardVehicleRecord
-        ? {
-            ageSec: boardVehicleRecord.ageSec,
-            distanceToBoardStopM:
-              boardLeg?.from?.lat != null && boardLeg?.from?.lon != null
-                ? calculateDistance(
-                    boardVehicleRecord.vehicle.lat,
-                    boardVehicleRecord.vehicle.lon,
-                    boardLeg.from.lat,
-                    boardLeg.from.lon
-                  )
-                : null,
-            nextStopId: boardVehicleRecord.vehicle.nextStopId ?? null
-          }
-        : null,
+      boardVehicle: boardVehicleInfo,
       currentLegIndex: routeMatch.legIndex,
       departureOverrideMs: departureOverride,
       legs: itinerary.legs,
@@ -3484,6 +3514,35 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         goMode.notifications?.sentNotifications || []
       )
     if (missedEvent) notifications.push(missedEvent)
+
+    // "Your bus is coming", while the rider walks or bikes to the stop —
+    // rider-requested from the kerb on 2026-08-27. Judged out here for the
+    // same reason as missed-bus, on the same vehicle reading; skipped on a
+    // tick that raised MISSED_BUS, which owns the bus-already-gone story, and
+    // once riding is established there is nothing left to announce.
+    if (
+      !missedEvent &&
+      !goMode.riding &&
+      boardLeg &&
+      routeMatch.legIndex < boardLegIndex &&
+      (currentLeg?.mode === 'WALK' || currentLeg?.mode === 'BICYCLE')
+    ) {
+      const liveBoardForAlert = goMode.liveLegTimes?.[boardLegIndex]
+      const boardAlert = checkBoardVehicleApproach(
+        boardLeg,
+        {
+          liveBoardEpochMs:
+            liveBoardForAlert?.boardRealtime &&
+            liveBoardForAlert.boardEpoch != null
+              ? liveBoardForAlert.boardEpoch
+              : null,
+          nowMs: currentTime.getTime(),
+          vehicle: boardVehicleInfo
+        },
+        goMode.notifications?.sentNotifications || []
+      )
+      if (boardAlert) notifications.push(boardAlert)
+    }
 
     // Has the bus the rider is travelling toward moved? Judged out here rather
     // than inside checkForNotifications because the answer needs a baseline

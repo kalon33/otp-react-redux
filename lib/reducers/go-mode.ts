@@ -674,15 +674,21 @@ const goMode = handleActions<GoModeState, any>(
         notifications: {
           ...state.notifications,
           recentNotifications: [],
-          // Alight alerts are keyed to the physical exit STOP, and they alone
-          // survive a trip swap: a background auto-update re-enters here with a
-          // new itinerary, and wiping their history let the same stop buzz the
-          // rider a second time — the complaint this whole path exists to fix.
-          // Everything else (boarding, connections, turns) is about the trip
-          // that just changed and must be free to fire again.
+          // Alight and board-vehicle alerts are keyed to a physical stop (and,
+          // for boarding, the trip), and they alone survive a trip swap: a
+          // background auto-update re-enters here with a new itinerary, and
+          // wiping their history let the same stop buzz the rider a second
+          // time — the complaint this whole path exists to fix. A re-plan onto
+          // a DIFFERENT run still re-arms the board alerts, because the trip
+          // id is part of their key. Everything else (boarding prompts,
+          // connections, turns) is about the trip that just changed and must
+          // be free to fire again.
           sentNotifications: state.notifications.sentNotifications.filter(
             (id) =>
-              id.startsWith('APPROACH_STOP_') || id.startsWith('ARRIVING_STOP_')
+              id.startsWith('APPROACH_STOP_') ||
+              id.startsWith('ARRIVING_STOP_') ||
+              id.startsWith('BOARD_BUS_APPROACHING_') ||
+              id.startsWith('BOARD_BUS_ARRIVING_')
           )
         },
         originalFrom: originalFrom ?? null,

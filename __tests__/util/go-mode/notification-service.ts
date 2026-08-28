@@ -1,5 +1,8 @@
 import {
+  BOARD_APPROACH_METRES,
+  BOARD_ARRIVE_METRES,
   checkAlightAlerts,
+  checkBoardVehicleApproach,
   checkConnectionWarning,
   checkDelayAlert,
   checkForNotifications,
@@ -679,6 +682,153 @@ describe('util > go-mode > notification-service', () => {
     it('should fire again after the 120s window expires', () => {
       const staleId = `ROUTE_DEVIATION_deviation_${Date.now() - 121000}`
       expect(checkRouteDeviation(250, [staleId])).not.toBeNull()
+    })
+  })
+
+  describe('checkBoardVehicleApproach', () => {
+    // The rider's planned boarding: the 465 at I-35W & 98th St, with two more
+    // stops before their exit. orderedStopsOnLeg = intermediates + alight (the
+    // board stop is leg.from), so a vehicle nextStopId found on the leg means
+    // the bus is already PAST the boarding.
+    const boardLeg: any = {
+      from: {
+        lat: 44.865,
+        lon: -93.3,
+        name: 'I-35W & 98th St Station',
+        stop: { gtfsId: '1:board-stop' }
+      },
+      intermediatePlaces: [
+        {
+          lat: 44.9,
+          lon: -93.29,
+          name: 'Mid stop',
+          stop: { gtfsId: '1:mid-stop' }
+        }
+      ],
+      mode: 'BUS',
+      routeShortName: '465',
+      to: {
+        lat: 44.97,
+        lon: -93.27,
+        name: 'Downtown',
+        stop: { gtfsId: '1:alight-stop' }
+      },
+      trip: { gtfsId: '1:trip-465' }
+    }
+    const NOW = 1787852667000
+    const vehicle = (over: any = {}) => ({
+      ageSec: 10,
+      distanceToBoardStopM: 5000,
+      nextStopId: null,
+      ...over
+    })
+    const check = (vehicleOver: any, ctxOver: any = {}, sent: string[] = []) =>
+      checkBoardVehicleApproach(
+        boardLeg,
+        {
+          liveBoardEpochMs: null,
+          nowMs: NOW,
+          vehicle: vehicleOver === null ? null : vehicle(vehicleOver),
+          ...ctxOver
+        },
+        sent
+      )
+
+    it('says nothing without a vehicle record — schedule times fire nothing', () => {
+      expect(check(null)).toBeNull()
+      expect(check(null, { liveBoardEpochMs: NOW + 60000 })).toBeNull()
+    })
+
+    it('says nothing on a stale record', () => {
+      expect(
+        check({ ageSec: 300, distanceToBoardStopM: BOARD_ARRIVE_METRES - 50 })
+      ).toBeNull()
+    })
+
+    it('stays quiet while the bus is still far out with no live prediction', () => {
+      expect(
+        check({ distanceToBoardStopM: BOARD_APPROACH_METRES + 500 })
+      ).toBeNull()
+    })
+
+    it('raises the heads-up when the bus closes on the stop', () => {
+      const event = check({ distanceToBoardStopM: 1200 })
+      expect(event).not.toBeNull()
+      expect(event!.type).toBe('BOARD_BUS_APPROACHING')
+      expect(event!.message).toContain('465')
+      expect(event!.message).toContain('I-35W & 98th St Station')
+    })
+
+    it('raises the heads-up off a live board prediction inside the window', () => {
+      const event = check(
+        { distanceToBoardStopM: null },
+        { liveBoardEpochMs: NOW + 120000 }
+      )
+      expect(event).not.toBeNull()
+      expect(event!.type).toBe('BOARD_BUS_APPROACHING')
+    })
+
+    it('escalates to arriving at the stop — by next-stop fact or distance', () => {
+      const byNextStop = check({ nextStopId: '1:board-stop' })
+      expect(byNextStop!.type).toBe('BOARD_BUS_ARRIVING')
+      expect(byNextStop!.priority).toBe('high')
+      const byDistance = check({
+        distanceToBoardStopM: BOARD_ARRIVE_METRES - 50
+      })
+      expect(byDistance!.type).toBe('BOARD_BUS_ARRIVING')
+    })
+
+    it('fires each stage exactly once across a full approach', () => {
+      const sent: string[] = []
+      const fired: string[] = []
+      // 2.4km out to at-the-stop, 100m per tick.
+      for (let d = 2400; d >= 0; d -= 100) {
+        const event = check({ distanceToBoardStopM: d }, {}, sent)
+        if (event) {
+          fired.push(event.type)
+          sent.push(event.id)
+        }
+      }
+      expect(fired).toEqual(['BOARD_BUS_APPROACHING', 'BOARD_BUS_ARRIVING'])
+    })
+
+    it('says nothing about a bus already past the boarding stop', () => {
+      // The vehicle's own next stop is beyond the boarding — been and gone.
+      // MISSED_BUS owns that story; "your bus is arriving" would be a lie.
+      expect(
+        check({ distanceToBoardStopM: 200, nextStopId: '1:mid-stop' })
+      ).toBeNull()
+      expect(
+        check({ distanceToBoardStopM: 200, nextStopId: '1:alight-stop' })
+      ).toBeNull()
+    })
+
+    it('re-arms for a different run: the trip id is part of the key', () => {
+      const first = check({ distanceToBoardStopM: 1200 })!
+      // A re-plan onto a later run of the same route at the same stop.
+      const laterRunLeg = { ...boardLeg, trip: { gtfsId: '1:trip-465-later' } }
+      const again = checkBoardVehicleApproach(
+        laterRunLeg,
+        {
+          liveBoardEpochMs: null,
+          nowMs: NOW,
+          vehicle: vehicle({ distanceToBoardStopM: 1200 })
+        },
+        [first.id]
+      )
+      expect(again).not.toBeNull()
+      // While the SAME trip after an itinerary swap stays deduped.
+      expect(
+        checkBoardVehicleApproach(
+          boardLeg,
+          {
+            liveBoardEpochMs: null,
+            nowMs: NOW,
+            vehicle: vehicle({ distanceToBoardStopM: 1200 })
+          },
+          [first.id]
+        )
+      ).toBeNull()
     })
   })
 

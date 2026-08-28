@@ -24,6 +24,35 @@ const riding: RidingState = {
   vehicleId: 'v-42'
 }
 
+describe('START_GO_MODE swap-exemption for stop-keyed alerts', () => {
+  it('keeps alight and board-vehicle ids, frees everything else to re-fire', () => {
+    const withSent = {
+      ...initial,
+      notifications: {
+        ...initial.notifications,
+        sentNotifications: [
+          'APPROACH_STOP_1:stop_prepare_123',
+          'ARRIVING_STOP_1:stop_act_123',
+          'BOARD_BUS_APPROACHING_1:stop_1:trip_approaching_123',
+          'BOARD_BUS_ARRIVING_1:stop_1:trip_arriving_123',
+          'LEAVE_SOON_leg1_123',
+          'ROUTE_DEVIATION_deviation_123'
+        ]
+      }
+    } as any
+    const next = goMode(
+      withSent,
+      startGoMode({ itinerary: { legs: [] } as any })
+    )
+    expect(next.notifications.sentNotifications).toEqual([
+      'APPROACH_STOP_1:stop_prepare_123',
+      'ARRIVING_STOP_1:stop_act_123',
+      'BOARD_BUS_APPROACHING_1:stop_1:trip_approaching_123',
+      'BOARD_BUS_ARRIVING_1:stop_1:trip_arriving_123'
+    ])
+  })
+})
+
 describe('go-mode riding reducer', () => {
   it('starts with no riding fact', () => {
     expect(initial.riding).toBeNull()

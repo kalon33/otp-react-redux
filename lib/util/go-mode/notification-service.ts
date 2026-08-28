@@ -7,6 +7,7 @@ import {
 } from './position-matching'
 import { hasArrivedAtDestination } from './progress-calculator'
 import {
+  stopsAheadFromNextStopId,
   VEHICLE_AT_BOARD_STOP_M,
   VEHICLE_RECORD_STALE_SEC
 } from './transit-trust'
@@ -15,6 +16,11 @@ import type { TripProgress } from './progress-calculator'
 export type NotificationType =
   | 'APPROACH_STOP'
   | 'ARRIVING_STOP'
+  // The rider's own bus closing on their boarding stop while they are still on
+  // the access leg — the thing they cannot see from the pavement and asked for
+  // by name mid-ride on 2026-08-27. Raised by checkBoardVehicleApproach.
+  | 'BOARD_BUS_APPROACHING'
+  | 'BOARD_BUS_ARRIVING'
   | 'UPCOMING_TURN'
   | 'TURN_ALERT'
   | 'LEG_TRANSITION'
@@ -209,6 +215,113 @@ export function checkAlightAlerts(
         timestamp: new Date(),
         title: 'Approaching Your Stop',
         type: 'APPROACH_STOP'
+      }
+}
+
+// The board-vehicle pair mirrors the alight pair above, from the other side of
+// the boarding: while the rider walks or bikes toward their stop, their own
+// bus's feed record — and nothing else — drives a heads-up and an at-the-stop
+// alert. Stage 1 fires when the live board prediction is inside
+// BOARD_APPROACH_SECONDS or the bus is inside BOARD_APPROACH_METRES of the
+// stop; stage 2 when the bus's own next stop IS the boarding stop or it is
+// within BOARD_ARRIVE_METRES (the same figure classifyMissedBus uses for "the
+// bus is at the stop", so the two can never tell contradictory stories).
+export const BOARD_APPROACH_SECONDS = 240
+export const BOARD_APPROACH_METRES = 1500
+export const BOARD_ARRIVE_METRES = VEHICLE_AT_BOARD_STOP_M
+// One firing per stage per boarding; longer than any plausible approach.
+const BOARD_DEDUP_MS = 30 * 60 * 1000
+
+/** What the board-vehicle alerts need, measured in the action layer. */
+export interface BoardVehicleContext {
+  /** The live (realtime-flagged) board prediction for the boarding leg. */
+  liveBoardEpochMs: number | null
+  nowMs: number
+  /** The PLANNED trip's own vehicle record — tripId-exact, never any bus of the route. */
+  vehicle: {
+    ageSec: number | null
+    distanceToBoardStopM: number | null
+    nextStopId: string | null
+  } | null
+}
+
+/**
+ * "Your bus is coming" while the rider is still making their way to the stop.
+ *
+ * Rider-requested from the kerb on 2026-08-27 (the 13:44 ride note). Real data
+ * only: both stages require a fresh feed record of the planned trip's own
+ * vehicle — a schedule time with no vehicle behind it fires nothing, and a
+ * vehicle already past the boarding stop is MISSED_BUS's story, not this one's.
+ */
+export function checkBoardVehicleApproach(
+  boardLeg: Leg,
+  ctx: BoardVehicleContext,
+  sentNotifications: string[]
+): NotificationEvent | null {
+  const { liveBoardEpochMs, nowMs, vehicle } = ctx
+  if (!vehicle) return null
+  if (vehicle.ageSec != null && vehicle.ageSec > VEHICLE_RECORD_STALE_SEC) {
+    return null
+  }
+
+  const boardStopId = (boardLeg.from as any)?.stop?.gtfsId ?? null
+  // A vehicle whose own next stop is one of this leg's stops BEYOND the
+  // boarding stop has been and gone. Say nothing — a "your bus is arriving"
+  // for a bus pulling away would be worse than silence.
+  if (
+    vehicle.nextStopId != null &&
+    vehicle.nextStopId !== boardStopId &&
+    stopsAheadFromNextStopId(boardLeg, vehicle.nextStopId)
+  ) {
+    return null
+  }
+
+  const atStop =
+    (boardStopId != null && vehicle.nextStopId === boardStopId) ||
+    (vehicle.distanceToBoardStopM != null &&
+      vehicle.distanceToBoardStopM <= BOARD_ARRIVE_METRES)
+  // A live prediction already in the past with a fresh not-yet-arrived vehicle
+  // record means "late but coming" — still worth the heads-up.
+  const comingSoon =
+    (liveBoardEpochMs != null &&
+      liveBoardEpochMs - nowMs <= BOARD_APPROACH_SECONDS * 1000) ||
+    (vehicle.distanceToBoardStopM != null &&
+      vehicle.distanceToBoardStopM <= BOARD_APPROACH_METRES)
+  if (!atStop && !comingSoon) return null
+
+  const stage = atStop ? 'arriving' : 'approaching'
+  const routeName =
+    (boardLeg as any).routeShortName ||
+    (boardLeg as any).routeLongName ||
+    'Your bus'
+  const stopName = boardLeg.from?.name || 'your stop'
+  // Keyed on stop AND trip: a re-plan onto a later run is a different bus and
+  // must re-arm, while an itinerary swap that keeps the trip stays deduped —
+  // the reducer's swap-exemption list preserves these ids for that reason.
+  const stopKey = boardStopId || stopName
+  const tripKey =
+    (boardLeg as any).trip?.gtfsId || (boardLeg as any).tripId || 'plan'
+  const id = generateNotificationId(
+    stage === 'arriving' ? 'BOARD_BUS_ARRIVING' : 'BOARD_BUS_APPROACHING',
+    `${stopKey}_${tripKey}_${stage}`
+  )
+  if (wasRecentlySent(id, sentNotifications, BOARD_DEDUP_MS)) return null
+  return stage === 'arriving'
+    ? {
+        id,
+        message: `${routeName} is arriving at ${stopName}`,
+        priority: 'high',
+        timestamp: new Date(),
+        title: 'Your Bus Is Here',
+        type: 'BOARD_BUS_ARRIVING'
+      }
+    : {
+        id,
+        message: `${routeName} is a few minutes from ${stopName}`,
+        priority: 'high',
+        timestamp: new Date(),
+        title: 'Your Bus Is Coming',
+        type: 'BOARD_BUS_APPROACHING'
       }
 }
 
