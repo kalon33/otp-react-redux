@@ -197,6 +197,8 @@ class AppMenu extends Component<
       }
     ]
 
+    const showRideConsole =
+      this.state.diagnosticsOn &&
       !!getDeviceId() &&
       !!rideConsoleUrl &&
       (!rideConsoleDeviceIds ||
