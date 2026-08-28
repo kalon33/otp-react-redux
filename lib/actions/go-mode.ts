@@ -159,7 +159,7 @@ import {
   onboardGraphQLQuery
 } from './apiV2'
 import { MobileScreens } from './ui-constants'
-import { setMobileScreen } from './ui'
+import { setMainPanelContent, setMobileScreen, setViewedStop } from './ui'
 import { setQueryParam } from './form'
 
 // The mutable state of the trip in progress. One object, one lifetime: created
@@ -588,7 +588,14 @@ export function backgroundGoMode() {
  * after explicitly adopting an alternate itinerary).
  */
 export function returnToGoMode() {
-  return function (dispatch: any) {
+  return function (dispatch: any, getState: any) {
+    // The mobile shell renders mainPanelContent (route/nearby/trip viewers) and
+    // a viewed stop AHEAD of the mobile screen, so a rider who reached one of
+    // those from the app menu would tap the banner, be back in Go Mode by every
+    // measure of state, and still be looking at the viewer.
+    const { ui } = getState().otp
+    if (ui.mainPanelContent !== null) dispatch(setMainPanelContent(null))
+    if (ui.viewedStop) dispatch(setViewedStop(null))
     dispatch(setGoModeBackgrounded(false))
     dispatch(setMobileScreen(MobileScreens.GO_MODE))
   }

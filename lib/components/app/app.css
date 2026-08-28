@@ -190,7 +190,9 @@
 }
 
 .slide-pane__overlay {
-  z-index: 1000;
+  /* Above the Go Mode screen's full-screen layer (z-index 1000), which the
+     pane is now opened from. */
+  z-index: 1100;
 }
 
 .app-menu {

@@ -458,6 +458,19 @@ export const FullScreenWrapper = styled.div`
     min-height: 38px;
   }
 
+  /* Bootstrap floats the brand and pulls the header block 15px left, which
+     buries the menu icon under the title (and off the screen edge). Lay the
+     strip out as a plain row instead: icon, back arrow, then the title. */
+  .mobile-navbar-container .container-fluid {
+    align-items: center;
+    display: flex;
+    padding: 0;
+  }
+
+  .mobile-navbar-container .navbar-header {
+    margin: 0;
+  }
+
   /* Strip the heavy default button chrome so the arrow reads as just an arrow. */
   .mobile-back {
     background: none;
@@ -465,6 +478,26 @@ export const FullScreenWrapper = styled.div`
     box-shadow: none;
     height: 38px;
     padding: 0 12px;
+  }
+
+  /* Menu icon and back arrow share the left end of the strip. */
+  .navbar-brand {
+    align-items: center;
+    display: flex;
+    float: none;
+    height: 38px;
+    margin: 0;
+    padding: 0;
+  }
+
+  .app-menu-icon {
+    margin: 0 0 0 15px;
+  }
+
+  /* The icon's bars are white for the app's dark nav bar. On this white screen
+     that is an invisible button. */
+  .app-menu-icon .menu-line {
+    border-bottom-color: #333;
   }
 
   /* Account/locale controls are noise during turn-by-turn navigation. */
@@ -478,8 +511,9 @@ export const FullScreenWrapper = styled.div`
     flex: 1;
     height: 38px;
     justify-content: flex-start;
+    min-width: 0;
     overflow: hidden;
-    padding: 0;
+    padding: 0 12px;
     text-align: left;
   }
 
