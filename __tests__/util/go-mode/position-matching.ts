@@ -1,3 +1,5 @@
+import { encode } from '@mapbox/polyline'
+
 import {
   calculateCumulativeDistances,
   calculateDistance,
@@ -176,6 +178,63 @@ describe('util > go-mode > position-matching', () => {
       expect(result).not.toBeNull()
       expect(result!.legIndex).toBeGreaterThanOrEqual(2)
       expect(result!.legIndex).toBeLessThanOrEqual(4)
+    })
+  })
+
+  describe('hysteresis on a self-overlapping shape', () => {
+    // The 465's downtown loop doubles back along 2 Av S, so two candidate
+    // segments sit sub-metre apart. On 2026-08-27 the strict global minimum
+    // alternated between them four times in thirty seconds (13:36:16, :24,
+    // :25, :27), dragging progressAlongLeg from 96.32% back to 95.14% and
+    // un-passing a stop the rider had already gone by.
+    //
+    // An out-and-back on one line: the rider is near the fold, so the outbound
+    // and return segments are both essentially underfoot.
+    // One polyline unit apart (~0.8 m at this latitude) — precision-5 encoding
+    // cannot express less, and the real flip was sub-metre.
+    const outAndBack = encode([
+      [44.97, -93.27],
+      [44.975, -93.27],
+      [44.98, -93.27],
+      [44.975, -93.27001],
+      [44.97, -93.27001]
+    ])
+    const legs = [{ legGeometry: { points: outAndBack }, mode: 'BUS' }] as any[]
+    const nearTheFold: [number, number] = [44.97501, -93.270005]
+
+    // Marginally closer to the OUTBOUND pass (~25% along) than to the return
+    // pass (~75%), by well under the hysteresis band. This is the tick that
+    // flipped on the real ride.
+    const leaningOutbound: [number, number] = [44.97501, -93.269998]
+
+    it('holds position when a near-tie would drag progress backward', () => {
+      // Without memory the marginally-closer outbound candidate wins and
+      // progress collapses to the first pass.
+      const naive = matchPositionToRoute(leaningOutbound, legs)
+      expect(naive!.progressAlongLeg).toBeLessThan(0.5)
+
+      // Having already been three-quarters along, that jump is rejected.
+      const onReturn = matchPositionToRoute(nearTheFold, legs)
+      expect(onReturn!.progressAlongLeg).toBeGreaterThan(0.5)
+      const held = matchPositionToRoute(leaningOutbound, legs, 0, onReturn)
+      expect(held!.progressAlongLeg).toBeGreaterThan(0.5)
+    })
+
+    it('never returns null just because every candidate is backward', () => {
+      // A rider who genuinely doubled back must still get a match; a null here
+      // reads to callers as "no geometry", which is far worse.
+      const wayAhead = {
+        ...matchPositionToRoute(nearTheFold, legs)!,
+        progressAlongLeg: 0.99
+      }
+      const still = matchPositionToRoute(nearTheFold, legs, 0, wayAhead)
+      expect(still).not.toBeNull()
+    })
+
+    it('is unchanged when the caller passes no previous match', () => {
+      const a = matchPositionToRoute(nearTheFold, legs)
+      const b = matchPositionToRoute(nearTheFold, legs, 0, null)
+      expect(b).toEqual(a)
     })
   })
 

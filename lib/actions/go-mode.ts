@@ -25,6 +25,10 @@ import {
 } from '../util/go-mode/progress-calculator'
 import { decideRiding } from '../util/go-mode/riding'
 import {
+  latchStopsRemaining,
+  getNextStopOnRide
+} from '../util/go-mode/next-stop'
+import {
   checkForNotifications,
   checkMissedBus,
   classifyMissedBus,
@@ -57,7 +61,6 @@ import {
   matchPositionToRoute,
   shouldTransitionToNextLeg
 } from '../util/go-mode/position-matching'
-import { getNextStopOnRide } from '../util/go-mode/next-stop'
 import {
   extractItineraryTimedPoints,
   findClosestPolylineIndex,
@@ -3005,7 +3008,11 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     const routeMatch = matchPositionToRoute(
       currentPosition,
       itinerary.legs,
-      currentLegIndex
+      currentLegIndex,
+      // Last tick's match, so a self-overlapping shape cannot flip between two
+      // sub-metre candidates and drag progress backward. Already in the store;
+      // no new state needed.
+      goMode.routeMatch
     )
 
     dispatch(updateRouteMatch(routeMatch))
@@ -3168,6 +3175,21 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       // and not only by a progress scalar that can freeze short of the bar.
       currentPosition
     )
+
+    // A stop the rider has passed stays passed. calculateTripProgress is pure
+    // and re-derives the count from this tick's position alone, so the latch is
+    // applied here rather than inside it.
+    if (progress.stopsRemaining != null) {
+      const latched = latchStopsRemaining(session.stopCountLatch, {
+        legIndex: progress.currentLegIndex,
+        source: progress.stopsSource ?? 'unknown',
+        stopsRemaining: progress.stopsRemaining
+      })
+      session.stopCountLatch = latched.next
+      progress.stopsRemaining = latched.stopsRemaining
+    } else {
+      session.stopCountLatch = null
+    }
 
     dispatch(updateProgress(progress))
 

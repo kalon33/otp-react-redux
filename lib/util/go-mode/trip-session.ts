@@ -1,3 +1,4 @@
+import type { StopCountLatch } from './next-stop'
 /**
  * The mutable state of one trip.
  *
@@ -101,7 +102,6 @@ export interface TripSession {
    * silently; the streak is bookkeeping for the debug log.
    */
   quietReplanMissStreak: number
-
   /** Reroute-snapshot capture interval (recording sessions only). */
   rerouteSnapshotIntervalId: ReturnType<typeof setInterval> | null
 
@@ -113,6 +113,9 @@ export interface TripSession {
   simulationCoords: TimedSimulationPoint[]
 
   simulationPointIndex: number
+
+  /** Monotonic floor for stopsRemaining — see latchStopsRemaining. */
+  stopCountLatch: StopCountLatch | null
 
   /** Vehicle-position polling interval. */
   vehiclePositionIntervalId: ReturnType<typeof setInterval> | null
@@ -144,6 +147,7 @@ export function createTripSession(): TripSession {
     simulationActive: false,
     simulationCoords: [],
     simulationPointIndex: 0,
+    stopCountLatch: null,
     vehiclePositionIntervalId: null,
     visibilityChangeHandler: null
   }

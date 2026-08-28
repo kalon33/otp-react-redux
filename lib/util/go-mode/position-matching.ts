@@ -166,13 +166,28 @@ export interface RouteMatchResult {
 /**
  * Match current position to the nearest point on the route
  */
+export const BACKWARD_JUMP_HYSTERESIS_M = 5
+
 export function matchPositionToRoute(
   currentPosition: LatLngArray,
   legs: Leg[],
-  currentLegIndex = 0
+  currentLegIndex = 0,
+  /**
+   * Last tick's match, used only to break sub-metre ties on a shape that
+   * doubles back on itself. Optional: without it the behaviour is exactly the
+   * old global-minimum search.
+   */
+  previousMatch?: RouteMatchResult | null
 ): RouteMatchResult | null {
   let bestMatch: RouteMatchResult | null = null
   let minDistance = Infinity
+  // The best candidate ignoring hysteresis. If the backward-jump rule ends up
+  // rejecting everything — a rider who really has doubled back — this is what
+  // is returned, so the rule can only ever REORDER preferences and never turn a
+  // match into a null. A null here reads to callers as "no geometry" and is a
+  // far worse answer than a backward jump.
+  let fallbackMatch: RouteMatchResult | null = null
+  let fallbackDistance = Infinity
 
   // Search current leg and next 2 legs for best match
   const legsToSearch = Math.min(3, legs.length - currentLegIndex)
@@ -195,8 +210,6 @@ export function matchPositionToRoute(
       const perpDistance = projection.perpDistance
 
       if (perpDistance < minDistance) {
-        minDistance = perpDistance
-
         // Calculate progress along this segment
         const segmentStartDistance = cumulativeDistances[i]
         const segmentEndDistance = cumulativeDistances[i + 1]
@@ -218,23 +231,49 @@ export function matchPositionToRoute(
         const isTransitLeg = leg.mode !== 'WALK' && leg.mode !== 'BICYCLE'
         const onRouteThreshold = isTransitLeg ? 250 : 100
 
-        bestMatch = {
+        const progressAlongLeg =
+          totalLegDistance > 0 ? totalDistanceAlongLeg / totalLegDistance : 0
+
+        // Where a shape doubles back on itself — the 465's downtown loop on 2
+        // Av S — two candidate segments sit SUB-METRE apart and the strict
+        // global minimum alternates between them tick to tick. Progress then
+        // jumps backward by the length of the loop, and the stop counter
+        // un-passes a stop the rider has already gone by (13:36:16, :24, :25,
+        // :27 on 2026-08-27 — four flips in thirty seconds).
+        //
+        // So when the winning candidate would move the rider BACKWARD along the
+        // same leg, and the position we already hold is within a few metres of
+        // it, keep what we have. This only ever breaks near-ties: a candidate
+        // that is genuinely closer by more than the hysteresis still wins, so a
+        // real correction is never blocked.
+        const wouldJumpBackward =
+          previousMatch != null &&
+          previousMatch.legIndex === legIndex &&
+          progressAlongLeg < previousMatch.progressAlongLeg &&
+          Math.abs(previousMatch.distanceFromRoute - perpDistance) <=
+            BACKWARD_JUMP_HYSTERESIS_M
+        const candidate: RouteMatchResult = {
           distanceFromRoute: perpDistance,
           isOnRoute: perpDistance < onRouteThreshold,
           legIndex,
           nearestPoint,
-
-          progressAlongLeg:
-            totalLegDistance > 0 ? totalDistanceAlongLeg / totalLegDistance : 0,
-
+          progressAlongLeg,
           progressAlongSegment: projection.alongSegment,
           segmentIndex: i
         }
+
+        if (perpDistance < fallbackDistance) {
+          fallbackDistance = perpDistance
+          fallbackMatch = candidate
+        }
+        if (wouldJumpBackward) continue
+        minDistance = perpDistance
+        bestMatch = candidate
       }
     }
   }
 
-  return bestMatch
+  return bestMatch ?? fallbackMatch
 }
 
 /**
