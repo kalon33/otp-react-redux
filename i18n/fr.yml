@@ -159,6 +159,7 @@ common:
       other {# s}}
 fastest: Le plus rapide
 minimize-walking: Minimiser la marche
+stay-aboard: Rester à bord
 stay-seated: Rester assis
 bike-forward: Privilégier le vélo
 avoid-biking: Éviter le vélo
@@ -169,6 +170,7 @@ components:
   RoutingProfiles:
     fastest: Le plus rapide
     minimize-walking: Minimiser la marche
+    stay-aboard: Rester à bord
     stay-seated: Rester assis
     bike-forward: Privilégier le vélo
     avoid-biking: Éviter le vélo

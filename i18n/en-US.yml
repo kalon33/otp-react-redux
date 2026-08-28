@@ -145,6 +145,7 @@ common:
       other {# sec}}
 fastest: Fastest
 minimize-walking: Minimize Walking
+stay-aboard: Stay aboard
 stay-seated: Stay Seated
 bike-forward: Bike Forward
 avoid-biking: Avoid Biking
