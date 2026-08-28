@@ -527,9 +527,9 @@ components:
       header: Moins rapide en transports
     NO_DIRECT_MODE_CONNECTION:
       body: >-
-        The origin and destination may be too far apart or not directly
-        connected by the requested mode of transport.
-      header: No direct trip found.
+        Le point de départ et la destination peuvent être trop éloignés ou non
+        directement connectés par le mode de transport demandé.
+      header: Aucune connexion directe trouvée.
     inputFields:
       FROM: point de départ
       TO: destination
