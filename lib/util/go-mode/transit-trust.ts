@@ -28,6 +28,14 @@ export const VEHICLE_RECORD_STALE_SEC = 120
 // VEHICLE's position, never the rider's.
 export const VEHICLE_AT_BOARD_STOP_M = 250
 
+// Past this separation a "confirmed" match is no longer describing the bus the
+// rider is on. Feed lag on freeway BRT can genuinely put the published position
+// several hundred metres from the rider, and MAX_ADJUSTED_RADIUS_METERS (2500,
+// vehicle-matching.ts) is already the widest the matcher will reach for a
+// moving rider — so anything beyond that is not lag, it is a different vehicle
+// or a ride that ended. Demotes to 'medium'; never drops.
+export const CONFIRMED_MATCH_MAX_SEPARATION_M = 2500
+
 // How many consecutive 1/s vehicle matches must agree before the sticky
 // riding.tripId may rebind to a different trip. Today's promotion needs only
 // 2 — exactly what the 7/29 flap survived. Eight is still fast for a real
@@ -196,17 +204,42 @@ export function refreshConfirmedMatch(
   if (forVehicle.length === 0) return null
   const vehicle =
     forVehicle.find((v) => v.tripId === previousMatch.tripId) ?? forVehicle[0]
+  const distanceMeters = Math.round(
+    calculateDistance(riderLat, riderLon, vehicle.lat, vehicle.lon)
+  )
+
+  // A confirmed match is still the rider's own assertion, and a large distance
+  // is still information rather than grounds to DROP it — that principle is
+  // load-bearing and earned (the 8/2 ghost record). What was wrong was the
+  // second half of the old reasoning: "VEHICLE_MATCH_FRESH_MS already handles
+  // staleness" could never be true while lastSeen was stamped `nowMs` on every
+  // successful refresh. A match the feed keeps publishing could not age out at
+  // any distance, so on 2026-08-27 a "confirmed" match followed bus 1:1786
+  // away from the rider at exactly rider speed, out to 13,322 m and across the
+  // vehicle's rollover onto its next trip, with no mechanism able to end it.
+  //
+  // So: age honestly (below), and beyond a plainly impossible separation
+  // DEMOTE rather than drop. Demotion just returns the match to the normal
+  // matcher, which re-evaluates from scratch and can re-promote immediately if
+  // the rider really is aboard — so a single bad reading is self-correcting and
+  // the rider's assertion is never silently discarded.
+  const implausiblyFar = distanceMeters > CONFIRMED_MATCH_MAX_SEPARATION_M
+
+  // The feed's own observation time, not the moment we happened to poll. Falls
+  // back to nowMs when the record carries no usable timestamp, so a feed
+  // without `seconds` behaves exactly as before instead of reading as ancient.
+  const observedMs =
+    typeof vehicle.seconds === 'number' && Number.isFinite(vehicle.seconds)
+      ? Math.min(nowMs, vehicle.seconds * 1000)
+      : nowMs
+
   return {
     ...previousMatch,
+    ...(implausiblyFar ? { confidence: 'medium' as const } : {}),
     // Sub-metre precision on a GTFS-RT position is noise; this value is only
-    // ever displayed or threshold-compared. No proximity filter here: a
-    // confirmed match is the rider's own assertion, and a large distance is
-    // information (the feed is lying), not grounds to drop the match —
-    // VEHICLE_MATCH_FRESH_MS already handles staleness.
-    distanceMeters: Math.round(
-      calculateDistance(riderLat, riderLon, vehicle.lat, vehicle.lon)
-    ),
-    lastSeen: nowMs,
+    // ever displayed or threshold-compared.
+    distanceMeters,
+    lastSeen: observedMs,
     nextStopId: vehicle.nextStopId ?? previousMatch.nextStopId,
     // Headsign travels WITH the trip id. shouldReplanBoardedEarlier's
     // opposite-direction guard compares tripHeadsign against the leg; before
