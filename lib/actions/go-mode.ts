@@ -3770,6 +3770,20 @@ export function performVehicleMatching(routeId: string) {
     // Speed also feeds the direction gate — headings only count against a
     // candidate while the rider is actually moving.
     const riderSpeed = userPos.coords.speed
+
+    // Which way is the rider's own leg going? The PLANNED leg cannot say — the
+    // plan query never fetched direction_id — so ask the feed: find the record
+    // for the trip the rider is supposed to be on and read its direction. When
+    // that trip isn't currently reporting there is no expected direction and
+    // the gate stays inert, which is the honest answer rather than a guess.
+    const plannedLeg: any =
+      goMode.activeItinerary?.legs?.[goMode.routeMatch?.legIndex ?? 0]
+    const plannedTripId = plannedLeg?.trip?.gtfsId || plannedLeg?.tripId || null
+    const expectedDirectionId = plannedTripId
+      ? vehicles.find((v: any) => v.tripId === plannedTripId)?.directionId ??
+        null
+      : null
+
     const matchResult = matchUserToVehicle(
       userPos.coords.latitude,
       userPos.coords.longitude,
@@ -3778,7 +3792,8 @@ export function performVehicleMatching(routeId: string) {
       routeId,
       previousMatch,
       speedAdjustedRadius(80, riderSpeed),
-      riderSpeed
+      riderSpeed,
+      expectedDirectionId
     )
 
     // Track consecutive matches

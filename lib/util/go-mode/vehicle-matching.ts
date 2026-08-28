@@ -13,6 +13,10 @@ export const NO_LIVE_VEHICLE_POLLS = 6
 export interface VehiclePosition {
   /** NB/SB/EB/WB, from the onboard API's trips table. */
   direction?: string | null
+  /** GTFS direction_id of the vehicle's current trip (0/1). Unlike `heading`
+   * this is meaningful at a standstill, which is exactly when a rider waiting
+   * at a stop needs the wrong-direction run excluded. */
+  directionId?: number | string | null
   heading: number
   label: string
   lat: number
@@ -39,6 +43,9 @@ export type MatchConfidence = 'none' | 'low' | 'medium' | 'high' | 'confirmed'
 
 export interface VehicleMatchResult {
   confidence: MatchConfidence
+  /** Carried through from the matched VehiclePosition so a later refresh can
+   * notice the vehicle rolling onto a trip going the other way. */
+  directionId?: number | string | null
   distanceMeters: number | null
   label: string | null
   lastSeen: number // epoch ms
@@ -188,7 +195,9 @@ export function matchUserToVehicle(
   expectedRouteId: string | null,
   previousMatch: VehicleMatchResult | null,
   proximityMeters = 80,
-  userSpeedMps: number | null = null
+  userSpeedMps: number | null = null,
+  /** GTFS direction_id of the leg the rider is trying to ride, when known. */
+  expectedDirectionId: number | string | null = null
 ): VehicleMatchResult {
   const noMatch: VehicleMatchResult = {
     confidence: 'none',
@@ -233,6 +242,36 @@ export function matchUserToVehicle(
         )
     )
     if (nearby.length === 0) return noMatch
+  }
+
+  // Phase 2b: Direction gate that works at a standstill.
+  //
+  // The heading gate above is inert below MIN_SPEED_FOR_HEADING_MPS, which is
+  // precisely the situation a rider waiting at a stop is in. On 2026-08-27 a
+  // rider standing still (0.0-0.3 m/s) was bound to the INBOUND run of their
+  // route 117 m away, and because classifyMissedBus opens with `if (riding)
+  // return null`, that one wrong fact disabled missed-bus detection for the
+  // entire ten-minute wait — the rider asked "will I be alerted when my bus is
+  // coming?" and the answer was no.
+  //
+  // GTFS direction_id is a fact about the trip, not about motion, so it holds
+  // when nothing is moving. Only applied when BOTH sides declare one: the field
+  // was dropped by the API mapper until 2026-08-27, so older records and any
+  // feed that omits it simply fall through to the behaviour above.
+  if (expectedDirectionId != null) {
+    const opposing = nearby.filter(
+      (c) =>
+        c.vehicle.directionId != null &&
+        String(c.vehicle.directionId) !== String(expectedDirectionId)
+    )
+    if (opposing.length) {
+      const sameWay = nearby.filter((c) => !opposing.includes(c))
+      // Only drop the wrong-direction candidates when something is left; an
+      // empty list would fall through to `noMatch`, which is right, but say so
+      // by keeping the same shape as the gate above.
+      nearby = sameWay
+      if (nearby.length === 0) return noMatch
+    }
   }
 
   // Phase 3: Route filter — prefer vehicles on expected route
@@ -316,6 +355,7 @@ export function matchUserToVehicle(
 
   return {
     confidence,
+    directionId: bestVehicle.directionId ?? null,
     distanceMeters: Math.round(best.distance),
     label: bestVehicle.label,
     lastSeen: Date.now(),
