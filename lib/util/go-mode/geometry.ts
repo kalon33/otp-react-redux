@@ -66,6 +66,42 @@ export function findClosestPolylineIndex(
   return bestIdx
 }
 
+/**
+ * Slice a trip's full shape down to the stretch one leg actually rides —
+ * between the leg's board and alight stops — and re-encode it. Returns null
+ * when the shape or the slice is unusable, so a caller can only ever improve a
+ * leg's geometry, never degrade it. Used to repair a leg whose plan geometry
+ * is missing (see geometry-trust.ts); buildOnboardItinerary performs the same
+ * slice inline for the itinerary it synthesizes.
+ */
+export function sliceTripGeometryForLeg(
+  tripShapePoints: string,
+  leg: Leg
+): { length: number; points: string } | null {
+  const from: any = (leg as any).from
+  const to: any = (leg as any).to
+  if (
+    from?.lat == null ||
+    from?.lon == null ||
+    to?.lat == null ||
+    to?.lon == null
+  ) {
+    return null
+  }
+  let decoded: Array<[number, number]>
+  try {
+    decoded = polyline.decode(tripShapePoints) as Array<[number, number]>
+  } catch {
+    return null
+  }
+  if (decoded.length < 2) return null
+  const startIdx = findClosestPolylineIndex(decoded, from.lat, from.lon, 0)
+  const endIdx = findClosestPolylineIndex(decoded, to.lat, to.lon, startIdx)
+  const slice = decoded.slice(startIdx, endIdx + 1)
+  if (slice.length < 2) return null
+  return { length: slice.length, points: polyline.encode(slice) }
+}
+
 interface IntermediatePlace {
   arrivalTime: number
   departureTime: number

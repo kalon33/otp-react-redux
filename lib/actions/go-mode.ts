@@ -64,8 +64,13 @@ import {
 import {
   extractItineraryTimedPoints,
   findClosestPolylineIndex,
-  haversineDistance
+  haversineDistance,
+  sliceTripGeometryForLeg
 } from '../util/go-mode/geometry'
+import {
+  assessMatchTrust,
+  legGeometryUsable
+} from '../util/go-mode/geometry-trust'
 import type { TimedSimulationPoint } from '../util/go-mode/geometry'
 import { createTripSession } from '../util/go-mode/trip-session'
 import type { TripSession } from '../util/go-mode/trip-session'
@@ -301,6 +306,7 @@ export const DISMISS_BOARDING_PROMPT = 'DISMISS_BOARDING_PROMPT'
 export const ONBOARD_CANDIDATE_SNAPSHOT = 'ONBOARD_CANDIDATE_SNAPSHOT'
 export const PAUSE_GPS_SIMULATION = 'PAUSE_GPS_SIMULATION'
 export const REROUTE_SNAPSHOT = 'REROUTE_SNAPSHOT'
+export const REPAIR_LEG_GEOMETRY = 'REPAIR_LEG_GEOMETRY'
 export const RESUME_GPS_SIMULATION = 'RESUME_GPS_SIMULATION'
 export const SET_ARRIVED = 'SET_ARRIVED'
 export const SET_DEPARTURE_OVERRIDE = 'SET_DEPARTURE_OVERRIDE'
@@ -363,6 +369,15 @@ export const transitionLeg = createAction<{ legIndex: number }>(TRANSITION_LEG)
 
 export const setLiveLegTimes =
   createAction<Record<number, LiveLegTime>>(SET_LIVE_LEG_TIMES)
+
+// Replace one leg's missing/degenerate polyline with a slice of its trip's
+// real shape, once the trip fetch that failed at itinerary-build time finally
+// lands. Only ever an improvement: the dispatcher (refreshLiveLegTimes) fires
+// it solely for a leg whose current geometry is unusable for matching.
+export const repairLegGeometry = createAction<{
+  legGeometry: { length: number; points: string }
+  legIndex: number
+}>(REPAIR_LEG_GEOMETRY)
 
 // Epoch ms of the moment trip progress first read "completed" — the rider is
 // at their destination and Go Mode shows the arrival card until they dismiss.
@@ -2832,8 +2847,21 @@ export function refreshLiveLegTimes() {
       // findTrip is noThrottle and idempotent; it refreshes the cached trip
       // (with current realtimeArrival) in transitIndex.trips[tripId].
       await dispatch(findTrip({ tripId }))
-      const stopTimes =
-        getState().otp?.transitIndex?.trips?.[tripId]?.stopTimes || []
+      const trip = getState().otp?.transitIndex?.trips?.[tripId]
+
+      // Heal a leg whose plan geometry is missing (the onboard flow builds one
+      // with empty points when its trip fetch fails): the trip record fetched
+      // above carries the full shape, so slice it to the leg and repair. Until
+      // this lands, handlePositionUpdate holds route matching entirely — see
+      // assessMatchTrust — so this dispatch is what ends that hold.
+      if (!legGeometryUsable(leg) && trip?.geometry?.points) {
+        const repaired = sliceTripGeometryForLeg(trip.geometry.points, leg)
+        if (repaired) {
+          dispatch(repairLegGeometry({ legGeometry: repaired, legIndex: i }))
+        }
+      }
+
+      const stopTimes = trip?.stopTimes || []
       if (!stopTimes.length) continue
 
       // Where this bus actually is, but ONLY for the leg the rider is
@@ -3015,11 +3043,55 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       goMode.routeMatch
     )
 
-    dispatch(updateRouteMatch(routeMatch))
-
     if (!routeMatch) {
+      dispatch(updateRouteMatch(routeMatch))
       return
     }
+
+    // A match that had to see THROUGH a transit leg with unusable geometry is
+    // no statement about where the rider is: the matcher silently skips such
+    // legs and lands on whatever geometry remains. On 2026-08-27 that meant
+    // five ticks pinned to a far-away point, a bogus "121m from route" push
+    // and a 16-point progress jump while the trip fetch was failing. Holding
+    // the PREVIOUS match is also what protects next tick's anchor — the
+    // matcher only searches forward from routeMatch.legIndex, so storing a
+    // blind cross-leg match would bake the jump in with no way back. Only the
+    // live-times poll (the healing path — it re-fetches the trip and repairs
+    // the leg's geometry) runs while the hold is on.
+    const matchTrust = assessMatchTrust(
+      itinerary.legs,
+      currentLegIndex,
+      routeMatch.legIndex
+    )
+    if (matchTrust.provisional) {
+      if (session.matchHeldSinceMs == null) {
+        session.matchHeldSinceMs = Date.now()
+        // eslint-disable-next-line no-console
+        console.log(
+          '[go-mode] holding route match: unsettled geometry on leg(s) ' +
+            matchTrust.unsettledLegIndexes.join(', ')
+        )
+      }
+      if (
+        !isReplayActive() &&
+        Date.now() - session.lastLiveLegTimesAt > LIVE_LEG_TIMES_INTERVAL_MS
+      ) {
+        session.lastLiveLegTimesAt = Date.now()
+        dispatch(refreshLiveLegTimes())
+      }
+      return
+    }
+    if (session.matchHeldSinceMs != null) {
+      // eslint-disable-next-line no-console
+      console.log(
+        `[go-mode] route match resumed after ${Math.round(
+          (Date.now() - session.matchHeldSinceMs) / 1000
+        )}s geometry hold`
+      )
+      session.matchHeldSinceMs = null
+    }
+
+    dispatch(updateRouteMatch(routeMatch))
 
     const matchedLeg: any = itinerary.legs[routeMatch.legIndex]
     const riding = goMode.riding

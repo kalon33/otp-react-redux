@@ -11,6 +11,7 @@ import {
   CONFIRM_VEHICLE,
   DISMISS_BOARDING_PROMPT,
   PAUSE_GPS_SIMULATION,
+  REPAIR_LEG_GEOMETRY,
   RESUME_GPS_SIMULATION,
   SET_ARRIVED,
   SET_DEPARTURE_OVERRIDE,
@@ -493,6 +494,24 @@ const goMode = handleActions<GoModeState, any>(
         status: 'paused' as const
       }
     }),
+
+    // Swap in a leg's repaired polyline (see repairLegGeometry). Only the
+    // legGeometry field changes; the leg object is necessarily new, which
+    // resets any WeakMap state keyed on it in notification-service — that
+    // state is walk/bike turn tracking and connection baselines, neither of
+    // which a transit leg that was unmatchable until now can have accrued.
+    [REPAIR_LEG_GEOMETRY]: (state: GoModeState, action: any) => {
+      const { legGeometry, legIndex } = action.payload
+      const itinerary: any = state.activeItinerary
+      const leg = itinerary?.legs?.[legIndex]
+      if (!leg) return state
+      const legs = itinerary.legs.slice()
+      legs[legIndex] = { ...leg, legGeometry }
+      return {
+        ...state,
+        activeItinerary: { ...itinerary, legs }
+      }
+    },
 
     [RESUME_GPS_SIMULATION]: (state) => ({
       ...state,

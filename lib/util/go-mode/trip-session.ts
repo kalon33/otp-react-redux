@@ -86,6 +86,13 @@ export interface TripSession {
    */
   manualDepartureLock: boolean
 
+  /**
+   * When route matching went on hold because a transit leg's geometry is
+   * unusable (see geometry-trust.ts). Null while matching normally; used to
+   * log the hold once and its duration when it lifts.
+   */
+  matchHeldSinceMs: number | null
+
   /** Retry bookkeeping for the missed departure being recovered from. */
   missedBusRerouteAttempt: MissedBusAttempt | null
 
@@ -139,6 +146,7 @@ export function createTripSession(): TripSession {
     lastTransitionedLegIndex: null,
     lastTurnCardKey: null,
     manualDepartureLock: false,
+    matchHeldSinceMs: null,
     missedBusRerouteAttempt: null,
     prevDistanceFromRoute: null,
     quietReplanMissStreak: 0,
