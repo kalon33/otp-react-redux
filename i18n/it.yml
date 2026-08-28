@@ -138,6 +138,7 @@ common:
     tripDurationFormat: '{hours, plural, =0 {} other {# h }}{minutes} min { seconds, plural, =0 {} other {# s}}'
 fastest: Più veloce
 minimize-walking: Minimizzare la camminata
+stay-aboard: Rimanere a bordo
 stay-seated: Posto a sedere mantenuto
 bike-forward: Bici in avanti
 avoid-biking: Evitare la bici
@@ -147,6 +148,7 @@ components:
   RoutingProfiles:
     fastest: Più veloce
     minimize-walking: Minimizzare la camminata
+    stay-aboard: Rimanere a bordo
     stay-seated: Posto a sedere mantenuto
     bike-forward: Bici in avanti
     avoid-biking: Evitare la bici
