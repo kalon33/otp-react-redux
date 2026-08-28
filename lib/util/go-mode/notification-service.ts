@@ -1,8 +1,13 @@
 import type { Leg } from '@opentripplanner/types'
 
 import { asContinuation, formatCueDistance } from './turn-by-turn'
-import { calculateDistance } from './position-matching'
 import {
+  calculateDistance,
+  MATCH_CORRIDOR_TRANSIT_M
+} from './position-matching'
+import { hasArrivedAtDestination } from './progress-calculator'
+import {
+  stopsAheadFromNextStopId,
   VEHICLE_AT_BOARD_STOP_M,
   VEHICLE_RECORD_STALE_SEC
 } from './transit-trust'
@@ -11,6 +16,11 @@ import type { TripProgress } from './progress-calculator'
 export type NotificationType =
   | 'APPROACH_STOP'
   | 'ARRIVING_STOP'
+  // The rider's own bus closing on their boarding stop while they are still on
+  // the access leg — the thing they cannot see from the pavement and asked for
+  // by name mid-ride on 2026-08-27. Raised by checkBoardVehicleApproach.
+  | 'BOARD_BUS_APPROACHING'
+  | 'BOARD_BUS_ARRIVING'
   | 'UPCOMING_TURN'
   | 'TURN_ALERT'
   | 'LEG_TRANSITION'
@@ -205,6 +215,113 @@ export function checkAlightAlerts(
         timestamp: new Date(),
         title: 'Approaching Your Stop',
         type: 'APPROACH_STOP'
+      }
+}
+
+// The board-vehicle pair mirrors the alight pair above, from the other side of
+// the boarding: while the rider walks or bikes toward their stop, their own
+// bus's feed record — and nothing else — drives a heads-up and an at-the-stop
+// alert. Stage 1 fires when the live board prediction is inside
+// BOARD_APPROACH_SECONDS or the bus is inside BOARD_APPROACH_METRES of the
+// stop; stage 2 when the bus's own next stop IS the boarding stop or it is
+// within BOARD_ARRIVE_METRES (the same figure classifyMissedBus uses for "the
+// bus is at the stop", so the two can never tell contradictory stories).
+export const BOARD_APPROACH_SECONDS = 240
+export const BOARD_APPROACH_METRES = 1500
+export const BOARD_ARRIVE_METRES = VEHICLE_AT_BOARD_STOP_M
+// One firing per stage per boarding; longer than any plausible approach.
+const BOARD_DEDUP_MS = 30 * 60 * 1000
+
+/** What the board-vehicle alerts need, measured in the action layer. */
+export interface BoardVehicleContext {
+  /** The live (realtime-flagged) board prediction for the boarding leg. */
+  liveBoardEpochMs: number | null
+  nowMs: number
+  /** The PLANNED trip's own vehicle record — tripId-exact, never any bus of the route. */
+  vehicle: {
+    ageSec: number | null
+    distanceToBoardStopM: number | null
+    nextStopId: string | null
+  } | null
+}
+
+/**
+ * "Your bus is coming" while the rider is still making their way to the stop.
+ *
+ * Rider-requested from the kerb on 2026-08-27 (the 13:44 ride note). Real data
+ * only: both stages require a fresh feed record of the planned trip's own
+ * vehicle — a schedule time with no vehicle behind it fires nothing, and a
+ * vehicle already past the boarding stop is MISSED_BUS's story, not this one's.
+ */
+export function checkBoardVehicleApproach(
+  boardLeg: Leg,
+  ctx: BoardVehicleContext,
+  sentNotifications: string[]
+): NotificationEvent | null {
+  const { liveBoardEpochMs, nowMs, vehicle } = ctx
+  if (!vehicle) return null
+  if (vehicle.ageSec != null && vehicle.ageSec > VEHICLE_RECORD_STALE_SEC) {
+    return null
+  }
+
+  const boardStopId = (boardLeg.from as any)?.stop?.gtfsId ?? null
+  // A vehicle whose own next stop is one of this leg's stops BEYOND the
+  // boarding stop has been and gone. Say nothing — a "your bus is arriving"
+  // for a bus pulling away would be worse than silence.
+  if (
+    vehicle.nextStopId != null &&
+    vehicle.nextStopId !== boardStopId &&
+    stopsAheadFromNextStopId(boardLeg, vehicle.nextStopId)
+  ) {
+    return null
+  }
+
+  const atStop =
+    (boardStopId != null && vehicle.nextStopId === boardStopId) ||
+    (vehicle.distanceToBoardStopM != null &&
+      vehicle.distanceToBoardStopM <= BOARD_ARRIVE_METRES)
+  // A live prediction already in the past with a fresh not-yet-arrived vehicle
+  // record means "late but coming" — still worth the heads-up.
+  const comingSoon =
+    (liveBoardEpochMs != null &&
+      liveBoardEpochMs - nowMs <= BOARD_APPROACH_SECONDS * 1000) ||
+    (vehicle.distanceToBoardStopM != null &&
+      vehicle.distanceToBoardStopM <= BOARD_APPROACH_METRES)
+  if (!atStop && !comingSoon) return null
+
+  const stage = atStop ? 'arriving' : 'approaching'
+  const routeName =
+    (boardLeg as any).routeShortName ||
+    (boardLeg as any).routeLongName ||
+    'Your bus'
+  const stopName = boardLeg.from?.name || 'your stop'
+  // Keyed on stop AND trip: a re-plan onto a later run is a different bus and
+  // must re-arm, while an itinerary swap that keeps the trip stays deduped —
+  // the reducer's swap-exemption list preserves these ids for that reason.
+  const stopKey = boardStopId || stopName
+  const tripKey =
+    (boardLeg as any).trip?.gtfsId || (boardLeg as any).tripId || 'plan'
+  const id = generateNotificationId(
+    stage === 'arriving' ? 'BOARD_BUS_ARRIVING' : 'BOARD_BUS_APPROACHING',
+    `${stopKey}_${tripKey}_${stage}`
+  )
+  if (wasRecentlySent(id, sentNotifications, BOARD_DEDUP_MS)) return null
+  return stage === 'arriving'
+    ? {
+        id,
+        message: `${routeName} is arriving at ${stopName}`,
+        priority: 'high',
+        timestamp: new Date(),
+        title: 'Your Bus Is Here',
+        type: 'BOARD_BUS_ARRIVING'
+      }
+    : {
+        id,
+        message: `${routeName} is a few minutes from ${stopName}`,
+        priority: 'high',
+        timestamp: new Date(),
+        title: 'Your Bus Is Coming',
+        type: 'BOARD_BUS_APPROACHING'
       }
 }
 
@@ -557,6 +674,15 @@ export function classifyMissedBus(
   // match settles it too, and ground speed at vehicle pace counts: the
   // realtime feed can mark the bus departed the instant the rider boards,
   // before matching confirms.
+  //
+  // Left unconditional deliberately. The 2026-08-27 false boarding suppressed
+  // missed-bus for a whole ten-minute wait, which looks like this guard's
+  // fault — but the riding fact there was stamped with legIndex 2, the very
+  // leg being boarded, so every "does riding vouch for THIS boarding" test
+  // passes it just as readily. The defect was upstream, in establishing the
+  // fact at all (see util/go-mode/riding.ts), and that is where it is fixed.
+  // Narrowing this guard would not have helped that ride and would undo the
+  // 7/29 behaviour that a held riding fact suppresses downstream boardings.
   if (riding) return null
   if (
     currentLegIndex === boardLegIndex &&
@@ -663,26 +789,38 @@ export function checkMissedBus(
 export function checkLegTransition(
   currentLegIndex: number,
   previousLegIndex: number,
-  nextLeg: Leg | undefined,
+  /**
+   * The leg the rider is ENTERING — legs[currentLegIndex].
+   *
+   * This used to be handed legs[currentLegIndex + 1], the leg after, so every
+   * transition announced the wrong step. On 2026-08-27 entering the bike leg
+   * said "Board 94", entering the 94 said "Board METRO Gold Line", and
+   * entering the Gold Line said "Continue to 4Front" — three transitions,
+   * three wrong buses named, each one the step the rider had not reached yet.
+   */
+  enteredLeg: Leg | undefined,
   sentNotifications: string[]
 ): NotificationEvent | null {
-  if (currentLegIndex > previousLegIndex && nextLeg) {
+  if (currentLegIndex > previousLegIndex && enteredLeg) {
+    // Mode comes from the SAME leg as the index. Pairing one leg's index with
+    // another leg's mode also let two different transitions collide inside the
+    // 30s dedup window.
     const id = generateNotificationId(
       'LEG_TRANSITION',
-      `leg_${currentLegIndex}_${nextLeg.mode}`
+      `leg_${currentLegIndex}_${enteredLeg.mode}`
     )
 
     if (!wasRecentlySent(id, sentNotifications, 30000)) {
       let message = ''
 
-      if (nextLeg.mode === 'BUS' || nextLeg.mode === 'RAIL') {
+      if (enteredLeg.mode === 'BUS' || enteredLeg.mode === 'RAIL') {
         message = `Board ${
-          nextLeg.routeShortName || nextLeg.routeLongName
-        } to ${nextLeg.to.name}`
-      } else if (nextLeg.mode === 'WALK') {
-        message = `Walk to ${nextLeg.to.name}`
+          enteredLeg.routeShortName || enteredLeg.routeLongName
+        } to ${enteredLeg.to.name}`
+      } else if (enteredLeg.mode === 'WALK') {
+        message = `Walk to ${enteredLeg.to.name}`
       } else {
-        message = `Continue to ${nextLeg.to.name}`
+        message = `Continue to ${enteredLeg.to.name}`
       }
 
       return {
@@ -712,7 +850,19 @@ export function checkRouteDeviation(
   // every extra second spent off-route is another block to backtrack — so react
   // sooner. Still generous enough to absorb GPS scatter and a parallel bike
   // path running alongside the planned street.
-  const threshold = currentLeg?.mode === 'BICYCLE' ? 120 : 200
+  //
+  // On a transit leg the threshold is the matcher's own corridor: on
+  // 2026-08-27 the matcher said on-route at 248m while this check pushed
+  // "you are 239m from the planned route" — two answers to the same question,
+  // 9m apart. Pushing "off route" while the matcher holds isOnRoute is the one
+  // forbidden disagreement; walk/bike merely being more patient than the 100m
+  // corridor is fine.
+  const threshold =
+    currentLeg?.mode === 'BICYCLE'
+      ? 120
+      : isTransitMode(currentLeg?.mode)
+      ? MATCH_CORRIDOR_TRANSIT_M
+      : 200
 
   if (distanceFromRoute > threshold) {
     // Stable context: the measured distance changes every GPS tick, so it must
@@ -800,6 +950,22 @@ function connectionWarningCopy(
  * own real-time delay is not yet accounted for — the warning is therefore
  * conservative and may over-warn if the connection is also late).
  */
+/** How much the margin must deteriorate before the rider is told again. */
+const CONNECTION_REWARN_WORSEN_SECONDS = 30
+
+interface ConnectionWarnState {
+  warnedSlackSeconds: number
+}
+let connectionWarnState = new WeakMap<Leg, ConnectionWarnState>()
+
+/**
+ * Drop every connection's warned-margin baseline. Test-only, exactly like
+ * resetTurnAnnouncements: in production the lifetime is the leg object.
+ */
+export function resetConnectionWarnings(): void {
+  connectionWarnState = new WeakMap<Leg, ConnectionWarnState>()
+}
+
 export function checkConnectionWarning(
   progress: TripProgress,
   legs: Leg[],
@@ -839,6 +1005,30 @@ export function checkConnectionWarning(
 
   if (wasRecentlySent(id, sentNotifications, 120000)) return null
 
+  // Only warn again when the margin has actually got WORSE.
+  //
+  // Slack is recomputed from scratch every tick out of progress.delay, which
+  // swings tick to tick, and nothing remembered what had already been said. On
+  // 2026-08-27 the rider was warned four times about the same Gold Line
+  // connection at Rice Park — "about 56s", then 102s, then 120s, then 19s —
+  // three of them while the margin was IMPROVING as they closed on the stop.
+  // The 120s dedup window could not help: it is exactly
+  // CONNECTION_SLACK_THRESHOLD_SECONDS, so the alert re-armed as fast as the
+  // situation could change.
+  //
+  // State is keyed on the connecting leg object, the same trick
+  // resetTurnAnnouncements uses: a new itinerary means new legs, so a swap
+  // clears the baseline without anything having to remember to.
+  const previouslyWarned = connectionWarnState.get(nextTransitLeg)
+  if (
+    previouslyWarned &&
+    slackSeconds >
+      previouslyWarned.warnedSlackSeconds - CONNECTION_REWARN_WORSEN_SECONDS
+  ) {
+    return null
+  }
+  connectionWarnState.set(nextTransitLeg, { warnedSlackSeconds: slackSeconds })
+
   const { message, title } = connectionWarningCopy(
     routeName,
     stopName,
@@ -871,9 +1061,25 @@ const DELAY_ALERT_THRESHOLD_SECONDS = 180
 export function checkDelayAlert(
   progress: TripProgress,
   currentLeg: Leg,
-  sentNotifications: string[]
+  sentNotifications: string[],
+  /** Legs of the active itinerary, so the alert can tell it is still on one. */
+  legs?: Leg[]
 ): NotificationEvent | null {
   if (!isTransitMode(currentLeg.mode)) return null
+
+  // Is this leg still the one the rider is on?
+  //
+  // The function's whole world was progress.delay and whatever leg it was
+  // handed, so it could not tell a bus the rider is sitting on from one they
+  // have already left. matchPositionToRoute only searches forward, so between
+  // physically stepping off and the leg transition firing, the finished bus
+  // leg keeps accruing delay — and on 2026-08-27 it announced "94 is running
+  // about 3 min late" 64 seconds AFTER the rider got off it at Rice Park.
+  if (legs && legs[progress.currentLegIndex] !== currentLeg) return null
+
+  // Near the end of a leg the rider is arriving, not riding: a delay they can
+  // no longer do anything about is noise.
+  if ((progress.currentLegProgress ?? 0) >= 99) return null
 
   const delaySeconds = progress.delay ?? 0
   if (delaySeconds < DELAY_ALERT_THRESHOLD_SECONDS) return null
@@ -903,7 +1109,17 @@ export function checkTripComplete(
   progress: TripProgress,
   sentNotifications: string[]
 ): NotificationEvent | null {
-  if (progress.status === 'completed' || progress.overallProgress >= 99.5) {
+  // One arrival rule, defined next to the status it produces. This used to
+  // repeat `overallProgress >= 99.5` inline, as did the latch in actions/
+  // go-mode.ts — three copies that could disagree, and on 2026-08-27 all three
+  // missed a real arrival at 99.28%.
+  if (
+    progress.status === 'completed' ||
+    hasArrivedAtDestination(
+      progress.overallProgress,
+      progress.distanceToDestination
+    )
+  ) {
     const id = generateNotificationId('TRIP_COMPLETE', 'trip_end')
 
     if (!wasRecentlySent(id, sentNotifications)) {
@@ -968,7 +1184,10 @@ export function checkForNotifications(
     checkLegTransition(
       progress.currentLegIndex,
       previousLegIndex,
-      nextLeg,
+      // currentLeg, NOT nextLeg: announce the step being entered. `nextLeg` is
+      // still right for checkLeaveSoon and the pacing card, which are about
+      // what comes after.
+      currentLeg,
       sentNotifications
     )
   )
@@ -993,7 +1212,7 @@ export function checkForNotifications(
   if (!connectionWarning) {
     pushIf(
       notifications,
-      checkDelayAlert(progress, currentLeg, sentNotifications)
+      checkDelayAlert(progress, currentLeg, sentNotifications, legs)
     )
   }
 

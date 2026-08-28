@@ -11,6 +11,7 @@ import {
   CONFIRM_VEHICLE,
   DISMISS_BOARDING_PROMPT,
   PAUSE_GPS_SIMULATION,
+  REPAIR_LEG_GEOMETRY,
   RESUME_GPS_SIMULATION,
   SET_ARRIVED,
   SET_DEPARTURE_OVERRIDE,
@@ -44,7 +45,7 @@ import {
   UPDATE_TRACKING_INTERVAL,
   UPDATE_VEHICLE_MATCH
 } from '../actions/go-mode'
-import type { LiveLegTime, RidingState } from '../actions/go-mode'
+import type { LiveLegTime, RidingState } from '../util/go-mode/types'
 import type {
   NearbyVehicleOption,
   VehicleMatchResult
@@ -165,13 +166,11 @@ export interface GoModeState {
   progress: TripProgress | null
 
   reRoute: {
-    // Apply the best result without asking (definitive missed bus) instead of
-    // surfacing the Switch/Keep card.
+    // Apply the best result without asking (definitive missed bus). There is
+    // no Switch/Keep card: applyAutoReroute takes the itineraries as
+    // arguments, so this slice carries only the search's status, never its
+    // results.
     autoApply: boolean
-    // The single best candidate (kept for callers that only need one).
-    candidate: Itinerary | null
-    // All browsable alternatives, shortest-duration first.
-    candidates: Itinerary[]
     // Auto-apply may only pick itineraries boarding this route — the one the
     // rider already chose. Null = no constraint (manual re-routes).
     keepRouteId: string | null
@@ -276,8 +275,6 @@ const defaultState: GoModeState = {
 
   reRoute: {
     autoApply: false,
-    candidate: null,
-    candidates: [],
     keepRouteId: null,
     reason: null,
     searchId: null,
@@ -378,12 +375,29 @@ const goMode = handleActions<GoModeState, any>(
         notification.id
       ]
 
-      // Keep only last 50 sent notification IDs to prevent memory growth. The
-      // window must be wide enough that a chatty type (e.g. route deviation)
-      // cannot evict one-shot ids like TRIP_COMPLETE within their dedup window.
-      if (sentNotifications.length > 50) {
-        sentNotifications.shift()
-      }
+      // Evict by AGE first, then by count.
+      //
+      // A blind shift() at 50 evicts the OLDEST id regardless of whether its
+      // dedup window is still open, so a chatty type (route deviation fires
+      // every 120s; turn cues far more often) could push a one-shot id like
+      // TRIP_COMPLETE or an alight alert out from under its own suppression
+      // and let it fire a second time. The old comment knew the window "must
+      // be wide enough" — but width alone cannot fix an eviction policy that
+      // disagrees with the dedup policy.
+      //
+      // Every id already ends in its Date.now() (generateNotificationId), and
+      // wasRecentlySent parses it back out, so age is readable here without
+      // any change of shape. Drop only ids older than the longest dedup window
+      // in the service (ALIGHT_DEDUP_MS, 30 min), which is exactly the point
+      // past which no caller can still be suppressing on them.
+      const evictBefore = Date.now() - 30 * 60 * 1000
+      let kept = sentNotifications.filter((id) => {
+        const stamp = parseInt(id.slice(id.lastIndexOf('_') + 1), 10)
+        return Number.isNaN(stamp) || stamp >= evictBefore
+      })
+      // Backstop against unbounded growth if something ever fires in a tight
+      // loop inside the window. 200 is well clear of a real ride's traffic.
+      if (kept.length > 200) kept = kept.slice(kept.length - 200)
 
       // Add to recent notifications (keep last 10)
       const recentNotifications = [
@@ -396,7 +410,7 @@ const goMode = handleActions<GoModeState, any>(
         notifications: {
           ...state.notifications,
           recentNotifications,
-          sentNotifications
+          sentNotifications: kept
         }
       }
     },
@@ -487,6 +501,24 @@ const goMode = handleActions<GoModeState, any>(
         status: 'paused' as const
       }
     }),
+
+    // Swap in a leg's repaired polyline (see repairLegGeometry). Only the
+    // legGeometry field changes; the leg object is necessarily new, which
+    // resets any WeakMap state keyed on it in notification-service — that
+    // state is walk/bike turn tracking and connection baselines, neither of
+    // which a transit leg that was unmatchable until now can have accrued.
+    [REPAIR_LEG_GEOMETRY]: (state: GoModeState, action: any) => {
+      const { legGeometry, legIndex } = action.payload
+      const itinerary: any = state.activeItinerary
+      const leg = itinerary?.legs?.[legIndex]
+      if (!leg) return state
+      const legs = itinerary.legs.slice()
+      legs[legIndex] = { ...leg, legGeometry }
+      return {
+        ...state,
+        activeItinerary: { ...itinerary, legs }
+      }
+    },
 
     [RESUME_GPS_SIMULATION]: (state) => ({
       ...state,
@@ -585,21 +617,18 @@ const goMode = handleActions<GoModeState, any>(
 
     [SET_REROUTE_RESULT]: (state, action) => {
       // Payload is the full list of alternatives (or null/[] for "none").
-      const candidates: Itinerary[] = Array.isArray(action.payload)
-        ? action.payload
-        : action.payload
-        ? [action.payload]
-        : []
+      // Only its emptiness is kept: nothing reads the itineraries back out.
+      const found: boolean = Array.isArray(action.payload)
+        ? action.payload.length > 0
+        : action.payload != null
       return {
         ...state,
         reRoute: {
           ...state.reRoute,
-          // Results resolved into a card (or "none") — the auto-apply moment,
-          // if there was one, has passed.
+          // Results resolved (or "none") — the auto-apply moment, if there
+          // was one, has passed.
           autoApply: false,
-          candidate: candidates[0] ?? null,
-          candidates,
-          status: candidates.length > 0 ? ('found' as const) : ('none' as const)
+          status: found ? ('found' as const) : ('none' as const)
         }
       }
     },
@@ -652,15 +681,21 @@ const goMode = handleActions<GoModeState, any>(
         notifications: {
           ...state.notifications,
           recentNotifications: [],
-          // Alight alerts are keyed to the physical exit STOP, and they alone
-          // survive a trip swap: a background auto-update re-enters here with a
-          // new itinerary, and wiping their history let the same stop buzz the
-          // rider a second time — the complaint this whole path exists to fix.
-          // Everything else (boarding, connections, turns) is about the trip
-          // that just changed and must be free to fire again.
+          // Alight and board-vehicle alerts are keyed to a physical stop (and,
+          // for boarding, the trip), and they alone survive a trip swap: a
+          // background auto-update re-enters here with a new itinerary, and
+          // wiping their history let the same stop buzz the rider a second
+          // time — the complaint this whole path exists to fix. A re-plan onto
+          // a DIFFERENT run still re-arms the board alerts, because the trip
+          // id is part of their key. Everything else (boarding prompts,
+          // connections, turns) is about the trip that just changed and must
+          // be free to fire again.
           sentNotifications: state.notifications.sentNotifications.filter(
             (id) =>
-              id.startsWith('APPROACH_STOP_') || id.startsWith('ARRIVING_STOP_')
+              id.startsWith('APPROACH_STOP_') ||
+              id.startsWith('ARRIVING_STOP_') ||
+              id.startsWith('BOARD_BUS_APPROACHING_') ||
+              id.startsWith('BOARD_BUS_ARRIVING_')
           )
         },
         originalFrom: originalFrom ?? null,
@@ -672,7 +707,27 @@ const goMode = handleActions<GoModeState, any>(
           ...state.tracking,
           error: null,
           isTracking: true
-        }
+        },
+        // The vehicle match belongs to the itinerary that just went away. It
+        // was carried across untouched, so the first tick after a swap
+        // refreshed a CONFIRMED match against the previous trip's cached
+        // vehicles using the new rider position — which on 2026-08-27 reported
+        // the rider 5,220 m from "their" bus for one frame, 51 ms before the
+        // fresh feed arrived and the next tick read 698 m.
+        //
+        // Two comments elsewhere (actions/go-mode.ts, in beginGoMode and
+        // replanFromAboard) already assert that beginGoMode resets this. It
+        // did not. Now it does, so those comments are true and
+        // reconfirmBoardedVehicle is undoing a reset that actually happens.
+        //
+        // A confirmed match is preserved when the rider is still riding: an
+        // auto-update mid-ride (missed bus, quiet replan) hands back a new
+        // itinerary for the SAME bus the rider is sitting on, and making them
+        // re-confirm it would be a regression. reanchorRiding above decides
+        // that, so key off its result rather than the pre-swap state.
+        vehicleMatch: reanchorRiding(state.riding, itinerary)
+          ? state.vehicleMatch
+          : { ...defaultState.vehicleMatch }
       }
     },
 
@@ -701,8 +756,6 @@ const goMode = handleActions<GoModeState, any>(
       ...state,
       reRoute: {
         autoApply: !!action.payload.autoApply,
-        candidate: null,
-        candidates: [],
         keepRouteId: action.payload.keepRouteId ?? null,
         reason: action.payload.reason ?? null,
         searchId: action.payload.searchId,

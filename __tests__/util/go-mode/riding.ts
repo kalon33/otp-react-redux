@@ -9,7 +9,7 @@ import {
 } from '../../../lib/actions/go-mode'
 import { getNextStopOnRide } from '../../../lib/util/go-mode/next-stop'
 import goMode from '../../../lib/reducers/go-mode'
-import type { RidingState } from '../../../lib/actions/go-mode'
+import type { RidingState } from '../../../lib/util/go-mode/types'
 
 const initial = goMode(undefined, { type: '@@INIT' })
 
@@ -23,6 +23,35 @@ const riding: RidingState = {
   tripId: '1:trip-1',
   vehicleId: 'v-42'
 }
+
+describe('START_GO_MODE swap-exemption for stop-keyed alerts', () => {
+  it('keeps alight and board-vehicle ids, frees everything else to re-fire', () => {
+    const withSent = {
+      ...initial,
+      notifications: {
+        ...initial.notifications,
+        sentNotifications: [
+          'APPROACH_STOP_1:stop_prepare_123',
+          'ARRIVING_STOP_1:stop_act_123',
+          'BOARD_BUS_APPROACHING_1:stop_1:trip_approaching_123',
+          'BOARD_BUS_ARRIVING_1:stop_1:trip_arriving_123',
+          'LEAVE_SOON_leg1_123',
+          'ROUTE_DEVIATION_deviation_123'
+        ]
+      }
+    } as any
+    const next = goMode(
+      withSent,
+      startGoMode({ itinerary: { legs: [] } as any })
+    )
+    expect(next.notifications.sentNotifications).toEqual([
+      'APPROACH_STOP_1:stop_prepare_123',
+      'ARRIVING_STOP_1:stop_act_123',
+      'BOARD_BUS_APPROACHING_1:stop_1:trip_approaching_123',
+      'BOARD_BUS_ARRIVING_1:stop_1:trip_arriving_123'
+    ])
+  })
+})
 
 describe('go-mode riding reducer', () => {
   it('starts with no riding fact', () => {
@@ -86,6 +115,66 @@ describe('go-mode riding reducer', () => {
     }
     const state = goMode(set, startGoMode({ itinerary }))
     expect(state.riding?.legIndex).toBe(2)
+  })
+
+  // 2026-08-27: the vehicle match was carried across an itinerary swap
+  // untouched, so the first tick refreshed a CONFIRMED match against the OLD
+  // trip's cached vehicles with the new rider position and reported the rider
+  // 5,220 m from "their" bus for one frame.
+  it('START_GO_MODE drops a vehicle match that no longer has a rider aboard', () => {
+    const withMatch = {
+      ...initial,
+      vehicleMatch: {
+        consecutiveMatches: 4,
+        emptyPolls: 0,
+        match: {
+          confidence: 'confirmed',
+          distanceMeters: 12,
+          label: '4769',
+          lastSeen: 1787854783000,
+          tripId: '2:t5E6',
+          vehicleId: '2:4769'
+        },
+        nearbyVehicles: []
+      }
+    } as any
+    // No riding fact, so nothing re-anchors: the match is about a trip the
+    // rider is not on any more.
+    const swapped = goMode(withMatch, startGoMode({ itinerary: { legs: [] } }))
+    expect(swapped.vehicleMatch?.match).toBeNull()
+    expect(swapped.vehicleMatch?.consecutiveMatches).toBe(0)
+  })
+
+  it('START_GO_MODE keeps the match when the rider is still on that bus', () => {
+    // A mid-ride auto-update (missed bus, quiet replan) hands back a new
+    // itinerary for the SAME bus the rider is sitting on. Making them
+    // re-confirm it would be a regression.
+    const set = goMode(initial, setRiding(riding))
+    const withMatch = {
+      ...set,
+      vehicleMatch: {
+        consecutiveMatches: 4,
+        emptyPolls: 0,
+        match: {
+          confidence: 'confirmed',
+          distanceMeters: 12,
+          label: '8140',
+          lastSeen: 1787854783000,
+          tripId: '1:trip-1',
+          vehicleId: '1:8140'
+        },
+        nearbyVehicles: []
+      }
+    } as any
+    const itinerary: any = {
+      legs: [
+        { mode: 'WALK' },
+        { mode: 'BUS', transitLeg: true, trip: { gtfsId: '1:trip-1' } }
+      ]
+    }
+    const swapped = goMode(withMatch, startGoMode({ itinerary }))
+    expect(swapped.riding?.legIndex).toBe(1)
+    expect(swapped.vehicleMatch?.match?.vehicleId).toBe('1:8140')
   })
 
   it('START_GO_MODE with a spliced-bus itinerary re-anchors riding to leg 0', () => {

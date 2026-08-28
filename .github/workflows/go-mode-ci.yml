@@ -16,12 +16,14 @@ on:
   push:
     branches: 
       - feature/go-mode
+      - main
       - mistral
       - mistral2
       - working
   pull_request:
     branches:
       - feature/go-mode
+      - main
       - mistral
       - mistral2
       - working
@@ -42,11 +44,12 @@ jobs:
       - name: Install dependencies
         run: yarn install --frozen-lockfile
 
-      # Advisory only: the branch carries ~60 pre-existing TS errors (implicit
-      # anys in the go-mode modules, missing redux-actions decls). Flip this to
-      # blocking once they're paid down.
-      - name: Typecheck (advisory)
-        continue-on-error: true
+      # Blocking as of 2026-08-18. The ~60 "pre-existing errors" this used to
+      # tolerate were almost entirely one missing package: redux-actions ships
+      # no types, so handleActions was `any` and every reducer callback's
+      # parameters were implicitly any — 56 errors in one file from a single
+      # cause. @types/redux-actions removed 55 of the 61 outright.
+      - name: Typecheck
         run: yarn typecheck
 
       # NODE_ENV=test is mandatory — without it jest dies in global-setup

@@ -8,6 +8,7 @@ import { GlobeAmericas } from '@styled-icons/fa-solid/GlobeAmericas'
 import { GraduationCap } from '@styled-icons/fa-solid/GraduationCap'
 import { History } from '@styled-icons/fa-solid/History'
 import { MapMarked } from '@styled-icons/fa-solid/MapMarked'
+import { MapMarkerAlt } from '@styled-icons/fa-solid/MapMarkerAlt'
 import { MapPin } from '@styled-icons/fa-solid/MapPin'
 import { Undo } from '@styled-icons/fa-solid/Undo'
 import React, { Component, Fragment, useContext } from 'react'
@@ -26,10 +27,12 @@ import { ComponentContext } from '../../util/contexts'
 import { convertChineseLanguageCode, getLanguageOptions } from '../../util/i18n'
 import {
   getBuildInfo,
+  getDeviceId,
   isDebugLogEnabled,
   setDebugLogEnabled
 } from '../../util/debug-log'
 import { isModuleEnabled, Modules } from '../../util/config'
+import { LOCAL_PLACES_PATH } from '../../util/constants'
 
 import AppMenuItem from './app-menu-item'
 import PopupTriggerText from './popup-trigger-text'
@@ -53,10 +56,13 @@ type AppMenuProps = {
   callTakerEnabled?: boolean
   extraMenuItems?: AppMenuItemConfig[]
   language?: LanguageConfig
-  languageOptions: Record<string, any> | null
-  mailablesEnabled?: boolean
-  popupTarget?: string
-  resetAndToggleCallHistory?: () => void
+
+  resetAndToggleFieldTrips?: () => void
+  rideConsoleDeviceIds?: string[]
+  rideConsoleUrl?: string
+  resetAndToggleFieldTrips?: () => void
+  rideConsoleDeviceIds?: string[]
+  rideConsoleUrl?: string
   setLocale: (locale: string) => void
   setPopupContent: (url: string) => void
   startOverFromInitialUrl: () => void
@@ -174,8 +180,11 @@ class AppMenu extends Component<
       mailablesEnabled,
       popupTarget,
       resetAndToggleCallHistory,
-      setLocale,
       toggleMailables,
+
+      resetAndToggleFieldTrips,
+      rideConsoleDeviceIds,
+      rideConsoleUrl,
       translateExternalLinks
     } = this.props
     const languageMenuItems: MenuItem[] | null = languageOptions && [
@@ -197,6 +206,17 @@ class AppMenu extends Component<
         subMenuDivider: false
       }
     ]
+
+    // The console is tailnet-gated server-side, so on any device not on the
+    // owner's tailnet the link is a dead 403 — and native builds default
+    // diagnostics ON, so without the allowlist every TestFlight install would
+    // show a button that cannot work.
+    const showRideConsole =
+      this.state.diagnosticsOn &&
+      !!getDeviceId() &&
+      !!rideConsoleUrl &&
+      (!rideConsoleDeviceIds ||
+        rideConsoleDeviceIds.includes(getDeviceId() as string))
 
     const { isPaneOpen } = this.state
     const { extraViews, SvgIcon } = this.context
@@ -269,6 +289,15 @@ class AppMenu extends Component<
               to="/nearby"
             />
             <AppMenuItem
+              icon={<MapMarkerAlt />}
+              onClick={this._togglePane}
+              text={intl.formatMessage({
+                defaultMessage: 'My places',
+                id: 'components.AppMenu.myPlaces'
+              })}
+              to={LOCAL_PLACES_PATH}
+            />
+            <AppMenuItem
               icon={<Undo />}
               onClick={this._startOver}
               text={intl.formatMessage({
@@ -326,6 +355,24 @@ class AppMenu extends Component<
                     })
               }
             />
+            {/* The ride console is a page on the server, not part of this app,
+                so it cannot read this phone's device id for itself. Opening it
+                from here is what hands the id over; the console keeps it, so
+                the rider's bookmark works on every later trip. Without it the
+                server can only serve whoever reported last — which, with two
+                riders out, is the other one. */}
+            {showRideConsole && (
+              <AppMenuItem
+                href={`${rideConsoleUrl}?device=${encodeURIComponent(
+                  getDeviceId() as string
+                )}`}
+                icon={<ExternalLinkSquareAlt />}
+                text={intl.formatMessage({
+                  defaultMessage: 'Open ride console',
+                  id: 'components.AppMenu.openRideConsole'
+                })}
+              />
+            )}
             {this._addExtraMenuItems(extraMenuItems, translateExternalLinks)}
             {this._addExtraMenuItems(languageMenuItems)}
             <div className="app-menu-build-info">
@@ -341,8 +388,14 @@ class AppMenu extends Component<
 // connect to the redux store
 
 const mapStateToProps = (state: AppReduxState) => {
-  const { extraMenuItems, language, popups, translateExternalLinks } =
-    state.otp.config
+  const {
+    extraMenuItems,
+    language,
+    popups,
+    rideConsoleDeviceIds,
+    rideConsoleUrl,
+    translateExternalLinks
+  } = state.otp.config
   return {
     activeLocale: state.otp.ui.locale,
     callTakerEnabled: isModuleEnabled(state, Modules.CALL_TAKER),
@@ -351,6 +404,8 @@ const mapStateToProps = (state: AppReduxState) => {
     languageOptions: getLanguageOptions(language),
     mailablesEnabled: isModuleEnabled(state, Modules.MAILABLES),
     popupTarget: popups?.launchers?.sidebarLink,
+    rideConsoleDeviceIds,
+    rideConsoleUrl,
     translateExternalLinks
   }
 }

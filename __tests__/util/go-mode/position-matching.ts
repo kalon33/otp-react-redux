@@ -1,3 +1,5 @@
+import { encode } from '@mapbox/polyline'
+
 import {
   calculateCumulativeDistances,
   calculateDistance,
@@ -179,6 +181,63 @@ describe('util > go-mode > position-matching', () => {
     })
   })
 
+  describe('hysteresis on a self-overlapping shape', () => {
+    // The 465's downtown loop doubles back along 2 Av S, so two candidate
+    // segments sit sub-metre apart. On 2026-08-27 the strict global minimum
+    // alternated between them four times in thirty seconds (13:36:16, :24,
+    // :25, :27), dragging progressAlongLeg from 96.32% back to 95.14% and
+    // un-passing a stop the rider had already gone by.
+    //
+    // An out-and-back on one line: the rider is near the fold, so the outbound
+    // and return segments are both essentially underfoot.
+    // One polyline unit apart (~0.8 m at this latitude) — precision-5 encoding
+    // cannot express less, and the real flip was sub-metre.
+    const outAndBack = encode([
+      [44.97, -93.27],
+      [44.975, -93.27],
+      [44.98, -93.27],
+      [44.975, -93.27001],
+      [44.97, -93.27001]
+    ])
+    const legs = [{ legGeometry: { points: outAndBack }, mode: 'BUS' }] as any[]
+    const nearTheFold: [number, number] = [44.97501, -93.270005]
+
+    // Marginally closer to the OUTBOUND pass (~25% along) than to the return
+    // pass (~75%), by well under the hysteresis band. This is the tick that
+    // flipped on the real ride.
+    const leaningOutbound: [number, number] = [44.97501, -93.269998]
+
+    it('holds position when a near-tie would drag progress backward', () => {
+      // Without memory the marginally-closer outbound candidate wins and
+      // progress collapses to the first pass.
+      const naive = matchPositionToRoute(leaningOutbound, legs)
+      expect(naive!.progressAlongLeg).toBeLessThan(0.5)
+
+      // Having already been three-quarters along, that jump is rejected.
+      const onReturn = matchPositionToRoute(nearTheFold, legs)
+      expect(onReturn!.progressAlongLeg).toBeGreaterThan(0.5)
+      const held = matchPositionToRoute(leaningOutbound, legs, 0, onReturn)
+      expect(held!.progressAlongLeg).toBeGreaterThan(0.5)
+    })
+
+    it('never returns null just because every candidate is backward', () => {
+      // A rider who genuinely doubled back must still get a match; a null here
+      // reads to callers as "no geometry", which is far worse.
+      const wayAhead = {
+        ...matchPositionToRoute(nearTheFold, legs)!,
+        progressAlongLeg: 0.99
+      }
+      const still = matchPositionToRoute(nearTheFold, legs, 0, wayAhead)
+      expect(still).not.toBeNull()
+    })
+
+    it('is unchanged when the caller passes no previous match', () => {
+      const a = matchPositionToRoute(nearTheFold, legs)
+      const b = matchPositionToRoute(nearTheFold, legs, 0, null)
+      expect(b).toEqual(a)
+    })
+  })
+
   describe('shouldTransitionToNextLeg', () => {
     const matchOn = (legIndex: number, progressAlongLeg: number) => ({
       distanceFromRoute: 10,
@@ -208,6 +267,101 @@ describe('util > go-mode > position-matching', () => {
 
     it('should return false when on the last leg', () => {
       expect(shouldTransitionToNextLeg(matchOn(2, 0.99), 2)).toBe(false)
+    })
+
+    describe('the transit board-time gate', () => {
+      const NOW = new Date('2026-08-27T18:19:43Z').getTime()
+      const busLeg = (startTime: number) =>
+        ({
+          mode: 'BUS',
+          routeShortName: '465',
+          startTime,
+          to: { name: '2 Av S at 6 St S NE corner' },
+          transitLeg: true
+        } as any)
+      const walkLeg = {
+        mode: 'WALK',
+        to: { name: 'I-35W & 98th Street Station Gate E' }
+      } as any
+
+      // 2026-08-27: Go Mode started on a trip whose 465 boarded at 20:17Z. The
+      // rider was standing at the boarding stop, which is the shared endpoint
+      // of the access and transit legs, so the matcher returned leg 1 — and
+      // 82ms after START_GO_MODE the trip advanced onto a bus two hours out.
+      it('should not board a transit leg that is hours away', () => {
+        const board = new Date('2026-08-27T20:17:00Z').getTime()
+        expect(
+          shouldTransitionToNextLeg(matchOn(1, 0.01), 0, {
+            nowMs: NOW,
+            targetLeg: busLeg(board)
+          })
+        ).toBe(false)
+      })
+
+      it('should board once the departure is at hand', () => {
+        const board = NOW + 4 * 60 * 1000
+        expect(
+          shouldTransitionToNextLeg(matchOn(1, 0.01), 0, {
+            nowMs: NOW,
+            targetLeg: busLeg(board)
+          })
+        ).toBe(true)
+      })
+
+      it('should let the riding state override the clock', () => {
+        // A rider who caught an earlier run is aboard whatever the plan says.
+        const board = new Date('2026-08-27T20:17:00Z').getTime()
+        expect(
+          shouldTransitionToNextLeg(matchOn(1, 0.01), 0, {
+            isRiding: true,
+            nowMs: NOW,
+            targetLeg: busLeg(board)
+          })
+        ).toBe(true)
+      })
+
+      it('should prefer the live board time over the plan', () => {
+        // Plan says now; the feed says the bus is an hour late. Don't advance.
+        expect(
+          shouldTransitionToNextLeg(matchOn(1, 0.01), 0, {
+            boardEpoch: NOW + 60 * 60 * 1000,
+            nowMs: NOW,
+            targetLeg: busLeg(NOW)
+          })
+        ).toBe(false)
+      })
+
+      it('should never gate a walking leg on a board time', () => {
+        expect(
+          shouldTransitionToNextLeg(matchOn(1, 0.01), 0, {
+            nowMs: NOW,
+            targetLeg: walkLeg
+          })
+        ).toBe(true)
+      })
+
+      it('should keep index-order behaviour when the caller supplies no gate', () => {
+        const board = new Date('2026-08-27T20:17:00Z').getTime()
+        expect(shouldTransitionToNextLeg(matchOn(1, 0.01), 0)).toBe(true)
+        expect(
+          shouldTransitionToNextLeg(matchOn(1, 0.01), 0, {
+            targetLeg: busLeg(board)
+          })
+        ).toBe(true)
+      })
+
+      it('should advance when the leg has no usable start time', () => {
+        expect(
+          shouldTransitionToNextLeg(matchOn(1, 0.01), 0, {
+            nowMs: NOW,
+            targetLeg: {
+              mode: 'BUS',
+              to: { name: 'x' },
+              transitLeg: true
+            } as any
+          })
+        ).toBe(true)
+      })
     })
   })
 })

@@ -220,6 +220,7 @@ components:
     callHistory: Historique des appels
     closeMenu: Fermer le menu
     mailables: Prêt-à-poster
+    myPlaces: Mes lieux
     networkConnectionLost: Erreur de connexion réseau
     networkConnectionRestored: Connexion réseau restaurée
     openMenu: Ouvrir le menu
@@ -372,11 +373,16 @@ components:
     multipleOptions: Plusieurs options
     orAlternatives: ou autres lignes dans la même direction
     originallyScheduledTime: (initialement {originalTime})
+    sameShapeVariants: >-
+      {count, plural, one {# option} other {# options}}
     singleModeItineraryDescription: Trajet de {time} {mode}
     startTrip: Commencer le trajet
     switchTrip: Basculer vers ce trajet
     timeBiking: "{time} à vélo"
     timeWalking: "{time} de marche"
+    variantBiking: "{distance} à vélo"
+    variantShown: actuellement affiché
+    variantWalking: "{distance} à pied"
   MobilityProfile:
     DevicesPane:
       devices:
@@ -551,10 +557,6 @@ components:
       recevoir des notifications par SMS.
   Place:
     deleteThisPlace: Supprimer ce lieu
-    enterAlert: >
-      Entrez votre point de départ/destination dans le formulaire (ou cliquez
-      sur la carte), puis cliquez sur le marqueur qui apparaît afin de définir
-      votre {placeType}.
   PlaceEditor:
     addressPrompt: "Adresse :"
     genericLocationPlaceholder: Adresse du lieu
@@ -618,6 +620,9 @@ components:
     saveTripText: Enregistrer
     signInText: Connectez-vous pour enregistrer
     signInTooltip: Veuillez vous connecter pour enregistrer ce trajet.
+  SavedPlacesScreen:
+    heading: Lieux enregistrés
+    saveThisPlace: Enregistrer ce lieu
   SavedTripEditor:
     deleteSavedTrip: Supprimer ce trajet
     editSavedTrip: Modifier un trajet enregistré

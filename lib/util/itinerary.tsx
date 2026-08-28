@@ -95,17 +95,49 @@ export function legLocationsAreEqual(legLocation: Place, other: Place) {
   )
 }
 
+/**
+ * The ordered list of routes an itinerary actually rides, ignoring how the
+ * rider reaches the first stop and leaves the last one. This is the "shape" of
+ * a trip: 465 > 94 > Gold Line is one shape whether you bike 4 miles or 6 at
+ * the end. Empty for a walk- or bike-the-whole-way itinerary, which is why
+ * callers must not treat two empty signatures as a match.
+ */
+export function transitRouteSignature(itinerary: Itinerary): string {
+  return itinerary.legs
+    .filter((leg) => leg.transitLeg)
+    .map((leg) => leg.routeId ?? leg.mode)
+    .join('>')
+}
+
 export function itinerariesAreEqual(
   itinerary: Itinerary,
   other: Itinerary,
   defaultFareType: FareProductSelector,
-  // When true, two itineraries are only "equal" if every transit leg uses the
-  // same route (same routeId), so the merge collapses same-route/different-time
-  // departures while keeping genuinely different routes as separate results.
+  // When true, two itineraries are "equal" if they ride the same routes in the
+  // same order — the access and egress legs are not compared at all. OTP will
+  // happily return the same chain three times over, alighting a stop or two
+  // apart so the closing bike leg is 4.2, 5.0 and 6.3 miles; those are one
+  // trip to a rider, and spending three result rows on them pushes genuinely
+  // different options (the Orange Line variant of the same journey) off the
+  // bottom of the list. The merge keeps the soonest departure and hangs the
+  // rest on it as alternate start times, so nothing is actually lost.
   // When false (default), legs are matched by mode + stop location only, which
   // also folds alternate routes serving the same stops together.
   requireSameRoute = false
 ): boolean {
+  if (requireSameRoute) {
+    const signature = transitRouteSignature(itinerary)
+    // No transit at all (walk- or bike-only): there is no shape to compare, so
+    // fall through to the stricter leg-by-leg test rather than collapsing
+    // every non-transit itinerary into one.
+    if (signature !== '') {
+      return (
+        signature === transitRouteSignature(other) &&
+        getFare(itinerary, defaultFareType).transitFare ===
+          getFare(other, defaultFareType).transitFare
+      )
+    }
+  }
   return (
     getFare(itinerary, defaultFareType).transitFare ===
       getFare(other, defaultFareType).transitFare &&
@@ -115,10 +147,7 @@ export function itinerariesAreEqual(
       return (
         otherLeg.mode === leg.mode &&
         legLocationsAreEqual(otherLeg?.to, leg?.to) &&
-        legLocationsAreEqual(otherLeg?.from, leg?.from) &&
-        // routeId is undefined on access (walk/bike) legs, so those still match.
-        (!requireSameRoute ||
-          (otherLeg?.routeId ?? null) === (leg?.routeId ?? null))
+        legLocationsAreEqual(otherLeg?.from, leg?.from)
       )
     })
   )

@@ -29,6 +29,7 @@ const tick = (
 ) =>
   evaluatePacingCard(prev, {
     currentLeg: legs.currentLeg ?? bikeLeg,
+    enabled: true,
     nextLeg: legs.nextLeg ?? busLeg,
     nowMs,
     progress: prog(dueSecs, waitSecs)
@@ -87,12 +88,40 @@ describe('util > go-mode > pacing-card', () => {
     const first = tick(null, T0, 900, 300).next
     const gone = evaluatePacingCard(first, {
       currentLeg: busLeg,
+      enabled: true,
       nextLeg: undefined,
       nowMs: T0 + 60_000,
       progress: {} as any
     })
     expect(gone.next).toBeNull()
     expect(gone.post).toBeNull()
+    // The wrist is still showing the ride advice until someone cancels it.
+    expect(gone.clear).toBe(true)
+  })
+
+  it('has nothing to clear when no card was showing', () => {
+    const gone = evaluatePacingCard(null, {
+      currentLeg: busLeg,
+      enabled: true,
+      nextLeg: undefined,
+      nowMs: T0,
+      progress: {} as any
+    })
+    expect(gone.clear).toBe(false)
+  })
+
+  it('leaves the wrist untouched when disabled, rather than clearing it', () => {
+    // Replay, or config.goMode.pacingCard off. A replay must not cancel a card
+    // the live trip put there.
+    const showing = tick(null, T0, 900, 300).next
+    const d = evaluatePacingCard(showing, {
+      currentLeg: busLeg,
+      enabled: false,
+      nextLeg: undefined,
+      nowMs: T0 + 60_000,
+      progress: {} as any
+    })
+    expect(d).toEqual({ clear: false, next: showing, post: null })
   })
 
   it('stays quiet while the buffer holds steady', () => {

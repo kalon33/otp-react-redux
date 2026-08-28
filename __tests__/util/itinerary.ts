@@ -1,6 +1,8 @@
 import {
   getItineraryDefaultMonitoredDays,
-  itineraryCanBeMonitored
+  itinerariesAreEqual,
+  itineraryCanBeMonitored,
+  transitRouteSignature
 } from '../../lib/util/itinerary'
 import { WEEKDAYS, WEEKEND_DAYS } from '../../lib/util/monitored-trip'
 
@@ -171,5 +173,65 @@ describe('util > itinerary', () => {
         expect(getItineraryDefaultMonitoredDays(itinerary)).toBe(expected)
       })
     })
+  })
+})
+
+describe('trip shape (mergeByRouteSignature)', () => {
+  // OTP hands back the same chain several times over, alighting a stop or two
+  // apart so only the closing bike leg differs. Measured on
+  // Bloomington -> Oakdale: 465 > 94 > Gold Line came back three times with
+  // 4.2, 5.0 and 6.3 closing bike miles, taking three of the ten result rows.
+  const place = (lat: number, lon: number) => ({ lat, lon })
+  const ride = (routeId: string) => ({
+    from: place(1, 1),
+    mode: 'BUS',
+    routeId,
+    to: place(2, 2),
+    transitLeg: true
+  })
+  const bike = (lat: number) => ({
+    from: place(2, 2),
+    mode: 'BICYCLE',
+    to: place(lat, 9),
+    transitLeg: false
+  })
+  const noFares = { mediumId: null, riderCategoryId: null }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const same = (a: any, b: any) => itinerariesAreEqual(a, b, noFares, true)
+
+  const chain = (egressLat: number) => ({
+    legs: [ride('1:465'), ride('1:94'), ride('1:902'), bike(egressLat)]
+  })
+
+  it('reads the routes ridden, not the access or egress', () => {
+    expect(transitRouteSignature(chain(4) as never)).toBe('1:465>1:94>1:902')
+    expect(transitRouteSignature({ legs: [bike(4)] } as never)).toBe('')
+  })
+
+  it('collapses one chain that alights at different stops', () => {
+    expect(same(chain(4), chain(6))).toBe(true)
+  })
+
+  it('keeps a different route sequence separate', () => {
+    const viaOrange = {
+      legs: [ride('1:904'), ride('1:94'), ride('1:902'), bike(4)]
+    }
+    expect(same(chain(4), viaOrange)).toBe(false)
+  })
+
+  it('keeps the same routes ridden in a different order separate', () => {
+    const reversed = {
+      legs: [ride('1:94'), ride('1:465'), ride('1:902'), bike(4)]
+    }
+    expect(same(chain(4), reversed)).toBe(false)
+  })
+
+  it('does not fold every transit-free itinerary into one', () => {
+    // Both have an empty signature; walking the whole way and biking the whole
+    // way are not the same trip.
+    const walkOnly = { legs: [{ ...bike(4), mode: 'WALK' }] }
+    const bikeOnly = { legs: [bike(4)] }
+    expect(same(walkOnly, bikeOnly)).toBe(false)
+    expect(same(bikeOnly, bikeOnly)).toBe(true)
   })
 })

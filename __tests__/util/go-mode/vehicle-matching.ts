@@ -1,9 +1,9 @@
+import { calculateDistance } from '../../../lib/util/go-mode/position-matching'
 import {
   findNearbyVehicles,
   hasUsablePosition,
   matchUserToVehicle
 } from '../../../lib/util/go-mode/vehicle-matching'
-import { calculateDistance } from '../../../lib/util/go-mode/position-matching'
 import type { VehiclePosition } from '../../../lib/util/go-mode/vehicle-matching'
 
 // Two Orange Line vehicles on I-35W: one at the rider, one ~2 km behind.
@@ -160,6 +160,129 @@ describe('matchUserToVehicle', () => {
       expect(stopped.vehicleId).toBe('1:8148')
     })
 
+    // 2026-08-27: the rider stood at 6th St S & 2nd Ave at 0.0-0.3 m/s waiting
+    // for the outbound 94. The heading gate above cannot help at that speed, so
+    // the INBOUND run 117m away won the match, SET_RIDING bound them to it, and
+    // classifyMissedBus's `if (riding) return null` then suppressed missed-bus
+    // detection for the whole ten-minute wait. GTFS direction_id is a fact
+    // about the trip rather than about motion, so it still holds at a
+    // standstill.
+    describe('the direction_id gate (works at a standstill)', () => {
+      it('excludes the opposite-direction run when the rider is not moving', () => {
+        const inbound = vehicle({
+          directionId: 1,
+          lat: RIDER[0] + 0.001,
+          speed: 0,
+          tripId: '1:1184013',
+          vehicleId: '1:1786'
+        })
+        const match = matchUserToVehicle(
+          RIDER[0],
+          RIDER[1],
+          HEADING,
+          [inbound],
+          '1:904',
+          null,
+          900,
+          0.2,
+          0 // the rider's own leg runs direction 0
+        )
+        expect(match.confidence).toBe('none')
+        expect(match.vehicleId).toBeNull()
+      })
+
+      it('keeps the same-direction run', () => {
+        const outbound = vehicle({ directionId: 0, speed: 0 })
+        const match = matchUserToVehicle(
+          RIDER[0],
+          RIDER[1],
+          HEADING,
+          [outbound],
+          '1:904',
+          null,
+          900,
+          0.2,
+          0
+        )
+        expect(match.vehicleId).toBe('1:8148')
+      })
+
+      it('prefers the same-direction run over a closer opposing one', () => {
+        const closerInbound = vehicle({
+          directionId: 1,
+          lat: RIDER[0] + 0.0001,
+          vehicleId: '1:wrong'
+        })
+        const fartherOutbound = vehicle({
+          directionId: 0,
+          lat: RIDER[0] + 0.002,
+          vehicleId: '1:right'
+        })
+        const match = matchUserToVehicle(
+          RIDER[0],
+          RIDER[1],
+          HEADING,
+          [closerInbound, fartherOutbound],
+          '1:904',
+          null,
+          900,
+          0.2,
+          0
+        )
+        expect(match.vehicleId).toBe('1:right')
+      })
+
+      it('stays inert when either side declares no direction', () => {
+        // Records predating the API mapper fix carry no directionId, and a feed
+        // may omit it — neither should start excluding candidates.
+        const noDirection = vehicle({ speed: 0 })
+        expect(
+          matchUserToVehicle(
+            RIDER[0],
+            RIDER[1],
+            HEADING,
+            [noDirection],
+            '1:904',
+            null,
+            900,
+            0.2,
+            0
+          ).vehicleId
+        ).toBe('1:8148')
+
+        const hasDirection = vehicle({ directionId: 1, speed: 0 })
+        expect(
+          matchUserToVehicle(
+            RIDER[0],
+            RIDER[1],
+            HEADING,
+            [hasDirection],
+            '1:904',
+            null,
+            900,
+            0.2,
+            null // no expected direction known
+          ).vehicleId
+        ).toBe('1:8148')
+      })
+
+      it('compares direction ids across string/number shapes', () => {
+        const inbound = vehicle({ directionId: '1', speed: 0 })
+        const match = matchUserToVehicle(
+          RIDER[0],
+          RIDER[1],
+          HEADING,
+          [inbound],
+          '1:904',
+          null,
+          900,
+          0.2,
+          0
+        )
+        expect(match.vehicleId).toBeNull()
+      })
+    })
+
     it('the direction gate is inert while the vehicle is (near-)stationary', () => {
       // A bus dwelling at a stop reports garbage headings; never exclude it.
       const dwelling = vehicle({ heading: 2, lat: RIDER[0] + 0.0002, speed: 0 })
@@ -266,9 +389,9 @@ describe('calculateDistance', () => {
     expect(calculateDistance(44.86, -93.28, null as any, null as any)).toBe(
       Infinity
     )
-    expect(
-      calculateDistance(44.86, -93.28, undefined as any, -93.28)
-    ).toBe(Infinity)
+    expect(calculateDistance(44.86, -93.28, undefined as any, -93.28)).toBe(
+      Infinity
+    )
     // A genuine 0/0 coordinate is still arithmetic, not an error — the
     // hasUsablePosition filter is what rejects null island.
     expect(calculateDistance(0, 0, 0, 0)).toBe(0)

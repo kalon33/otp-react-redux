@@ -1,5 +1,8 @@
 import {
+  BOARD_APPROACH_METRES,
+  BOARD_ARRIVE_METRES,
   checkAlightAlerts,
+  checkBoardVehicleApproach,
   checkConnectionWarning,
   checkDelayAlert,
   checkForNotifications,
@@ -10,6 +13,7 @@ import {
   checkUpcomingTurn,
   classifyMissedBus,
   getEffectiveBoardTimeMs,
+  resetConnectionWarnings,
   resetTurnAnnouncements,
   shouldAutoReroute,
   triggerVibration,
@@ -34,10 +38,12 @@ const makeConfig = (overrides: Record<string, any> = {}) => ({
 })
 
 describe('util > go-mode > notification-service', () => {
-  // The turn latch lives for the life of a leg OBJECT; these tests reuse a
-  // handful of leg literals across cases, so clear it between them.
+  // The turn latch and the connection-warning baseline both live for the life
+  // of a leg OBJECT; these tests reuse a handful of leg literals across cases,
+  // so clear them between them.
   beforeEach(() => {
     resetTurnAnnouncements()
+    resetConnectionWarnings()
   })
 
   describe('wasRecentlySent', () => {
@@ -643,6 +649,22 @@ describe('util > go-mode > notification-service', () => {
       ).toBeNull()
     })
 
+    it('never pushes off-route while the matcher still says on-route', () => {
+      // 2026-08-27, 13:14:02-04: the matcher held isOnRoute at 248m (its
+      // transit corridor is 250m) while this check pushed "You are 239m from
+      // the planned route". One question, two answers, 9m apart. The transit
+      // threshold is now the matcher's own corridor.
+      const busLeg = { mode: 'BUS' } as any
+      expect(checkRouteDeviation(239, [], busLeg)).toBeNull()
+      expect(checkRouteDeviation(250, [], busLeg)).toBeNull()
+    })
+
+    it('still flags a genuine deviation beyond the transit corridor', () => {
+      const result = checkRouteDeviation(260, [], { mode: 'BUS' } as any)
+      expect(result).not.toBeNull()
+      expect(result!.type).toBe('ROUTE_DEVIATION')
+    })
+
     it('should dedup repeated deviations even as the distance changes', () => {
       const sent: string[] = []
       let fired = 0
@@ -660,6 +682,217 @@ describe('util > go-mode > notification-service', () => {
     it('should fire again after the 120s window expires', () => {
       const staleId = `ROUTE_DEVIATION_deviation_${Date.now() - 121000}`
       expect(checkRouteDeviation(250, [staleId])).not.toBeNull()
+    })
+  })
+
+  describe('checkBoardVehicleApproach', () => {
+    // The rider's planned boarding: the 465 at I-35W & 98th St, with two more
+    // stops before their exit. orderedStopsOnLeg = intermediates + alight (the
+    // board stop is leg.from), so a vehicle nextStopId found on the leg means
+    // the bus is already PAST the boarding.
+    const boardLeg: any = {
+      from: {
+        lat: 44.865,
+        lon: -93.3,
+        name: 'I-35W & 98th St Station',
+        stop: { gtfsId: '1:board-stop' }
+      },
+      intermediatePlaces: [
+        {
+          lat: 44.9,
+          lon: -93.29,
+          name: 'Mid stop',
+          stop: { gtfsId: '1:mid-stop' }
+        }
+      ],
+      mode: 'BUS',
+      routeShortName: '465',
+      to: {
+        lat: 44.97,
+        lon: -93.27,
+        name: 'Downtown',
+        stop: { gtfsId: '1:alight-stop' }
+      },
+      trip: { gtfsId: '1:trip-465' }
+    }
+    const NOW = 1787852667000
+    const vehicle = (over: any = {}) => ({
+      ageSec: 10,
+      distanceToBoardStopM: 5000,
+      nextStopId: null,
+      ...over
+    })
+    const check = (vehicleOver: any, ctxOver: any = {}, sent: string[] = []) =>
+      checkBoardVehicleApproach(
+        boardLeg,
+        {
+          liveBoardEpochMs: null,
+          nowMs: NOW,
+          vehicle: vehicleOver === null ? null : vehicle(vehicleOver),
+          ...ctxOver
+        },
+        sent
+      )
+
+    it('says nothing without a vehicle record — schedule times fire nothing', () => {
+      expect(check(null)).toBeNull()
+      expect(check(null, { liveBoardEpochMs: NOW + 60000 })).toBeNull()
+    })
+
+    it('says nothing on a stale record', () => {
+      expect(
+        check({ ageSec: 300, distanceToBoardStopM: BOARD_ARRIVE_METRES - 50 })
+      ).toBeNull()
+    })
+
+    it('stays quiet while the bus is still far out with no live prediction', () => {
+      expect(
+        check({ distanceToBoardStopM: BOARD_APPROACH_METRES + 500 })
+      ).toBeNull()
+    })
+
+    it('raises the heads-up when the bus closes on the stop', () => {
+      const event = check({ distanceToBoardStopM: 1200 })
+      expect(event).not.toBeNull()
+      expect(event!.type).toBe('BOARD_BUS_APPROACHING')
+      expect(event!.message).toContain('465')
+      expect(event!.message).toContain('I-35W & 98th St Station')
+    })
+
+    it('raises the heads-up off a live board prediction inside the window', () => {
+      const event = check(
+        { distanceToBoardStopM: null },
+        { liveBoardEpochMs: NOW + 120000 }
+      )
+      expect(event).not.toBeNull()
+      expect(event!.type).toBe('BOARD_BUS_APPROACHING')
+    })
+
+    it('escalates to arriving at the stop — by next-stop fact or distance', () => {
+      const byNextStop = check({ nextStopId: '1:board-stop' })
+      expect(byNextStop!.type).toBe('BOARD_BUS_ARRIVING')
+      expect(byNextStop!.priority).toBe('high')
+      const byDistance = check({
+        distanceToBoardStopM: BOARD_ARRIVE_METRES - 50
+      })
+      expect(byDistance!.type).toBe('BOARD_BUS_ARRIVING')
+    })
+
+    it('fires each stage exactly once across a full approach', () => {
+      const sent: string[] = []
+      const fired: string[] = []
+      // 2.4km out to at-the-stop, 100m per tick.
+      for (let d = 2400; d >= 0; d -= 100) {
+        const event = check({ distanceToBoardStopM: d }, {}, sent)
+        if (event) {
+          fired.push(event.type)
+          sent.push(event.id)
+        }
+      }
+      expect(fired).toEqual(['BOARD_BUS_APPROACHING', 'BOARD_BUS_ARRIVING'])
+    })
+
+    it('says nothing about a bus already past the boarding stop', () => {
+      // The vehicle's own next stop is beyond the boarding — been and gone.
+      // MISSED_BUS owns that story; "your bus is arriving" would be a lie.
+      expect(
+        check({ distanceToBoardStopM: 200, nextStopId: '1:mid-stop' })
+      ).toBeNull()
+      expect(
+        check({ distanceToBoardStopM: 200, nextStopId: '1:alight-stop' })
+      ).toBeNull()
+    })
+
+    it('re-arms for a different run: the trip id is part of the key', () => {
+      const first = check({ distanceToBoardStopM: 1200 })!
+      // A re-plan onto a later run of the same route at the same stop.
+      const laterRunLeg = { ...boardLeg, trip: { gtfsId: '1:trip-465-later' } }
+      const again = checkBoardVehicleApproach(
+        laterRunLeg,
+        {
+          liveBoardEpochMs: null,
+          nowMs: NOW,
+          vehicle: vehicle({ distanceToBoardStopM: 1200 })
+        },
+        [first.id]
+      )
+      expect(again).not.toBeNull()
+      // While the SAME trip after an itinerary swap stays deduped.
+      expect(
+        checkBoardVehicleApproach(
+          boardLeg,
+          {
+            liveBoardEpochMs: null,
+            nowMs: NOW,
+            vehicle: vehicle({ distanceToBoardStopM: 1200 })
+          },
+          [first.id]
+        )
+      ).toBeNull()
+    })
+  })
+
+  describe('checkDelayAlert staleness', () => {
+    // 2026-08-27: "94 is running about 3 min late" fired 64 seconds after the
+    // rider stepped off the 94 at Rice Park. matchPositionToRoute only searches
+    // forward, so between physically alighting and the leg transition firing,
+    // the finished bus leg keeps accruing delay.
+    const busLeg = {
+      mode: 'BUS',
+      routeShortName: '94',
+      to: { name: 'Rice' }
+    } as any
+    const bikeLeg = { mode: 'BICYCLE', to: { name: 'Helmo' } } as any
+
+    it('stays quiet about a leg the rider has already left', () => {
+      expect(
+        checkDelayAlert(
+          makeProgress({ currentLegIndex: 3, delay: 240 }),
+          busLeg,
+          [],
+          [bikeLeg, bikeLeg, busLeg, bikeLeg] // rider is on leg 3 now
+        )
+      ).toBeNull()
+    })
+
+    it('still alerts about the leg the rider IS on', () => {
+      const alert = checkDelayAlert(
+        makeProgress({
+          currentLegIndex: 2,
+          currentLegProgress: 40,
+          delay: 240
+        }),
+        busLeg,
+        [],
+        [bikeLeg, bikeLeg, busLeg, bikeLeg]
+      )
+      expect(alert).not.toBeNull()
+      expect(alert!.message).toContain('94')
+    })
+
+    it('stays quiet once the leg is essentially over', () => {
+      expect(
+        checkDelayAlert(
+          makeProgress({
+            currentLegIndex: 2,
+            currentLegProgress: 99.5,
+            delay: 240
+          }),
+          busLeg,
+          [],
+          [bikeLeg, bikeLeg, busLeg, bikeLeg]
+        )
+      ).toBeNull()
+    })
+
+    it('is unchanged when the caller supplies no legs', () => {
+      expect(
+        checkDelayAlert(
+          makeProgress({ currentLegIndex: 2, delay: 240 }),
+          busLeg,
+          []
+        )
+      ).not.toBeNull()
     })
   })
 
@@ -721,6 +954,60 @@ describe('util > go-mode > notification-service', () => {
         startTime: T + 900000
       }
     ] as any[]
+
+    // 2026-08-27, Rice Park: the rider was warned FOUR times about the same
+    // Gold Line connection — "about 56s", 102s, 120s, then 19s — and three of
+    // those fired while the margin was IMPROVING as they closed on the stop.
+    // Slack is recomputed every tick from progress.delay, which swings, and
+    // nothing remembered what had already been said. The 120s dedup window is
+    // exactly CONNECTION_SLACK_THRESHOLD_SECONDS, so it re-armed as fast as
+    // the situation could change.
+    it('warns once, then stays quiet while the margin recovers', () => {
+      // Slack here = 300s - delay - 120s transfer. delay 240 -> 60s slack.
+      const warn = checkConnectionWarning(
+        makeProgress({ currentLegIndex: 0, delay: 240 }),
+        connectionLegs,
+        0,
+        []
+      )
+      expect(warn).not.toBeNull()
+
+      // Margin improving: 120s, then 150s of slack. Neither is news.
+      expect(
+        checkConnectionWarning(
+          makeProgress({ currentLegIndex: 0, delay: 180 }),
+          connectionLegs,
+          0,
+          []
+        )
+      ).toBeNull()
+      expect(
+        checkConnectionWarning(
+          makeProgress({ currentLegIndex: 0, delay: 150 }),
+          connectionLegs,
+          0,
+          []
+        )
+      ).toBeNull()
+    })
+
+    it('warns again once the margin genuinely deteriorates', () => {
+      checkConnectionWarning(
+        makeProgress({ currentLegIndex: 0, delay: 240 }), // 60s slack
+        connectionLegs,
+        0,
+        []
+      )
+      // Down to 15s of slack — a real worsening, worth saying.
+      const worse = checkConnectionWarning(
+        makeProgress({ currentLegIndex: 0, delay: 285 }),
+        connectionLegs,
+        0,
+        []
+      )
+      expect(worse).not.toBeNull()
+      expect(worse!.type).toBe('CONNECTION_WARNING')
+    })
 
     it('should warn when the connection will be missed', () => {
       // 10 min late: projected arrival (+20min) is past the +15min departure
@@ -821,6 +1108,60 @@ describe('util > go-mode > notification-service', () => {
   })
 
   describe('checkForNotifications', () => {
+    // The off-by-one lived at the CALL SITE, not inside checkLegTransition —
+    // every unit test above hands the announced leg straight in as the third
+    // argument, so none of them could ever have caught it. On 2026-08-27 the
+    // caller passed legs[i + 1] and the rider was told to board the wrong bus
+    // at all three transitions: entering the bike leg -> "Board 94", entering
+    // the 94 -> "Board METRO Gold Line", entering the Gold Line -> "Continue
+    // to 4Front".
+    it('announces the leg being ENTERED, not the one after it', () => {
+      const enteredBike = {
+        mode: 'BICYCLE',
+        to: { name: '4th St S at 2nd Ave' }
+      } as any
+      const theBusAfterThat = {
+        mode: 'BUS',
+        routeShortName: '94',
+        to: { name: 'Rice Park Station' }
+      } as any
+
+      const result = checkForNotifications(
+        makeProgress({ currentLegIndex: 1 }),
+        enteredBike,
+        0, // previousLegIndex — a transition just happened
+        theBusAfterThat,
+        10,
+        [],
+        makeConfig()
+      )
+
+      const transition = result.find((n) => n.type === 'LEG_TRANSITION')
+      expect(transition?.message).toBe('Continue to 4th St S at 2nd Ave')
+      expect(transition?.message).not.toContain('94')
+      expect(transition?.id).toContain('leg_1_BICYCLE')
+    })
+
+    it('names the bus the rider is actually boarding', () => {
+      const enteredBus = {
+        mode: 'BUS',
+        routeShortName: '94',
+        to: { name: 'Rice Park Station' }
+      } as any
+      const result = checkForNotifications(
+        makeProgress({ currentLegIndex: 2 }),
+        enteredBus,
+        1,
+        { mode: 'RAIL', routeShortName: 'Gold', to: { name: 'Helmo' } } as any,
+        10,
+        [],
+        makeConfig()
+      )
+      const transition = result.find((n) => n.type === 'LEG_TRANSITION')
+      expect(transition?.message).toBe('Board 94 to Rice Park Station')
+      expect(transition?.message).not.toContain('Gold')
+    })
+
     it('should return empty array when notifications are disabled', () => {
       const progress = makeProgress({ stopsRemaining: 2 })
       const leg = {

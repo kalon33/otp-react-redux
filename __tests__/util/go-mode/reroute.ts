@@ -35,8 +35,6 @@ describe('go-mode re-route reducer', () => {
   it('starts with an idle reRoute state', () => {
     expect(initial.reRoute).toEqual({
       autoApply: false,
-      candidate: null,
-      candidates: [],
       keepRouteId: null,
       reason: null,
       searchId: null,
@@ -49,8 +47,6 @@ describe('go-mode re-route reducer', () => {
     const state = goMode(initial, startReroute({ searchId: 'abc' }))
     expect(state.reRoute).toEqual({
       autoApply: false,
-      candidate: null,
-      candidates: [],
       keepRouteId: null,
       reason: null,
       searchId: 'abc',
@@ -92,12 +88,11 @@ describe('go-mode re-route reducer', () => {
     expect(state.reRoute.status).toBe('none')
   })
 
-  it('SET_REROUTE_RESULT with an itinerary -> found + candidate', () => {
+  it('SET_REROUTE_RESULT with an itinerary -> found', () => {
     const searching = goMode(initial, startReroute({ searchId: 'abc' }))
     const itin = { duration: 1200 } as any
     const state = goMode(searching, setRerouteResult(itin))
     expect(state.reRoute.status).toBe('found')
-    expect(state.reRoute.candidate).toBe(itin)
     // searchId is preserved across the result.
     expect(state.reRoute.searchId).toBe('abc')
   })
@@ -106,7 +101,6 @@ describe('go-mode re-route reducer', () => {
     const searching = goMode(initial, startReroute({ searchId: 'abc' }))
     const state = goMode(searching, setRerouteResult(null))
     expect(state.reRoute.status).toBe('none')
-    expect(state.reRoute.candidate).toBeNull()
   })
 
   it('CLEAR_REROUTE resets to idle', () => {
@@ -117,8 +111,6 @@ describe('go-mode re-route reducer', () => {
     const state = goMode(found, clearReroute())
     expect(state.reRoute).toEqual({
       autoApply: false,
-      candidate: null,
-      candidates: [],
       keepRouteId: null,
       reason: null,
       searchId: null,
@@ -289,7 +281,6 @@ describe('reRouteFromCurrentPosition (isolated pipeline)', () => {
     expect(types).not.toContain('ROUTING_REQUEST')
     expect(types).toContain('START_REROUTE')
     expect(store.getGoMode().reRoute.status).toBe('found')
-    expect(store.getGoMode().reRoute.candidates).toEqual(itineraries)
   })
 
   it('resolves to "none" on an error or empty plan', async () => {
@@ -699,5 +690,90 @@ describe('pickSameRouteReroute', () => {
     ).toBeNull()
     expect(pickSameRouteReroute([itin('1:546', 60000)], null)).toBeNull()
     expect(pickSameRouteReroute([], '1:546')).toBeNull()
+  })
+})
+
+describe('a named route survives a Go Mode re-route', () => {
+  const mockedFetch = fetchOnboardCandidatePlan as jest.Mock
+  const T = 1780000000000
+
+  beforeEach(() => {
+    mockedFetch.mockReset()
+    mockedFetch.mockReturnValue(() =>
+      Promise.resolve({ error: false, itineraries: [] })
+    )
+  })
+
+  // Three routes across two feeds: the ban must be the complete complement of
+  // the kept one, and the suburban feed is the half that is easy to drop.
+  const ROUTES = {
+    '1:18': { id: '1:18', shortName: '18' },
+    '1:5': { id: '1:5', shortName: '5' },
+    '2:420': { id: '2:420', shortName: '420' }
+  }
+
+  const dispatchReroute = async (currentQuery: any) => {
+    let goModeState: any = {
+      ...initial,
+      activeItinerary: {
+        legs: [
+          { mode: 'WALK', to: { lat: 44.98, lon: -93.27, name: 'Destination' } }
+        ]
+      },
+      isActive: true,
+      tracking: {
+        ...initial.tracking,
+        lastPosition: {
+          coords: { latitude: 44.95, longitude: -93.29 },
+          timestamp: T
+        }
+      }
+    }
+    const getState = () => ({
+      otp: {
+        config: { homeTimezone: 'America/Chicago' },
+        currentQuery,
+        goMode: goModeState,
+        transitIndex: { routes: ROUTES }
+      }
+    })
+    const dispatch: any = (action: any) => {
+      if (typeof action === 'function') return action(dispatch, getState)
+      goModeState = goMode(goModeState, action)
+      return action
+    }
+    await dispatch(reRouteFromCurrentPosition())
+    return mockedFetch.mock.calls[0]?.[0]
+  }
+
+  it('bans every other route and bikes both ends', async () => {
+    const payload = await dispatchReroute({
+      routeLock: { id: '1:18', label: '18' }
+    })
+    const banned = (payload.banned?.routes || '').split(',')
+    expect(banned).toEqual(expect.arrayContaining(['1:5', '2:420']))
+    expect(banned).not.toContain('1:18')
+    expect(payload.modes).toEqual([{ mode: 'TRANSIT' }, { mode: 'BICYCLE' }])
+  })
+
+  it('raises bike reluctance so the named route still carries the trip', async () => {
+    const payload = await dispatchReroute({
+      routeLock: { id: '1:18', label: '18' }
+    })
+    expect(payload.routingPreferences.bikeReluctance).toBeGreaterThanOrEqual(10)
+  })
+
+  it('drops a preferred-route bias that the lock has already banned', async () => {
+    // The stay-seated bias exists to keep a rider on the bus they are on. Under
+    // a lock the named route decides that, and preferring a banned route is noise.
+    const payload = await dispatchReroute({
+      routeLock: { id: '1:18', label: '18' }
+    })
+    expect(payload.preferred).toBeUndefined()
+  })
+
+  it('changes nothing when no route was named', async () => {
+    const payload = await dispatchReroute({})
+    expect(payload.banned).toBeUndefined()
   })
 })

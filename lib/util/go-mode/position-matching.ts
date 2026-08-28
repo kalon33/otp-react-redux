@@ -1,4 +1,8 @@
 import { decode } from '@mapbox/polyline'
+// Aliased: matchPositionToRoute below has its own local `isTransitLeg`, a
+// mode-based guess used to widen the on-route threshold. The two are not
+// equivalent and reconciling them is its own change, so keep the names apart.
+import { isTransitLeg as legIsTransit } from '@opentripplanner/core-utils/lib/itinerary'
 import type { LatLngArray, Leg } from '@opentripplanner/types'
 
 /**
@@ -162,13 +166,38 @@ export interface RouteMatchResult {
 /**
  * Match current position to the nearest point on the route
  */
+export const BACKWARD_JUMP_HYSTERESIS_M = 5
+
+// These corridors answer "is this match usable", nothing more. Transit shapes
+// are sparse enough that a rider genuinely aboard can project 200m+ from the
+// polyline, so the corridor must stay wide — but that makes isOnRoute far too
+// weak to mean "plausibly aboard this vehicle". Anything deciding aboard-ness
+// or off-route-ness needs its own, tighter figure (see riding.ts and
+// checkRouteDeviation), derived from or reconciled with these so the matcher
+// and its consumers can never disagree about the same metre.
+export const MATCH_CORRIDOR_TRANSIT_M = 250
+export const MATCH_CORRIDOR_ACTIVE_M = 100
+
 export function matchPositionToRoute(
   currentPosition: LatLngArray,
   legs: Leg[],
-  currentLegIndex = 0
+  currentLegIndex = 0,
+  /**
+   * Last tick's match, used only to break sub-metre ties on a shape that
+   * doubles back on itself. Optional: without it the behaviour is exactly the
+   * old global-minimum search.
+   */
+  previousMatch?: RouteMatchResult | null
 ): RouteMatchResult | null {
   let bestMatch: RouteMatchResult | null = null
   let minDistance = Infinity
+  // The best candidate ignoring hysteresis. If the backward-jump rule ends up
+  // rejecting everything — a rider who really has doubled back — this is what
+  // is returned, so the rule can only ever REORDER preferences and never turn a
+  // match into a null. A null here reads to callers as "no geometry" and is a
+  // far worse answer than a backward jump.
+  let fallbackMatch: RouteMatchResult | null = null
+  let fallbackDistance = Infinity
 
   // Search current leg and next 2 legs for best match
   const legsToSearch = Math.min(3, legs.length - currentLegIndex)
@@ -191,8 +220,6 @@ export function matchPositionToRoute(
       const perpDistance = projection.perpDistance
 
       if (perpDistance < minDistance) {
-        minDistance = perpDistance
-
         // Calculate progress along this segment
         const segmentStartDistance = cumulativeDistances[i]
         const segmentEndDistance = cumulativeDistances[i + 1]
@@ -212,25 +239,53 @@ export function matchPositionToRoute(
 
         // Use wider threshold for transit legs (sparser polylines)
         const isTransitLeg = leg.mode !== 'WALK' && leg.mode !== 'BICYCLE'
-        const onRouteThreshold = isTransitLeg ? 250 : 100
+        const onRouteThreshold = isTransitLeg
+          ? MATCH_CORRIDOR_TRANSIT_M
+          : MATCH_CORRIDOR_ACTIVE_M
 
-        bestMatch = {
+        const progressAlongLeg =
+          totalLegDistance > 0 ? totalDistanceAlongLeg / totalLegDistance : 0
+
+        // Where a shape doubles back on itself — the 465's downtown loop on 2
+        // Av S — two candidate segments sit SUB-METRE apart and the strict
+        // global minimum alternates between them tick to tick. Progress then
+        // jumps backward by the length of the loop, and the stop counter
+        // un-passes a stop the rider has already gone by (13:36:16, :24, :25,
+        // :27 on 2026-08-27 — four flips in thirty seconds).
+        //
+        // So when the winning candidate would move the rider BACKWARD along the
+        // same leg, and the position we already hold is within a few metres of
+        // it, keep what we have. This only ever breaks near-ties: a candidate
+        // that is genuinely closer by more than the hysteresis still wins, so a
+        // real correction is never blocked.
+        const wouldJumpBackward =
+          previousMatch != null &&
+          previousMatch.legIndex === legIndex &&
+          progressAlongLeg < previousMatch.progressAlongLeg &&
+          Math.abs(previousMatch.distanceFromRoute - perpDistance) <=
+            BACKWARD_JUMP_HYSTERESIS_M
+        const candidate: RouteMatchResult = {
           distanceFromRoute: perpDistance,
           isOnRoute: perpDistance < onRouteThreshold,
           legIndex,
           nearestPoint,
-
-          progressAlongLeg:
-            totalLegDistance > 0 ? totalDistanceAlongLeg / totalLegDistance : 0,
-
+          progressAlongLeg,
           progressAlongSegment: projection.alongSegment,
           segmentIndex: i
         }
+
+        if (perpDistance < fallbackDistance) {
+          fallbackDistance = perpDistance
+          fallbackMatch = candidate
+        }
+        if (wouldJumpBackward) continue
+        minDistance = perpDistance
+        bestMatch = candidate
       }
     }
   }
 
-  return bestMatch
+  return bestMatch ?? fallbackMatch
 }
 
 /**
@@ -243,10 +298,52 @@ export function matchPositionToRoute(
  * standing on the curb onto the bus. (Matching only ever searches forward, so
  * that advance is unrecoverable.) Actual boarding is established by the riding
  * state, which wants a vehicle match or real progress along the transit leg.
+ *
+ * Index order alone is still not enough, because an access leg and the transit
+ * leg that follows it SHARE an endpoint: a rider waiting at the boarding stop
+ * sits on both polylines at once, so the matcher can honestly return the
+ * transit leg while the bus is still hours away. On 2026-08-27 Go Mode started
+ * on a trip whose 465 boarded at 20:17Z, and 82ms later — at 18:19Z, with the
+ * rider standing at the stop — advanced onto that leg and pushed "Walk to 6th
+ * St S & 2nd Ave", a stop 17km away. Since matching only ever searches forward,
+ * that advance is unrecoverable without a re-plan.
+ *
+ * So a transit leg additionally has to be plausibly boardable: the rider is
+ * already riding it, or its board time is at hand.
  */
+export const TRANSIT_BOARD_EARLY_MS = 5 * 60 * 1000
+
+export type TransitionGate = {
+  /** Live board epoch for the target leg, when one is known. */
+  boardEpoch?: number | null
+  /** True when the riding state already places the rider on the target leg. */
+  isRiding?: boolean
+  nowMs?: number
+  /** The leg the match wants to move to — itinerary.legs[match.legIndex]. */
+  targetLeg?: Leg
+}
 export function shouldTransitionToNextLeg(
   match: RouteMatchResult,
-  currentLegIndex: number
+  currentLegIndex: number,
+  gate?: TransitionGate
 ): boolean {
-  return match.legIndex > currentLegIndex
+  if (match.legIndex <= currentLegIndex) return false
+  if (!gate) return true
+
+  const { boardEpoch, isRiding, nowMs, targetLeg } = gate
+
+  // Aboard is aboard: the riding state is the stronger fact and outranks the
+  // clock, which is what lets a rider who caught an earlier run move on.
+  if (isRiding) return true
+
+  // Callers that supply no clock or no leg keep the old index-order behaviour.
+  if (!targetLeg || nowMs == null) return true
+  if (!legIsTransit(targetLeg)) return true
+
+  // Prefer the live board time; a bus running late should not pull the rider
+  // onto its leg on the strength of the plan alone.
+  const board = Number(boardEpoch ?? targetLeg.startTime)
+  if (!Number.isFinite(board)) return true
+
+  return nowMs >= board - TRANSIT_BOARD_EARLY_MS
 }

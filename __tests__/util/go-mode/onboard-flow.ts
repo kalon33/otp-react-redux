@@ -9,7 +9,7 @@ import {
 import { fetchOnboardCandidatePlan, findTrip } from '../../../lib/actions/apiV2'
 import { mergeCandidateRoutes } from '../../../lib/util/go-mode/onboard-discovery-util'
 import goMode from '../../../lib/reducers/go-mode'
-import type { RidingState } from '../../../lib/actions/go-mode'
+import type { RidingState } from '../../../lib/util/go-mode/types'
 
 jest.mock('../../../lib/actions/apiV2', () => ({
   ...jest.requireActual('../../../lib/actions/apiV2'),
@@ -82,21 +82,36 @@ describe('onboard flow keeps what the app already knows', () => {
 })
 
 describe('mergeCandidateRoutes (position-based discovery)', () => {
-  it('puts live-vehicle routes first, then shape routes, deduped, prefixed', () => {
+  it('puts live-vehicle routes first, then shape routes, deduped', () => {
     const vehicles = [
       {
         color: '#F68B1F',
         distanceMeters: 120,
+        feedId: '1',
+        id: '1:904',
         longName: 'METRO Orange Line',
         routeId: '904',
         textColor: '#000000'
       },
-      { distanceMeters: 300, mode: 'BUS', routeId: '4', shortName: '4' },
-      { distanceMeters: 500, routeId: '904' } // second Orange bus — dedupe
+      {
+        distanceMeters: 300,
+        feedId: '1',
+        id: '1:4',
+        mode: 'BUS',
+        routeId: '4',
+        shortName: '4'
+      },
+      { distanceMeters: 500, feedId: '1', id: '1:904', routeId: '904' } // dedupe
     ]
     const routes = [
-      { distanceMeters: 17, routeId: '467', shortName: '467' },
-      { distanceMeters: 17, routeId: '904' } // already known live — dedupe
+      {
+        distanceMeters: 17,
+        feedId: '1',
+        id: '1:467',
+        routeId: '467',
+        shortName: '467'
+      },
+      { distanceMeters: 17, feedId: '1', id: '1:904', routeId: '904' } // dedupe
     ]
     expect(mergeCandidateRoutes(vehicles, routes)).toEqual([
       {
@@ -127,14 +142,14 @@ describe('mergeCandidateRoutes (position-based discovery)', () => {
   })
 
   it('works with either source missing', () => {
-    expect(mergeCandidateRoutes(null, [{ routeId: '904' }])).toHaveLength(1)
-    expect(mergeCandidateRoutes([{ routeId: '4' }], undefined)).toHaveLength(1)
+    expect(mergeCandidateRoutes(null, [{ id: '1:904' }])).toHaveLength(1)
+    expect(mergeCandidateRoutes([{ id: '1:4' }], undefined)).toHaveLength(1)
     expect(mergeCandidateRoutes(null, null)).toEqual([])
   })
 
-  it('skips entries without a routeId (vehicles heading to layover)', () => {
+  it('skips entries without an id (vehicles heading to layover)', () => {
     expect(
-      mergeCandidateRoutes([{ routeId: null }, { routeId: '904' }], [])
+      mergeCandidateRoutes([{ routeId: null }, { id: '1:904' }], [])
     ).toEqual([
       {
         color: null,
@@ -145,6 +160,41 @@ describe('mergeCandidateRoutes (position-based discovery)', () => {
         textColor: null
       }
     ])
+  })
+
+  // The 2026-08-28 bug: a hardcoded '1:' turned MVTA's 465 into '1:465', an id
+  // no route in the graph has, so the rider's own commuter bus was undiscoverable.
+  it('keeps a non-Metro-Transit feed id intact', () => {
+    expect(
+      mergeCandidateRoutes(
+        [],
+        [
+          {
+            distanceMeters: 0,
+            feedId: '2',
+            id: '2:465',
+            longName: 'Burnsville-Bloomington-Mpls-UMN',
+            routeId: '465',
+            shortName: '465'
+          }
+        ]
+      )
+    ).toEqual([
+      {
+        color: null,
+        id: '2:465',
+        longName: 'Burnsville-Bloomington-Mpls-UMN',
+        mode: 'BUS',
+        shortName: '465',
+        textColor: null
+      }
+    ])
+  })
+
+  it('never invents a prefix for a bare id from an older sidecar', () => {
+    expect(
+      mergeCandidateRoutes([], [{ routeId: '465', shortName: '465' }])
+    ).toEqual([])
   })
 })
 

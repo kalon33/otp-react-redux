@@ -2,6 +2,7 @@ import { encode } from '@mapbox/polyline'
 
 import {
   assessRiderGpsTrust,
+  CONFIRMED_MATCH_MAX_SEPARATION_M,
   findRidingVehicle,
   findVehicleById,
   findVehicleForTrip,
@@ -454,9 +455,59 @@ describe('refreshConfirmedMatch', () => {
     expect(refreshed?.vehicleId).toBe('1:8140')
     expect(refreshed?.confidence).toBe('confirmed')
     expect(refreshed?.distanceMeters).toBeCloseTo(0)
-    expect(refreshed?.lastSeen).toBe(NOW)
+    // lastSeen is the FEED's observation time, not the moment we polled. It
+    // used to be stamped `nowMs` on every refresh, which meant a match the feed
+    // kept publishing could never age out however wrong it had become — see the
+    // 13 km case below.
+    expect(refreshed?.lastSeen).toBe(vehicle({}).seconds * 1000)
     expect(refreshed?.nextStopId).toBe('1:stop-66th')
     expect(refreshed?.tripId).toBe('1:1173133')
+  })
+
+  it('falls back to now when the record carries no usable timestamp', () => {
+    const refreshed = refreshConfirmedMatch(
+      confirmed,
+      [vehicle({ seconds: undefined as never })],
+      44.86,
+      -93.28,
+      NOW
+    )
+    expect(refreshed?.lastSeen).toBe(NOW)
+  })
+
+  // 2026-08-27: the rider boarded the real 94 and never re-matched. Bus 1:1786
+  // finished its inbound run, parked, then rolled onto its next trip — while
+  // the gap to the rider grew at exactly rider speed (4,618 m -> 5,757 m as
+  // they crossed I-94 at 28 m/s) out to 13,322 m, still reading "confirmed".
+  it('demotes rather than drops a match that is implausibly far away', () => {
+    const farAway = refreshConfirmedMatch(
+      confirmed,
+      [vehicle({ lat: 44.97, lon: -93.09 })], // ~19 km
+      44.86,
+      -93.28,
+      NOW
+    )
+    expect(farAway).not.toBeNull()
+    expect(farAway?.vehicleId).toBe('1:8140')
+    expect(farAway?.confidence).toBe('medium')
+    expect(farAway?.distanceMeters).toBeGreaterThan(
+      CONFIRMED_MATCH_MAX_SEPARATION_M
+    )
+  })
+
+  it('keeps confidence through ordinary feed lag', () => {
+    // Freeway BRT genuinely publishes a position several hundred metres off.
+    const lagging = refreshConfirmedMatch(
+      confirmed,
+      [vehicle({ lat: 44.8665 })], // ~700 m
+      44.86,
+      -93.28,
+      NOW
+    )
+    expect(lagging?.confidence).toBe('confirmed')
+    expect(lagging?.distanceMeters).toBeLessThan(
+      CONFIRMED_MATCH_MAX_SEPARATION_M
+    )
   })
 
   it('never re-matches: absent from the feed means null, and lastSeen ages', () => {

@@ -21,6 +21,7 @@ import AdvancedSettingsPanel from '../form/advanced-settings-panel'
 import BatchSettings from '../form/batch-settings'
 import DefaultMap from '../map/default-map'
 import LocationField from '../form/connected-location-field'
+import SavePlaceButton from '../form/save-place-button'
 import SwitchButton from '../form/switch-button'
 
 import MobileContainer from './container'
@@ -196,6 +197,7 @@ class BatchSearchScreen extends Component<Props> {
                         openAdvancedSettings={this.openAdvancedSettings}
                       />
                       <ActiveRoutingPreferences />
+                      <SavePlaceButton />
                       <OnBusButton onClick={this._onBusClicked} type="button">
                         {intl.formatMessage({
                           defaultMessage: "I'm already on the bus",

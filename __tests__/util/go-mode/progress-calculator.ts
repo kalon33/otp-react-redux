@@ -2,16 +2,20 @@ import { encode } from '@mapbox/polyline'
 
 import {
   alightBannerLevel,
+  ARRIVAL_MIN_PROGRESS,
+  ARRIVAL_RADIUS_M,
   calculateExpectedProgress,
   calculateOverallProgress,
   calculateTimeRemaining,
   calculateTripProgress,
   computeCurrentDelay,
   determineTripStatus,
+  distanceToFinalStop,
   estimateArrival,
   getTransitProgress,
   getUpcomingTransitTiming,
   getWalkingInstruction,
+  hasArrivedAtDestination,
   shouldAlertForApproachingStop,
   shouldAlertForBoarding
 } from '../../../lib/util/go-mode/progress-calculator'
@@ -117,6 +121,49 @@ describe('util > go-mode > progress-calculator', () => {
       expect(result).toBe(300) // 5 minutes remaining
     })
 
+    it('ticks down with the clock, not with GPS', () => {
+      // The old implementation accepted currentTime and never read it, so the
+      // number only moved when the rider did. Standing still at a red light,
+      // "time remaining" froze.
+      const legs = makeLegs([1000, 1000], [300, 300])
+      const itinerary = makeItinerary(
+        legs,
+        '2026-01-28T10:00:00',
+        '2026-01-28T10:10:00'
+      )
+      const early = calculateTimeRemaining(
+        new Date('2026-01-28T10:02:00'),
+        itinerary,
+        0,
+        0.4
+      )
+      const later = calculateTimeRemaining(
+        new Date('2026-01-28T10:04:00'),
+        itinerary,
+        0,
+        0.4 // identical GPS progress
+      )
+      expect(early - later).toBeCloseTo(120)
+    })
+
+    it('never reports a ride ending on another day', () => {
+      // 2048 minutes reached the header because the span carried an overnight
+      // wait. A countdown against a real arrival cannot express that.
+      const legs = makeLegs([1000, 1000], [300, 300])
+      const itinerary = makeItinerary(
+        legs,
+        '2026-01-28T10:00:00',
+        '2026-01-28T10:10:00'
+      )
+      const result = calculateTimeRemaining(
+        new Date('2026-01-28T10:00:00'),
+        itinerary,
+        0,
+        0
+      )
+      expect(result).toBeLessThan(6 * 60 * 60)
+    })
+
     it('should never return negative values', () => {
       const legs = makeLegs([1000], [300])
       const itinerary = makeItinerary(
@@ -171,6 +218,44 @@ describe('util > go-mode > progress-calculator', () => {
     it('should return completed when progress >= 99.5', () => {
       expect(determineTripStatus(onRouteMatch, 99, 99.5)).toBe('completed')
       expect(determineTripStatus(onRouteMatch, 99, 100)).toBe('completed')
+    })
+
+    // 2026-08-27: the rider's final bike leg froze at 99.28% at the
+    // destination. Under the old ordering the off-route test ran first, and a
+    // parked phone's jitter clears the 100m bike threshold easily, so the trip
+    // flapped completed/deviated ten times and then latched deviated — and
+    // tracked the rider for four and a half hours, including their drive home.
+    it('should complete at the destination even when the match reads off-route', () => {
+      const offRoute = { ...onRouteMatch, isOnRoute: false }
+      expect(determineTripStatus(offRoute, 99, 99.28, 40)).toBe('completed')
+      expect(determineTripStatus(null, 99, 99.28, 40)).toBe('completed')
+    })
+
+    it('should still deviate near the end when the destination is far away', () => {
+      const offRoute = { ...onRouteMatch, isOnRoute: false }
+      expect(determineTripStatus(offRoute, 99, 99.28, 900)).toBe('deviated')
+    })
+
+    // The progress floor is what stops a one-way latch ending a live trip: a
+    // destination near the early route (a loop, an out-and-back) must not read
+    // as arrival in the first mile.
+    it('should not complete on proximity alone early in the trip', () => {
+      expect(determineTripStatus(onRouteMatch, 20, 20, 10)).not.toBe(
+        'completed'
+      )
+      expect(determineTripStatus(onRouteMatch, 85, 85, 10)).not.toBe(
+        'completed'
+      )
+    })
+
+    it('should ignore a missing or unusable destination distance', () => {
+      expect(determineTripStatus(onRouteMatch, 95, 95, null)).toBe('on_track')
+      expect(determineTripStatus(onRouteMatch, 95, 95, undefined)).toBe(
+        'on_track'
+      )
+      expect(determineTripStatus(onRouteMatch, 95, 95, Infinity)).toBe(
+        'on_track'
+      )
     })
 
     it('should return on_track when within 5% of expected', () => {
@@ -462,6 +547,89 @@ describe('util > go-mode > progress-calculator', () => {
       const result = computeCurrentDelay(leg, 1.5, new Date(end))
       expect(result).toBeCloseTo(0)
     })
+
+    it('should return undefined for a leg that has not started', () => {
+      // Position along a leg is spatial: GPS can put the rider partway down the
+      // polyline while the leg's scheduled window is still in the future.
+      expect(computeCurrentDelay(leg, 0.15, new Date(start - 60000))).toBe(
+        undefined
+      )
+    })
+
+    it('should not report a pre-departure wait as being ahead of schedule', () => {
+      // The 2026-08-27 case: a re-plan briefly made an itinerary active whose
+      // departure was 7,037s out while the rider was already 14.85% along the
+      // access leg's geometry. The old arithmetic called that -7000s of delay,
+      // i.e. nearly two hours AHEAD, and fed it to the notification service.
+      const departsIn = 7037_000
+      const future = {
+        endTime: start + departsIn + 600000,
+        mode: 'BUS',
+        startTime: start + departsIn
+      } as any
+      expect(computeCurrentDelay(future, 0.1485, new Date(start))).toBe(
+        undefined
+      )
+    })
+
+    it('should start measuring the moment the leg begins', () => {
+      // The guard must not swallow a real delay one tick after departure.
+      expect(computeCurrentDelay(leg, 0, new Date(start))).toBeCloseTo(0)
+      expect(computeCurrentDelay(leg, 0, new Date(start + 30000))).toBeCloseTo(
+        30
+      )
+    })
+  })
+
+  describe('hasArrivedAtDestination', () => {
+    it('completes on progress alone at the old bar', () => {
+      expect(hasArrivedAtDestination(99.5, null)).toBe(true)
+      expect(hasArrivedAtDestination(100, null)).toBe(true)
+    })
+
+    it('completes on proximity once far enough along', () => {
+      expect(hasArrivedAtDestination(99.28, ARRIVAL_RADIUS_M)).toBe(true)
+      expect(hasArrivedAtDestination(ARRIVAL_MIN_PROGRESS, 10)).toBe(true)
+    })
+
+    it('refuses proximity below the progress floor', () => {
+      expect(hasArrivedAtDestination(ARRIVAL_MIN_PROGRESS - 0.1, 1)).toBe(false)
+      expect(hasArrivedAtDestination(5, 0)).toBe(false)
+    })
+
+    it('refuses proximity beyond the radius', () => {
+      expect(hasArrivedAtDestination(99, ARRIVAL_RADIUS_M + 1)).toBe(false)
+    })
+
+    it('treats missing or non-finite distance as no evidence', () => {
+      expect(hasArrivedAtDestination(99, null)).toBe(false)
+      expect(hasArrivedAtDestination(99, undefined)).toBe(false)
+      expect(hasArrivedAtDestination(99, NaN)).toBe(false)
+      expect(hasArrivedAtDestination(99, Infinity)).toBe(false)
+    })
+  })
+
+  describe('distanceToFinalStop', () => {
+    const legs = [
+      { mode: 'WALK', to: { lat: 44.9, lon: -93.2 } },
+      { mode: 'BICYCLE', to: { lat: 44.999953, lon: -92.949019 } }
+    ]
+
+    it('measures to the LAST leg, not the current one', () => {
+      const atDestination = distanceToFinalStop(legs, [44.999953, -92.949019])
+      expect(atDestination).toBeCloseTo(0, 0)
+      const atFirstLegEnd = distanceToFinalStop(legs, [44.9, -93.2])
+      expect(atFirstLegEnd).toBeGreaterThan(10000)
+    })
+
+    it('returns null when either end is unavailable', () => {
+      expect(distanceToFinalStop(legs, null)).toBeNull()
+      expect(distanceToFinalStop(undefined, [44.9, -93.2])).toBeNull()
+      expect(distanceToFinalStop([], [44.9, -93.2])).toBeNull()
+      expect(
+        distanceToFinalStop([{ mode: 'WALK', to: {} }], [44.9, -93.2])
+      ).toBeNull()
+    })
   })
 
   describe('calculateTripProgress', () => {
@@ -503,7 +671,14 @@ describe('util > go-mode > progress-calculator', () => {
       expect(result.currentLegIndex).toBe(1)
       expect(result.overallProgress).toBeGreaterThan(0)
       expect(result.overallProgress).toBeLessThan(100)
+      // Bounded, not merely positive: the old span-based value returned 2048
+      // minutes for a 15-minute ride and `toBeGreaterThan(0)` waved it through.
       expect(result.timeRemaining).toBeGreaterThan(0)
+      expect(result.timeRemaining).toBeLessThanOrEqual(
+        (new Date(itinerary.endTime).getTime() -
+          new Date(itinerary.startTime).getTime()) /
+          1000
+      )
       expect(result.estimatedArrival).toBeInstanceOf(Date)
       expect(result.status).toBeDefined()
       expect(result.currentLegProgress).toBeCloseTo(50)
@@ -669,8 +844,27 @@ describe('getUpcomingTransitTiming', () => {
   })
 
   it('reports the destination arrival on transit legs', () => {
+    // No live figure supplied — the plan's endTime is the right fallback.
     const t = getUpcomingTransitTiming(NOW, busLeg, undefined, 0.2)
     expect(t.destinationArrivalTime).toBe(busLeg.endTime)
+  })
+
+  it('prefers the live arrival over the plan on transit legs', () => {
+    // This is the assertion whose absence let the header quote a build-time
+    // arrival all the way through. destinationArrivalTime drives
+    // alightBannerLevel, so a bus four minutes late was firing GET READY four
+    // minutes early — with every test green.
+    const late = Number(busLeg.endTime) + 240_000
+    const t = getUpcomingTransitTiming(
+      NOW,
+      busLeg,
+      undefined,
+      0.2,
+      null,
+      null,
+      late
+    )
+    expect(t.destinationArrivalTime).toBe(late)
   })
 
   it('returns nothing for non-transit connections', () => {

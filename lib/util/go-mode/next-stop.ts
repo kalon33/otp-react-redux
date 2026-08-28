@@ -226,3 +226,46 @@ export function getNextStopOnRide(
     stopId: next.stopId
   }
 }
+
+/**
+ * A stop the rider has passed stays passed.
+ *
+ * countStopsAhead is stateless and re-decides "passed" from scratch every tick
+ * out of a fraction along the leg, so any downward wobble in progress un-passes
+ * a stop. On 2026-08-27 that happened twice by two different routes: a snapper
+ * flip on the 465's self-overlapping downtown loop (1 -> 2 -> 1 stops), and
+ * again on the Gold Line at 14:21:33 with the snapper perfectly stable —
+ * progressAlongLeg 0.2158 and segment 71 identical across the flip — where the
+ * count alone went 7 -> 8 -> 7. Fixing the snapper cannot fix the second one;
+ * the counter needs its own latch.
+ *
+ * The latch is per leg AND per source: stopsSource switches between gps,
+ * vehicle, vehicle-stop and schedule (see getTransitProgress), and those counts
+ * are not measuring the same thing — a vehicle-derived count is not comparable
+ * with a GPS-derived one, so a source change starts over rather than pinning
+ * the new source to the old source's floor.
+ */
+export interface StopCountLatch {
+  legIndex: number
+  source: string
+  stopsRemaining: number
+}
+
+export function latchStopsRemaining(
+  prev: StopCountLatch | null,
+  next: { legIndex: number; source: string; stopsRemaining: number }
+): { next: StopCountLatch; stopsRemaining: number } {
+  const comparable =
+    prev != null &&
+    prev.legIndex === next.legIndex &&
+    prev.source === next.source
+  // Never let the count grow back. It may only fall (stops being passed) or
+  // hold.
+  const stopsRemaining = comparable
+    ? Math.min(prev.stopsRemaining, next.stopsRemaining)
+    : next.stopsRemaining
+  return {
+    next: { legIndex: next.legIndex, source: next.source, stopsRemaining },
+    stopsRemaining
+  }
+}

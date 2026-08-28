@@ -1,6 +1,7 @@
-import type { IntlShape } from 'react-intl'
-import type { Itinerary, Leg } from '@opentripplanner/types'
+import type { Itinerary, LatLngArray, Leg } from '@opentripplanner/types'
+import type { Itinerary, LatLngArray, Leg } from '@opentripplanner/types'
 
+import { calculateDistance } from './position-matching'
 import { countStopsAhead, hasDegenerateStopList } from './next-stop'
 import { getNextCueWithIntl, selectCueForNavigation } from './turn-by-turn'
 import type { RouteMatchResult } from './position-matching'
@@ -24,6 +25,10 @@ export interface TripProgress {
   departureIsOverridden?: boolean
   // Epoch ms — arrival at current transit leg's destination
   destinationArrivalTime?: number
+  // Metres from the rider's raw fix to the last leg's `to`. Null when either
+  // end is unavailable. Feeds the arrival test, and is logged so the daemon
+  // can see WHICH condition ended a trip.
+  distanceToDestination?: number | null
   distanceToNextTurn?: number
   // Epoch ms — the departure the wait math actually ran on (override, else the
   // live prediction, else the plan). One number for the pacing card, the drift
@@ -108,29 +113,56 @@ export function calculateTimeRemaining(
   currentTime: Date,
   itinerary: Itinerary,
   currentLegIndex: number,
+  progressInCurrentLeg: number,
+  liveTripEndMs?: number | null
+): number {
+  // A countdown against the clock, not plan-span arithmetic.
+  //
+  // This used to return (itinerary span) - (plan moving time consumed). Three
+  // things were wrong with that at once: the span is wall-clock so it carried
+  // every WAIT in the itinerary including wait the rider had already served;
+  // `currentTime` was accepted and never used, so the number only moved when
+  // GPS moved rather than ticking down; and Math.max(0, ...) clamped only the
+  // bottom, so an onward plan whose connection landed on the next service day
+  // propagated upward in silence. It printed 2048 min — 34 hours — for a ride
+  // that ended in fifteen minutes, and nothing asserted on it.
+  //
+  // Anchored on the live end of the trip it cannot do that: the answer is
+  // bounded by a real arrival time that the feed keeps current.
+  const end =
+    liveTripEndMs ??
+    legEndFallback(itinerary, currentLegIndex, progressInCurrentLeg)
+  return Math.max(0, (end - currentTime.getTime()) / 1000)
+}
+
+/**
+ * Plan-time end of the trip, for when no live arrival is known yet.
+ *
+ * Deliberately the itinerary's own endTime rather than the old span
+ * subtraction: it is a real moment, so the countdown above stays a countdown.
+ */
+function legEndFallback(
+  itinerary: Itinerary,
+  currentLegIndex: number,
   progressInCurrentLeg: number
 ): number {
-  const endTime = new Date(itinerary.endTime)
-  const startTime = new Date(itinerary.startTime)
-  const totalDuration = (endTime.getTime() - startTime.getTime()) / 1000 // seconds
-
-  // Calculate expected time elapsed based on leg progress
-  const legs = itinerary.legs
-  let expectedElapsed = 0
-
-  for (let i = 0; i < currentLegIndex; i++) {
-    expectedElapsed += legs[i].duration || 0
-  }
-
+  // `new Date`, not `Number`. Itinerary times are `number | string` in
+  // @opentripplanner/types and the fixtures use ISO strings; Number('2026-...')
+  // is NaN, which silently fell through to the leg-sum branch and returned a
+  // countdown measured from the wrong century.
+  const end = new Date(itinerary.endTime as string | number).getTime()
+  if (Number.isFinite(end)) return end
+  // No usable container end: rebuild one from the legs still ahead.
+  const legs = itinerary.legs || []
+  let remaining = 0
   if (currentLegIndex < legs.length) {
-    const currentLeg = legs[currentLegIndex]
-    expectedElapsed += (currentLeg.duration || 0) * progressInCurrentLeg
+    remaining +=
+      (legs[currentLegIndex].duration || 0) * (1 - progressInCurrentLeg)
   }
-
-  // Simple calculation: remaining = total - expected elapsed
-  const remaining = totalDuration - expectedElapsed
-
-  return Math.max(0, remaining)
+  for (let i = currentLegIndex + 1; i < legs.length; i++) {
+    remaining += legs[i].duration || 0
+  }
+  return Date.now() + remaining * 1000
 }
 
 /**
@@ -144,23 +176,93 @@ export function estimateArrival(
 }
 
 /**
+ * How close to the destination counts as arrived, and how far along the trip
+ * the rider must already be for that distance to mean anything.
+ *
+ * The progress floor is the safety catch, not a formality. setArrived is a
+ * ONE-WAY latch: once it fires the trip quiesces and the rider gets an arrival
+ * card instead of navigation. A destination that happens to sit near the route
+ * — a loop, an out-and-back, a geocoded point a block from a street the rider
+ * rides down early on — would otherwise end the trip in the first mile. Losing
+ * navigation mid-trip is a worse failure than the one this fixes, so distance
+ * alone is never enough.
+ */
+export const ARRIVAL_RADIUS_M = 75
+export const ARRIVAL_MIN_PROGRESS = 90
+
+/**
+ * Has the rider reached the destination?
+ *
+ * Progress alone was the whole test until 2026-08-27, when a rider's final bike
+ * leg froze at 99.28% on arrival — under the 99.5 bar — so the trip never
+ * completed. It then tracked them for four and a half hours, including their
+ * drive home, because every rule downstream kept evaluating a trip that was
+ * over. A frozen scalar cannot be the only way to notice arrival, so being
+ * physically at the destination counts too.
+ */
+export function hasArrivedAtDestination(
+  actualProgress: number,
+  distanceToDestination: number | null | undefined
+): boolean {
+  if (actualProgress >= 99.5) return true
+  return (
+    distanceToDestination != null &&
+    Number.isFinite(distanceToDestination) &&
+    distanceToDestination <= ARRIVAL_RADIUS_M &&
+    actualProgress >= ARRIVAL_MIN_PROGRESS
+  )
+}
+
+/**
+ * Metres from the rider to the trip's final destination, or null when either
+ * end of that measurement is missing. The destination is the last leg's `to` —
+ * the place the rider actually asked to reach, not the end of whatever leg the
+ * matcher currently favours.
+ */
+export function distanceToFinalStop(
+  legs: Leg[] | undefined,
+  riderPosition: LatLngArray | null | undefined
+): number | null {
+  if (!legs?.length || !riderPosition) return null
+  const to = legs[legs.length - 1]?.to as
+    | { lat?: number; lon?: number }
+    | undefined
+  if (to?.lat == null || to?.lon == null) return null
+  const d = calculateDistance(
+    riderPosition[0],
+    riderPosition[1],
+    to.lat,
+    to.lon
+  )
+  return Number.isFinite(d) ? d : null
+}
+
+/**
  * Determine trip status based on position and timing
  */
 export function determineTripStatus(
   routeMatch: RouteMatchResult | null,
   expectedProgress: number,
-  actualProgress: number
+  actualProgress: number,
+  distanceToDestination?: number | null
 ): TripStatus {
+  // Arrival is tested FIRST, ahead of the deviation checks. It used to run
+  // last, which meant a rider standing at their destination could never be
+  // "completed" if the match happened to read off-route — and at a destination
+  // it usually does, because the rider has stopped riding the line and GPS
+  // jitter around a parked phone easily clears the 100m bike threshold. On
+  // 2026-08-27 that flapped completed/deviated ten times and then latched
+  // deviated for four and a half hours.
+  if (hasArrivedAtDestination(actualProgress, distanceToDestination)) {
+    return 'completed'
+  }
+
   if (!routeMatch) {
     return 'deviated'
   }
 
   if (!routeMatch.isOnRoute) {
     return 'deviated'
-  }
-
-  if (actualProgress >= 99.5) {
-    return 'completed'
   }
 
   const progressDifference = actualProgress - expectedProgress
@@ -443,7 +545,8 @@ export function getUpcomingTransitTiming(
   nextLeg: Leg | undefined,
   progressInLeg: number,
   departureOverrideMs?: number | null,
-  liveBoardMs?: number | null
+  liveBoardMs?: number | null,
+  liveAlightMs?: number | null
 ): {
   departureIsOverridden?: boolean
   destinationArrivalTime?: number
@@ -491,7 +594,12 @@ export function getUpcomingTransitTiming(
   }
 
   if (isTransit) {
-    return { destinationArrivalTime: currentLeg.endTime }
+    // The live arrival, not the plan's. currentLeg.endTime is the build-time
+    // anchor, frozen when the trip was planned — and this value feeds
+    // alightBannerLevel below, so a bus running four minutes late was firing
+    // GET READY four minutes early. liveAlightMs comes from legAlight, which
+    // already resolves live -> projected -> plan in one place.
+    return { destinationArrivalTime: liveAlightMs ?? currentLeg.endTime }
   }
 
   return {}
@@ -519,6 +627,20 @@ export function computeCurrentDelay(
     return undefined
   }
 
+  // A leg that has not started yet has no delay to measure. Position along it
+  // is spatial — GPS can put the rider partway down a leg's polyline while its
+  // scheduled window is still entirely in the future, which happens whenever a
+  // re-plan briefly makes an itinerary active whose departure is hours out.
+  // Subtracting a future scheduled time from now would then report the whole
+  // pre-departure wait as if the rider were that far AHEAD of schedule: on
+  // 2026-08-27 a rider 14.85% along a leg departing in 7,037s got a delay of
+  // -7000.6s and an arrival two hours late (4:57 PM against a true ~3:00 PM),
+  // with status still "on_track" so nothing flagged it.
+  //
+  // The wait itself is not lost — getUpcomingTransitTiming already reports it
+  // as waitTimeAtStop, which is the same gap named correctly.
+  if (currentTime.getTime() < start) return undefined
+
   const clamped = Math.max(0, Math.min(1, progressInLeg))
   const scheduledMsAtPosition = start + clamped * (end - start)
 
@@ -535,11 +657,19 @@ export function calculateTripProgress(
   departureOverrideMs?: number | null,
   transitCtx?: TransitTrustContext,
   riderSpeedMps?: number | null,
-  liveBoardMs?: number | null
+  liveBoardMs?: number | null,
+  liveAlightMs?: number | null,
+  riderPosition?: LatLngArray | null
 ): TripProgress {
   const legs = itinerary.legs
   const currentLegIndex = routeMatch?.legIndex || 0
   const progressInCurrentLeg = routeMatch?.progressAlongLeg || 0
+
+  // The rider's RAW fix, deliberately not routeMatch.nearestPoint: that is the
+  // projection onto the route, which is exactly wrong here. A rider who has
+  // walked away from the line to their door would measure as still on it, and
+  // a rider who never arrives would measure as arrived.
+  const distanceToDestination = distanceToFinalStop(legs, riderPosition)
 
   const overallProgress = calculateOverallProgress(
     currentLegIndex,
@@ -547,11 +677,22 @@ export function calculateTripProgress(
     legs
   )
 
+  // The live end of the trip: the live/projected alight of the current transit
+  // leg plus whatever legs follow it. Anything downstream of a live figure is
+  // still plan-time, which is the honest best guess for legs not yet started.
+  const liveTripEndMs =
+    liveAlightMs != null
+      ? legs
+          .slice(currentLegIndex + 1)
+          .reduce((acc, l) => acc + (l.duration || 0) * 1000, liveAlightMs)
+      : null
+
   const timeRemaining = calculateTimeRemaining(
     currentTime,
     itinerary,
     currentLegIndex,
-    progressInCurrentLeg
+    progressInCurrentLeg,
+    liveTripEndMs
   )
 
   const estimatedArrival = estimateArrival(currentTime, timeRemaining)
@@ -569,7 +710,8 @@ export function calculateTripProgress(
   const status = determineTripStatus(
     routeMatch,
     expectedProgress,
-    overallProgress
+    overallProgress,
+    distanceToDestination
   )
 
   const currentLeg = legs[currentLegIndex]
@@ -599,7 +741,8 @@ export function calculateTripProgress(
     nextLeg,
     progressInCurrentLeg,
     departureOverrideMs,
-    liveBoardMs
+    liveBoardMs,
+    liveAlightMs
   )
 
   // Measured schedule delay at the rider's current position (real GPS progress
@@ -615,6 +758,7 @@ export function calculateTripProgress(
     currentLegProgress,
     currentTime,
     delay,
+    distanceToDestination,
     estimatedArrival,
     overallProgress,
     riderSpeedMps: riderSpeedMps ?? undefined,

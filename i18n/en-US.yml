@@ -203,6 +203,7 @@ components:
     callHistory: Call History
     closeMenu: Close Menu
     mailables: Mailables
+    myPlaces: My places
     networkConnectionLost: Network connection lost
     networkConnectionRestored: Network connection restored
     openMenu: Open Menu
@@ -353,11 +354,15 @@ components:
     multipleOptions: Multiple Options
     orAlternatives: or other routes in the same direction
     originallyScheduledTime: (originally {originalTime})
+    sameShapeVariants: "{count, plural, one {# option} other {# options}}"
     singleModeItineraryDescription: "{time} {mode} itinerary"
     startTrip: Start Trip
     switchTrip: Switch to this trip
     timeBiking: "{time} biking"
     timeWalking: "{time} walking"
+    variantBiking: "{distance} biking"
+    variantShown: currently shown
+    variantWalking: "{distance} walking"
   MobilityProfile:
     DevicesPane:
       devices:
@@ -463,7 +468,7 @@ components:
       body: >-
         The origin and destination may be too far apart or not directly
         connected by the requested mode of transport.
-      header: No direct trip found.
+      header: Outside the routable area
     NO_STOPS_IN_RANGE:
       body: >-
         {inputFields} {inputFieldsCount, plural, =0 {} one {location is} other
@@ -526,9 +531,6 @@ components:
       notifications.
   Place:
     deleteThisPlace: Delete this place
-    enterAlert: >
-      Enter origin/destination in the form (or set via map click)  and click the
-      resulting marker to set as {placeType} location.
   PlaceEditor:
     addressPrompt: "Address:"
     genericLocationPlaceholder: Search for location
@@ -591,6 +593,9 @@ components:
     saveTripText: Save trip
     signInText: Log in to save trip
     signInTooltip: Please log in to save trip.
+  SavedPlacesScreen:
+    heading: Saved places
+    saveThisPlace: Save this place
   SavedTripEditor:
     deleteSavedTrip: Delete
     editSavedTrip: Edit saved trip
