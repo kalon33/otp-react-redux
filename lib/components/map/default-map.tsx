@@ -42,6 +42,7 @@ import { setViewedStop } from '../../actions/ui'
 import { updateOverlayVisibility } from '../../actions/config'
 import TransitOperatorIcons from '../util/connected-transit-operator-icons'
 
+import { handleStyleImageMissing } from './suppress-missing-icons'
 import ElevationPointMarker from './elevation-point-marker'
 import EndpointsOverlay from './connected-endpoints-overlay'
 import GeoJsonLayer from './connected-geojson-layer'
@@ -157,7 +158,9 @@ function getLayerName(overlay, config, intl) {
     case 'realtimeStops':
       return intl.formatMessage({ id: 'components.MapLayers.realtimeStops' })
     case 'OTP-UI-stopsAndStations':
-      return intl.formatMessage({ id: 'components.MapLayers.OTP-UI-stopsAndStations' })
+      return intl.formatMessage({
+        id: 'components.MapLayers.OTP-UI-stopsAndStations'
+      })
     default:
       console.warn(`No name found for overlay type ${type}.`)
       return type
@@ -205,6 +208,7 @@ class DefaultMap extends Component<DefaultMapProps> {
       zoom
     }
     this.geolocateControlRef = React.createRef<maplibregl.GeolocateControl>()
+    this.baseMapRef = React.createRef<maplibregl.Map>()
   }
 
   getNearbyViewFilteredOverlays = () => {
@@ -432,11 +436,13 @@ class DefaultMap extends Component<DefaultMapProps> {
           }
           baseLayerNames={baseLayerNames}
           center={[lat, lon]}
+          innerRef={this.baseMapRef}
           mapLibreProps={{
             onLoad: () => {
               // Once this map has loaded, we subtly trigger the geolocate control to update its state.
               return this.setState({ mapLoad: true })
             },
+            onStyleImageMissing: handleStyleImageMissing,
             reuseMaps: true
           }}
           maxZoom={maxZoom}
@@ -472,6 +478,7 @@ class DefaultMap extends Component<DefaultMapProps> {
           />
           <TransitiveOverlay
             getTransitiveRouteLabel={getTransitiveRouteLabel}
+            mapRef={this.baseMapRef}
           />
           <TripViewerOverlay />
           <ElevationPointMarker />

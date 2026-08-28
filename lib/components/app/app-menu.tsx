@@ -16,12 +16,9 @@ import SlidingPane from 'react-sliding-pane'
 import type { WrappedComponentProps } from 'react-intl'
 
 import * as callTakerActions from '../../actions/call-taker'
+import * as fieldTripActions from '../../actions/field-trip'
 import * as uiActions from '../../actions/ui'
-import {
-  AppMenuItemConfig,
-  ExtraView,
-  LanguageConfig
-} from '../../util/config-types'
+import { AppMenuItemConfig, LanguageConfig } from '../../util/config-types'
 import { AppReduxState } from '../../util/state-types'
 import { ComponentContext } from '../../util/contexts'
 import { convertChineseLanguageCode, getLanguageOptions } from '../../util/i18n'
@@ -55,12 +52,7 @@ type AppMenuProps = {
   activeLocale: string
   callTakerEnabled?: boolean
   extraMenuItems?: AppMenuItemConfig[]
-  language?: LanguageConfig
-
-  resetAndToggleFieldTrips?: () => void
-  rideConsoleDeviceIds?: string[]
-  rideConsoleUrl?: string
-  resetAndToggleFieldTrips?: () => void
+  fieldTripEnabled?: boolean
   rideConsoleDeviceIds?: string[]
   rideConsoleUrl?: string
   setLocale: (locale: string) => void
@@ -175,13 +167,11 @@ class AppMenu extends Component<
       activeLocale,
       callTakerEnabled,
       extraMenuItems,
+      fieldTripEnabled,
       intl,
       languageOptions,
       mailablesEnabled,
       popupTarget,
-      resetAndToggleCallHistory,
-      toggleMailables,
-
       resetAndToggleFieldTrips,
       rideConsoleDeviceIds,
       rideConsoleUrl,
@@ -207,19 +197,13 @@ class AppMenu extends Component<
       }
     ]
 
-    // The console is tailnet-gated server-side, so on any device not on the
-    // owner's tailnet the link is a dead 403 — and native builds default
-    // diagnostics ON, so without the allowlist every TestFlight install would
-    // show a button that cannot work.
-    const showRideConsole =
-      this.state.diagnosticsOn &&
       !!getDeviceId() &&
       !!rideConsoleUrl &&
       (!rideConsoleDeviceIds ||
         rideConsoleDeviceIds.includes(getDeviceId() as string))
 
     const { isPaneOpen } = this.state
-    const { extraViews, SvgIcon } = this.context
+    const { SvgIcon } = this.context
     const buttonLabel = isPaneOpen
       ? intl.formatMessage({ id: 'components.AppMenu.closeMenu' })
       : intl.formatMessage({ id: 'components.AppMenu.openMenu' })
@@ -304,7 +288,6 @@ class AppMenu extends Component<
                 id: 'common.forms.startOver'
               })}
             />
-            {/* // TODO: add extra views here */}
             {popupTarget && (
               <AppMenuItem
                 icon={<SvgIcon iconName={popupTarget} />}
@@ -321,6 +304,15 @@ class AppMenu extends Component<
                 })}
               />
             )}
+            {fieldTripEnabled && (
+              <AppMenuItem
+                icon={<GraduationCap />}
+                onClick={resetAndToggleFieldTrips}
+                text={intl.formatMessage({
+                  id: 'components.AppMenu.fieldTrip'
+                })}
+              />
+            )}
             {mailablesEnabled && (
               <AppMenuItem
                 icon={<Envelope />}
@@ -330,15 +322,6 @@ class AppMenu extends Component<
                 })}
               />
             )}
-            {extraViews.map((view: ExtraView) => (
-              <AppMenuItem
-                icon={view.icon}
-                key={view.name}
-                onClick={this._togglePane}
-                text={view.name}
-                to={view.path}
-              />
-            ))}
             <AppMenuItem
               aria-pressed={this.state.diagnosticsOn}
               icon={<Bug />}
@@ -400,6 +383,7 @@ const mapStateToProps = (state: AppReduxState) => {
     activeLocale: state.otp.ui.locale,
     callTakerEnabled: isModuleEnabled(state, Modules.CALL_TAKER),
     extraMenuItems,
+    fieldTripEnabled: isModuleEnabled(state, Modules.FIELD_TRIP),
     language,
     languageOptions: getLanguageOptions(language),
     mailablesEnabled: isModuleEnabled(state, Modules.MAILABLES),
@@ -412,6 +396,7 @@ const mapStateToProps = (state: AppReduxState) => {
 
 const mapDispatchToProps = {
   resetAndToggleCallHistory: callTakerActions.resetAndToggleCallHistory,
+  resetAndToggleFieldTrips: fieldTripActions.resetAndToggleFieldTrips,
   setLocale: uiActions.setLocale,
   setPopupContent: uiActions.setPopupContent,
   startOverFromInitialUrl: uiActions.startOverFromInitialUrl,

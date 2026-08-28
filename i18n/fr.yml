@@ -163,6 +163,7 @@ stay-seated: Rester assis
 bike-forward: Privilégier le vélo
 avoid-biking: Éviter le vélo
 reliable-transfers: Correspondances fiables
+accessible: Accessible
 components:
 
   RoutingProfiles:
@@ -172,6 +173,7 @@ components:
     bike-forward: Privilégier le vélo
     avoid-biking: Éviter le vélo
     reliable-transfers: Correspondances fiables
+    accessible: Accessible
   A11yPrefs:
     accessibilityRoutingByDefault: Privilégier par défaut les trajets 
       accessibles

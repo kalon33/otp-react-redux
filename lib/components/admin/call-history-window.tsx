@@ -25,12 +25,11 @@ type Props = {
   // was untyped the mismatch was invisible, and typing it surfaced this.
   fetchQueries: (callId?: any, intl?: any) => void
   searches: Array<any>
-<<<<<<< HEAD
+} & WrappedComponentProps
+
+function CallHistoryWindow(props: Props) {
   toggleCallHistory: () => void
-=======
-  toggleCallHistory: (...args: any[]) => any
-  const { activeCall, callHistory } = callTaker
-  toggleCallHistory: () => void
+  const { callTaker, fetchQueries, intl, searches, toggleCallHistory } = props
   if (!callHistory.visible) return null
   return (
     <DraggableWindow

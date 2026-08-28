@@ -7,9 +7,6 @@ import coreUtils from '@opentripplanner/core-utils'
 import polyline from '@mapbox/polyline'
 import type { Itinerary, LatLngArray, Leg } from '@opentripplanner/types'
 
-// Translation key for "Current location" to be used in place names
-const CURRENT_LOCATION_NAME = 'Current location'
-
 import {
   clampNonLiveLegTimes,
   findStopTimeIndex,
@@ -163,6 +160,9 @@ import {
 } from './apiV2'
 import { MobileScreens } from './ui-constants'
 import { setMobileScreen } from './ui'
+
+// Translation key for "Current location" to be used in place names
+const CURRENT_LOCATION_NAME = 'Current location'
 import { setQueryParam } from './form'
 
 // The mutable state of the trip in progress. One object, one lifetime: created
@@ -624,7 +624,7 @@ export function startGoModeTracking(
       getState().otp.config.homeTimezone
     )
     for (const leg of itinerary.legs) {
-      const stopId = (leg as any).from?.stop?.gtfsId || (leg as any).from?.stopId
+      const stopId = (leg as any).from?.stop?.gtfsId
       if (leg.transitLeg && stopId) {
         try {
           dispatch(
@@ -1648,17 +1648,6 @@ export function discoverNearbyVehicles(attempt = 0) {
           })
         )
         routes = getState().otp?.transitIndex?.nearbyRoutes || []
-        // If still no routes, try a very large radius as a last resort
-        if (!routes.length) {
-          await dispatch(
-            findRoutesNearby({
-              lat,
-              lon,
-              radius: 3000 // 3km radius as a final fallback
-            })
-          )
-          routes = getState().otp?.transitIndex?.nearbyRoutes || []
-        }
       }
     }
 
@@ -2916,7 +2905,7 @@ export function refreshLiveLegTimes() {
               realtime: prev.alightRealtime ?? prev.realtime
             }
           : null,
-        liveStopArrival(stopTimes, leg.to?.stop?.gtfsId || (leg as any).to?.stopId, leg.to?.name, anchor),
+        liveStopArrival(stopTimes, leg.to?.stop?.gtfsId, leg.to?.name, anchor),
         nowMs
       )
       const board = mergeLiveTimePoint(
@@ -2928,7 +2917,7 @@ export function refreshLiveLegTimes() {
           : null,
         liveStopArrival(
           stopTimes,
-          leg.from?.stop?.gtfsId || (leg as any).from?.stopId,
+          leg.from?.stop?.gtfsId,
           leg.from?.name,
           anchor
         ),
@@ -3459,7 +3448,6 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     const persistedDistanceFromRoute = smoothed.distance
     session.prevDistanceFromRoute = smoothed.next
 
-    const units = getState().otp.config?.units || 'imperial'
     const notifications = checkForNotifications(
       progress,
       currentLeg,
@@ -3473,8 +3461,7 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         vibrationEnabled: true
       },
       itinerary.legs,
-      alightContext,
-      units
+      alightContext
     )
 
     // Missed boarding? Judged outside checkForNotifications because it needs

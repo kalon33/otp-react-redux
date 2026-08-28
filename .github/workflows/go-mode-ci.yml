@@ -14,7 +14,7 @@ name: Go Mode CI
 
 on:
   push:
-    branches: 
+    branches:
       - feature/go-mode
       - main
       - mistral

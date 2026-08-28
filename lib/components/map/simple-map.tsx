@@ -13,6 +13,8 @@ import { AppConfig } from '../../util/config-types'
 import { AppReduxState } from '../../util/state-types'
 import { ComponentContext } from '../../util/contexts'
 
+import { handleStyleImageMissing } from './suppress-missing-icons'
+
 interface Props {
   config: AppConfig
   itinerary?: Itinerary
@@ -42,7 +44,10 @@ const SimpleMap = ({ config, itinerary }: Props): JSX.Element => {
         (baseLayerUrls?.length || 0) > 1 ? baseLayerUrls : baseLayerUrls?.[0]
       }
       center={[initLat, initLon]}
-      mapLibreProps={{ reuseMaps: true }}
+      mapLibreProps={{
+        onStyleImageMissing: handleStyleImageMissing,
+        reuseMaps: true
+      }}
       maxZoom={maxZoom}
       zoom={initZoom}
     >
