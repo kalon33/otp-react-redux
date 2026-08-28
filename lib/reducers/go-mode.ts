@@ -367,12 +367,29 @@ const goMode = handleActions<GoModeState, any>(
         notification.id
       ]
 
-      // Keep only last 50 sent notification IDs to prevent memory growth. The
-      // window must be wide enough that a chatty type (e.g. route deviation)
-      // cannot evict one-shot ids like TRIP_COMPLETE within their dedup window.
-      if (sentNotifications.length > 50) {
-        sentNotifications.shift()
-      }
+      // Evict by AGE first, then by count.
+      //
+      // A blind shift() at 50 evicts the OLDEST id regardless of whether its
+      // dedup window is still open, so a chatty type (route deviation fires
+      // every 120s; turn cues far more often) could push a one-shot id like
+      // TRIP_COMPLETE or an alight alert out from under its own suppression
+      // and let it fire a second time. The old comment knew the window "must
+      // be wide enough" — but width alone cannot fix an eviction policy that
+      // disagrees with the dedup policy.
+      //
+      // Every id already ends in its Date.now() (generateNotificationId), and
+      // wasRecentlySent parses it back out, so age is readable here without
+      // any change of shape. Drop only ids older than the longest dedup window
+      // in the service (ALIGHT_DEDUP_MS, 30 min), which is exactly the point
+      // past which no caller can still be suppressing on them.
+      const evictBefore = Date.now() - 30 * 60 * 1000
+      let kept = sentNotifications.filter((id) => {
+        const stamp = parseInt(id.slice(id.lastIndexOf('_') + 1), 10)
+        return Number.isNaN(stamp) || stamp >= evictBefore
+      })
+      // Backstop against unbounded growth if something ever fires in a tight
+      // loop inside the window. 200 is well clear of a real ride's traffic.
+      if (kept.length > 200) kept = kept.slice(kept.length - 200)
 
       // Add to recent notifications (keep last 10)
       const recentNotifications = [
@@ -385,7 +402,7 @@ const goMode = handleActions<GoModeState, any>(
         notifications: {
           ...state.notifications,
           recentNotifications,
-          sentNotifications
+          sentNotifications: kept
         }
       }
     },

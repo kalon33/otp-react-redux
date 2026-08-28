@@ -589,6 +589,12 @@ export function startGoModeTracking(
     // A reroute or missed-bus auto-update swaps the itinerary without going
     // through endGoMode, so clear the per-leg transition guard here too.
     session.lastTransitionedLegIndex = null
+    // ...and the deviation smoother's memory. smoothDistanceFromRoute takes the
+    // MINIMUM of this tick and the last, so a distance measured against the old
+    // geometry damps the first tick against the new — the one tick where the
+    // rider's relationship to the route has genuinely just changed. It was
+    // cleared only in endGoMode, so every swap carried a stale number across.
+    session.prevDistanceFromRoute = null
 
     // Pre-fetch stop times for all transit boarding stops
     const today = currentServiceDate(
@@ -2926,6 +2932,9 @@ export function advanceToLeg(legIndex: number) {
     // A new leg is also a fresh quiet-replan slate — an egress leg must not
     // inherit the access leg's miss streak.
     session.quietReplanMissStreak = 0
+    // Same reasoning for the deviation smoother: the previous leg's distance
+    // says nothing about the new leg's geometry.
+    session.prevDistanceFromRoute = null
 
     // Update tracking interval for new leg
     const newLeg = legs[legIndex]

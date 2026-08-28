@@ -821,6 +821,60 @@ describe('util > go-mode > notification-service', () => {
   })
 
   describe('checkForNotifications', () => {
+    // The off-by-one lived at the CALL SITE, not inside checkLegTransition —
+    // every unit test above hands the announced leg straight in as the third
+    // argument, so none of them could ever have caught it. On 2026-08-27 the
+    // caller passed legs[i + 1] and the rider was told to board the wrong bus
+    // at all three transitions: entering the bike leg -> "Board 94", entering
+    // the 94 -> "Board METRO Gold Line", entering the Gold Line -> "Continue
+    // to 4Front".
+    it('announces the leg being ENTERED, not the one after it', () => {
+      const enteredBike = {
+        mode: 'BICYCLE',
+        to: { name: '4th St S at 2nd Ave' }
+      } as any
+      const theBusAfterThat = {
+        mode: 'BUS',
+        routeShortName: '94',
+        to: { name: 'Rice Park Station' }
+      } as any
+
+      const result = checkForNotifications(
+        makeProgress({ currentLegIndex: 1 }),
+        enteredBike,
+        0, // previousLegIndex — a transition just happened
+        theBusAfterThat,
+        10,
+        [],
+        makeConfig()
+      )
+
+      const transition = result.find((n) => n.type === 'LEG_TRANSITION')
+      expect(transition?.message).toBe('Continue to 4th St S at 2nd Ave')
+      expect(transition?.message).not.toContain('94')
+      expect(transition?.id).toContain('leg_1_BICYCLE')
+    })
+
+    it('names the bus the rider is actually boarding', () => {
+      const enteredBus = {
+        mode: 'BUS',
+        routeShortName: '94',
+        to: { name: 'Rice Park Station' }
+      } as any
+      const result = checkForNotifications(
+        makeProgress({ currentLegIndex: 2 }),
+        enteredBus,
+        1,
+        { mode: 'RAIL', routeShortName: 'Gold', to: { name: 'Helmo' } } as any,
+        10,
+        [],
+        makeConfig()
+      )
+      const transition = result.find((n) => n.type === 'LEG_TRANSITION')
+      expect(transition?.message).toBe('Board 94 to Rice Park Station')
+      expect(transition?.message).not.toContain('Gold')
+    })
+
     it('should return empty array when notifications are disabled', () => {
       const progress = makeProgress({ stopsRemaining: 2 })
       const leg = {

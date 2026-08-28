@@ -672,26 +672,38 @@ export function checkMissedBus(
 export function checkLegTransition(
   currentLegIndex: number,
   previousLegIndex: number,
-  nextLeg: Leg | undefined,
+  /**
+   * The leg the rider is ENTERING — legs[currentLegIndex].
+   *
+   * This used to be handed legs[currentLegIndex + 1], the leg after, so every
+   * transition announced the wrong step. On 2026-08-27 entering the bike leg
+   * said "Board 94", entering the 94 said "Board METRO Gold Line", and
+   * entering the Gold Line said "Continue to 4Front" — three transitions,
+   * three wrong buses named, each one the step the rider had not reached yet.
+   */
+  enteredLeg: Leg | undefined,
   sentNotifications: string[]
 ): NotificationEvent | null {
-  if (currentLegIndex > previousLegIndex && nextLeg) {
+  if (currentLegIndex > previousLegIndex && enteredLeg) {
+    // Mode comes from the SAME leg as the index. Pairing one leg's index with
+    // another leg's mode also let two different transitions collide inside the
+    // 30s dedup window.
     const id = generateNotificationId(
       'LEG_TRANSITION',
-      `leg_${currentLegIndex}_${nextLeg.mode}`
+      `leg_${currentLegIndex}_${enteredLeg.mode}`
     )
 
     if (!wasRecentlySent(id, sentNotifications, 30000)) {
       let message = ''
 
-      if (nextLeg.mode === 'BUS' || nextLeg.mode === 'RAIL') {
+      if (enteredLeg.mode === 'BUS' || enteredLeg.mode === 'RAIL') {
         message = `Board ${
-          nextLeg.routeShortName || nextLeg.routeLongName
-        } to ${nextLeg.to.name}`
-      } else if (nextLeg.mode === 'WALK') {
-        message = `Walk to ${nextLeg.to.name}`
+          enteredLeg.routeShortName || enteredLeg.routeLongName
+        } to ${enteredLeg.to.name}`
+      } else if (enteredLeg.mode === 'WALK') {
+        message = `Walk to ${enteredLeg.to.name}`
       } else {
-        message = `Continue to ${nextLeg.to.name}`
+        message = `Continue to ${enteredLeg.to.name}`
       }
 
       return {
@@ -986,7 +998,10 @@ export function checkForNotifications(
     checkLegTransition(
       progress.currentLegIndex,
       previousLegIndex,
-      nextLeg,
+      // currentLeg, NOT nextLeg: announce the step being entered. `nextLeg` is
+      // still right for checkLeaveSoon and the pacing card, which are about
+      // what comes after.
+      currentLeg,
       sentNotifications
     )
   )
