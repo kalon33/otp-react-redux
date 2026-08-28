@@ -19,7 +19,10 @@ import {
   selectCandidateStops
 } from '../util/go-mode/alight-optimizer'
 import type { AlightCandidateResult } from '../util/go-mode/alight-optimizer'
-import { calculateTripProgress } from '../util/go-mode/progress-calculator'
+import {
+  calculateTripProgress,
+  hasArrivedAtDestination
+} from '../util/go-mode/progress-calculator'
 import {
   checkForNotifications,
   checkMissedBus,
@@ -3009,7 +3012,16 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     const matchedLeg: any = itinerary.legs[routeMatch.legIndex]
     const riding = goMode.riding
     const nowForRiding = getCurrentTime().getTime()
-    if (routeMatch.isOnRoute && matchedLeg?.transitLeg) {
+    // Once the rider has arrived the trip is over, and neither of the two
+    // side-effectful blocks below has anything left to decide. The quiesce
+    // further down already stops notifications, reroutes and polling, but it
+    // sits BELOW these, so on 2026-08-27 a finished trip went on maintaining
+    // riding state and advancing legs for four and a half hours — through the
+    // rider's drive home, where it chased a leg 9.9km away at 18 m/s. Position,
+    // route match and progress still update above, so the map stays honest
+    // while the arrival card is up; only the decisions stop.
+    const alreadyArrived = goMode.arrivedAt != null
+    if (!alreadyArrived && routeMatch.isOnRoute && matchedLeg?.transitLeg) {
       const vehicleMatchNow = goMode.vehicleMatch?.match
       const vehicleConfidence = vehicleMatchNow?.confidence
       const vehicleTrusted =
@@ -3063,7 +3075,10 @@ export function handlePositionUpdate(position: GeolocationPosition) {
           })
         )
       }
-    } else if (riding) {
+      // `alreadyArrived` again, not just an `else`: without it this branch
+      // would start firing the moment the guard above turned the first branch
+      // off, stamping off-route on a rider who has simply finished.
+    } else if (!alreadyArrived && riding) {
       if (riding.offRouteSince == null) {
         dispatch(setRiding({ ...riding, offRouteSince: nowForRiding }))
       } else if (
@@ -3080,6 +3095,7 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     // cannot carry that fact itself.
     const previousLegIndex = goMode.routeMatch?.legIndex || 0
     if (
+      !alreadyArrived &&
       shouldTransitionToNextLeg(routeMatch, previousLegIndex, {
         boardEpoch: goMode.liveLegTimes?.[routeMatch.legIndex]?.boardEpoch,
         isRiding: riding?.legIndex === routeMatch.legIndex,
@@ -3177,7 +3193,10 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       // prepare an 18 s warning).
       position.coords.speed ?? null,
       liveBoardMs,
-      Number.isFinite(liveAlightMs) ? liveAlightMs : null
+      Number.isFinite(liveAlightMs) ? liveAlightMs : null,
+      // The raw fix, so arrival can be judged by where the rider actually is
+      // and not only by a progress scalar that can freeze short of the bar.
+      currentPosition
     )
 
     dispatch(updateProgress(progress))
@@ -3191,8 +3210,24 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     const hasArrived = goMode.arrivedAt != null
     if (
       !hasArrived &&
-      (progress.status === 'completed' || progress.overallProgress >= 99.5)
+      (progress.status === 'completed' ||
+        hasArrivedAtDestination(
+          progress.overallProgress,
+          progress.distanceToDestination
+        ))
     ) {
+      // Say which condition fired. The daemon reads this stream and had no way
+      // to tell an arrival from a trip that simply stopped reporting, and a
+      // one-way latch deserves a reason in the record.
+      // eslint-disable-next-line no-console
+      console.log(
+        `[go-mode] arrived: progress=${progress.overallProgress.toFixed(2)}% ` +
+          `distanceToDestination=${
+            progress.distanceToDestination == null
+              ? 'unknown'
+              : `${Math.round(progress.distanceToDestination)}m`
+          }`
+      )
       dispatch(setArrived(currentTime.getTime()))
     } else if (hasArrived) {
       return

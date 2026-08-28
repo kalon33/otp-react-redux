@@ -2,6 +2,7 @@ import type { Leg } from '@opentripplanner/types'
 
 import { asContinuation, formatCueDistance } from './turn-by-turn'
 import { calculateDistance } from './position-matching'
+import { hasArrivedAtDestination } from './progress-calculator'
 import {
   VEHICLE_AT_BOARD_STOP_M,
   VEHICLE_RECORD_STALE_SEC
@@ -902,7 +903,17 @@ export function checkTripComplete(
   progress: TripProgress,
   sentNotifications: string[]
 ): NotificationEvent | null {
-  if (progress.status === 'completed' || progress.overallProgress >= 99.5) {
+  // One arrival rule, defined next to the status it produces. This used to
+  // repeat `overallProgress >= 99.5` inline, as did the latch in actions/
+  // go-mode.ts — three copies that could disagree, and on 2026-08-27 all three
+  // missed a real arrival at 99.28%.
+  if (
+    progress.status === 'completed' ||
+    hasArrivedAtDestination(
+      progress.overallProgress,
+      progress.distanceToDestination
+    )
+  ) {
     const id = generateNotificationId('TRIP_COMPLETE', 'trip_end')
 
     if (!wasRecentlySent(id, sentNotifications)) {

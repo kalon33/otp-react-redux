@@ -1,5 +1,6 @@
-import type { Itinerary, Leg } from '@opentripplanner/types'
+import type { Itinerary, LatLngArray, Leg } from '@opentripplanner/types'
 
+import { calculateDistance } from './position-matching'
 import { countStopsAhead, hasDegenerateStopList } from './next-stop'
 import { selectCueForNavigation } from './turn-by-turn'
 import type { RouteMatchResult } from './position-matching'
@@ -23,6 +24,10 @@ export interface TripProgress {
   departureIsOverridden?: boolean
   // Epoch ms — arrival at current transit leg's destination
   destinationArrivalTime?: number
+  // Metres from the rider's raw fix to the last leg's `to`. Null when either
+  // end is unavailable. Feeds the arrival test, and is logged so the daemon
+  // can see WHICH condition ended a trip.
+  distanceToDestination?: number | null
   distanceToNextTurn?: number
   // Epoch ms — the departure the wait math actually ran on (override, else the
   // live prediction, else the plan). One number for the pacing card, the drift
@@ -170,23 +175,93 @@ export function estimateArrival(
 }
 
 /**
+ * How close to the destination counts as arrived, and how far along the trip
+ * the rider must already be for that distance to mean anything.
+ *
+ * The progress floor is the safety catch, not a formality. setArrived is a
+ * ONE-WAY latch: once it fires the trip quiesces and the rider gets an arrival
+ * card instead of navigation. A destination that happens to sit near the route
+ * — a loop, an out-and-back, a geocoded point a block from a street the rider
+ * rides down early on — would otherwise end the trip in the first mile. Losing
+ * navigation mid-trip is a worse failure than the one this fixes, so distance
+ * alone is never enough.
+ */
+export const ARRIVAL_RADIUS_M = 75
+export const ARRIVAL_MIN_PROGRESS = 90
+
+/**
+ * Has the rider reached the destination?
+ *
+ * Progress alone was the whole test until 2026-08-27, when a rider's final bike
+ * leg froze at 99.28% on arrival — under the 99.5 bar — so the trip never
+ * completed. It then tracked them for four and a half hours, including their
+ * drive home, because every rule downstream kept evaluating a trip that was
+ * over. A frozen scalar cannot be the only way to notice arrival, so being
+ * physically at the destination counts too.
+ */
+export function hasArrivedAtDestination(
+  actualProgress: number,
+  distanceToDestination: number | null | undefined
+): boolean {
+  if (actualProgress >= 99.5) return true
+  return (
+    distanceToDestination != null &&
+    Number.isFinite(distanceToDestination) &&
+    distanceToDestination <= ARRIVAL_RADIUS_M &&
+    actualProgress >= ARRIVAL_MIN_PROGRESS
+  )
+}
+
+/**
+ * Metres from the rider to the trip's final destination, or null when either
+ * end of that measurement is missing. The destination is the last leg's `to` —
+ * the place the rider actually asked to reach, not the end of whatever leg the
+ * matcher currently favours.
+ */
+export function distanceToFinalStop(
+  legs: Leg[] | undefined,
+  riderPosition: LatLngArray | null | undefined
+): number | null {
+  if (!legs?.length || !riderPosition) return null
+  const to = legs[legs.length - 1]?.to as
+    | { lat?: number; lon?: number }
+    | undefined
+  if (to?.lat == null || to?.lon == null) return null
+  const d = calculateDistance(
+    riderPosition[0],
+    riderPosition[1],
+    to.lat,
+    to.lon
+  )
+  return Number.isFinite(d) ? d : null
+}
+
+/**
  * Determine trip status based on position and timing
  */
 export function determineTripStatus(
   routeMatch: RouteMatchResult | null,
   expectedProgress: number,
-  actualProgress: number
+  actualProgress: number,
+  distanceToDestination?: number | null
 ): TripStatus {
+  // Arrival is tested FIRST, ahead of the deviation checks. It used to run
+  // last, which meant a rider standing at their destination could never be
+  // "completed" if the match happened to read off-route — and at a destination
+  // it usually does, because the rider has stopped riding the line and GPS
+  // jitter around a parked phone easily clears the 100m bike threshold. On
+  // 2026-08-27 that flapped completed/deviated ten times and then latched
+  // deviated for four and a half hours.
+  if (hasArrivedAtDestination(actualProgress, distanceToDestination)) {
+    return 'completed'
+  }
+
   if (!routeMatch) {
     return 'deviated'
   }
 
   if (!routeMatch.isOnRoute) {
     return 'deviated'
-  }
-
-  if (actualProgress >= 99.5) {
-    return 'completed'
   }
 
   const progressDifference = actualProgress - expectedProgress
@@ -527,11 +602,18 @@ export function calculateTripProgress(
   transitCtx?: TransitTrustContext,
   riderSpeedMps?: number | null,
   liveBoardMs?: number | null,
-  liveAlightMs?: number | null
+  liveAlightMs?: number | null,
+  riderPosition?: LatLngArray | null
 ): TripProgress {
   const legs = itinerary.legs
   const currentLegIndex = routeMatch?.legIndex || 0
   const progressInCurrentLeg = routeMatch?.progressAlongLeg || 0
+
+  // The rider's RAW fix, deliberately not routeMatch.nearestPoint: that is the
+  // projection onto the route, which is exactly wrong here. A rider who has
+  // walked away from the line to their door would measure as still on it, and
+  // a rider who never arrives would measure as arrived.
+  const distanceToDestination = distanceToFinalStop(legs, riderPosition)
 
   const overallProgress = calculateOverallProgress(
     currentLegIndex,
@@ -572,7 +654,8 @@ export function calculateTripProgress(
   const status = determineTripStatus(
     routeMatch,
     expectedProgress,
-    overallProgress
+    overallProgress,
+    distanceToDestination
   )
 
   const currentLeg = legs[currentLegIndex]
@@ -619,6 +702,7 @@ export function calculateTripProgress(
     currentLegProgress,
     currentTime,
     delay,
+    distanceToDestination,
     estimatedArrival,
     overallProgress,
     riderSpeedMps: riderSpeedMps ?? undefined,
