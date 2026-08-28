@@ -23,6 +23,7 @@ import {
   calculateTripProgress,
   hasArrivedAtDestination
 } from '../util/go-mode/progress-calculator'
+import { decideRiding } from '../util/go-mode/riding'
 import {
   checkForNotifications,
   checkMissedBus,
@@ -253,8 +254,6 @@ const REROUTE_STUCK_MS = 90000
 // Minimum progress along a transit leg before GPS alone establishes
 // aboard-ness. isOnRoute is true within 250m of the leg — including while
 // still waiting at the boarding stop — so require clear movement along the
-// leg (or a confirmed/high vehicle match, which skips this gate).
-const RIDING_MIN_PROGRESS = 0.05
 
 // A single recorded GPS fix from a replay fixture (see build-fixture.js).
 interface ReplayGpsFix {
@@ -3006,9 +3005,6 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       return
     }
 
-    // Maintain the sticky "riding" fact (see RidingState). Established once the
-    // rider is verifiably aboard a transit leg; refreshed if the anchor leg
-    // changes; dropped only after a sustained off-route period.
     const matchedLeg: any = itinerary.legs[routeMatch.legIndex]
     const riding = goMode.riding
     const nowForRiding = getCurrentTime().getTime()
@@ -3021,90 +3017,55 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     // route match and progress still update above, so the map stays honest
     // while the arrival card is up; only the decisions stop.
     const alreadyArrived = goMode.arrivedAt != null
-    if (!alreadyArrived && routeMatch.isOnRoute && matchedLeg?.transitLeg) {
-      const vehicleMatchNow = goMode.vehicleMatch?.match
-      const vehicleConfidence = vehicleMatchNow?.confidence
-      const vehicleTrusted =
-        vehicleConfidence === 'confirmed' || vehicleConfidence === 'high'
-      const aboard =
-        vehicleTrusted || routeMatch.progressAlongLeg >= RIDING_MIN_PROGRESS
-      // The trip the rider is ACTUALLY on: a trusted vehicle match knows its
-      // GTFS-RT trip, which outranks the planned leg's — the rider may have
-      // caught an earlier run of the same route, and the boarded-earlier
-      // replan, next-stop anchoring, and live leg times all key off this id.
-      const ridingTripId =
-        (vehicleTrusted ? vehicleMatchNow?.tripId : null) ||
-        matchedLeg.trip?.gtfsId ||
-        matchedLeg.tripId ||
-        riding?.tripId ||
-        null
-      // Rebind hysteresis: rewriting riding.tripId to a DIFFERENT trip arms
-      // the boarded-earlier replan, so it needs sustained consistent evidence
-      // (see shouldRebindRidingTrip). On 7/29 a two-tick stale-feed flap onto
-      // the opposite-direction Orange Line rebound the ride and cascaded into
-      // auto-replans. When a rebind is disallowed, refreshes (legIndex change,
-      // offRouteSince clear) still go out with the EXISTING trip/vehicle.
-      const rebindAllowed = shouldRebindRidingTrip(
-        riding,
-        ridingTripId,
-        matchedLeg,
-        goMode.vehicleMatch
-      )
-      const nextTripId = rebindAllowed ? ridingTripId : riding?.tripId ?? null
-      const nextVehicleId = rebindAllowed
-        ? vehicleMatchNow?.vehicleId ?? riding?.vehicleId ?? null
-        : riding?.vehicleId ?? null
-      if (
-        aboard &&
-        (!riding ||
-          riding.legIndex !== routeMatch.legIndex ||
-          riding.tripId !== nextTripId ||
-          riding.offRouteSince != null)
-      ) {
-        dispatch(
-          setRiding({
-            boardedAt: riding?.boardedAt ?? nowForRiding,
-            headsign: matchedLeg.headsign ?? null,
-            legIndex: routeMatch.legIndex,
-            offRouteSince: null,
-            routeId: getLegRouteId(matchedLeg),
-            routeShortName:
-              matchedLeg.routeShortName ?? matchedLeg.route?.shortName ?? null,
-            tripId: nextTripId,
-            vehicleId: nextVehicleId
-          })
-        )
-      }
-      // `alreadyArrived` again, not just an `else`: without it this branch
-      // would start firing the moment the guard above turned the first branch
-      // off, stamping off-route on a rider who has simply finished.
-    } else if (!alreadyArrived && riding) {
-      if (riding.offRouteSince == null) {
-        dispatch(setRiding({ ...riding, offRouteSince: nowForRiding }))
-      } else if (
-        nowForRiding - riding.offRouteSince >
-        RIDING_OFFROUTE_CLEAR_MS
-      ) {
-        dispatch(clearRiding())
-      }
-    }
 
-    // Check for leg transition. This is side-effectful (it restarts the position
-    // watcher and vehicle tracking, and clears the anchored departure), so it
-    // must run once per leg — routeMatch is rebuilt from raw GPS every tick and
-    // cannot carry that fact itself.
+    // ORDER MATTERS: the leg transition runs BEFORE the riding update.
+    //
+    // It used to be the other way round, and the two disagreed about what tick
+    // they were in. SET_RIDING advanced riding.legIndex to the new leg, and
+    // TRANSITION_LEG's alight test is `legIndex > state.riding.legIndex`
+    // (reducers/go-mode.ts) — which was then false, so on a transit-to-transit
+    // transfer riding was never cleared and alightedFrom was never recorded.
+    // The 2026-08-27 Gold Line transition inherited the falsely-boarded 94's
+    // tripId, vehicleId and boardedAt, and the record claimed a Gold Line train
+    // identified by a Minneapolis bus. Transitioning first means the alight
+    // test sees the riding fact from the leg the rider is actually leaving.
     const previousLegIndex = goMode.routeMatch?.legIndex || 0
     if (
       !alreadyArrived &&
       shouldTransitionToNextLeg(routeMatch, previousLegIndex, {
         boardEpoch: goMode.liveLegTimes?.[routeMatch.legIndex]?.boardEpoch,
         isRiding: riding?.legIndex === routeMatch.legIndex,
-        nowMs: getCurrentTime().getTime(),
+        nowMs: nowForRiding,
         targetLeg: matchedLeg
       }) &&
       routeMatch.legIndex !== session.lastTransitionedLegIndex
     ) {
       dispatch(advanceToLeg(routeMatch.legIndex))
+    }
+
+    // Maintain the sticky "riding" fact (see RidingState). Established once the
+    // rider is verifiably aboard a transit leg; refreshed if the anchor leg
+    // changes; dropped only after a sustained off-route period. The decision
+    // itself is a pure function (util/go-mode/riding.ts) so it can be tested —
+    // this is the seam every riding bug of 2026-08-27 lived in, and it had no
+    // coverage at all.
+    if (!alreadyArrived) {
+      // Re-read riding: advanceToLeg above may have cleared it on alight.
+      const ridingNow = getState().otp?.goMode?.riding ?? null
+      const decision = decideRiding({
+        matchedLeg,
+        nowMs: nowForRiding,
+        offRouteClearMs: RIDING_OFFROUTE_CLEAR_MS,
+        prevRiding: ridingNow,
+        riderSpeedMps: position.coords.speed ?? null,
+        routeMatch,
+        vehicleMatch: goMode.vehicleMatch
+      })
+      if (decision.kind === 'set' || decision.kind === 'markOffRoute') {
+        dispatch(setRiding(decision.riding))
+      } else if (decision.kind === 'clear') {
+        dispatch(clearRiding())
+      }
     }
 
     // Calculate progress — use simulated clock during simulation, real time for live GPS
