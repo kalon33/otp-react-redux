@@ -557,6 +557,15 @@ export function classifyMissedBus(
   // match settles it too, and ground speed at vehicle pace counts: the
   // realtime feed can mark the bus departed the instant the rider boards,
   // before matching confirms.
+  //
+  // Left unconditional deliberately. The 2026-08-27 false boarding suppressed
+  // missed-bus for a whole ten-minute wait, which looks like this guard's
+  // fault — but the riding fact there was stamped with legIndex 2, the very
+  // leg being boarded, so every "does riding vouch for THIS boarding" test
+  // passes it just as readily. The defect was upstream, in establishing the
+  // fact at all (see util/go-mode/riding.ts), and that is where it is fixed.
+  // Narrowing this guard would not have helped that ride and would undo the
+  // 7/29 behaviour that a held riding fact suppresses downstream boardings.
   if (riding) return null
   if (
     currentLegIndex === boardLegIndex &&

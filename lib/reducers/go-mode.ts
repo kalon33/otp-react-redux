@@ -658,7 +658,27 @@ const goMode = handleActions<GoModeState, any>(
           ...state.tracking,
           error: null,
           isTracking: true
-        }
+        },
+        // The vehicle match belongs to the itinerary that just went away. It
+        // was carried across untouched, so the first tick after a swap
+        // refreshed a CONFIRMED match against the previous trip's cached
+        // vehicles using the new rider position — which on 2026-08-27 reported
+        // the rider 5,220 m from "their" bus for one frame, 51 ms before the
+        // fresh feed arrived and the next tick read 698 m.
+        //
+        // Two comments elsewhere (actions/go-mode.ts, in beginGoMode and
+        // replanFromAboard) already assert that beginGoMode resets this. It
+        // did not. Now it does, so those comments are true and
+        // reconfirmBoardedVehicle is undoing a reset that actually happens.
+        //
+        // A confirmed match is preserved when the rider is still riding: an
+        // auto-update mid-ride (missed bus, quiet replan) hands back a new
+        // itinerary for the SAME bus the rider is sitting on, and making them
+        // re-confirm it would be a regression. reanchorRiding above decides
+        // that, so key off its result rather than the pre-swap state.
+        vehicleMatch: reanchorRiding(state.riding, itinerary)
+          ? state.vehicleMatch
+          : { ...defaultState.vehicleMatch }
       }
     },
 
