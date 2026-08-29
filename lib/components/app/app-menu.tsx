@@ -17,6 +17,7 @@ import type { WrappedComponentProps } from 'react-intl'
 
 import * as callTakerActions from '../../actions/call-taker'
 import * as fieldTripActions from '../../actions/field-trip'
+import * as goModeActions from '../../actions/go-mode'
 import * as uiActions from '../../actions/ui'
 import { AppMenuItemConfig, LanguageConfig } from '../../util/config-types'
 import { AppReduxState } from '../../util/state-types'
@@ -50,6 +51,7 @@ type MenuItem = {
 
 type AppMenuProps = {
   activeLocale: string
+  backgroundGoMode: () => void
   callTakerEnabled?: boolean
   extraMenuItems?: AppMenuItemConfig[]
   fieldTripEnabled?: boolean
@@ -60,6 +62,7 @@ type AppMenuProps = {
   startOverFromInitialUrl: () => void
   toggleMailables: () => void
   translateExternalLinks?: boolean
+  tripInForeground?: boolean
 }
 type AppMenuState = {
   diagnosticsOn: boolean
@@ -92,6 +95,17 @@ class AppMenu extends Component<
   _togglePane = () => {
     const { isPaneOpen } = this.state
     this.setState({ isPaneOpen: !isPaneOpen })
+  }
+
+  // Every item below that navigates takes the rider off this screen. An active
+  // Go Mode trip is a fixed full-screen layer over the whole app, so with the
+  // trip in the foreground the rider taps a menu item and nothing appears to
+  // happen. Background it instead: tracking, notifications and the trip itself
+  // keep running, and the ReturnToTripBanner is the way back.
+  _handleNavigate = () => {
+    const { backgroundGoMode, tripInForeground } = this.props
+    if (tripInForeground) backgroundGoMode()
+    this._togglePane()
   }
 
   _handleSkipNavigation = () => {
@@ -246,7 +260,7 @@ class AppMenu extends Component<
             <AppMenuItem
               className="app-menu-trip-planner-link"
               icon={<MapMarked />}
-              onClick={this._togglePane}
+              onClick={this._handleNavigate}
               text={intl.formatMessage({
                 id: 'components.BatchRoutingPanel.shortTitle'
               })}
@@ -257,7 +271,7 @@ class AppMenu extends Component<
             <AppMenuItem
               className="app-menu-route-viewer-link"
               icon={<Bus />}
-              onClick={this._togglePane}
+              onClick={this._handleNavigate}
               text={intl.formatMessage({
                 id: 'components.RouteViewer.shortTitle'
               })}
@@ -268,7 +282,7 @@ class AppMenu extends Component<
             <AppMenuItem
               className="app-menu-nearby-viewer-link"
               icon={<MapPin />}
-              onClick={this._togglePane}
+              onClick={this._handleNavigate}
               text={intl.formatMessage({
                 id: 'components.ViewSwitcher.nearby'
               })}
@@ -276,7 +290,7 @@ class AppMenu extends Component<
             />
             <AppMenuItem
               icon={<MapMarkerAlt />}
-              onClick={this._togglePane}
+              onClick={this._handleNavigate}
               text={intl.formatMessage({
                 defaultMessage: 'My places',
                 id: 'components.AppMenu.myPlaces'
@@ -392,11 +406,15 @@ const mapStateToProps = (state: AppReduxState) => {
     popupTarget: popups?.launchers?.sidebarLink,
     rideConsoleDeviceIds,
     rideConsoleUrl,
-    translateExternalLinks
+    translateExternalLinks,
+    tripInForeground: Boolean(
+      state.otp.goMode?.isActive && !state.otp.goMode?.ui?.backgrounded
+    )
   }
 }
 
 const mapDispatchToProps = {
+  backgroundGoMode: goModeActions.backgroundGoMode,
   resetAndToggleCallHistory: callTakerActions.resetAndToggleCallHistory,
   resetAndToggleFieldTrips: fieldTripActions.resetAndToggleFieldTrips,
   setLocale: uiActions.setLocale,

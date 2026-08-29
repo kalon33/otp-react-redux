@@ -172,6 +172,7 @@ const GoModeScreen = ({
           onBackClicked={
             goMode.activeItinerary ? () => clearOnboard() : handleOnboardExit
           }
+          showAppMenu
           showBackButton
         />
         <ScreenMain>
@@ -214,6 +215,7 @@ const GoModeScreen = ({
             id: 'components.GoMode.gpsErrorTitle'
           })}
           onBackClicked={handleExit}
+          showAppMenu
           showBackButton
         />
         <LoadingMessage>
@@ -238,6 +240,7 @@ const GoModeScreen = ({
             id: 'components.GoMode.loading'
           })}
           onBackClicked={handleExit}
+          showAppMenu
           showBackButton
         />
         <LoadingMessage>
@@ -254,9 +257,28 @@ const GoModeScreen = ({
 
   const currentLeg =
     goMode.activeItinerary.legs[goMode.progress.currentLegIndex]
+  const destinationName =
+    goMode.activeItinerary.legs[goMode.activeItinerary.legs.length - 1]?.to
+      ?.name || undefined
 
   return (
     <FullScreenWrapper>
+      {/* The tracking screen is a fixed, full-screen layer over the app, so the
+          nav bar underneath it is unreachable. Carry the app menu here too, or
+          the only way to the rest of the app mid-trip is to end the trip. */}
+      <MobileNavigationBar
+        headerText={
+          destinationName &&
+          intl.formatMessage(
+            {
+              defaultMessage: 'To {destination}',
+              id: 'components.GoMode.headerDestination'
+            },
+            { destination: destinationName }
+          )
+        }
+        showAppMenu
+      />
       <ScreenMain>
         <CurrentLegPanel
           boardingStopData={boardingStopData}
