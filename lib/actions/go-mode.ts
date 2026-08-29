@@ -158,6 +158,7 @@ import {
   getVehiclePositionsForRoute,
   onboardGraphQLQuery
 } from './apiV2'
+import { MobileScreens } from './ui-constants'
 import { setMainPanelContent, setMobileScreen, setViewedStop } from './ui'
 import { setQueryParam } from './form'
 
