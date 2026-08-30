@@ -17,6 +17,7 @@ on:
     branches:
       - feature/go-mode
       - main
+      - merge_dev
       - mistral
       - mistral2
       - working
@@ -24,6 +25,7 @@ on:
     branches:
       - feature/go-mode
       - main
+      - merge_dev
       - mistral
       - mistral2
       - working
