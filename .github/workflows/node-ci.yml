@@ -5,6 +5,7 @@ on:
     branches:
       - master
       - dev
+      - merge_dev
       - mistral
       - mistral2
       - working
