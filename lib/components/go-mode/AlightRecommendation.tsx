@@ -155,4 +155,7 @@ const mapDispatchToProps = {
   endGoMode: goModeActions.endGoMode
 }
 
-export default connect(mapStateToProps, mapDispatchToProps)(AlightRecommendation)
+export default connect(
+  mapStateToProps,
+  mapDispatchToProps
+)(AlightRecommendation)

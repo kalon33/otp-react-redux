@@ -6,12 +6,12 @@ import {
   asContinuationWithIntl,
   formatCueDistance
 } from '../../util/go-mode/turn-by-turn'
+import { formatPlaceName } from '../../util/format-place-name'
 import {
   getLegRouteId,
   getRouteDepartures,
   getSoonestCatchableMs
 } from '../../util/go-mode/departure-anchor'
-import { formatPlaceName } from '../../util/format-place-name'
 import { getWalkingInstructionWithIntl } from '../../util/go-mode/progress-calculator'
 import type { TripProgress } from '../../util/go-mode/progress-calculator'
 
@@ -116,8 +116,11 @@ const WalkingNavigation = ({
   )
 
   const turnLine =
-    walkingInstruction.nextTurnCue && walkingInstruction.distanceToNextTurn != null
-      ? `${walkingInstruction.nextTurnCue.instruction} \u00b7 ${formatCueDistance(
+    walkingInstruction.nextTurnCue &&
+    walkingInstruction.distanceToNextTurn != null
+      ? `${
+          walkingInstruction.nextTurnCue.instruction
+        } \u00b7 ${formatCueDistance(
           walkingInstruction.distanceToNextTurn,
           units
         )}`
@@ -125,7 +128,12 @@ const WalkingNavigation = ({
   const thenLine = walkingInstruction.followingTurnCue
     ? intl.formatMessage(
         { defaultMessage: 'then {turn}', id: 'components.GoMode.thenTurn' },
-        { turn: asContinuationWithIntl(walkingInstruction.followingTurnCue.instruction, intl) }
+        {
+          turn: asContinuationWithIntl(
+            walkingInstruction.followingTurnCue.instruction,
+            intl
+          )
+        }
       )
     : null
 
@@ -289,9 +297,10 @@ const WalkingNavigation = ({
                   alt: { departureMs: number; realtime: boolean },
                   idx: number
                 ) => {
-                  const minsAway = alt.departureMs && nowMs
-                    ? Math.round((alt.departureMs - nowMs) / 60000)
-                    : null
+                  const minsAway =
+                    alt.departureMs && nowMs
+                      ? Math.round((alt.departureMs - nowMs) / 60000)
+                      : null
                   return (
                     <AlternativeDeparture key={idx}>
                       <span
@@ -303,27 +312,26 @@ const WalkingNavigation = ({
                           whiteSpace: 'nowrap' as const
                         }}
                       >
-                        {minsAway !== null && alt.departureMs ? (
-                          intl.formatMessage(
-                            {
-                              defaultMessage: 'Next: {time} ({mins} min away)',
-                              id: 'components.GoMode.nextDeparture'
-                            },
-                            {
-                              mins: minsAway,
-                              time: (
-                                <RealtimeTime live={alt.realtime || false}>
-                                  {formatClockTime(alt.departureMs)}
-                                </RealtimeTime>
-                              )
-                            }
-                          )
-                        ) : (
-                          intl.formatMessage({
-                            defaultMessage: 'Next departure',
-                            id: 'components.GoMode.nextDepartureNoInfo'
-                          })
-                        )}
+                        {minsAway !== null && alt.departureMs
+                          ? intl.formatMessage(
+                              {
+                                defaultMessage:
+                                  'Next: {time} ({mins} min away)',
+                                id: 'components.GoMode.nextDeparture'
+                              },
+                              {
+                                mins: minsAway,
+                                time: (
+                                  <RealtimeTime live={alt.realtime || false}>
+                                    {formatClockTime(alt.departureMs)}
+                                  </RealtimeTime>
+                                )
+                              }
+                            )
+                          : intl.formatMessage({
+                              defaultMessage: 'Next departure',
+                              id: 'components.GoMode.nextDepartureNoInfo'
+                            })}
                       </span>
                       <UseNextButton
                         onClick={() => onSelectDeparture?.(alt.departureMs)}

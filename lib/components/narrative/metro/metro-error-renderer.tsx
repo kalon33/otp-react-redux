@@ -98,12 +98,11 @@ const ErrorRenderer = ({
         .map((error: string) => {
           const localizedInputFieldList = Array.from(errors[error])
             ?.filter((inputField): inputField is string => inputField != null)
-            ?.map(
-            (inputField) =>
+            ?.map((inputField) =>
               intl.formatMessage({
                 id: `components.OTP2ErrorRenderer.inputFields.${inputField}`
               })
-          )
+            )
 
           return (
             <IconMessageContainer

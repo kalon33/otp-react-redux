@@ -216,7 +216,8 @@ const BoardingPrompt = ({
         ) : (
           <VehicleDetail style={{ marginBottom: 12, textAlign: 'center' }}>
             {intl.formatMessage({
-              defaultMessage: 'No buses or routes detected nearby. Try moving closer to a bus stop.',
+              defaultMessage:
+                'No buses or routes detected nearby. Try moving closer to a bus stop.',
               id: 'components.GoMode.noBusesOrRoutesNearby'
             })}
           </VehicleDetail>

@@ -357,11 +357,10 @@ function reanchorRiding(
   return { ...riding, legIndex }
 }
 
-
 interface GoModeAction {
-  type: string
-  payload?: any
   meta?: any
+  payload?: any
+  type: string
 }
 
 const goMode = handleActions<GoModeState, any>(

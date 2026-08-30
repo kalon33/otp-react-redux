@@ -36,20 +36,20 @@ import { AppReduxState } from '../../util/state-types'
 import { blue, getBaseColor, grey } from '../util/colors'
 import { ComponentContext } from '../../util/contexts'
 import {
+  DEFAULT_PROFILE_ID,
+  ROUTING_PROFILES
+} from '../../util/routing-profiles'
+import {
   generateModeSettingValues,
   getDefaultModeButtons,
   getDefaultModeSettingValues
 } from '../../util/api'
 import { getAuth0Config } from '../../util/auth'
-import {
-  DEFAULT_PROFILE_ID,
-  ROUTING_PROFILES
-} from '../../util/routing-profiles'
 import { getDependentName } from '../../util/user'
 import { IconWithText } from '../util/styledIcon'
 import { invisibleCss } from '../util/invisible-a11y-label'
-import { PersistenceConfig } from '../../util/config-types'
 import { LockableRoute, routeLockLabel } from '../../util/route-lock'
+import { PersistenceConfig } from '../../util/config-types'
 import { toastPromise } from '../util/toasts'
 import { User } from '../user/types'
 import BackButton from '../util/back-button'
@@ -63,10 +63,10 @@ import {
   setModeButton,
   tripPlannerValidationErrors
 } from './util'
-import DateTimeModal from './date-time-modal'
 import { setModeButtonEnabled } from './batch-settings'
 import { styledCheckboxCss } from './styled'
 import { StyledTransparentButton } from './advanced-settings-button'
+import DateTimeModal from './date-time-modal'
 
 const PanelOverlay = styled.div`
   height: 100%;

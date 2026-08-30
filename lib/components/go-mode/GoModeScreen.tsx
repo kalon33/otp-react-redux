@@ -4,8 +4,8 @@ import React, { useEffect, useRef, useState } from 'react'
 
 import * as goModeActions from '../../actions/go-mode'
 import * as uiActions from '../../actions/ui'
-import { MobileScreens } from '../../actions/ui-constants'
 import { formatPlaceName } from '../../util/format-place-name'
+import { MobileScreens } from '../../actions/ui-constants'
 import MobileNavigationBar from '../mobile/navigation-bar'
 import type { GoModeState } from '../../reducers/go-mode'
 

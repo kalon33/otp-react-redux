@@ -8,8 +8,8 @@ import type { Itinerary, Leg } from '@opentripplanner/types'
 import * as goModeActions from '../../actions/go-mode'
 import * as routingProfileActions from '../../actions/routing-profiles'
 import { buildLiveItinerary } from '../../util/go-mode/live-itinerary'
-import { getModeIcon } from '../../util/go-mode/mode-icon'
 import { formatPlaceName } from '../../util/format-place-name'
+import { getModeIcon } from '../../util/go-mode/mode-icon'
 import { IconWithText } from '../util/styledIcon'
 import ItineraryBody from '../narrative/line-itin/connected-itinerary-body'
 import type { LiveLegTime } from '../../util/go-mode/types'
@@ -226,7 +226,10 @@ const TripSheet = ({
                       '{count, plural, one {# stop} other {# stops}} to {dest}',
                     id: 'components.GoMode.legStopsTo'
                   },
-                  { count: stopCount, dest: formatPlaceName(currentLeg.to.name, intl) }
+                  {
+                    count: stopCount,
+                    dest: formatPlaceName(currentLeg.to.name, intl)
+                  }
                 )
               : intl.formatMessage(
                   {

@@ -93,10 +93,10 @@ export function getRouteDepartures(
         }
       })
       .sort((a: RouteDeparture, b: RouteDeparture) => a.depMs - b.depMs)
-    
+
     // If no routeId specified, return all departures
     if (!routeId) return departures
-    
+
     // Otherwise filter by routeId
     return departures.filter((d: RouteDeparture) => d.routeId === routeId)
   } catch {

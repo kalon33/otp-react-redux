@@ -4,11 +4,11 @@ import React from 'react'
 import type { Leg } from '@opentripplanner/types'
 
 import * as goModeActions from '../../actions/go-mode'
+import { alightBannerLevel } from '../../util/go-mode/progress-calculator'
 import {
   displayVehicleLabel,
   NO_LIVE_VEHICLE_POLLS
 } from '../../util/go-mode/vehicle-matching'
-import { alightBannerLevel } from '../../util/go-mode/progress-calculator'
 import { getModeIcon } from '../../util/go-mode/mode-icon'
 import { VEHICLE_MATCH_FRESH_MS } from '../../util/go-mode/transit-trust'
 import type { TripProgress } from '../../util/go-mode/progress-calculator'

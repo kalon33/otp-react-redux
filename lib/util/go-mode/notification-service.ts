@@ -704,7 +704,10 @@ export function classifyMissedBus(
     boardVehicle.ageSec != null &&
     boardVehicle.ageSec <= VEHICLE_RECORD_STALE_SEC
   ) {
-    const boardStopId = ((boardLeg.from as any)?.stop?.gtfsId || (boardLeg.from as any)?.stopId) ?? null
+    const boardStopId =
+      ((boardLeg.from as any)?.stop?.gtfsId ||
+        (boardLeg.from as any)?.stopId) ??
+      null
     const atBoardStop =
       (boardStopId != null && boardVehicle.nextStopId === boardStopId) ||
       (boardVehicle.distanceToBoardStopM != null &&

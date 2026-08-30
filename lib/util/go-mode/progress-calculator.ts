@@ -1,5 +1,11 @@
-import type { Itinerary, LatLngArray, Leg } from '@opentripplanner/types'
-import type { Itinerary, LatLngArray, Leg } from '@opentripplanner/types'
+import type {
+  Itinerary,
+  Itinerary,
+  LatLngArray,
+  LatLngArray,
+  Leg,
+  Leg
+} from '@opentripplanner/types'
 
 import { calculateDistance } from './position-matching'
 import { countStopsAhead, hasDegenerateStopList } from './next-stop'

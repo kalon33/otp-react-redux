@@ -497,7 +497,11 @@ const GoModeMap = ({
               defaultMessage: '{distance}m from route',
               id: 'components.GoMode.deviationWarning'
             },
-            { distance: Math.round(Math.min(routeMatch.distanceFromRoute, prevOffRouteDistance)) }
+            {
+              distance: Math.round(
+                Math.min(routeMatch.distanceFromRoute, prevOffRouteDistance)
+              )
+            }
           )}
         </DeviationWarning>
       )}

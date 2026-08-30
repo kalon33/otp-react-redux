@@ -332,13 +332,14 @@ const GoModeDemo = (): JSX.Element => (
         note="Live realtime departure → green waves glyph left of the time; alternatives mix live + scheduled."
         title="Boarding (walk → bus), LIVE"
       >
-        <WalkingNavigation units="imperial"
+        <WalkingNavigation
           boardingStopData={makeBoardingStopData(true)}
           leg={walkLeg}
           nextLeg={busNextLeg}
           onExit={() => undefined}
           onSelectDeparture={() => undefined}
           progress={baseProgress}
+          units="imperial"
         />
       </Frame>
 
@@ -346,13 +347,14 @@ const GoModeDemo = (): JSX.Element => (
         note="No realtime → plain time, no glyph."
         title="Boarding (walk → bus), SCHEDULED"
       >
-        <WalkingNavigation units="imperial"
+        <WalkingNavigation
           boardingStopData={makeBoardingStopData(false)}
           leg={walkLeg}
           nextLeg={busNextLeg}
           onExit={() => undefined}
           onSelectDeparture={() => undefined}
           progress={baseProgress}
+          units="imperial"
         />
       </Frame>
 
@@ -362,7 +364,6 @@ const GoModeDemo = (): JSX.Element => (
       >
         <WalkingNavigation
           boardingStopData={makeBoardingStopData(true)}
-          units="imperial"
           leg={{ ...walkLeg, mode: 'BICYCLE' }}
           nextLeg={busNextLeg}
           onExit={() => undefined}
@@ -381,6 +382,7 @@ const GoModeDemo = (): JSX.Element => (
               streetName: 'E Lake Nokomis Pkwy'
             }
           }}
+          units="imperial"
         />
       </Frame>
 
@@ -388,7 +390,7 @@ const GoModeDemo = (): JSX.Element => (
         note="Plain access leg, no transit next — turn-by-turn off leg.steps."
         title="Walking only"
       >
-        <WalkingNavigation units="imperial"
+        <WalkingNavigation
           leg={walkLeg}
           onExit={() => undefined}
           progress={{
@@ -414,6 +416,7 @@ const GoModeDemo = (): JSX.Element => (
               streetName: '2nd Avenue South'
             }
           }}
+          units="imperial"
         />
       </Frame>
 

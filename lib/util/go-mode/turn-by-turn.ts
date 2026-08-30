@@ -1,4 +1,7 @@
-import { humanizeDistanceStringImperial, humanizeDistanceStringMetric } from '@opentripplanner/humanize-distance'
+import {
+  humanizeDistanceStringImperial,
+  humanizeDistanceStringMetric
+} from '@opentripplanner/humanize-distance'
 import type { IntlShape } from 'react-intl'
 import type { LatLngArray, Leg, Step } from '@opentripplanner/types'
 
@@ -127,10 +130,7 @@ export function phraseInstruction(step: Step): string {
  * Rider-facing phrasing for a step, using i18n translations.
  * This is the preferred function for UI use, as it returns localized strings.
  */
-export function phraseInstructionWithIntl(
-  step: Step,
-  intl: IntlShape
-): string {
+export function phraseInstructionWithIntl(step: Step, intl: IntlShape): string {
   const verbKey = DIRECTION_VERB_KEYS[step.relativeDirection]
   // `bogusName` marks a way OTP couldn't name ("path", "road"); naming it adds
   // nothing the rider can see from the saddle, so drop it.
@@ -144,17 +144,22 @@ export function phraseInstructionWithIntl(
         { street }
       )
     }
-    return intl.formatMessage({ id: 'components.GoMode.turnInstructions.continue' })
+    return intl.formatMessage({
+      id: 'components.GoMode.turnInstructions.continue'
+    })
   }
 
   // Get the base translation without street
   const baseTranslation = intl.formatMessage({ id: verbKey })
-  
+
   // If we have a street name, append it with the appropriate preposition
   // In French: "Tournez à gauche sur {street}", in English: "Turn left on {street}"
   // We detect French by checking if the translation contains accented characters or specific words
   if (street) {
-    const isFrench = baseTranslation.includes('à') || baseTranslation.includes('é') || baseTranslation.includes('è')
+    const isFrench =
+      baseTranslation.includes('à') ||
+      baseTranslation.includes('é') ||
+      baseTranslation.includes('è')
     const preposition = isFrench ? ' sur ' : ' on '
     return `${baseTranslation}${preposition}${street}`
   }
@@ -184,7 +189,10 @@ export function asContinuationWithIntl(
 }
 
 /** Abbreviated distance ("300 ft", "0.4 mi" or metric equivalent) for cue copy. */
-export function formatCueDistance(meters: number, units: 'imperial' | 'metric' = 'imperial'): string {
+export function formatCueDistance(
+  meters: number,
+  units: 'imperial' | 'metric' = 'imperial'
+): string {
   return units === 'imperial'
     ? humanizeDistanceStringImperial(meters, true)
     : humanizeDistanceStringMetric(meters)
@@ -317,10 +325,7 @@ const localizedCueCache = new WeakMap<Leg, Map<string, LegCues>>()
  * Build turn cues for a leg using i18n translations.
  * This version accepts an intl context for localized instruction strings.
  */
-export function buildStepIndexWithIntl(
-  leg: Leg,
-  intl: IntlShape
-): StepCue[] {
+export function buildStepIndexWithIntl(leg: Leg, intl: IntlShape): StepCue[] {
   const locale = intl.locale
   let legLocalizedCues = localizedCueCache.get(leg)
   if (!legLocalizedCues) {

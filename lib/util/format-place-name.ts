@@ -16,13 +16,13 @@ const STATIC_PLACE_NAMES: Record<string, string> = {
  */
 export function formatPlaceName(name: string, intl: IntlShape): string {
   if (!name) return name
-  
+
   // Check if the name is a known static place name that needs translation
   const translationKey = STATIC_PLACE_NAMES[name]
   if (translationKey) {
     return intl.formatMessage({ id: translationKey })
   }
-  
+
   // Return the original name if no translation is needed
   return name
 }

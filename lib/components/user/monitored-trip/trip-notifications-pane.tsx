@@ -13,10 +13,10 @@ import {
   YesNoOptions
 } from '../common/dropdown-options'
 import { FieldSet } from '../styled'
-import { SUCCESS_COLOR_VARIABLES } from '../../util/colors'
 import { IconWithText } from '../../util/styledIcon'
 import { isBlank } from '../../../util/ui'
 import { MonitoredTrip, notificationChannels } from '../types'
+import { SUCCESS_COLOR_VARIABLES } from '../../util/colors'
 
 // Element styles
 const SettingsList = styled.ul`

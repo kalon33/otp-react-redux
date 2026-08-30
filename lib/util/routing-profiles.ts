@@ -186,7 +186,11 @@ const PREFERENCE_PHRASES: Record<
     higher: 'components.ActiveRoutingPreferences.avoidingBiking',
     lower: 'components.ActiveRoutingPreferences.moreBiking'
   },
-  bikeSpeed: { baseline: 4, higher: 'components.ActiveRoutingPreferences.fasterBiking', lower: 'components.ActiveRoutingPreferences.slowerBiking' },
+  bikeSpeed: {
+    baseline: 4,
+    higher: 'components.ActiveRoutingPreferences.fasterBiking',
+    lower: 'components.ActiveRoutingPreferences.slowerBiking'
+  },
   minTransferTime: {
     baseline: 0,
     higher: 'components.ActiveRoutingPreferences.longerTransferBuffer',

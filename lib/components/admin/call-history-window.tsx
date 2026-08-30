@@ -28,7 +28,6 @@ type Props = {
 } & WrappedComponentProps
 
 function CallHistoryWindow(props: Props) {
-  toggleCallHistory: () => void
   const { callTaker, fetchQueries, intl, searches, toggleCallHistory } = props
   if (!callHistory.visible) return null
   return (
