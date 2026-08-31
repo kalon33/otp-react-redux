@@ -176,6 +176,9 @@ import { MobileScreens } from './ui-constants'
 import { setMainPanelContent, setMobileScreen, setViewedStop } from './ui'
 import { setQueryParam } from './form'
 
+// Translation key for "Current location" to be used in place names
+const CURRENT_LOCATION_NAME = 'Current location'
+
 // The mutable state of the trip in progress. One object, one lifetime: created
 // here for the first trip of the page, replaced wholesale by endGoMode. See
 // util/go-mode/trip-session.ts for why it is not 21 loose `let`s any more.
