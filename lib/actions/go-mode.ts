@@ -3875,7 +3875,8 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         handledAtMs: session.deviationHandledAtMs,
         nowMs: currentTime.getTime(),
         replanImminent: quietReplanImminent
-      }
+      },
+      state.otp.config?.units || 'imperial'
     )
 
     // One clock for both arms. A tick that SPARED the rider a card because a

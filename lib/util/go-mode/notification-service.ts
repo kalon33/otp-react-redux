@@ -1311,7 +1311,8 @@ export function checkForNotifications(
   config: NotificationConfig,
   legs?: Leg[],
   alight?: AlightContext,
-  deviation?: DeviationAlertGate
+  deviation?: DeviationAlertGate,
+  units: 'imperial' | 'metric' = 'imperial'
 ): NotificationEvent[] {
   if (!config.enabled) {
     return []
