@@ -3300,7 +3300,33 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     // tripId, vehicleId and boardedAt, and the record claimed a Gold Line train
     // identified by a Minneapolis bus. Transitioning first means the alight
     // test sees the riding fact from the leg the rider is actually leaving.
-    const previousLegIndex = goMode.routeMatch?.legIndex || 0
+    //
+    // The basis for "have we already advanced onto this leg" is the leg the
+    // trip actually TRANSITIONED to, not the matcher's last projection. Those
+    // were the same number until 3f5d5b95 gave the transition a way to say no:
+    // an access leg and the transit leg after it share an endpoint, so a rider
+    // waiting at the stop projects onto the bus leg while the bus is still
+    // minutes out, and the board-time gate refuses. But updateRouteMatch above
+    // has already stored legIndex 1, so the NEXT tick reads previousLegIndex 1,
+    // `match.legIndex <= currentLegIndex` short-circuits ahead of the gate, and
+    // the refusal becomes permanent — the gate never gets asked again, not even
+    // once the rider is aboard.
+    //
+    // The 2026-07-29 Orange Line replay shows the whole cost: the rider reached
+    // the platform at 17:19:43 for a 17:26 bus, 77 s outside the five-minute
+    // window, and advanceToLeg never ran for the rest of the ride. That is the
+    // only place startVehicleTracking is called for a mid-trip transit leg, so
+    // vehicle tracking never started, no vehicle was ever matched, and the
+    // riding fact was established from GPS alone with vehicleId null. Arriving
+    // at the stop early — which is exactly what the app tells riders to do — was
+    // enough to lose vehicle tracking for the whole bus leg.
+    //
+    // session.lastTransitionedLegIndex is null before the first transition and
+    // is reset on every itinerary swap and trip start; leg 0 is where a trip
+    // begins. Everywhere a transition actually happens the two values agree, and
+    // routeMatch is null after both a swap and a restore, so this reads the same
+    // as the old expression in every case except a refusal.
+    const previousLegIndex = session.lastTransitionedLegIndex ?? 0
     if (
       !alreadyArrived &&
       shouldTransitionToNextLeg(routeMatch, previousLegIndex, {
