@@ -25,11 +25,22 @@ import {
 } from '../util/go-mode/progress-calculator'
 import { decideRiding } from '../util/go-mode/riding'
 import {
+  estimateBikeSpeedMps,
+  recordRiderSpeedSample,
+  withObservedBikeSpeed
+} from '../util/go-mode/rider-speed'
+import {
+  destinationStalled,
+  noteDestinationDistance,
+  noteReplanAttempt
+} from '../util/go-mode/destination-progress'
+import {
   latchStopsRemaining,
   getNextStopOnRide
 } from '../util/go-mode/next-stop'
 import {
   checkBoardVehicleApproach,
+  checkDestinationUnreachable,
   checkForNotifications,
   checkMissedBus,
   classifyMissedBus,
@@ -141,8 +152,10 @@ import { evaluateTurnCard } from '../util/go-mode/turn-card'
 import { evaluateMissedBusRecovery } from '../util/go-mode/missed-bus-recovery'
 import {
   quietReplanAdmitted,
+  remainingAccessDistanceM,
   shouldQuietReplanAccessLeg,
-  smoothDistanceFromRoute
+  smoothDistanceFromRoute,
+  trimQuietReplanHistory
 } from '../util/go-mode/deviation'
 import { evaluateDepartureDrift } from '../util/go-mode/departure-drift'
 import type { DepartureBaselineState } from '../util/go-mode/departure-drift'
@@ -292,6 +305,23 @@ function getCurrentTime(): Date {
     return new Date(session.simulatedTimeMs)
   }
   return new Date()
+}
+
+/**
+ * The rider's own measured cycling speed for a plan query, or null when there
+ * is not enough evidence to improve on the profile / engine default.
+ *
+ * One reading, shared by every re-plan builder, so two plans issued seconds
+ * apart cannot time the same bike leg differently. The samples themselves are
+ * collected on the tick (handlePositionUpdate) and only while the rider is
+ * actually on a bike leg — see rider-speed.ts for why this is a rolling median
+ * of moving fixes and not `position.coords.speed`.
+ */
+function observedBikeSpeedMps(): number | null {
+  return estimateBikeSpeedMps(
+    session.riderSpeedSamples,
+    getCurrentTime().getTime()
+  )
 }
 
 const { randId } = coreUtils.storage
@@ -1049,6 +1079,17 @@ export function reRouteFromCurrentPosition(
       payload.routingPreferences = getRoutingProfile('stay-seated')?.prefs
     }
 
+    // Time the bike legs at the pace this rider is actually keeping. The
+    // ladder above still decides everything else, and a bikeSpeed the rider
+    // chose (bike-forward, or their own levers) is left alone — see
+    // withObservedBikeSpeed. Routed through routingPreferences because that is
+    // the channel applyRoutingPreferences merges AFTER generateOtp2Query, which
+    // is the only way a lever the default planQuery does not declare survives.
+    payload.routingPreferences = withObservedBikeSpeed(
+      payload.routingPreferences,
+      observedBikeSpeedMps()
+    )
+
     // A named route outlives the search it was named in.
     //
     // "Only take the 18" was a search-time setting only: Go Mode re-routes build
@@ -1231,29 +1272,6 @@ export function quietReplanAccessLeg() {
     const destLeg = legs[legs.length - 1]
     if (!goMode?.isActive || !itinerary || !lastPosition || !destLeg) return
     const nowMs = getCurrentTime().getTime()
-    if (
-      !quietReplanAdmitted({
-        lastReplanAtMs: session.lastQuietReplanAt,
-        nowMs,
-        reRouteStatus: goMode.reRoute?.status || 'idle'
-      })
-    ) {
-      return
-    }
-    session.lastQuietReplanAt = nowMs
-
-    const { homeTimezone } = state.otp.config
-    const { modes, modeSettings, numItineraries } = getBasePlanParts(state)
-    const routingPreferences = state.otp.currentQuery?.routingPreferences
-    const zoned = utcToZonedTime(nowMs, homeTimezone)
-    const date = format(zoned, coreUtils.time.OTP_API_DATE_FORMAT)
-    const time = format(zoned, coreUtils.time.OTP_API_TIME_FORMAT)
-    const from = {
-      category: 'CURRENT_LOCATION',
-      lat: lastPosition.coords.latitude,
-      lon: lastPosition.coords.longitude,
-      name: 'Current location'
-    }
 
     const currentLegIndex = goMode.routeMatch?.legIndex ?? 0
     const currentLeg = legs[currentLegIndex]
@@ -1263,6 +1281,97 @@ export function quietReplanAccessLeg() {
       (l: Leg, i: number) => i >= currentLegIndex && l.transitLeg
     )
     const nextTransitLeg = boardLegIndex >= 0 ? legs[boardLegIndex] : undefined
+    // Bike plans include their own walk segments, so one mode suffices; the
+    // chain the scoped path re-plans is what the mode has to describe.
+    const accessMode = legs
+      .slice(currentLegIndex, boardLegIndex >= 0 ? boardLegIndex : legs.length)
+      .some((l: Leg) => l.mode === 'BICYCLE')
+      ? 'BICYCLE'
+      : 'WALK'
+
+    // Re-planning that is not getting the rider any closer does not get to keep
+    // going. Three attempts with no net reduction in distance to the
+    // destination and this mode is retired for the trip — on 2026-08-28 the
+    // afternoon ride spent 32 minutes re-planning into a venue interior the
+    // street graph does not reach, never getting inside 454 m, and told the
+    // rider nothing. Detection and the stop live here; what the rider is told
+    // is one notification through the existing machinery, no new surface.
+    if (destinationStalled(session.destinationProgress, accessMode)) {
+      const sent = goMode.notifications?.sentNotifications || []
+      const stalledNote = checkDestinationUnreachable(
+        sent,
+        session.destinationProgress?.bestDistanceM,
+        destLeg.to?.name
+      )
+      if (stalledNote) {
+        dispatch(addNotification(stalledNote))
+        if (!isReplayActive()) {
+          showNotification(
+            stalledNote,
+            goMode.notifications || {
+              enabled: true,
+              soundEnabled: false,
+              vibrationEnabled: true
+            }
+          )
+          sendPush({
+            message: stalledNote.message,
+            priority: 1,
+            title: stalledNote.title
+          })
+        }
+      }
+      return
+    }
+
+    if (
+      !quietReplanAdmitted({
+        lastReplanAtMs: session.lastQuietReplanAt,
+        nowMs,
+        recentReplanAtMs: session.quietReplanHistory,
+        // How much access leg is actually left. A rider two blocks from the
+        // boarding stop should not wait the same minute as one with 3 km to go
+        // — 8/28's 670 m leg went 122 m wrong within 55 s and got no retry for
+        // nearly three minutes.
+        remainingAccessMeters: remainingAccessDistanceM(
+          legs,
+          currentLegIndex,
+          goMode.routeMatch?.progressAlongLeg
+        ),
+        reRouteStatus: goMode.reRoute?.status || 'idle'
+      })
+    ) {
+      return
+    }
+    session.lastQuietReplanAt = nowMs
+    session.quietReplanHistory = [
+      ...trimQuietReplanHistory(session.quietReplanHistory, nowMs),
+      nowMs
+    ]
+    session.destinationProgress = noteReplanAttempt(
+      session.destinationProgress,
+      accessMode
+    )
+
+    const { homeTimezone } = state.otp.config
+    const { modes, modeSettings, numItineraries } = getBasePlanParts(state)
+    // 2026-08-28: every access re-plan re-derived the bike leg at OTP's default
+    // speed while the rider was measurably doing 5.6-7.8 m/s, which is what
+    // produced the backwards trip sheets — the spliced transit suffix was
+    // sequenced for an arrival at the boarding stop the rider beat every time.
+    const routingPreferences = withObservedBikeSpeed(
+      state.otp.currentQuery?.routingPreferences,
+      observedBikeSpeedMps()
+    )
+    const zoned = utcToZonedTime(nowMs, homeTimezone)
+    const date = format(zoned, coreUtils.time.OTP_API_DATE_FORMAT)
+    const time = format(zoned, coreUtils.time.OTP_API_TIME_FORMAT)
+    const from = {
+      category: 'CURRENT_LOCATION',
+      lat: lastPosition.coords.latitude,
+      lon: lastPosition.coords.longitude,
+      name: 'Current location'
+    }
 
     // Rider exited Go Mode / a reroute started while a request was in flight?
     const stillReplannable = () => {
@@ -1278,12 +1387,6 @@ export function quietReplanAccessLeg() {
     // (GPS → boarding stop, single mode) and keep every transit leg as-is.
     if (boardLegIndex >= 0 && nextTransitLeg) {
       const boardPlace = nextTransitLeg.from
-      // Bike plans include their own walk segments, so one mode suffices.
-      const accessMode = legs
-        .slice(currentLegIndex, boardLegIndex)
-        .some((l: Leg) => l.mode === 'BICYCLE')
-        ? 'BICYCLE'
-        : 'WALK'
       const scoped = {
         arriveBy: false,
         date,
@@ -1408,7 +1511,13 @@ export function captureRerouteSnapshot() {
 
     const { homeTimezone } = state.otp.config
     const { modes, modeSettings, numItineraries } = getBasePlanParts(state)
-    const routingPreferences = state.otp.currentQuery?.routingPreferences
+    // Same levers a real re-plan would carry, observed bike speed included —
+    // a snapshot that queries differently from the path it exists to reproduce
+    // is not a recording of anything.
+    const routingPreferences = withObservedBikeSpeed(
+      state.otp.currentQuery?.routingPreferences,
+      observedBikeSpeedMps()
+    )
     const zoned = utcToZonedTime(getCurrentTime().getTime(), homeTimezone)
     const from = {
       category: 'CURRENT_LOCATION',
@@ -1946,10 +2055,16 @@ function optimizeAlightFromTrip(options: {
       preferred: boardedRouteId
         ? { otherThanPreferredRoutesPenalty: 900, routes: boardedRouteId }
         : undefined,
-      routingPreferences:
+      // The onward plans from each candidate alight stop are mostly bike
+      // egress, so they get the observed pace too. It is null unless the rider
+      // was cycling within rider-speed.ts's window, so a long bus ride simply
+      // falls back to the profile / engine default.
+      routingPreferences: withObservedBikeSpeed(
         prefsOverride ??
-        state.otp.currentQuery?.routingPreferences ??
-        getRoutingProfile('stay-seated')?.prefs,
+          state.otp.currentQuery?.routingPreferences ??
+          getRoutingProfile('stay-seated')?.prefs,
+        observedBikeSpeedMps()
+      ),
       to: { lat: to.lat, lon: to.lon, name: to.name }
     }
 
@@ -3214,6 +3329,23 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       }
     }
 
+    // Feed the rolling bike-speed estimate the re-plan builders query with.
+    // Gated on the rider being on a bike leg and NOT aboard anything: a fix
+    // taken on a bus reads 15 m/s and would clamp straight to the top of the
+    // lever range, which is how "tell OTP how fast the rider is" turns into a
+    // different lie. Judged on the fix's own timestamp so a replay reproduces
+    // the live estimate exactly. See util/go-mode/rider-speed.ts.
+    if (
+      matchedLeg?.mode === 'BICYCLE' &&
+      !matchedLeg?.transitLeg &&
+      !getState().otp?.goMode?.riding
+    ) {
+      session.riderSpeedSamples = recordRiderSpeedSample(
+        session.riderSpeedSamples,
+        { speedMps: position.coords.speed ?? null, tMs: position.timestamp }
+      )
+    }
+
     // Calculate progress — use simulated clock during simulation, real time for live GPS
     const currentTime = getCurrentTime()
     const departureOverride = goMode.departureOverride ?? null
@@ -3322,6 +3454,16 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     }
 
     dispatch(updateProgress(progress))
+
+    // The only thing that remembers distanceToDestination past this tick. Until
+    // now it was computed every tick and read by nothing but the arrival latch,
+    // so no part of the app could see the 8/28 afternoon failure: 32 minutes of
+    // re-planning into the State Fairgrounds interior that never once got
+    // inside 454 m. See util/go-mode/destination-progress.ts.
+    session.destinationProgress = noteDestinationDistance(
+      session.destinationProgress,
+      progress.distanceToDestination
+    )
 
     // Arrival: mark it once and let this tick's notification pass emit
     // TRIP_COMPLETE; every later tick quiesces here — no live-times polling,
@@ -3863,7 +4005,18 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       // construction.
       dispatch(replanFromAboard({ autoApply: true, reason: 'boarded-earlier' }))
     } else if (
-      shouldQuietReplanAccessLeg({ currentLeg, notifications, reRouteStatus })
+      shouldQuietReplanAccessLeg({
+        currentLeg,
+        // The drift itself, not only a fresh alert about it. checkRouteDeviation
+        // dedups on a 120 s window because that is how often it is decent to
+        // interrupt someone — borrowing it as the re-plan's retry interval is
+        // why 8/28's 670 m leg went un-replanned for three minutes and why
+        // scaling the re-plan cooldown alone would have changed nothing. Rate
+        // is quietReplanAdmitted's job now.
+        distanceFromRoute: persistedDistanceFromRoute,
+        notifications,
+        reRouteStatus
+      })
     ) {
       // Drifted off a walk/bike leg: the rider chose their own way. Quietly
       // re-plan the access path from where they are (car-GPS style) — no card,

@@ -17,11 +17,21 @@ import type { StopCountLatch } from './next-stop'
  * scoped in actions/go-mode.ts rather than change behaviour silently.
  */
 import type { DepartureBaselineState } from './departure-drift'
+import type { DestinationProgressState } from './destination-progress'
 import type { MissedBusAttempt } from './missed-bus-recovery'
 import type { PacingCardState } from './pacing-card'
+import type { RiderSpeedSample } from './rider-speed'
 import type { TimedSimulationPoint } from './geometry'
 
 export interface TripSession {
+  /**
+   * Closest approach to the destination so far, and how many re-plans have gone
+   * out since it last improved. The only thing in Go Mode that remembers
+   * distanceToDestination across ticks — see destination-progress.ts for the
+   * 8/28 ride that needed it.
+   */
+  destinationProgress: DestinationProgressState | null
+
   /** The boarded-earlier replan's retry bookkeeping, per boarding. */
   earlyBoardReplan: {
     attempts: number
@@ -111,12 +121,26 @@ export interface TripSession {
   prevDistanceFromRoute: number | null
 
   /**
+   * Quiet access-leg replan timestamps inside the burst window, so a cooldown
+   * that now scales down with leg length still cannot become a replan storm.
+   */
+  quietReplanHistory: number[]
+
+  /**
    * Quiet access-leg replans that keep coming back empty are counted but settle
    * silently; the streak is bookkeeping for the debug log.
    */
   quietReplanMissStreak: number
   /** Reroute-snapshot capture interval (recording sessions only). */
   rerouteSnapshotIntervalId: ReturnType<typeof setInterval> | null
+
+  /**
+   * Recent ground speeds off the rider's own fixes while they are on a bike
+   * leg, for the observed-bikeSpeed estimate a replan query carries. See
+   * rider-speed.ts — this is a rolling estimate precisely because a single
+   * instantaneous sample is worse than no sample at all.
+   */
+  riderSpeedSamples: RiderSpeedSample[]
 
   /** Epoch ms — the "current time" in simulation-land. */
   simulatedTimeMs: number
@@ -140,6 +164,7 @@ export interface TripSession {
 /** A trip's state at its first GPS fix. */
 export function createTripSession(): TripSession {
   return {
+    destinationProgress: null,
     earlyBoardReplan: null,
     gpsPollingIntervalId: null,
     gpsSimulationTimeoutId: null,
@@ -156,8 +181,10 @@ export function createTripSession(): TripSession {
     matchHeldSinceMs: null,
     missedBusRerouteAttempt: null,
     prevDistanceFromRoute: null,
+    quietReplanHistory: [],
     quietReplanMissStreak: 0,
     rerouteSnapshotIntervalId: null,
+    riderSpeedSamples: [],
     simulatedTimeMs: 0,
     simulationActive: false,
     simulationCoords: [],

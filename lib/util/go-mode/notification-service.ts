@@ -35,6 +35,10 @@ export type NotificationType =
   // when the boarding became current. Raised by departure-drift.ts, which owns
   // the baseline state a check function here could not hold.
   | 'DEPARTURE_CHANGED'
+  // Re-planning has stopped getting the rider closer to the destination — the
+  // last stretch is not in the street graph. Raised by the quiet access-leg
+  // re-plan off destination-progress.ts, which owns the across-replans state.
+  | 'DESTINATION_UNREACHABLE'
 
 export interface NotificationConfig {
   enabled: boolean
@@ -837,13 +841,14 @@ export function checkLegTransition(
 }
 
 /**
- * Check if should notify for route deviation
+ * How far off the planned route counts as off it, for this leg's mode.
+ *
+ * Exported so the quiet access-leg re-plan (deviation.ts) can judge a SUSTAINED
+ * drift against the same number the alert uses. Two answers to the same
+ * question, a few metres apart, is the failure this file already calls the one
+ * forbidden disagreement.
  */
-export function checkRouteDeviation(
-  distanceFromRoute: number,
-  sentNotifications: string[],
-  currentLeg?: Leg
-): NotificationEvent | null {
+export function deviationThresholdM(currentLeg?: Leg): number {
   // 200 m is a walking allowance. On a bike a wrong turn puts that much
   // sideways distance between you and the route in well under a minute, and
   // every extra second spent off-route is another block to backtrack — so react
@@ -856,14 +861,22 @@ export function checkRouteDeviation(
   // 9m apart. Pushing "off route" while the matcher holds isOnRoute is the one
   // forbidden disagreement; walk/bike merely being more patient than the 100m
   // corridor is fine.
-  const threshold =
-    currentLeg?.mode === 'BICYCLE'
-      ? 120
-      : isTransitMode(currentLeg?.mode)
-      ? MATCH_CORRIDOR_TRANSIT_M
-      : 200
+  return currentLeg?.mode === 'BICYCLE'
+    ? 120
+    : isTransitMode(currentLeg?.mode)
+    ? MATCH_CORRIDOR_TRANSIT_M
+    : 200
+}
 
-  if (distanceFromRoute > threshold) {
+/**
+ * Check if should notify for route deviation
+ */
+export function checkRouteDeviation(
+  distanceFromRoute: number,
+  sentNotifications: string[],
+  currentLeg?: Leg
+): NotificationEvent | null {
+  if (distanceFromRoute > deviationThresholdM(currentLeg)) {
     // Stable context: the measured distance changes every GPS tick, so it must
     // not be part of the dedup key or the 120s window never matches.
     const id = generateNotificationId('ROUTE_DEVIATION', 'deviation')
@@ -883,6 +896,46 @@ export function checkRouteDeviation(
   }
 
   return null
+}
+
+/**
+ * Tell the rider that re-planning has stopped helping.
+ *
+ * Raised once the across-replans tracker (destination-progress.ts) retires an
+ * access mode as non-convergent — three re-plans with no net reduction in
+ * distance to the destination. On 2026-08-28 the afternoon ride re-planned into
+ * the State Fairgrounds interior for 32 minutes and never got inside 454 m; the
+ * app kept promising an arrival the street graph could not deliver, and said
+ * nothing when the promise stopped being true.
+ *
+ * Deliberately a plain notification and nothing more: it uses the same event
+ * shape, the same dedup and the same push path as every other alert, so there
+ * is no new surface to maintain for a case that should be rare. The dedup
+ * window is a whole hour on a stable id — this is a fact about the trip, not a
+ * status, and repeating it helps nobody.
+ */
+export function checkDestinationUnreachable(
+  sentNotifications: string[],
+  distanceM: number | null | undefined,
+  destinationName?: string | null
+): NotificationEvent | null {
+  const id = generateNotificationId('DESTINATION_UNREACHABLE', 'destination')
+  if (wasRecentlySent(id, sentNotifications, 3600000)) return null
+  const where = destinationName ? ` from ${destinationName}` : ''
+  const howFar =
+    distanceM != null && Number.isFinite(distanceM)
+      ? `${Math.round(distanceM)}m`
+      : 'some way'
+  return {
+    id,
+    message:
+      `Still ${howFar}${where} and re-planning isn't closing the gap — ` +
+      'the last stretch may not be on the map. Finish from here your own way.',
+    priority: 'high',
+    timestamp: new Date(),
+    title: 'This is as close as routing gets',
+    type: 'DESTINATION_UNREACHABLE'
+  }
 }
 
 const TRANSIT_MODES = ['BUS', 'RAIL', 'SUBWAY', 'TRAM', 'FERRY']
