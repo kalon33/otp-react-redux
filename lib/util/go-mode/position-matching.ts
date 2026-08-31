@@ -172,9 +172,35 @@ export interface RouteMatchResult {
 }
 
 /**
- * Match current position to the nearest point on the route
+ * How close two candidate projections have to be, in perpendicular metres,
+ * before the choice between them stops being a measurement.
+ *
+ * A shape that folds back on itself puts two segments underfoot at once. The
+ * strict global minimum picks between them on a sub-metre difference that is
+ * pure GPS noise, and the two answers are hundreds of metres apart ALONG the
+ * leg. On 2026-08-28 that produced 165 m of "progress" per second, repeatedly,
+ * on a 215 m access leg with the rider's fix 0–6 m from the line (21:41:00,
+ * :04, :16, :17, :20, :32; 21:43:06, :10, :12) — the rider was as on-route as
+ * it is possible to be, and the projection was still inventing motion. Over
+ * the whole recorded ride, MORE THAN HALF the unexplained along-leg metres
+ * (5,523 of 10,123) were logged while `isOnRoute` was true, which is why no
+ * amount of off-corridor suppression reaches them.
+ *
+ * So among candidates that are within this band of the best one — genuinely
+ * equally good statements about where the rider is — prefer the one that is
+ * nearest to the projection already held. This can only ever REORDER a set of
+ * near-ties: a candidate that is better by more than the band still wins
+ * outright, so a real correction is never blocked and nothing can be pinned
+ * for longer than it takes the rider to move the width of the band.
+ *
+ * This generalises what used to be BACKWARD_JUMP_HYSTERESIS_M, which applied
+ * the same 5 m band in the backward direction only (the 465's downtown loop,
+ * 2026-08-27) and therefore let every forward flip through.
  */
-export const BACKWARD_JUMP_HYSTERESIS_M = 5
+export const MATCH_NEAR_TIE_M = 5
+
+/** @deprecated Kept as the old name for the same band; prefer MATCH_NEAR_TIE_M. */
+export const BACKWARD_JUMP_HYSTERESIS_M = MATCH_NEAR_TIE_M
 
 // These corridors answer "is this match usable", nothing more. Transit shapes
 // are sparse enough that a rider genuinely aboard can project 200m+ from the
@@ -302,20 +328,7 @@ function exceedsJumpBudget(
   const elapsedSec = (gate.nowMs - heldSinceMs) / 1000
   if (!Number.isFinite(elapsedSec) || elapsedSec <= 0) return false
 
-  const movedM =
-    winner.legIndex === previousMatch.legIndex
-      ? Math.abs(winner.progressAlongLeg - previousMatch.progressAlongLeg) *
-        winnerLegDistance
-      : // Across a leg boundary progress is not comparable, so measure the
-        // ground the projected point itself covered. An access leg and the
-        // transit leg after it share an endpoint, so a real transition measures
-        // ~0 m and is never gated.
-        calculateDistance(
-          previousMatch.nearestPoint[0],
-          previousMatch.nearestPoint[1],
-          winner.nearestPoint[0],
-          winner.nearestPoint[1]
-        )
+  const movedM = continuityGapM(previousMatch, winner, winnerLegDistance)
 
   return (
     movedM >
@@ -324,14 +337,39 @@ function exceedsJumpBudget(
   )
 }
 
+/**
+ * How far the projection would have to travel to get from `previousMatch` to
+ * `candidate`, in metres — the same quantity the jump budget measures, and the
+ * one the near-tie rule minimises.
+ *
+ * Across a leg boundary progress is not comparable, so the ground the
+ * projected point itself covers stands in. An access leg and the transit leg
+ * after it share an endpoint, so a real transition measures ~0 m.
+ */
+function continuityGapM(
+  previousMatch: RouteMatchResult,
+  candidate: RouteMatchResult,
+  candidateLegDistance: number
+): number {
+  return candidate.legIndex === previousMatch.legIndex
+    ? Math.abs(candidate.progressAlongLeg - previousMatch.progressAlongLeg) *
+        candidateLegDistance
+    : calculateDistance(
+        previousMatch.nearestPoint[0],
+        previousMatch.nearestPoint[1],
+        candidate.nearestPoint[0],
+        candidate.nearestPoint[1]
+      )
+}
+
 export function matchPositionToRoute(
   currentPosition: LatLngArray,
   legs: Leg[],
   currentLegIndex = 0,
   /**
-   * Last tick's match, used only to break sub-metre ties on a shape that
-   * doubles back on itself. Optional: without it the behaviour is exactly the
-   * old global-minimum search.
+   * Last tick's match, used only to break near-ties on a shape that doubles
+   * back on itself. Optional: without it the behaviour is exactly the old
+   * global-minimum search.
    */
   previousMatch?: RouteMatchResult | null,
   /**
@@ -342,17 +380,14 @@ export function matchPositionToRoute(
 ): RouteMatchResult | null {
   let bestMatch: RouteMatchResult | null = null
   let minDistance = Infinity
-  // Length of the leg each of the two candidates below was measured on, so a
-  // progress delta can be turned back into metres without decoding again.
+  // Length of the leg the winner was measured on, so a progress delta can be
+  // turned back into metres without decoding again.
   let bestLegDistance = 0
-  let fallbackLegDistance = 0
-  // The best candidate ignoring hysteresis. If the backward-jump rule ends up
-  // rejecting everything — a rider who really has doubled back — this is what
-  // is returned, so the rule can only ever REORDER preferences and never turn a
-  // match into a null. A null here reads to callers as "no geometry" and is a
-  // far worse answer than a backward jump.
-  let fallbackMatch: RouteMatchResult | null = null
-  let fallbackDistance = Infinity
+  // Every candidate within MATCH_NEAR_TIE_M of the running best, so the
+  // continuity preference below has a set to choose from. Only collected when
+  // there is a previous match to be continuous with; with none, the search is
+  // the plain global minimum it always was, allocation included.
+  const nearTies: Array<{ legDistance: number; match: RouteMatchResult }> = []
 
   // Search current leg and next 2 legs for best match
   const legsToSearch = Math.min(3, legs.length - currentLegIndex)
@@ -374,7 +409,9 @@ export function matchPositionToRoute(
       const projection = projectPointOntoSegment(currentPosition, start, end)
       const perpDistance = projection.perpDistance
 
-      if (perpDistance < minDistance) {
+      const isNearTie =
+        previousMatch != null && perpDistance <= minDistance + MATCH_NEAR_TIE_M
+      if (perpDistance < minDistance || isNearTie) {
         // Calculate progress along this segment
         const segmentStartDistance = cumulativeDistances[i]
         const segmentEndDistance = cumulativeDistances[i + 1]
@@ -401,24 +438,6 @@ export function matchPositionToRoute(
         const progressAlongLeg =
           totalLegDistance > 0 ? totalDistanceAlongLeg / totalLegDistance : 0
 
-        // Where a shape doubles back on itself — the 465's downtown loop on 2
-        // Av S — two candidate segments sit SUB-METRE apart and the strict
-        // global minimum alternates between them tick to tick. Progress then
-        // jumps backward by the length of the loop, and the stop counter
-        // un-passes a stop the rider has already gone by (13:36:16, :24, :25,
-        // :27 on 2026-08-27 — four flips in thirty seconds).
-        //
-        // So when the winning candidate would move the rider BACKWARD along the
-        // same leg, and the position we already hold is within a few metres of
-        // it, keep what we have. This only ever breaks near-ties: a candidate
-        // that is genuinely closer by more than the hysteresis still wins, so a
-        // real correction is never blocked.
-        const wouldJumpBackward =
-          previousMatch != null &&
-          previousMatch.legIndex === legIndex &&
-          progressAlongLeg < previousMatch.progressAlongLeg &&
-          Math.abs(previousMatch.distanceFromRoute - perpDistance) <=
-            BACKWARD_JUMP_HYSTERESIS_M
         const candidate: RouteMatchResult = {
           distanceFromRoute: perpDistance,
           isOnRoute: perpDistance < onRouteThreshold,
@@ -429,34 +448,52 @@ export function matchPositionToRoute(
           segmentIndex: i
         }
 
-        if (perpDistance < fallbackDistance) {
-          fallbackDistance = perpDistance
-          fallbackMatch = candidate
-          fallbackLegDistance = totalLegDistance
+        if (perpDistance < minDistance) {
+          minDistance = perpDistance
+          bestMatch = candidate
+          bestLegDistance = totalLegDistance
+          // The band moved with the new best; anything it no longer covers is
+          // not a tie any more.
+          for (let k = nearTies.length - 1; k >= 0; k--) {
+            if (
+              nearTies[k].match.distanceFromRoute >
+              minDistance + MATCH_NEAR_TIE_M
+            ) {
+              nearTies.splice(k, 1)
+            }
+          }
         }
-        if (wouldJumpBackward) continue
-        minDistance = perpDistance
-        bestMatch = candidate
-        bestLegDistance = totalLegDistance
+        if (previousMatch != null) {
+          nearTies.push({ legDistance: totalLegDistance, match: candidate })
+        }
       }
     }
   }
 
-  const winner = bestMatch ?? fallbackMatch
+  let winner = bestMatch
+  let winnerLegDistance = bestLegDistance
+  // Prefer continuity among equals. Never a null: the set always contains the
+  // global minimum itself, so this can reorder preferences and nothing else. A
+  // null here would read to callers as "no geometry", which is a far worse
+  // answer than any projection.
+  if (previousMatch != null && winner != null && nearTies.length > 1) {
+    let bestGap = Infinity
+    for (const tie of nearTies) {
+      if (tie.match.distanceFromRoute > minDistance + MATCH_NEAR_TIE_M) continue
+      const gap = continuityGapM(previousMatch, tie.match, tie.legDistance)
+      if (gap < bestGap) {
+        bestGap = gap
+        winner = tie.match
+        winnerLegDistance = tie.legDistance
+      }
+    }
+  }
   if (!gate || !winner) return winner
 
   // Held verbatim, stamp included: the previous projection is still the best
   // statement about where the rider is, and re-stamping it would reset the
   // budget and pin the rider for good.
-  if (
-    exceedsJumpBudget(
-      winner,
-      bestMatch ? bestLegDistance : fallbackLegDistance,
-      previousMatch,
-      legs,
-      gate
-    )
-  ) {
+  if (exceedsJumpBudget(winner, winnerLegDistance, previousMatch, legs, gate)) {
     return previousMatch as RouteMatchResult
   }
 

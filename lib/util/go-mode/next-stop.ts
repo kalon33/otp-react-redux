@@ -184,10 +184,25 @@ export function getNextStopOnRide(
   if (!ordered.length) return null
 
   // Fraction of the leg already covered. Trust the live route match when it is
-  // anchored to this leg; otherwise fall back to time-based selection below.
+  // anchored to this leg AND inside the corridor; otherwise fall back to
+  // time-based selection below.
+  //
+  // Off the corridor the projection is not a measurement, and this is the one
+  // consumer left that was still reading it as one. A transit leg's corridor
+  // is 250 m, so `isOnRoute` false here means the rider is nowhere near the
+  // shape — and the nearest point on a shape you are 250 m from slides along
+  // it freely: on 2026-08-28 that projection moved 266 m, then 315 m, then
+  // 397 m on single one-second fixes, which read here as stops being passed
+  // that the vehicle had not reached. The arrival-time fallback below is a
+  // real alternative built from the boarded trip's own stop times, so there is
+  // no need to guess from a fiction. (turn-by-turn.ts and riding.ts already
+  // refuse off-corridor progress for the same reason; this brings the stop
+  // counter in line with them.)
   const routeMatch = goMode.routeMatch
   const progress =
-    routeMatch && routeMatch.legIndex === riding.legIndex
+    routeMatch &&
+    routeMatch.legIndex === riding.legIndex &&
+    routeMatch.isOnRoute
       ? routeMatch.progressAlongLeg
       : null
 

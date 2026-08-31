@@ -3221,9 +3221,18 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       itinerary.legs,
       currentLegIndex,
       // Last tick's match, so a self-overlapping shape cannot flip between two
-      // sub-metre candidates and drag progress backward. Already in the store;
-      // no new state needed.
-      goMode.routeMatch
+      // near-tied candidates and invent hundreds of metres of progress.
+      // Already in the store; no new state needed.
+      goMode.routeMatch,
+      // The fix's OWN clock, matching the arrival taper above, so a replayed
+      // ride gates exactly where the live one did. Deliberately NOT
+      // previousMatchMs: that defaults to previousMatch.matchedAtMs, which the
+      // matcher stamps and the store carries, and which is the moment the held
+      // projection was ESTABLISHED. Feeding tracking.lastPosition.timestamp
+      // instead would advance every tick — including through a
+      // matchTrust.provisional hold, where the match does not move — freezing
+      // the budget at ~1 s and stranding the rider on a stale point.
+      { accuracyM: position.coords.accuracy, nowMs: position.timestamp }
     )
 
     if (!routeMatch) {
