@@ -3934,37 +3934,64 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       }
     })
 
-    // The sticky per-turn card on the rider's wrist — what to show and when to
-    // swap or clear it is decided in util/go-mode/turn-card.ts, which carries
-    // the reasoning and the rides behind it.
-    const turnCard = evaluateTurnCard(session.lastTurnCardKey, {
-      currentLeg,
-      enabled: !replaying && getState().otp.config.goMode?.turnCard !== false,
-      progress
-    })
-    session.lastTurnCardKey = turnCard.next
-    if (turnCard.post) {
-      sendPush({ id: TURN_CARD_NOTIFICATION_ID, ...turnCard.post })
-    } else if (turnCard.clear) {
-      cancelPush(TURN_CARD_NOTIFICATION_ID)
-    }
+    // The two sticky cards on the rider's wrist. Both sit BELOW the arrival
+    // quiesce's `else if (hasArrived) return`, so the tick that latches arrival
+    // is the last one that ever reaches them — which means whatever card was
+    // posted last has no path to being cleared. On the 2026-08-28 ride the
+    // watch still read "Turn left on George Perry Floyd Jr Place" 88 minutes
+    // after the trip ended; only endGoMode cancels these, so a rider who
+    // backgrounds or kills the app keeps a dead turn on their wrist. That
+    // became reachable when 73ef2b9a taught arrival to fire on distance
+    // (correctly — it is why the trip ends at all now), moving the latch off
+    // the final tick and ahead of the last cue.
+    //
+    // Arrival is the end of navigation: clear both, once, and do not evaluate
+    // them again. Evaluating would be worse than doing nothing — the arrival
+    // tick can still have a cue pending, so it would post a fresh turn card
+    // onto a wrist that nothing will visit again.
+    if (getState().otp.goMode?.arrivedAt != null) {
+      if (session.lastTurnCardKey !== null) {
+        cancelPush(TURN_CARD_NOTIFICATION_ID)
+        session.lastTurnCardKey = null
+      }
+      if (session.lastPacingCard !== null) {
+        cancelPush(PACING_CARD_NOTIFICATION_ID)
+        session.lastPacingCard = null
+      }
+    } else {
+      // What to show and when to swap or clear it is decided in
+      // util/go-mode/turn-card.ts, which carries the reasoning and the rides
+      // behind it.
+      const turnCard = evaluateTurnCard(session.lastTurnCardKey, {
+        currentLeg,
+        enabled: !replaying && getState().otp.config.goMode?.turnCard !== false,
+        progress
+      })
+      session.lastTurnCardKey = turnCard.next
+      if (turnCard.post) {
+        sendPush({ id: TURN_CARD_NOTIFICATION_ID, ...turnCard.post })
+      } else if (turnCard.clear) {
+        cancelPush(TURN_CARD_NOTIFICATION_ID)
+      }
 
-    // The sticky pacing card (id 2, alongside the turn card): ride time left,
-    // the bus being chased, and the buffer at the stop, so the rider knows
-    // whether to go fast or slow. Every decision — cadence, clearing, and the
-    // enable gate — lives in util/go-mode/pacing-card.ts.
-    const pacingCard = evaluatePacingCard(session.lastPacingCard, {
-      currentLeg,
-      enabled: !replaying && getState().otp.config.goMode?.pacingCard !== false,
-      nextLeg,
-      nowMs: currentTime.getTime(),
-      progress
-    })
-    session.lastPacingCard = pacingCard.next
-    if (pacingCard.post) {
-      sendPush({ id: PACING_CARD_NOTIFICATION_ID, ...pacingCard.post })
-    } else if (pacingCard.clear) {
-      cancelPush(PACING_CARD_NOTIFICATION_ID)
+      // The pacing card (id 2, alongside the turn card): ride time left, the
+      // bus being chased, and the buffer at the stop, so the rider knows
+      // whether to go fast or slow. Every decision — cadence, clearing, and the
+      // enable gate — lives in util/go-mode/pacing-card.ts.
+      const pacingCard = evaluatePacingCard(session.lastPacingCard, {
+        currentLeg,
+        enabled:
+          !replaying && getState().otp.config.goMode?.pacingCard !== false,
+        nextLeg,
+        nowMs: currentTime.getTime(),
+        progress
+      })
+      session.lastPacingCard = pacingCard.next
+      if (pacingCard.post) {
+        sendPush({ id: PACING_CARD_NOTIFICATION_ID, ...pacingCard.post })
+      } else if (pacingCard.clear) {
+        cancelPush(PACING_CARD_NOTIFICATION_ID)
+      }
     }
 
     // Whether a missed bus re-plans now, whether the result is applied without
