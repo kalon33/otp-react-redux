@@ -319,6 +319,80 @@ describe('shouldReplanBoardedEarlier', () => {
     ).toBe(true)
   })
 
+  describe('the 8/28 signature: your own bus, running early', () => {
+    // Bloomington -> Fairgrounds. The rider boarded the Orange Line the plan
+    // named, while it was running 4m45s ahead of schedule. The clock test read
+    // that schedule lead as proof of an earlier run and swapped the itinerary
+    // mid-ride: a leg re-index and a high-priority push, on the right bus.
+    const earlyByFourFortyFive = {
+      nowMs: NOW,
+      // Planned board is 4m45s out; the bus is here now.
+      ridingLeg: { ...ridingLeg, startTime: NOW + 285000 },
+      ridingTripId: '1:1173133',
+      vehicleMatchState: {
+        consecutiveMatches: 8,
+        match: {
+          confidence: 'high' as const,
+          distanceMeters: 40,
+          label: '8140',
+          lastSeen: NOW,
+          tripHeadsign: 'Orange Burnsville',
+          tripId: '1:1173133',
+          vehicleId: '1:8140'
+        }
+      },
+      vehicleRecord: freshRecord
+    }
+
+    it('does not fire when the rider is on the trip the plan already names', () => {
+      expect(shouldReplanBoardedEarlier(earlyByFourFortyFive)).toBe(false)
+    })
+
+    it('does not fire on the planned trip even with no vehicle match at all', () => {
+      // The riding fact alone names the planned trip; there is nothing to
+      // re-plan to, so the clock is irrelevant.
+      expect(
+        shouldReplanBoardedEarlier({
+          ...earlyByFourFortyFive,
+          vehicleMatchState: null,
+          vehicleRecord: null
+        })
+      ).toBe(false)
+    })
+
+    it('measures earliness against the live board time, not the timetable', () => {
+      // A DIFFERENT trip, so the planned-trip short-circuit is out of the way,
+      // and the timetable says the boarding is 5 min out. The feed says the bus
+      // is at the kerb now — which is why the rider is aboard it.
+      const differentTrip = {
+        ...earlyByFourFortyFive,
+        ridingLeg: { ...ridingLeg, startTime: NOW + 300000 },
+        ridingTripId: '1:trip-other',
+        vehicleMatchState: null,
+        vehicleRecord: null
+      }
+      expect(
+        shouldReplanBoardedEarlier({ ...differentTrip, liveBoardEpochMs: NOW })
+      ).toBe(false)
+      // Without the live epoch the plan's frozen startTime still governs.
+      expect(shouldReplanBoardedEarlier(differentTrip)).toBe(true)
+    })
+
+    it('a genuinely earlier run still fires: live board time is far out', () => {
+      // The feed agrees the planned boarding has not happened yet, and the
+      // rider is on some other trip — that is the case this trigger exists for.
+      expect(
+        shouldReplanBoardedEarlier({
+          ...earlyByFourFortyFive,
+          liveBoardEpochMs: NOW + 600000,
+          ridingTripId: '1:trip-earlier-run',
+          vehicleMatchState: null,
+          vehicleRecord: null
+        })
+      ).toBe(true)
+    })
+  })
+
   it('being aboard well before the planned bus could exist still proves an earlier run', () => {
     expect(
       shouldReplanBoardedEarlier({

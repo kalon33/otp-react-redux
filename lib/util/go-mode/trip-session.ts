@@ -17,17 +17,47 @@ import type { StopCountLatch } from './next-stop'
  * scoped in actions/go-mode.ts rather than change behaviour silently.
  */
 import type { DepartureBaselineState } from './departure-drift'
+import type { DestinationProgressState } from './destination-progress'
 import type { MissedBusAttempt } from './missed-bus-recovery'
 import type { PacingCardState } from './pacing-card'
+import type { RiderSpeedSample } from './rider-speed'
 import type { TimedSimulationPoint } from './geometry'
 
 export interface TripSession {
+  /**
+   * Closest approach to the destination so far, and how many re-plans have gone
+   * out since it last improved. The only thing in Go Mode that remembers
+   * distanceToDestination across ticks — see destination-progress.ts for the
+   * 8/28 ride that needed it.
+   */
+  destinationProgress: DestinationProgressState | null
+
+  /**
+   * When this deviation was last dealt with — the rider told, or the drift
+   * quietly re-planned around. Held here, NOT in `sentNotifications`, because
+   * an itinerary swap wipes the deviation ids out of that list (START_GO_MODE,
+   * reducers/go-mode.ts) and the swap is the re-plan the alert itself asked
+   * for. That is how a 120 s window produced cards 55 s and 108 s apart on
+   * 2026-08-28. Survives a swap on purpose; a new trip resets it with the rest
+   * of the session.
+   */
+  deviationHandledAtMs: number | null
+
   /** The boarded-earlier replan's retry bookkeeping, per boarding. */
   earlyBoardReplan: {
     attempts: number
     key: string
     lastAtMs: number
   } | null
+
+  /**
+   * When the leg geometry last moved under the rider: an itinerary swap or a
+   * leg transition. Stamped in exactly the two places that already null
+   * `prevDistanceFromRoute`, for the same reason — the rider's relationship to
+   * the line has just been redrawn, and for a moment being "off route" is a
+   * statement about the app, not about them. See DEVIATION_GEOMETRY_SETTLE_MS.
+   */
+  geometryChangedAtMs: number | null
 
   /** GPS polling interval (replaces the old window.__goModeIntervalId). */
   gpsPollingIntervalId: ReturnType<typeof setInterval> | null
@@ -41,6 +71,12 @@ export interface TripSession {
    * down and starting a new one.
    */
   gpsWatchdogIntervalId: ReturnType<typeof setInterval> | null
+
+  /**
+   * Timestamp of the last fix ACCEPTED after arrival, for the idle-cadence
+   * gate in handlePositionUpdate. Null until the rider arrives.
+   */
+  lastArrivedFixMs: number | null
 
   /**
    * Lets the auto-anchor keep chasing the live feed while the current
@@ -105,12 +141,26 @@ export interface TripSession {
   prevDistanceFromRoute: number | null
 
   /**
+   * Quiet access-leg replan timestamps inside the burst window, so a cooldown
+   * that now scales down with leg length still cannot become a replan storm.
+   */
+  quietReplanHistory: number[]
+
+  /**
    * Quiet access-leg replans that keep coming back empty are counted but settle
    * silently; the streak is bookkeeping for the debug log.
    */
   quietReplanMissStreak: number
   /** Reroute-snapshot capture interval (recording sessions only). */
   rerouteSnapshotIntervalId: ReturnType<typeof setInterval> | null
+
+  /**
+   * Recent ground speeds off the rider's own fixes while they are on a bike
+   * leg, for the observed-bikeSpeed estimate a replan query carries. See
+   * rider-speed.ts — this is a rolling estimate precisely because a single
+   * instantaneous sample is worse than no sample at all.
+   */
+  riderSpeedSamples: RiderSpeedSample[]
 
   /** Epoch ms — the "current time" in simulation-land. */
   simulatedTimeMs: number
@@ -134,10 +184,14 @@ export interface TripSession {
 /** A trip's state at its first GPS fix. */
 export function createTripSession(): TripSession {
   return {
+    destinationProgress: null,
+    deviationHandledAtMs: null,
     earlyBoardReplan: null,
+    geometryChangedAtMs: null,
     gpsPollingIntervalId: null,
     gpsSimulationTimeoutId: null,
     gpsWatchdogIntervalId: null,
+    lastArrivedFixMs: null,
     lastAutoAnchorMs: null,
     lastDepartureBaseline: null,
     lastLiveLegTimesAt: 0,
@@ -149,8 +203,10 @@ export function createTripSession(): TripSession {
     matchHeldSinceMs: null,
     missedBusRerouteAttempt: null,
     prevDistanceFromRoute: null,
+    quietReplanHistory: [],
     quietReplanMissStreak: 0,
     rerouteSnapshotIntervalId: null,
+    riderSpeedSamples: [],
     simulatedTimeMs: 0,
     simulationActive: false,
     simulationCoords: [],

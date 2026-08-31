@@ -156,6 +156,14 @@ export interface RouteMatchResult {
   // 0-1
   isOnRoute: boolean
   legIndex: number
+  /**
+   * Fix timestamp at which this projection was last ESTABLISHED — not the time
+   * it was last returned. A match held by the continuity gate keeps the stamp
+   * it was born with, which is what lets the gate's budget grow while a hold
+   * lasts (see ContinuityGate). Stamped only when a caller supplies a gate;
+   * callers that pass none get the field-for-field old result.
+   */
+  matchedAtMs?: number
   nearestPoint: LatLngArray
   progressAlongLeg: number
   // 0-1
@@ -178,6 +186,144 @@ export const BACKWARD_JUMP_HYSTERESIS_M = 5
 export const MATCH_CORRIDOR_TRANSIT_M = 250
 export const MATCH_CORRIDOR_ACTIVE_M = 100
 
+/**
+ * The projection may not travel faster than the rider plausibly can.
+ *
+ * On 2026-08-28, riding the Orange Line to the Fairgrounds and then biking, the
+ * rider spent minutes at a sustained 121–133 m offset from the planned line
+ * (Como Av, replanned around). A global-minimum scan has nothing to say about
+ * WHEN a candidate became the nearest one, so the projection sat pinned on one
+ * segment for 16–22 s and then, on a single ~14 m-accuracy fix one second after
+ * the last, snapped 266 m down the leg (22:13:14Z; again 315 m at 22:15:55Z,
+ * 179 m at 22:20:35Z). The same shape appears at the very start of the ride, on
+ * a 215 m bike leg that folds back on itself: 165 m of "progress" in one second
+ * at 21:41:04Z and 21:43:10Z, straddled by the reverse flip. That invented
+ * motion is what ride-watch's two `progress-without-motion` findings fired on —
+ * the rule was right and the matcher was wrong.
+ *
+ * BACKWARD_JUMP_HYSTERESIS_M cannot see any of this: it is a ±5 m near-tie
+ * reorder, and these candidates win by more than that, most of them forward.
+ *
+ * So the movement a candidate implies is checked against a per-second ceiling
+ * for the mode of the leg it moves along. The ceilings are deliberately far
+ * above any real vehicle — this exists to reject 266 m in one second, not to
+ * second-guess a bus. The Orange Line is BRT running I-35W at freeway speed
+ * (~31 m/s) and Northstar tops out near 35 m/s, so transit gets 40.
+ */
+export const MATCH_JUMP_CEILING_WALK_MPS = 5
+export const MATCH_JUMP_CEILING_BICYCLE_MPS = 15
+export const MATCH_JUMP_CEILING_TRANSIT_MPS = 40
+
+/**
+ * Added to every budget. A projection legitimately slides along the shape by
+ * more than the rider moves — sparse transit polylines, a segment change at a
+ * bend, a couple of metres of jitter on each of the two fixes being compared.
+ * Sized under MATCH_CORRIDOR_ACTIVE_M so a single slack-only step can never
+ * cover a whole corridor width, and well over any observed per-fix jitter.
+ */
+export const MATCH_JUMP_SLACK_M = 50
+
+/**
+ * Same figure, and the same meaning, as `FIX_ACCURACY_MAX_M` in transit-trust —
+ * duplicated rather than imported because transit-trust imports THIS module and
+ * the cycle is not worth a shared constants file for one number. A fix that
+ * cannot place the rider inside a city block is not evidence of highway-speed
+ * travel, so it is held to the walking ceiling whatever the leg's mode.
+ *
+ * Note this gate would NOT have caught 8/28 on its own: those fixes reported
+ * 3–22 m. Accuracy is the cheap half; the continuity window is load-bearing.
+ */
+export const MATCH_FIX_ACCURACY_TRUSTED_M = 100
+
+/**
+ * Optional continuity evidence for `matchPositionToRoute`, same shape and same
+ * contract as `TransitionGate` below: supply nothing and the search behaves
+ * exactly as it did before the gate existed.
+ */
+export type ContinuityGate = {
+  /** Reported accuracy of THIS fix in metres (position.coords.accuracy). */
+  accuracyM?: number | null
+  /** Timestamp of THIS fix in epoch ms (position.timestamp). */
+  nowMs?: number | null
+  /**
+   * When the held projection was established, epoch ms. Defaults to
+   * `previousMatch.matchedAtMs`, which this function stamps itself, so callers
+   * threading their previous match need not track it.
+   */
+  previousMatchMs?: number | null
+}
+
+function jumpCeilingMps(leg: Leg | undefined, accuracyM?: number | null) {
+  if (
+    accuracyM != null &&
+    Number.isFinite(accuracyM) &&
+    accuracyM > MATCH_FIX_ACCURACY_TRUSTED_M
+  ) {
+    return MATCH_JUMP_CEILING_WALK_MPS
+  }
+  switch (leg?.mode) {
+    case 'WALK':
+      return MATCH_JUMP_CEILING_WALK_MPS
+    case 'BICYCLE':
+    case 'SCOOTER':
+    case 'MICROMOBILITY':
+    case 'MICROMOBILITY_RENT':
+      return MATCH_JUMP_CEILING_BICYCLE_MPS
+    default:
+      return MATCH_JUMP_CEILING_TRANSIT_MPS
+  }
+}
+
+/**
+ * Would accepting `winner` require the rider to have covered more ground than
+ * the time since `previousMatch` was established allows?
+ *
+ * A first match, a caller with no clock, and a fix that arrives at or before
+ * the held one (a device clock that stepped backwards) are all ungated: with no
+ * elapsed time there is no budget to compare against, and rejecting on that
+ * basis would strand every trip on its opening fix.
+ */
+function exceedsJumpBudget(
+  winner: RouteMatchResult,
+  winnerLegDistance: number,
+  previousMatch: RouteMatchResult | null | undefined,
+  legs: Leg[],
+  gate: ContinuityGate
+): boolean {
+  if (previousMatch == null) return false
+  // Elapsed is measured from when the held projection was ESTABLISHED, not from
+  // the previous fix. That is the whole convergence story: while the gate holds
+  // a match the clock keeps running against it, so the budget widens every tick
+  // and a rider who genuinely moved — a tunnel, a dropped signal, a real 400 m
+  // correction — is re-projected within a minute instead of being pinned to a
+  // stale point forever. Nothing here can hold a match indefinitely.
+  const heldSinceMs = gate.previousMatchMs ?? previousMatch.matchedAtMs
+  if (gate.nowMs == null || heldSinceMs == null) return false
+  const elapsedSec = (gate.nowMs - heldSinceMs) / 1000
+  if (!Number.isFinite(elapsedSec) || elapsedSec <= 0) return false
+
+  const movedM =
+    winner.legIndex === previousMatch.legIndex
+      ? Math.abs(winner.progressAlongLeg - previousMatch.progressAlongLeg) *
+        winnerLegDistance
+      : // Across a leg boundary progress is not comparable, so measure the
+        // ground the projected point itself covered. An access leg and the
+        // transit leg after it share an endpoint, so a real transition measures
+        // ~0 m and is never gated.
+        calculateDistance(
+          previousMatch.nearestPoint[0],
+          previousMatch.nearestPoint[1],
+          winner.nearestPoint[0],
+          winner.nearestPoint[1]
+        )
+
+  return (
+    movedM >
+    MATCH_JUMP_SLACK_M +
+      jumpCeilingMps(legs[winner.legIndex], gate.accuracyM) * elapsedSec
+  )
+}
+
 export function matchPositionToRoute(
   currentPosition: LatLngArray,
   legs: Leg[],
@@ -187,10 +333,19 @@ export function matchPositionToRoute(
    * doubles back on itself. Optional: without it the behaviour is exactly the
    * old global-minimum search.
    */
-  previousMatch?: RouteMatchResult | null
+  previousMatch?: RouteMatchResult | null,
+  /**
+   * Fix time and accuracy, used to reject a projection that would have to
+   * teleport. Optional: without it the behaviour is exactly the old search.
+   */
+  gate?: ContinuityGate
 ): RouteMatchResult | null {
   let bestMatch: RouteMatchResult | null = null
   let minDistance = Infinity
+  // Length of the leg each of the two candidates below was measured on, so a
+  // progress delta can be turned back into metres without decoding again.
+  let bestLegDistance = 0
+  let fallbackLegDistance = 0
   // The best candidate ignoring hysteresis. If the backward-jump rule ends up
   // rejecting everything — a rider who really has doubled back — this is what
   // is returned, so the rule can only ever REORDER preferences and never turn a
@@ -277,15 +432,35 @@ export function matchPositionToRoute(
         if (perpDistance < fallbackDistance) {
           fallbackDistance = perpDistance
           fallbackMatch = candidate
+          fallbackLegDistance = totalLegDistance
         }
         if (wouldJumpBackward) continue
         minDistance = perpDistance
         bestMatch = candidate
+        bestLegDistance = totalLegDistance
       }
     }
   }
 
-  return bestMatch ?? fallbackMatch
+  const winner = bestMatch ?? fallbackMatch
+  if (!gate || !winner) return winner
+
+  // Held verbatim, stamp included: the previous projection is still the best
+  // statement about where the rider is, and re-stamping it would reset the
+  // budget and pin the rider for good.
+  if (
+    exceedsJumpBudget(
+      winner,
+      bestMatch ? bestLegDistance : fallbackLegDistance,
+      previousMatch,
+      legs,
+      gate
+    )
+  ) {
+    return previousMatch as RouteMatchResult
+  }
+
+  return gate.nowMs == null ? winner : { ...winner, matchedAtMs: gate.nowMs }
 }
 
 /**

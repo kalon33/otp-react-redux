@@ -1,7 +1,13 @@
 import { matchPositionToRoute } from '../../../lib/util/go-mode/position-matching'
 import {
+  QUIET_REPLAN_BURST_MAX,
+  QUIET_REPLAN_BURST_WINDOW_MS,
+  QUIET_REPLAN_FULL_COOLDOWN_LEG_M,
+  QUIET_REPLAN_MIN_COOLDOWN_MS,
   QUIET_REPLAN_MIN_INTERVAL_MS,
   quietReplanAdmitted,
+  quietReplanCooldownMs,
+  remainingAccessDistanceM,
   shouldQuietReplanAccessLeg,
   smoothDistanceFromRoute
 } from '../../../lib/util/go-mode/deviation'
@@ -221,6 +227,180 @@ describe('util > go-mode > quiet re-plan admission', () => {
         lastReplanAtMs: 0,
         nowMs: T0,
         reRouteStatus: 'none'
+      })
+    ).toBe(true)
+  })
+})
+
+describe('util > go-mode > a drift that is still there (2026-08-28)', () => {
+  // The trigger used to be `notifications.some(ROUTE_DEVIATION)` alone, which
+  // silently borrowed checkRouteDeviation's 120 s dedup window as the re-plan's
+  // retry interval. That is why the 670 m leg went un-replanned for nearly
+  // three minutes, and why scaling the cooldown on its own would have fixed
+  // nothing.
+  it('re-plans a bike rider still 150 m off route with no fresh alert', () => {
+    expect(
+      shouldQuietReplanAccessLeg({
+        currentLeg: bikeLeg,
+        distanceFromRoute: 150,
+        notifications: [],
+        reRouteStatus: 'idle'
+      })
+    ).toBe(true)
+  })
+
+  it('uses checkRouteDeviation own per-mode threshold, not a second opinion', () => {
+    // Bike 120 m, walk 200 m — the numbers the alert already judges on.
+    expect(
+      shouldQuietReplanAccessLeg({
+        currentLeg: bikeLeg,
+        distanceFromRoute: 119,
+        notifications: [],
+        reRouteStatus: 'idle'
+      })
+    ).toBe(false)
+    expect(
+      shouldQuietReplanAccessLeg({
+        currentLeg: walkLeg,
+        distanceFromRoute: 150,
+        notifications: [],
+        reRouteStatus: 'idle'
+      })
+    ).toBe(false)
+    expect(
+      shouldQuietReplanAccessLeg({
+        currentLeg: walkLeg,
+        distanceFromRoute: 201,
+        notifications: [],
+        reRouteStatus: 'idle'
+      })
+    ).toBe(true)
+  })
+
+  it('still does nothing automatic to a rider on a bus, however far off', () => {
+    expect(
+      shouldQuietReplanAccessLeg({
+        currentLeg: busLeg,
+        distanceFromRoute: 5000,
+        notifications: [],
+        reRouteStatus: 'idle'
+      })
+    ).toBe(false)
+  })
+
+  it('stands down on a sustained drift while a search is in flight', () => {
+    expect(
+      shouldQuietReplanAccessLeg({
+        currentLeg: bikeLeg,
+        distanceFromRoute: 400,
+        notifications: [],
+        reRouteStatus: 'searching'
+      })
+    ).toBe(false)
+  })
+})
+
+describe('util > go-mode > how much access leg is left', () => {
+  const bike = (distance: number) => ({ ...bikeLeg, distance })
+  const walk = (distance: number) => ({ ...walkLeg, distance })
+
+  it('sums the access chain up to the boarding and no further', () => {
+    const legs: any[] = [bike(600), walk(100), { ...busLeg, distance: 8000 }]
+    expect(remainingAccessDistanceM(legs, 0, 0)).toBe(700)
+  })
+
+  it('discounts the current leg by how far along it the rider is', () => {
+    const legs: any[] = [bike(670), busLeg]
+    expect(remainingAccessDistanceM(legs, 0, 0.5)).toBe(335)
+    expect(remainingAccessDistanceM(legs, 0, 1)).toBe(0)
+  })
+
+  it('runs to the end of the trip when no transit remains', () => {
+    const legs: any[] = [bike(400), walk(200)]
+    expect(remainingAccessDistanceM(legs, 0, 0)).toBe(600)
+  })
+
+  it('says nothing rather than zero when the legs carry no distances', () => {
+    expect(remainingAccessDistanceM([bikeLeg] as any, 0, 0)).toBeNull()
+    expect(remainingAccessDistanceM(undefined, 0, 0)).toBeNull()
+    // Standing on a transit leg: no access chain in front of the rider.
+    expect(remainingAccessDistanceM([busLeg] as any, 0, 0)).toBeNull()
+  })
+})
+
+describe('util > go-mode > a cooldown that knows the leg (2026-08-28)', () => {
+  const T0 = 1_785_361_461_418
+
+  it('keeps the old patience on a long leg', () => {
+    expect(quietReplanCooldownMs(QUIET_REPLAN_FULL_COOLDOWN_LEG_M)).toBe(
+      QUIET_REPLAN_MIN_INTERVAL_MS
+    )
+    expect(quietReplanCooldownMs(5000)).toBe(QUIET_REPLAN_MIN_INTERVAL_MS)
+    // Unknown distance is treated as a long leg, not a short one.
+    expect(quietReplanCooldownMs(null)).toBe(QUIET_REPLAN_MIN_INTERVAL_MS)
+    expect(quietReplanCooldownMs(undefined)).toBe(QUIET_REPLAN_MIN_INTERVAL_MS)
+  })
+
+  it('retries the 670 m leg well inside the flat minute it used to wait', () => {
+    // The incident: a re-plan produced a 670 m leg, the rider was 122 m off it
+    // within 55 s, and nothing happened for nearly three minutes.
+    const cooldown = quietReplanCooldownMs(670)
+    expect(cooldown).toBeLessThan(QUIET_REPLAN_MIN_INTERVAL_MS)
+    expect(
+      quietReplanAdmitted({
+        lastReplanAtMs: T0,
+        nowMs: T0 + 55000,
+        remainingAccessMeters: 670,
+        reRouteStatus: 'idle'
+      })
+    ).toBe(true)
+    // ...and the same 55 s on a 3 km leg is still too soon.
+    expect(
+      quietReplanAdmitted({
+        lastReplanAtMs: T0,
+        nowMs: T0 + 55000,
+        remainingAccessMeters: 3000,
+        reRouteStatus: 'idle'
+      })
+    ).toBe(false)
+  })
+
+  it('never collapses into a storm however short the leg', () => {
+    expect(quietReplanCooldownMs(0)).toBe(QUIET_REPLAN_MIN_COOLDOWN_MS)
+    expect(quietReplanCooldownMs(20)).toBe(QUIET_REPLAN_MIN_COOLDOWN_MS)
+    expect(
+      quietReplanAdmitted({
+        lastReplanAtMs: T0,
+        nowMs: T0 + QUIET_REPLAN_MIN_COOLDOWN_MS - 1,
+        remainingAccessMeters: 10,
+        reRouteStatus: 'idle'
+      })
+    ).toBe(false)
+  })
+
+  it('caps the burst at what the old 120 s alert window already allowed', () => {
+    const history: number[] = []
+    for (let i = 0; i < QUIET_REPLAN_BURST_MAX; i++) {
+      history.push(T0 + i * 26000)
+    }
+    const now = T0 + QUIET_REPLAN_BURST_MAX * 26000 + 26000
+    expect(
+      quietReplanAdmitted({
+        lastReplanAtMs: history[history.length - 1],
+        nowMs: now,
+        recentReplanAtMs: history,
+        remainingAccessMeters: 200,
+        reRouteStatus: 'idle'
+      })
+    ).toBe(false)
+    // Once the oldest falls out of the window there is room again.
+    expect(
+      quietReplanAdmitted({
+        lastReplanAtMs: history[history.length - 1],
+        nowMs: history[0] + QUIET_REPLAN_BURST_WINDOW_MS + 1,
+        recentReplanAtMs: history,
+        remainingAccessMeters: 200,
+        reRouteStatus: 'idle'
       })
     ).toBe(true)
   })

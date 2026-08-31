@@ -378,14 +378,25 @@ export function shouldRebindRidingTrip(
  * was the stale thing that caused the flap. Defense in depth behind the
  * rebind hysteresis — this is the trigger that actually replaces the
  * itinerary. Attempt/rate-limit bookkeeping stays with the caller.
+ *
+ * Two things bound the time-based proof, both from 2026-08-28. It cannot fire
+ * at all when the rider is on the trip the plan already names, and it measures
+ * earliness against the feed's board time rather than the timetable's — a bus
+ * running ahead of schedule is not an earlier bus.
  */
 export function shouldReplanBoardedEarlier({
+  liveBoardEpochMs,
   nowMs,
   ridingLeg,
   ridingTripId,
   vehicleMatchState,
   vehicleRecord
 }: {
+  /** The ridden leg's board time as the feed currently predicts it, or null
+   * when there is no realtime one. Callers resolve `boardRealtime &&
+   * boardEpoch != null` themselves, the same shape checkBoardVehicleApproach
+   * takes. */
+  liveBoardEpochMs?: number | null
   nowMs: number
   ridingLeg: Leg
   /** The sticky riding fact's trip — the identity replanFromAboard will
@@ -400,6 +411,21 @@ export function shouldReplanBoardedEarlier({
   const plannedTripId =
     (ridingLeg as any)?.trip?.gtfsId || (ridingLeg as any)?.tripId
   const matched = vehicleMatchState?.match
+
+  // Boarding the trip the itinerary planned is never an early board, whatever
+  // the clock says — there is nothing to re-plan TO. On 2026-08-28 the rider
+  // caught their own Orange Line while it was running 4m45s ahead of schedule;
+  // the clock test below read that lead as proof of an earlier run and swapped
+  // the itinerary out from under them mid-ride, re-indexing the legs and
+  // pushing a high-priority card. Both identities are checked because either
+  // one being the planned trip is enough: the match is what the trigger sees,
+  // riding.tripId is what the remedy would splice from.
+  if (
+    plannedTripId != null &&
+    (matched?.tripId === plannedTripId || ridingTripId === plannedTripId)
+  ) {
+    return false
+  }
   // 'confirmed' needs no sustained run: match promotion never produces it —
   // only an explicit rider confirmation or the riding lock in beginGoMode
   // does, and refreshConfirmedMatch never re-matches — so a flap cannot reach
@@ -434,7 +460,14 @@ export function shouldReplanBoardedEarlier({
       (ridingLeg as any)?.headsign ?? null
     ) &&
     isVehicleRecordFresh(vehicleRecord)
-  const aboardBeforePlanned =
-    nowMs < Number(ridingLeg.startTime) - EARLY_BOARD_MIN_MS
+  // Measure "before the bus could exist" against the bus, not the timetable.
+  // The plan's startTime never moves, so a route running ahead of schedule
+  // looks identical to a rider who caught the previous run — and EARLY_BOARD_
+  // MIN_MS is only two minutes, which BRT beats routinely. Prefer the live
+  // board epoch when the feed has a realtime one; fall back to the plan only
+  // when it does not, which is the same live-first order shouldTransitionTo-
+  // NextLeg and getEffectiveBoardTimeMs already use.
+  const boardMs = liveBoardEpochMs ?? Number(ridingLeg.startTime)
+  const aboardBeforePlanned = nowMs < boardMs - EARLY_BOARD_MIN_MS
   return tripMismatch || aboardBeforePlanned
 }
