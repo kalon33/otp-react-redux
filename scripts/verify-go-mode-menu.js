@@ -30,6 +30,36 @@ const BANNER = '.return-to-trip-banner'
 const MENU_ICON = '.app-menu-icon'
 const SHOTS = `${__dirname}`
 
+// The mobile/desktop split is UA-sniffed, not viewport-based
+// (responsive-webapp -> isMobile() from @opentripplanner/core-utils, which
+// regex-tests navigator.userAgent). A phone-sized viewport alone still renders
+// the DESKTOP layout, and this whole script asserts on mobile constructs
+// (mobileScreen, .mobile-header-text, .mobile-back). Copied from
+// verify-current-location.js.
+const IPHONE_UA =
+  'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) ' +
+  'AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148'
+
+// The Go Mode screen is a fixed, full-screen layer (FullScreenWrapper,
+// z-index 1000) that carries its OWN copy of the app menu — that is the thing
+// under test, and the thing 06c24415 darkened. The desktop layout ALSO renders
+// DesktopNav's menu, earlier in the DOM, sitting on a dark navbar-inverse where
+// white bars are correct. A bare document.querySelector('.app-menu-icon')
+// returns that one, so the script spent two nights reporting a shipped, working
+// feature as white-on-white. Scope every lookup to the Go Mode layer so it can
+// never grab a background nav bar again, whatever layout renders.
+const ICON_FINDER = `window.__goModeMenuIcon = function () {
+  const layer = Array.from(document.querySelectorAll('div')).find(function (d) {
+    const cs = getComputedStyle(d)
+    return (
+      cs.position === 'fixed' &&
+      cs.zIndex === '1000' &&
+      !!d.querySelector('${MENU_ICON}')
+    )
+  })
+  return (layer || document).querySelector('${MENU_ICON}')
+}`
+
 async function main() {
   const browser = await puppeteer.launch({
     args: ['--no-sandbox'],
@@ -37,7 +67,9 @@ async function main() {
     headless: 'new'
   })
   const page = await browser.newPage()
+  await page.setUserAgent(IPHONE_UA)
   await page.setViewport({ height: 850, width: 393 })
+  await page.evaluateOnNewDocument(ICON_FINDER)
   await browser
     .defaultBrowserContext()
     .overridePermissions(APP, ['geolocation'])
@@ -100,9 +132,12 @@ async function main() {
   console.log('[setup] tracking a real itinerary on the Go Mode screen')
 
   // ---- (1) the hamburger is there, and can be seen ----
-  await page.waitForSelector(MENU_ICON, { timeout: 10000 })
+  await page.waitForFunction(() => !!window.__goModeMenuIcon(), {
+    polling: 200,
+    timeout: 10000
+  })
   const icon = await page.evaluate((sel) => {
-    const el = document.querySelector(sel)
+    const el = window.__goModeMenuIcon()
     const box = el.getBoundingClientRect()
     const line = el.querySelector('.menu-line')
     const contrastOk = (color) => {
@@ -137,7 +172,7 @@ async function main() {
   await page.screenshot({ path: `${SHOTS}/go-mode-menu-icon.png` })
 
   // ---- (2) the pane opens above the full-screen Go Mode layer ----
-  await page.click(MENU_ICON)
+  await page.evaluate(() => window.__goModeMenuIcon().click())
   await page.waitForSelector('#app-menu', { timeout: 10000 })
   // The pane slides in over 200ms; measure it where it comes to rest.
   await new Promise((resolve) => setTimeout(resolve, 800))
@@ -239,19 +274,17 @@ async function main() {
     { polling: 200, timeout: 15000 }
   )
   await page.waitForSelector('.mobile-back', { timeout: 10000 })
-  const withBack = await page.evaluate((sel) => {
+  const withBack = await page.evaluate(() => {
+    const menuIcon = window.__goModeMenuIcon()
     return {
       back: !!document.querySelector('.mobile-back'),
-      menu: !!document.querySelector(sel),
+      menu: !!menuIcon,
       // Both live in the navbar brand: the arrow must not have pushed the
       // menu off the strip.
-      sameBar:
-        document
-          .querySelector('.navbar-brand')
-          ?.contains(document.querySelector(sel)) || false,
+      sameBar: !!menuIcon?.closest('.navbar-brand'),
       status: window.store.getState().otp.goMode.onboard.status
     }
-  }, MENU_ICON)
+  })
   console.log(
     `[onboard] status=${withBack.status} back arrow=${withBack.back} ` +
       `menu=${withBack.menu} in the same bar=${withBack.sameBar}`

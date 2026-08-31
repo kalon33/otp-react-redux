@@ -383,7 +383,6 @@ async function main() {
       onwardPlanned: rc.onwardTransitRouteId(window.__plannedItinerary, {
         boardedRouteId
       }),
-      rerouteCardShowing: (g.reRoute?.candidates || []).length > 0,
       reRouteStatus: g.reRoute?.status
     }
   })
@@ -392,11 +391,18 @@ async function main() {
       `${after.newTripId} boarding ${after.newBoardStopId} ` +
       `${fmt(after.newBoard)}, alight ${fmt(after.newEnd)} ` +
       `(planned trip was ${plan.plannedTripId}); ` +
-      `card showing: ${after.rerouteCardShowing}`
+      `reRoute status: ${after.reRouteStatus}`
   )
-  if (after.rerouteCardShowing) {
-    throw new Error('boarded-earlier surfaced a card — must auto-apply')
-  }
+  // There used to be a "boarded-earlier surfaced a card — must auto-apply"
+  // assertion here, reading `reRoute.candidates.length > 0`. eb74a9d8 deleted
+  // that field (the slice now carries "only the status, never its results"), so
+  // the expression had been a permanent `false` and the check could not fail —
+  // it read like a policy and tested nothing, and this script has been passing
+  // partly on it ever since. Nothing in lib/components reads `reRoute` at all
+  // any more, so there is no Switch/Keep card left to assert the absence of.
+  // The auto-apply contract is carried instead by the splice assertions below,
+  // which check that the itinerary really was replaced without the rider
+  // answering anything.
   // The spliced recovery contract (replanFromAboard): the new itinerary's
   // FIRST leg IS the physically-boarded bus — an aboard replan can never
   // take the rider off their line (7/29: orange line).

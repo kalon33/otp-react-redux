@@ -68,24 +68,30 @@ async function main() {
     const form = await import('/lib/actions/form.js')
     window.store.dispatch(form.setQueryParam({ to }))
   }, TO)
-  const clickSearch = () =>
-    page.evaluate(() => {
-      const btn = document.querySelector(
-        'button[aria-label="Search"], .search-button, button.search'
-      )
-      if (btn) {
-        btn.click()
-        return true
-      }
-      // Fallback: the green magnifier button inside BatchSettings.
-      const candidates = Array.from(document.querySelectorAll('button')).filter(
-        (b) => b.querySelector('svg') && b.offsetWidth > 40
-      )
-      const target = candidates[candidates.length - 1]
-      if (target) target.click()
-      return !!target
+  // The submit control is BatchSettings' PlanTripButton, id="plan-trip"
+  // (lib/components/form/batch-settings.tsx). It lives on the SEARCH_FORM
+  // screen, and a fresh mobile load starts on WELCOME_SCREEN — so getting there
+  // is part of pressing it.
+  //
+  // This used to guess: 'button[aria-label="Search"], .search-button,
+  // button.search' (none of which exist in this app), then fall back to "the
+  // last <button> containing an <svg> wider than 40px" and return true
+  // regardless of which button that turned out to be. So it clicked the wrong
+  // control, the `if (!(await clickSearch())) throw` guard never fired, and the
+  // run died 60 s later in the wait below with nothing pointing at the cause —
+  // the identical ~66 s duration on 8/28, 8/29, 8/30 and 8/31.
+  const clickSearch = async () => {
+    await page.evaluate(async () => {
+      // eslint-disable-next-line import/no-absolute-path
+      const ui = await import('/lib/actions/ui.js')
+      // eslint-disable-next-line import/no-absolute-path
+      const { MobileScreens } = await import('/lib/actions/ui-constants.js')
+      window.store.dispatch(ui.setMobileScreen(MobileScreens.SEARCH_FORM))
     })
-  if (!(await clickSearch())) throw new Error('search button not found')
+    await page.waitForSelector('#plan-trip', { timeout: 15000 })
+    await page.click('#plan-trip')
+  }
+  await clickSearch()
   await page.waitForFunction(
     () => {
       const searches = window.store.getState().otp.searches || {}
@@ -114,16 +120,9 @@ async function main() {
     { polling: 300, timeout: 20000 },
     P2.latitude
   )
-  // Back to the search form for the button.
-  await page.evaluate(async () => {
-    // eslint-disable-next-line import/no-absolute-path
-    const ui = await import('/lib/actions/ui.js')
-    // eslint-disable-next-line import/no-absolute-path
-    const { MobileScreens } = await import('/lib/actions/ui-constants.js')
-    window.store.dispatch(ui.setMobileScreen(MobileScreens.SEARCH_FORM))
-  })
+  // clickSearch takes the rider back to the search form itself.
   await new Promise((resolve) => setTimeout(resolve, 1000))
-  if (!(await clickSearch())) throw new Error('search button not found (2nd)')
+  await clickSearch()
   await page.waitForFunction(
     (lat) => {
       const from = window.store.getState().otp.currentQuery.from
