@@ -3756,8 +3756,18 @@ export function handlePositionUpdate(position: GeolocationPosition) {
             matched?.tripId,
             currentTime.getTime()
           )
+        // The ridden leg's board time as the feed has it now. Without this the
+        // early-board clock test runs on the plan's frozen startTime, and a bus
+        // running ahead of schedule reads as a bus the rider could not yet be
+        // on. Same resolution as the boarding-approach alert below.
+        const liveRidingBoard = goMode.liveLegTimes?.[riding.legIndex]
         if (
           !shouldReplanBoardedEarlier({
+            liveBoardEpochMs:
+              liveRidingBoard?.boardRealtime &&
+              liveRidingBoard.boardEpoch != null
+                ? liveRidingBoard.boardEpoch
+                : null,
             nowMs: currentTime.getTime(),
             ridingLeg: ridingLeg as Leg,
             ridingTripId: riding.tripId,
