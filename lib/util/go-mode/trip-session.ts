@@ -43,6 +43,12 @@ export interface TripSession {
   gpsWatchdogIntervalId: ReturnType<typeof setInterval> | null
 
   /**
+   * Timestamp of the last fix ACCEPTED after arrival, for the idle-cadence
+   * gate in handlePositionUpdate. Null until the rider arrives.
+   */
+  lastArrivedFixMs: number | null
+
+  /**
    * Lets the auto-anchor keep chasing the live feed while the current
    * departure override is its own.
    */
@@ -138,6 +144,7 @@ export function createTripSession(): TripSession {
     gpsPollingIntervalId: null,
     gpsSimulationTimeoutId: null,
     gpsWatchdogIntervalId: null,
+    lastArrivedFixMs: null,
     lastAutoAnchorMs: null,
     lastDepartureBaseline: null,
     lastLiveLegTimesAt: 0,

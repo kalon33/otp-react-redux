@@ -504,6 +504,19 @@ function getTrackingIntervalForLeg(leg: Leg | undefined): number {
 }
 
 /**
+ * GPS cadence once the rider has arrived, replacing the per-leg value above.
+ *
+ * Nothing behind the static arrival card is time-critical any more — no
+ * matching, no notifications, no reroutes (the tick quiesces; see setArrived
+ * below) — so the only thing left for a fix to do is keep the blue dot roughly
+ * where the rider is. Twice a minute does that, and is the same order as the
+ * GPS watchdog's own poll. 30 s rather than "stop entirely" because the trip is
+ * only over when the rider says so: they may still be walking the last block,
+ * and Go Mode has to keep drawing them.
+ */
+const ARRIVED_TRACKING_INTERVAL_MS = 30000
+
+/**
  * Start Go Mode tracking for an itinerary
  */
 export function beginGoMode(rawItinerary: Itinerary) {
@@ -1382,6 +1395,16 @@ export function captureRerouteSnapshot() {
     const destLeg = legs[legs.length - 1]
     // Need a real position and destination — never fabricate either.
     if (!itinerary || !lastPosition || !destLeg) return
+    // A rider who has arrived has no rest-of-trip to find alternatives for.
+    // Guarded here as well as stopped on the arrival tick because the 90 s
+    // interval is SESSION state that outlives any single dispatch path: on
+    // 2026-08-28 it went on firing for the 88 minutes between the arrival card
+    // and the rider ending the trip by hand — 58 real plan() calls from a
+    // parked phone, the last at 23:35:52.
+    if (goMode?.arrivedAt != null) {
+      stopRerouteSnapshotCapture()
+      return
+    }
 
     const { homeTimezone } = state.otp.config
     const { modes, modeSettings, numItineraries } = getBasePlanParts(state)
@@ -3027,6 +3050,28 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       return
     }
 
+    // The post-arrival idle cadence, applied where the fixes land.
+    // UPDATE_TRACKING_INTERVAL sizes the browser poll and nothing else: inside
+    // the iOS shell the native watcher streams on its own terms (native-gps.ts
+    // asks for distanceFilter: 0 so vehicle matching sees every fix), so on the
+    // phone — the only place this bug has ever bitten — the tapered interval is
+    // advisory unless the funnel enforces it. On 2026-08-28 that stream kept
+    // delivering ~1 fix/s for 88 minutes past the arrival card: 5,318
+    // positions, and with them 5,319 route matches and 5,319 progress
+    // recomputations. Judged on the fix's own timestamp, not the wall clock, so
+    // a replayed ride tapers exactly where the live one did.
+    if (goMode.arrivedAt != null) {
+      const sinceLastFixMs =
+        session.lastArrivedFixMs == null
+          ? Infinity
+          : position.timestamp - session.lastArrivedFixMs
+      // A device clock that steps backwards reads as a fresh fix rather than
+      // jamming the gate shut for as long as the skew lasts.
+      if (sinceLastFixMs >= 0 && sinceLastFixMs < ARRIVED_TRACKING_INTERVAL_MS)
+        return
+      session.lastArrivedFixMs = position.timestamp
+    }
+
     // During the "I'm on the bus" onboard flow there is no active itinerary
     // yet; still record position so vehicle discovery and schedule anchoring
     // (alight-optimizer) can use the rider's location.
@@ -3306,6 +3351,28 @@ export function handlePositionUpdate(position: GeolocationPosition) {
           }`
       )
       dispatch(setArrived(currentTime.getTime()))
+      // The quiesce below only governs what THIS function does; the two
+      // subsystems that live outside the tick have to be told separately, and
+      // on 2026-08-28 neither was. The trip was over at 22:08:37 and the rider
+      // ended it by hand at 23:37:04 — 48% of that ride's telemetry (16,740 of
+      // 34,784 actions) was recorded in between.
+      stopRerouteSnapshotCapture()
+      dispatch(
+        updateTrackingInterval({ interval: ARRIVED_TRACKING_INTERVAL_MS })
+      )
+      // Resize the running poll in place, the way advanceToLeg does: the store
+      // value is read once, when the interval is armed, so a dispatch on its
+      // own never reaches the setInterval already ticking. Replay drives
+      // positions from the recorded track and simulation from its own timer —
+      // neither has a poll to resize, and starting one would put a live GPS
+      // stream underneath a reproduced trip.
+      if (!session.simulationActive && !isReplayActive()) {
+        if (session.gpsPollingIntervalId) {
+          clearInterval(session.gpsPollingIntervalId)
+          session.gpsPollingIntervalId = null
+        }
+        dispatch(startPositionTracking())
+      }
     } else if (hasArrived) {
       return
     }
