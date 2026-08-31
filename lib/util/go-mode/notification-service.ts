@@ -869,33 +869,128 @@ export function deviationThresholdM(currentLeg?: Leg): number {
 }
 
 /**
+ * How long one deviation stays already-told.
+ *
+ * Unchanged at 120 s. The window was never too short — it was being destroyed.
+ * See DeviationAlertGate.handledAtMs.
+ */
+export const DEVIATION_ALERT_COOLDOWN_MS = 120000
+
+/**
+ * How long after the geometry moves under the rider this alert stays quiet.
+ *
+ * The same allowance the quiet re-plan gives itself before it will consider
+ * another one (QUIET_REPLAN_MIN_COOLDOWN_MS in deviation.ts — not imported,
+ * because deviation.ts imports THIS module): the time it takes a rider to
+ * converge onto a line they were just handed. Duplicated as a number rather
+ * than inverting the dependency, so the two are cross-referenced by comment.
+ */
+export const DEVIATION_GEOMETRY_SETTLE_MS = 25000
+
+/**
+ * The state checkRouteDeviation cannot see for itself.
+ *
+ * Every field here answers a failure from the 2026-08-27 and 08-28 rides where
+ * the 120 s dedup above was live and did nothing, because the evidence it dedups
+ * on — `sentNotifications` — is not the rider's memory. START_GO_MODE
+ * (reducers/go-mode.ts) deliberately keeps only the stop-keyed ids across an
+ * itinerary swap, so every swap wipes `ROUTE_DEVIATION_deviation_*`. The quiet
+ * access-leg re-plan swaps the itinerary; the deviation is what triggers it. So
+ * the alert was destroying its own suppression through the re-plan it asked for:
+ * 8/28 evening, 17:12:57 -> START_GO_MODE 17:12:58.9 -> next card 17:14:45
+ * (108 s), and 17:36:33 -> START_GO_MODE 17:36:34.9 -> next card 17:37:28
+ * (55 s). Both inside a window that was open the whole time.
+ *
+ * Supply nothing and the function behaves exactly as it did before the gate
+ * existed.
+ */
+export interface DeviationAlertGate {
+  /**
+   * When the leg geometry last changed under the rider — an itinerary swap or a
+   * leg transition, the two places that already null out the deviation smoother
+   * (actions/go-mode.ts). Geometry moving is not a rider going off course:
+   * 2026-08-27 pushed at 13:14:04, 0.9 s after the boarded-earlier swap's
+   * START_GO_MODE, and at 13:16:20 ("5464m from the planned route"), 1.25 s
+   * after TRANSITION_LEG.
+   */
+  geometryChangedAtMs?: number | null
+  /**
+   * When this deviation was last DEALT WITH — told to the rider, or silently
+   * re-planned around. One clock for both arms, because from the rider's side
+   * they are the same event handled two ways; keeping separate ones let a tick
+   * that suppressed the card hand the very next tick a clean slate.
+   */
+  handledAtMs?: number | null
+  /** This tick's clock. Without it the timing gates below are all skipped. */
+  nowMs?: number | null
+  /**
+   * A quiet access-leg re-plan will run on THIS tick.
+   *
+   * Not "did one just run": on 8/28 the push beat its own re-plan by under two
+   * seconds three times over (17:12:57, 17:14:45, 17:36:33), so the answer has
+   * to be about what is going to happen. The rider does not need to be told
+   * about a problem the app is about to fix without them.
+   */
+  replanImminent?: boolean
+}
+
+/** Is `stampMs` inside `windowMs` of `nowMs`? Unknown stamps never suppress. */
+function withinWindow(
+  nowMs: number,
+  stampMs: number | null | undefined,
+  windowMs: number
+): boolean {
+  if (stampMs == null || !Number.isFinite(stampMs)) return false
+  const elapsed = nowMs - stampMs
+  return elapsed >= 0 && elapsed < windowMs
+}
+
+/**
  * Check if should notify for route deviation
  */
 export function checkRouteDeviation(
   distanceFromRoute: number,
   sentNotifications: string[],
-  currentLeg?: Leg
+  currentLeg?: Leg,
+  gate?: DeviationAlertGate
 ): NotificationEvent | null {
-  if (distanceFromRoute > deviationThresholdM(currentLeg)) {
-    // Stable context: the measured distance changes every GPS tick, so it must
-    // not be part of the dedup key or the 120s window never matches.
-    const id = generateNotificationId('ROUTE_DEVIATION', 'deviation')
+  if (distanceFromRoute <= deviationThresholdM(currentLeg)) return null
 
-    if (!wasRecentlySent(id, sentNotifications, 120000)) {
-      return {
-        id,
-        message: `You are ${Math.round(
-          distanceFromRoute
-        )}m from the planned route`,
-        priority: 'high',
-        timestamp: new Date(),
-        title: 'Off Route',
-        type: 'ROUTE_DEVIATION'
-      }
+  if (gate?.replanImminent) return null
+
+  const nowMs = gate?.nowMs
+  if (nowMs != null && Number.isFinite(nowMs)) {
+    if (withinWindow(nowMs, gate?.handledAtMs, DEVIATION_ALERT_COOLDOWN_MS)) {
+      return null
+    }
+    if (
+      withinWindow(
+        nowMs,
+        gate?.geometryChangedAtMs,
+        DEVIATION_GEOMETRY_SETTLE_MS
+      )
+    ) {
+      return null
     }
   }
 
-  return null
+  // Stable context: the measured distance changes every GPS tick, so it must
+  // not be part of the dedup key or the 120s window never matches. Kept as the
+  // in-trip backstop for the gate above; it is the one that cannot survive an
+  // itinerary swap, which is why it is no longer the only floor.
+  const id = generateNotificationId('ROUTE_DEVIATION', 'deviation')
+  if (wasRecentlySent(id, sentNotifications, DEVIATION_ALERT_COOLDOWN_MS)) {
+    return null
+  }
+
+  return {
+    id,
+    message: `You are ${Math.round(distanceFromRoute)}m from the planned route`,
+    priority: 'high',
+    timestamp: new Date(),
+    title: 'Off Route',
+    type: 'ROUTE_DEVIATION'
+  }
 }
 
 /**
@@ -1211,7 +1306,8 @@ export function checkForNotifications(
   sentNotifications: string[],
   config: NotificationConfig,
   legs?: Leg[],
-  alight?: AlightContext
+  alight?: AlightContext,
+  deviation?: DeviationAlertGate
 ): NotificationEvent[] {
   if (!config.enabled) {
     return []
@@ -1244,7 +1340,12 @@ export function checkForNotifications(
   )
   pushIf(
     notifications,
-    checkRouteDeviation(distanceFromRoute, sentNotifications, currentLeg)
+    checkRouteDeviation(
+      distanceFromRoute,
+      sentNotifications,
+      currentLeg,
+      deviation
+    )
   )
 
   // At-risk downstream connection (needs the full leg list).

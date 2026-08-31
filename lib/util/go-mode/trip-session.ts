@@ -32,12 +32,32 @@ export interface TripSession {
    */
   destinationProgress: DestinationProgressState | null
 
+  /**
+   * When this deviation was last dealt with — the rider told, or the drift
+   * quietly re-planned around. Held here, NOT in `sentNotifications`, because
+   * an itinerary swap wipes the deviation ids out of that list (START_GO_MODE,
+   * reducers/go-mode.ts) and the swap is the re-plan the alert itself asked
+   * for. That is how a 120 s window produced cards 55 s and 108 s apart on
+   * 2026-08-28. Survives a swap on purpose; a new trip resets it with the rest
+   * of the session.
+   */
+  deviationHandledAtMs: number | null
+
   /** The boarded-earlier replan's retry bookkeeping, per boarding. */
   earlyBoardReplan: {
     attempts: number
     key: string
     lastAtMs: number
   } | null
+
+  /**
+   * When the leg geometry last moved under the rider: an itinerary swap or a
+   * leg transition. Stamped in exactly the two places that already null
+   * `prevDistanceFromRoute`, for the same reason — the rider's relationship to
+   * the line has just been redrawn, and for a moment being "off route" is a
+   * statement about the app, not about them. See DEVIATION_GEOMETRY_SETTLE_MS.
+   */
+  geometryChangedAtMs: number | null
 
   /** GPS polling interval (replaces the old window.__goModeIntervalId). */
   gpsPollingIntervalId: ReturnType<typeof setInterval> | null
@@ -165,7 +185,9 @@ export interface TripSession {
 export function createTripSession(): TripSession {
   return {
     destinationProgress: null,
+    deviationHandledAtMs: null,
     earlyBoardReplan: null,
+    geometryChangedAtMs: null,
     gpsPollingIntervalId: null,
     gpsSimulationTimeoutId: null,
     gpsWatchdogIntervalId: null,

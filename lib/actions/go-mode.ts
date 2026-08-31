@@ -155,7 +155,8 @@ import {
   remainingAccessDistanceM,
   shouldQuietReplanAccessLeg,
   smoothDistanceFromRoute,
-  trimQuietReplanHistory
+  trimQuietReplanHistory,
+  willQuietReplanAccessLeg
 } from '../util/go-mode/deviation'
 import { evaluateDepartureDrift } from '../util/go-mode/departure-drift'
 import type { DepartureBaselineState } from '../util/go-mode/departure-drift'
@@ -664,6 +665,12 @@ export function startGoModeTracking(
     // rider's relationship to the route has genuinely just changed. It was
     // cleared only in endGoMode, so every swap carried a stale number across.
     session.prevDistanceFromRoute = null
+    // Damping ONE tick is not enough for the alert: on 2026-08-27 the off-route
+    // push landed 0.9 s after this swap's START_GO_MODE (13:14:04) and 1.25 s
+    // after a leg transition (13:16:20, "5464m from the planned route"). Give
+    // the rider the convergence window before accusing them of drifting off a
+    // line they have only just been handed.
+    session.geometryChangedAtMs = getCurrentTime().getTime()
 
     // Pre-fetch stop times for all transit boarding stops
     const today = currentServiceDate(
@@ -3117,6 +3124,9 @@ export function advanceToLeg(legIndex: number) {
     // Same reasoning for the deviation smoother: the previous leg's distance
     // says nothing about the new leg's geometry.
     session.prevDistanceFromRoute = null
+    // And the same reasoning, one step further out, for the off-route alert —
+    // see the stamp in startGoModeTracking.
+    session.geometryChangedAtMs = getCurrentTime().getTime()
 
     // Update tracking interval for new leg
     const newLeg = legs[legIndex]
@@ -3661,6 +3671,48 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     const persistedDistanceFromRoute = smoothed.distance
     session.prevDistanceFromRoute = smoothed.next
 
+    // A reroute stuck at 'searching' (both the fetch and its timeout timer
+    // lost to a WebView suspension) blocks every auto-update below — declare
+    // it dead once definitively overdue so recovery can proceed.
+    let reRouteStatus = goMode.reRoute?.status || 'idle'
+    if (
+      reRouteStatus === 'searching' &&
+      goMode.reRoute?.startedAtMs != null &&
+      Date.now() - goMode.reRoute.startedAtMs > REROUTE_STUCK_MS
+    ) {
+      dispatch(clearReroute())
+      reRouteStatus = 'idle'
+    }
+
+    // ORDER MATTERS: this is decided BEFORE the notification pass, not after.
+    //
+    // The quiet access-leg re-plan used to be evaluated at the bottom of the
+    // tick, long after the cards had gone out, and on 2026-08-28 the "Off
+    // Route" push beat the re-plan that made it moot by under two seconds three
+    // times over (17:12:57, 17:14:45, 17:36:33). The rider was told they were
+    // lost and then silently un-lost. Asking first is only possible since the
+    // re-plan stopped keying on the notification (see shouldQuietReplanAccessLeg
+    // in deviation.ts); while that dependency ran backwards, suppressing the
+    // card would have suppressed the fix.
+    //
+    // The dispatch itself stays where it is, inside the else-if chain that
+    // gives missed-bus recovery and the boarded-earlier swap precedence. Both
+    // of those are re-plans too, so a tick they win is still a tick the app is
+    // fixing the route on.
+    const quietReplanImminent = willQuietReplanAccessLeg({
+      currentLeg,
+      distanceFromRoute: persistedDistanceFromRoute,
+      lastReplanAtMs: session.lastQuietReplanAt,
+      nowMs: currentTime.getTime(),
+      recentReplanAtMs: session.quietReplanHistory,
+      remainingAccessMeters: remainingAccessDistanceM(
+        itinerary.legs,
+        routeMatch.legIndex,
+        routeMatch.progressAlongLeg
+      ),
+      reRouteStatus
+    })
+
     const notifications = checkForNotifications(
       progress,
       currentLeg,
@@ -3674,8 +3726,28 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         vibrationEnabled: true
       },
       itinerary.legs,
-      alightContext
+      alightContext,
+      {
+        geometryChangedAtMs: session.geometryChangedAtMs,
+        handledAtMs: session.deviationHandledAtMs,
+        nowMs: currentTime.getTime(),
+        replanImminent: quietReplanImminent
+      }
     )
+
+    // One clock for both arms. A tick that SPARED the rider a card because a
+    // re-plan was coming has dealt with that deviation just as much as a tick
+    // that pushed one, and stamping only the push let the very next tick — the
+    // one where the re-plan is no longer admitted — start from a clean slate
+    // and fire immediately. Re-stamping is self-limiting: once the burst cap
+    // (QUIET_REPLAN_BURST_MAX) closes the re-plan down, the stamps stop and the
+    // alert comes back on the cooldown.
+    if (
+      quietReplanImminent ||
+      notifications.some((n) => n.type === 'ROUTE_DEVIATION')
+    ) {
+      session.deviationHandledAtMs = currentTime.getTime()
+    }
 
     // Missed boarding? Judged outside checkForNotifications because it needs
     // live board times, the sticky riding fact, and the raw GPS fix. The
@@ -3867,19 +3939,6 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       sendPush({ id: PACING_CARD_NOTIFICATION_ID, ...pacingCard.post })
     } else if (pacingCard.clear) {
       cancelPush(PACING_CARD_NOTIFICATION_ID)
-    }
-
-    // A reroute stuck at 'searching' (both the fetch and its timeout timer
-    // lost to a WebView suspension) blocks every auto-update below — declare
-    // it dead once definitively overdue so recovery can proceed.
-    let reRouteStatus = goMode.reRoute?.status || 'idle'
-    if (
-      reRouteStatus === 'searching' &&
-      goMode.reRoute?.startedAtMs != null &&
-      Date.now() - goMode.reRoute.startedAtMs > REROUTE_STUCK_MS
-    ) {
-      dispatch(clearReroute())
-      reRouteStatus = 'idle'
     }
 
     // Whether a missed bus re-plans now, whether the result is applied without

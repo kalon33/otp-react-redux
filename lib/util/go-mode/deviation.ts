@@ -121,6 +121,61 @@ export function shouldQuietReplanAccessLeg(input: {
 }
 
 /**
+ * Whether a quiet access-leg re-plan will run on THIS tick — asked BEFORE the
+ * notifications are raised, so the ROUTE_DEVIATION card can be held back for a
+ * problem the app is about to fix silently.
+ *
+ * Deliberately nothing but the two predicates the tick already runs, composed:
+ * the drift arm of shouldQuietReplanAccessLeg (an empty notification list,
+ * because the alert is exactly what this is being asked about) and
+ * quietReplanAdmitted's rate gate. Composing rather than restating them is the
+ * point — a fourth copy of "is this drift re-plannable" is how the alert and the
+ * re-plan end up disagreeing about the same metre, which is the failure
+ * deviationThresholdM was extracted to prevent.
+ *
+ * A re-plan that another arm of the tick pre-empts (missed-bus recovery, the
+ * boarded-earlier swap) still counts: from the rider's side those are the same
+ * answer — the app is fixing the route. What is NOT modelled is
+ * destinationStalled: when re-planning has been retired for the mode, the
+ * caller raises DESTINATION_UNREACHABLE, which is a better thing to say than
+ * "Off Route" about a route no re-plan is coming for.
+ */
+export function willQuietReplanAccessLeg(input: {
+  currentLeg: Leg | undefined
+  distanceFromRoute?: number | null
+  lastReplanAtMs: number
+  nowMs: number
+  reRouteStatus: string
+  recentReplanAtMs?: number[]
+  remainingAccessMeters?: number | null
+}): boolean {
+  const {
+    currentLeg,
+    distanceFromRoute,
+    lastReplanAtMs,
+    nowMs,
+    recentReplanAtMs,
+    remainingAccessMeters,
+    reRouteStatus
+  } = input
+  return (
+    shouldQuietReplanAccessLeg({
+      currentLeg,
+      distanceFromRoute,
+      notifications: [],
+      reRouteStatus
+    }) &&
+    quietReplanAdmitted({
+      lastReplanAtMs,
+      nowMs,
+      recentReplanAtMs,
+      remainingAccessMeters,
+      reRouteStatus
+    })
+  )
+}
+
+/**
  * How much of the access chain the rider still has in front of them, in metres.
  *
  * Sums the planned distance of every leg from the current one up to (not
