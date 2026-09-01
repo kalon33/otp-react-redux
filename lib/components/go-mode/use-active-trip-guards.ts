@@ -16,27 +16,64 @@ export default function useActiveTripGuards(active: boolean): void {
 
     let wakeLock: any = null
     let disposed = false
+    let pending = false
 
     const requestWakeLock = async () => {
+      // A request made while the document is hidden is rejected outright
+      // (NotAllowedError, "Permission was denied") — there is no permission to
+      // grant, the page simply is not on screen. Asking anyway costs a console
+      // error and, worse, looks like a denial that will never be retried.
+      if (
+        disposed ||
+        pending ||
+        wakeLock ||
+        document.visibilityState !== 'visible'
+      ) {
+        return
+      }
+      pending = true
       try {
-        wakeLock = await (navigator as any).wakeLock.request('screen')
+        const lock = await (navigator as any).wakeLock.request('screen')
+        if (disposed) {
+          lock.release()
+          return
+        }
+        wakeLock = lock
       } catch (err) {
         console.warn('Wake lock request failed:', err)
+      } finally {
+        pending = false
       }
     }
 
-    const reacquire = () => {
-      if (!disposed && document.visibilityState === 'visible') {
-        requestWakeLock()
+    const onVisibilityChange = () => {
+      if (document.visibilityState !== 'visible') {
+        // The OS releases the lock every time the page hides. Drop the handle
+        // rather than waiting for the `release` event, so the next return to
+        // visibility always takes a fresh one.
+        wakeLock = null
+        return
       }
+      requestWakeLock()
     }
 
     requestWakeLock()
-    document.addEventListener('visibilitychange', reacquire)
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    // ...and on focus, which is what actually fires on the path this was
+    // failing on. A trip RESTORED from storage is active from the first render,
+    // so the lock is requested during page load — inside the iOS shell that is
+    // before the app is active, and the request is refused. visibilitychange
+    // never rescues it: visibilityState was already "visible", so there is no
+    // change to hear. The 2026-08-31 18:52 sessions are the only two in a week
+    // of logs that logged the failure, and they are also the only two where Go
+    // Mode was active at page load; every trip the rider STARTED by hand, in an
+    // already-live page, took the lock first time.
+    window.addEventListener('focus', requestWakeLock)
 
     return () => {
       disposed = true
-      document.removeEventListener('visibilitychange', reacquire)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      window.removeEventListener('focus', requestWakeLock)
       if (wakeLock) {
         wakeLock.release()
       }

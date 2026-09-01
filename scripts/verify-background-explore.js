@@ -129,17 +129,19 @@ async function main() {
     const otp = window.store.getState().otp
     return {
       activeSearchId: otp.activeSearchId,
-      candidates: otp.goMode.reRoute.candidates.length,
       from: JSON.stringify(otp.currentQuery.from),
       searchIds: Object.keys(otp.searches).sort().join(','),
       status: otp.goMode.reRoute.status,
       to: JSON.stringify(otp.currentQuery.to)
     }
   })
-  console.log(
-    `[reroute] settled '${afterReroute.status}' with ${afterReroute.candidates} candidate(s)`
-  )
-  if (afterReroute.status !== 'found' || afterReroute.candidates < 1) {
+  console.log(`[reroute] settled '${afterReroute.status}'`)
+  // eb74a9d8 deleted reRoute.candidates: applyAutoReroute takes the itineraries
+  // as arguments, so the slice carries "only the status, never its results".
+  // 'found' IS the statement that the re-route turned up alternatives; reading
+  // the removed field threw a TypeError and failed this script every night
+  // since, on an assertion that was never actually evaluated.
+  if (afterReroute.status !== 'found') {
     throw new Error(
       `re-route did not find alternatives (${afterReroute.status})`
     )

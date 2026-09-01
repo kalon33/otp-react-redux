@@ -2289,6 +2289,18 @@ export function buildOnboardItinerary(
   // Alighting at the bus's very next stop: the ride segment is the approach to
   // that stop, not a leg starting there — anchor the board stop one back so
   // the rider's chosen stop is honored instead of silently pushed one further.
+  //
+  // NOTE (2026-08-31): this roll-back is what produced the phantom leg 0 of
+  // that ride — the rider stood AT I-35W & 98th St, their own alight stop, and
+  // the splice handed back a 4.6 km leg from Knox Ave & American Blvd, ridden
+  // four minutes earlier, "departing" now. It is left alone deliberately. The
+  // roll-back is the right model for the premise it is given ("you are aboard
+  // trip T and will alight at S"); the premise was the lie, and it is fixed
+  // upstream. Nothing in the inputs separates that ride from the legitimate
+  // mid-ride case: onboard-flow's pinned splice cases sit at the same
+  // alightIdx === boardIdx with a 4.4 km roll-back of their own, with the same
+  // provenance (no live vehicle, nearest-stop board) and the same absent
+  // realtime departures. A guard here cannot tell them apart.
   if (alightIdx <= boardIdx) {
     boardIdx = Math.max(0, alightIdx - 1)
   }
@@ -2610,13 +2622,37 @@ export function replanFromAboard(
       name: destLeg.to.name
     }
 
+    // WHICH LEG IS THE BOARDED TRIP ACTUALLY ON? riding.legIndex comes from the
+    // route matcher and can point at a leg the rider has not boarded, while
+    // riding.tripId — the trip this whole path fetches and splices from — names
+    // another. On 2026-08-31 a confirmed Orange Line match re-established the
+    // riding fact on the 539's leg (index 2) while the trip stayed the Orange
+    // Line's (leg 0). Resolve the anchor from the trip, because the trip is what
+    // the splice replaces; fall back to riding.legIndex when the plan no longer
+    // contains it.
+    const boardedLegIndex = legs.findIndex(
+      (l: any) =>
+        l?.transitLeg &&
+        (l.trip?.gtfsId === riding.tripId || l.tripId === riding.tripId)
+    )
+    const aboardLegIndex =
+      boardedLegIndex >= 0 ? boardedLegIndex : riding.legIndex ?? -1
+
     // The route to preserve is the one the rider has NOT boarded yet — the leg
     // after this bus. riding.routeId used to be written here, which is the bus
     // they are already on: a constraint that is always satisfied and therefore
     // says nothing. Null when the plan has no onward transit leg.
+    //
+    // Anchored on riding.legIndex this read the 539 — the leg the rider had not
+    // boarded and was standing at the stop for — as already ridden, so it came
+    // out NULL, the automatic update was free to change lines, and it traded a
+    // 17:53 arrival for an 18:28 one. An auto-update keeps the rider's route.
+    // boardedRouteId is only for the pre-trip onboard flow, where there is no
+    // index to start after; with one resolved the boarded leg is already behind
+    // us, and passing it would skip the very route we are trying to keep.
     const keepRouteId = onwardTransitRouteId(itinerary, {
-      afterLegIndex: riding.legIndex ?? -1,
-      boardedRouteId: riding.routeId ?? null
+      afterLegIndex: aboardLegIndex,
+      boardedRouteId: aboardLegIndex >= 0 ? null : riding.routeId ?? null
     })
 
     // Single-flight bookkeeping: same token/stuck-detection contract as
@@ -2707,9 +2743,7 @@ export function replanFromAboard(
       // boarded-earlier gate and wiped the live-times anchor. The explicit
       // rider-facing path keeps the full ranked choice.
       const ridingLegForAlight: any =
-        riding.legIndex != null && riding.legIndex >= 0
-          ? legs[riding.legIndex]
-          : null
+        aboardLegIndex >= 0 ? legs[aboardLegIndex] : null
       const plannedAlightStopId =
         ridingLegForAlight?.to?.stop?.gtfsId ??
         ridingLegForAlight?.to?.stopId ??
@@ -2728,7 +2762,7 @@ export function replanFromAboard(
           busArrivalEpoch: plannedArrival.epoch,
           itinerary: {
             ...itinerary,
-            legs: legs.slice((riding.legIndex as number) + 1)
+            legs: legs.slice(aboardLegIndex + 1)
           },
           stopId: plannedAlightStopId,
           // liveStopArrival resolved the epoch above by id-OR-name; the
@@ -3338,9 +3372,18 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       itinerary.legs,
       currentLegIndex,
       // Last tick's match, so a self-overlapping shape cannot flip between two
-      // sub-metre candidates and drag progress backward. Already in the store;
-      // no new state needed.
-      goMode.routeMatch
+      // near-tied candidates and invent hundreds of metres of progress.
+      // Already in the store; no new state needed.
+      goMode.routeMatch,
+      // The fix's OWN clock, matching the arrival taper above, so a replayed
+      // ride gates exactly where the live one did. Deliberately NOT
+      // previousMatchMs: that defaults to previousMatch.matchedAtMs, which the
+      // matcher stamps and the store carries, and which is the moment the held
+      // projection was ESTABLISHED. Feeding tracking.lastPosition.timestamp
+      // instead would advance every tick — including through a
+      // matchTrust.provisional hold, where the match does not move — freezing
+      // the budget at ~1 s and stranding the rider on a stale point.
+      { accuracyM: position.coords.accuracy, nowMs: position.timestamp }
     )
 
     if (!routeMatch) {
@@ -3604,6 +3647,18 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       progress.stopsRemaining = latched.stopsRemaining
     } else {
       session.stopCountLatch = null
+    }
+
+    // How late the rider ARRIVED is a fact fixed at arrival. computeCurrentDelay
+    // measures the schedule against the wall clock, so on a trip that is already
+    // over it just counts the time since: on 2026-08-31 a rider standing still
+    // at their destination went from "24 min late" to "31 min late" over the
+    // 104 minutes the finished trip kept ticking, and every notification and
+    // card that quotes delay climbed with it. Carry the measurement taken on the
+    // arrival tick instead — the last one that meant anything. Not a fabricated
+    // number: it is the real delay, held at the moment it stopped changing.
+    if (goMode.arrivedAt != null && goMode.progress?.delay != null) {
+      progress.delay = goMode.progress.delay
     }
 
     dispatch(updateProgress(progress))
@@ -4208,6 +4263,12 @@ export function handlePositionUpdate(position: GeolocationPosition) {
                 ? liveRidingBoard.boardEpoch
                 : null,
             nowMs: currentTime.getTime(),
+            // Every leg's trip, so the gate can tell "an earlier run of this
+            // route" from "the trip of a leg already ridden" — the 8/31
+            // transfer loop was entirely the latter.
+            plannedTripIds: (itinerary.legs || []).map(
+              (l: any) => l?.trip?.gtfsId ?? l?.tripId ?? null
+            ),
             ridingLeg: ridingLeg as Leg,
             ridingTripId: riding.tripId,
             vehicleMatchState: goMode.vehicleMatch,

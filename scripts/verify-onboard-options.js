@@ -25,6 +25,9 @@ const OUT = process.env.OUT_DIR || __dirname
 const CHROME =
   process.env.PUPPETEER_EXECUTABLE_PATH || '/opt/google/chrome/chrome'
 
+// Orange Line first, then busy local fallbacks.
+const PROBE_ROUTES = ['1:904', '1:5', '1:18', '1:10', '1:2']
+
 async function gql(query) {
   const res = await fetch(API, {
     body: JSON.stringify({ query }),
@@ -34,10 +37,15 @@ async function gql(query) {
   return res.json()
 }
 
+// Exit code for "the thing under test could not be exercised, and that is not a
+// defect". nightly-verify.sh maps it to SKIP; anything else is still a failure.
+const EXIT_SKIP = 75
+
 async function main() {
   // ---- 1. live vehicle discovery (Orange Line first, then fallbacks) ----
   let picked = null
-  for (const routeId of ['1:904', '1:5', '1:18', '1:10', '1:2']) {
+  const probe = []
+  for (const routeId of PROBE_ROUTES) {
     const d = await gql(`{ route(id: "${routeId}") {
       gtfsId shortName longName
       patterns { vehiclePositions {
@@ -45,10 +53,27 @@ async function main() {
         trip { gtfsId tripHeadsign }
         stopRelationship { status stop { gtfsId name } }
       } } } }`)
+    // Separate "the feed is empty" from "discovery is broken". These used to
+    // land on the same ambiguous 'no live vehicles found on any probe route',
+    // which is why the 2026-08-31 05:00 run read as a regression when the
+    // network was simply not running yet.
+    if (d?.errors?.length) {
+      throw new Error(
+        `OTP rejected the vehicle query for ${routeId}: ` +
+          `${d.errors[0].message} — vehicle discovery is broken, not idle`
+      )
+    }
     const route = d?.data?.route
+    if (!route) {
+      throw new Error(
+        `probe route ${routeId} is not in the graph — vehicle discovery is ` +
+          'broken, not idle'
+      )
+    }
     const vehicles = (route?.patterns || []).flatMap(
       (p) => p.vehiclePositions || []
     )
+    probe.push(`${routeId}=${vehicles.length}`)
     // Prefer a vehicle with a known next stop (mid-run, not laying over)
     const v =
       vehicles.find((x) => x.stopRelationship?.stop?.gtfsId) || vehicles[0]
@@ -57,7 +82,23 @@ async function main() {
       break
     }
   }
-  if (!picked) throw new Error('no live vehicles found on any probe route')
+  if (!picked) {
+    // Every probe route resolved in the graph and answered a vehiclePositions
+    // query; they just had nothing on them. This suite runs at 05:00, before
+    // most of the network is out of the garage.
+    const now = new Date().toLocaleTimeString('en-US', {
+      timeZone: 'America/Chicago'
+    })
+    console.log(`[probe] vehicles per route: ${probe.join(', ')}`)
+    console.log(
+      `SKIP: no vehicle is running on any of the ${PROBE_ROUTES.length} probe ` +
+        `routes at ${now} America/Chicago. Every route resolved and the ` +
+        'realtime feed answered, so vehicle discovery is healthy — there is ' +
+        'simply no bus to board. Nothing was verified.'
+    )
+    process.exit(EXIT_SKIP)
+  }
+  console.log(`[probe] vehicles per route: ${probe.join(', ')}`)
   const { route, vehicle } = picked
   console.log(
     `[setup] live vehicle ${vehicle.vehicleId} on ${

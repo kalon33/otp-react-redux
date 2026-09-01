@@ -334,7 +334,15 @@ describe('getNextStopOnRide', () => {
         isActive: true,
         riding: { ...riding, ...ridingOverrides },
         routeMatch:
-          progressAlongLeg == null ? null : { legIndex: 1, progressAlongLeg }
+          progressAlongLeg == null
+            ? null
+            : // isOnRoute is not optional on a real RouteMatchResult, and the
+              // stop counter now requires it: off the corridor the projection
+              // is not a measurement of anything, so these cases have to say
+              // which they are. Every one of them models a rider aboard and on
+              // the line (see near-tie-continuity-0828 for the off-corridor
+              // half).
+              { isOnRoute: true, legIndex: 1, progressAlongLeg }
       },
       transitIndex: { trips: {} }
     }

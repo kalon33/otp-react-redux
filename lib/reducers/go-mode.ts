@@ -830,6 +830,15 @@ const goMode = handleActions<GoModeState, any>(
           ? {
               ...state.routeMatch,
               legIndex,
+              // This match was never measured — it is a re-anchor onto a leg
+              // the rider has not been projected onto yet, and its
+              // nearestPoint still belongs to the OLD leg. The continuity gate
+              // measures a cross-leg move as ground distance from that point,
+              // so leaving the stamp would make the next tick's first honest
+              // projection look like a several-hundred-metre teleport and hold
+              // it for seconds. No stamp means no elapsed time, which means no
+              // budget and no gating: the next real fix is taken as it comes.
+              matchedAtMs: undefined,
               // The new leg starts at its start: inheriting the previous
               // leg's ~1.0 progress made the manual "I got off here"/onboard
               // paths flash "1 stop remaining" (and its GET READY banner)

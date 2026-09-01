@@ -383,10 +383,15 @@ export function shouldRebindRidingTrip(
  * at all when the rider is on the trip the plan already names, and it measures
  * earliness against the feed's board time rather than the timetable's — a bus
  * running ahead of schedule is not an earlier bus.
+ *
+ * A third, from 2026-08-31, bounds the IDENTITY: a riding trip the plan itself
+ * assigns to another leg is a stale anchor, not an earlier run. See
+ * plannedTripIds below.
  */
 export function shouldReplanBoardedEarlier({
   liveBoardEpochMs,
   nowMs,
+  plannedTripIds,
   ridingLeg,
   ridingTripId,
   vehicleMatchState,
@@ -398,6 +403,10 @@ export function shouldReplanBoardedEarlier({
    * takes. */
   liveBoardEpochMs?: number | null
   nowMs: number
+  /** Every leg's trip id in the itinerary this leg belongs to, in leg order —
+   * the caller just maps over activeItinerary.legs. Optional: omitted, the
+   * stale-anchor gate below simply does not apply. */
+  plannedTripIds?: (string | null | undefined)[] | null
   ridingLeg: Leg
   /** The sticky riding fact's trip — the identity replanFromAboard will
    * actually build its splice from. See the trigger/remedy note below. */
@@ -426,6 +435,30 @@ export function shouldReplanBoardedEarlier({
   ) {
     return false
   }
+
+  // The riding fact names a trip the PLAN ITSELF puts on a DIFFERENT leg. That
+  // is not "you caught an earlier run of this route" — there is no earlier run
+  // in it at all. It is an identity carried across a leg change, and the remedy
+  // would splice from a bus the rider has already got off.
+  //
+  // 2026-08-31, at the transfer: riding held the Orange Line's trip 1:1268645
+  // (leg 0, ridden and finished) while anchored to the 539 at leg 2. Neither
+  // identity equalled leg 2's planned trip, so the short-circuit above missed,
+  // and the clock test below — which had no identity gate of its own — fired on
+  // a board time three minutes out. Each applied itinerary then put that same
+  // Orange trip back at leg 0 and pushed the onward bus 44 minutes away, so the
+  // trigger got STRONGER every cycle: a loop that could not satisfy itself,
+  // stopped only by the caller's three-attempt cap, at a cost of 35 minutes.
+  //
+  // Same lesson as 8/2 — gate on the identity the REMEDY will use — extended
+  // from the trip-mismatch branch to the whole function, because the clock
+  // branch is reachable without any vehicle evidence whatsoever.
+  const ridingTripIsAnotherLegs =
+    ridingTripId != null &&
+    ridingTripId !== plannedTripId &&
+    (plannedTripIds ?? []).some((id) => id != null && id === ridingTripId)
+  if (ridingTripIsAnotherLegs) return false
+
   // 'confirmed' needs no sustained run: match promotion never produces it —
   // only an explicit rider confirmation or the riding lock in beginGoMode
   // does, and refreshConfirmedMatch never re-matches — so a flap cannot reach
