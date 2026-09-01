@@ -3532,6 +3532,18 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       session.stopCountLatch = null
     }
 
+    // How late the rider ARRIVED is a fact fixed at arrival. computeCurrentDelay
+    // measures the schedule against the wall clock, so on a trip that is already
+    // over it just counts the time since: on 2026-08-31 a rider standing still
+    // at their destination went from "24 min late" to "31 min late" over the
+    // 104 minutes the finished trip kept ticking, and every notification and
+    // card that quotes delay climbed with it. Carry the measurement taken on the
+    // arrival tick instead — the last one that meant anything. Not a fabricated
+    // number: it is the real delay, held at the moment it stopped changing.
+    if (goMode.arrivedAt != null && goMode.progress?.delay != null) {
+      progress.delay = goMode.progress.delay
+    }
+
     dispatch(updateProgress(progress))
 
     // The only thing that remembers distanceToDestination past this tick. Until

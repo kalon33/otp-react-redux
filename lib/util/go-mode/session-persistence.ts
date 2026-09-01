@@ -23,6 +23,25 @@ const MAX_SESSION_AGE_MS = 3 * 60 * 60 * 1000
 const END_TIME_GRACE_MS = 45 * 60 * 1000
 
 /**
+ * How long after ARRIVAL a saved trip is still worth resuming.
+ *
+ * A trip whose rider has arrived is over. The two windows above are both about
+ * the SCHEDULE — when the trip was meant to start and end — and a trip that
+ * ended early, or whose rider stopped 40 m short of a destination the schedule
+ * said they would reach at 18:27, sits comfortably inside both. On 2026-08-31
+ * that let a finished trip come back as a live one twice in 41 s: the app
+ * re-mounted at 18:52 onto a trip that had already arrived, replayed the whole
+ * notification stack (including "Board 546" alongside "You have arrived"), and
+ * then tracked a stationary rider for 104 minutes — 6,100 position/match/
+ * progress triples and 68 reroute plan() calls from a parked phone.
+ *
+ * Short, because the only thing a resumed arrived trip has left to show is the
+ * arrival card: a reload seconds after arriving should still find it, and by
+ * five minutes the rider has walked away from it.
+ */
+const ARRIVED_RESUME_GRACE_MS = 5 * 60 * 1000
+
+/**
  * The durable parts of a Go Mode trip — enough to drop the rider back into live
  * tracking after a reload. GPS-derived state (tracking/progress/simulation) is
  * intentionally omitted; it recomputes once location resumes.
@@ -33,6 +52,14 @@ export interface GoModeSession {
   // — and it must travel WITH it: restoring a confirmed match without the fact
   // that disproves it is how a reload would re-open the 8/9 hole.
   alightedFrom?: { tripId: string | null; vehicleId: string | null } | null
+  // The moment the rider arrived, or null if they have not. The one fact that
+  // says this trip is FINISHED, and therefore the one that decides whether it
+  // may come back at all — and, when it does, that it comes back quiesced (the
+  // post-arrival GPS funnel, the reroute guard and the tick's own quiesce all
+  // key off goMode.arrivedAt) instead of as a live trip with everything still
+  // to do. Omitted before 2026-08-31, which is exactly how a finished trip
+  // re-mounted as a running one.
+  arrivedAt?: number | null
   // Whether the rider had stepped out to the planner (ReturnToTripBanner
   // showing) — restored so a reload doesn't force the Go Mode screen back.
   backgrounded?: boolean
@@ -88,6 +115,7 @@ export function saveGoModeSession(goMode: GoModeState): void {
   const session: GoModeSession = {
     activeItinerary: goMode.activeItinerary,
     alightedFrom: goMode.alightedFrom ?? null,
+    arrivedAt: goMode.arrivedAt ?? null,
     backgrounded: !!goMode.ui?.backgrounded,
     departureOverride: goMode.departureOverride ?? null,
     originalFrom: goMode.originalFrom ?? null,
@@ -120,8 +148,14 @@ export function loadGoModeSession(): GoModeSession | null {
   const endTime = session.activeItinerary.endTime
   const alreadyEnded =
     typeof endTime === 'number' && endTime + END_TIME_GRACE_MS < now
+  // A trip the rider has already finished. Resumable only for the few minutes
+  // in which the arrival card is still what they expect to see; after that it
+  // is not a trip any more and must not be resurrected as one.
+  const alreadyArrived =
+    typeof session.arrivedAt === 'number' &&
+    now - session.arrivedAt > ARRIVED_RESUME_GRACE_MS
 
-  if (tooOld || alreadyEnded) {
+  if (tooOld || alreadyEnded || alreadyArrived) {
     clearGoModeSession()
     return null
   }
