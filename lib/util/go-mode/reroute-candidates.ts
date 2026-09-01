@@ -6,12 +6,20 @@ import type { Itinerary, Leg } from '@opentripplanner/types'
  * swaps the rider's itinerary out from under them.
  *
  * Modelled on collectRerouteCandidates' leg signature (mode + route +
- * endpoints), extended with the trip id and a MINUTE-BUCKETED start time:
- * live-time jitter must not read as a change, but two departures of the same
- * route must stay distinguishable. Bucketing is coarse at the boundary (a few
- * seconds of jitter across :00 lands in the next bucket) — acceptable, because
- * the trip id already carries the identity that matters and a re-applied
- * splice of the same trip reproduces the same times anyway.
+ * endpoints), extended with the trip id and — for a leg with NO trip id — a
+ * minute-bucketed start time: live-time jitter must not read as a change, but
+ * two departures must stay distinguishable.
+ *
+ * The start time is deliberately NOT part of a leg that names a trip. That was
+ * how this read until 2026-08-31, defended by "a re-applied splice of the same
+ * trip reproduces the same times anyway" — which is false for exactly the legs
+ * this guard exists to catch. buildOnboardItinerary stamps a synthesized bus
+ * leg `busLegStart = Date.now()`, so re-splicing the same trip yields the same
+ * bus, the same stops and a start one minute later. On 8/31 that let three
+ * substantively identical Orange Line splices through as three "changes":
+ * 17:36, 17:37, 17:38, one high-priority push each. Two departures of one route
+ * always carry different trip ids, so the id alone keeps them apart and the
+ * clock adds nothing but false novelty.
  *
  * Deliberately not itinerariesAreEqual (lib/util/itinerary.tsx) — it needs a
  * FareProductSelector, compares fares, and matches legs by lat/lon only, so it
@@ -25,7 +33,10 @@ export function itinerarySignature(
   return (itinerary.legs || [])
     .map((l: Leg) => {
       const tripId = (l as any).trip?.gtfsId || (l as any).tripId || ''
-      const startMinute = Math.floor(Number(l.startTime) / 60000) || 0
+      // Only when the leg has no trip of its own to identify it by.
+      const startMinute = tripId
+        ? ''
+        : Math.floor(Number(l.startTime) / 60000) || 0
       // getLegRouteId, not leg.routeId: a synthesized onboard leg carries its
       // route as an object while a planner leg carries the flattened id, and
       // the whole point here is to compare across those two provenances.

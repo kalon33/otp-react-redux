@@ -69,6 +69,39 @@ function legTripId(leg: any): string | null {
   return leg?.trip?.gtfsId ?? leg?.tripId ?? null
 }
 
+/**
+ * Does this vehicle match speak for the leg the matcher is on?
+ *
+ * A match is evidence about ONE bus on ONE route. A confirmed one is also the
+ * stickiest fact Go Mode holds: refreshConfirmedMatch never re-matches, and a
+ * SYNTHETIC vehicle id (`route:<routeId>`, minted by the riding lock and by
+ * replanFromAboard) is in no feed at all, so it can never be refreshed, demoted
+ * or aged out. It simply persists — across the alight, across the bike leg,
+ * across the transfer.
+ *
+ * On 2026-08-31 that is exactly what happened. The Orange Line match (route
+ * 1:904, trip 1:1268645, vehicle route:1:904, "confirmed" since 17:15:01) was
+ * still held when the rider reached the 539's leg at 17:35:57, and decideRiding
+ * ranked it ABOVE the leg's own trip id. So the riding fact was established on
+ * the 539 carrying the Orange Line's identity — which shouldReplanBoardedEarlier
+ * compares against the planned leg's trip and can never match. It fired three
+ * times in 2m14s and cost the rider their 539.
+ *
+ * A route disagreement is the cheapest honest statement of "this match is not
+ * about that bus". Missing on either side passes: the matcher does not always
+ * carry a routeId, and a decision must never be blocked on data a feed simply
+ * does not publish (same policy as the null headsign/accuracy cases).
+ */
+export function matchDescribesLeg(
+  match: { routeId?: string | null } | null | undefined,
+  matchedLeg: Leg | null | undefined
+): boolean {
+  const matchRouteId = match?.routeId ?? null
+  const legRoute = legRouteId(matchedLeg)
+  if (matchRouteId == null || legRoute == null) return true
+  return matchRouteId === legRoute
+}
+
 /** Loose headsign agreement — either side may be absent or differently cased. */
 function headsignsAgree(a?: string | null, b?: string | null): boolean {
   if (!a || !b) return false
@@ -157,6 +190,11 @@ export function decideRiding(input: RidingDecisionInput): RidingDecision {
   const match = vehicleMatch?.match ?? null
   const vehicleTrusted =
     match?.confidence === 'confirmed' || match?.confidence === 'high'
+  // Trusted AND about this leg. A confirmed match for a different route is not
+  // evidence the rider is aboard THIS bus, and it must not get to name this
+  // ride's trip or vehicle — see matchDescribesLeg for the 8/31 transfer.
+  const vehicleSpeaksForLeg =
+    vehicleTrusted && matchDescribesLeg(match, matchedLeg)
   // A fact already held keeps the matcher's wide corridor — refreshes and the
   // offRouteSince reset must not pause just because the rider projects far
   // from a sparse shape. Only a NEW claim of aboard-ness from GPS alone has to
@@ -165,7 +203,7 @@ export function decideRiding(input: RidingDecisionInput): RidingDecision {
     routeMatch.progressAlongLeg >= RIDING_MIN_PROGRESS &&
     (prevRiding != null ||
       routeMatch.distanceFromRoute <= RIDING_ESTABLISH_MAX_DISTANCE_M)
-  const aboard = vehicleTrusted || gpsPlausiblyAboard
+  const aboard = vehicleSpeaksForLeg || gpsPlausiblyAboard
   if (!aboard) return { kind: 'none' }
 
   // The trip the rider is ACTUALLY on: a trusted vehicle match knows its
@@ -173,7 +211,7 @@ export function decideRiding(input: RidingDecisionInput): RidingDecision {
   // an earlier run of the same route, and the boarded-earlier replan, next-stop
   // anchoring and live leg times all key off this id.
   const ridingTripId =
-    (vehicleTrusted ? match?.tripId : null) ||
+    (vehicleSpeaksForLeg ? match?.tripId : null) ||
     legTripId(matchedLeg) ||
     prevRiding?.tripId ||
     null
@@ -186,7 +224,7 @@ export function decideRiding(input: RidingDecisionInput): RidingDecision {
       riderSpeedMps,
       ridingTripId,
       vehicleMatch: match,
-      vehicleTrusted
+      vehicleTrusted: vehicleSpeaksForLeg
     })
   ) {
     return { kind: 'none' }
@@ -205,8 +243,13 @@ export function decideRiding(input: RidingDecisionInput): RidingDecision {
     vehicleMatch
   )
   const nextTripId = rebindAllowed ? ridingTripId : prevRiding?.tripId ?? null
+  // A match that does not speak for this leg may not name its vehicle either —
+  // the same gate the trip id gets above. Whatever was already held is kept, so
+  // a leg the matcher merely lost sight of does not shed its bus.
   const nextVehicleId = rebindAllowed
-    ? match?.vehicleId ?? prevRiding?.vehicleId ?? null
+    ? (vehicleSpeaksForLeg ? match?.vehicleId : null) ??
+      prevRiding?.vehicleId ??
+      null
     : prevRiding?.vehicleId ?? null
 
   const changed =
