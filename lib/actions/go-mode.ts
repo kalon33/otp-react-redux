@@ -3337,7 +3337,19 @@ export function handlePositionUpdate(position: GeolocationPosition) {
           itinerary.legs.slice(0, transitionedLegIndex + 1),
           Math.min(currentLegIndex, transitionedLegIndex),
           goMode.routeMatch,
-          { accuracyM: position.coords.accuracy, nowMs: position.timestamp }
+          // Same gate as the nomination above, `movedSinceFixM` included.
+          // Both calls measure from the same held match, so the rider's step
+          // is not counted twice — but leaving it off here dropped the
+          // unaccounted-ground accumulator on every tick the gate refused,
+          // and that accumulator is the evidence that later releases a held
+          // projection. A rider cycling toward the stop while the matcher
+          // nominates the bus leg early would arrive with none of the ground
+          // they had covered on the record.
+          {
+            accuracyM: position.coords.accuracy,
+            movedSinceFixM,
+            nowMs: position.timestamp
+          }
         ) ?? routeMatch
     }
 

@@ -408,7 +408,33 @@ function exceedsJumpBudget(
   // the rider is licensed by the step alone and never gated; one that has sat
   // still while the rider rode earns its correction at the rate they ride, and
   // one that wants to move a kilometre on a 4 m fix gets nothing.
-  return movedM > MATCH_JUMP_SLACK_MOVED_M + riderPathM * MATCH_PATH_FACTOR
+  //
+  // ...along ONE leg. A candidate on a different leg is not a claim about
+  // progress at all: `continuityGapM` switches to the straight line between
+  // the two nearest points, so what is being measured is the offset between
+  // where one polyline ends and where the rider projects onto the next — a
+  // change of reference line, not ground the projection says it covered.
+  //
+  // The halved slack was justified by displacement standing in for the mode
+  // ceiling, and displacement is the wrong quantity here for the one case that
+  // matters most: boarding. A rider waiting at the stop is stationary BY
+  // DEFINITION — that is what waiting is — so they earn no ground allowance on
+  // the tick the bus is finally due, and the leg-0 projection they are pinned
+  // to can never reach leg 1. Measured on the 2026-08-27 board-gate fixture:
+  // the bike leg's end and the bus leg's shape are 39.4 m apart, the rider's
+  // step between ticks is 0.00 m, and the trip never boards on any tick. Every
+  // sighting behind the ground budget (2026-09-01 08:56:20 and 11:10:06) is a
+  // same-leg snap, so the leg boundary is not where its evidence lives.
+  //
+  // So across a leg boundary the original slack stands. The clock still drops
+  // out — this is tighter than the mode-ceiling budget it replaced, which
+  // would have added 15 m/s of licence on top — and the rider's own ground
+  // still widens it.
+  const slackM =
+    winner.legIndex === previousMatch.legIndex
+      ? MATCH_JUMP_SLACK_MOVED_M
+      : MATCH_JUMP_SLACK_M
+  return movedM > slackM + riderPathM * MATCH_PATH_FACTOR
 }
 
 /**
