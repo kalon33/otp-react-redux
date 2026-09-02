@@ -402,6 +402,30 @@ export const PREPARE_LEAD_MAX_M = 250
 export const ACT_LEAD_MAX_M = 60
 
 /**
+ * How far apart the two cards for one turn have to land, in seconds of riding,
+ * before the second one is worth sending.
+ *
+ * The prepare card already names the turn and the distance; the sticky turn
+ * card (turn-card.ts) then holds that instruction on the rider's wrist and the
+ * screen counts the metres down. So the act card at the corner is new
+ * information only when the prepare card was long enough ago to have been
+ * forgotten.
+ *
+ * 2026-09-01 ride 1, the 7 min 8 s bike leg that produced this rule: prepare
+ * and act landed 12 s apart (08:56:15 / 08:56:27), 16 s (08:56:23 / 08:56:39),
+ * 20 s (08:58:03 / 08:58:23), 16 s (08:58:31 / 08:58:47) and 28 s (08:59:07 /
+ * 08:59:35) — five second cards inside half a minute of their own first card.
+ * The one pair that was genuinely far apart was the rider dawdling off the bus:
+ * 08:52:34 to 08:54:16, 102 s. 45 s keeps that one and drops the other five.
+ *
+ * Judged from the leads in force this tick rather than from a remembered
+ * announcement time, so it needs no extra state and it moves with the rider's
+ * own speed: the same gap that is 17 s at 5.5 m/s is 112 s for someone walking
+ * a bike at 0.8 m/s, and the slow rider keeps both cards.
+ */
+export const ACT_REMINDER_MIN_GAP_SECONDS = 45
+
+/**
  * Check if should notify for upcoming turn
  */
 export function checkUpcomingTurn(
@@ -446,6 +470,22 @@ export function checkUpcomingTurn(
 
   // Two cues per turn: one with time to react, one at the corner itself.
   const stage = distance <= act ? 'act' : 'prepare'
+
+  // …but only where those two moments are far enough apart to be two different
+  // pieces of news. See ACT_REMINDER_MIN_GAP_SECONDS. A rider who was never
+  // told about this turn still gets the corner cue — that case is handled by
+  // `firstCueForTurn` below, and this gate defers to it.
+  const twoStageWorthIt =
+    speed == null ||
+    !(speed > 0) ||
+    (prepare - act) / speed >= ACT_REMINDER_MIN_GAP_SECONDS
+  if (
+    stage === 'act' &&
+    !twoStageWorthIt &&
+    state.announced.has(`${cue.index}_prepare`)
+  ) {
+    return null
+  }
 
   // The latch: this turn, this stage, once for the whole life of the leg.
   // Deliberately permanent — a rider who passes a turn and loops back does not
@@ -787,6 +827,38 @@ export function checkMissedBus(
 }
 
 /**
+ * Legs whose entry has already been announced.
+ *
+ * The 30 s `wasRecentlySent` window was never a latch, and the condition it was
+ * guarding — `currentLegIndex > previousLegIndex` — is not an edge. It is a
+ * standing comparison between the matcher's projection and
+ * `session.lastTransitionedLegIndex`, and when the board-time gate refuses the
+ * transition (actions/go-mode.ts, `shouldTransitionToNextLeg`) the two disagree
+ * for as long as the refusal lasts. On 2026-09-01 ride 2 that was five minutes:
+ * "Board METRO Orange Line to I-35W & 98th St Station" went out ELEVEN times,
+ * 10:37:35 → 10:42:11, one every 30–32 s, each one the moment the window
+ * reopened. (The ride report blamed the `Date.now()` suffix on the id; it does
+ * not survive `wasRecentlySent`, which strips the last underscore-separated
+ * field before comparing. The suffix was innocent and the window was the bug.)
+ *
+ * So the fact, not the moment: this leg, entered, announced. Keyed on the leg
+ * OBJECT exactly like the turn latch above — one itinerary's legs are stable
+ * for its lifetime, a swap hands back new objects and re-arms the announcement
+ * for what is genuinely a new trip, and the whole map is collectable when the
+ * trip ends.
+ */
+let announcedLegEntries = new WeakSet<Leg>()
+
+/**
+ * Forget which legs have been announced. Test-only, for the same reason as
+ * resetTurnAnnouncements: production lifetime is the leg object itself, but
+ * unit tests reuse one leg literal across cases.
+ */
+export function resetLegAnnouncements(): void {
+  announcedLegEntries = new WeakSet<Leg>()
+}
+
+/**
  * Check if should notify for leg transition
  */
 export function checkLegTransition(
@@ -813,7 +885,11 @@ export function checkLegTransition(
       `leg_${currentLegIndex}_${enteredLeg.mode}`
     )
 
-    if (!wasRecentlySent(id, sentNotifications, 30000)) {
+    if (
+      !announcedLegEntries.has(enteredLeg) &&
+      !wasRecentlySent(id, sentNotifications, 30000)
+    ) {
+      announcedLegEntries.add(enteredLeg)
       let message = ''
 
       if (enteredLeg.mode === 'BUS' || enteredLeg.mode === 'RAIL') {
@@ -991,6 +1067,89 @@ export function checkRouteDeviation(
     title: 'Off Route',
     type: 'ROUTE_DEVIATION'
   }
+}
+
+/**
+ * The `deviationHandledAtMs` stamp to carry into the next tick.
+ *
+ * `checkRouteDeviation`'s 120 s cooldown counts from when a deviation was last
+ * DEALT WITH, and that was enough for the 2026-08-28 storms because those were
+ * repeats across an itinerary swap. It is not enough for a rider who is simply
+ * still off the line: on 2026-09-01 ride 2 the cooldown re-armed on schedule and
+ * "Off Route" went out at 10:37:15, 10:39:15, 10:41:15, 10:43:15 and 10:45:19 —
+ * five cards, 120 s apart to the second, for one continuous 663 -> 842 -> 750 m
+ * excursion. Nothing changed between them that the rider could act on.
+ *
+ * So the clock is held while the excursion lasts. The cooldown then measures
+ * time since the rider came BACK, which makes it what the row asked for: one
+ * card per deviation EPISODE, with 120 s of floor before the next episode can
+ * speak.
+ *
+ * The stamp is only ever EXTENDED, never opened: a tick that is off route while
+ * the window is already shut keeps it shut, but a deviation that has not yet
+ * been reported — held by the geometry-settle window, say — is left alone, so
+ * the first card of an episode still lands when the settle expires.
+ */
+export function nextDeviationHandledAtMs(input: {
+  /** A ROUTE_DEVIATION card went out on this tick. */
+  alerted: boolean
+  /** The leg the rider is on, for the per-mode threshold. */
+  currentLeg?: Leg
+  /** This tick's smoothed distance from the planned route. */
+  distanceFromRoute?: number | null
+  /** The stamp carried in from the previous tick. */
+  handledAtMs: number | null
+  nowMs: number
+  /** A quiet access-leg re-plan will run on this tick. */
+  replanImminent: boolean
+}): number | null {
+  const {
+    alerted,
+    currentLeg,
+    distanceFromRoute,
+    handledAtMs,
+    nowMs,
+    replanImminent
+  } = input
+
+  // Told, or silently re-planned around: both are the deviation being handled.
+  if (alerted || replanImminent) return nowMs
+
+  const stillOffRoute =
+    distanceFromRoute != null &&
+    Number.isFinite(distanceFromRoute) &&
+    distanceFromRoute > deviationThresholdM(currentLeg)
+
+  if (
+    stillOffRoute &&
+    withinWindow(nowMs, handledAtMs, DEVIATION_ALERT_COOLDOWN_MS)
+  ) {
+    return nowMs
+  }
+
+  return handledAtMs
+}
+
+/**
+ * The epoch the rider should be told they will ARRIVE, for an itinerary that
+ * has just replaced the one they were on.
+ *
+ * The aboard re-plan's "Trip updated" copy read the arrival off `legs[0]` —
+ * the bus the rider is sitting on — so it named the moment they get OFF the bus
+ * and called it the arrival. 2026-09-01 ride 1, 08:26:27: *"…to I-35W & Lake St
+ * Station, arriving 8:45 AM"*, while the itinerary it had just installed ended
+ * at 08:51:45 and the trip sheet on the same screen said so. Two answers to one
+ * question, 6m41s apart, on the same tick.
+ *
+ * Falls back to the last leg's end when the itinerary carries no `endTime`, and
+ * returns null rather than inventing one.
+ */
+export function itineraryArrivalMs(itinerary: any): number | null {
+  const end = Number(itinerary?.endTime)
+  if (Number.isFinite(end) && end > 0) return end
+  const legs = itinerary?.legs
+  const lastEnd = Number(legs?.[legs.length - 1]?.endTime)
+  return Number.isFinite(lastEnd) && lastEnd > 0 ? lastEnd : null
 }
 
 /**
@@ -1197,13 +1356,47 @@ export function checkConnectionWarning(
 const DELAY_ALERT_THRESHOLD_SECONDS = 180
 
 /**
+ * How much worse the stated lateness has to get before the rider hears it
+ * again, in whole minutes — the same shape as CONNECTION_REWARN_WORSEN_SECONDS
+ * and for the same reason.
+ */
+const DELAY_REWARN_WORSEN_MINUTES = 2
+
+interface DelayWarnState {
+  /** The number of minutes the rider was last actually told. */
+  warnedLateMin: number
+}
+
+/**
+ * What the rider has already been told about each leg's lateness. Keyed on the
+ * leg object, like connectionWarnState: an itinerary swap hands back new legs
+ * and so a clean baseline, without anything having to remember to clear it.
+ */
+let delayWarnState = new WeakMap<Leg, DelayWarnState>()
+
+/**
+ * Drop every leg's warned-lateness baseline. Test-only — production lifetime is
+ * the leg object.
+ */
+export function resetDelayAlerts(): void {
+  delayWarnState = new WeakMap<Leg, DelayWarnState>()
+}
+
+/**
  * Check whether the transit leg the rider is currently on is running late
  * enough to warrant a heads-up.
  *
  * Real-data only: uses `progress.delay`, the measured GPS-vs-schedule lag on
- * the current leg. The alert id buckets the delay into 5-minute increments so
- * worsening lateness re-alerts (3 min, then 8 min, ...) without spamming on
- * small fluctuations within a bucket.
+ * the current leg.
+ *
+ * Re-alerts only when the number the rider was READ changes for the worse. The
+ * id used to bucket the delay into five-minute steps and lean on a five-minute
+ * `wasRecentlySent` window, which is a rate limit, not a fact: on 2026-09-01
+ * ride 1 "METRO Orange Line is running about 3 min late" went out at 08:25:38,
+ * 08:35:25 and 08:41:05 — three pushes, one fact, each one the moment the
+ * window aged out with the delay still inside bucket 0. The rider's rule is
+ * that notification copy is only the numbers they act on; a number they have
+ * already been given is not one of them.
  */
 export function checkDelayAlert(
   progress: TripProgress,
@@ -1213,6 +1406,26 @@ export function checkDelayAlert(
   legs?: Leg[]
 ): NotificationEvent | null {
   if (!isTransitMode(currentLeg.mode)) return null
+
+  // Never quote lateness at a rider who has arrived.
+  //
+  // `delay` is measured against the wall clock, so on a trip that is over it
+  // just counts the time since: the 2026-08-31 18:52 session went 1489 s ->
+  // 1911 s with the rider standing still at their destination. The tick that
+  // latches arrival is the one tick this pass still runs on (handlePositionUpdate
+  // quiesces only from the NEXT tick), and a re-mount onto a finished trip
+  // rebuilds the session with `arrivedAt` unset — so the guard belongs here as
+  // well as in the store. Same arrival rule as checkTripComplete, so the two can
+  // never disagree about whether the trip is over.
+  if (
+    progress.status === 'completed' ||
+    hasArrivedAtDestination(
+      progress.overallProgress,
+      progress.distanceToDestination
+    )
+  ) {
+    return null
+  }
 
   // Is this leg still the one the rider is on?
   //
@@ -1234,10 +1447,25 @@ export function checkDelayAlert(
   const routeName =
     currentLeg.routeShortName || currentLeg.routeLongName || 'Your ride'
   const lateMin = Math.max(1, Math.round(delaySeconds / 60))
-  const bucket = Math.floor(delaySeconds / 300)
-  const id = generateNotificationId('DELAY_ALERT', `${routeName}_${bucket}`)
+
+  // The key is the fact — the minutes the rider is about to be read — not the
+  // five-minute bracket the fact happens to sit in.
+  const id = generateNotificationId('DELAY_ALERT', `${routeName}_${lateMin}`)
 
   if (wasRecentlySent(id, sentNotifications, 300000)) return null
+
+  // Only a materially WORSE number is news. Hysteresis rather than a bare
+  // inequality because delay swings a minute either way tick to tick, and
+  // 3 -> 4 -> 3 -> 4 would be its own storm; and worsening-only because a bus
+  // making up time needs no announcement.
+  const previouslyWarned = delayWarnState.get(currentLeg)
+  if (
+    previouslyWarned &&
+    lateMin < previouslyWarned.warnedLateMin + DELAY_REWARN_WORSEN_MINUTES
+  ) {
+    return null
+  }
+  delayWarnState.set(currentLeg, { warnedLateMin: lateMin })
 
   return {
     id,

@@ -51,6 +51,10 @@ import {
   checkMissedBus,
   classifyMissedBus,
   findBoardLegIndex,
+  itineraryArrivalMs,
+  nextDeviationHandledAtMs,
+  resetDelayAlerts,
+  resetLegAnnouncements,
   resetTurnAnnouncements,
   showNotification
 } from '../util/go-mode/notification-service'
@@ -869,6 +873,13 @@ export function endGoMode() {
     // mid-trip with the transit legs deliberately object-identical, and
     // re-arming then is the 7/31 notification storm again.
     resetTurnAnnouncements()
+    // The leg-entry latch is keyed the same way and makes the same assumption,
+    // so it is re-armed in the same place and for the same retry-path reason.
+    resetLegAnnouncements()
+    // Same story for the warned-lateness baseline: keyed on the leg object, so
+    // a retry that reuses the legs would inherit what the previous attempt had
+    // already said and swallow the retried trip's first delay alert.
+    resetDelayAlerts()
 
     // ...and then the trip's state goes in one line. Anything added to
     // TripSession is cleared by this automatically — which is the point.
@@ -2928,15 +2939,22 @@ export function replanFromAboard(
       // Same "Trip updated" style as applyAutoReroute — but aboard, the new
       // ALIGHTING is the fact the rider needs (the boarding is under them).
       const busLeg: any = spliced.legs?.[0]
+      // The arrival is the TRIP's end, not this leg's. `legs[0].endTime` is
+      // when the rider steps off the bus, and quoting it as the arrival is how
+      // 2026-09-01 ride 1 announced 8:45 AM against an itinerary that ended at
+      // 8:51:45 — see itineraryArrivalMs. Alight stop and arrival time are two
+      // facts, so the copy no longer runs them into one clause.
+      const arrivalMs = itineraryArrivalMs(spliced)
+      const arrivalText =
+        arrivalMs == null
+          ? ''
+          : ` Arriving ${format(
+              utcToZonedTime(arrivalMs, getState().otp.config.homeTimezone),
+              'h:mm a'
+            )}.`
       const message = `Trip updated — ${
         busLeg?.routeShortName || busLeg?.routeLongName || 'your bus'
-      } to ${busLeg?.to?.name || 'your stop'}, arriving ${format(
-        utcToZonedTime(
-          Number(busLeg?.endTime),
-          getState().otp.config.homeTimezone
-        ),
-        'h:mm a'
-      )}.`
+      }, off at ${busLeg?.to?.name || 'your stop'}.${arrivalText}`
       const notification: NotificationEvent = {
         id: `TRIP_UPDATED_auto_${Date.now()}`,
         message,
@@ -4083,19 +4101,20 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       }
     )
 
-    // One clock for both arms. A tick that SPARED the rider a card because a
-    // re-plan was coming has dealt with that deviation just as much as a tick
-    // that pushed one, and stamping only the push let the very next tick — the
-    // one where the re-plan is no longer admitted — start from a clean slate
-    // and fire immediately. Re-stamping is self-limiting: once the burst cap
-    // (QUIET_REPLAN_BURST_MAX) closes the re-plan down, the stamps stop and the
-    // alert comes back on the cooldown.
-    if (
-      quietReplanImminent ||
-      notifications.some((n) => n.type === 'ROUTE_DEVIATION')
-    ) {
-      session.deviationHandledAtMs = currentTime.getTime()
-    }
+    // One clock for three arms — told, quietly re-planned around, or simply
+    // still off the line. The first two are the same event handled two ways;
+    // the third is what stopped ride 2 of 2026-09-01 getting five identical
+    // "Off Route" cards 120 s apart through one continuous excursion. All of
+    // the reasoning, and the reason the third arm can only extend an open
+    // window and never open one, is on nextDeviationHandledAtMs.
+    session.deviationHandledAtMs = nextDeviationHandledAtMs({
+      alerted: notifications.some((n) => n.type === 'ROUTE_DEVIATION'),
+      currentLeg,
+      distanceFromRoute: persistedDistanceFromRoute,
+      handledAtMs: session.deviationHandledAtMs,
+      nowMs: currentTime.getTime(),
+      replanImminent: quietReplanImminent
+    })
 
     // Missed boarding? Judged outside checkForNotifications because it needs
     // live board times, the sticky riding fact, and the raw GPS fix. The

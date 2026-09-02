@@ -18,9 +18,13 @@ import fixture from '../../../lib/util/go-mode/replay/fixtures/orange-line-0729.
  * them :)". Measured from this fixture: minutes 20.2–22.2 the rider rode a
  * street parallel to bike leg 0 (perpendicular distance flapping around the
  * 100 m on-route threshold) while the nearest-point projection slid
- * 537 m → 1509 m — sweeping past the cues at 822/992/1003 m. Ticks that dipped
+ * 537 m → 1509 m — sweeping past the cues at 822/1003 m. Ticks that dipped
  * back under the threshold announced those swept-past turns as if they were
  * still ahead.
+ *
+ * (A third swept cue used to sit at 992 m: `LEFT bike path`, a 10.5 m connector
+ * onto the Grand Rounds a dozen metres later. It is folded away now — see
+ * MICRO_STEP_METERS — so the sweep is two cues wide here rather than three.)
  *
  * This test replays leg 0's window through the same pure pipeline the app
  * runs per GPS tick — matchPositionToRoute → calculateTripProgress →
@@ -133,10 +137,12 @@ describe('util > go-mode > turn honesty on the 7/29 ride', () => {
   })
 
   it('exercises the data it claims to: real cues, real deviated stretch', () => {
-    // The three turns the rider bypassed on the parallel street.
+    // The turns the rider bypassed on the parallel street.
     expect(cues.map((c) => Math.round(c.offsetMeters))).toEqual(
-      expect.arrayContaining([822, 992, 1003])
+      expect.arrayContaining([822, 1003])
     )
+    // …and the 10.5 m connector between them is no longer a cue at all.
+    expect(cues.map((c) => Math.round(c.offsetMeters))).not.toContain(992)
     // The min 20.2–22.2 deviated stretch is in the window.
     expect(deviatedTickCount).toBeGreaterThan(30)
     // And honest guidance still announces the turns the rider does ride.
@@ -171,12 +177,12 @@ describe('util > go-mode > turn honesty on the 7/29 ride', () => {
     })
   })
 
-  it('stays silent about the swept-past turns at 822/992/1003 m', () => {
+  it('stays silent about the swept-past turns at 822/1003 m', () => {
     // The rider effectively took these on the parallel street; announcing them
     // afterwards is the complaint, verbatim. The rider's on-route travel never
     // brings them inside an announcement lead, so the honest count is zero.
     const sweptIndexes = cues
-      .filter((c) => [822, 992, 1003].includes(Math.round(c.offsetMeters)))
+      .filter((c) => [822, 1003].includes(Math.round(c.offsetMeters)))
       .map((c) => c.index)
     expect(emitted.filter((e) => sweptIndexes.includes(e.cueIndex))).toEqual([])
   })

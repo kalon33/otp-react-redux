@@ -13,7 +13,11 @@ import {
   checkUpcomingTurn,
   classifyMissedBus,
   getEffectiveBoardTimeMs,
+  itineraryArrivalMs,
+  nextDeviationHandledAtMs,
   resetConnectionWarnings,
+  resetDelayAlerts,
+  resetLegAnnouncements,
   resetTurnAnnouncements,
   shouldAutoReroute,
   triggerVibration,
@@ -38,12 +42,15 @@ const makeConfig = (overrides: Record<string, any> = {}) => ({
 })
 
 describe('util > go-mode > notification-service', () => {
-  // The turn latch and the connection-warning baseline both live for the life
-  // of a leg OBJECT; these tests reuse a handful of leg literals across cases,
-  // so clear them between them.
+  // The turn latch, the leg-entry latch, the connection-warning baseline and
+  // the warned-lateness baseline all live for the life of a leg OBJECT; these
+  // tests reuse a handful of leg literals across cases, so clear them between
+  // them.
   beforeEach(() => {
     resetTurnAnnouncements()
+    resetLegAnnouncements()
     resetConnectionWarnings()
+    resetDelayAlerts()
   })
 
   describe('wasRecentlySent', () => {
@@ -428,10 +435,14 @@ describe('util > go-mode > notification-service', () => {
         expect(checkUpcomingTurn(turnProgress(112), bikeLeg, sent)).toBeNull()
       })
 
-      it('emits prepare and act exactly once each across a whole approach', () => {
+      it('emits ONE card across a whole approach at riding speed', () => {
         const sent: string[] = []
         const stages: string[] = []
-        // A bike closing on the corner at ~4 m/s, one tick per second.
+        // A bike closing on the corner at ~4 m/s, one tick per second. The
+        // prepare lead is 120 m and the act lead 32 m, so the two cards would
+        // land 22 s apart — under ACT_REMINDER_MIN_GAP_SECONDS, and exactly the
+        // 12–28 s spacing that made five of ride 1's thirteen turn cards on
+        // 2026-09-01 pure repetition.
         for (let distance = 200; distance >= 0; distance -= 4) {
           nowMs += 1000
           const event = checkUpcomingTurn(
@@ -439,6 +450,31 @@ describe('util > go-mode > notification-service', () => {
               distanceToNextTurn: distance,
               nextTurnCue: makeCue(),
               riderSpeedMps: 4
+            }),
+            bikeLeg,
+            sent
+          )
+          if (event) {
+            sent.push(event.id)
+            stages.push(event.id.split('_')[4])
+          }
+        }
+        expect(stages).toEqual(['prepare'])
+      })
+
+      it('keeps the corner card for a rider slow enough to have forgotten', () => {
+        // 2026-09-01 08:52:34 -> 08:54:16: the rider wheeled off the bus and
+        // covered 102 m to the corner in 102 s. At 0.8 m/s the same two leads
+        // are 112 s apart, which is a reminder rather than an echo.
+        const sent: string[] = []
+        const stages: string[] = []
+        for (let distance = 200; distance >= 0; distance -= 4) {
+          nowMs += 5000
+          const event = checkUpcomingTurn(
+            makeProgress({
+              distanceToNextTurn: distance,
+              nextTurnCue: makeCue(),
+              riderSpeedMps: 0.8
             }),
             bikeLeg,
             sent
@@ -1091,16 +1127,18 @@ describe('util > go-mode > notification-service', () => {
       expect(checkDelayAlert(progress, walkLeg, [])).toBeNull()
     })
 
-    it('should not re-alert within the same delay bucket', () => {
+    it('should not re-alert with the same number it just gave', () => {
+      // The id carries the minutes the rider was READ, not the five-minute
+      // bracket those minutes happened to fall in. Same number, nothing to say.
       const progress = makeProgress({ currentLegIndex: 0, delay: 240 })
-      const recent = [`DELAY_ALERT_5_0_${Date.now() - 30000}`]
+      const recent = [`DELAY_ALERT_5_4_${Date.now() - 30000}`]
       expect(checkDelayAlert(progress, transitLeg, recent)).toBeNull()
     })
 
-    it('should re-alert when lateness escalates to a new bucket', () => {
-      // Previously alerted at bucket 0 (<5 min); now 10 min late -> bucket 2
+    it('should re-alert when lateness escalates', () => {
+      // Previously alerted at 4 min; now 10 min late.
       const progress = makeProgress({ currentLegIndex: 0, delay: 600 })
-      const recent = [`DELAY_ALERT_5_0_${Date.now() - 30000}`]
+      const recent = [`DELAY_ALERT_5_4_${Date.now() - 30000}`]
       const result = checkDelayAlert(progress, transitLeg, recent)
       expect(result).not.toBeNull()
       expect(result!.message).toContain('10 min late')
@@ -1819,6 +1857,340 @@ describe('missed-bus detection', () => {
         sent
       )
       expect(event).not.toBeNull()
+    })
+  })
+})
+
+/**
+ * The 2026-09-01 notifier repeats — backlog 6.6 and 4.6, one defect in two
+ * halves. Every timestamp and every string below is out of
+ * otp-debug-logs/debug-2026-09-01.jsonl, session mtin0l9c-yieexg.
+ *
+ * The ride reports blamed the `Date.now()` suffix that generateNotificationId
+ * appends to every id. It is innocent: wasRecentlySent strips the last
+ * underscore-separated field before comparing prefixes, and the surviving keys
+ * (`DELAY_ALERT_<route>_<bucket>`, `LEG_TRANSITION_leg_1_BUS`,
+ * `ROUTE_DEVIATION_deviation`) matched perfectly. What re-fired was the WINDOW:
+ * 300 s for the delay alert, 30 s for a leg entry, 120 s for a deviation, each
+ * re-arming under a condition that had not changed. A window is a rate limit,
+ * not a fact.
+ */
+describe('go-mode > the 2026-09-01 notification repeats', () => {
+  let nowMs = 0
+  let dateNowSpy: jest.SpyInstance
+
+  beforeEach(() => {
+    resetTurnAnnouncements()
+    resetLegAnnouncements()
+    resetConnectionWarnings()
+    resetDelayAlerts()
+    nowMs = 1788269138079 // 08:25:38.079, the first DELAY_ALERT of the ride
+    dateNowSpy = jest.spyOn(Date, 'now').mockImplementation(() => nowMs)
+  })
+
+  afterEach(() => {
+    dateNowSpy.mockRestore()
+  })
+
+  describe('6.6 — DELAY_ALERT re-fires with the same number', () => {
+    // Ride 1's five delay pushes, verbatim:
+    //   08:25:38  "about 3 min late"   DELAY_ALERT_METRO Orange Line_0_…
+    //   08:35:25  "about 3 min late"   (587 s later — the 300 s window aged out)
+    //   08:41:05  "about 3 min late"   (340 s later — and again)
+    //   08:45:19  "about 5 min late"
+    //   08:50:20  "about 8 min late"
+    const orangeLine = () =>
+      ({
+        mode: 'BUS',
+        routeShortName: 'METRO Orange Line',
+        to: { name: 'I-35W & Lake St Station' }
+      } as any)
+
+    const delayProgress = (delay: number) =>
+      makeProgress({
+        currentLegIndex: 0,
+        currentLegProgress: 40,
+        delay
+      })
+
+    it('says the same lateness once, however long the wait', () => {
+      const leg = orangeLine()
+      const sent: string[] = []
+
+      const first = checkDelayAlert(delayProgress(190), leg, sent, [leg])
+      expect(first).not.toBeNull()
+      expect(first!.message).toContain('about 3 min late')
+      sent.push(first!.id)
+
+      // 08:35:25 — 587 s on, still ~3 min late. This is the push the rider got.
+      nowMs = 1788269725152
+      expect(checkDelayAlert(delayProgress(200), leg, sent, [leg])).toBeNull()
+
+      // 08:41:05 — another 340 s, still ~3 min.
+      nowMs = 1788270065135
+      expect(checkDelayAlert(delayProgress(185), leg, sent, [leg])).toBeNull()
+    })
+
+    it('speaks again when the number the rider is read gets worse', () => {
+      const leg = orangeLine()
+      const sent: string[] = []
+
+      const first = checkDelayAlert(delayProgress(190), leg, sent, [leg])
+      sent.push(first!.id)
+
+      // 08:45:19 — 5 min late. Two minutes worse than anything said so far.
+      nowMs = 1788270319144
+      const worse = checkDelayAlert(delayProgress(300), leg, sent, [leg])
+      expect(worse).not.toBeNull()
+      expect(worse!.message).toContain('about 5 min late')
+      sent.push(worse!.id)
+
+      // 08:50:20 — 8 min late.
+      nowMs = 1788270620155
+      const worst = checkDelayAlert(delayProgress(480), leg, sent, [leg])
+      expect(worst).not.toBeNull()
+      expect(worst!.message).toContain('about 8 min late')
+    })
+
+    it('does not chatter on a delay swinging a minute either way', () => {
+      const leg = orangeLine()
+      const sent: string[] = []
+      const said: string[] = []
+      // 3 -> 4 -> 3 -> 4 -> 3 min across twenty minutes of 1 Hz ticks.
+      ;[190, 230, 200, 240, 195].forEach((delay) => {
+        nowMs += 300000
+        const event = checkDelayAlert(delayProgress(delay), leg, sent, [leg])
+        if (event) {
+          sent.push(event.id)
+          said.push(event.message)
+        }
+      })
+      expect(said).toHaveLength(1)
+    })
+
+    it('never quotes lateness at a rider who has arrived (4.15)', () => {
+      // 2026-08-31 18:52: `delay` ran 1489 s -> 1911 s with the rider standing
+      // still at their destination, because it is measured off the wall clock.
+      const leg = orangeLine()
+      expect(
+        checkDelayAlert(
+          makeProgress({
+            currentLegIndex: 0,
+            currentLegProgress: 40,
+            delay: 1911,
+            status: 'completed'
+          }),
+          leg,
+          [],
+          [leg]
+        )
+      ).toBeNull()
+
+      // …and on the arrival tick itself, where `status` has not caught up but
+      // the rider is demonstrably at the destination.
+      expect(
+        checkDelayAlert(
+          makeProgress({
+            currentLegIndex: 0,
+            currentLegProgress: 40,
+            delay: 1489,
+            distanceToDestination: 12,
+            overallProgress: 99.9
+          }),
+          leg,
+          [],
+          [leg]
+        )
+      ).toBeNull()
+    })
+  })
+
+  describe('4.6 — the duplicate Board prompts', () => {
+    // 10:37:35 -> 10:42:11, ELEVEN identical "Board METRO Orange Line to I-35W
+    // & 98th St Station" cards, one every 30-32 s. The condition
+    // `currentLegIndex > previousLegIndex` was true the whole time: the matcher
+    // had projected the rider onto leg 1 while the board-time gate kept
+    // refusing the transition, so `session.lastTransitionedLegIndex` stayed 0.
+    const busLeg = () =>
+      ({
+        mode: 'BUS',
+        routeShortName: 'METRO Orange Line',
+        to: { name: 'I-35W & 98th St Station' }
+      } as any)
+
+    it('announces entering a leg once, not once per dedup window', () => {
+      const leg = busLeg()
+      const sent: string[] = []
+
+      nowMs = 1788277053089 // 10:37:33.089
+      const first = checkLegTransition(1, 0, leg, sent)
+      expect(first).not.toBeNull()
+      expect(first!.message).toBe(
+        'Board METRO Orange Line to I-35W & 98th St Station'
+      )
+      sent.push(first!.id)
+
+      // Every later fire from the real ride, at its real epoch. The condition
+      // is still true at each one; the window is the only thing that changed.
+      const repeats = [
+        1788277084076, 1788277115078, 1788277145102, 1788277176073,
+        1788277206095, 1788277237078, 1788277268079, 1788277298080,
+        1788277329098
+      ]
+      repeats.forEach((atMs) => {
+        nowMs = atMs
+        expect(checkLegTransition(1, 0, leg, sent)).toBeNull()
+      })
+    })
+
+    it('still guides a rider onto the leg an itinerary swap hands them', () => {
+      // 10:48:52 START_GO_MODE, then the Board card 1.1 s later. A swap makes
+      // new leg objects, and that is a genuinely new trip to be guided through.
+      const sent: string[] = []
+      const before = checkLegTransition(1, 0, busLeg(), sent)
+      expect(before).not.toBeNull()
+      sent.push(before!.id)
+
+      nowMs = 1788277731073 // 10:48:51.073
+      expect(checkLegTransition(1, 0, busLeg(), sent)).not.toBeNull()
+    })
+  })
+
+  describe('4.5 — TRIP_UPDATED quotes the wrong arrival', () => {
+    // The 08:26:27 push read "…to I-35W & Lake St Station, arriving 8:45 AM".
+    // These are the two epochs off that tick's START_GO_MODE payload.
+    const LEG0_END = 1788270304000 // 08:45:04 — when the rider gets OFF the bus
+    const ITINERARY_END = 1788270705000 // 08:51:45 — when the trip ends
+
+    it('names the trip end, not the bus leg end', () => {
+      const spliced = {
+        endTime: ITINERARY_END,
+        legs: [
+          { endTime: LEG0_END, mode: 'BUS' },
+          { endTime: ITINERARY_END, mode: 'BICYCLE' }
+        ]
+      }
+      expect(itineraryArrivalMs(spliced)).toBe(ITINERARY_END)
+      expect(itineraryArrivalMs(spliced)).not.toBe(LEG0_END)
+    })
+
+    it('falls back to the last leg when the itinerary carries no end', () => {
+      expect(
+        itineraryArrivalMs({
+          legs: [{ endTime: LEG0_END }, { endTime: ITINERARY_END }]
+        })
+      ).toBe(ITINERARY_END)
+    })
+
+    it('invents nothing when there is nothing to read', () => {
+      expect(itineraryArrivalMs(undefined)).toBeNull()
+      expect(itineraryArrivalMs({ legs: [] })).toBeNull()
+    })
+  })
+
+  describe('4.6 — one Off Route card per deviation episode', () => {
+    // 10:37:15, 10:39:15, 10:41:15, 10:43:15, 10:45:19 — five cards, 120 s
+    // apart to the second, across ONE continuous excursion (663 -> 558 -> 749
+    // -> 842 -> 750 m). checkRouteDeviation's cooldown was doing its job; it
+    // was just measuring from the wrong event.
+    const bikeLeg = { mode: 'BICYCLE', transitLeg: false } as any
+    const FIRST_CARD = 1788277034074 // 10:37:14.074
+    const SECOND_CARD = 1788277155077 // 10:39:15.077, 121.0 s later
+
+    it('holds the clock while the rider is still off the line', () => {
+      // The tick that pushed the first card.
+      let handled = nextDeviationHandledAtMs({
+        alerted: true,
+        currentLeg: bikeLeg,
+        distanceFromRoute: 663,
+        handledAtMs: null,
+        nowMs: FIRST_CARD,
+        replanImminent: false
+      })
+      expect(handled).toBe(FIRST_CARD)
+
+      // Every second in between, still hundreds of metres out and nothing said.
+      for (let t = FIRST_CARD + 1000; t < SECOND_CARD; t += 1000) {
+        handled = nextDeviationHandledAtMs({
+          alerted: false,
+          currentLeg: bikeLeg,
+          distanceFromRoute: 600,
+          handledAtMs: handled,
+          nowMs: t,
+          replanImminent: false
+        })
+      }
+
+      // 10:39:15: the card that actually went out. With the clock held, the
+      // cooldown has not aged a second and checkRouteDeviation stays quiet.
+      expect(
+        checkRouteDeviation(558, [], bikeLeg, {
+          handledAtMs: handled,
+          nowMs: SECOND_CARD
+        })
+      ).toBeNull()
+    })
+
+    it('speaks again for a rider who came back and left again', () => {
+      // On route at 10:39:15 ends the episode; the stamp stops moving.
+      const handled = nextDeviationHandledAtMs({
+        alerted: false,
+        currentLeg: bikeLeg,
+        distanceFromRoute: 12,
+        handledAtMs: FIRST_CARD,
+        nowMs: SECOND_CARD,
+        replanImminent: false
+      })
+      expect(handled).toBe(FIRST_CARD)
+
+      // 120 s of floor later, a fresh excursion is fresh news.
+      expect(
+        checkRouteDeviation(240, [], bikeLeg, {
+          handledAtMs: handled,
+          nowMs: FIRST_CARD + 121000
+        })
+      ).not.toBeNull()
+    })
+
+    it('never opens a window that was closed — the first card still lands', () => {
+      // A deviation nothing has spoken about yet: an itinerary swap 2 s ago is
+      // holding the card back (DEVIATION_GEOMETRY_SETTLE_MS). Stamping here
+      // would start a 120 s cooldown on a card that was never sent, and the
+      // rider would never be told at all.
+      const handled = nextDeviationHandledAtMs({
+        alerted: false,
+        currentLeg: bikeLeg,
+        distanceFromRoute: 663,
+        handledAtMs: null,
+        nowMs: FIRST_CARD,
+        replanImminent: false
+      })
+      expect(handled).toBeNull()
+
+      // Stale from a previous episode, likewise left alone.
+      expect(
+        nextDeviationHandledAtMs({
+          alerted: false,
+          currentLeg: bikeLeg,
+          distanceFromRoute: 663,
+          handledAtMs: FIRST_CARD - 600000,
+          nowMs: FIRST_CARD,
+          replanImminent: false
+        })
+      ).toBe(FIRST_CARD - 600000)
+    })
+
+    it('counts a quiet re-plan as the deviation being handled, as before', () => {
+      expect(
+        nextDeviationHandledAtMs({
+          alerted: false,
+          currentLeg: bikeLeg,
+          distanceFromRoute: 663,
+          handledAtMs: null,
+          nowMs: FIRST_CARD,
+          replanImminent: true
+        })
+      ).toBe(FIRST_CARD)
     })
   })
 })

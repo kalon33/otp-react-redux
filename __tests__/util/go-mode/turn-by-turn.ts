@@ -350,3 +350,76 @@ describe('util > go-mode > turn-by-turn', () => {
     })
   })
 })
+
+/**
+ * Backlog 6.7 — the connector turns that made the 2026-09-01 legs shout.
+ *
+ * OTP names the eight-metre jog between two ways as a full step with its own
+ * relativeDirection, and every one of them became a turn cue with a prepare
+ * card and an act card. The 10:34 leg's steps, verbatim from that ride's
+ * START_GO_MODE payload:
+ *
+ *   DEPART sidewalk                       8.2 m
+ *   RIGHT  Elliot Avenue                 13.3 m
+ *   RIGHT  East Minnehaha Parkway       108.0 m
+ *   LEFT   Chicago Avenue                 8.5 m
+ *   RIGHT  Minnehaha Parkway Trail      224.1 m
+ *
+ * Four cues for two junctions, and the rider got three announcements in eleven
+ * seconds (10:34:24, 10:34:27, 10:34:35).
+ */
+describe('util > go-mode > turn-by-turn > connector turns (6.7)', () => {
+  it('announces the manoeuvre, not the eight-metre jog into it', () => {
+    const leg = makeLeg([
+      makeStep(0, 'DEPART', 'sidewalk', { distance: 8.2 }),
+      makeStep(1, 'RIGHT', 'Elliot Avenue', { distance: 13.3 }),
+      makeStep(2, 'RIGHT', 'East Minnehaha Parkway', { distance: 108 }),
+      makeStep(3, 'LEFT', 'Chicago Avenue', { distance: 8.5 }),
+      makeStep(4, 'RIGHT', 'Minnehaha Parkway Regional Trail', {
+        distance: 224.1
+      })
+    ])
+    expect(buildStepIndex(leg).map((c) => c.instruction)).toEqual([
+      'Turn right on East Minnehaha Parkway',
+      'Turn right on Minnehaha Parkway Regional Trail'
+    ])
+  })
+
+  it('keeps the indexes contiguous — they key the per-turn latch', () => {
+    const leg = makeLeg([
+      makeStep(0, 'DEPART', 'sidewalk', { distance: 15.2 }),
+      makeStep(1, 'RIGHT', 'service road', { distance: 7.8 }),
+      makeStep(2, 'LEFT', 'East 48th Street', { distance: 220.1 }),
+      makeStep(3, 'RIGHT', 'Park Avenue', { distance: 401.7 })
+    ])
+    expect(buildStepIndex(leg).map((c) => c.index)).toEqual([0, 1])
+  })
+
+  it('never folds the last turn away — it is the way into the block', () => {
+    // 2026-09-01 10:33: the leg ends `LEFT path 52.9 m`, `LEFT path 9.1 m`.
+    // The 9.1 m one is the rider's own driveway and the only thing left to say.
+    const leg = makeLeg([
+      makeStep(0, 'DEPART', 'sidewalk', { distance: 81.6 }),
+      makeStep(1, 'RIGHT', '2nd Avenue South', { distance: 191.1 }),
+      makeStep(2, 'LEFT', 'path', { distance: 52.9 }),
+      makeStep(3, 'LEFT', 'path', { distance: 9.1 })
+    ])
+    expect(buildStepIndex(leg)).toHaveLength(3)
+  })
+
+  it('gives the folded distance to the cue the rider is following', () => {
+    // "then in 0.3 mi" must not under-report because a connector vanished.
+    const leg = makeLeg([
+      makeStep(0, 'DEPART', 'sidewalk', { distance: 20 }),
+      makeStep(1, 'LEFT', 'Park Avenue', { distance: 400 }),
+      makeStep(2, 'RIGHT', 'service road', { distance: 10 }),
+      makeStep(3, 'LEFT', 'West 105th Street', { distance: 579 })
+    ])
+    const cues = buildStepIndex(leg)
+    expect(cues.map((c) => c.instruction)).toEqual([
+      'Turn left on Park Avenue',
+      'Turn left on West 105th Street'
+    ])
+    expect(cues[0].distanceMeters).toBe(410)
+  })
+})
