@@ -159,6 +159,63 @@ export function clampPreferences(
 }
 
 /**
+ * OTP's `searchWindow` — how far past the requested departure time Raptor is
+ * allowed to look for a departure. It is NOT a routing preference (it does not
+ * price anything), so it lives beside the levers rather than inside
+ * RoutingPreferences: `clampPreferences` must never see it.
+ *
+ * Sending nothing lets OTP auto-size the window, which on the rider's 07:23
+ * Bloomington -> 3322 Columbus Ave commute is 3000 s — about five Orange Line
+ * departures, and nothing else. Measured against the live server on 2026-09-02
+ * (TRANSIT+BICYCLE, numItineraries 40, after `itineraryFilters.debug` went off
+ * so every returned itinerary is one OTP actually kept):
+ *
+ *   auto   ->  6 itineraries, 2 distinct route chains
+ *   3600   ->  7 itineraries, 2 chains
+ *   7200   -> 12 itineraries, 3 chains
+ *   14400  -> 20 itineraries, 4 chains
+ *
+ * 7200 s roughly doubles the usable list for one extra hour of window, which is
+ * why it is the default. Note what it does NOT do: the 465 (22 min against the
+ * Orange Line's 28-30) does not appear at 07:23 at ANY window below 14400,
+ * because its first northbound trip from that origin is 10:15 — at 09:45 it
+ * comes back on the auto window with no help from us. The window buys
+ * departures and alternates, not that specific route.
+ *
+ * The GraphQL type is `Long`, not `Int`: declaring `$searchWindow: Int` is
+ * rejected by OTP with `VariableTypeMismatch`.
+ */
+export const SEARCH_WINDOW_RANGE: readonly [number, number] = [600, 21600]
+
+/** Default window for a rider-initiated plan (seconds). */
+export const DEFAULT_SEARCH_WINDOW_SECONDS = 7200
+
+/**
+ * Window for Go Mode's background plans (auto-reroute snapshots, the onboard
+ * alight optimizer). Deliberately half the planner's: those queries ask "how do
+ * I finish this trip now", so a departure two hours out answers a question
+ * nobody asked, and each extra departure is response bytes over a cell link on
+ * a moving bus — the onboard optimizer fires FIVE of these at once. Measured
+ * 2026-09-02 on the 2026-08-31 ride's own onboard queries (98th St -> Home at
+ * 17:35, 46th St -> Home at 17:22): auto gave 6 itineraries, 3600 gives 7-8,
+ * 7200 gives 13-17. One more departure per candidate stop, not three times the
+ * payload — and unlike the auto window it is bounded (the 08-31 run's auto
+ * window returned 32).
+ */
+export const GO_MODE_SEARCH_WINDOW_SECONDS = 3600
+
+/** Clamp a searchWindow to the allowed range; non-numbers fall back to `fallback`. */
+export function clampSearchWindow(
+  seconds?: number | null,
+  fallback: number = DEFAULT_SEARCH_WINDOW_SECONDS
+): number {
+  const [min, max] = SEARCH_WINDOW_RANGE
+  const value =
+    typeof seconds === 'number' && !Number.isNaN(seconds) ? seconds : fallback
+  return Math.round(Math.min(max, Math.max(min, value)))
+}
+
+/**
  * Plain-English summary of an active lever, with the raw value(s) kept around
  * for a hover tooltip. Used by the search-form indicator so a rider can see
  * what their description actually changed.
@@ -273,9 +330,11 @@ export function applyRoutingPreferences(
 // Variable declarations + plan() arguments for the levers the default
 // core-utils planQuery does not already declare. Verified against OTP's
 // (deprecated but functional) plan field: bikeSpeed/waitReluctance are Float,
-// transferPenalty/minTransferTime/walkBoardCost are Int.
+// transferPenalty/minTransferTime/walkBoardCost are Int, and searchWindow is
+// Long (Int is rejected with VariableTypeMismatch).
 const EXTRA_VAR_DECLS =
   '$walkSpeed: Float\n' +
+  '  $searchWindow: Long\n' +
   '  $bikeSpeed: Float\n' +
   '  $waitReluctance: Float\n' +
   '  $transferPenalty: Int\n' +
@@ -283,6 +342,7 @@ const EXTRA_VAR_DECLS =
   '  $walkBoardCost: Int'
 const EXTRA_PLAN_ARGS =
   'walkSpeed: $walkSpeed\n' +
+  '    searchWindow: $searchWindow\n' +
   '    bikeSpeed: $bikeSpeed\n' +
   '    waitReluctance: $waitReluctance\n' +
   '    transferPenalty: $transferPenalty\n' +

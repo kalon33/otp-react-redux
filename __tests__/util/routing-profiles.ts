@@ -1,12 +1,16 @@
 import {
   applyRoutingPreferences,
   clampPreferences,
+  clampSearchWindow,
   DEFAULT_PROFILE_ID,
+  DEFAULT_SEARCH_WINDOW_SECONDS,
   extendPlanQueryWithLevers,
   getRoutingProfile,
+  GO_MODE_SEARCH_WINDOW_SECONDS,
   LEVER_RANGES,
   NON_OTP_QUERY_KEYS,
-  ROUTING_PROFILES
+  ROUTING_PROFILES,
+  SEARCH_WINDOW_RANGE
 } from '../../lib/util/routing-profiles'
 
 describe('routing-profiles', () => {
@@ -152,6 +156,57 @@ describe('routing-profiles', () => {
     it('returns the query unchanged when the walkSpeed anchors are absent', () => {
       const odd = 'query Q { plan(fromPlace: $f) { itineraries { duration } } }'
       expect(extendPlanQueryWithLevers(odd)).toBe(odd)
+    })
+
+    // 5.2: the client never sent searchWindow, so OTP auto-sized it to 3000 s
+    // on the rider's commute and returned five Orange Line departures and
+    // nothing else. Declaring it is half the fix; the type is the other half.
+    it('declares searchWindow as Long, not Int', () => {
+      const out = extendPlanQueryWithLevers(baseQuery)
+      expect(out).toContain('$searchWindow: Long')
+      expect(out).not.toContain('$searchWindow: Int')
+      expect(out).toContain('searchWindow: $searchWindow')
+    })
+  })
+
+  describe('clampSearchWindow', () => {
+    it('passes a sane window through unchanged', () => {
+      expect(clampSearchWindow(7200)).toBe(7200)
+    })
+
+    it('clamps to the allowed range rather than rejecting', () => {
+      const [min, max] = SEARCH_WINDOW_RANGE
+      expect(clampSearchWindow(1)).toBe(min)
+      expect(clampSearchWindow(999999)).toBe(max)
+    })
+
+    it('falls back when the value is missing or not a number', () => {
+      expect(clampSearchWindow(undefined)).toBe(DEFAULT_SEARCH_WINDOW_SECONDS)
+      expect(clampSearchWindow(NaN)).toBe(DEFAULT_SEARCH_WINDOW_SECONDS)
+      expect(clampSearchWindow(undefined, GO_MODE_SEARCH_WINDOW_SECONDS)).toBe(
+        GO_MODE_SEARCH_WINDOW_SECONDS
+      )
+    })
+
+    it('keeps both defaults inside the range, planner wider than Go Mode', () => {
+      const [min, max] = SEARCH_WINDOW_RANGE
+      expect(DEFAULT_SEARCH_WINDOW_SECONDS).toBeGreaterThanOrEqual(min)
+      expect(DEFAULT_SEARCH_WINDOW_SECONDS).toBeLessThanOrEqual(max)
+      expect(GO_MODE_SEARCH_WINDOW_SECONDS).toBeLessThan(
+        DEFAULT_SEARCH_WINDOW_SECONDS
+      )
+    })
+
+    it('is not a routing-preference lever', () => {
+      // searchWindow prices nothing; it bounds the Raptor departure window. It
+      // must stay out of LEVER_RANGES so a profile can never set it and
+      // applyRoutingPreferences can never spread it over the real levers.
+      expect(Object.keys(LEVER_RANGES)).not.toContain('searchWindow')
+      expect(
+        ROUTING_PROFILES.some((p) =>
+          Object.keys(p.prefs).includes('searchWindow')
+        )
+      ).toBe(false)
     })
   })
 })

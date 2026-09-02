@@ -290,6 +290,12 @@ export interface ItineraryConfig {
   disableMetroSeperatorDot?: true
   exclusiveErrors?: string[]
   fillModeIcons?: boolean
+  /**
+   * OTP `searchWindow`, in seconds, for Go Mode's background plans (reroute
+   * snapshots, the onboard alight optimizer). Clamped to SEARCH_WINDOW_RANGE;
+   * omit to take the default in util/routing-profiles.
+   */
+  goModeSearchWindowSeconds?: number
   groupByMode?: boolean
   groupTransitModes?: boolean
   hideSkeletons?: boolean
@@ -299,6 +305,11 @@ export interface ItineraryConfig {
   onlyShowCountdownForRealtime?: boolean
   previewOverlay?: boolean
   renderRouteNamesInBlocks?: boolean
+  /**
+   * OTP `searchWindow`, in seconds, for a rider-initiated plan. Clamped to
+   * SEARCH_WINDOW_RANGE; omit to take the default in util/routing-profiles.
+   */
+  searchWindowSeconds?: number
   showAllWalkLegs?: boolean
   showApproximatePrefixAccessLegs?: boolean
   showFirstResultByDefault?: boolean
@@ -311,6 +322,14 @@ export interface ItineraryConfig {
   showScheduleDeviation?: boolean
   sortModes?: ItinerarySortOption[]
   syncSortWithDepartArrive?: boolean
+  /**
+   * Token-transit-hop demotion (see util/itinerary#demoteTokenTransitHops):
+   * the length below which a closing transit leg counts as a token hop, and
+   * how much later the same trip without that hop may arrive and still push it
+   * down the list. Omit to take the defaults.
+   */
+  tokenTransitHopMeters?: number
+  tokenTransitHopToleranceMinutes?: number
   weights?: ItineraryCostWeights
 }
 
