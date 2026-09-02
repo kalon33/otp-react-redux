@@ -2,6 +2,11 @@ import coreUtils from '@opentripplanner/core-utils'
 
 import type { GoModeState } from '../../reducers/go-mode'
 
+import {
+  captureNotificationLatches,
+  NotificationLatches
+} from './notification-service'
+
 const { getItem, removeItem, storeItem } = coreUtils.storage
 
 /** Local-storage key holding the in-progress Go Mode trip for resume-on-reload. */
@@ -75,10 +80,27 @@ export interface GoModeSession {
   // continuing the first's ride — which is the one case where they should.
   debugSessionId?: string | null
   departureOverride: number | null
+  // What the notifier has already said, re-keyed onto leg indexes so it can be
+  // rebuilt on the other side of a re-mount. Its three latches live on the leg
+  // OBJECT and so die with the page; see notification-service.
+  notificationLatches?: NotificationLatches | null
   originalFrom: any | null
   // Sticky "rider is aboard this vehicle" fact — kept across reloads so a
   // mid-ride refresh never re-asks which bus the rider is on.
   riding: any | null
+  // The ids of every notification already sent, which is the list
+  // `wasRecentlySent` suppresses against. Without it a mid-trip re-mount comes
+  // back with an empty dedupe list and re-fires every card whose condition
+  // still stands — the un-arrived half of the 2026-08-31 18:52 replay, which
+  // `arrivedAt` only closed for trips that were already over. Each id carries
+  // its own Date.now() suffix, so the windows resume where they left off
+  // rather than restarting.
+  //
+  // `recentNotifications` is deliberately NOT saved with it: it is the toast
+  // feed, not a dedupe list (nothing reads it but GoModeNotifications), and
+  // restoring it would make the newest already-seen card pop up again on mount
+  // — the component's seen-ids set is per-mount (GoModeNotifications.tsx:78).
+  sentNotifications?: string[]
   // Set once when the trip starts; preserved across reloads so the freshness
   // window measures the real trip age, not the time since the last save.
   startedAt: number
@@ -147,8 +169,12 @@ export function saveGoModeSession(
     backgrounded: !!goMode.ui?.backgrounded,
     debugSessionId: savedDebugSessionId,
     departureOverride: goMode.departureOverride ?? null,
+    notificationLatches: captureNotificationLatches(
+      goMode.activeItinerary?.legs
+    ),
     originalFrom: goMode.originalFrom ?? null,
     riding: goMode.riding ?? null,
+    sentNotifications: goMode.notifications?.sentNotifications ?? [],
     startedAt: sessionStartedAt,
     vehicleMatch: goMode.vehicleMatch?.match ?? null
   }

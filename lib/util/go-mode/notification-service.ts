@@ -1634,3 +1634,101 @@ export function showNotification(
   })
   window.dispatchEvent(customEvent)
 }
+
+/**
+ * The notifier's per-leg memory, in a shape that survives a page load.
+ *
+ * Three of the checks above hold their state on the leg OBJECT — a `WeakSet` of
+ * legs whose entry card has gone out, and two `WeakMap`s of the number the
+ * rider was last read. That is exactly right while the page lives: an itinerary
+ * swap hands back new leg objects and so re-arms everything, and the whole map
+ * is collectable when the trip ends.
+ *
+ * It is exactly wrong across a re-mount. The legs come back from storage as
+ * fresh objects, so every latch reads empty, and the conditions they guard are
+ * standing ones rather than edges: `currentLegIndex > previousLegIndex` holds
+ * for as long as the rider is past leg 0 (and `session.lastTransitionedLegIndex`
+ * is a module field that a re-mount resets to null, so `previousLegIndex` comes
+ * back 0 — `actions/go-mode.ts:3735`), and a bus that is 3 min late is still
+ * 3 min late one second after the app came back. The rider is therefore told
+ * again everything they were told before: "Board METRO Orange Line", "running
+ * about 3 min late", the connection they are about to miss.
+ *
+ * Leg INDEXES, not identities, because that is all storage can carry — and it
+ * is the right key anyway, since a session is only ever restored onto the very
+ * itinerary it was saved from.
+ */
+export interface NotificationLatches {
+  /** Legs whose entry card has already gone out. */
+  announcedLegIndexes: number[]
+  /** The margin, in seconds, each connection warning last quoted. */
+  connectionWarnedSlackSecondsByLeg: Record<number, number>
+  /** The lateness, in minutes, the rider was last read for each leg. */
+  delayWarnedLateMinByLeg: Record<number, number>
+}
+
+/**
+ * Read the latches back out for saving. `WeakSet`/`WeakMap` cannot be walked,
+ * but they can be asked about a key — and the legs are the keys.
+ */
+export function captureNotificationLatches(legs?: Leg[]): NotificationLatches {
+  const latches: NotificationLatches = {
+    announcedLegIndexes: [],
+    connectionWarnedSlackSecondsByLeg: {},
+    delayWarnedLateMinByLeg: {}
+  }
+  if (!Array.isArray(legs)) return latches
+  legs.forEach((leg, index) => {
+    if (!leg || typeof leg !== 'object') return
+    if (announcedLegEntries.has(leg)) latches.announcedLegIndexes.push(index)
+    const delay = delayWarnState.get(leg)
+    if (delay) latches.delayWarnedLateMinByLeg[index] = delay.warnedLateMin
+    const connection = connectionWarnState.get(leg)
+    if (connection) {
+      latches.connectionWarnedSlackSecondsByLeg[index] =
+        connection.warnedSlackSeconds
+    }
+  })
+  return latches
+}
+
+/**
+ * Re-key a saved set of latches onto the restored itinerary's leg objects, so a
+ * resumed trip carries on from what the rider has already been told.
+ *
+ * Additive on purpose: it only ever marks legs as already-announced, never
+ * un-marks one. A restore cannot therefore make the app say MORE than it would
+ * have — the failure mode of a wrong index is silence about one leg, not a
+ * second copy of a card.
+ */
+export function restoreNotificationLatches(
+  legs: Leg[] | undefined,
+  latches: Partial<NotificationLatches> | null | undefined
+): void {
+  if (!Array.isArray(legs) || !latches) return
+  const legAt = (index: unknown): Leg | undefined => {
+    const i =
+      typeof index === 'string' ? parseInt(index, 10) : (index as number)
+    return Number.isInteger(i) ? legs[i as number] : undefined
+  }
+  ;(latches.announcedLegIndexes || []).forEach((index) => {
+    const leg = legAt(index)
+    if (leg) announcedLegEntries.add(leg)
+  })
+  Object.entries(latches.delayWarnedLateMinByLeg || {}).forEach(
+    ([index, warnedLateMin]) => {
+      const leg = legAt(index)
+      if (leg && typeof warnedLateMin === 'number') {
+        delayWarnState.set(leg, { warnedLateMin })
+      }
+    }
+  )
+  Object.entries(latches.connectionWarnedSlackSecondsByLeg || {}).forEach(
+    ([index, warnedSlackSeconds]) => {
+      const leg = legAt(index)
+      if (leg && typeof warnedSlackSeconds === 'number') {
+        connectionWarnState.set(leg, { warnedSlackSeconds })
+      }
+    }
+  )
+}
