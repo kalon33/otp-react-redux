@@ -623,6 +623,10 @@ components:
       body: Une erreur inconnue s'est produite pendant la recherche.
       header: Échec de la recherche
     WALKING_BETTER_THAN_TRANSIT:
+      advisory: La marche est plus rapide que les transports pour ce trajet.
+      advisoryWithTime: >-
+        La marche est {minutes} min plus rapide que la meilleure option en
+        transports.
       body: >-
         Vous pouvez effectuer ce trajet plus rapidement sans prendre les
         transports.
