@@ -369,7 +369,7 @@ exports[`components > viewers > nearby view renders nothing on a blank page 1`] 
                 >
                   <styled.li>
                     <li
-                      className="sc-edoYdd dUlBtg"
+                      className="sc-edoYdd gSYpBZ"
                     >
                       <Icon
                         Icon={
