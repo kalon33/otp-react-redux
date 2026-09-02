@@ -69,6 +69,10 @@ export interface TripProgress {
   // True while turn announcements are settling after a rejoin/projection jump
   // (see selectCueForNavigation) — the cue itself stays current and passive.
   turnAnnouncementsHeld?: boolean
+  // True when distanceToNextTurn is a straight line from the rider's raw fix
+  // to the turn rather than a distance along the route: the rider is off the
+  // corridor, so there is no route under them to measure along.
+  turnDistanceIsDirect?: boolean
   // Seconds of estimated wait at next stop (walking legs only)
   waitTimeAtStop?: number
 }
@@ -542,21 +546,30 @@ function legacyStopEstimate(
  * `isOnRoute` defaults to true so legacy callers keep today's behavior; pass
  * the real route-match verdict to get honest guidance. Off the route the
  * nearest-point projection is a fiction (on 7/29 it swept past three turns
- * while the rider rode a parallel street), so no turn fields come back at all
- * — not even the "Continue to X" filler, which is exactly the stale line the
- * rider shouldn't see while off the plan. The deviation toast and the quiet
- * replan own that state.
+ * while the rider rode a parallel street), so the along-route figures are
+ * never quoted and the "Continue to X" filler is suppressed — that stale line
+ * is exactly what the rider shouldn't see while off the plan.
+ *
+ * The TURN itself is not suppressed, though, when `riderPosition` is supplied:
+ * `selectCueForNavigation` holds the turn the rider is nearest to and measures
+ * it as a straight line from their own fix, flagged `turnDistanceIsDirect` so
+ * consumers can say so. Going blank instead is what lost the 2026-09-01
+ * `LEFT East 32nd Street` cue for the whole 16 s excursion in which the rider
+ * rode up to that very turn. The deviation toast and the quiet replan still
+ * own the "you are off the plan" message.
  */
 export function getWalkingInstruction(
   leg: Leg,
   progressInLeg: number,
-  isOnRoute = true
+  isOnRoute = true,
+  riderPosition?: LatLngArray | null
 ): {
   distanceToNextTurn?: number
   followingTurnCue?: StepCue
   nextInstruction?: string
   nextTurnCue?: StepCue
   turnAnnouncementsHeld?: boolean
+  turnDistanceIsDirect?: boolean
 } {
   if (leg.mode !== 'WALK' && leg.mode !== 'BICYCLE') {
     return {}
@@ -564,12 +577,13 @@ export function getWalkingInstruction(
 
   // Real turn-by-turn when the leg carries usable steps. Always consulted so
   // the per-leg cursor sees every tick, including off-route ones.
-  const { announceHold, cue, distanceToNextTurn, following } =
-    selectCueForNavigation(leg, progressInLeg, isOnRoute)
-
-  if (!isOnRoute) {
-    return {}
-  }
+  const {
+    announceHold,
+    cue,
+    distanceToNextTurn,
+    following,
+    turnDistanceIsDirect
+  } = selectCueForNavigation(leg, progressInLeg, isOnRoute, riderPosition)
 
   if (cue) {
     return {
@@ -577,8 +591,16 @@ export function getWalkingInstruction(
       followingTurnCue: following,
       nextInstruction: cue.instruction,
       nextTurnCue: cue,
-      turnAnnouncementsHeld: announceHold
+      turnAnnouncementsHeld: announceHold,
+      turnDistanceIsDirect
     }
+  }
+
+  // Off the corridor with no held turn (no steps, no position, or every turn
+  // behind the rider): the along-route remainder below would be measured on a
+  // projection the rider isn't on, so say nothing.
+  if (!isOnRoute) {
+    return {}
   }
 
   // No steps (OTP omits them for some legs), or every turn is behind the rider
@@ -811,7 +833,8 @@ export function calculateTripProgress(
   const walkingInfo = getWalkingInstruction(
     currentLeg,
     progressInCurrentLeg,
-    routeMatch?.isOnRoute ?? false
+    routeMatch?.isOnRoute ?? false,
+    riderPosition
   )
 
   // Get upcoming transit timing

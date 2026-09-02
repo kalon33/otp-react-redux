@@ -31,6 +31,13 @@ import fixture from '../../../lib/util/go-mode/replay/fixtures/orange-line-0729.
  * checkUpcomingTurn — and pins what an honest navigator must do with this
  * exact data. Against the pre-fix logic these assertions fail; that is the
  * point of the test.
+ *
+ * Off-corridor ticks are no longer silent (2026-09-01 ride 1 lost a 300 m turn
+ * to that silence — turn-off-corridor-0901), so the guard that matters here is
+ * the convergence one: the rider on the parallel street is riding AWAY from
+ * 822/1003 m, never towards them, so those turns still earn no announcement.
+ * "Announces nothing at all on deviated ticks" holds on this data for that
+ * reason, not because the code has nothing to say.
  */
 
 // Leg 0's window: departure through the ride to the boarding stop. 28 minutes
@@ -111,7 +118,14 @@ describe('util > go-mode > turn honesty on the 7/29 ride', () => {
         match,
         undefined,
         undefined,
-        fix.speed
+        fix.speed,
+        null,
+        null,
+        // The raw fix, as the live tick supplies it. Off the corridor this is
+        // now the only thing turn guidance has to measure with (a held turn,
+        // straight-line to the corner — see selectOffRouteCue), so leaving it
+        // out would exempt this ride from exactly the path it exists to guard.
+        [fix.lat, fix.lon]
       )
       const event = checkUpcomingTurn(progress, leg0, sentNotifications)
       if (!event) return
