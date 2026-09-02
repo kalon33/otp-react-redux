@@ -96,6 +96,7 @@ import {
   legGeometryUsable
 } from '../util/go-mode/geometry-trust'
 import type { TimedSimulationPoint } from '../util/go-mode/geometry'
+import { resumedTransitionedLegIndex } from '../util/go-mode/session-persistence'
 import { createTripSession } from '../util/go-mode/trip-session'
 import type { TripSession } from '../util/go-mode/trip-session'
 import type { LiveLegTime, RidingState } from '../util/go-mode/types'
@@ -963,6 +964,19 @@ export function startGoModeTracking(
 }
 
 /**
+ * The leg the trip has actually TRANSITIONED onto, for the session save.
+ *
+ * `session` is module-private and rebuilt by every page load, so this field
+ * cannot ride in the store and cannot be read from `session-persistence`
+ * either — that would point the dependency the wrong way round. `main.js`
+ * already owns both sides of the save (it hands across the debug session id
+ * for the same reason), so it reads it here and passes it in. See 6.30.
+ */
+export function currentTransitionedLegIndex(): number | null {
+  return session.lastTransitionedLegIndex
+}
+
+/**
  * Pick a saved trip back up after the page went away and came back.
  *
  * create-otp-reducer has already rebuilt the trip from storage by the time this
@@ -987,6 +1001,41 @@ export function resumeGoModeTrip() {
       })
     )
     await dispatch(startGoModeTracking(goMode.activeItinerary))
+
+    // Put the transition guard back — AFTER startGoModeTracking, which clears
+    // it (it is the itinerary-swap reset, and a resume comes through the same
+    // door). Left at null, `previousLegIndex` reads 0 on the first resumed
+    // tick, `routeMatch.legIndex !== null` is trivially true, and the trip
+    // announces a TRANSITION_LEG onto the leg the rider is already on: a leg
+    // change in the record that never physically happened, and one ride-watch
+    // reads as real (6.30).
+    //
+    // Suppressing the dispatch would have been the wrong fix. `advanceToLeg`
+    // is the ONLY place `startVehicleTracking` runs for a mid-trip transit
+    // leg, and `startGoModeTracking` arms it for leg 0 alone — so a resume
+    // that merely stopped transitioning would come back with no vehicle
+    // polling at all for the bus the rider is sitting on. Restore the guard
+    // and do that leg's arming explicitly.
+    const resumedLegIndex = resumedTransitionedLegIndex()
+    const legs = goMode.activeItinerary.legs || []
+    if (resumedLegIndex == null || !legs[resumedLegIndex]) return
+    session.lastTransitionedLegIndex = resumedLegIndex
+
+    // Never on a resumed ARRIVAL: there is no bus left to match, and this poll
+    // outlives the tick — arming it for a finished trip is what produced the
+    // 392 vehicle-position responses of the 2026-08-31 18:52 mount. Leg 0 is
+    // excluded because startGoModeTracking has already handled it, and
+    // re-arming would re-stamp transitLegEnteredAt for no reason.
+    const resumedLeg: any = legs[resumedLegIndex]
+    const resumedRouteId = getLegRouteId(resumedLeg)
+    if (
+      getState().otp?.goMode?.arrivedAt == null &&
+      resumedLegIndex > 0 &&
+      resumedLeg?.transitLeg &&
+      resumedRouteId
+    ) {
+      dispatch(startVehicleTracking(resumedRouteId))
+    }
   }
 }
 

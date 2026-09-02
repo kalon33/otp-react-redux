@@ -80,6 +80,16 @@ export interface GoModeSession {
   // continuing the first's ride — which is the one case where they should.
   debugSessionId?: string | null
   departureOverride: number | null
+  // The leg the trip has actually TRANSITIONED onto — `advanceToLeg`'s guard,
+  // which lives on the module-level trip session and so is rebuilt as null by
+  // a page load. Without it a re-mount reads `previousLegIndex` as 0
+  // (`actions/go-mode.ts:3953`), the first resumed tick sees
+  // `routeMatch.legIndex !== null` and dispatches a TRANSITION_LEG for the leg
+  // the rider is already riding — a leg change in the record that did not
+  // physically happen (6.30). The action is not merely noise: `advanceToLeg`
+  // is the only place `startVehicleTracking` runs for a mid-trip transit leg,
+  // so `resumeGoModeTrip` restores this AND re-arms vehicle tracking itself.
+  lastTransitionedLegIndex?: number | null
   // What the notifier has already said, re-keyed onto leg indexes so it can be
   // rebuilt on the other side of a re-mount. Its three latches live on the leg
   // OBJECT and so die with the page; see notification-service.
@@ -149,7 +159,12 @@ export function saveGoModeSession(
   // Passed in rather than imported: debug-log.js carries an `import.meta` Jest
   // cannot parse, and this module is unit-tested. main.js owns both and hands
   // the id across.
-  debugSessionId?: string | null
+  debugSessionId?: string | null,
+  // Likewise for the transition guard: it is a field on the module-level trip
+  // session that `actions/go-mode.ts` owns, and importing that here would
+  // point the dependency the wrong way round. main.js reads it and hands it
+  // across on the same subscriber tick as the id.
+  lastTransitionedLegIndex?: number | null
 ): void {
   if (!goMode?.isActive || !goMode.activeItinerary) return
 
@@ -161,6 +176,10 @@ export function saveGoModeSession(
   // that does not pass one cannot erase the link across a re-mount.
   const savedDebugSessionId =
     debugSessionId ?? lastLoaded?.debugSessionId ?? null
+  // Same rule for the transition guard, and for the same reason: a caller with
+  // nothing to offer must not erase what a previous save recorded.
+  const savedTransitionedLegIndex =
+    lastTransitionedLegIndex ?? lastLoaded?.lastTransitionedLegIndex ?? null
 
   const session: GoModeSession = {
     activeItinerary: goMode.activeItinerary,
@@ -169,6 +188,7 @@ export function saveGoModeSession(
     backgrounded: !!goMode.ui?.backgrounded,
     debugSessionId: savedDebugSessionId,
     departureOverride: goMode.departureOverride ?? null,
+    lastTransitionedLegIndex: savedTransitionedLegIndex,
     notificationLatches: captureNotificationLatches(
       goMode.activeItinerary?.legs
     ),
@@ -231,6 +251,24 @@ export function loadGoModeSession(): GoModeSession | null {
  */
 export function resumedDebugSessionId(): string | null {
   return lastLoaded?.debugSessionId ?? null
+}
+
+/**
+ * The leg the RESTORED trip had already transitioned onto, or null if nothing
+ * was restored (or the saved trip predates the field, in which case a resume
+ * behaves exactly as it did before).
+ *
+ * Same accessor pattern, and for the same reason as the id above: the reducer
+ * has consumed the session by the time `resumeGoModeTrip` runs, and reading
+ * storage again would not do — `loadGoModeSession` clears a stale session as a
+ * side effect, so a second read cannot tell "nothing saved" from "already
+ * consumed".
+ */
+export function resumedTransitionedLegIndex(): number | null {
+  const index = lastLoaded?.lastTransitionedLegIndex
+  return typeof index === 'number' && Number.isInteger(index) && index >= 0
+    ? index
+    : null
 }
 
 /** Drop the saved trip (explicit exit or completion) so it never resurrects. */

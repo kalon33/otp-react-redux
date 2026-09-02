@@ -8,7 +8,6 @@ import {
   SliderSelector,
   Styled as TripFormStyled
 } from '@opentripplanner/trip-form'
-import { ArrowLeft } from '@styled-icons/fa-solid/ArrowLeft'
 import { Check } from '@styled-icons/boxicons-regular'
 import { connect } from 'react-redux'
 import { decodeQueryParams, DelimitedArrayParam } from 'serialize-query-params'
@@ -105,11 +104,6 @@ const GlobalSettingsContainer = styled.div`
   margin-bottom: 2em;
 
   ${styledCheckboxCss}
-`
-
-const CloseButton = styled.button`
-  background: transparent;
-  border: none;
 `
 
 const HeaderContainer = styled.div`

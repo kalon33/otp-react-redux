@@ -361,7 +361,8 @@ async function main() {
       `settled-empty reroute), ${offRoute.deviationCount} deviation ` +
       'notification(s) (never more than one), single-tick GPS glitches ' +
       'ignored, no search screen, no recents pollution, and deviated ticks ' +
-      'stayed turn-silent (frozen wrist card).'
+      'stayed turn-silent (announced nothing; any wrist card was the held ' +
+      'off-corridor cue, labelled direct, written once).'
   )
 
   // ------------------------------------------------------------------------
@@ -685,10 +686,24 @@ async function main() {
 //
 // 7/29: "The bike turn notification announces turns after you take them." Off
 // the planned line the nearest-point projection is a fiction, so deviated
-// ticks must produce NO turn guidance: no UPCOMING_TURN / TURN_ALERT
-// notifications, no sticky turn-card (id 1) writes — and no id 1 cancels
-// either. The card FREEZES while deviated (a 100 m-threshold flap must not
-// churn cancel→repost on the wrist); boarding and trip end still clear it.
+// ticks must ANNOUNCE nothing: no UPCOMING_TURN / TURN_ALERT notifications.
+//
+// This block used to also demand the sticky turn card (id 1) stay blank while
+// deviated. `gomode/off-corridor` (6.20) deliberately changed that: rather
+// than sweeping past turns on a fictional projection, `offRouteCueResult`
+// (turn-by-turn.ts:481-538) HOLDS the nearest real cue, measures it as a
+// straight line from the rider's own fix, and flags it `turnDistanceIsDirect`
+// so the UI says "direct". A held cue is a legitimate card write, so the
+// blank-card clause was contradicting shipped behaviour — and flaking on
+// geometry, since whether a held cue is in range depends on where the hop
+// lands (6.41). What survives, and is what this block now asserts:
+//   1. no ANNOUNCEMENT fires while deviated;
+//   2. no churn — no id 1 cancels, and no card title written twice (a
+//      100 m-threshold flap must not cancel→repost on the wrist);
+//   3. any card written while deviated is labelled direct
+//      (`progress.turnDistanceIsDirect === true`), i.e. it is the held
+//      off-corridor cue and not a projection-derived one.
+// Boarding and trip end still clear the card.
 //
 // The rejoin-side guarantees (2-tick announcement hold, no swept-cue burst)
 // are pinned offline on real 7/29 data in
@@ -800,6 +815,13 @@ async function verifyTurnSilenceWhileDeviated(page, offAt) {
       return window.store.dispatch(action)
     }
     const getState = () => window.store.getState()
+    // Card traffic ATTRIBUTED to a deviated tick, with the label the app was
+    // showing when it happened. Counting the whole push log the way this block
+    // used to also swept up the on-route writes the real GPS watcher makes
+    // while the previous phase's quiet replan settles.
+    const stickyEvents = []
+    // Ignore anything already in the log from the settle wait above.
+    let cursor = (window.__pushLog || []).length
     for (let i = 0; i < 6; i++) {
       // Stop counting once the quiet replan swaps the itinerary: a fresh leg
       // from the rider's own position puts them back ON route, where turn
@@ -826,21 +848,50 @@ async function verifyTurnSilenceWhileDeviated(page, offAt) {
       // (The deviation smoother takes the smaller of this tick's and last
       // tick's distance, so the first tick after the hop still reads on-route —
       // by design, and correctly not counted.)
-      if (getState().otp.goMode.routeMatch?.isOnRoute === false) {
-        deviatedTicks += 1
-      }
+      const deviatedNow =
+        getState().otp.goMode.routeMatch?.isOnRoute === false ||
+        getState().otp.goMode.progress?.status === 'deviated'
+      if (deviatedNow) deviatedTicks += 1
+      // sendPush/cancelPush are async, so the bridge records after the thunk
+      // returns; read the log once the tick has had time to land.
       await new Promise((resolve) => setTimeout(resolve, 150))
+      const after = getState().otp.goMode
+      const fresh = (window.__pushLog || []).slice(cursor)
+      cursor += fresh.length
+      fresh
+        .filter((p) => p.id === 1)
+        .forEach((p) => {
+          stickyEvents.push({
+            // A write is charged to this tick's judgement, taking either the
+            // pre- or post-sleep reading as deviated so a mid-sleep watcher
+            // tick cannot launder one.
+            deviated:
+              deviatedNow ||
+              after.routeMatch?.isOnRoute === false ||
+              after.progress?.status === 'deviated',
+            direct: after.progress?.turnDistanceIsDirect === true,
+            kind: p.kind,
+            title: p.title ?? null
+          })
+        })
     }
-    const pushLog = window.__pushLog || []
+    const deviatedWrites = stickyEvents.filter(
+      (e) => e.deviated && e.kind === 'schedule'
+    )
+    const titles = deviatedWrites.map((e) => e.title)
     return {
       deviatedTicks,
-      stickyCancels: pushLog.filter((p) => p.kind === 'cancel' && p.id === 1)
-        .length,
-      stickyWrites: pushLog.filter((p) => p.kind === 'schedule' && p.id === 1)
-        .length,
+      repeatedTitles: titles.filter((t, i) => titles.indexOf(t) !== i),
+      stickyCancels: stickyEvents.filter(
+        (e) => e.deviated && e.kind === 'cancel'
+      ).length,
+      stickyWrites: deviatedWrites.length,
       swapped,
       ticksCounted,
-      turnNotifications
+      turnNotifications,
+      undirectedWrites: deviatedWrites
+        .filter((e) => !e.direct)
+        .map((e) => e.title)
     }
   }, deviateAt)
 
@@ -849,7 +900,8 @@ async function verifyTurnSilenceWhileDeviated(page, offAt) {
       'tick(s) off route' +
       `${result.swapped ? ' (stopped at quiet-replan swap)' : ''}: ` +
       `${result.turnNotifications} turn notification(s), ` +
-      `${result.stickyWrites} sticky-card write(s), ` +
+      `${result.stickyWrites} deviated sticky-card write(s) ` +
+      `(${result.undirectedWrites.length} not labelled direct), ` +
       `${result.stickyCancels} sticky-card cancel(s)`
   )
   // Say so rather than passing on an assertion that never ran. This block used
@@ -860,21 +912,41 @@ async function verifyTurnSilenceWhileDeviated(page, offAt) {
         'exercised — the assertion would have passed vacuously'
     )
   }
+  // 1. Silence.
   if (result.turnNotifications > 0) {
     throw new Error(
       `FAIL: ${result.turnNotifications} turn notification(s) fired while ` +
         'deviated — off-route projections must announce nothing'
     )
   }
-  if (result.stickyWrites > 0) {
-    throw new Error(
-      `FAIL: ${result.stickyWrites} sticky turn-card write(s) while deviated`
-    )
-  }
+  // 2. No churn.
   if (result.stickyCancels > 0) {
     throw new Error(
       `FAIL: ${result.stickyCancels} sticky turn-card cancel(s) while ` +
         'deviated — the card must freeze, not churn'
+    )
+  }
+  if (result.repeatedTitles.length > 0) {
+    throw new Error(
+      'FAIL: sticky turn card re-posted while deviated ' +
+        `(${result.repeatedTitles.join(', ')}) — one write per held cue, ` +
+        'not one per tick'
+    )
+  }
+  // 3. Whatever IS on the card while deviated is the held off-corridor cue,
+  //    measured directly from the rider's own fix.
+  if (result.undirectedWrites.length > 0) {
+    throw new Error(
+      `FAIL: ${result.undirectedWrites.length} sticky turn-card write(s) ` +
+        'while deviated were not labelled direct ' +
+        `(${result.undirectedWrites.join(', ')}) — an off-route card may ` +
+        'only carry a held cue with turnDistanceIsDirect'
+    )
+  }
+  if (result.stickyWrites === 0) {
+    console.log(
+      '[turn-silence] no held cue was in range at this hop, so the card ' +
+        'stayed blank — silence and no-churn still asserted'
     )
   }
 
