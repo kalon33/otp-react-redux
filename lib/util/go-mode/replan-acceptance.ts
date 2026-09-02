@@ -1,5 +1,13 @@
 import type { Itinerary, Leg } from '@opentripplanner/types'
 
+import {
+  hasTokenTransitHop,
+  signatureWithoutLastTransitLeg,
+  TOKEN_TRANSIT_HOP_METERS,
+  TOKEN_TRANSIT_HOP_TOLERANCE_MS,
+  transitRouteSignature
+} from '../itinerary'
+
 import { calculateDistance } from './position-matching'
 
 /**
@@ -78,11 +86,18 @@ export interface AutoReplanContext {
    * nothing to say about it.
    */
   riding?: boolean
+  /** Override for TOKEN_TRANSIT_HOP_METERS (config itinerary.tokenTransitHopMeters). */
+  tokenHopMaxMeters?: number
+  /** Override for TOKEN_TRANSIT_HOP_TOLERANCE_MS. */
+  tokenHopToleranceMs?: number
 }
 
 export type AutoReplanVerdict =
   | { accept: true }
-  | { accept: false; reason: 'arrives-later' | 'origin-behind-rider' }
+  | {
+      accept: false
+      reason: 'arrives-later' | 'origin-behind-rider' | 'token-transit-hop'
+    }
 
 function arrivalMs(itinerary: Itinerary | null | undefined): number | null {
   const end = Number(itinerary?.endTime)
@@ -111,6 +126,121 @@ function originIsBehindRider(
       Number(from.lat),
       Number(from.lon)
     ) > AUTO_REPLAN_ORIGIN_MAX_M
+  )
+}
+
+/**
+ * The route id of an itinerary's FIRST transit leg, read the way
+ * pickSameRouteReroute (util/state) reads it — same accessor, so "boards the
+ * route the rider chose" means the same thing on both sides of the swap.
+ */
+function firstTransitRouteId(itinerary: Itinerary): string | null {
+  const leg = transitLegs(itinerary)[0] as any
+  return leg?.route?.gtfsId || leg?.route?.id || leg?.routeId || null
+}
+
+/** The itinerary's transit legs, in order. Null-tolerant: an auto-replan
+ * candidate can arrive with no legs at all. */
+function transitLegs(itinerary: Itinerary): Leg[] {
+  return (itinerary.legs || []).filter((leg) => leg.transitLeg)
+}
+
+/**
+ * Is `other` the same journey as `itinerary` minus its closing token hop, and
+ * does it land soon enough to be the better answer?
+ */
+function isHopFreeSiblingOf(
+  other: Itinerary,
+  itinerary: Itinerary,
+  toleranceMs: number
+): boolean {
+  if (other === itinerary) return false
+  if (
+    transitRouteSignature(other) !== signatureWithoutLastTransitLeg(itinerary)
+  )
+    return false
+  const otherEnd = Number(other.endTime)
+  const end = Number(itinerary.endTime)
+  if (!Number.isFinite(otherEnd) || !Number.isFinite(end)) return false
+  return otherEnd <= end + toleranceMs
+}
+
+/**
+ * The reroute half of the 602 m bus leg.
+ *
+ * `demoteTokenTransitHops` (util/itinerary) reorders what the rider is SHOWN.
+ * It has nothing to say about an automatic swap, and the leg the rider caught
+ * on 2026-08-31 — board 98th St Gate C, ride the 539 **602 m** to 98th &
+ * Dupont, then cycle 1743 m home — survived four replans precisely there:
+ * `keepRouteId` pins the route they chose, the picker takes the earliest
+ * departure on it, and nothing ever asked whether the leg being kept was worth
+ * keeping. The same OTP response carried `Orange Line > bike 3970 m`, the same
+ * trip minus the hop, arriving 3m05s later.
+ *
+ * So: given the candidate a picker chose and the pool it chose from, hand back
+ * the hop-free version of that journey when the pool contains one. Never a
+ * different trip — same transit shape minus the final hop, arriving within
+ * `toleranceMs`. `requireRouteId` keeps the rider's route: a sibling that does
+ * not board it is not offered, so an itinerary whose token hop IS its only
+ * transit leg is left exactly as it was rather than silently downgraded to
+ * biking the whole way.
+ */
+export function pickHopFreeSibling<T extends Itinerary>(
+  chosen: T | null | undefined,
+  alternatives: T[] | null | undefined,
+  {
+    maxHopMeters = TOKEN_TRANSIT_HOP_METERS,
+    requireRouteId = null,
+    toleranceMs = TOKEN_TRANSIT_HOP_TOLERANCE_MS
+  }: {
+    maxHopMeters?: number
+    requireRouteId?: string | null
+    toleranceMs?: number
+  } = {}
+): T | null {
+  if (!chosen) return chosen ?? null
+  if (!hasTokenTransitHop(chosen, maxHopMeters)) return chosen
+  const siblings = (alternatives || []).filter(
+    (other) =>
+      isHopFreeSiblingOf(other, chosen, toleranceMs) &&
+      (!requireRouteId || firstTransitRouteId(other) === requireRouteId)
+  )
+  if (!siblings.length) return chosen
+  // Earliest arrival among them — the same metric the demotion uses to decide
+  // the hop bought the rider nothing.
+  return siblings.reduce((best, other) =>
+    Number(other.endTime) < Number(best.endTime) ? other : best
+  )
+}
+
+/**
+ * Would applying this candidate ADD a token hop to the trip the rider already
+ * has — the same journey, plus a closing bus leg that buys them nothing?
+ *
+ * The 08-31 hop arrived three minutes EARLIER than its hop-free sibling, so
+ * acceptAutoReplan's arrival check waves it straight through: arriving sooner
+ * is exactly what a 602 m ride between two bike legs buys, and it is not worth
+ * having.
+ *
+ * Answers false when the current plan is dead — a rider who has missed their
+ * bus needs A plan, and refusing this one leaves them with none.
+ */
+function addsATokenHopTo(
+  candidate: Itinerary,
+  current: Itinerary | null | undefined,
+  context: AutoReplanContext
+): boolean {
+  if (context.currentPlanIsDead || !current) return false
+  return (
+    hasTokenTransitHop(
+      candidate,
+      context.tokenHopMaxMeters ?? TOKEN_TRANSIT_HOP_METERS
+    ) &&
+    isHopFreeSiblingOf(
+      current,
+      candidate,
+      context.tokenHopToleranceMs ?? TOKEN_TRANSIT_HOP_TOLERANCE_MS
+    )
   )
 }
 
@@ -149,6 +279,12 @@ export function acceptAutoReplan(
     originIsBehindRider(candidate, context.position)
   ) {
     return { accept: false, reason: 'origin-behind-rider' }
+  }
+
+  // 3. Token hop: never swap the plan in hand for the same journey PLUS a
+  // pointless closing bus leg.
+  if (addsATokenHopTo(candidate, current, context)) {
+    return { accept: false, reason: 'token-transit-hop' }
   }
 
   return { accept: true }

@@ -1,5 +1,7 @@
 import type { Itinerary } from '@opentripplanner/types'
 
+import { demoteTokenTransitHopsBy } from '../itinerary'
+
 import { calculateDistance } from './position-matching'
 import { getLegRouteId } from './departure-anchor'
 
@@ -496,6 +498,73 @@ export interface AlightCandidateResult {
   stopName: string
 }
 
+/**
+ * How long the optimizer waits for ALL candidate plans before ranking whatever
+ * came back.
+ *
+ * The per-request deadline in actions/api (GO_MODE_FETCH_TIMEOUT_MS, 12 s) is
+ * the first line: it makes each candidate settle. This is the second, and it
+ * exists because the first one is a promise about one fetch and this is a
+ * promise to the rider about the whole answer. Before 2026-09-02 there was
+ * neither: `Promise.all` over five candidate plans resolved only when the last
+ * one did, and on 2026-08-31 three of the five never did — the rider watched an
+ * empty panel for 9m11s (17:22:25 to CLEAR_ONBOARD at 17:31:36) and no state
+ * anywhere said the search had failed.
+ *
+ * 15 s, comfortably past the per-request deadline so a straggler is normally
+ * killed by its own timeout and this never fires. It is the backstop for the
+ * failure the 08-31 log actually shows: a request that settles by no route at
+ * all.
+ */
+export const ONBOARD_CANDIDATE_SETTLE_MS = 15000
+
+/**
+ * Wait for candidate plans, but not forever: whatever has settled by the
+ * deadline is returned, and anything still outstanding is replaced by
+ * `onTimeout(index)` — for the optimizer, a result marked `error`, which
+ * rankAlightOptions already skips.
+ *
+ * Two of five plans are a worse answer than five of five and a far better one
+ * than no answer, which is what waiting for all five bought on 08-31.
+ */
+export async function settleCandidatePlans<T>(
+  plans: Array<Promise<T>>,
+  timeoutMs: number,
+  onTimeout: (index: number) => T
+): Promise<T[]> {
+  if (!plans.length) return []
+  const settled: Array<{ done: boolean; value?: T }> = plans.map(() => ({
+    done: false
+  }))
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let timer: any = null
+  const tracked = plans.map((plan, index) =>
+    plan.then(
+      (value) => {
+        settled[index] = { done: true, value }
+      },
+      () => {
+        // A rejected plan is a failed candidate, not a failed optimize. The
+        // fetch layer resolves rather than rejects, so this is belt and braces.
+        settled[index] = { done: true, value: onTimeout(index) }
+      }
+    )
+  )
+  const deadline =
+    timeoutMs > 0
+      ? new Promise<void>((resolve) => {
+          timer = setTimeout(resolve, timeoutMs)
+        })
+      : null
+  await (deadline
+    ? Promise.race([Promise.all(tracked), deadline])
+    : Promise.all(tracked))
+  if (timer) clearTimeout(timer)
+  return settled.map((entry, index) =>
+    entry.done ? (entry.value as T) : onTimeout(index)
+  )
+}
+
 /** The chosen best stop to get off, with its remaining-journey itinerary. */
 export interface AlightOption {
   busArrivalEpoch: number
@@ -657,11 +726,15 @@ export function rankAlightOptions(
     keepRouteId = null,
     limit = 5,
     nowMs = null,
+    tokenHopMaxMeters,
+    tokenHopToleranceMs,
     walkOnlyMax = 1200
   }: {
     keepRouteId?: string | null
     limit?: number
     nowMs?: number | null
+    tokenHopMaxMeters?: number
+    tokenHopToleranceMs?: number
     walkOnlyMax?: number
   } = {}
 ): AlightOption[] {
@@ -684,6 +757,18 @@ export function rankAlightOptions(
 
   scored.sort((a, b) => compareAlightOptions(a, b, keepRouteId))
 
+  // An onward plan that ends with a token bus hop does not get to sit above the
+  // same journey without it (4.2). Applied BEFORE the dedupe and the cap, so a
+  // hop-free sibling that the arrival sort had pushed past `limit` gets its
+  // place back rather than being cut and then not found. Reorders only —
+  // keepRouteId's held slot below still works off the full deduped list, so the
+  // rider's own route can never be demoted out of the answer.
+  const ordered = demoteTokenTransitHopsBy(
+    scored,
+    (option) => option.itinerary,
+    { maxHopMeters: tokenHopMaxMeters, toleranceMs: tokenHopToleranceMs }
+  )
+
   const strip = (option: AlightOption & { arrival: number }): AlightOption => ({
     busArrivalEpoch: option.busArrivalEpoch,
     itinerary: option.itinerary,
@@ -695,7 +780,7 @@ export function rankAlightOptions(
   const seen = new Set<string>()
   const ranked: AlightOption[] = []
   const deduped: Array<AlightOption & { arrival: number }> = []
-  for (const option of scored) {
+  for (const option of ordered) {
     const sig = journeySignature(option.stopId, option.itinerary)
     if (seen.has(sig)) continue
     seen.add(sig)
