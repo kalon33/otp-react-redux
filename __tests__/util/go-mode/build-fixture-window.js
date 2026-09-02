@@ -6,7 +6,8 @@ import path from 'path'
 import {
   parseArgs,
   parseTime,
-  readAllEntries
+  readAllEntries,
+  splitRides
 } from '../../../lib/util/go-mode/replay/build-fixture'
 
 /**
@@ -20,6 +21,15 @@ import {
  * not have helped: `beginGoMode` re-dispatches it on every itinerary swap, so
  * that session carries ELEVEN of them for two rides. An instant is the only
  * unambiguous cut, which is why the flags are --since/--until.
+ *
+ * SO THE DEFAULT IS THE LAST RIDE. --since/--until landed first and the default
+ * did not follow them: on 2026-09-01 a wrap-up ran `--session mtin0l9c-yieexg`
+ * with no window and got a 15.5 MB fixture spanning 13:26:27Z -> 15:48:47Z --
+ * rides 1 and 2 -- which silently excluded the ride being reported, whose own
+ * window opens three seconds later at 15:48:50Z. The banner said
+ * `window: (none) .. (none)`. splitRides is what makes a default possible: a
+ * START_GO_MODE arriving while NO trip is open is a ride boundary; one arriving
+ * while a ride is already open is the itinerary swap it has always been.
  *
  * The de-duplication guarded here is a separate defect found the same day: the
  * debug-log client re-POSTs a batch whose delivery it could not confirm, so
@@ -251,6 +261,179 @@ describe('util > go-mode > build-fixture windowing', () => {
       expect(fixture.itinerarySwaps[0].itinerary.startTime).not.toBe(
         fixture.itinerary.startTime
       )
+    })
+  })
+
+  describe('splitRides — where one ride ends and the next begins', () => {
+    const startEvt = (tIso) =>
+      entry('START_GO_MODE', tIso, {
+        itinerary: itinerary(tIso, tIso)
+      })
+    const stopEvt = (tIso) => entry('STOP_GO_MODE', tIso, null)
+
+    it('cuts the two rides apart and does not cut on a mid-ride swap', () => {
+      const rides = splitRides([
+        startEvt('2026-08-28T14:00:00Z'),
+        stopEvt('2026-08-28T14:20:00Z'),
+        startEvt('2026-08-28T15:30:00Z'),
+        // The swap: START_GO_MODE again with a trip already open.
+        startEvt('2026-08-28T15:40:00Z'),
+        stopEvt('2026-08-28T15:50:00Z')
+      ])
+      expect(rides).toHaveLength(2)
+      expect(rides[1].startMs).toBe(T('2026-08-28T15:30:00Z'))
+      expect(rides[1].endMs).toBe(T('2026-08-28T15:50:00Z'))
+    })
+
+    it('opens a ride on a RESUME_GO_MODE, which is all a resumed ride has', () => {
+      // The 2026-08-31 18:52 mounts emitted no START_GO_MODE at all, so the
+      // 104-minute session had no findable beginning and was unreplayable.
+      const rides = splitRides([
+        entry('RESUME_GO_MODE', '2026-08-31T23:52:55Z', {
+          itinerary: itinerary('2026-08-31T23:52:55Z', '2026-09-01T00:10:00Z'),
+          resumed: true
+        }),
+        stopEvt('2026-09-01T01:36:52Z')
+      ])
+      expect(rides).toHaveLength(1)
+      expect(rides[0].startEvt.type).toBe('RESUME_GO_MODE')
+    })
+
+    it('closes a ride whose stream just stopped on the last entry it has', () => {
+      const rides = splitRides([
+        startEvt('2026-08-28T15:30:00Z'),
+        fix('2026-08-28T15:45:00Z', 44.96)
+      ])
+      expect(rides).toHaveLength(1)
+      expect(rides[0].endEvt).toBeNull()
+      expect(rides[0].endMs).toBe(T('2026-08-28T15:45:00Z'))
+    })
+  })
+
+  describe('--ride / --all', () => {
+    it('defaults to no ride chosen, which main() reads as the last one', () => {
+      expect(
+        parseArgs(['node', 'build-fixture.js', '--latest']).ride
+      ).toBeNull()
+      expect(parseArgs(['node', 'build-fixture.js', '--latest']).all).toBe(
+        false
+      )
+    })
+
+    it('takes a 1-based ride number', () => {
+      expect(parseArgs(['node', 'build-fixture.js', '--ride', '2']).ride).toBe(
+        2
+      )
+    })
+
+    it('refuses a ride 0, which would silently build ride 1', () => {
+      expect(() =>
+        parseArgs(['node', 'build-fixture.js', '--ride', '0'])
+      ).toThrow(/1-based/)
+    })
+
+    it('refuses --all and --ride together', () => {
+      expect(() =>
+        parseArgs(['node', 'build-fixture.js', '--all', '--ride', '1'])
+      ).toThrow(/pick one/)
+    })
+  })
+
+  describe('the default, un-windowed, on a two-ride session', () => {
+    let dir
+    let out
+    let banner
+    beforeAll(() => {
+      dir = writeLogDir()
+      out = path.join(dir, 'defaulted.json')
+      banner = execFileSync(
+        process.execPath,
+        [
+          BUILDER,
+          '--session',
+          'one-session-two-rides',
+          '--label',
+          'defaulted',
+          '--logs-dir',
+          dir,
+          '--out',
+          out
+        ],
+        { encoding: 'utf8' }
+      )
+    })
+    afterAll(() => fs.rmSync(dir, { force: true, recursive: true }))
+
+    it('builds the LAST ride, not the whole session', () => {
+      const fixture = JSON.parse(fs.readFileSync(out, 'utf8'))
+      // Before 2026-09-02 this bracketed 14:00:00 -> 15:50:00: both rides and
+      // the parked hour between them, under a banner claiming no window at all.
+      expect(fixture.meta.startMs).toBe(T('2026-08-28T15:30:00Z'))
+      expect(fixture.meta.endMs).toBe(T('2026-08-28T15:50:00Z'))
+      expect(fixture.gpsTrack).toHaveLength(2)
+    })
+
+    it('names which ride it took and which it skipped', () => {
+      expect(banner).toMatch(/ride:\s+2 of 2/)
+      expect(banner).toMatch(/skipped ride 1/)
+      expect(banner).toMatch(/--ride 1 to build it/)
+    })
+
+    it('records the ride number in meta, so a fixture on disk can be checked', () => {
+      const fixture = JSON.parse(fs.readFileSync(out, 'utf8'))
+      expect(fixture.meta.ride).toBe(2)
+      expect(fixture.meta.rideCount).toBe(2)
+      expect(fixture.meta.resumed).toBe(false)
+    })
+  })
+
+  describe('--ride 1 and --all', () => {
+    let dir
+    beforeAll(() => {
+      dir = writeLogDir()
+    })
+    afterAll(() => fs.rmSync(dir, { force: true, recursive: true }))
+
+    const build = (out, extra) =>
+      execFileSync(
+        process.execPath,
+        [
+          BUILDER,
+          '--session',
+          'one-session-two-rides',
+          '--label',
+          path.basename(out, '.json'),
+          '--logs-dir',
+          dir,
+          '--out',
+          out,
+          ...extra
+        ],
+        { encoding: 'utf8' }
+      )
+
+    it('--ride 1 builds the morning ride and nothing after it', () => {
+      const out = path.join(dir, 'first.json')
+      build(out, ['--ride', '1'])
+      const fixture = JSON.parse(fs.readFileSync(out, 'utf8'))
+      expect(fixture.meta.startMs).toBe(T('2026-08-28T14:00:00Z'))
+      expect(fixture.meta.endMs).toBe(T('2026-08-28T14:20:00Z'))
+      expect(fixture.gpsTrack).toHaveLength(1)
+    })
+
+    it('--all restores the old whole-session bracket, on request', () => {
+      const out = path.join(dir, 'everything.json')
+      const banner = build(out, ['--all'])
+      const fixture = JSON.parse(fs.readFileSync(out, 'utf8'))
+      expect(fixture.meta.startMs).toBe(T('2026-08-28T14:00:00Z'))
+      expect(fixture.meta.endMs).toBe(T('2026-08-28T15:50:00Z'))
+      expect(fixture.gpsTrack).toHaveLength(3)
+      expect(banner).toMatch(/ride:\s+ALL 2/)
+    })
+
+    it('refuses a ride number the session does not have', () => {
+      const out = path.join(dir, 'nope.json')
+      expect(() => build(out, ['--ride', '9'])).toThrow()
     })
   })
 })

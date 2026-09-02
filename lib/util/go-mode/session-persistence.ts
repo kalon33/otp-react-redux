@@ -63,6 +63,17 @@ export interface GoModeSession {
   // Whether the rider had stepped out to the planner (ReturnToTripBanner
   // showing) — restored so a reload doesn't force the Go Mode screen back.
   backgrounded?: boolean
+  // The debug-log session id this trip has been recording under. Saved so a
+  // re-mount can carry on writing under the SAME id instead of minting a new
+  // one: ride-watch keys its per-trip state and its two-page budget on the
+  // session id, so one ride arriving as two ids is one ride's evidence split
+  // in half and one ride's budget spent twice (2026-08-31 18:52,
+  // mthw7svy-s4msqc then mthw8o2w-i8z1i6, 41 s apart, same trip).
+  //
+  // Scoped to the trip on purpose. It is adopted only when a trip is actually
+  // restored, so two page loads share an id only when the second is genuinely
+  // continuing the first's ride — which is the one case where they should.
+  debugSessionId?: string | null
   departureOverride: number | null
   originalFrom: any | null
   // Sticky "rider is aboard this vehicle" fact — kept across reloads so a
@@ -77,6 +88,13 @@ export interface GoModeSession {
 // Stable across saves within one page session; reset on clear. Initialized
 // lazily from any already-saved session so reloads keep the original startedAt.
 let sessionStartedAt: number | null = null
+
+// The session loadGoModeSession last handed back, remembered so main.js can ask
+// what the RESTORED trip was recording under after the reducer has already
+// consumed it. Reading storage a second time would not do: loadGoModeSession
+// clears a stale session as a side effect, so the second read would see nothing
+// and could not tell that from "there was no id".
+let lastLoaded: GoModeSession | null = null
 
 /**
  * Return a JSON-safe deep copy with any circular references dropped. Real OTP
@@ -104,19 +122,30 @@ function stripCycles<T>(value: T): T {
  * locked-in itinerary (the onboard "I'm on the bus" discovery state has no
  * itinerary yet and is not worth resuming).
  */
-export function saveGoModeSession(goMode: GoModeState): void {
+export function saveGoModeSession(
+  goMode: GoModeState,
+  // Passed in rather than imported: debug-log.js carries an `import.meta` Jest
+  // cannot parse, and this module is unit-tested. main.js owns both and hands
+  // the id across.
+  debugSessionId?: string | null
+): void {
   if (!goMode?.isActive || !goMode.activeItinerary) return
 
   if (sessionStartedAt == null) {
     const existing = getItem(GO_MODE_SESSION_KEY, null) as GoModeSession | null
     sessionStartedAt = existing?.startedAt ?? Date.now()
   }
+  // Keep the id already saved when this save has none to offer, so a caller
+  // that does not pass one cannot erase the link across a re-mount.
+  const savedDebugSessionId =
+    debugSessionId ?? lastLoaded?.debugSessionId ?? null
 
   const session: GoModeSession = {
     activeItinerary: goMode.activeItinerary,
     alightedFrom: goMode.alightedFrom ?? null,
     arrivedAt: goMode.arrivedAt ?? null,
     backgrounded: !!goMode.ui?.backgrounded,
+    debugSessionId: savedDebugSessionId,
     departureOverride: goMode.departureOverride ?? null,
     originalFrom: goMode.originalFrom ?? null,
     riding: goMode.riding ?? null,
@@ -162,11 +191,25 @@ export function loadGoModeSession(): GoModeSession | null {
 
   // Adopt the restored start so subsequent saves this session keep it.
   sessionStartedAt = session.startedAt
+  lastLoaded = session
   return session
+}
+
+/**
+ * The debug-log session id the RESTORED trip was recording under, or null if
+ * nothing was restored on this load (or the saved trip predates the field).
+ *
+ * Only ever non-null after loadGoModeSession accepted a session, which is the
+ * whole point: an id is reused exactly when this page load is continuing a
+ * ride, never merely because one was left in storage.
+ */
+export function resumedDebugSessionId(): string | null {
+  return lastLoaded?.debugSessionId ?? null
 }
 
 /** Drop the saved trip (explicit exit or completion) so it never resurrects. */
 export function clearGoModeSession(): void {
   sessionStartedAt = null
+  lastLoaded = null
   removeItem(GO_MODE_SESSION_KEY)
 }
