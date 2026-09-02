@@ -31,6 +31,7 @@ import {
   getCurrentPosition,
   GetCurrentPositionFunction
 } from '../../actions/location'
+import { getVectorTilesPath } from '../../util/config'
 import { MainPanelContent } from '../../actions/ui-constants'
 import { setLocation, setMapPopupLocationAndGeocode } from '../../actions/map'
 import { SetLocationHandler, SetViewedStopHandler } from '../util/types'
@@ -370,9 +371,11 @@ class DefaultMap extends Component<DefaultMapProps> {
     const { baseLayers, maxZoom, navigationControlPosition, overlays } =
       mapConfig || {}
     const { lat, lon, zoom } = this.state
-    const vectorTilesEndpoint = `${assembleBasePath(config)}${
-      config.api?.path
-    }/vectorTiles`
+    // See getVectorTilesPath: this used to read the (deliberately unset) OTP1
+    // `api.path`, which made every tile URL "https://host:portundefined/...".
+    const vectorTilesEndpoint = `${assembleBasePath(
+      config
+    )}${getVectorTilesPath(config.api)}`
 
     const bikeStationsAndFloatingBikes = [
       ...bikeRentalStations,

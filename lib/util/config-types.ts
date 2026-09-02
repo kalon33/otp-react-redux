@@ -197,6 +197,12 @@ export interface Otp1StopsOverlayConfig extends OverlayConfigBase {
 export interface Otp2TileLayer {
   color?: string
   initiallyVisible?: boolean
+  /**
+   * Zoom level at which the layer starts drawing. Mirror the matching layer's
+   * `minZoom` in the server's router-config.json `vectorTiles.layers`;
+   * @opentripplanner/otp2-tile-overlay defaults it to 14 when unset.
+   */
+  minZoom?: number
   network?: string
   type: 'stops' | 'stations' | 'rentalVehicles' | 'rentalStations'
 }
