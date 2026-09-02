@@ -1,5 +1,10 @@
 import {
   applyRoutingPreferences,
+  BIKE_WILLINGNESS_RANGE,
+  bikeCeilingMiles,
+  bikeReluctanceToWillingness,
+  bikeSpeedMph,
+  bikeWillingnessToReluctance,
   clampPreferences,
   clampSearchWindow,
   DEFAULT_PROFILE_ID,
@@ -10,10 +15,58 @@ import {
   LEVER_RANGES,
   NON_OTP_QUERY_KEYS,
   ROUTING_PROFILES,
-  SEARCH_WINDOW_RANGE
+  SEARCH_WINDOW_RANGE,
+  SERVER_BIKE_RELUCTANCE
 } from '../../lib/util/routing-profiles'
 
 describe('routing-profiles', () => {
+  describe('bike willingness control (backlog 5.3)', () => {
+    it('leaves an untouched slider at the value the server already uses', () => {
+      // No lever set -> the slider sits at its right-hand end, and that end
+      // maps back to the shipped bicycle.reluctance. A rider who never moves
+      // the control must get exactly today's routing.
+      const willingness = bikeReluctanceToWillingness(undefined)
+      expect(willingness).toBe(BIKE_WILLINGNESS_RANGE[1])
+      expect(bikeWillingnessToReluctance(willingness)).toBe(
+        SERVER_BIKE_RELUCTANCE
+      )
+    })
+
+    it('mirrors willingness and reluctance so less willing means more reluctant', () => {
+      const [low, high] = BIKE_WILLINGNESS_RANGE
+      expect(bikeWillingnessToReluctance(low)).toBe(high)
+      expect(bikeWillingnessToReluctance(high)).toBe(low)
+      // Its own inverse, so a round trip through the slider never drifts.
+      ;[low, 2, 4.5, 6, high].forEach((value) => {
+        expect(
+          bikeReluctanceToWillingness(bikeWillingnessToReluctance(value))
+        ).toBeCloseTo(value, 10)
+      })
+    })
+
+    it('keeps every reachable value inside the bikeReluctance lever range', () => {
+      const [min, max] = LEVER_RANGES.bikeReluctance
+      const [low, high] = BIKE_WILLINGNESS_RANGE
+      ;[low - 5, low, 3, high, high + 5].forEach((value) => {
+        const reluctance = bikeWillingnessToReluctance(value)
+        expect(reluctance).toBeGreaterThanOrEqual(min)
+        expect(reluctance).toBeLessThanOrEqual(max)
+      })
+    })
+
+    it('recomputes the ceiling in miles from the live bike speed', () => {
+      // The server ceiling is 120 minutes, a duration — so the mile figure
+      // beside the slider moves with the bikeSpeed lever and cannot be a
+      // constant. These are the two ends of LEVER_RANGES.bikeSpeed.
+      expect(bikeCeilingMiles(5)).toBeCloseTo(22.4, 1)
+      expect(bikeCeilingMiles(2)).toBeCloseTo(8.9, 1)
+      expect(bikeCeilingMiles(8)).toBeCloseTo(35.8, 1)
+      // Unset speed falls back to the server's, not to zero.
+      expect(bikeCeilingMiles(undefined)).toBeCloseTo(bikeCeilingMiles(5), 6)
+      expect(bikeSpeedMph(5)).toBeCloseTo(11.2, 1)
+    })
+  })
+
   describe('ROUTING_PROFILES', () => {
     it('has a unique id per profile', () => {
       const ids = ROUTING_PROFILES.map((p) => p.id)

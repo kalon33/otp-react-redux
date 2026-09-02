@@ -42,6 +42,101 @@ export const LEVER_RANGES: Record<LeverKey, readonly [number, number]> = {
   walkSpeed: [0.5, 3]
 }
 
+/**
+ * What the routing server does today. Recorded here so the rider-facing help
+ * text cannot drift away from the engine: all three are `routingDefaults` in
+ * otp-minneapolis `{config,data}/router-config.json` —
+ * `bicycle.reluctance`, `bicycle.speed` (m/s) and
+ * `accessEgress.maxDurationForMode.BIKE`.
+ *
+ * Only the first of the three is a lever. OTP's `plan` field exposes
+ * bikeBoardCost / bikeReluctance / bikeSpeed / bikeSwitchCost / bikeSwitchTime /
+ * bikeWalkingReluctance and nothing that caps access duration or distance, so
+ * the 120-minute ceiling is server-wide and a rider control can only *show* it.
+ * bikeReluctance is a soft cost multiplier — at the shipped 0.5 a 14-mile bike
+ * to a trunk route is nearly free, which is the whole complaint; raising it
+ * makes long bike legs expensive, never forbidden.
+ */
+export const SERVER_BIKE_RELUCTANCE = 0.5
+export const SERVER_BIKE_SPEED_MPS = 5
+export const BIKE_ACCESS_CEILING_MINUTES = 120
+
+/**
+ * Ends and granularity of the panel's bike control. The slider reads as
+ * *willingness* (right = bike more) because that is the rider's question, while
+ * the lever underneath is *reluctance* (higher = bike less). Mirroring the two
+ * around the same interval keeps every reachable value inside
+ * LEVER_RANGES.bikeReluctance and makes the mapping its own inverse — the same
+ * trick trip-form's SLIDER `inverseKey` uses for mode settings.
+ *
+ * The right-hand end is SERVER_BIKE_RELUCTANCE, so a rider who never touches
+ * the slider gets exactly today's behaviour.
+ */
+export const BIKE_WILLINGNESS_RANGE: readonly [number, number] = [
+  SERVER_BIKE_RELUCTANCE,
+  8
+]
+export const BIKE_WILLINGNESS_STEP = 0.5
+
+const METERS_PER_MILE = 1609.344
+const MPS_TO_MPH = 2.23693629
+
+function mirrorBikeLever(value: number): number {
+  const [low, high] = BIKE_WILLINGNESS_RANGE
+  return Math.min(high, Math.max(low, low + high - value))
+}
+
+/** Slider position -> the bikeReluctance lever actually sent to OTP. */
+export function bikeWillingnessToReluctance(willingness: number): number {
+  return mirrorBikeLever(willingness)
+}
+
+/**
+ * The bikeReluctance lever -> slider position. An unset lever means "whatever
+ * the server does", which is the right-hand end.
+ */
+export function bikeReluctanceToWillingness(reluctance?: number): number {
+  if (typeof reluctance !== 'number' || Number.isNaN(reluctance)) {
+    return BIKE_WILLINGNESS_RANGE[1]
+  }
+  return mirrorBikeLever(reluctance)
+}
+
+/** The rider's bike speed in m/s, falling back to the server's. */
+export function effectiveBikeSpeedMps(bikeSpeedMps?: number): number {
+  const [min, max] = LEVER_RANGES.bikeSpeed
+  if (typeof bikeSpeedMps !== 'number' || Number.isNaN(bikeSpeedMps)) {
+    return SERVER_BIKE_SPEED_MPS
+  }
+  return Math.min(max, Math.max(min, bikeSpeedMps))
+}
+
+/** Same speed in mph, for a label a rider can read. */
+export function bikeSpeedMph(bikeSpeedMps?: number): number {
+  return effectiveBikeSpeedMps(bikeSpeedMps) * MPS_TO_MPH
+}
+
+/**
+ * How many miles of biking the server's duration ceiling allows at a given
+ * speed. The ceiling is a *duration*, so this number drifts with the bikeSpeed
+ * lever — 8.9 mi at that lever's 2 m/s floor against 35.8 mi at its 8 m/s
+ * ceiling, a 4x swing — which is exactly why the panel recomputes it from the
+ * live lever instead of printing a fixed mileage next to the slider.
+ */
+export function bikeCeilingMiles(bikeSpeedMps?: number): number {
+  return (
+    (effectiveBikeSpeedMps(bikeSpeedMps) * BIKE_ACCESS_CEILING_MINUTES * 60) /
+    METERS_PER_MILE
+  )
+}
+
+/**
+ * Steps offered by the panel's "how many options" control. The config default
+ * (`modes.numItineraries`, 40 on this deployment) is added at render time if it
+ * is not one of these, so the control can always show what is in effect.
+ */
+export const ITINERARY_COUNT_OPTIONS = [10, 20, 40]
+
 export interface RoutingProfile {
   description: string
   id: string
@@ -308,6 +403,8 @@ export function summarizePreferences(
  */
 export const NON_OTP_QUERY_KEYS = [
   'activeProfileId',
+  // Shapes the mode fan-out in routingQuery, not a plan() argument.
+  'hideWalkTransitOptions',
   'routeLock',
   'routingPreferences'
 ]

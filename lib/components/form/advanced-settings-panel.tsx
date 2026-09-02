@@ -1,9 +1,12 @@
 import {
   addSettingsToButton,
   AdvancedModeSubsettingsContainer,
+  CheckboxSelector,
   DropdownSelector,
   ModeSettingRenderer,
-  populateSettingWithValue
+  populateSettingWithValue,
+  SliderSelector,
+  Styled as TripFormStyled
 } from '@opentripplanner/trip-form'
 import { ArrowLeft } from '@styled-icons/fa-solid/ArrowLeft'
 import { Check } from '@styled-icons/boxicons-regular'
@@ -32,13 +35,26 @@ import * as routeLockActions from '../../actions/route-lock'
 import * as routingProfileActions from '../../actions/routing-profiles'
 import * as userActions from '../../actions/user'
 import { AppReduxState } from '../../util/state-types'
+import {
+  BIKE_ACCESS_CEILING_MINUTES,
+  BIKE_WILLINGNESS_RANGE,
+  BIKE_WILLINGNESS_STEP,
+  bikeCeilingMiles,
+  bikeReluctanceToWillingness,
+  bikeSpeedMph,
+  bikeWillingnessToReluctance,
+  DEFAULT_PROFILE_ID,
+  ITINERARY_COUNT_OPTIONS,
+  ROUTING_PROFILES,
+  RoutingPreferences,
+  SERVER_BIKE_RELUCTANCE
+} from '../../util/routing-profiles'
 import { blue, getBaseColor } from '../util/colors'
 import { ComponentContext } from '../../util/contexts'
 import {
-  DEFAULT_PROFILE_ID,
-  ROUTING_PROFILES
-} from '../../util/routing-profiles'
-import { generateModeSettingValues } from '../../util/api'
+  generateModeSettingValues,
+  getDefaultNumItineraries
+} from '../../util/api'
 import { getDependentName } from '../../util/user'
 import { invisibleCss } from '../util/invisible-a11y-label'
 import { LockableRoute, routeLockLabel } from '../../util/route-lock'
@@ -200,12 +216,54 @@ const NlStatus = styled.div`
   margin-top: 8px;
 `
 
+const BikePreferenceContainer = styled.div`
+  margin: 2em 0;
+
+  /* Same flush-left label as RoutingProfileDropdown, which zeroes the 6px
+     padding trip-form's SettingLabel carries. */
+  > label {
+    padding-left: 0;
+  }
+`
+
+// Same margins as RoutingProfileDropdown so the slider lines up with the
+// dropdowns above it rather than sitting in its own rhythm.
+const BikeWillingnessSlider = styled(SliderSelector)`
+  margin: 20px 0px;
+`
+
+const HelperText = styled.p`
+  color: #666;
+  font-size: 13px;
+  margin: 0;
+`
+
+const SearchOptionsContainer = styled.div`
+  margin: 2em 0;
+`
+
+// trip-form wraps CheckboxSelector the same way for the mode sub-settings:
+// `display: inherit` is what makes the row pick up GlobalSettingsContainer's
+// column flex, which is in turn what styledCheckboxCss's space-between and
+// `order: 2` need in order to put the label on the left and the box on the
+// right. Without it the checkbox renders browser-default (box first) and stops
+// matching the trip-option checkboxes further down this same panel.
+const SearchOptionCheckbox = styled(CheckboxSelector)`
+  display: inherit;
+  margin-left: 4px;
+
+  input {
+    flex-shrink: 0;
+  }
+`
+
 const AdvancedSettingsPanel = ({
   applyPreferencesFromText,
   applyRoutingProfile,
   autoPlan,
   closeAdvancedSettings,
   currentQuery,
+  defaultNumItineraries,
   enabledModeButtons,
   findRoutesIfNeeded,
   getDependentUserInfo,
@@ -220,13 +278,16 @@ const AdvancedSettingsPanel = ({
   saveAndReturnButton,
   setCloseAdvancedSettingsWithDelay,
   setQueryParam,
-  setRouteLock
+  setRouteLock,
+  setRoutingPreferences,
+  setSearchOptions
 }: {
   applyPreferencesFromText: (text: string) => Promise<any>
   applyRoutingProfile: (profileId: string) => void
   autoPlan: boolean
   closeAdvancedSettings: () => void
   currentQuery: any
+  defaultNumItineraries: number
   enabledModeButtons: string[]
   findRoutesIfNeeded: () => void
   getDependentUserInfo: (userIds: string[], intl: IntlShape) => void
@@ -242,6 +303,14 @@ const AdvancedSettingsPanel = ({
   setCloseAdvancedSettingsWithDelay: () => void
   setQueryParam: (evt: any) => void
   setRouteLock: (routeId?: string | null) => void
+  setRoutingPreferences: (
+    prefs: RoutingPreferences,
+    activeProfileId?: string
+  ) => void
+  setSearchOptions: (options: {
+    hideWalkTransitOptions?: boolean
+    numItineraries?: number
+  }) => void
 }): JSX.Element => {
   const intl = useIntl()
   const [closingBySave, setClosingBySave] = useState(false)
@@ -390,6 +459,77 @@ const AdvancedSettingsPanel = ({
     [applyRoutingProfile]
   )
 
+  const routingPreferences: RoutingPreferences = useMemo(
+    () => currentQuery.routingPreferences || {},
+    [currentQuery.routingPreferences]
+  )
+  const bikeWillingness = bikeReluctanceToWillingness(
+    routingPreferences.bikeReluctance
+  )
+  // The ceiling is a duration, so its mileage moves with the bikeSpeed lever.
+  // Read it back out of the live preferences every render so the number beside
+  // the slider can never describe a speed the rider is no longer using.
+  const ceilingMiles = Math.round(
+    bikeCeilingMiles(routingPreferences.bikeSpeed)
+  )
+  const bikeMph = bikeSpeedMph(routingPreferences.bikeSpeed)
+
+  const onBikeWillingnessChange = useCallback(
+    (evt: QueryParamChangeEvent) => {
+      const willingness = Number(evt.bikeWillingness)
+      if (Number.isNaN(willingness)) return
+      const reluctance = bikeWillingnessToReluctance(willingness)
+      const prefs: RoutingPreferences = { ...routingPreferences }
+      // At the right-hand end the lever would just restate what the server
+      // already does, so drop it instead — otherwise a rider who slid the
+      // control and slid it back would keep a "more biking" preference chip for
+      // a setting they had returned to its default.
+      if (reluctance <= SERVER_BIKE_RELUCTANCE) {
+        delete prefs.bikeReluctance
+      } else {
+        prefs.bikeReluctance = reluctance
+      }
+      setRoutingPreferences(prefs, currentQuery.activeProfileId)
+    },
+    [currentQuery.activeProfileId, routingPreferences, setRoutingPreferences]
+  )
+
+  const numItineraries = currentQuery.numItineraries || defaultNumItineraries
+  const numItineraryOptions = useMemo(() => {
+    const counts = Array.from(
+      new Set([
+        ...ITINERARY_COUNT_OPTIONS,
+        defaultNumItineraries,
+        numItineraries
+      ])
+    ).sort((a, b) => a - b)
+    return counts.map((count) => ({
+      text: intl.formatMessage(
+        { id: 'components.BatchSearchScreen.numItinerariesOption' },
+        { count }
+      ),
+      value: String(count)
+    }))
+  }, [defaultNumItineraries, intl, numItineraries])
+
+  const onNumItinerariesChange = useCallback(
+    (evt: QueryParamChangeEvent) => {
+      const count = Number(evt.numItineraries)
+      if (Number.isNaN(count)) return
+      setSearchOptions({ numItineraries: count })
+    },
+    [setSearchOptions]
+  )
+
+  const onHideWalkTransitChange = useCallback(
+    (evt: QueryParamChangeEvent) => {
+      setSearchOptions({
+        hideWalkTransitOptions: !!evt.hideWalkTransitOptions
+      })
+    },
+    [setSearchOptions]
+  )
+
   const onApplyNlPreferences = useCallback(async () => {
     const text = nlText.trim()
     if (!text) return
@@ -461,6 +601,71 @@ const AdvancedSettingsPanel = ({
           value={currentQuery.routeLock?.id || ''}
         />
       </RoutingProfileContainer>
+      <BikePreferenceContainer>
+        <VisibleSubheader>
+          <FormattedMessage id="components.BatchSearchScreen.bikeWillingnessHeader" />
+        </VisibleSubheader>
+        <TripFormStyled.SettingLabel
+          as="label"
+          htmlFor="id-query-param-bikeWillingness"
+        >
+          <FormattedMessage id="components.BatchSearchScreen.bikeWillingnessLabel" />
+        </TripFormStyled.SettingLabel>
+        <BikeWillingnessSlider
+          label={intl.formatMessage({
+            id: 'components.BatchSearchScreen.bikeWillingnessLabel'
+          })}
+          labelHigh={intl.formatMessage({
+            id: 'components.BatchSearchScreen.bikeWillingnessHigh'
+          })}
+          labelLow={intl.formatMessage({
+            id: 'components.BatchSearchScreen.bikeWillingnessLow'
+          })}
+          max={BIKE_WILLINGNESS_RANGE[1]}
+          min={BIKE_WILLINGNESS_RANGE[0]}
+          name="bikeWillingness"
+          onChange={onBikeWillingnessChange}
+          step={BIKE_WILLINGNESS_STEP}
+          value={bikeWillingness}
+        />
+        <HelperText>
+          <FormattedMessage
+            id="components.BatchSearchScreen.bikeCeilingHelp"
+            values={{
+              miles: ceilingMiles,
+              minutes: BIKE_ACCESS_CEILING_MINUTES,
+              speed: bikeMph.toFixed(1)
+            }}
+          />
+        </HelperText>
+      </BikePreferenceContainer>
+      <SearchOptionsContainer className="search-options-container">
+        <VisibleSubheader>
+          <FormattedMessage id="components.BatchSearchScreen.searchOptionsHeader" />
+        </VisibleSubheader>
+        <RoutingProfileDropdown
+          label={intl.formatMessage({
+            id: 'components.BatchSearchScreen.numItinerariesLabel'
+          })}
+          name="numItineraries"
+          onChange={onNumItinerariesChange}
+          options={numItineraryOptions}
+          value={String(numItineraries)}
+        />
+        <GlobalSettingsContainer>
+          <SearchOptionCheckbox
+            label={intl.formatMessage({
+              id: 'components.BatchSearchScreen.hideWalkTransitLabel'
+            })}
+            name="hideWalkTransitOptions"
+            onChange={onHideWalkTransitChange}
+            value={!!currentQuery.hideWalkTransitOptions}
+          />
+        </GlobalSettingsContainer>
+        <HelperText>
+          <FormattedMessage id="components.BatchSearchScreen.hideWalkTransitHelp" />
+        </HelperText>
+      </SearchOptionsContainer>
       <NlPreferencesContainer>
         <VisibleSubheader>
           <FormattedMessage id="components.BatchSearchScreen.nlPreferencesHeader" />
@@ -598,6 +803,7 @@ const mapStateToProps = (state: AppReduxState) => {
   return {
     autoPlan: autoPlan !== false,
     currentQuery: state.otp.currentQuery,
+    defaultNumItineraries: getDefaultNumItineraries(state.otp.config),
     // TODO: Duplicated in apiv2.js
     enabledModeButtons:
       decodeQueryParams(queryParamConfig, {
@@ -621,7 +827,9 @@ const mapDispatchToProps = {
   findRoutesIfNeeded: apiActions.findRoutesIfNeeded,
   getDependentUserInfo: userActions.getDependentUserInfo,
   setQueryParam: formActions.setQueryParam,
-  setRouteLock: routeLockActions.setRouteLock
+  setRouteLock: routeLockActions.setRouteLock,
+  setRoutingPreferences: routingProfileActions.setRoutingPreferences,
+  setSearchOptions: routingProfileActions.setSearchOptions
 }
 
 export default connect(
