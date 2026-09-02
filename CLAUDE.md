@@ -40,9 +40,21 @@ explicit approval.
 
 - **Shared worktree.** Other agents work in this same checkout. Never `git stash`,
   commit only your own paths, and leave pre-staged work alone.
-- **`yarn unit` clobbers the dev config.** The a11y suite overwrites `tmp/config.yml`
-  and silently breaks the live :9967 dev server. Restore from `port-config.yml` after
-  every host test run.
+- **`yarn unit` clobbers the dev config — and `port-config.yml` in THIS repo is not
+  the way back.** The a11y suite overwrites `tmp/config.yml` and silently breaks the
+  live :9967 dev server. `tmp/config.yml` is a *copy*: vite writes it from
+  `$YAML_CONFIG` on startup (`vite.config.js:43`), and the `otp-frontend-dev` container
+  sets `YAML_CONFIG=/app/port-config.yml` from a read-only bind mount of
+  **`otp-minneapolis/frontend/port-config.yml`** — that file is the source of truth
+  (`host: https://api.transit-nav.com`). Restore from it, or just
+  `docker restart otp-frontend-dev`. The `port-config.yml` sitting in this repo is an
+  untracked local copy (`.gitignore` has `*config.yml`) that nothing reads; it still
+  said `host: https://tre.hopto.org` on 2026-09-02, whose cert expired 2026-08-09, so
+  restoring from it is how you break :9967 rather than how you fix it.
+- **The nightly verify run is not in this repo.** It is
+  `otp-minneapolis/scripts/nightly-verify.sh` (crontab `0 5 * * *`, log
+  `/tmp/otp-nightly-verify.log`, report into the vault); `scripts/verify-*.js` here are
+  what it drives.
 - **`scripts/verify-*.js` hang against current Chrome.** Repo puppeteer 10 vs an
   auto-updated Chrome. Use a scratchpad `puppeteer-core` with
   `--disable-dev-shm-usage`, an iPhone UA, and `/#/hash` routes.

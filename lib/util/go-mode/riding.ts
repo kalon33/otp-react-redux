@@ -132,16 +132,33 @@ export function trackBoardStopDwell(
   }
 ): BoardStopDwell | null {
   const { distanceToBoardStopM, legIndex, nowMs } = sample
-  if (
+  const awayFromStop =
     distanceToBoardStopM == null ||
     !Number.isFinite(distanceToBoardStopM) ||
     distanceToBoardStopM > BOARD_STOP_DWELL_RADIUS_M
-  ) {
-    return null
-  }
+
+  // A different leg's boarding stop is a different question; start again.
   if (prev == null || prev.legIndex !== legIndex) {
-    return { dwellMs: 0, lastTickMs: nowMs, legIndex }
+    return awayFromStop ? null : { dwellMs: 0, lastTickMs: nowMs, legIndex }
   }
+
+  // Once the wait has actually run its course it is a FACT about this leg, not
+  // a condition the rider has to keep satisfying — and leaving the stop is
+  // precisely what boarding looks like.
+  //
+  // Without this latch the gate is unsatisfiable on any transit leg longer
+  // than BOARD_STOP_DWELL_RADIUS_M / RIDING_MIN_PROGRESS (~2.4 km), because
+  // GPS establishment ALSO needs progressAlongLeg >= RIDING_MIN_PROGRESS: on
+  // the 2026-07-29 Orange Line leg (13,279 m) 5% is 664 m down the freeway,
+  // some 550 m past the point where the dwell had already been erased. The
+  // recorded ride shows exactly that — 332 s of genuine waiting at I-35W &
+  // 46th St Station, discarded at 17:28:03 as the bus pulled away, so the
+  // riding fact could only ever come from whatever the vehicle feed said next.
+  const waitCompleted = prev.dwellMs >= BOARD_STOP_DWELL_MIN_MS
+  if (awayFromStop) {
+    return waitCompleted ? { ...prev, lastTickMs: nowMs } : null
+  }
+
   const step = Math.min(
     Math.max(0, nowMs - prev.lastTickMs),
     BOARD_STOP_DWELL_MAX_STEP_MS
@@ -176,6 +193,69 @@ export function vehicleReachedBoardStop(
   const nextStopId = match?.nextStopId
   if (!boardStopId || nextStopId == null) return true
   return nextStopId !== boardStopId
+}
+
+/**
+ * Every stop id this leg is known to call at, or null when the leg does not
+ * say. Ids arrive in three shapes on the same object — `1:53543` on
+ * `from`/`to`, the bare code `53543` beside it, and a base64 `Stop:1:52719`
+ * on `intermediateStops` — so everything is reduced to the trailing segment.
+ *
+ * Null unless the leg ENUMERATES its calls: a leg carrying only `from` and
+ * `to` may still stop ten times in between (several recorded fixtures have an
+ * empty `intermediateStops`), and "not in the list" would then be a statement
+ * about the recording rather than about the bus.
+ */
+function legCalledStopKeys(matchedLeg: any): Set<string> | null {
+  const intermediate = matchedLeg?.intermediateStops
+  if (!Array.isArray(intermediate) || intermediate.length === 0) return null
+  const keys = new Set<string>()
+  const add = (v: unknown) => {
+    if (typeof v === 'string' && v) keys.add(v.slice(v.lastIndexOf(':') + 1))
+  }
+  for (const place of [matchedLeg?.from, matchedLeg?.to, ...intermediate]) {
+    add(place?.stopId)
+    add(place?.stopCode)
+    add(place?.stop?.gtfsId)
+    add(place?.stop?.code)
+  }
+  return keys.size ? keys : null
+}
+
+/**
+ * Is the vehicle heading for a stop this leg actually calls at?
+ *
+ * The other half of matchDescribesLeg. A route id says which SERVICE a match
+ * is about; it says nothing about which way round the loop the bus is going,
+ * and on 2026-07-29 that is the whole incident: one stale position for the
+ * rider's own bus (8140 sat at the platform with speed 0 for 44 s after the
+ * rider had already pulled away on it) let the OPPOSITE-direction Orange Line
+ * across I-35W, 8141 on trip 1:1082792, win the match at 559 m and establish
+ * the riding fact. Every direction gate the matcher owns was inert on that
+ * data: the feed published `heading: null` for 8141 on the deciding snapshot,
+ * and no `directionId` at all.
+ *
+ * Its next stop, though, was 1:53542 — the NORTHBOUND platform at 46th St —
+ * and it never once named a stop on the rider's leg (1:17780, 1:53311,
+ * 1:53313, 1:53314 followed). 8140 named nothing else: 1:53543, 1:52719,
+ * 1:56832, 1:56884, 1:56833, the leg's five calls in order. Where the leg
+ * lists its calls, "your bus is going to a stop you are not going to" is the
+ * cheapest honest statement that a match is about a different bus, and it
+ * holds when heading, direction_id and headsign are all missing.
+ *
+ * Silent on the data agencies omit: no next stop in the feed, or a leg that
+ * does not enumerate its calls, passes — the same policy as the null headsign
+ * and null accuracy cases.
+ */
+export function matchServesLegStops(
+  match: { nextStopId?: string | null } | null | undefined,
+  matchedLeg: Leg | null | undefined
+): boolean {
+  const nextStopId = match?.nextStopId
+  if (nextStopId == null) return true
+  const calls = legCalledStopKeys(matchedLeg as any)
+  if (calls == null) return true
+  return calls.has(nextStopId.slice(nextStopId.lastIndexOf(':') + 1))
 }
 
 /**
@@ -357,7 +437,9 @@ export function decideRiding(input: RidingDecisionInput): RidingDecision {
   // evidence the rider is aboard THIS bus, and it must not get to name this
   // ride's trip or vehicle — see matchDescribesLeg for the 8/31 transfer.
   const vehicleSpeaksForLeg =
-    vehicleTrusted && matchDescribesLeg(match, matchedLeg)
+    vehicleTrusted &&
+    matchDescribesLeg(match, matchedLeg) &&
+    matchServesLegStops(match, matchedLeg)
   // What a NEW claim of aboard-ness from GPS alone has to prove.
   //
   // Route proximity plus motion is not it: that is a cyclist riding beside a
@@ -402,8 +484,18 @@ export function decideRiding(input: RidingDecisionInput): RidingDecision {
   // GTFS-RT trip, which outranks the planned leg's — the rider may have caught
   // an earlier run of the same route, and the boarded-earlier replan, next-stop
   // anchoring and live leg times all key off this id.
+  //
+  // Naming asks vehicleSpeaksForLeg, not vehicleMayEstablish: "may this match
+  // assert, by itself, that the rider is aboard" and "which bus is it" are
+  // different questions, and the first one has already been answered by the
+  // time this line runs. Tying them together is what broke 2026-07-29 — GPS
+  // established the ride at 17:28:34 while the matcher held 8140 at high
+  // confidence, but the board-stop gate (8140's feed record still named the
+  // rider's own stop, 44 s stale) suppressed the naming too, so the fact went
+  // in with `vehicleId: null` and the first bus it ever named was whatever the
+  // feed flapped to. A match that cannot establish can still identify.
   const ridingTripId =
-    (vehicleMayEstablish ? match?.tripId : null) ||
+    (vehicleSpeaksForLeg ? match?.tripId : null) ||
     legTripId(matchedLeg) ||
     prevRiding?.tripId ||
     null
@@ -416,7 +508,7 @@ export function decideRiding(input: RidingDecisionInput): RidingDecision {
       riderSpeedMps,
       ridingTripId,
       vehicleMatch: match,
-      vehicleTrusted: vehicleMayEstablish
+      vehicleTrusted: vehicleSpeaksForLeg
     })
   ) {
     return { kind: 'none' }
@@ -439,7 +531,7 @@ export function decideRiding(input: RidingDecisionInput): RidingDecision {
   // the same gate the trip id gets above. Whatever was already held is kept, so
   // a leg the matcher merely lost sight of does not shed its bus.
   const nextVehicleId = rebindAllowed
-    ? (vehicleMayEstablish ? match?.vehicleId : null) ??
+    ? (vehicleSpeaksForLeg ? match?.vehicleId : null) ??
       prevRiding?.vehicleId ??
       null
     : prevRiding?.vehicleId ?? null

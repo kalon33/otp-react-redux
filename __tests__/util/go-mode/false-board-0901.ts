@@ -218,14 +218,43 @@ describe('util > go-mode > the 2026-09-01 false boards', () => {
       }
       expect(dwell?.dwellMs).toBe(90000)
       expect(stop.lat).toBeGreaterThan(44)
-      // Stepping outside the radius restarts it: a rider who cycled past a
-      // stop has not waited at it.
+      // Once the wait has run its course, leaving the radius is BOARDING, so
+      // the fact is kept (see the 2026-07-29 leg in riding-identity-0729).
       dwell = trackBoardStopDwell(dwell, {
         distanceToBoardStopM: 400,
         legIndex: 1,
         nowMs: FALSE_BOARD_MS + 91000
       })
-      expect(dwell).toBeNull()
+      expect(dwell?.dwellMs).toBe(90000)
+      // But moving on to a DIFFERENT leg's boarding stop starts again.
+      expect(
+        trackBoardStopDwell(dwell, {
+          distanceToBoardStopM: 400,
+          legIndex: 3,
+          nowMs: FALSE_BOARD_MS + 92000
+        })
+      ).toBeNull()
+    })
+
+    it('a wait that has not run its course still restarts on leaving', () => {
+      // A rider who cycled past a stop has not waited at it.
+      let dwell = null
+      for (let i = 0; i <= 30; i++) {
+        dwell = trackBoardStopDwell(dwell, {
+          distanceToBoardStopM: 15,
+          legIndex: 1,
+          nowMs: FALSE_BOARD_MS + i * 1000
+        })
+      }
+      expect(dwell?.dwellMs).toBe(30000)
+      expect(dwell!.dwellMs).toBeLessThan(BOARD_STOP_DWELL_MIN_MS)
+      expect(
+        trackBoardStopDwell(dwell, {
+          distanceToBoardStopM: 400,
+          legIndex: 1,
+          nowMs: FALSE_BOARD_MS + 31000
+        })
+      ).toBeNull()
     })
 
     it('a backgrounded app cannot bank a wait it did not observe', () => {

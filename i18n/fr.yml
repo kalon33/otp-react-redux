@@ -217,10 +217,14 @@ components:
     networkConnectionLost: Erreur de connexion réseau
     networkConnectionRestored: Connexion réseau restaurée
     openMenu: Ouvrir le menu
+    shareDiagnosticsOff: "Partage des diagnostics : désactivé"
+    shareDiagnosticsOn: "Partage des diagnostics : activé"
     skipNavigation: Sauter la navigation
   ActiveRoutingPreferences:
     clear: Effacer
     label: "Préférences :"
+    noWalkTransit: "Sans marche + transports"
+    optionCount: "{count} options"
   BackToTripPlanner:
     backToTripPlanner: Retour au planificateur de trajets
   BatchResultsScreen:
@@ -230,11 +234,29 @@ components:
     shortTitle: Planifier un trajet
   BatchSearchScreen:
     advancedHeader: Préférences avancées
+    bikeCeilingHelp: "Un trajet peut contenir jusqu'à {minutes} minutes de vélo — environ {miles} mi à votre vitesse actuelle de {speed} mph. Cette limite est fixée sur le serveur ; ce curseur règle la propension du planificateur à utiliser le vélo à l'intérieur de cette limite."
+    bikeWillingnessHeader: "Vélo"
+    bikeWillingnessHigh: "Plus"
+    bikeWillingnessLabel: "Distance que vous acceptez de faire à vélo"
+    bikeWillingnessLow: "Moins"
     header: Votre trajet
+    hideWalkTransitHelp: "N'affiche que les options utilisant votre vélo pour rejoindre les transports. Ignoré lorsque la marche est le seul moyen d'y arriver."
+    hideWalkTransitLabel: "Masquer les options marche + transports"
     modeSelectorLabel: Sélectionnez un mode de déplacement
     moreOptions: Plus d'options
+    nlPreferencesApplied: "Appliqué : {summary}"
+    nlPreferencesApply: "Appliquer"
+    nlPreferencesError: "Impossible d'interpréter — reformulez."
+    nlPreferencesHeader: "Décrivez vos besoins"
+    nlPreferencesLoading: "Réflexion…"
+    nlPreferencesPlaceholder: "ex. genou douloureux aujourd'hui, éviter les correspondances"
+    numItinerariesLabel: "Nombre d'options à rechercher"
+    numItinerariesOption: "{count} options"
+    routingProfileHeader: "Profil d'itinéraire"
+    routingProfileLabel: "Optimiser l'itinéraire pour"
     saveAndReturn: Enregistrer et fermer
     saved: Enregistré
+    searchOptionsHeader: "Options affichées"
     submodeSelectorLabel: Sélectionnez vos modes et sous-modes de déplacement
     tripOptions: Options concernant le trajet
   BatchSettings:
@@ -322,6 +344,83 @@ components:
     placeNotFoundDescription: Le lieu recherché est introuvable.
   FormNavigationButtons:
     ariaLabel: Navigation du formulaire
+  GoMode:
+    arrivedDone: "Terminé"
+    arrivedTitle: "🎉 Vous êtes arrivé !"
+    arrivesIn: "arrive dans {time}"
+    boardingQuestion: "Êtes-vous dans le bus ?"
+    boardingSubtitle: "Recherche du {route} à proximité"
+    busHeadsign: "vers {headsign}"
+    busLabel: "Bus {label}"
+    busNotBroadcasting: "Bus pas encore localisé — prévu à {time}"
+    changeBus: "Choisir le bus"
+    confirmExit: "Voulez-vous vraiment arrêter le suivi de ce trajet ?"
+    directionEB: "Direction est"
+    directionNB: "Direction nord"
+    directionSB: "Direction sud"
+    directionWB: "Direction ouest"
+    errorPermissionDenied: "Accès à la position refusé. Autorisez la localisation dans les réglages de votre navigateur."
+    errorTimeout: "Signal GPS expiré. Vérifiez que vous êtes dans une zone couverte par le GPS."
+    errorUnavailable: "Impossible de déterminer votre position. Vérifiez les réglages de votre appareil."
+    findAnotherWay: "Trouver un autre chemin"
+    findingBestStop: "Recherche du meilleur arrêt pour descendre…"
+    findingYourBus: "Recherche de votre bus…"
+    followToggle: "Suivre ma position"
+    getReady: "⚠️ Préparez-vous - 2 arrêts"
+    getReadyNow: "🔔 PRÉPAREZ-VOUS ! C'est le prochain arrêt !"
+    gotOffHere: "Je suis descendu ici"
+    gpsError: "Signal GPS perdu. Nouvelle tentative de connexion..."
+    gpsErrorTitle: "Erreur GPS"
+    headerDestination: "Vers {destination}"
+    legBike: "Vélo"
+    legStopsTo: "{count, plural, one {# arrêt} other {# arrêts}} jusqu'à {dest}"
+    legTo: "vers {dest}"
+    legWait: "🕒 {mins} min d'attente"
+    legWalk: "Marche"
+    liveBanner: "Mode Go actif — suivi de votre bus"
+    loading: "Démarrage du trajet..."
+    loadingSchedule: "Chargement des horaires de votre bus…"
+    locatingBus: "Localisation de votre bus..."
+    nextDeparture: "Prochain : {time} (dans {mins} min)"
+    noBusesNearby: "Aucun bus détecté à proximité"
+    noLiveVehicleData: "Pas de données en temps réel — suivi par GPS"
+    notYet: "Pas encore"
+    offAtStop: "Descente à {stop}"
+    onBus: "Dans le bus n° {label}"
+    onBusButton: "Je suis déjà dans le bus"
+    onboardCancel: "Annuler"
+    onboardError: "Impossible d'identifier votre bus. Réessayer ?"
+    onboardTitle: "Dans le bus"
+    openTripSheet: "Ouvrir l'aperçu du trajet"
+    pickYourBus: "Dans quel bus êtes-vous ? Choisissez-le ci-dessous."
+    pickYourRoute: "Aucun bus détecté en temps réel — choisissez votre ligne :"
+    rerouteNlError: "Impossible de comprendre — réessayez."
+    rerouteNlLabel: "Décrivez ce dont vous avez besoin"
+    rerouteNlPlaceholder: "ex. éviter les escaliers aujourd'hui"
+    rerouteNlSend: "Envoyer"
+    rerouteSearchHere: "Chercher depuis ici"
+    resetToPlanned: "Revenir au trajet prévu"
+    restOfTrip: "Suite de votre trajet"
+    retry: "Réessayer"
+    returnBannerArrived: "Vous êtes arrivé — touchez pour terminer"
+    returnBannerLive: "En trajet · Prochain arrêt {stop} · Arrivée {eta} — touchez pour revenir"
+    returnBannerNoProgress: "Trajet en cours — touchez pour revenir"
+    rideToStop: "{emoji} {time} de trajet jusqu'à {stop}"
+    selectVehicle: "Celui-ci"
+    sheetHandleLabel: "Voir le trajet et les autres options"
+    stopsRemainingCompact: "Encore {count, plural, one {1 arrêt} other {# arrêts}}"
+    theBus: "le bus"
+    thenTurn: "puis {turn}"
+    toStop: "{emoji} Vers {stop}"
+    trackingBus: "Suivi du bus n° {label}"
+    tripSheetHeading: "Votre trajet"
+    tripSheetTitle: "Aperçu du trajet"
+    useThisDeparture: "Utiliser celui-ci"
+    vehicleDetail: "Prochain arrêt : {stop} - à {distance} m · n° {label}"
+    vehicleDistance: "à {distance} m · n° {label}"
+    waitingGPS: "Acquisition du signal GPS..."
+    walkToStop: "{emoji} {time} de marche jusqu'à {stop}"
+    whereToAlight: "Où voulez-vous descendre ?"
   ItinerarySummary:
     itineraryDetails: Détails du trajet
   LocationSearch:
@@ -342,6 +441,7 @@ components:
     title: Vue panoramique
   MetroUI:
     arriveAt: Vous arrivez à
+    confirmSwitchTrip: "Basculer votre trajet actif sur cette ligne ? Vos indications seront mises à jour."
     fare: "{fare}"
     itineraryDescription: Trajet de {time} par les lignes {routes}
     itinerarySummary: Partez à {stopName} | {cost}
@@ -352,6 +452,9 @@ components:
     sameShapeVariants: >-
       {count, plural, one {# option} other {# options}}
     singleModeItineraryDescription: Trajet de {time} {mode}
+    startTrip: "Démarrer le trajet"
+    switchTrip: "Basculer sur ce trajet"
+    timeBiking: "{time} de vélo"
     timeWalking: "{time} de marche"
     variantBiking: "{distance} à vélo"
     variantShown: actuellement affiché
