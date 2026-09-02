@@ -170,6 +170,14 @@ export interface TripSession {
   rerouteSnapshotIntervalId: ReturnType<typeof setInterval> | null
 
   /**
+   * When the rider last tapped "Not on the bus" on the trip sheet. Holds the
+   * automatic, evidence-free half of the board gate off for a few minutes so
+   * the matcher cannot immediately put them back aboard — see
+   * boarding-confirmation.ts. Trip state, never trip-crossing.
+   */
+  riderDeniedBoardingAtMs: number | null
+
+  /**
    * Recent ground speeds off the rider's own fixes while they are on a bike
    * leg, for the observed-bikeSpeed estimate a replan query carries. See
    * rider-speed.ts — this is a rolling estimate precisely because a single
@@ -223,6 +231,7 @@ export function createTripSession(): TripSession {
     quietReplanHistory: [],
     quietReplanMissStreak: 0,
     rerouteSnapshotIntervalId: null,
+    riderDeniedBoardingAtMs: null,
     riderSpeedSamples: [],
     simulatedTimeMs: 0,
     simulationActive: false,

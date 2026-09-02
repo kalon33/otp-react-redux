@@ -139,6 +139,8 @@ import {
   acceptAutoReplan,
   pickHopFreeSibling
 } from '../util/go-mode/replan-acceptance'
+import { accessArriveByTarget } from '../util/go-mode/arrive-on-time'
+import { ridingSuppressedByRider } from '../util/go-mode/boarding-confirmation'
 import { isTripRecordingEnabled } from '../util/debug-log'
 import { fetchOnboardContext } from '../util/go-mode/onboard-discovery'
 import {
@@ -1674,35 +1676,72 @@ export function quietReplanAccessLeg() {
     // (GPS → boarding stop, single mode) and keep every transit leg as-is.
     if (boardLegIndex >= 0 && nextTransitLeg) {
       const boardPlace = nextTransitLeg.from
-      const scoped = {
-        arriveBy: false,
-        date,
+      // "Arrive on time" (rider ask 6.10b, opt-in): aim the access query a few
+      // minutes ahead of the boarding instead of as-fast-as-possible. The
+      // boarding time is the feed's when the feed is genuinely predicting it —
+      // a board epoch that is NOT realtime has been clamped forward to `now`
+      // by clampNonLiveLegTimes and would set a deadline of about right now —
+      // and the plan's own leg start otherwise. Null target = the ordinary
+      // depart-now query, unchanged.
+      const liveBoardForReplan = goMode.liveLegTimes?.[boardLegIndex]
+      const arriveTarget = accessArriveByTarget({
+        boardEpochMs:
+          liveBoardForReplan?.boardRealtime &&
+          liveBoardForReplan.boardEpoch != null
+            ? liveBoardForReplan.boardEpoch
+            : Number(nextTransitLeg.startTime),
+        enabled: !!state.otp.currentQuery?.arriveOnTimeAccess,
+        nowMs
+      })
+      const targetZoned =
+        arriveTarget != null ? utcToZonedTime(arriveTarget, homeTimezone) : null
+      const scopedAt = (target: number | null) => ({
+        arriveBy: target != null,
+        date:
+          target != null && targetZoned
+            ? format(targetZoned, coreUtils.time.OTP_API_DATE_FORMAT)
+            : date,
         from,
         modes: [{ mode: accessMode }],
         modeSettings,
         numItineraries: ACCESS_REPLAN_NUM_ITINERARIES,
         routingPreferences,
-        time,
+        time:
+          target != null && targetZoned
+            ? format(targetZoned, coreUtils.time.OTP_API_TIME_FORMAT)
+            : time,
         to: {
           lat: boardPlace.lat,
           lon: boardPlace.lon,
           name: boardPlace.name
         }
-      }
-      const { error, itineraries } = await dispatch(
-        fetchOnboardCandidatePlan(scoped)
-      )
-      if (!stillReplannable()) return
+      })
       // nextTransitRouteId null: a mode-restricted query cannot return
       // transit, and the picker still refuses to downgrade a biking rider to
       // walk-only.
-      const best =
-        error || !itineraries?.length
+      const runScoped = async (target: number | null) => {
+        const { error, itineraries } = await dispatch(
+          fetchOnboardCandidatePlan(scopedAt(target))
+        )
+        if (!stillReplannable()) return undefined
+        return error || !itineraries?.length
           ? null
           : pickAccessReplanCandidate(itineraries, {
               accessMode,
               nextTransitRouteId: null
             })
+      }
+      let best = await runScoped(arriveTarget)
+      if (best === undefined) return
+      // An arrive-by query that comes back with nothing must not cost the
+      // rider the scoped re-plan itself: the alternative is the full-trip
+      // fallback below, which is where all three of 2026-09-01's unwanted
+      // swaps came from (6.12). Ask the ordinary depart-now question before
+      // giving up on the access chain.
+      if (!best && arriveTarget != null) {
+        best = await runScoped(null)
+        if (best === undefined) return
+      }
       if (best) {
         const spliced = spliceAccessOntoItinerary(
           itinerary,
@@ -3972,7 +4011,20 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         vehicleMatch: goMode.vehicleMatch
       })
       if (decision.kind === 'set' || decision.kind === 'markOffRoute') {
-        dispatch(setRiding(decision.riding))
+        // A rider who has just tapped "Not on the bus" must not be put back
+        // aboard by the next tick's guess (6.10c). Only an evidence-free
+        // establishment is held, and only while riding is unset — a matched
+        // vehicle, or the rider's own "I'm on the bus", still lands at once.
+        if (
+          !ridingSuppressedByRider({
+            deniedAtMs: session.riderDeniedBoardingAtMs,
+            next: decision.riding,
+            nowMs: nowForRiding,
+            prev: ridingNow
+          })
+        ) {
+          dispatch(setRiding(decision.riding))
+        }
       } else if (decision.kind === 'clear') {
         dispatch(clearRiding())
       }
@@ -4605,12 +4657,22 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       // bus being chased, and the buffer at the stop, so the rider knows
       // whether to go fast or slow. Every decision — cadence, clearing, and the
       // enable gate — lives in util/go-mode/pacing-card.ts.
+      //
+      // The last two arguments are the rider's 2026-09-01 ask (6.10a): the
+      // feed's own departure (liveBoardMs is already the boardRealtime-gated
+      // one, computed above for exactly this reason) and the rolling observed
+      // cycling pace, which is non-null only after the rider has really been
+      // moving on a bike leg. With both, the card's buffer becomes measured
+      // flex rather than plan arithmetic, and it is allowed to buzz when that
+      // flex erodes. Without them the card behaves exactly as it did.
       const pacingCard = evaluatePacingCard(session.lastPacingCard, {
         currentLeg,
         enabled:
           !replaying && getState().otp.config.goMode?.pacingCard !== false,
+        liveBoardEpochMs: liveBoardMs,
         nextLeg,
         nowMs: currentTime.getTime(),
+        observedSpeedMps: observedBikeSpeedMps(),
         progress
       })
       session.lastPacingCard = pacingCard.next
@@ -4990,6 +5052,53 @@ export function performVehicleMatching(routeId: string) {
         dispatch(showBoardingPromptAction())
       }
     }
+  }
+}
+
+/**
+ * The rider says they ARE on the bus (trip-sheet button, 6.10c).
+ *
+ * Deliberately not a new way to write `riding`: it routes through
+ * `confirmVehicleSelection`, exactly as the boarding prompt's own "This one"
+ * button does, so the fact that lands carries a real vehicle and trip id
+ * instead of a rider-shaped placeholder — which is what makes it usable by
+ * everything downstream that keys on `riding.tripId` (the alight optimizer,
+ * the access re-plan's aboard check, the stop counter).
+ *
+ * With no vehicle matched yet there is nothing honest to name, so the existing
+ * boarding prompt opens and the rider picks from the buses actually nearby.
+ * No new surface, and no guessing.
+ */
+export function confirmBoardingByRider() {
+  return function (dispatch: any, getState: any) {
+    const goMode = getState().otp?.goMode
+    // A confirmation retires any standing denial: the rider has changed their
+    // answer, and the hold exists to respect them, not to outlive them.
+    session.riderDeniedBoardingAtMs = null
+    const vehicleId = goMode?.vehicleMatch?.match?.vehicleId || null
+    if (vehicleId) {
+      dispatch(confirmVehicleSelection(vehicleId))
+    } else {
+      dispatch(showBoardingPromptAction())
+    }
+  }
+}
+
+/**
+ * The rider says they are NOT on the bus (trip-sheet button, 6.10c).
+ *
+ * Drops the riding fact and the vehicle match that fed it, and holds the
+ * evidence-free half of the board gate off for BOARDING_DENIAL_HOLD_MS so the
+ * next tick cannot simply re-declare it. The rider's word is the strongest
+ * signal there is in either direction; on 2026-09-01 they had to say it out
+ * loud with no way to tell the app.
+ */
+export function denyBoardingByRider() {
+  return function (dispatch: any) {
+    session.riderDeniedBoardingAtMs = getCurrentTime().getTime()
+    dispatch(clearRiding())
+    dispatch(clearVehicleMatch())
+    dispatch(dismissBoardingPrompt())
   }
 }
 

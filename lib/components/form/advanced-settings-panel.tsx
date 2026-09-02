@@ -72,6 +72,7 @@ import {
 } from './util'
 import { setModeButtonEnabled } from './batch-settings'
 import { styledCheckboxCss } from './styled'
+import ArriveOnTimeSetting from './arrive-on-time-setting'
 import DateTimeModal from './date-time-modal'
 
 const PanelOverlay = styled.div`
@@ -768,6 +769,9 @@ const AdvancedSettingsPanel = ({
         onSettingsUpdate={onSettingsUpdate(setQueryParam)}
         onToggleModeButton={handleModeButtonToggle}
       />
+      {/* Rider ask 6.10b, in its own component file so the panel takes one
+          line for it — see arrive-on-time-setting.tsx. */}
+      <ArriveOnTimeSetting />
       {saveAndReturnButton && (
         <ReturnToTripPlanButton
           className="save-settings-button"

@@ -212,6 +212,11 @@ components:
     shortTitle: Plan Trip
   BatchSearchScreen:
     advancedHeader: Advanced Preferences
+    arriveOnTimeHeader: Getting to the bus
+    arriveOnTimeHelp: >-
+      When your ride to the stop is re-planned mid-trip, it aims to get you
+      there {minutes} minutes before the bus instead of as fast as possible.
+    arriveOnTimeLabel: Arrive just before the bus
     bikeCeilingHelp: >-
       One trip can hold up to {minutes} minutes of biking — about {miles} mi at
       your current speed of {speed} mph. That limit is set on the server; this
