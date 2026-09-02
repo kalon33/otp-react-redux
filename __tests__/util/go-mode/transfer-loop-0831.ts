@@ -1,4 +1,5 @@
 import {
+  BOARD_STOP_DWELL_MIN_MS,
   decideRiding,
   matchDescribesLeg
 } from '../../../lib/util/go-mode/riding'
@@ -105,6 +106,14 @@ const onThe539Leg = {
 
 const decideAtTheTransfer = (over: any = {}) =>
   decideRiding({
+    // A transfer IS a wait at the next leg's boarding stop, so the
+    // 2026-09-01 board gate (BOARD_STOP_DWELL_MIN_MS, false-board-0901.ts) is
+    // satisfied here. Supplied explicitly so these cases keep testing what
+    // they were written for: WHICH trip the fact names, not whether one is
+    // established. The recorded 17:35:57 tick — 7.54 m/s, no dwell — would
+    // now be refused outright, which is a strictly better outcome for this
+    // ride too and is why that gate has its own coverage.
+    boardStopDwellMs: BOARD_STOP_DWELL_MIN_MS,
     matchedLeg: BUS_539_LEG,
     nowMs: TRANSFER_MS,
     offRouteClearMs: 90000,

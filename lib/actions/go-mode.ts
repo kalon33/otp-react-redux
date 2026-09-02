@@ -23,7 +23,13 @@ import {
   calculateTripProgress,
   hasArrivedAtDestination
 } from '../util/go-mode/progress-calculator'
-import { decideRiding } from '../util/go-mode/riding'
+import {
+  BOARD_AUTO_CONFIRM_MIN_CONSECUTIVE,
+  decideRiding,
+  ridingFactIsEvidenced,
+  trackBoardStopDwell,
+  vehicleReachedBoardStop
+} from '../util/go-mode/riding'
 import {
   estimateBikeSpeedMps,
   recordRiderSpeedSample,
@@ -3250,7 +3256,7 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     const currentLegIndex = goMode.routeMatch?.legIndex || 0
 
     // Match position to route
-    const routeMatch = matchPositionToRoute(
+    let routeMatch = matchPositionToRoute(
       currentPosition,
       itinerary.legs,
       currentLegIndex,
@@ -3272,6 +3278,44 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     if (!routeMatch) {
       dispatch(updateRouteMatch(routeMatch))
       return
+    }
+
+    // ONE current leg, not two.
+    //
+    // The matcher nominates a leg; TRANSITION_LEG decides. Those were two
+    // independent answers to the same question, and the store held whichever
+    // was written last — which is always the matcher, every tick. On
+    // 2026-09-01 ride 2 the matcher moved to the Orange Line leg at 10:37:33
+    // (810 m off it, `isOnRoute: false`) and TRANSITION_LEG did not follow
+    // until 10:42:09, so for 4m36s the progress producer, the deviation
+    // detector and the riding decision all ran against a bus polyline while
+    // the trip believed it was still on the bike leg (backlog 6.3).
+    //
+    // So the nomination is put to the gate FIRST, and a refused nomination is
+    // not stored: the match is re-taken over the legs the trip has actually
+    // reached. The gate is re-asked from scratch every tick — this holds
+    // nothing shut, it only declines to act early. `advanceToLeg` below then
+    // sees an accepted match, unchanged.
+    const transitionedLegIndex = session.lastTransitionedLegIndex ?? 0
+    if (
+      routeMatch.legIndex > transitionedLegIndex &&
+      !shouldTransitionToNextLeg(routeMatch, transitionedLegIndex, {
+        boardEpoch: goMode.liveLegTimes?.[routeMatch.legIndex]?.boardEpoch,
+        isRiding: goMode.riding?.legIndex === routeMatch.legIndex,
+        nowMs: getCurrentTime().getTime(),
+        targetLeg: itinerary.legs[routeMatch.legIndex]
+      })
+    ) {
+      routeMatch =
+        matchPositionToRoute(
+          currentPosition,
+          // Sliced from the FRONT, so every legIndex the matcher returns is
+          // still an index into itinerary.legs.
+          itinerary.legs.slice(0, transitionedLegIndex + 1),
+          Math.min(currentLegIndex, transitionedLegIndex),
+          goMode.routeMatch,
+          { accuracyM: position.coords.accuracy, nowMs: position.timestamp }
+        ) ?? routeMatch
     }
 
     // A match that had to see THROUGH a transit leg with unusable geometry is
@@ -3390,9 +3434,46 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     // this is the seam every riding bug of 2026-08-27 lived in, and it had no
     // coverage at all.
     if (!alreadyArrived) {
+      // "Has the rider waited at this stop?" is not a function of one fix, so
+      // it is accumulated here and handed to the decision. See
+      // BOARD_STOP_DWELL_MIN_MS: this is the evidence a bicycle overtaking a
+      // bus route cannot manufacture, and its absence is what let 2026-09-01
+      // ride 2 be declared aboard 4.3 km from its boarding stop.
+      //
+      // The wait happens where the access leg ENDS and the transit leg
+      // begins, so it is measured against the next transit leg's boarding
+      // stop whatever leg the matcher currently favours — otherwise the count
+      // could not start until the trip had already stepped onto the bus, and
+      // the two gates would depend on each other. Keyed by that leg's index,
+      // so walking on to a different boarding stop starts the count again.
+      const matchedLegIndex = routeMatch.legIndex
+      const boardLegIndex = itinerary.legs.findIndex(
+        (l: any, i: number) => i >= matchedLegIndex && l?.transitLeg
+      )
+      const boardStop: any =
+        boardLegIndex >= 0 ? (itinerary.legs[boardLegIndex] as any).from : null
+      session.boardStopDwell = trackBoardStopDwell(session.boardStopDwell, {
+        distanceToBoardStopM:
+          boardStop?.lat != null && boardStop?.lon != null
+            ? calculateDistance(
+                position.coords.latitude,
+                position.coords.longitude,
+                boardStop.lat,
+                boardStop.lon
+              )
+            : null,
+        legIndex: boardLegIndex,
+        nowMs: nowForRiding
+      })
+
       // Re-read riding: advanceToLeg above may have cleared it on alight.
       const ridingNow = getState().otp?.goMode?.riding ?? null
       const decision = decideRiding({
+        boardStopDwellMs:
+          session.boardStopDwell?.legIndex === routeMatch.legIndex
+            ? session.boardStopDwell.dwellMs
+            : null,
+        fixAccuracyM: position.coords.accuracy ?? null,
         matchedLeg,
         nowMs: nowForRiding,
         offRouteClearMs: RIDING_OFFROUTE_CLEAR_MS,
@@ -4309,8 +4390,18 @@ export function performVehicleMatching(routeId: string) {
     // for the trip the rider is supposed to be on and read its direction. When
     // that trip isn't currently reporting there is no expected direction and
     // the gate stays inert, which is the honest answer rather than a guess.
+    // The leg the rider is boarding: the next TRANSIT leg at or after the one
+    // the matcher favours. Reading the matcher's own leg would name the access
+    // leg while the rider is still walking to the stop, and an access leg has
+    // no trip and no boarding stop id — so both the direction gate and the
+    // board-stop gate below would go inert exactly while the rider waits.
+    const legs: any[] = goMode.activeItinerary?.legs ?? []
+    const matcherLegIndex = goMode.routeMatch?.legIndex ?? 0
+    const boardLegIndex = legs.findIndex(
+      (l: any, i: number) => i >= matcherLegIndex && l?.transitLeg
+    )
     const plannedLeg: any =
-      goMode.activeItinerary?.legs?.[goMode.routeMatch?.legIndex ?? 0]
+      boardLegIndex >= 0 ? legs[boardLegIndex] : legs[matcherLegIndex]
     const plannedTripId = plannedLeg?.trip?.gtfsId || plannedLeg?.tripId || null
     const expectedDirectionId = plannedTripId
       ? vehicles.find((v: any) => v.tripId === plannedTripId)?.directionId ??
@@ -4378,7 +4469,23 @@ export function performVehicleMatching(routeId: string) {
       // is reserved for the onboard ("I'm already on the bus") flow, which has
       // no itinerary and genuinely needs the rider to identify their route.
       if (goMode.activeItinerary) {
-        if (matchResult.vehicleId && matchResult.confidence !== 'low') {
+        // Auto-confirming is the app boarding the rider on their behalf, so it
+        // needs more than one poll and more than a bus that is on its way.
+        //
+        // 2026-09-01 ride 1, 08:26:26: one poll (`consecutiveMatches: 1`,
+        // confidence `medium`), vehicle 8139 135 m off with `nextStopId` still
+        // "I-35W & 98th St Station" — the rider's OWN boarding stop, so it had
+        // not arrived — and the rider standing on the platform at 0.0-0.9 m/s.
+        // This fired anyway, minted `confidence: "confirmed"`, and SET_RIDING
+        // landed 3 ms later. The boarded-earlier branch then swapped the whole
+        // itinerary with `autoApply: true`, moving the estimated arrival
+        // +8m54s. Both halves of that are the same missing gate.
+        if (
+          matchResult.vehicleId &&
+          matchResult.confidence !== 'low' &&
+          consecutiveMatches >= BOARD_AUTO_CONFIRM_MIN_CONSECUTIVE &&
+          vehicleReachedBoardStop(matchResult, plannedLeg)
+        ) {
           dispatch(confirmVehicleSelection(matchResult.vehicleId))
         }
       } else if (!goMode.riding) {
@@ -4435,9 +4542,18 @@ export function confirmVehicleSelection(vehicleId: string) {
     // stamp the sticky riding fact directly (no GPS heuristics needed).
     if (selected?.routeId || selected?.tripId) {
       const prevRiding = goMode?.riding
+      // Keep a board time that already had a bus behind it; re-stamp one that
+      // did not. On 2026-09-01 ride 2 riding was established from GPS alone at
+      // 10:47:15 with `vehicleId: null`; real evidence arrived 3m40s later
+      // (CONFIRM_VEHICLE 10:50:55, vehicle 1:8216 at 127.9 m) and this line
+      // carried the fabricated `boardedAt: 1788277635049` straight through it,
+      // so the recorded boarding stayed 3m40s early even after confirmation.
+      const prevBoardedAt = ridingFactIsEvidenced(prevRiding)
+        ? prevRiding?.boardedAt
+        : null
       dispatch(
         setRiding({
-          boardedAt: prevRiding?.boardedAt ?? Date.now(),
+          boardedAt: prevBoardedAt ?? Date.now(),
           headsign: selected.tripHeadsign ?? null,
           legIndex: goMode?.routeMatch?.legIndex ?? -1,
           offRouteSince: null,

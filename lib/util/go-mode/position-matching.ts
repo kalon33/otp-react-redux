@@ -525,6 +525,25 @@ export function matchPositionToRoute(
  */
 export const TRANSIT_BOARD_EARLY_MS = 5 * 60 * 1000
 
+/**
+ * How close to the target transit leg's shape the rider must be for the trip
+ * to step onto it.
+ *
+ * The clock says a bus is due; it says nothing about where the rider is. On
+ * 2026-09-01 ride 2 the matcher's own legIndex moved to the Orange Line leg at
+ * 10:37:33 while the rider was **810 m** off it, `isOnRoute: false`, cycling —
+ * and the board window opened at 10:42:09, so TRANSITION_LEG followed with the
+ * rider 1003.7 m away and still `isOnRoute: false`. Everything keyed off the
+ * transitioned leg then ran against a bus polyline for someone on a bicycle
+ * for the next four and a half minutes (backlog 6.3).
+ *
+ * Same figure as riding.ts's RIDING_ESTABLISH_MAX_DISTANCE_M and the matcher's
+ * own MATCH_CORRIDOR_ACTIVE_M — one metre-count for "the rider is at this
+ * line", not three. A rider waiting on the platform measures 20-31 m (ride 1,
+ * 08:25:30-08:26:26), so this does not delay the ordinary case by one tick.
+ */
+export const TRANSIT_BOARD_MAX_DISTANCE_M = MATCH_CORRIDOR_ACTIVE_M
+
 export type TransitionGate = {
   /** Live board epoch for the target leg, when one is known. */
   boardEpoch?: number | null
@@ -551,6 +570,12 @@ export function shouldTransitionToNextLeg(
   // Callers that supply no clock or no leg keep the old index-order behaviour.
   if (!targetLeg || nowMs == null) return true
   if (!legIsTransit(targetLeg)) return true
+
+  // The clock is not a statement about position. A rider four and a half
+  // minutes and 800 m from the stop is not boarding, whatever the timetable
+  // says — see TRANSIT_BOARD_MAX_DISTANCE_M.
+  if (!match.isOnRoute) return false
+  if (match.distanceFromRoute > TRANSIT_BOARD_MAX_DISTANCE_M) return false
 
   // Prefer the live board time; a bus running late should not pull the rider
   // onto its leg on the strength of the plan alone.

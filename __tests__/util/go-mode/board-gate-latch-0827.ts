@@ -210,9 +210,18 @@ describe('the board-time gate that could only refuse once (2026-08-27)', () => {
     store = makeStore(trip())
     tickAt(BOARD_MS - TRANSIT_BOARD_EARLY_MS - 180_000)
     expect(store.transitions()).toEqual([])
-    // ...and the matcher has nonetheless recorded the rider on the bus leg,
-    // which is the state the next tick used to read back as "already there".
-    expect(store.getGoMode().routeMatch?.legIndex).toBe(1)
+    // ...and the stored match stays on the leg the trip has actually reached.
+    //
+    // It used to read 1 here: the matcher nominated the bus leg, the gate
+    // refused it, and the nomination was stored anyway — a second, ungated
+    // answer to "which leg is this trip on" that the next tick read back as
+    // "already there". 3f5d5b95 worked around that by giving the gate
+    // `session.lastTransitionedLegIndex` instead, which is what the case
+    // below proves still holds; backlog 6.3 removes the second answer. On
+    // 2026-09-01 ride 2 the two disagreed for 4m36s, and the progress
+    // producer, the deviation detector and the riding decision spent all of
+    // it measuring a cyclist against a bus polyline.
+    expect(store.getGoMode().routeMatch?.legIndex).toBe(0)
   })
 
   /**
