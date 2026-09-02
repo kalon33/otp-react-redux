@@ -214,18 +214,36 @@ export function clampNonLiveLegTimes<
       changed = true
     }
     // Raising the board time past a still-past alight time inverts the leg —
-    // the rider would be shown arriving before they got on. Carry the alight
-    // with it. Scoped to the raise we just made: everywhere else board and
-    // alight are deliberately independent, and a merely-late live pair is
-    // honest data, not an inversion. (8/2: this shape drove the
-    // once-per-second SET_LIVE_LEG_TIMES churn through the whole ride.)
+    // the rider would be shown arriving before they got on. Scoped to the
+    // raise we just made: everywhere else board and alight are deliberately
+    // independent, and a merely-late live pair is honest data, not an
+    // inversion.
+    //
+    // WHICH end gives way depends on which one is evidence. A schedule-only
+    // alight is bookkeeping and moves with the board (8/2). A REALTIME alight
+    // is the feed's own statement about when this trip reaches the stop, and
+    // on 2026-09-01 moving it was trip-ending: the Orange Line's alight sat in
+    // the past at 13:50:00Z, flagged live and re-written by every 20 s poll,
+    // while the schedule-only board was raised to `now` on every 1 Hz tick and
+    // dragged the alight up with it. The trip's live end therefore became
+    // `now` once a second, so `timeRemaining` printed exactly 400.0 s — the
+    // trailing legs' duration — on every tick while `distanceToDestination`
+    // fell 1745 -> 1648 m, and `estimatedArrival` slid with the wall clock and
+    // could never arrive. Once per poll the real figure got through, and the
+    // rider saw 2.7 min / 13:51:41 and then 6.7 min / 13:55:38 one second
+    // apart. So when the alight is live, the BOARD gives way instead: a rider
+    // whose bus has already reached the alight stop boarded no later than
+    // that, and the leg stays the right way round either way.
     if (
       boardRaised &&
       next.alightEpoch != null &&
       next.boardEpoch != null &&
       next.alightEpoch < next.boardEpoch
     ) {
-      next = { ...next, alightEpoch: next.boardEpoch }
+      next =
+        next.alightRealtime ?? next.realtime
+          ? { ...next, boardEpoch: next.alightEpoch }
+          : { ...next, alightEpoch: next.boardEpoch }
     }
     out[idx] = next
   }
