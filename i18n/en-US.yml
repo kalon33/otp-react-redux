@@ -177,6 +177,8 @@ components:
   ActiveRoutingPreferences:
     clear: Clear
     label: "Preferences:"
+    noWalkTransit: No walk + transit
+    optionCount: "{count} options"
   AddPlaceButton:
     addPlace: Add place
     needOriginDestination: Define origin/destination to add intermediate places
@@ -208,7 +210,19 @@ components:
     shortTitle: Plan Trip
   BatchSearchScreen:
     advancedHeader: Advanced Preferences
+    bikeCeilingHelp: >-
+      One trip can hold up to {minutes} minutes of biking — about {miles} mi at
+      your current speed of {speed} mph. That limit is set on the server; this
+      slider changes how readily the planner reaches for the bike inside it.
+    bikeWillingnessHeader: Biking
+    bikeWillingnessHigh: More
+    bikeWillingnessLabel: How far you're willing to bike
+    bikeWillingnessLow: Less
     header: Plan Your Trip
+    hideWalkTransitHelp: >-
+      Only shows options that use your bike to reach transit. Ignored when
+      walking is the only way you can get there.
+    hideWalkTransitLabel: Hide walk + transit options
     modeSelectorLabel: Select a travel mode
     moreOptions: More options
     nlPreferencesApplied: "Applied: {summary}"
@@ -217,6 +231,8 @@ components:
     nlPreferencesHeader: Describe your needs
     nlPreferencesLoading: Thinking…
     nlPreferencesPlaceholder: e.g. bad knee today, avoid transfers
+    numItinerariesLabel: How many options to look for
+    numItinerariesOption: "{count} options"
     routeLockAny: Any route
     routeLockChip: Only {route}
     routeLockDetail: Only trips on {route}, biking to and from it
@@ -227,6 +243,7 @@ components:
     routingProfileLabel: Optimize routing for
     saveAndReturn: Save and return
     saved: Saved
+    searchOptionsHeader: Options shown
     submodeSelectorLabel: Select travel modes and submodes
     tripOptions: Trip Options
   BatchSettings:

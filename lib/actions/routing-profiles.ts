@@ -6,6 +6,7 @@ import {
   postPreferences,
   PREFERENCES_API_PATH
 } from '../util/routing-profiles'
+import { getDefaultNumItineraries } from '../util/api'
 import { queryIsValid } from '../util/state'
 import type { RouteLock } from '../util/route-lock'
 import type { RoutingPreferences } from '../util/routing-profiles'
@@ -17,6 +18,21 @@ const { randId, removeItem, storeItem } = coreUtils.storage
 
 /** Local-storage key for the rider's last-used routing profile/preferences. */
 const ROUTING_PROFILE_STORAGE_KEY = 'routingProfile'
+
+/**
+ * Local-storage key for the settings panel's non-lever search options: how many
+ * itineraries to ask OTP for (#47) and whether to drop the walk-access call
+ * from the mode fan-out (#48). Kept apart from ROUTING_PROFILE_STORAGE_KEY
+ * because that one is cleared whenever the rider returns to the default
+ * profile, which would silently reset these two as well.
+ */
+const SEARCH_OPTIONS_STORAGE_KEY = 'searchOptions'
+
+/** The panel's search options, as they sit on currentQuery. */
+export interface SearchOptions {
+  hideWalkTransitOptions?: boolean
+  numItineraries?: number
+}
 
 /**
  * Apply a set of routing-preference levers to the current query. They are
@@ -60,13 +76,48 @@ export function setRoutingPreferences(
 }
 
 /**
- * Reset everything the rider has customized about routing: levers, profile, and
- * any route lock. One re-search, not two — the preferences write is silenced so
- * the lock release fires it.
+ * Set one or both of the panel's search options. They ride on currentQuery so
+ * routingQuery reads them with no new plumbing (numItineraries is already a
+ * query param OTP takes; hideWalkTransitOptions is listed in
+ * NON_OTP_QUERY_KEYS so it is stripped before the variables are sent), and they
+ * are persisted separately from the profile so a "reset to Fastest" cannot take
+ * them down with it. Re-searches once when the query is already valid.
+ */
+export function setSearchOptions(
+  options: SearchOptions,
+  actionOptions: { replan?: boolean } = {}
+) {
+  return function (dispatch: any, getState: any): void {
+    const { currentQuery } = getState().otp
+    const next: SearchOptions = {
+      hideWalkTransitOptions: !!currentQuery.hideWalkTransitOptions,
+      numItineraries: currentQuery.numItineraries,
+      ...options
+    }
+    const replan = actionOptions.replan !== false && queryIsValid(getState())
+    dispatch(setQueryParam(next, replan ? randId() : undefined))
+    storeItem(SEARCH_OPTIONS_STORAGE_KEY, next)
+  }
+}
+
+/**
+ * Reset everything the rider has customized about routing: levers, profile,
+ * route lock, and the panel's search options. One re-search, not several — the
+ * writes ahead of the lock release are silenced so the release fires it.
  */
 export function clearRoutingPreferences() {
-  return function (dispatch: any): void {
+  return function (dispatch: any, getState: any): void {
     dispatch(setRoutingPreferences({}, DEFAULT_PROFILE_ID, { replan: false }))
+    dispatch(
+      setSearchOptions(
+        {
+          hideWalkTransitOptions: false,
+          numItineraries: getDefaultNumItineraries(getState().otp.config)
+        },
+        { replan: false }
+      )
+    )
+    removeItem(SEARCH_OPTIONS_STORAGE_KEY)
     dispatch(setRouteLock(null))
   }
 }

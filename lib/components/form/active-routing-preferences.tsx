@@ -6,6 +6,7 @@ import styled from 'styled-components'
 
 import * as routingProfileActions from '../../actions/routing-profiles'
 import { AppReduxState } from '../../util/state-types'
+import { getDefaultNumItineraries } from '../../util/api'
 import {
   PreferenceSummary,
   RoutingPreferences,
@@ -65,16 +66,36 @@ const ClearButton = styled.button`
  */
 const ActiveRoutingPreferences = ({
   clearPreferences,
+  defaultNumItineraries,
+  hideWalkTransitOptions,
+  numItineraries,
   preferences,
   routeLock
 }: {
   clearPreferences: () => void
+  defaultNumItineraries: number
+  hideWalkTransitOptions?: boolean
+  numItineraries?: number
   preferences?: RoutingPreferences
   routeLock?: RouteLock
 }): JSX.Element | null => {
   const intl = useIntl()
   const summary: PreferenceSummary[] = summarizePreferences(preferences)
-  if (summary.length === 0 && !routeLock) return null
+  // The count only counts as "customized" when the rider moved it off whatever
+  // the config ships, so an untouched app shows no chip for it.
+  const customCount =
+    typeof numItineraries === 'number' &&
+    numItineraries !== defaultNumItineraries
+      ? numItineraries
+      : undefined
+  if (
+    summary.length === 0 &&
+    !routeLock &&
+    !hideWalkTransitOptions &&
+    customCount === undefined
+  ) {
+    return null
+  }
 
   return (
     <Container
@@ -104,6 +125,27 @@ const ActiveRoutingPreferences = ({
           {item.phrase}
         </Chip>
       ))}
+      {hideWalkTransitOptions && (
+        <Chip
+          title={intl.formatMessage({
+            id: 'components.BatchSearchScreen.hideWalkTransitHelp'
+          })}
+        >
+          <FormattedMessage id="components.ActiveRoutingPreferences.noWalkTransit" />
+        </Chip>
+      )}
+      {customCount !== undefined && (
+        <Chip
+          title={intl.formatMessage({
+            id: 'components.BatchSearchScreen.numItinerariesLabel'
+          })}
+        >
+          <FormattedMessage
+            id="components.ActiveRoutingPreferences.optionCount"
+            values={{ count: customCount }}
+          />
+        </Chip>
+      )}
       <ClearButton onClick={clearPreferences} type="button">
         <Times size={11} />
         <FormattedMessage id="components.ActiveRoutingPreferences.clear" />
@@ -113,6 +155,9 @@ const ActiveRoutingPreferences = ({
 }
 
 const mapStateToProps = (state: AppReduxState) => ({
+  defaultNumItineraries: getDefaultNumItineraries(state.otp.config),
+  hideWalkTransitOptions: state.otp.currentQuery?.hideWalkTransitOptions,
+  numItineraries: state.otp.currentQuery?.numItineraries,
   preferences: state.otp.currentQuery?.routingPreferences,
   routeLock: state.otp.currentQuery?.routeLock
 })
