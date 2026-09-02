@@ -500,10 +500,30 @@ describe('clampNonLiveLegTimes', () => {
     expect(out?.[2].alightEpoch).toBe(NOW)
   })
 
-  it('carries the alight along when raising the board past it', () => {
-    // 8/2: raising a non-live board time to now while a live alight sat in
-    // the past showed the rider arriving before they got on, and re-fired
-    // SET_LIVE_LEG_TIMES once a second for the whole ride.
+  it('carries a schedule-only alight along when raising the board past it', () => {
+    // 8/2: raising a non-live board time to now while the alight sat in the
+    // past showed the rider arriving before they got on.
+    const times = {
+      1: entry({
+        alightEpoch: NOW - 60000,
+        alightRealtime: false,
+        boardEpoch: NOW - 90000,
+        boardRealtime: false
+      })
+    }
+    const out = clampNonLiveLegTimes(times, NOW)
+    expect(out?.[1].boardEpoch).toBe(NOW)
+    expect(out?.[1].alightEpoch).toBe(NOW)
+  })
+
+  it('gives way at the BOARD when the alight is the feed’s own figure', () => {
+    // Corrected 2026-09-01. This case used to raise the live alight to now as
+    // well, which made the trip's live end slide with the wall clock: on ride
+    // 1 the Orange Line's realtime alight sat in the past and was re-written
+    // by every 20 s poll, while the schedule-only board was raised each 1 Hz
+    // tick and dragged it along. timeRemaining printed exactly 400.0 s on
+    // every tick and estimatedArrival could never arrive. The leg still may
+    // not read backwards — but it is the board, not the feed, that moves.
     const times = {
       1: entry({
         alightEpoch: NOW - 60000,
@@ -513,8 +533,11 @@ describe('clampNonLiveLegTimes', () => {
       })
     }
     const out = clampNonLiveLegTimes(times, NOW)
-    expect(out?.[1].boardEpoch).toBe(NOW)
-    expect(out?.[1].alightEpoch).toBe(NOW)
+    expect(out?.[1].alightEpoch).toBe(NOW - 60000)
+    expect(out?.[1].boardEpoch).toBe(NOW - 60000)
+    expect(out?.[1].boardEpoch).toBeLessThanOrEqual(
+      out?.[1].alightEpoch as number
+    )
   })
 
   it('leaves a merely-late live pair alone — that is honest data', () => {

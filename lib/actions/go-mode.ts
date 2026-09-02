@@ -3255,6 +3255,22 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     const itinerary = goMode.activeItinerary
     const currentLegIndex = goMode.routeMatch?.legIndex || 0
 
+    // The rider's OWN ground step since the last fix. `goMode` was read before
+    // this tick's updatePosition dispatch, so tracking.lastPosition is still
+    // the previous fix. Null on the first fix of a session, where there is no
+    // step to measure and the matcher is ungated anyway.
+    const previousFix = goMode.tracking?.lastPosition
+    const movedSinceFixM =
+      previousFix?.coords?.latitude == null ||
+      previousFix?.coords?.longitude == null
+        ? null
+        : calculateDistance(
+            previousFix.coords.latitude,
+            previousFix.coords.longitude,
+            currentPosition[0],
+            currentPosition[1]
+          )
+
     // Match position to route
     let routeMatch = matchPositionToRoute(
       currentPosition,
@@ -3272,7 +3288,14 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       // instead would advance every tick — including through a
       // matchTrust.provisional hold, where the match does not move — freezing
       // the budget at ~1 s and stranding the rider on a stale point.
-      { accuracyM: position.coords.accuracy, nowMs: position.timestamp }
+      {
+        accuracyM: position.coords.accuracy,
+        // Without this the jump budget is a mode ceiling and nothing else, and
+        // a stationary rider on a bike leg is allowed 15 m/s of projection
+        // movement they never made (2026-09-01, twice).
+        movedSinceFixM,
+        nowMs: position.timestamp
+      }
     )
 
     if (!routeMatch) {
