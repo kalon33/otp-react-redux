@@ -3,20 +3,20 @@ import { Leg } from '@opentripplanner/types'
 import React, { Component } from 'react'
 import TransitLegSubheader from '@opentripplanner/itinerary-body/lib/otp-react-redux/transit-leg-subheader'
 
-import { setMainPanelContent, setViewedStop } from '../../../actions/ui'
 import { SetViewedStopHandler } from '../../util/types'
+import { viewStopFromItinerary } from '../../../actions/ui'
 
 interface Props {
   leg: Leg
-  setMainPanelContent: (content: number | null) => void
-  setViewedStop: SetViewedStopHandler
+  viewStopFromItinerary: SetViewedStopHandler
 }
 
 class ConnectedTransitLegSubheader extends Component<Props> {
+  // Where this lands depends on whether a trip is running — see
+  // actions/ui#viewStopFromItinerary. Mid-trip it opens inside the Go Mode
+  // layer; otherwise it is the nearby view, exactly as before.
   onClick: SetViewedStopHandler = (payload) => {
-    const { setMainPanelContent, setViewedStop } = this.props
-    setMainPanelContent(null)
-    setViewedStop(payload)
+    this.props.viewStopFromItinerary(payload)
   }
 
   render() {
@@ -26,8 +26,7 @@ class ConnectedTransitLegSubheader extends Component<Props> {
 }
 
 const mapDispatchToProps = {
-  setMainPanelContent,
-  setViewedStop
+  viewStopFromItinerary
 }
 
 export default connect(null, mapDispatchToProps)(ConnectedTransitLegSubheader)
