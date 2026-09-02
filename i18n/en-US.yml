@@ -362,6 +362,8 @@ components:
     arrivedDone: Done
     arrivedTitle: 🎉 You've arrived!
     arrivesIn: arrives in {time}
+    boardingConfirm: I'm on the bus
+    boardingDeny: Not on the bus
     boardingQuestion: Are you on the bus?
     boardingSubtitle: Looking for {route} nearby
     busHeadsign: to {headsign}
@@ -397,6 +399,7 @@ components:
     loading: Starting Trip...
     loadingSchedule: Loading the schedule for your bus…
     locatingBus: Locating your bus...
+    nextBusesAtStop: Next buses at {stop}
     nextDeparture: "Next: {time} ({mins} min away)"
     noBusesNearby: No buses detected nearby
     noLiveVehicleData: No live bus data — tracking by GPS
@@ -424,6 +427,7 @@ components:
     rideToStop: "{emoji} {time} ride to {stop}"
     selectVehicle: This one
     sheetHandleLabel: View trip & other ways
+    stopDeparturesTitle: Departures
     stopsRemainingCompact: "{count, plural, one {1 stop} other {# stops}} remaining"
     theBus: the bus
     thenTurn: then {turn}

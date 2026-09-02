@@ -223,8 +223,10 @@ components:
   ActiveRoutingPreferences:
     clear: Effacer
     label: "Préférences :"
+    noTransfers: "Sans correspondance"
     noWalkTransit: "Sans marche + transports"
     optionCount: "{count} options"
+    viaStop: "Via {stop}"
   BackToTripPlanner:
     backToTripPlanner: Retour au planificateur de trajets
   BatchResultsScreen:
@@ -234,6 +236,9 @@ components:
     shortTitle: Planifier un trajet
   BatchSearchScreen:
     advancedHeader: Préférences avancées
+    arriveOnTimeHeader: "Rejoindre le bus"
+    arriveOnTimeHelp: "Lorsque votre trajet jusqu'à l'arrêt est recalculé en cours de route, il vise à vous y amener {minutes} minutes avant le bus plutôt que le plus vite possible."
+    arriveOnTimeLabel: "Arriver juste avant le bus"
     bikeCeilingHelp: "Un trajet peut contenir jusqu'à {minutes} minutes de vélo — environ {miles} mi à votre vitesse actuelle de {speed} mph. Cette limite est fixée sur le serveur ; ce curseur règle la propension du planificateur à utiliser le vélo à l'intérieur de cette limite."
     bikeWillingnessHeader: "Vélo"
     bikeWillingnessHigh: "Plus"
@@ -250,8 +255,19 @@ components:
     nlPreferencesHeader: "Décrivez vos besoins"
     nlPreferencesLoading: "Réflexion…"
     nlPreferencesPlaceholder: "ex. genou douloureux aujourd'hui, éviter les correspondances"
+    noTransfersHelp: "Uniquement les trajets réalisables sans changer de véhicule. Certains couples de lieux n'en ont aucun ; il ne reste alors que les options à pied ou à vélo."
+    noTransfersLabel: "Sans correspondance"
     numItinerariesLabel: "Nombre d'options à rechercher"
     numItinerariesOption: "{count} options"
+    routeLockAdd: "Ajouter une ligne…"
+    routeLockHeader: "Lignes"
+    routeLockNotStarted: "Ne commence pas par {route}"
+    routeLockRemove: "Retirer {route}"
+    routeLockScopeLabel: "Comment utiliser ces lignes"
+    routeLockScopeOnly: "N'emprunter que ces lignes"
+    routeLockScopeStarting: "Utiliser comme ligne de départ"
+    routeLockStartChip: "Départ sur {route}"
+    routeLockStartDetail: "Trajets dont le premier bus ou train est {route} ; le reste du trajet est laissé au planificateur."
     routingProfileHeader: "Profil d'itinéraire"
     routingProfileLabel: "Optimiser l'itinéraire pour"
     saveAndReturn: Enregistrer et fermer
@@ -259,6 +275,12 @@ components:
     searchOptionsHeader: "Options affichées"
     submodeSelectorLabel: Sélectionnez vos modes et sous-modes de déplacement
     tripOptions: Options concernant le trajet
+    viaStopHelp: "Tous les trajets affichés desserviront cet arrêt, dans un sens comme dans l'autre."
+    viaStopLabel: "Doit passer par un arrêt"
+    viaStopNone: "Aucun arrêt ne correspond à « {name} »."
+    viaStopPlaceholder: "Saisissez une partie du nom d'un arrêt"
+    viaStopRemove: "Retirer {stop}"
+    viaStopSearching: "Recherche…"
   BatchSettings:
     destination: destination
     invalidModeSelection: >-
@@ -348,6 +370,8 @@ components:
     arrivedDone: "Terminé"
     arrivedTitle: "🎉 Vous êtes arrivé !"
     arrivesIn: "arrive dans {time}"
+    boardingConfirm: "Je suis dans le bus"
+    boardingDeny: "Je ne suis pas dans le bus"
     boardingQuestion: "Êtes-vous dans le bus ?"
     boardingSubtitle: "Recherche du {route} à proximité"
     busHeadsign: "vers {headsign}"
@@ -381,6 +405,7 @@ components:
     loading: "Démarrage du trajet..."
     loadingSchedule: "Chargement des horaires de votre bus…"
     locatingBus: "Localisation de votre bus..."
+    nextBusesAtStop: "Prochains bus à {stop}"
     nextDeparture: "Prochain : {time} (dans {mins} min)"
     noBusesNearby: "Aucun bus détecté à proximité"
     noLiveVehicleData: "Pas de données en temps réel — suivi par GPS"
@@ -408,6 +433,7 @@ components:
     rideToStop: "{emoji} {time} de trajet jusqu'à {stop}"
     selectVehicle: "Celui-ci"
     sheetHandleLabel: "Voir le trajet et les autres options"
+    stopDeparturesTitle: "Départs"
     stopsRemainingCompact: "Encore {count, plural, one {1 arrêt} other {# arrêts}}"
     theBus: "le bus"
     thenTurn: "puis {turn}"
