@@ -2483,17 +2483,18 @@ function optimizeAlightFromTrip(options: {
       return null
     }
 
+    // Kept by identity: START_ONBOARD_OPTIMIZE stores this exact array, so
+    // `onboard.candidates === candidatePayload` later is a precise "this is
+    // still MY optimize run" token — a second run (Change bus, rediscover)
+    // replaces it and the late re-rank below stands down.
+    const candidatePayload = candidates.map((c) => ({
+      busArrivalEpoch: c.busArrivalEpoch,
+      realtime: c.realtime,
+      stopId: c.stop.id,
+      stopName: c.stop.name
+    }))
     if (updateOnboardState) {
-      dispatch(
-        startOnboardOptimize({
-          candidates: candidates.map((c) => ({
-            busArrivalEpoch: c.busArrivalEpoch,
-            realtime: c.realtime,
-            stopId: c.stop.id,
-            stopName: c.stop.name
-          }))
-        })
-      )
+      dispatch(startOnboardOptimize({ candidates: candidatePayload }))
     }
 
     const { modes, modeSettings, numItineraries } = getBasePlanParts(state)
@@ -2536,58 +2537,130 @@ function optimizeAlightFromTrip(options: {
     const settleMs =
       state.otp.config?.itinerary?.onboardSettleMs ??
       ONBOARD_CANDIDATE_SETTLE_MS
-    const results = await settleCandidatePlans<AlightCandidateResult>(
-      candidates.map((c) =>
-        Promise.resolve(dispatch(fetchCandidatePlan(c, ctx)))
-      ),
-      settleMs,
-      (index) => ({
-        busArrivalEpoch: candidates[index].busArrivalEpoch,
-        // rankAlightOptions skips an errored result, which is exactly right:
-        // a candidate stop whose onward plan never came back is not a stop the
-        // rider can be told to get off at.
-        error: true,
-        itineraries: [],
-        realtime: candidates[index].realtime,
-        stopId: candidates[index].stop.id,
-        stopName: candidates[index].stop.name
-      })
-    )
-
+    // Candidates whose request was still in flight at the deadline. A REJECTED
+    // candidate is not in here: that one is over, so telling the rider we are
+    // still checking it would be a lie.
+    const stillInFlight = new Set<number>()
+    // Declared ahead of foldInLateResult, which reads it. A straggler's
+    // callback can only run after settleCandidatePlans has returned (it sets
+    // its hand-off flag synchronously before returning), so by then this holds
+    // the array the rider was actually shown.
+    let results: AlightCandidateResult[] = []
     const keepRouteId =
       options.keepRouteId !== undefined
         ? options.keepRouteId
         : goMode?.onboard?.keepRouteId ?? null
-    const ranked = rankAlightOptions(results, {
-      keepRouteId,
-      limit,
-      nowMs,
-      tokenHopMaxMeters: tokenHopMeters(state),
-      tokenHopToleranceMs: tokenHopToleranceMs(state),
-      walkOnlyMax
+
+    const substitute = (index: number) => ({
+      busArrivalEpoch: candidates[index].busArrivalEpoch,
+      // rankAlightOptions skips an errored result, which is exactly right:
+      // a candidate stop whose onward plan never came back is not a stop the
+      // rider can be told to get off at.
+      error: true,
+      itineraries: [],
+      realtime: candidates[index].realtime,
+      stopId: candidates[index].stop.id,
+      stopName: candidates[index].stop.name
     })
-    // Decorate each option with the itinerary the rider actually gets on tap
-    // (current-bus leg prepended, transfers recounted, real bike legs) so the
-    // results list displays exactly what confirmOnboardAlightStop will start.
-    // The 7/12 cards showed the ONWARD plan's numbers instead — "0 more
-    // transfers" became a 1-transfer trip after tapping.
-    const decorated = (ranked || []).map((option: any) => {
-      try {
-        return {
-          ...option,
-          displayItinerary: buildOnboardItinerary(
-            trip,
-            vehicle,
-            option,
-            lastPosition
-          )
+
+    const rankAndDecorate = (
+      settledResults: AlightCandidateResult[],
+      at: number
+    ) => {
+      const ranked = rankAlightOptions(settledResults, {
+        keepRouteId,
+        limit,
+        nowMs: at,
+        tokenHopMaxMeters: tokenHopMeters(state),
+        tokenHopToleranceMs: tokenHopToleranceMs(state),
+        walkOnlyMax
+      })
+      // Decorate each option with the itinerary the rider actually gets on tap
+      // (current-bus leg prepended, transfers recounted, real bike legs) so the
+      // results list displays exactly what confirmOnboardAlightStop will start.
+      // The 7/12 cards showed the ONWARD plan's numbers instead — "0 more
+      // transfers" became a 1-transfer trip after tapping.
+      return (ranked || []).map((option: any) => {
+        try {
+          return {
+            ...option,
+            displayItinerary: buildOnboardItinerary(
+              trip,
+              vehicle,
+              option,
+              lastPosition
+            )
+          }
+        } catch {
+          return option
         }
-      } catch {
-        return option
+      })
+    }
+
+    /**
+     * A candidate plan that landed after the deadline. Folding it in is only
+     * safe while the answer it would replace is still the one on screen: a
+     * re-dispatched SET_ONBOARD_RESULT sets onboard.status back to 'ready',
+     * and a non-idle onboard status renders the onboard UI OVER the live trip
+     * screen — so doing this after the rider has tapped an option would throw
+     * them back into the chooser mid-ride. Hence the four guards below;
+     * anything else and the straggler is discarded, which is what the code
+     * did unconditionally before.
+     */
+    const foldInLateResult = (index: number, value: AlightCandidateResult) => {
+      results[index] = value
+      stillInFlight.delete(index)
+      const now = getState()
+      const onboard = now.otp?.goMode?.onboard
+      if (
+        // (1) still showing an answer, not idle/optimizing/error, and (2) not
+        // a fresh run: candidates is the very array this run dispatched.
+        onboard?.status !== 'ready' ||
+        onboard?.candidates !== candidatePayload ||
+        // (3) same bus, same trip — a re-confirm can swap either.
+        onboard?.trip?.id !== trip?.id ||
+        (onboard?.vehicle?.vehicleId ?? null) !==
+          (vehicle?.vehicleId ?? null) ||
+        // (4) the rider is no longer looking at this list (they tapped an
+        // option, which clears onboard, or Go Mode moved on).
+        !now.otp?.goMode?.isActive
+      ) {
+        return
       }
-    })
+      const improved = rankAndDecorate(results, Date.now())
+      if (!improved.length) return
+      dispatch(
+        setOnboardResult({
+          answeredCandidates: results.filter((r) => !r?.error).length,
+          options: improved,
+          pendingCandidates: stillInFlight.size
+        })
+      )
+    }
+
+    results = await settleCandidatePlans<AlightCandidateResult>(
+      candidates.map((c) =>
+        Promise.resolve(dispatch(fetchCandidatePlan(c, ctx)))
+      ),
+      settleMs,
+      (index, reason) => {
+        if (reason === 'timeout') stillInFlight.add(index)
+        return substitute(index)
+      },
+      updateOnboardState ? foldInLateResult : undefined
+    )
+
+    const decorated = rankAndDecorate(results, nowMs)
     if (updateOnboardState) {
-      dispatch(setOnboardResult(decorated.length ? decorated : null))
+      dispatch(
+        decorated.length
+          ? setOnboardResult({
+              answeredCandidates: results.filter((r) => !r?.error).length,
+              options: decorated,
+              pendingCandidates: stillInFlight.size
+            })
+          : setOnboardResult(null)
+      )
     }
     return decorated.length ? decorated : null
   }

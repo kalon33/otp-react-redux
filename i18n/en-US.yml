@@ -427,6 +427,7 @@ components:
     rideToStop: "{emoji} {time} ride to {stop}"
     selectVehicle: This one
     sheetHandleLabel: View trip & other ways
+    stillCheckingStops: Still checking {count, plural, one {1 more stop} other {# more stops}}…
     stopDeparturesTitle: Departures
     stopsRemainingCompact: "{count, plural, one {1 stop} other {# stops}} remaining"
     theBus: the bus

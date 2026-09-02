@@ -99,12 +99,29 @@ export interface OnboardAlightOption {
  */
 export interface OnboardState {
   alightOptions: OnboardAlightOption[]
+  /**
+   * How many of `candidates` actually came back with a plan by the time the
+   * options below were ranked. Null when unknown (nothing has optimized yet).
+   *
+   * Since 2026-09-02 the optimizer ranks whatever answered by its deadline
+   * rather than hanging on the slowest candidate (4.1) — a strictly better
+   * trade, but it means a partial answer and a whole answer looked identical
+   * on screen. This is what lets AlightRecommendation say "still checking N
+   * more stops" instead of presenting two of five as the whole list.
+   */
+  answeredCandidates: number | null
   bestAlightStop: OnboardAlightOption | null
   candidates: OnboardCandidate[]
   /** The route the rider already chose for the leg after this bus, captured
    * when the flow opened (BEGIN_ONBOARD_FLOW nulls activeItinerary, so it
    * cannot be re-derived later). Ranks its options up, never filters. */
   keepRouteId: string | null
+  /**
+   * Candidates whose onward plan was still in flight when the deadline fired,
+   * so a straggler could still land and improve the list. Rejections are NOT
+   * counted here — those are over. Null when unknown.
+   */
+  pendingCandidates: number | null
   status:
     | 'idle'
     | 'discovering'
@@ -262,9 +279,11 @@ const defaultState: GoModeState = {
 
   onboard: {
     alightOptions: [],
+    answeredCandidates: null,
     bestAlightStop: null,
     candidates: [],
     keepRouteId: null,
+    pendingCandidates: null,
     status: 'idle',
     trip: null,
     vehicle: null
@@ -572,13 +591,24 @@ const goMode = handleActions<GoModeState, any>(
     },
 
     [SET_ONBOARD_RESULT]: (state, action) => {
-      const options: OnboardAlightOption[] = action.payload || []
+      // Two payload shapes on purpose. A bare array is the original one and
+      // still means "this is the whole answer"; the object form carries how
+      // many candidates answered, so the UI can say the answer is partial.
+      const payload = action.payload
+      const isCounted = !!payload && !Array.isArray(payload)
+      const options: OnboardAlightOption[] = isCounted
+        ? payload.options || []
+        : payload || []
       return {
         ...state,
         onboard: {
           ...state.onboard,
           alightOptions: options,
+          answeredCandidates: isCounted
+            ? payload.answeredCandidates ?? null
+            : state.onboard.candidates.length || null,
           bestAlightStop: options[0] || null,
+          pendingCandidates: isCounted ? payload.pendingCandidates ?? 0 : 0,
           status: options.length ? ('ready' as const) : ('error' as const)
         }
       }
@@ -756,8 +786,10 @@ const goMode = handleActions<GoModeState, any>(
       onboard: {
         ...state.onboard,
         alightOptions: [],
+        answeredCandidates: 0,
         bestAlightStop: null,
         candidates: action.payload.candidates,
+        pendingCandidates: action.payload.candidates?.length ?? 0,
         status: 'optimizing' as const
       }
     }),

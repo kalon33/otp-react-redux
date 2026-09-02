@@ -138,7 +138,9 @@ describe('onboard optimize settles on what came back (2026-08-31)', () => {
     expect(mockedFetch).toHaveBeenCalledTimes(5)
     const result = store.actions.find((a) => a.type === 'SET_ONBOARD_RESULT')
     expect(result).toBeTruthy()
-    expect(result.payload.length).toBeGreaterThan(0)
+    // Since 6.37 the payload also carries how much of the answer is in, so
+    // the panel can say the list is partial. The options are under `options`.
+    expect(result.payload.options.length).toBeGreaterThan(0)
     expect(store.getOnboard().status).toBe('ready')
   })
 
