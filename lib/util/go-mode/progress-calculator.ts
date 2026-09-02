@@ -218,8 +218,13 @@ export function calculateTimeRemaining(
   // read 0 with `estimatedArrival = now` on all 487 ticks from 1068 m out,
   // while `delay` climbed to 634 s. What is left is a distance and a speed, so
   // the countdown becomes the one thing still true: how long the ground ahead
-  // takes at the pace the rider is keeping. This is also the number the bike
-  // buffer (6.10a) has to be built on.
+  // takes at the pace the rider is keeping.
+  //
+  // Note this pace context is WHOLE-TRIP: `remainingTripDistanceM` sums the
+  // current leg's remainder plus every leg after it, bus and far-side bike leg
+  // included. It is therefore NOT the number the bike buffer (6.10a) is built
+  // on — that one needs leg-scoped ground and computes its own
+  // (`legMetresAhead`, `pacing-card.ts`).
   return paceRemainingSeconds(pace) ?? 0
 }
 

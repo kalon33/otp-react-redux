@@ -3,8 +3,9 @@ import { Dispatch } from 'redux'
 import { IntlShape } from 'react-intl'
 import { isMobile } from '@opentripplanner/core-utils/lib/ui'
 
-import { setLocationToCurrent } from './map'
 import { shouldReuseGoModePosition } from '../util/go-mode/tracking-gates'
+
+import { setLocationToCurrent } from './map'
 
 export const addLocationSearch = createAction('ADD_LOCATION_SEARCH')
 export const receivedPositionError = createAction('POSITION_ERROR')

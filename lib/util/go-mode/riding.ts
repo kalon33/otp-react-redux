@@ -183,16 +183,40 @@ export function trackBoardStopDwell(
  * A feed that publishes no next stop, or a leg with no boarding stop id,
  * passes: never block a decision on data an agency simply does not publish
  * (the same policy as the null headsign and null accuracy cases above).
+ *
+ * ...but `nextStopId` alone is not the whole statement, because it does not
+ * distinguish a bus APPROACHING the stop from one standing AT it. Metro
+ * Transit keeps naming the current stop while the doors are open: measured on
+ * `orange-line-0729.json`, 8140 reported `stopStatus: "STOPPED_AT"` with
+ * `nextStopId: "1:53543"` — the rider's own stop — on all five records from
+ * 17:27:49 to 17:28:48, sitting 39 m and then 23-25 m off the I-35W & 46th St
+ * platform at `speed: 0`. It only named a different stop (`1:52719`) at
+ * 17:28:52, ON DEPARTURE, by which time it was already 230 m up the freeway.
+ * So the plain rule refuses exactly the bus the rider is stepping onto, for
+ * the whole minute it is boardable (6.38).
+ *
+ * `stopStatus` is the field that separates the two cases, so a `STOPPED_AT`
+ * naming the boarding stop counts as REACHED. This cannot weaken the
+ * 2026-09-01 ride 1 refusal that the gate exists for: 8139 was 127-135 m out
+ * and `IN_TRANSIT_TO`, which still fails. A record with no `stopStatus` (or
+ * any other status) falls through to the original comparison unchanged.
  */
 export function vehicleReachedBoardStop(
-  match: { nextStopId?: string | null } | null | undefined,
+  match:
+    | { nextStopId?: string | null; stopStatus?: string | null }
+    | null
+    | undefined,
   matchedLeg: Leg | null | undefined
 ): boolean {
   const boardStopId =
     (matchedLeg as any)?.from?.stopId ?? (matchedLeg as any)?.from?.stopCode
   const nextStopId = match?.nextStopId
   if (!boardStopId || nextStopId == null) return true
-  return nextStopId !== boardStopId
+  if (nextStopId !== boardStopId) return true
+  // Same stop named — the dwelling case is the only one that is nonetheless
+  // "reached". Compared case-insensitively: the field arrives as the GTFS-RT
+  // enum name from some producers and lower-cased from others.
+  return String(match?.stopStatus ?? '').toUpperCase() === 'STOPPED_AT'
 }
 
 /**

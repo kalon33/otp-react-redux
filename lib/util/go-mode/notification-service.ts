@@ -1661,6 +1661,17 @@ export function showNotification(
 export interface NotificationLatches {
   /** Legs whose entry card has already gone out. */
   announcedLegIndexes: number[]
+  /**
+   * The `<cueIndex>_<stage>` keys `checkUpcomingTurn` has already announced on
+   * each leg — the fourth object-keyed latch, and the one 6.21 left behind.
+   *
+   * Its exposure is narrower than the other three but real: already-PASSED
+   * cues cannot re-fire (the check only ever announces a cue still ahead) and
+   * a leg restored fresh starts pre-charged at STATIONARY_HOLD_TICKS, so what
+   * a re-mount loses is the CURRENT cue — which re-announces once per mount,
+   * on a phone that re-mounted twice in 41 s on 2026-08-31.
+   */
+  announcedTurnCuesByLeg: Record<number, string[]>
   /** The margin, in seconds, each connection warning last quoted. */
   connectionWarnedSlackSecondsByLeg: Record<number, number>
   /** The lateness, in minutes, the rider was last read for each leg. */
@@ -1674,6 +1685,7 @@ export interface NotificationLatches {
 export function captureNotificationLatches(legs?: Leg[]): NotificationLatches {
   const latches: NotificationLatches = {
     announcedLegIndexes: [],
+    announcedTurnCuesByLeg: {},
     connectionWarnedSlackSecondsByLeg: {},
     delayWarnedLateMinByLeg: {}
   }
@@ -1681,6 +1693,13 @@ export function captureNotificationLatches(legs?: Leg[]): NotificationLatches {
   legs.forEach((leg, index) => {
     if (!leg || typeof leg !== 'object') return
     if (announcedLegEntries.has(leg)) latches.announcedLegIndexes.push(index)
+    // Only the announcement keys travel, never `slowTicks`: the stationary
+    // hold is about the rider's speed history in THIS page's ticks, and a
+    // restored leg is meant to start pre-charged.
+    const turn = turnState.get(leg)
+    if (turn && turn.announced.size > 0) {
+      latches.announcedTurnCuesByLeg[index] = Array.from(turn.announced)
+    }
     const delay = delayWarnState.get(leg)
     if (delay) latches.delayWarnedLateMinByLeg[index] = delay.warnedLateMin
     const connection = connectionWarnState.get(leg)
@@ -1715,6 +1734,19 @@ export function restoreNotificationLatches(
     const leg = legAt(index)
     if (leg) announcedLegEntries.add(leg)
   })
+  Object.entries(latches.announcedTurnCuesByLeg || {}).forEach(
+    ([index, cueKeys]) => {
+      const leg = legAt(index)
+      if (!leg || !Array.isArray(cueKeys)) return
+      // Additive, like the rest of this function: `turnStateFor` mints the
+      // leg's state pre-charged at STATIONARY_HOLD_TICKS, and adding keys can
+      // only make the app say LESS than it otherwise would.
+      const state = turnStateFor(leg)
+      cueKeys.forEach((key) => {
+        if (typeof key === 'string') state.announced.add(key)
+      })
+    }
+  )
   Object.entries(latches.delayWarnedLateMinByLeg || {}).forEach(
     ([index, warnedLateMin]) => {
       const leg = legAt(index)

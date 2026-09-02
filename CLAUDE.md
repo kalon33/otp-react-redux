@@ -55,6 +55,14 @@ explicit approval.
   `otp-minneapolis/scripts/nightly-verify.sh` (crontab `0 5 * * *`, log
   `/tmp/otp-nightly-verify.log`, report into the vault); `scripts/verify-*.js` here are
   what it drives.
+- **Format with `npx eslint --fix`, never `npx prettier`.** There is no standalone
+  prettier config here and there never has been — formatting is enforced only through
+  `.eslintrc.js` (`plugin:prettier/recommended`), so a bare `npx prettier --write` runs
+  prettier's *defaults* and rewrites files with double quotes and semicolons. One such
+  run on 2026-09-02 turned a 16-file, ~1,400-line diff into ~9,600 lines; `eslint --fix`
+  recovered all but two spots (an import block, and the `doMergeItineraries(...)` call
+  at `narrative-itineraries.js:604`, which carries an explicit
+  `// eslint-disable-next-line prettier/prettier`).
 - **`scripts/verify-*.js` hang against current Chrome.** Repo puppeteer 10 vs an
   auto-updated Chrome. Use a scratchpad `puppeteer-core` with
   `--disable-dev-shm-usage`, an iPhone UA, and `/#/hash` routes.

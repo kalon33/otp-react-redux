@@ -53,6 +53,15 @@ export interface VehicleMatchResult {
   /** GTFS ids of the matched run, when known — lets flows that trust a
    * confirmed match (onboard silent path) act without re-asking. */
   routeId?: string | null
+  /**
+   * The matched record's GTFS-RT `current_status` — `STOPPED_AT`,
+   * `IN_TRANSIT_TO`, `INCOMING_AT`. Carried through because `nextStopId`
+   * alone cannot tell a bus approaching the rider's stop from one standing at
+   * it with its doors open: Metro Transit keeps naming the CURRENT stop as
+   * `nextStopId` for the whole dwell (6.38). It is on `VehiclePosition`
+   * already; nothing downstream could see it until now.
+   */
+  stopStatus?: string | null
   tripHeadsign?: string | null
   tripId?: string | null
   vehicleId: string | null
@@ -361,6 +370,7 @@ export function matchUserToVehicle(
     lastSeen: Date.now(),
     nextStopId: bestVehicle.nextStopId ?? null,
     routeId: bestVehicle.routeId ?? null,
+    stopStatus: bestVehicle.stopStatus ?? null,
     tripHeadsign: bestVehicle.tripHeadsign ?? null,
     // The matched run's identity travels with the match: the boarded-earlier
     // trigger and the riding fact compare it against the PLANNED leg's trip
