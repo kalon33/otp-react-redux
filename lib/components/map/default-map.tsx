@@ -587,7 +587,7 @@ const mapStateToProps = (state) => {
             // Generate a list of every stop id the pattern stops at
             viewedRoutePatterns.reduce((acc, cur) => {
               // Convert pattern object to list of the pattern's stops
-              return [...cur?.[1]?.stops.map((s) => s.id), ...acc]
+              return [...(cur?.[1]?.stops?.map((s) => s.id) || []), ...acc]
             }, [])
           )
         )

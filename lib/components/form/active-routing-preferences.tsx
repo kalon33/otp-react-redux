@@ -13,7 +13,8 @@ import {
   summarizePreferences,
   ViaStop
 } from '../../util/routing-profiles'
-import type { RouteLock, RouteLockScope } from '../../util/route-lock'
+import { routeLockRoutes, routeLockScope } from '../../util/route-lock'
+import type { AnyRouteLock, RouteLockScope } from '../../util/route-lock'
 
 const Container = styled.div`
   align-items: center;
@@ -73,7 +74,7 @@ function anythingCustomized({
   customCount?: number
   hideWalkTransitOptions?: boolean
   noTransfers?: boolean
-  routeLock?: RouteLock
+  routeLock?: AnyRouteLock | null
   summaryCount: number
   viaStop?: ViaStop | null
 }): boolean {
@@ -131,7 +132,7 @@ const ActiveRoutingPreferences = ({
   noTransfers?: boolean
   numItineraries?: number
   preferences?: RoutingPreferences
-  routeLock?: RouteLock
+  routeLock?: AnyRouteLock | null
   viaStop?: ViaStop | null
 }): JSX.Element | null => {
   const intl = useIntl()
@@ -159,7 +160,7 @@ const ActiveRoutingPreferences = ({
   // rider reads this row at a glance to check what is in effect, and a single
   // chip reading "Only 18, 21, METRO Orange Line" stops being glanceable at two.
   const { chipId: lockChipId, detailId: lockDetailId } = routeLockMessageIds(
-    routeLock?.scope
+    routeLockScope(routeLock)
   )
 
   return (
@@ -172,7 +173,7 @@ const ActiveRoutingPreferences = ({
       <LabelText>
         <FormattedMessage id="components.ActiveRoutingPreferences.label" />
       </LabelText>
-      {routeLock?.routes.map((route) => (
+      {routeLockRoutes(routeLock).map((route) => (
         <Chip
           key={route.id}
           title={intl.formatMessage(

@@ -83,6 +83,20 @@ describe('components > form > active routing preferences', () => {
     expect(texts).toContain('Only METRO Orange Line')
   })
 
+  it('renders a lock saved by the previous bundle instead of white-screening', () => {
+    // The 09-02 bundle changed RouteLock from `{ id, label }` to
+    // `{ routes[], scope }`. `currentQuery` is serialised into the URL hash, and
+    // the phone reopens on the URL the OLD bundle left, so the first render
+    // after an OTA update is handed the old shape. `routeLock?.routes.map(...)`
+    // stops its optional chain at `routeLock` — the old lock threw
+    // "undefined is not an object" here, and a throw in this render unmounts
+    // the whole app.
+    const text = renderChips({
+      routeLock: { id: '1:904', label: 'METRO Orange Line' }
+    }).text()
+    expect(text).toContain('Only METRO Orange Line')
+  })
+
   it('says "start on" rather than "only" for a starting route (#45)', () => {
     const text = renderChips({
       routeLock: {

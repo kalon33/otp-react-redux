@@ -7,7 +7,10 @@ import {
   itineraryUsesRoute,
   resolveRouteLock,
   ROUTE_LOCK_MIN_BIKE_RELUCTANCE,
+  routeLockIds,
   routeLockLabel,
+  routeLockRoutes,
+  routeLockScope,
   routeLockText,
   withRouteLockPrefs
 } from '../../lib/util/route-lock'
@@ -318,5 +321,50 @@ describe('applyRouteLockToItineraries', () => {
 
   it('leaves the list alone when no routes are named', () => {
     expect(applyRouteLockToItineraries(list, undefined)).toBe(list)
+  })
+})
+
+// A phone that took the 09-02 web bundle reopens on the URL the PREVIOUS
+// bundle left behind, and `routeLock` rides on `currentQuery`, which is
+// serialised into that URL. So the first render after an update can be handed
+// the single-route lock builds up to 8534746f wrote — `{ id, label }`, with no
+// `routes` array and no `scope`. Every reader has to survive it.
+describe('a lock saved by a build before the route list (#46)', () => {
+  const legacy: any = { id: '1:904', label: 'METRO Orange Line' }
+
+  it('reads as the one route the rider had picked', () => {
+    expect(routeLockRoutes(legacy)).toEqual([
+      { id: '1:904', label: 'METRO Orange Line' }
+    ])
+    expect(routeLockIds(legacy)).toEqual(['1:904'])
+    expect(routeLockText(legacy)).toBe('METRO Orange Line')
+  })
+
+  it('falls back to the id when the old entry carried no label', () => {
+    expect(routeLockRoutes({ id: '1:18' } as any)).toEqual([
+      { id: '1:18', label: '1:18' }
+    ])
+  })
+
+  it('means "ride nothing else", which is all the old shape could say', () => {
+    expect(routeLockScope(legacy)).toBe('only')
+    expect(routeLockScope(null)).toBe('only')
+    expect(routeLockScope({ routes: [], scope: 'starting' })).toBe('starting')
+  })
+
+  it('still partitions a results list by the locked route', () => {
+    const onOrange = { legs: [{ route: { gtfsId: '1:904' } }] }
+    const allBike = { legs: [{ mode: 'BICYCLE' }] }
+    expect(itineraryMatchesLock(onOrange, legacy)).toBe(true)
+    expect(itineraryMatchesLock(allBike, legacy)).toBe(false)
+    expect(applyRouteLockToItineraries([allBike, onOrange], legacy)).toEqual([
+      onOrange,
+      allBike
+    ])
+  })
+
+  it('is empty for no lock at all', () => {
+    expect(routeLockRoutes(null)).toEqual([])
+    expect(routeLockRoutes(undefined)).toEqual([])
   })
 })
