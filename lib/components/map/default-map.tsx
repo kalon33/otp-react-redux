@@ -46,6 +46,8 @@ import ItinSummaryOverlay from './itinerary-summary-overlay'
 import NearbyViewDotOverlay from './nearby-view-dot-overlay'
 import ParkAndRideOverlay from './connected-park-and-ride-overlay'
 import PointPopup from './point-popup'
+import RiddenRouteShapeOverlay from './ridden-route-shape-overlay'
+import RiddenRouteStopsOverlay from './ridden-route-stops-overlay'
 import RoutePreviewOverlay from './route-preview-overlay'
 import RouteViewerOverlay from './connected-route-viewer-overlay'
 import StopsOverlay from './connected-stops-overlay'
@@ -436,6 +438,10 @@ class DefaultMap extends Component<DefaultMapProps> {
           <NearbyViewDotOverlay />
           <ItinSummaryOverlay />
           <RoutePreviewOverlay />
+          {/* The ridden line's full shape, faint and FIRST: everything below
+              paints over it, so only the run-in before boarding and the
+              run-out after alighting stay light. See rider ask #21. */}
+          <RiddenRouteShapeOverlay />
           {/* The default overlays */}
           <EndpointsOverlay />
           <RouteViewerOverlay />
@@ -541,6 +547,10 @@ class DefaultMap extends Component<DefaultMapProps> {
                 return null
             }
           })}
+          {/* Emphasis for the ridden pattern's stops. AFTER the configurable
+              overlays on purpose: it draws a ring on top of the OTP2 stops
+              tile layer they create, leaving every other stop visible. */}
+          <RiddenRouteStopsOverlay />
           {/* If set, custom overlays are shown if no active itinerary is shown or pending. */}
           {typeof getCustomMapOverlays === 'function' &&
             getCustomMapOverlays(!itinerary && !pending)}

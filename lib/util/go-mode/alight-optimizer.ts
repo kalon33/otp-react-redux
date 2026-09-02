@@ -523,34 +523,59 @@ export interface AlightCandidateResult {
 export const ONBOARD_CANDIDATE_SETTLE_MS = 15000
 
 /**
+ * Why a candidate was substituted rather than answered.
+ *
+ * `'rejected'` is final — that request is over and nothing will arrive later.
+ * `'timeout'` is not: the request is still in flight, and it is the only case
+ * where a straggler can still land (see `onLate`). The optimizer counts them
+ * apart so the rider is only told "still checking" about candidates that
+ * really might still answer.
+ */
+export type UnsettledReason = 'rejected' | 'timeout'
+
+/**
  * Wait for candidate plans, but not forever: whatever has settled by the
  * deadline is returned, and anything still outstanding is replaced by
- * `onTimeout(index)` — for the optimizer, a result marked `error`, which
- * rankAlightOptions already skips.
+ * `onTimeout(index, reason)` — for the optimizer, a result marked `error`,
+ * which rankAlightOptions already skips.
  *
  * Two of five plans are a worse answer than five of five and a far better one
  * than no answer, which is what waiting for all five bought on 08-31.
+ *
+ * `onLate` closes the other half of that trade: a plan that lands AFTER the
+ * deadline is otherwise thrown away, and the answer the rider is looking at
+ * stays permanently short. This stays a pure utility — it has no store and no
+ * idea what a re-rank would mean — so it only reports the late value and lets
+ * the caller decide whether it is still safe to use.
  */
 export async function settleCandidatePlans<T>(
   plans: Array<Promise<T>>,
   timeoutMs: number,
-  onTimeout: (index: number) => T
+  onTimeout: (index: number, reason: UnsettledReason) => T,
+  onLate?: (index: number, value: T) => void
 ): Promise<T[]> {
   if (!plans.length) return []
   const settled: Array<{ done: boolean; value?: T }> = plans.map(() => ({
     done: false
   }))
+  // Indices the caller was handed a substitute for. Filled synchronously
+  // below, before this function returns, so a plan whose `.then` runs in a
+  // later microtask can never be reported both ways.
+  const substituted = new Set<number>()
+  let handedOff = false
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let timer: any = null
   const tracked = plans.map((plan, index) =>
     plan.then(
       (value) => {
         settled[index] = { done: true, value }
+        // Landed after the answer was already handed to the caller.
+        if (handedOff && substituted.has(index) && onLate) onLate(index, value)
       },
       () => {
         // A rejected plan is a failed candidate, not a failed optimize. The
         // fetch layer resolves rather than rejects, so this is belt and braces.
-        settled[index] = { done: true, value: onTimeout(index) }
+        settled[index] = { done: true, value: onTimeout(index, 'rejected') }
       }
     )
   )
@@ -564,9 +589,13 @@ export async function settleCandidatePlans<T>(
     ? Promise.race([Promise.all(tracked), deadline])
     : Promise.all(tracked))
   if (timer) clearTimeout(timer)
-  return settled.map((entry, index) =>
-    entry.done ? (entry.value as T) : onTimeout(index)
-  )
+  const results = settled.map((entry, index) => {
+    if (entry.done) return entry.value as T
+    substituted.add(index)
+    return onTimeout(index, 'timeout')
+  })
+  handedOff = true
+  return results
 }
 
 /** The chosen best stop to get off, with its remaining-journey itinerary. */

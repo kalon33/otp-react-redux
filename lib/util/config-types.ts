@@ -257,10 +257,25 @@ export interface TransitiveConfig {
   }
 }
 
+/**
+ * Go Mode map decoration for the line the rider is riding (rider ask #21).
+ * Both default ON; the rider asked for a switch because he named the clutter
+ * risk himself, so both are opt-OUT, not opt-in.
+ */
+export interface GoModeMapConfig {
+  /** Draw the ridden pattern's stops larger, in the route colour, while every
+   * other stop stays on the map as it was. Default true. */
+  emphasizeRouteStops?: boolean
+  /** Draw the ridden pattern's WHOLE shape faintly beneath the trip line, so
+   * the line reads before boarding and after alighting. Default true. */
+  fullRouteShape?: boolean
+}
+
 export interface MapConfig {
   autoFlyOnTripFormUpdate?: boolean
   baseLayers?: BaseLayerConfig[]
   forceDisplayEndpointsPopup?: boolean
+  goMode?: GoModeMapConfig
   initLat?: number
   initLon?: number
   initZoom?: number

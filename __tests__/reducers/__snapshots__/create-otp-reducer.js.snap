@@ -57,9 +57,11 @@ Object {
     },
     "onboard": Object {
       "alightOptions": Array [],
+      "answeredCandidates": null,
       "bestAlightStop": null,
       "candidates": Array [],
       "keepRouteId": null,
+      "pendingCandidates": null,
       "status": "idle",
       "trip": null,
       "vehicle": null,
