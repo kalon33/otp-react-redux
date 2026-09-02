@@ -200,6 +200,8 @@ components:
     networkConnectionLost: Network connection lost
     networkConnectionRestored: Network connection restored
     openMenu: Open Menu
+    shareDiagnosticsOff: "Share diagnostics: Off"
+    shareDiagnosticsOn: "Share diagnostics: On"
     skipNavigation: Skip navigation
   BackToTripPlanner:
     backToTripPlanner: Back to trip planner
@@ -329,6 +331,85 @@ components:
     placeNotFoundDescription: Sorry, the requested place was not found.
   FormNavigationButtons:
     ariaLabel: Form navigation
+  GoMode:
+    arrivedDone: Done
+    arrivedTitle: 🎉 You've arrived!
+    arrivesIn: arrives in {time}
+    boardingQuestion: Are you on the bus?
+    boardingSubtitle: Looking for {route} nearby
+    busHeadsign: to {headsign}
+    busLabel: Bus {label}
+    busNotBroadcasting: Bus not broadcasting yet — scheduled {time}
+    changeBus: Choose bus
+    confirmExit: Are you sure you want to stop tracking this trip?
+    directionEB: Eastbound
+    directionNB: Northbound
+    directionSB: Southbound
+    directionWB: Westbound
+    errorPermissionDenied: >-
+      Location permission denied. Please enable location access in your browser
+      settings.
+    errorTimeout: GPS signal timed out. Please ensure you are in an area with GPS coverage.
+    errorUnavailable: Unable to determine your location. Please check your device settings.
+    findAnotherWay: Find another way
+    findingBestStop: Finding the best stop to get off…
+    findingYourBus: Finding your bus…
+    followToggle: Follow my location
+    getReady: ⚠️ Get Ready - 2 stops away
+    getReadyNow: 🔔 GET READY! Next stop is yours!
+    gotOffHere: I got off here
+    gpsError: GPS signal lost. Trying to reconnect...
+    gpsErrorTitle: GPS Error
+    headerDestination: To {destination}
+    legBike: Bike
+    legStopsTo: "{count, plural, one {# stop} other {# stops}} to {dest}"
+    legTo: to {dest}
+    legWait: 🕒 {mins} min wait
+    legWalk: Walk
+    liveBanner: Go Mode is live — tracking your bus
+    loading: Starting Trip...
+    loadingSchedule: Loading the schedule for your bus…
+    locatingBus: Locating your bus...
+    nextDeparture: "Next: {time} ({mins} min away)"
+    noBusesNearby: No buses detected nearby
+    noLiveVehicleData: No live bus data — tracking by GPS
+    notYet: Not yet
+    offAtStop: Off at {stop}
+    onBus: "On Bus #{label}"
+    onBusButton: I'm already on the bus
+    onboardCancel: Cancel
+    onboardError: Couldn't work out your bus. Try again?
+    onboardTitle: On the bus
+    openTripSheet: Open trip overview
+    pickYourBus: Which bus are you on? Pick it below.
+    pickYourRoute: "No live bus detected — pick your route:"
+    rerouteNlError: Couldn't read that — try again.
+    rerouteNlLabel: Describe what you need
+    rerouteNlPlaceholder: e.g. avoid stairs today
+    rerouteNlSend: Go
+    rerouteSearchHere: Search from here
+    resetToPlanned: Reset to planned
+    restOfTrip: Rest of your trip
+    retry: Retry
+    returnBannerArrived: You've arrived — tap to finish
+    returnBannerLive: On trip · Next stop {stop} · Arrive {eta} — tap to return
+    returnBannerNoProgress: Trip in progress — tap to return
+    rideToStop: "{emoji} {time} ride to {stop}"
+    selectVehicle: This one
+    sheetHandleLabel: View trip & other ways
+    stopsRemainingCompact: "{count, plural, one {1 stop} other {# stops}} remaining"
+    theBus: the bus
+    thenTurn: then {turn}
+    toStop: "{emoji} To {stop}"
+    trackingBus: "Tracking Bus #{label}"
+    tripSheetHeading: Your trip
+    tripSheetTitle: Trip overview
+    useThisDeparture: Use this
+    vehicleDetail: "Next stop: {stop} - {distance}m away · #{label}"
+    vehicleDistance: "{distance}m away · #{label}"
+    waitingGPS: Acquiring GPS signal...
+    walkToStop: "{emoji} {time} walk to {stop}"
+    whereToAlight: Where do you want to get off?
   ItinerarySummary:
     itineraryDetails: Itinerary details
   LocationSearch:
@@ -349,6 +430,7 @@ components:
     title: Imagery of the street
   MetroUI:
     arriveAt: You arrive
+    confirmSwitchTrip: Switch your active trip to this route? Your current guidance will update.
     fare: "{fare}"
     itineraryDescription: "{time} itinerary using {routes}"
     itinerarySummary: from {stopName} | {cost}
@@ -358,6 +440,9 @@ components:
     originallyScheduledTime: (originally {originalTime})
     sameShapeVariants: "{count, plural, one {# option} other {# options}}"
     singleModeItineraryDescription: "{time} {mode} itinerary"
+    startTrip: Start Trip
+    switchTrip: Switch to this trip
+    timeBiking: "{time} biking"
     timeWalking: "{time} walking"
     variantBiking: "{distance} biking"
     variantShown: currently shown

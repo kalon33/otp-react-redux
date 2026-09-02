@@ -19,6 +19,19 @@
  * first at the end of the access leg, then out along the bus's own geometry —
  * calling it with our own dispatch so every action it emits is counted while
  * real state still advances through the real store.
+ *
+ * PRECONDITION, and the reason this script used to fail for reasons that had
+ * nothing to do with it (backlog 6.26): assertion (2) is gated by the board
+ * window, `nowMs >= boardEpoch - TRANSIT_BOARD_EARLY_MS`
+ * (`position-matching.ts:725`, five minutes). Whether the earliest walk→bus
+ * itinerary the live graph happens to return is inside that window is a fact
+ * about Metro Transit's timetable at the moment of the run, not about the code
+ * — measured 2026-09-02, a bus 9.9 min out produced no transition and one 2.5
+ * min out produced the expected single transition, with board-gate's own two
+ * new conditions (`isOnRoute`, `distanceFromRoute`) true in both. So the script
+ * now PICKS a boardable itinerary: it prefers one whose bus is naturally inside
+ * the window, and otherwise shifts the chosen itinerary's clock so it is —
+ * then asserts the precondition explicitly, before the assertion it exists for.
  */
 const puppeteer = require('puppeteer')
 
@@ -92,14 +105,49 @@ async function main() {
     })
     if (!ok.length) return null
     ok.sort((a, b) => a.startTime - b.startTime)
-    window.__itin = ok[0]
-    const busLeg = ok[0].legs[1]
+
+    // Choose an itinerary the board window will actually admit, and say which
+    // way it was obtained. Preference order:
+    //   1. a bus already inside [now, now + TRANSIT_BOARD_EARLY_MS) — the real
+    //      thing, no harness intervention at all;
+    //   2. otherwise the earliest, with every leg time shifted by a constant
+    //      so its bus boards half a window from now. Shifting the plan's clock
+    //      is the harness's own business (the rider is teleported onto the bus
+    //      route anyway); shifting it by a CONSTANT keeps every leg duration,
+    //      ordering and geometry exactly as the graph produced them.
+    const EARLY = pm.TRANSIT_BOARD_EARLY_MS
+    const now = Date.now()
+    const boardOf = (it) => Number(it.legs[1].startTime)
+    const natural = ok.find((it) => {
+      const lead = boardOf(it) - now
+      return lead < EARLY && lead > -EARLY
+    })
+    let picked = natural || ok[0]
+    let shiftedByMs = 0
+    if (!natural) {
+      shiftedByMs = now + EARLY / 2 - boardOf(picked)
+      const shift = (v) =>
+        Number.isFinite(Number(v)) ? Number(v) + shiftedByMs : v
+      picked = {
+        ...picked,
+        endTime: shift(picked.endTime),
+        legs: picked.legs.map((l) => ({
+          ...l,
+          endTime: shift(l.endTime),
+          startTime: shift(l.startTime)
+        })),
+        startTime: shift(picked.startTime)
+      }
+    }
+    window.__itin = picked
+    const busLeg = picked.legs[1]
+    const boardLeadMs = boardOf(picked) - Date.now()
 
     // Stand on the access leg's own polyline, a few metres short of the stop:
     // that's the rider waiting to board, and it is what keeps the route match
     // pinned to leg 0 at >=98% (the condition seen on the real trip). Sitting
     // exactly on the stop can instead match the transit leg at 0%.
-    const poly = pm.decodeLegGeometry(ok[0].legs[0])
+    const poly = pm.decodeLegGeometry(picked.legs[0])
     const cum = pm.calculateCumulativeDistances(poly)
     const target = cum[cum.length - 1] * 0.99
     let i = cum.findIndex((d) => d >= target)
@@ -115,8 +163,13 @@ async function main() {
     const [busLat, busLon] = busPoly[j]
 
     return {
+      boardEarlyMs: EARLY,
+      boardLeadMs,
+      boardMaxDistanceM: pm.TRANSIT_BOARD_MAX_DISTANCE_M,
       busRoute: busLeg.routeShortName || busLeg.routeLongName,
+      candidates: ok.length,
       rideAt: { lat: busLat, lon: busLon },
+      shiftedByMs,
       stop: busLeg.from?.name,
       waitAt: { lat, lon }
     }
@@ -124,6 +177,16 @@ async function main() {
   if (!chosen) throw new Error('no walk→bus itinerary found')
   console.log(
     `[setup] walk to ${chosen.stop}, board ${chosen.busRoute}; rider will wait at the stop`
+  )
+  console.log(
+    `[setup] ${chosen.candidates} walk→bus itinerar${
+      chosen.candidates === 1 ? 'y' : 'ies'
+    }; bus boards in ${(chosen.boardLeadMs / 60000).toFixed(1)} min ` +
+      `(window ${(chosen.boardEarlyMs / 60000).toFixed(0)} min)` +
+      (chosen.shiftedByMs
+        ? `, clock shifted ${(chosen.shiftedByMs / 60000).toFixed(1)} min ` +
+          'because no natural departure was inside it'
+        : ', taken as the graph returned it')
   )
 
   // Pin the real position watcher to the same spot, so the live GPS ticks agree
@@ -183,7 +246,21 @@ async function main() {
         }
 
         const g = getState().otp.goMode
+        // The three inputs shouldTransitionToNextLeg actually judges, read
+        // back at the same moment, so a refusal names its own reason instead
+        // of surfacing as "expected exactly one, to leg 1".
+        const gateLegIndex = g.routeMatch?.legIndex
+        const gateLeg = g.activeItinerary?.legs?.[gateLegIndex]
         return {
+          gate: {
+            boardEpoch: Number(
+              g.liveLegTimes?.[gateLegIndex]?.boardEpoch ?? gateLeg?.startTime
+            ),
+            distanceFromRoute: g.routeMatch?.distanceFromRoute,
+            isOnRoute: !!g.routeMatch?.isOnRoute,
+            isRiding: g.riding?.legIndex === gateLegIndex,
+            nowMs: Date.now()
+          },
           itineraryStart: Number(g.activeItinerary?.startTime),
           legTransitions: seen.filter((t) => t === 'TRANSITION_LEG').length,
           matchedLeg: g.routeMatch?.legIndex,
@@ -256,6 +333,48 @@ async function main() {
       `FAIL: ${waiting.legTransitions} leg transition(s) fired while the rider ` +
         'stood at the stop — waiting is not boarding'
     )
+  }
+  // The precondition, asserted before the assertion that depends on it. Each
+  // of these three is a way for the transition to be refused that says nothing
+  // about leg advance — and the board window is the one that made this script
+  // red on `b3273adb` (backlog 6.26).
+  const gate = riding.gate
+  const boardLead = gate.boardEpoch - gate.nowMs
+  console.log(
+    `  gate: isOnRoute=${gate.isOnRoute} ` +
+      `distanceFromRoute=${
+        gate.distanceFromRoute == null
+          ? 'n/a'
+          : `${gate.distanceFromRoute.toFixed(0)}m`
+      } board in ${(boardLead / 60000).toFixed(1)} min` +
+      (gate.isRiding ? ' (riding — outranks the clock)' : '')
+  )
+  if (!gate.isRiding) {
+    if (!gate.isOnRoute) {
+      throw new Error(
+        'PRECONDITION: the ride position did not match the bus leg ' +
+          '(isOnRoute false) — the transition gate refuses on position, not ' +
+          'on leg order'
+      )
+    }
+    if (gate.distanceFromRoute > chosen.boardMaxDistanceM) {
+      throw new Error(
+        `PRECONDITION: ride position is ${gate.distanceFromRoute.toFixed(
+          0
+        )} m from the bus shape, over TRANSIT_BOARD_MAX_DISTANCE_M ` +
+          `(${chosen.boardMaxDistanceM} m)`
+      )
+    }
+    if (boardLead >= chosen.boardEarlyMs) {
+      throw new Error(
+        `PRECONDITION: the bus boards in ${(boardLead / 60000).toFixed(
+          1
+        )} min, outside the ${(chosen.boardEarlyMs / 60000).toFixed(
+          0
+        )} min board window — the gate refuses on the clock. The itinerary ` +
+          'picker was supposed to prevent this; re-check the clock shift.'
+      )
+    }
   }
   if (riding.transitionedTo.length !== 1 || riding.transitionedTo[0] !== 1) {
     throw new Error(
