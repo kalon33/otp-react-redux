@@ -64,7 +64,86 @@ export async function getRunningBundle(): Promise<{
 }
 
 /**
+ * How long a freshly-booted bundle has to stay up before it is confirmed.
+ *
+ * Well inside the plugin's own `appReadyTimeout` (20 s, see
+ * transitnav-ios/ios/App/App/capacitor.config.json), because the whole point is
+ * to answer before the shell gives up — but long enough to have seen the app
+ * do something. Five seconds covers the first render, the restored trip's first
+ * tick, and the first plan response, which is where the boot-path throws
+ * actually happen.
+ */
+export const BUNDLE_HEALTH_GRACE_MS = 5000
+
+/** Has the app actually put anything on screen? */
+function defaultHasRendered(): boolean {
+  return (document.getElementById('main')?.childElementCount ?? 0) > 0
+}
+
+/**
+ * Confirm the bundle only once it has demonstrably survived its own boot.
+ *
+ * `confirmBundleHealthy` used to be called on the line after `render()`, which
+ * confirms a bundle for the single fact that ReactDOM's first synchronous pass
+ * returned. That is not what the plugin's rollback is for. On 2026-09-02 an
+ * old-shape `routeLock` threw inside a render, React unmounted the whole tree,
+ * and the phone showed a white screen — and because `render()` itself had
+ * returned by then, the bundle had already been pronounced healthy. The 20 s
+ * safety net never fired, so the rider was pinned to a bundle that could not
+ * start until the bundle was rolled back by hand (2026.0902.4).
+ *
+ * So three things have to hold, all of them after a grace period rather than
+ * at the instant of render:
+ *   * nothing has raised a window `error` or `unhandledrejection` since boot —
+ *     an unmounting render throw surfaces as exactly that;
+ *   * `#main` still has children, which a React tree that unmounted itself does
+ *     not;
+ *   * the grace period elapsed at all, so a bundle that hard-crashes the
+ *     webview never gets to the call.
+ * Any of them failing means we simply do not call `notifyAppReady`, and the
+ * plugin reverts at the next launch. Withholding is always the safe direction:
+ * the cost is one relaunch on the previous bundle, and the cost of confirming
+ * wrongly is a rider who cannot open the app at all.
+ *
+ * The listeners are scoped to this call rather than module state so the whole
+ * thing is a pure function of its arguments and a test can run it twice.
+ * No-op in a browser by way of `confirmBundleHealthy`, which returns without a
+ * bridge.
+ */
+export function confirmBundleHealthyWhenStable(
+  options: {
+    confirm?: () => Promise<void> | void
+    graceMs?: number
+    hasRendered?: () => boolean
+  } = {}
+): void {
+  if (typeof window === 'undefined') return
+  const {
+    confirm = confirmBundleHealthy,
+    graceMs = BUNDLE_HEALTH_GRACE_MS,
+    hasRendered = defaultHasRendered
+  } = options
+
+  let brokeDuringBoot = false
+  const noteFailure = () => {
+    brokeDuringBoot = true
+  }
+  window.addEventListener('error', noteFailure)
+  window.addEventListener('unhandledrejection', noteFailure)
+
+  setTimeout(() => {
+    window.removeEventListener('error', noteFailure)
+    window.removeEventListener('unhandledrejection', noteFailure)
+    if (brokeDuringBoot || !hasRendered()) return
+    confirm()
+  }, graceMs)
+}
+
+/**
  * Tell the shell this bundle came up. Call once, after the app has rendered.
+ *
+ * Prefer `confirmBundleHealthyWhenStable` on the boot path — calling this
+ * directly says "healthy" on the strength of nothing at all.
  *
  * Failure is deliberately silent: in a browser there is no bridge, and in the
  * shell a throw here would be an exception on the boot path of a working app.

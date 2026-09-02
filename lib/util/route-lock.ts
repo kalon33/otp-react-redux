@@ -47,14 +47,61 @@ export interface RouteLock {
   scope: RouteLockScope
 }
 
+/**
+ * A lock as builds before 2026-09-02 wrote it: the single route, inline, with
+ * no `routes` array and no `scope`.
+ *
+ * It still turns up, because a lock is not a transient: it rides on
+ * `currentQuery`, and `currentQuery` is serialised into the URL hash on every
+ * search. A phone that took the 09-02 web bundle reopens on the URL the
+ * PREVIOUS bundle left behind, so new code reads an old lock on the first
+ * render after an update — before anything has had a chance to rewrite it.
+ */
+export interface LegacyRouteLock {
+  id: string
+  label?: string
+}
+
+/** Either shape, as it may actually arrive on `currentQuery.routeLock`. */
+export type AnyRouteLock = RouteLock | LegacyRouteLock
+
+/**
+ * The routes in a lock, whichever shape it is — the ONE place the old single
+ * route form is turned into the new list.
+ *
+ * Every reader goes through this rather than touching `.routes`, because
+ * `lock?.routes` is `undefined` for an old lock and the optional chain stops at
+ * `lock`: `lock?.routes.map(...)` throws, and a throw in a render is a white
+ * screen, not a missing chip.
+ */
+export function routeLockRoutes(lock?: AnyRouteLock | null): LockedRoute[] {
+  if (!lock) return []
+  const { routes } = lock as RouteLock
+  if (Array.isArray(routes)) {
+    return routes.filter((route) => !!route?.id)
+  }
+  const legacy = lock as LegacyRouteLock
+  return legacy.id ? [{ id: legacy.id, label: legacy.label || legacy.id }] : []
+}
+
+/**
+ * The lock's scope. An old lock has none, and it means "ride nothing else" —
+ * that is the only thing the single-route lock ever expressed.
+ */
+export function routeLockScope(lock?: AnyRouteLock | null): RouteLockScope {
+  return (lock as RouteLock)?.scope === 'starting' ? 'starting' : 'only'
+}
+
 /** The ids in a lock, in the order the rider picked them. */
-export function routeLockIds(lock?: RouteLock | null): string[] {
-  return (lock?.routes || []).map((route) => route.id).filter(Boolean)
+export function routeLockIds(lock?: AnyRouteLock | null): string[] {
+  return routeLockRoutes(lock)
+    .map((route) => route.id)
+    .filter(Boolean)
 }
 
 /** The labels in a lock, for copy that has to name them in one breath. */
-export function routeLockLabels(lock?: RouteLock | null): string[] {
-  return (lock?.routes || []).map((route) => route.label)
+export function routeLockLabels(lock?: AnyRouteLock | null): string[] {
+  return routeLockRoutes(lock).map((route) => route.label)
 }
 
 /**
@@ -62,7 +109,7 @@ export function routeLockLabels(lock?: RouteLock | null): string[] {
  * Used where a message takes a single {route} value; the chips render one
  * chip per route instead.
  */
-export function routeLockText(lock?: RouteLock | null): string {
+export function routeLockText(lock?: AnyRouteLock | null): string {
   return routeLockLabels(lock).join(', ')
 }
 
@@ -276,11 +323,11 @@ export function itineraryStartsOnRoute(
  */
 export function itineraryMatchesLock(
   itinerary: { legs?: Array<unknown> } | null | undefined,
-  lock?: RouteLock | null
+  lock?: AnyRouteLock | null
 ): boolean {
   const ids = routeLockIds(lock)
   if (ids.length === 0) return true
-  return lock?.scope === 'starting'
+  return routeLockScope(lock) === 'starting'
     ? itineraryStartsOnRoute(itinerary, ids)
     : itineraryUsesRoute(itinerary, ids)
 }
@@ -304,11 +351,11 @@ export function itineraryMatchesLock(
  */
 export function applyRouteLockToItineraries<
   T extends { legs?: Array<unknown> }
->(itineraries: T[], lock?: RouteLock | null): T[] {
+>(itineraries: T[], lock?: AnyRouteLock | null): T[] {
   if (routeLockIds(lock).length === 0) return itineraries
   const matches = (itinerary: T) => itineraryMatchesLock(itinerary, lock)
   const kept = itineraries.filter(matches)
-  if (lock?.scope === 'starting') {
+  if (routeLockScope(lock) === 'starting') {
     return kept.length > 0 ? kept : itineraries
   }
   return [...kept, ...itineraries.filter((itin) => !matches(itin))]
