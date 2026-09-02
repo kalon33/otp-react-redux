@@ -87,6 +87,58 @@ const SIGNIFICANT_GAP_SECONDS = 90
 /** Fallback speed when a leg lacks usable duration/distance, in m/s (~4 mph). */
 const FALLBACK_SPEED_MPS = 1.8
 
+/**
+ * A turn you leave again almost immediately is not a decision — it is the shape
+ * of a kerb cut, a driveway apron or an alley mouth, and OTP emits it as a full
+ * step with its own name.
+ *
+ * The 2026-09-01 rides are full of them: `RIGHT service road 7.8 m`,
+ * `LEFT Chicago Avenue 8.5 m`, `RIGHT Elliot Avenue 13.3 m`,
+ * `LEFT service road 13.6 m`, `LEFT path 9.1 m` (three times). Each one earned
+ * its own prepare card and its own act card, so the 10:34 leg spent three
+ * announcements in eleven seconds (10:34:24, 10:34:27, 10:34:35) on two jogs
+ * around one junction. The rider cannot miss an eight-metre connector; they can
+ * only be interrupted by it.
+ *
+ * So a turn whose own stretch is shorter than this is folded away and the turn
+ * AFTER it is announced instead — which is the manoeuvre the rider actually has
+ * to steer. Its distance is folded into the previous cue, exactly as a
+ * CONTINUE step already is, so "then in 0.3 mi" stays honest.
+ *
+ * 20 m is deliberately mild: the shortest real turn across those three rides is
+ * a 52.9 m path segment, and the alley the rider ends on is 81.2 m. Nothing a
+ * rider steers by is anywhere near this line.
+ */
+export const MICRO_STEP_METERS = 20
+
+/**
+ * Drop the connector turns described above, in place.
+ *
+ * The LAST cue of a leg is never dropped however short it is: it is the final
+ * approach, the one turn with nothing after it to announce instead. On the
+ * 2026-09-01 10:33 leg that is `LEFT path 9.1 m` — the way into the rider's own
+ * block.
+ */
+function foldMicroSteps(cues: StepCue[]): StepCue[] {
+  const kept: StepCue[] = []
+  cues.forEach((cue, i) => {
+    const isLast = i === cues.length - 1
+    if (!isLast && cue.distanceMeters < MICRO_STEP_METERS) {
+      const previous = kept[kept.length - 1]
+      if (previous) previous.distanceMeters += cue.distanceMeters
+      return
+    }
+    kept.push(cue)
+  })
+  // The index is the cue's position in the announced list — it keys the
+  // per-turn announcement latch and the sticky card — so it has to follow the
+  // list it now belongs to, not the one it was built from.
+  kept.forEach((cue, i) => {
+    cue.index = i
+  })
+  return kept
+}
+
 /** Rider-facing phrasing for a step. Exported for tests and UI reuse. */
 export function phraseInstruction(step: Step): string {
   const verb = DIRECTION_VERBS[step.relativeDirection]
@@ -194,7 +246,7 @@ function buildLegCues(leg: Leg): LegCues {
   const cumulative = calculateCumulativeDistances(polyline)
   const legLength = cumulative[cumulative.length - 1] || 0
 
-  const cues: StepCue[] = []
+  const raw: StepCue[] = []
   steps.forEach((step) => {
     const isTurn =
       !NON_TURN_DIRECTIONS.has(step.relativeDirection) && !step.stayOn
@@ -202,14 +254,14 @@ function buildLegCues(leg: Leg): LegCues {
       // Not a decision point. Its distance still belongs to the rider's current
       // stretch, so fold it into the cue they're already following rather than
       // dropping it — otherwise "then in 0.3 mi" under-reports.
-      const previous = cues[cues.length - 1]
+      const previous = raw[raw.length - 1]
       if (previous) previous.distanceMeters += step.distance || 0
       return
     }
 
-    cues.push({
+    raw.push({
       distanceMeters: step.distance || 0,
-      index: cues.length,
+      index: raw.length,
       instruction: phraseInstruction(step),
       offsetMeters: offsetAlongPolyline(polyline, cumulative, [
         step.lat,
@@ -227,6 +279,11 @@ function buildLegCues(leg: Leg): LegCues {
     legSeconds > 0 && legMeters > 0
       ? legMeters / legSeconds
       : FALLBACK_SPEED_MPS
+
+  // Fold the connector turns away BEFORE significance is judged: significance
+  // is about the gap the rider has just ridden without thinking, and a 8 m jog
+  // that is never announced must not break that gap in two.
+  const cues = foldMicroSteps(raw)
 
   markSignificance(cues, speedMps)
 
