@@ -8,10 +8,11 @@ import {
 } from '../util/routing-profiles'
 import { getDefaultNumItineraries } from '../util/api'
 import { queryIsValid } from '../util/state'
-import type { RouteLock } from '../util/route-lock'
-import type { RoutingPreferences } from '../util/routing-profiles'
+import type { LockedRoute } from '../util/route-lock'
+import type { RoutingPreferences, ViaStop } from '../util/routing-profiles'
 
 import { applyRouteLockFromText, setRouteLock } from './route-lock'
+import { createGraphQLQueryAction } from './apiV2'
 import { setQueryParam } from './form'
 
 const { randId, removeItem, storeItem } = coreUtils.storage
@@ -37,7 +38,11 @@ export interface SearchOptions {
    */
   arriveOnTimeAccess?: boolean
   hideWalkTransitOptions?: boolean
+  /** Rider ask 4.9: one vehicle, no connections (OTP `maxTransfers: 0`). */
+  noTransfers?: boolean
   numItineraries?: number
+  /** Rider ask 4.9: the trip must serve this stop (OTP `via`). */
+  viaStop?: ViaStop | null
 }
 
 /**
@@ -98,7 +103,9 @@ export function setSearchOptions(
     const next: SearchOptions = {
       arriveOnTimeAccess: !!currentQuery.arriveOnTimeAccess,
       hideWalkTransitOptions: !!currentQuery.hideWalkTransitOptions,
+      noTransfers: !!currentQuery.noTransfers,
       numItineraries: currentQuery.numItineraries,
+      viaStop: currentQuery.viaStop || null,
       ...options
     }
     const replan = actionOptions.replan !== false && queryIsValid(getState())
@@ -120,7 +127,9 @@ export function clearRoutingPreferences() {
         {
           arriveOnTimeAccess: false,
           hideWalkTransitOptions: false,
-          numItineraries: getDefaultNumItineraries(getState().otp.config)
+          noTransfers: false,
+          numItineraries: getDefaultNumItineraries(getState().otp.config),
+          viaStop: null
         },
         { replan: false }
       )
@@ -142,7 +151,7 @@ export function applyRoutingProfile(profileId: string) {
 /** What a plain-language request turned into, for the search form to report. */
 export interface AppliedPreferences {
   /** The route we held the search to, when the rider named one and it exists. */
-  lock?: RouteLock | null
+  lock?: LockedRoute | null
   preferences: RoutingPreferences
   /** The route name the rider used, echoed back so an error can quote it. */
   routeQuery?: string
@@ -189,5 +198,55 @@ export function fetchPreferencesFromText(text: string) {
       getState().otp.config?.routingPreferencesApiUrl || PREFERENCES_API_PATH
     const { preferences } = await postPreferences(url, text)
     return preferences
+  }
+}
+
+/** How many stop suggestions the panel's "must pass through" field offers. */
+export const VIA_STOP_SUGGESTION_LIMIT = 8
+
+/**
+ * Look up transit stops by name, for the panel's "must pass through this stop"
+ * field.
+ *
+ * A one-off read that resolves rather than landing in the store: there is no
+ * stop index in state (only the ~150-entry route index the lock picker uses),
+ * and a 14,000-stop index fetched to power one text field would be a far worse
+ * trade than a debounced query per keystroke-pause. `stops(name:)` is a live
+ * OTP field — verified 2026-09-02, `stops(name: "Lake & Chicago")` returns the
+ * two Lake & Chicago Station platforms and nothing else.
+ *
+ * Never rejects: an empty list is the honest answer to both "no match" and "the
+ * server didn't answer", and the field says "no stops match" either way.
+ */
+export function lookupViaStops(name: string) {
+  return async function (dispatch: any): Promise<ViaStop[]> {
+    const query = (name || '').trim()
+    if (query.length < 3) return []
+    const payload: any = await new Promise((resolve) => {
+      dispatch(
+        createGraphQLQueryAction(
+          'query Stops($name: String) { stops(name: $name) { gtfsId name } }',
+          { name: query },
+          (data: any) => () => resolve(data),
+          () => () => resolve(null),
+          { noThrottle: true }
+        )
+      )
+    })
+    const stops: any[] = payload?.data?.stops || []
+    // One suggestion per NAME, carrying every platform id under it. The same
+    // stop name appears once per direction (Lake & Chicago Station is 1:16871
+    // northbound and 1:56796 southbound) and the rider is naming a place, not a
+    // bay — OTP is satisfied by visiting any one of the ids listed.
+    const byName = new Map<string, ViaStop>()
+    stops.forEach((stop) => {
+      const id = stop?.gtfsId
+      const name = stop?.name
+      if (!id || !name) return
+      const existing = byName.get(name)
+      if (existing) existing.ids.push(id)
+      else byName.set(name, { ids: [id], name })
+    })
+    return Array.from(byName.values()).slice(0, VIA_STOP_SUGGESTION_LIMIT)
   }
 }

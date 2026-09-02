@@ -10,9 +10,10 @@ import { getDefaultNumItineraries } from '../../util/api'
 import {
   PreferenceSummary,
   RoutingPreferences,
-  summarizePreferences
+  summarizePreferences,
+  ViaStop
 } from '../../util/routing-profiles'
-import type { RouteLock } from '../../util/route-lock'
+import type { RouteLock, RouteLockScope } from '../../util/route-lock'
 
 const Container = styled.div`
   align-items: center;
@@ -57,6 +58,56 @@ const ClearButton = styled.button`
 `
 
 /**
+ * Has the rider changed anything at all? Module-level because the list of
+ * things that count keeps growing, and the row must render nothing — not an
+ * empty "Preferences:" label — for an untouched app.
+ */
+function anythingCustomized({
+  customCount,
+  hideWalkTransitOptions,
+  noTransfers,
+  routeLock,
+  summaryCount,
+  viaStop
+}: {
+  customCount?: number
+  hideWalkTransitOptions?: boolean
+  noTransfers?: boolean
+  routeLock?: RouteLock
+  summaryCount: number
+  viaStop?: ViaStop | null
+}): boolean {
+  return (
+    summaryCount > 0 ||
+    !!routeLock ||
+    !!hideWalkTransitOptions ||
+    !!noTransfers ||
+    !!viaStop ||
+    customCount !== undefined
+  )
+}
+
+/**
+ * Which pair of messages names a route selection, given its scope. Module-level
+ * so the component below stays a straight render: "only the 18" and "start on
+ * the 18" are different sentences, not a different component.
+ */
+function routeLockMessageIds(scope?: RouteLockScope): {
+  chipId: string
+  detailId: string
+} {
+  return scope === 'starting'
+    ? {
+        chipId: 'components.BatchSearchScreen.routeLockStartChip',
+        detailId: 'components.BatchSearchScreen.routeLockStartDetail'
+      }
+    : {
+        chipId: 'components.BatchSearchScreen.routeLockChip',
+        detailId: 'components.BatchSearchScreen.routeLockDetail'
+      }
+}
+
+/**
  * Persistent, plain-English readout of the routing preferences currently
  * applied to the search (whether chosen via the profile dropdown or the
  * natural-language box). Unlike the "Applied: …" message inside the advanced
@@ -68,16 +119,20 @@ const ActiveRoutingPreferences = ({
   clearPreferences,
   defaultNumItineraries,
   hideWalkTransitOptions,
+  noTransfers,
   numItineraries,
   preferences,
-  routeLock
+  routeLock,
+  viaStop
 }: {
   clearPreferences: () => void
   defaultNumItineraries: number
   hideWalkTransitOptions?: boolean
+  noTransfers?: boolean
   numItineraries?: number
   preferences?: RoutingPreferences
   routeLock?: RouteLock
+  viaStop?: ViaStop | null
 }): JSX.Element | null => {
   const intl = useIntl()
   const summary: PreferenceSummary[] = summarizePreferences(preferences)
@@ -89,13 +144,23 @@ const ActiveRoutingPreferences = ({
       ? numItineraries
       : undefined
   if (
-    summary.length === 0 &&
-    !routeLock &&
-    !hideWalkTransitOptions &&
-    customCount === undefined
+    !anythingCustomized({
+      customCount,
+      hideWalkTransitOptions,
+      noTransfers,
+      routeLock,
+      summaryCount: summary.length,
+      viaStop
+    })
   ) {
     return null
   }
+  // One chip per named route (#46) rather than one chip listing them all: the
+  // rider reads this row at a glance to check what is in effect, and a single
+  // chip reading "Only 18, 21, METRO Orange Line" stops being glanceable at two.
+  const { chipId: lockChipId, detailId: lockDetailId } = routeLockMessageIds(
+    routeLock?.scope
+  )
 
   return (
     <Container
@@ -107,19 +172,17 @@ const ActiveRoutingPreferences = ({
       <LabelText>
         <FormattedMessage id="components.ActiveRoutingPreferences.label" />
       </LabelText>
-      {routeLock && (
+      {routeLock?.routes.map((route) => (
         <Chip
+          key={route.id}
           title={intl.formatMessage(
-            { id: 'components.BatchSearchScreen.routeLockDetail' },
-            { route: routeLock.label }
+            { id: lockDetailId },
+            { route: route.label }
           )}
         >
-          <FormattedMessage
-            id="components.BatchSearchScreen.routeLockChip"
-            values={{ route: routeLock.label }}
-          />
+          <FormattedMessage id={lockChipId} values={{ route: route.label }} />
         </Chip>
-      )}
+      ))}
       {summary.map((item) => (
         <Chip key={item.phrase} title={item.detail}>
           {item.phrase}
@@ -132,6 +195,27 @@ const ActiveRoutingPreferences = ({
           })}
         >
           <FormattedMessage id="components.ActiveRoutingPreferences.noWalkTransit" />
+        </Chip>
+      )}
+      {noTransfers && (
+        <Chip
+          title={intl.formatMessage({
+            id: 'components.BatchSearchScreen.noTransfersHelp'
+          })}
+        >
+          <FormattedMessage id="components.ActiveRoutingPreferences.noTransfers" />
+        </Chip>
+      )}
+      {viaStop && (
+        <Chip
+          title={intl.formatMessage({
+            id: 'components.BatchSearchScreen.viaStopHelp'
+          })}
+        >
+          <FormattedMessage
+            id="components.ActiveRoutingPreferences.viaStop"
+            values={{ stop: viaStop.name }}
+          />
         </Chip>
       )}
       {customCount !== undefined && (
@@ -157,9 +241,11 @@ const ActiveRoutingPreferences = ({
 const mapStateToProps = (state: AppReduxState) => ({
   defaultNumItineraries: getDefaultNumItineraries(state.otp.config),
   hideWalkTransitOptions: state.otp.currentQuery?.hideWalkTransitOptions,
+  noTransfers: state.otp.currentQuery?.noTransfers,
   numItineraries: state.otp.currentQuery?.numItineraries,
   preferences: state.otp.currentQuery?.routingPreferences,
-  routeLock: state.otp.currentQuery?.routeLock
+  routeLock: state.otp.currentQuery?.routeLock,
+  viaStop: state.otp.currentQuery?.viaStop
 })
 
 const mapDispatchToProps = {

@@ -398,6 +398,74 @@ export function summarizePreferences(
 }
 
 /**
+ * A stop the trip must pass through (rider ask 4.9, "specific stop").
+ *
+ * Stored on the query as the rider picked it — an id plus the name to show —
+ * and turned into OTP's `via` argument at query time by
+ * planConstraintVariables.
+ */
+export interface ViaStop {
+  /**
+   * Every OTP stop id sharing this name, feed-prefixed: the two platforms of
+   * "Lake & Chicago Station" are 1:16871 and 1:56796, one per direction. OTP's
+   * `stopLocationIds` is satisfied by visiting ONE of the ids listed, so
+   * carrying all of them is what makes "must pass through Lake & Chicago" mean
+   * the place rather than one bay of it — pinning a single platform would
+   * quietly forbid the other direction.
+   */
+  ids: string[]
+  /** What the rider sees: "Lake & Chicago Station". */
+  name: string
+}
+
+/**
+ * "No transfers" as OTP counts them.
+ *
+ * `plan(maxTransfers:)` is documented on the live schema as "Maximum number of
+ * transfers. Default value: 2", and a transfer is a boarding after the first —
+ * so 0 means exactly one vehicle. Measured against the live graph 2026-09-02
+ * (Bloomington 44.8408,-93.2983 -> Oakdale 45.0000,-92.9600, 12:00,
+ * TRANSIT+WALK, numItineraries 8): unset returned 8 itineraries, every one of
+ * them 3-5 vehicles; `maxTransfers: 0` returned 0. That empty answer is the
+ * honest one for that pair, and it is why this is offered as a toggle the rider
+ * turns on deliberately rather than a lever with a slider — and why the
+ * bike/direct itineraries the mode fan-out returns alongside still fill the
+ * list for a rider who has BICYCLE enabled.
+ */
+export const NO_TRANSFERS_MAX_TRANSFERS = 0
+
+/** The hard constraints the panel can put on a search, as they sit on the query. */
+export interface PlanConstraints {
+  noTransfers?: boolean
+  viaStop?: ViaStop | null
+}
+
+/**
+ * Turn the rider's hard constraints into OTP `plan()` variables.
+ *
+ * Kept apart from clampPreferences because neither one *prices* anything: they
+ * forbid, the way searchWindow bounds. Returns only the keys that are actually
+ * in effect, so an untouched search sends neither and OTP uses its own defaults
+ * (maxTransfers 2, no via).
+ *
+ * `via` is verified against the live server: `plan(via: [{passThrough:
+ * {stopLocationIds: ["1:56796"]}}])` on Bloomington -> downtown 2026-09-02
+ * returned three itineraries that all route through Lake & Chicago, against a
+ * baseline (same query, no via) whose three itineraries used none of them.
+ */
+export function planConstraintVariables(
+  query?: PlanConstraints
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  if (query?.noTransfers) out.maxTransfers = NO_TRANSFERS_MAX_TRANSFERS
+  const stopIds = query?.viaStop?.ids?.filter(Boolean)
+  if (stopIds?.length) {
+    out.via = [{ passThrough: { stopLocationIds: stopIds } }]
+  }
+  return out
+}
+
+/**
  * Bookkeeping keys we stash in currentQuery (so they round-trip through the
  * query pipeline) but must NOT send to OTP as GraphQL variables.
  */
@@ -409,8 +477,12 @@ export const NON_OTP_QUERY_KEYS = [
   'arriveOnTimeAccess',
   // Shapes the mode fan-out in routingQuery, not a plan() argument.
   'hideWalkTransitOptions',
+  // Both become real plan() arguments via planConstraintVariables, but not
+  // under these names — the raw keys would be undeclared variables.
+  'noTransfers',
   'routeLock',
-  'routingPreferences'
+  'routingPreferences',
+  'viaStop'
 ]
 
 /**
@@ -440,6 +512,8 @@ const EXTRA_VAR_DECLS =
   '  $waitReluctance: Float\n' +
   '  $transferPenalty: Int\n' +
   '  $minTransferTime: Int\n' +
+  '  $maxTransfers: Int\n' +
+  '  $via: [PlanViaLocationInput!]\n' +
   '  $walkBoardCost: Int'
 const EXTRA_PLAN_ARGS =
   'walkSpeed: $walkSpeed\n' +
@@ -448,6 +522,8 @@ const EXTRA_PLAN_ARGS =
   '    waitReluctance: $waitReluctance\n' +
   '    transferPenalty: $transferPenalty\n' +
   '    minTransferTime: $minTransferTime\n' +
+  '    maxTransfers: $maxTransfers\n' +
+  '    via: $via\n' +
   '    walkBoardCost: $walkBoardCost'
 
 /**

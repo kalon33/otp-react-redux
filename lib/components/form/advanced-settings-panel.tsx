@@ -19,6 +19,7 @@ import {
   ModeSettingValues
 } from '@opentripplanner/types'
 import { QueryParamChangeEvent } from '@opentripplanner/trip-form/lib/types'
+import { Times } from '@styled-icons/fa-solid/Times'
 import React, {
   RefObject,
   useCallback,
@@ -47,7 +48,8 @@ import {
   ITINERARY_COUNT_OPTIONS,
   ROUTING_PROFILES,
   RoutingPreferences,
-  SERVER_BIKE_RELUCTANCE
+  SERVER_BIKE_RELUCTANCE,
+  ViaStop
 } from '../../util/routing-profiles'
 import { blue, getBaseColor } from '../util/colors'
 import { ComponentContext } from '../../util/contexts'
@@ -57,7 +59,13 @@ import {
 } from '../../util/api'
 import { getDependentName } from '../../util/user'
 import { invisibleCss } from '../util/invisible-a11y-label'
-import { LockableRoute, routeLockLabel } from '../../util/route-lock'
+import {
+  LockableRoute,
+  RouteLock,
+  routeLockIds,
+  routeLockLabel,
+  RouteLockScope
+} from '../../util/route-lock'
 import { User } from '../user/types'
 import BackButton from '../util/back-button'
 
@@ -258,6 +266,87 @@ const SearchOptionCheckbox = styled(CheckboxSelector)`
   }
 `
 
+const RouteLockContainer = styled.div`
+  margin: 2em 0;
+`
+
+// One toggle (or field) and the sentence that explains it, as one block.
+// GlobalSettingsContainer carries a 2em bottom margin of its own, which on a
+// panel with several of these would park each explanation against the NEXT
+// control instead of under its own.
+const SearchOptionBlock = styled.div`
+  margin-bottom: 2em;
+
+  > div {
+    margin-bottom: 6px;
+  }
+`
+
+// One row of route chips under the picker. Same pill look as the search form's
+// active-preferences chips so the two readouts of the same fact match.
+const ChipRow = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0;
+`
+
+const RouteChip = styled.button`
+  align-items: center;
+  background: #f1f1f1;
+  border: 1px solid #ccc;
+  border-radius: 999px;
+  color: #333;
+  cursor: pointer;
+  display: flex;
+  font-size: 13px;
+  gap: 6px;
+  padding: 4px 10px;
+
+  &:hover {
+    border-color: #d32f2f;
+    color: #d32f2f;
+  }
+`
+
+const StopInput = styled.input`
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font: inherit;
+  padding: 8px;
+  width: 100%;
+`
+
+const StopSuggestions = styled.ul`
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  list-style: none;
+  margin: 6px 0 0;
+  max-height: 180px;
+  overflow-y: auto;
+  padding: 0;
+`
+
+const StopSuggestion = styled.button`
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  display: block;
+  font: inherit;
+  padding: 8px 10px;
+  text-align: left;
+  width: 100%;
+
+  &:hover {
+    background: #f1f1f1;
+  }
+`
+
+/** Shortest stop-name fragment worth asking the server about. */
+const VIA_STOP_MIN_CHARS = 3
+/** Pause after the last keystroke before the stop lookup fires. */
+const VIA_STOP_DEBOUNCE_MS = 350
+
 const AdvancedSettingsPanel = ({
   applyPreferencesFromText,
   applyRoutingProfile,
@@ -271,6 +360,7 @@ const AdvancedSettingsPanel = ({
   handlePlanTrip,
   innerRef,
   loggedInUser,
+  lookupViaStops,
   mobilityProfile,
   modeButtonOptions,
   modeSettingDefinitions,
@@ -279,9 +369,10 @@ const AdvancedSettingsPanel = ({
   saveAndReturnButton,
   setCloseAdvancedSettingsWithDelay,
   setQueryParam,
-  setRouteLock,
+  setRouteLockScope,
   setRoutingPreferences,
-  setSearchOptions
+  setSearchOptions,
+  toggleRouteLockRoute
 }: {
   applyPreferencesFromText: (text: string) => Promise<any>
   applyRoutingProfile: (profileId: string) => void
@@ -295,6 +386,7 @@ const AdvancedSettingsPanel = ({
   handlePlanTrip: () => void
   innerRef: RefObject<HTMLDivElement>
   loggedInUser?: User
+  lookupViaStops: (name: string) => Promise<ViaStop[]>
   mobilityProfile: boolean
   modeButtonOptions: ModeButtonDefinition[]
   modeSettingDefinitions: ModeSetting[]
@@ -303,15 +395,18 @@ const AdvancedSettingsPanel = ({
   saveAndReturnButton?: boolean
   setCloseAdvancedSettingsWithDelay: () => void
   setQueryParam: (evt: any) => void
-  setRouteLock: (routeId?: string | null) => void
+  setRouteLockScope: (scope: RouteLockScope) => void
   setRoutingPreferences: (
     prefs: RoutingPreferences,
     activeProfileId?: string
   ) => void
   setSearchOptions: (options: {
     hideWalkTransitOptions?: boolean
+    noTransfers?: boolean
     numItineraries?: number
+    viaStop?: ViaStop | null
   }) => void
+  toggleRouteLockRoute: (routeId: string) => void
 }): JSX.Element => {
   const intl = useIntl()
   const [closingBySave, setClosingBySave] = useState(false)
@@ -338,11 +433,19 @@ const AdvancedSettingsPanel = ({
     findRoutesIfNeeded()
   }, [findRoutesIfNeeded])
 
+  const routeLock: RouteLock | undefined = currentQuery.routeLock
+  const lockedRouteIds = useMemo(() => routeLockIds(routeLock), [routeLock])
+
+  // The picker ADDS a route (#46), so routes already chosen drop out of it and
+  // the chips below are the only place they appear. Selecting always leaves the
+  // control back on its placeholder, which is what makes a second pick possible
+  // without a reset step.
   const routeLockOptions = useMemo(() => {
     const named = Object.entries(routes || {})
       // Vehicle-position updates stash bare {vehicles} entries under a route id;
       // those aren't pickable routes.
       .filter(([, route]) => route.shortName || route.longName)
+      .filter(([id]) => !lockedRouteIds.includes(id))
       .map(([id, route]) => ({
         sortOrder: route.sortOrder ?? Number.MAX_SAFE_INTEGER,
         text: route.longName
@@ -360,19 +463,45 @@ const AdvancedSettingsPanel = ({
     return [
       {
         text: intl.formatMessage({
-          id: 'components.BatchSearchScreen.routeLockAny'
+          id: 'components.BatchSearchScreen.routeLockAdd'
         }),
         value: ''
       },
       ...named.map(({ text, value }) => ({ text, value }))
     ]
-  }, [intl, routes])
+  }, [intl, lockedRouteIds, routes])
+
+  const routeLockScopeOptions = useMemo(
+    () => [
+      {
+        text: intl.formatMessage({
+          id: 'components.BatchSearchScreen.routeLockScopeOnly'
+        }),
+        value: 'only'
+      },
+      {
+        text: intl.formatMessage({
+          id: 'components.BatchSearchScreen.routeLockScopeStarting'
+        }),
+        value: 'starting'
+      }
+    ],
+    [intl]
+  )
 
   const onRouteLockChange = useCallback(
     (evt: QueryParamChangeEvent) => {
-      setRouteLock((evt.routeLock as string) || null)
+      const id = evt.routeLock as string
+      if (id) toggleRouteLockRoute(id)
     },
-    [setRouteLock]
+    [toggleRouteLockRoute]
+  )
+
+  const onRouteLockScopeChange = useCallback(
+    (evt: QueryParamChangeEvent) => {
+      setRouteLockScope(evt.routeLockScope as RouteLockScope)
+    },
+    [setRouteLockScope]
   )
 
   const baseColor = getBaseColor()
@@ -531,6 +660,55 @@ const AdvancedSettingsPanel = ({
     [setSearchOptions]
   )
 
+  const onNoTransfersChange = useCallback(
+    (evt: QueryParamChangeEvent) => {
+      setSearchOptions({ noTransfers: !!evt.noTransfers })
+    },
+    [setSearchOptions]
+  )
+
+  // "Must pass through this stop" (4.9). There is no stop index in the store —
+  // only the ~150-entry route index the picker above uses — so the field asks
+  // OTP by name, debounced, and holds the answers in component state.
+  const viaStop: ViaStop | null = currentQuery.viaStop || null
+  const [stopText, setStopText] = useState('')
+  const [stopMatches, setStopMatches] = useState<ViaStop[] | null>(null)
+  const [stopSearching, setStopSearching] = useState(false)
+
+  useEffect(() => {
+    const query = stopText.trim()
+    if (query.length < VIA_STOP_MIN_CHARS) {
+      setStopMatches(null)
+      setStopSearching(false)
+      return
+    }
+    let live = true
+    setStopSearching(true)
+    const timer = setTimeout(async () => {
+      const found = await lookupViaStops(query)
+      if (!live) return
+      setStopSearching(false)
+      setStopMatches(found)
+    }, VIA_STOP_DEBOUNCE_MS)
+    return () => {
+      live = false
+      clearTimeout(timer)
+    }
+  }, [lookupViaStops, stopText])
+
+  const onPickViaStop = useCallback(
+    (stop: ViaStop) => {
+      setSearchOptions({ viaStop: stop })
+      setStopText('')
+      setStopMatches(null)
+    },
+    [setSearchOptions]
+  )
+
+  const onClearViaStop = useCallback(() => {
+    setSearchOptions({ viaStop: null })
+  }, [setSearchOptions])
+
   const onApplyNlPreferences = useCallback(async () => {
     const text = nlText.trim()
     if (!text) return
@@ -592,6 +770,11 @@ const AdvancedSettingsPanel = ({
           }))}
           value={currentQuery.activeProfileId || DEFAULT_PROFILE_ID}
         />
+      </RoutingProfileContainer>
+      <RouteLockContainer className="route-lock-container">
+        <VisibleSubheader>
+          <FormattedMessage id="components.BatchSearchScreen.routeLockHeader" />
+        </VisibleSubheader>
         <RoutingProfileDropdown
           label={intl.formatMessage({
             id: 'components.BatchSearchScreen.routeLockLabel'
@@ -599,9 +782,50 @@ const AdvancedSettingsPanel = ({
           name="routeLock"
           onChange={onRouteLockChange}
           options={routeLockOptions}
-          value={currentQuery.routeLock?.id || ''}
+          value=""
         />
-      </RoutingProfileContainer>
+        {routeLock && (
+          <>
+            <ChipRow className="route-lock-chips">
+              {routeLock.routes.map((route) => (
+                <RouteChip
+                  aria-label={intl.formatMessage(
+                    { id: 'components.BatchSearchScreen.routeLockRemove' },
+                    { route: route.label }
+                  )}
+                  key={route.id}
+                  onClick={() => toggleRouteLockRoute(route.id)}
+                  type="button"
+                >
+                  {route.label}
+                  <Times size={11} />
+                </RouteChip>
+              ))}
+            </ChipRow>
+            <RoutingProfileDropdown
+              label={intl.formatMessage({
+                id: 'components.BatchSearchScreen.routeLockScopeLabel'
+              })}
+              name="routeLockScope"
+              onChange={onRouteLockScopeChange}
+              options={routeLockScopeOptions}
+              value={routeLock.scope}
+            />
+            <HelperText>
+              <FormattedMessage
+                id={
+                  routeLock.scope === 'starting'
+                    ? 'components.BatchSearchScreen.routeLockStartDetail'
+                    : 'components.BatchSearchScreen.routeLockDetail'
+                }
+                values={{
+                  route: routeLock.routes.map((route) => route.label).join(', ')
+                }}
+              />
+            </HelperText>
+          </>
+        )}
+      </RouteLockContainer>
       <BikePreferenceContainer>
         <VisibleSubheader>
           <FormattedMessage id="components.BatchSearchScreen.bikeWillingnessHeader" />
@@ -653,19 +877,98 @@ const AdvancedSettingsPanel = ({
           options={numItineraryOptions}
           value={String(numItineraries)}
         />
-        <GlobalSettingsContainer>
-          <SearchOptionCheckbox
-            label={intl.formatMessage({
-              id: 'components.BatchSearchScreen.hideWalkTransitLabel'
-            })}
-            name="hideWalkTransitOptions"
-            onChange={onHideWalkTransitChange}
-            value={!!currentQuery.hideWalkTransitOptions}
-          />
-        </GlobalSettingsContainer>
-        <HelperText>
-          <FormattedMessage id="components.BatchSearchScreen.hideWalkTransitHelp" />
-        </HelperText>
+        <SearchOptionBlock>
+          <GlobalSettingsContainer>
+            <SearchOptionCheckbox
+              label={intl.formatMessage({
+                id: 'components.BatchSearchScreen.hideWalkTransitLabel'
+              })}
+              name="hideWalkTransitOptions"
+              onChange={onHideWalkTransitChange}
+              value={!!currentQuery.hideWalkTransitOptions}
+            />
+          </GlobalSettingsContainer>
+          <HelperText>
+            <FormattedMessage id="components.BatchSearchScreen.hideWalkTransitHelp" />
+          </HelperText>
+        </SearchOptionBlock>
+        <SearchOptionBlock>
+          <GlobalSettingsContainer>
+            <SearchOptionCheckbox
+              label={intl.formatMessage({
+                id: 'components.BatchSearchScreen.noTransfersLabel'
+              })}
+              name="noTransfers"
+              onChange={onNoTransfersChange}
+              value={!!currentQuery.noTransfers}
+            />
+          </GlobalSettingsContainer>
+          <HelperText>
+            <FormattedMessage id="components.BatchSearchScreen.noTransfersHelp" />
+          </HelperText>
+        </SearchOptionBlock>
+        <SearchOptionBlock>
+          <TripFormStyled.SettingLabel as="label" htmlFor="via-stop-input">
+            <FormattedMessage id="components.BatchSearchScreen.viaStopLabel" />
+          </TripFormStyled.SettingLabel>
+          {viaStop ? (
+            <ChipRow className="via-stop-chips">
+              <RouteChip
+                aria-label={intl.formatMessage(
+                  { id: 'components.BatchSearchScreen.viaStopRemove' },
+                  { stop: viaStop.name }
+                )}
+                onClick={onClearViaStop}
+                type="button"
+              >
+                {viaStop.name}
+                <Times size={11} />
+              </RouteChip>
+            </ChipRow>
+          ) : (
+            <>
+              <StopInput
+                id="via-stop-input"
+                onChange={(e) => setStopText(e.target.value)}
+                placeholder={intl.formatMessage({
+                  id: 'components.BatchSearchScreen.viaStopPlaceholder'
+                })}
+                type="text"
+                value={stopText}
+              />
+              {stopSearching && (
+                <HelperText>
+                  <FormattedMessage id="components.BatchSearchScreen.viaStopSearching" />
+                </HelperText>
+              )}
+              {!stopSearching && stopMatches?.length === 0 && (
+                <HelperText>
+                  <FormattedMessage
+                    id="components.BatchSearchScreen.viaStopNone"
+                    values={{ name: stopText.trim() }}
+                  />
+                </HelperText>
+              )}
+              {!stopSearching && !!stopMatches?.length && (
+                <StopSuggestions className="via-stop-suggestions">
+                  {stopMatches.map((stop) => (
+                    <li key={stop.ids.join(',')}>
+                      <StopSuggestion
+                        onClick={() => onPickViaStop(stop)}
+                        type="button"
+                      >
+                        {stop.name}
+                      </StopSuggestion>
+                    </li>
+                  ))}
+                </StopSuggestions>
+              )}
+            </>
+          )}
+          <HelperText>
+            <FormattedMessage id="components.BatchSearchScreen.viaStopHelp" />
+          </HelperText>
+        </SearchOptionBlock>
       </SearchOptionsContainer>
       <NlPreferencesContainer>
         <VisibleSubheader>
@@ -830,10 +1133,12 @@ const mapDispatchToProps = {
   applyRoutingProfile: routingProfileActions.applyRoutingProfile,
   findRoutesIfNeeded: apiActions.findRoutesIfNeeded,
   getDependentUserInfo: userActions.getDependentUserInfo,
+  lookupViaStops: routingProfileActions.lookupViaStops,
   setQueryParam: formActions.setQueryParam,
-  setRouteLock: routeLockActions.setRouteLock,
+  setRouteLockScope: routeLockActions.setRouteLockScope,
   setRoutingPreferences: routingProfileActions.setRoutingPreferences,
-  setSearchOptions: routingProfileActions.setSearchOptions
+  setSearchOptions: routingProfileActions.setSearchOptions,
+  toggleRouteLockRoute: routeLockActions.toggleRouteLockRoute
 }
 
 export default connect(

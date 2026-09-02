@@ -177,8 +177,10 @@ components:
   ActiveRoutingPreferences:
     clear: Clear
     label: "Preferences:"
+    noTransfers: No transfers
     noWalkTransit: No walk + transit
     optionCount: "{count} options"
+    viaStop: Via {stop}
   AddPlaceButton:
     addPlace: Add place
     needOriginDestination: Define origin/destination to add intermediate places
@@ -238,14 +240,28 @@ components:
     nlPreferencesHeader: Describe your needs
     nlPreferencesLoading: Thinking…
     nlPreferencesPlaceholder: e.g. bad knee today, avoid transfers
+    noTransfersHelp: >-
+      Only trips you can make without changing vehicles. Some pairs of places
+      have none, and then only the walk or bike options are left.
+    noTransfersLabel: No transfers
     numItinerariesLabel: How many options to look for
     numItinerariesOption: "{count} options"
-    routeLockAny: Any route
+    routeLockAdd: Add a route…
     routeLockChip: Only {route}
     routeLockDetail: Only trips on {route}, biking to and from it
-    routeLockLabel: Ride only this route
+    routeLockHeader: Routes
+    routeLockLabel: Name a route
     routeLockNotFound: No route called “{route}” — nothing was locked.
+    routeLockNotStarted: Doesn’t start on {route}
     routeLockNotUsed: Doesn’t use {route}
+    routeLockRemove: Remove {route}
+    routeLockScopeLabel: How to use these routes
+    routeLockScopeOnly: Ride only these routes
+    routeLockScopeStarting: Use as my starting route
+    routeLockStartChip: Start on {route}
+    routeLockStartDetail: >-
+      Trips whose first bus or train is {route}; the rest of the trip is up to
+      the planner.
     routingProfileHeader: Routing profile
     routingProfileLabel: Optimize routing for
     saveAndReturn: Save and return
@@ -253,6 +269,12 @@ components:
     searchOptionsHeader: Options shown
     submodeSelectorLabel: Select travel modes and submodes
     tripOptions: Trip Options
+    viaStopHelp: Every trip shown will serve this stop, in either direction.
+    viaStopLabel: Must pass through a stop
+    viaStopNone: No stops match “{name}”.
+    viaStopPlaceholder: Type part of a stop name
+    viaStopRemove: Remove {stop}
+    viaStopSearching: Searching…
   BatchSettings:
     destination: destination
     invalidModeSelection: >-
