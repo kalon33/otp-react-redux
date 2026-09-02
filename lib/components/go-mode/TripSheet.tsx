@@ -7,11 +7,15 @@ import type { Itinerary, Leg } from '@opentripplanner/types'
 
 import * as goModeActions from '../../actions/go-mode'
 import * as routingProfileActions from '../../actions/routing-profiles'
+import {
+  BOARDING_CONFIRM,
+  resolveBoardingOffer
+} from '../../util/go-mode/boarding-confirmation'
 import { buildLiveItinerary } from '../../util/go-mode/live-itinerary'
 import { getModeIcon } from '../../util/go-mode/mode-icon'
 import { IconWithText } from '../util/styledIcon'
 import ItineraryBody from '../narrative/line-itin/connected-itinerary-body'
-import type { LiveLegTime } from '../../util/go-mode/types'
+import type { LiveLegTime, RidingState } from '../../util/go-mode/types'
 import type { TripProgress } from '../../util/go-mode/progress-calculator'
 
 import {
@@ -57,10 +61,14 @@ interface Props {
     preferences?: any
     profileId?: string
   }) => void
+  confirmBoardingByRider: () => void
+  denyBoardingByRider: () => void
   fetchPreferencesFromText: (text: string) => Promise<any>
   liveLegTimes: Record<number, LiveLegTime>
+  matchedVehicleId: string | null
   onClose: () => void
   progress: TripProgress | null
+  riding: RidingState | null
   setGoModeActiveLeg: (index: number | null) => void
 }
 
@@ -81,10 +89,14 @@ const TripSheet = ({
   activeItinerary,
   activeLeg,
   browseFromCurrentPosition,
+  confirmBoardingByRider,
+  denyBoardingByRider,
   fetchPreferencesFromText,
   liveLegTimes,
+  matchedVehicleId,
   onClose,
   progress,
+  riding,
   setGoModeActiveLeg
 }: Props) => {
   const intl = useIntl()
@@ -234,6 +246,42 @@ const TripSheet = ({
     )
   }
 
+  /**
+   * The rider's own say on being aboard (6.10c). One chip, never a question:
+   * the app already knows which bus is in the itinerary, and
+   * `feedback_no_redundant_prompts` says it must not ask. Which chip — and
+   * whether there is one at all — is decided in
+   * util/go-mode/boarding-confirmation.ts.
+   */
+  const renderBoardingChip = () => {
+    const { offer } = resolveBoardingOffer({
+      currentLeg,
+      matchedVehicleId,
+      nextLeg: legs[currentLegIndex + 1],
+      riding
+    })
+    if (!offer) return null
+    const confirming = offer === BOARDING_CONFIRM
+    return (
+      <RerouteChips>
+        <RerouteChip
+          onClick={confirming ? confirmBoardingByRider : denyBoardingByRider}
+          type="button"
+        >
+          {confirming
+            ? intl.formatMessage({
+                defaultMessage: "I'm on the bus",
+                id: 'components.GoMode.boardingConfirm'
+              })
+            : intl.formatMessage({
+                defaultMessage: 'Not on the bus',
+                id: 'components.GoMode.boardingDeny'
+              })}
+        </RerouteChip>
+      </RerouteChips>
+    )
+  }
+
   // Same toggle semantics as the planner's narrative list: tapping the active
   // leg again clears it. Selecting one drops the sheet so the zoom is visible.
   const handleLegClick = (index: number) => {
@@ -339,6 +387,7 @@ const TripSheet = ({
           })}
         </SheetSectionTitle>
         {renderCurrentLegCard()}
+        {renderBoardingChip()}
         {liveItinerary && (
           <ItineraryBody
             itinerary={liveItinerary}
@@ -425,12 +474,16 @@ const mapStateToProps = (state: any) => {
     activeItinerary: goMode?.activeItinerary || null,
     activeLeg: goMode?.ui?.activeLeg ?? null,
     liveLegTimes: goMode?.liveLegTimes || {},
-    progress: goMode?.progress || null
+    matchedVehicleId: goMode?.vehicleMatch?.match?.vehicleId || null,
+    progress: goMode?.progress || null,
+    riding: goMode?.riding || null
   }
 }
 
 const mapDispatchToProps = {
   browseFromCurrentPosition: goModeActions.browseFromCurrentPosition,
+  confirmBoardingByRider: goModeActions.confirmBoardingByRider,
+  denyBoardingByRider: goModeActions.denyBoardingByRider,
   fetchPreferencesFromText: routingProfileActions.fetchPreferencesFromText,
   setGoModeActiveLeg: goModeActions.setGoModeActiveLeg
 }

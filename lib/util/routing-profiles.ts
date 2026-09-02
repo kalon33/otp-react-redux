@@ -403,6 +403,10 @@ export function summarizePreferences(
  */
 export const NON_OTP_QUERY_KEYS = [
   'activeProfileId',
+  // Re-anchors Go Mode's scoped access re-plan onto an arrive-by deadline
+  // (util/go-mode/arrive-on-time.ts). It picks the time a query is asked at;
+  // it is not itself an argument OTP takes.
+  'arriveOnTimeAccess',
   // Shapes the mode fan-out in routingQuery, not a plan() argument.
   'hideWalkTransitOptions',
   'routeLock',

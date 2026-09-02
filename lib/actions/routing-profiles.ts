@@ -30,6 +30,12 @@ const SEARCH_OPTIONS_STORAGE_KEY = 'searchOptions'
 
 /** The panel's search options, as they sit on currentQuery. */
 export interface SearchOptions {
+  /**
+   * Go Mode aims its scoped access re-plan a few minutes ahead of the bus
+   * rather than as-fast-as-possible (rider ask 6.10b). Opt-in, and off by
+   * default — see util/go-mode/arrive-on-time.ts for why.
+   */
+  arriveOnTimeAccess?: boolean
   hideWalkTransitOptions?: boolean
   numItineraries?: number
 }
@@ -90,6 +96,7 @@ export function setSearchOptions(
   return function (dispatch: any, getState: any): void {
     const { currentQuery } = getState().otp
     const next: SearchOptions = {
+      arriveOnTimeAccess: !!currentQuery.arriveOnTimeAccess,
       hideWalkTransitOptions: !!currentQuery.hideWalkTransitOptions,
       numItineraries: currentQuery.numItineraries,
       ...options
@@ -111,6 +118,7 @@ export function clearRoutingPreferences() {
     dispatch(
       setSearchOptions(
         {
+          arriveOnTimeAccess: false,
           hideWalkTransitOptions: false,
           numItineraries: getDefaultNumItineraries(getState().otp.config)
         },
