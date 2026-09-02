@@ -49,8 +49,21 @@ const StubItineraryBody = ({ itinerary }: any) => (
 const option = (
   stopName: string,
   routes: string[],
-  { bikeAfter = 400, endTime = T + 30 * MIN, hopMeters = 5000 } = {}
+  {
+    alightStopName,
+    bikeAfter = 400,
+    endTime = T + 30 * MIN,
+    hopMeters = 5000
+  }: {
+    alightStopName?: string
+    bikeAfter?: number
+    endTime?: number
+    hopMeters?: number
+  } = {}
 ) => ({
+  ...(alightStopName
+    ? { alightStopId: `s:${alightStopName}`, alightStopName }
+    : {}),
   busArrivalEpoch: T,
   displayItinerary: {
     endTime,
@@ -153,6 +166,68 @@ describe('components > go-mode > OnboardItineraryList', () => {
       ])
       expect(wrapper.find('li.result')).toHaveLength(2)
       expect(wrapper.find('button.same-shape-variants-toggle')).toHaveLength(0)
+    })
+  })
+
+  /**
+   * 6.44, live 2026-09-02: the second row said "Off at I-35W & Lake St Station"
+   * and guidance rode on to 1:56830, Burnsville Heart of the City — the end of
+   * the line. The tap wiring was innocent (it passes the option it captions,
+   * proven above); the option's `stopName` was the stop its ONWARD plan was
+   * planned from, and that plan opened with the boarded trip continuing, so
+   * mergeAdjacentSameTripLegs folded it into one longer ride. decorateAlightOptions
+   * records the real end as `alightStopName`; the row must print THAT.
+   *
+   * The five options and three rows are the live shapes from the reproduction.
+   */
+  describe('options whose ride runs past their planning anchor', () => {
+    const liveShape = [
+      option('Marquette Ave & 7th St - Stop Group C', ['1:904', '2:465']),
+      option('I-35W & Lake St Station', ['1:904'], {
+        alightStopName: 'Burnsville Heart of the City Station'
+      }),
+      option('I-35W & 46th St Station', ['1:904'], {
+        alightStopName: 'Burnsville Heart of the City Station'
+      }),
+      option('Burnsville Heart of the City Station', ['1:904', '2:425']),
+      option('Gateway Ramp Layover', ['1:904', '2:465'])
+    ]
+
+    it('captions the row with the stop the ride reaches, not the anchor', () => {
+      const { wrapper } = renderList(liveShape)
+      const rows = wrapper.find('li.result')
+      expect(rows).toHaveLength(3)
+      expect(rows.at(1).text()).toContain(
+        'Off at Burnsville Heart of the City Station'
+      )
+      expect(rows.at(1).text()).not.toContain('I-35W & Lake St Station')
+    })
+
+    it('starts guidance to the stop the tapped row names', () => {
+      const { onSelect, wrapper } = renderList(liveShape)
+      const rows = wrapper.find('li.result')
+      rows.at(1).find('div.stub-itin').simulate('click')
+      expect(onSelect).toHaveBeenCalledTimes(1)
+      const chosen = onSelect.mock.calls[0][0]
+      expect(chosen.alightStopName).toBe('Burnsville Heart of the City Station')
+      expect(rows.at(1).text()).toContain(`Off at ${chosen.alightStopName}`)
+    })
+
+    it('names the real stop on the drill-down variants too', () => {
+      const { wrapper } = renderList(liveShape)
+      wrapper
+        .find('li.result')
+        .at(1)
+        .find('button.same-shape-variants-toggle')
+        .simulate('click')
+      const variants = wrapper
+        .find('li.result')
+        .at(1)
+        .find('button[data-index]')
+      expect(variants).toHaveLength(2)
+      variants.forEach((b: any) => {
+        expect(b.text()).toContain('Burnsville Heart of the City Station')
+      })
     })
   })
 

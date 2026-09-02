@@ -8,6 +8,7 @@ import {
 
 import { calculateDistance } from './position-matching'
 import { getLegRouteId } from './departure-anchor'
+import { legTripId } from './leg-merge'
 
 // --- Types ---
 
@@ -69,6 +70,35 @@ export function findStopTimeIndex(
     : -1
   if (byId >= 0) return byId
   return stopName ? stopTimes.findIndex((s) => s.stop?.name === stopName) : -1
+}
+
+/**
+ * Where a BUILT onboard itinerary actually puts the rider back on the pavement:
+ * the end of its leg on the boarded trip.
+ *
+ * An alight option's `stopId`/`stopName` are the PLANNING ANCHOR — the stop its
+ * onward plan was fetched from — and that is not always where the ride ends.
+ * OTP's onward plan legitimately opens with the boarded trip CONTINUING (the
+ * `otherThanPreferredRoutesPenalty` bias at the fetch makes it common), and
+ * `mergeAdjacentSameTripLegs` then folds that leg into the synthesized bus leg,
+ * correctly, into one continuous ride running on to ITS alight stop. The anchor
+ * is then a stop the rider rides straight past.
+ *
+ * Returns null when the itinerary carries no leg on that trip, and when the
+ * boarded trip id is unknown — callers keep the anchor in both cases.
+ */
+export function builtAlightStop(
+  itinerary: Itinerary | null | undefined,
+  boardedTripId: string | null | undefined
+): { stopId: string; stopName: string } | null {
+  if (!boardedTripId) return null
+  const leg: any = (itinerary?.legs || []).find(
+    (l: any) => l.transitLeg && legTripId(l) === boardedTripId
+  )
+  const to = leg?.to
+  const stopId = to?.stop?.gtfsId || to?.stop?.id || to?.stopId
+  if (!stopId || !to?.name) return null
+  return { stopId, stopName: to.name }
 }
 
 /**
@@ -727,7 +757,7 @@ function compareAlightOptions(
  * leg), used to drop duplicate options the multi-stop search surfaces more than
  * once. Mirrors collectRerouteCandidates' dedup idiom in
  * lib/util/go-mode/reroute-candidates.ts. */
-function journeySignature(stopId: string, itinerary: Itinerary): string {
+export function journeySignature(stopId: string, itinerary: Itinerary): string {
   const legs = (itinerary.legs || [])
     .map(
       (l: any) =>
