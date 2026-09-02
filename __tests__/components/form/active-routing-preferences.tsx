@@ -66,6 +66,46 @@ describe('components > form > active routing preferences', () => {
     )
   })
 
+  it('shows one chip per named route (rider ask #46)', () => {
+    // A single chip reading "Only 18, 21, METRO Orange Line" stops being
+    // glanceable at two routes, and this row exists to be glanced at.
+    const chips = renderChips({
+      routeLock: {
+        routes: [
+          { id: '1:18', label: '18' },
+          { id: '1:904', label: 'METRO Orange Line' }
+        ],
+        scope: 'only'
+      }
+    }).find('.active-routing-preferences span')
+    const texts = chips.map((c) => c.text())
+    expect(texts).toContain('Only 18')
+    expect(texts).toContain('Only METRO Orange Line')
+  })
+
+  it('says "start on" rather than "only" for a starting route (#45)', () => {
+    const text = renderChips({
+      routeLock: {
+        routes: [{ id: '1:18', label: '18' }],
+        scope: 'starting'
+      }
+    }).text()
+    expect(text).toContain('Start on 18')
+    expect(text).not.toContain('Only 18')
+  })
+
+  it('shows a chip while transfers are ruled out (4.9)', () => {
+    expect(renderChips({ noTransfers: true }).text()).toContain('No transfers')
+  })
+
+  it('names the stop the trip must serve (4.9)', () => {
+    expect(
+      renderChips({
+        viaStop: { ids: ['1:56796'], name: 'Lake & Chicago Station' }
+      }).text()
+    ).toContain('Via Lake & Chicago Station')
+  })
+
   it('still shows the lever chips beside them', () => {
     const text = renderChips({
       hideWalkTransitOptions: true,

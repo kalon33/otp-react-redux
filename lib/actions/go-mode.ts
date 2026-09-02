@@ -102,6 +102,7 @@ import { legAlight } from '../util/go-mode/live-itinerary'
 import {
   buildBannedRoutes,
   ROUTE_LOCK_MODES,
+  routeLockIds,
   withRouteLockPrefs
 } from '../util/route-lock'
 import {
@@ -1268,24 +1269,32 @@ export function reRouteFromCurrentPosition(
     // Rebuilt from the live route index rather than reusing currentQuery.banned:
     // the index is the authority on which routes exist, and a ban list is only
     // correct if it is the complete complement of the kept route.
+    //
+    // Only a whole-trip lock is a ban. A "starting route" (#45) names the
+    // vehicle the rider boards FIRST, and a mid-trip re-plan is not a first
+    // boarding — banning the complement here would forbid exactly the
+    // connections the rider deliberately left free.
     const routeLock = state.otp?.currentQuery?.routeLock
-    if (routeLock?.id) {
+    const lockedRouteIds = routeLockIds(routeLock)
+    if (lockedRouteIds.length && routeLock?.scope !== 'starting') {
       const banned = buildBannedRoutes(
         state.otp?.transitIndex?.routes,
-        routeLock.id
+        lockedRouteIds
       )
       if (banned) {
         payload.banned = { routes: banned }
-        // Bike both ends: naming one route only makes sense with a personal
+        // Bike both ends: naming routes only makes sense with a personal
         // vehicle filling the gaps (see util/route-lock).
         payload.modes = ROUTE_LOCK_MODES
         payload.routingPreferences = withRouteLockPrefs(
           payload.routingPreferences
         )
         // The stay-seated/preferred bias is about keeping the rider on the bus
-        // they are on. Under a lock the named route already decides that, and a
+        // they are on. Under a lock the named routes already decide that, and a
         // preference for a now-banned route is just noise in the query.
-        if (payload.preferred?.routes !== routeLock.id) delete payload.preferred
+        if (!lockedRouteIds.includes(payload.preferred?.routes as string)) {
+          delete payload.preferred
+        }
       }
     }
 

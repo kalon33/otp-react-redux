@@ -265,7 +265,12 @@ describe('reRouteFromCurrentPosition (isolated pipeline)', () => {
       {
         duration: 900,
         legs: [
-          { from: { name: 'A' }, mode: 'BUS', routeId: 'r1', to: { name: 'B' } }
+          {
+            from: { name: 'A' },
+            mode: 'BUS',
+            routeId: 'r1',
+            to: { name: 'B' }
+          }
         ]
       }
     ]
@@ -717,7 +722,10 @@ describe('a named route survives a Go Mode re-route', () => {
       ...initial,
       activeItinerary: {
         legs: [
-          { mode: 'WALK', to: { lat: 44.98, lon: -93.27, name: 'Destination' } }
+          {
+            mode: 'WALK',
+            to: { lat: 44.98, lon: -93.27, name: 'Destination' }
+          }
         ]
       },
       isActive: true,
@@ -746,29 +754,61 @@ describe('a named route survives a Go Mode re-route', () => {
     return mockedFetch.mock.calls[0]?.[0]
   }
 
+  const onlyThe18 = {
+    routeLock: { routes: [{ id: '1:18', label: '18' }], scope: 'only' }
+  }
+
   it('bans every other route and bikes both ends', async () => {
-    const payload = await dispatchReroute({
-      routeLock: { id: '1:18', label: '18' }
-    })
+    const payload = await dispatchReroute(onlyThe18)
     const banned = (payload.banned?.routes || '').split(',')
     expect(banned).toEqual(expect.arrayContaining(['1:5', '2:420']))
     expect(banned).not.toContain('1:18')
     expect(payload.modes).toEqual([{ mode: 'TRANSIT' }, { mode: 'BICYCLE' }])
   })
 
-  it('raises bike reluctance so the named route still carries the trip', async () => {
+  it('keeps every named route legal, not only the first', async () => {
+    // Rider ask #46. The mid-trip re-plan rebuilds the ban from the live route
+    // index, so a lock over a set has to survive that rebuild too — otherwise
+    // naming two routes and then re-planning silently drops one of them, which
+    // is a forced route change the rider never asked for.
     const payload = await dispatchReroute({
-      routeLock: { id: '1:18', label: '18' }
+      routeLock: {
+        routes: [
+          { id: '1:18', label: '18' },
+          { id: '1:5', label: '5' }
+        ],
+        scope: 'only'
+      }
     })
+    const banned = (payload.banned?.routes || '').split(',')
+    expect(banned).not.toContain('1:18')
+    expect(banned).not.toContain('1:5')
+    expect(banned).toContain('2:420')
+  })
+
+  it('does not ban anything for a starting-route selection', async () => {
+    // Rider ask #45: "use as my STARTING route". A mid-trip re-plan is not the
+    // first boarding, so banning the complement here would forbid exactly the
+    // connections the rider deliberately left free.
+    const payload = await dispatchReroute({
+      routeLock: { routes: [{ id: '1:18', label: '18' }], scope: 'starting' }
+    })
+    expect(payload.banned).toBeUndefined()
+    expect(payload.modes).not.toEqual([
+      { mode: 'TRANSIT' },
+      { mode: 'BICYCLE' }
+    ])
+  })
+
+  it('raises bike reluctance so the named route still carries the trip', async () => {
+    const payload = await dispatchReroute(onlyThe18)
     expect(payload.routingPreferences.bikeReluctance).toBeGreaterThanOrEqual(10)
   })
 
   it('drops a preferred-route bias that the lock has already banned', async () => {
     // The stay-seated bias exists to keep a rider on the bus they are on. Under
     // a lock the named route decides that, and preferring a banned route is noise.
-    const payload = await dispatchReroute({
-      routeLock: { id: '1:18', label: '18' }
-    })
+    const payload = await dispatchReroute(onlyThe18)
     expect(payload.preferred).toBeUndefined()
   })
 

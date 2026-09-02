@@ -13,7 +13,9 @@ import {
   getRoutingProfile,
   GO_MODE_SEARCH_WINDOW_SECONDS,
   LEVER_RANGES,
+  NO_TRANSFERS_MAX_TRANSFERS,
   NON_OTP_QUERY_KEYS,
+  planConstraintVariables,
   ROUTING_PROFILES,
   SEARCH_WINDOW_RANGE,
   SERVER_BIKE_RELUCTANCE
@@ -219,6 +221,89 @@ describe('routing-profiles', () => {
       expect(out).toContain('$searchWindow: Long')
       expect(out).not.toContain('$searchWindow: Int')
       expect(out).toContain('searchWindow: $searchWindow')
+    })
+
+    // 4.9: "specific stop or route or no transfers. Search must comply."
+    // Neither of these existed as a declared variable, so a maxTransfers or via
+    // set on the query would have gone out as an undeclared name and been
+    // ignored by OTP — the search would have looked compliant and not been.
+    it('declares the hard constraints too', () => {
+      const out = extendPlanQueryWithLevers(baseQuery)
+      expect(out).toContain('$maxTransfers: Int')
+      expect(out).toContain('maxTransfers: $maxTransfers')
+      expect(out).toContain('$via: [PlanViaLocationInput!]')
+      expect(out).toContain('via: $via')
+    })
+  })
+
+  describe('planConstraintVariables (rider ask 4.9)', () => {
+    it('sends nothing at all for an unconstrained search', () => {
+      expect(planConstraintVariables(undefined)).toEqual({})
+      expect(planConstraintVariables({})).toEqual({})
+      expect(planConstraintVariables({ noTransfers: false })).toEqual({})
+    })
+
+    it('turns "no transfers" into maxTransfers 0', () => {
+      // A transfer is a boarding after the first, so 0 is exactly one vehicle.
+      expect(NO_TRANSFERS_MAX_TRANSFERS).toBe(0)
+      expect(planConstraintVariables({ noTransfers: true })).toEqual({
+        maxTransfers: 0
+      })
+    })
+
+    it('turns a chosen stop into a passThrough via', () => {
+      expect(
+        planConstraintVariables({
+          viaStop: { ids: ['1:56796', '1:16871'], name: 'Lake & Chicago' }
+        })
+      ).toEqual({
+        via: [{ passThrough: { stopLocationIds: ['1:56796', '1:16871'] } }]
+      })
+    })
+
+    it('carries every platform id under the name, not just one', () => {
+      // The two ids are the two directions of the same station. OTP is
+      // satisfied by visiting ONE of the ids listed, so pinning a single
+      // platform would quietly forbid travelling the other way.
+      const out = planConstraintVariables({
+        viaStop: { ids: ['1:56796', '1:16871'], name: 'Lake & Chicago' }
+      }) as any
+      expect(out.via[0].passThrough.stopLocationIds).toHaveLength(2)
+    })
+
+    it('sends no via for a stop entry with no ids', () => {
+      expect(
+        planConstraintVariables({ viaStop: { ids: [], name: 'x' } })
+      ).toEqual({})
+      expect(planConstraintVariables({ viaStop: null })).toEqual({})
+    })
+
+    it('sends both constraints together', () => {
+      expect(
+        planConstraintVariables({
+          noTransfers: true,
+          viaStop: { ids: ['1:56796'], name: 'Lake & Chicago' }
+        })
+      ).toEqual({
+        maxTransfers: 0,
+        via: [{ passThrough: { stopLocationIds: ['1:56796'] } }]
+      })
+    })
+  })
+
+  describe('the bookkeeping keys the constraints ride on', () => {
+    it('never reach OTP under their own names', () => {
+      // `noTransfers` and `viaStop` are not plan() arguments; they become
+      // maxTransfers / via via planConstraintVariables. Left in the variables
+      // they would be undeclared names.
+      expect(NON_OTP_QUERY_KEYS).toContain('noTransfers')
+      expect(NON_OTP_QUERY_KEYS).toContain('viaStop')
+      const cleaned = applyRoutingPreferences(
+        { noTransfers: true, viaStop: { ids: ['1:1'], name: 'x' } },
+        {}
+      )
+      expect(cleaned.noTransfers).toBeUndefined()
+      expect(cleaned.viaStop).toBeUndefined()
     })
   })
 
