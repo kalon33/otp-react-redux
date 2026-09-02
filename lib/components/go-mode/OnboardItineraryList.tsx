@@ -14,6 +14,12 @@ import type { OnboardAlightOption } from '../../reducers/go-mode'
 
 // The itinerary rows alone can look identical (same routes, same duration) —
 // the decision being made is WHICH STOP, so caption each row with it.
+//
+// `alightStopName` first, `stopName` only as the fallback: the option's
+// stopName is the stop its onward plan was PLANNED from, and when that plan
+// opens with the boarded trip continuing the legs merge and the ride runs on
+// past it (see decorateAlightOptions). Captioning the anchor there promised a
+// stop the rider is carried straight through — 6.44, live 2026-09-02.
 const OffAtLabel = styled.div`
   color: #2e7d32;
   font-size: 13px;
@@ -99,7 +105,7 @@ const OnboardItineraryList = ({
           (variant, index) =>
             Object.assign({}, variant.displayItinerary || variant.itinerary, {
               index,
-              variantLabel: variant.stopName
+              variantLabel: variant.alightStopName || variant.stopName
             })
         )
 
@@ -118,7 +124,7 @@ const OnboardItineraryList = ({
                     defaultMessage: 'Off at {stop}',
                     id: 'components.GoMode.offAtStop'
                   },
-                  { stop: option.stopName }
+                  { stop: option.alightStopName || option.stopName }
                 )}
               </OffAtLabel>
               <ItineraryBody

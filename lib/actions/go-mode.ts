@@ -8,10 +8,12 @@ import polyline from '@mapbox/polyline'
 import type { Itinerary, LatLngArray, Leg } from '@opentripplanner/types'
 
 import {
+  builtAlightStop,
   clampNonLiveLegTimes,
   findStopTimeIndex,
   getDownstreamStops,
   hasLiveArrival,
+  journeySignature,
   liveStopArrival,
   mergeLiveTimePoint,
   ONBOARD_CANDIDATE_SETTLE_MS,
@@ -2575,26 +2577,7 @@ function optimizeAlightFromTrip(options: {
         tokenHopToleranceMs: tokenHopToleranceMs(state),
         walkOnlyMax
       })
-      // Decorate each option with the itinerary the rider actually gets on tap
-      // (current-bus leg prepended, transfers recounted, real bike legs) so the
-      // results list displays exactly what confirmOnboardAlightStop will start.
-      // The 7/12 cards showed the ONWARD plan's numbers instead — "0 more
-      // transfers" became a 1-transfer trip after tapping.
-      return (ranked || []).map((option: any) => {
-        try {
-          return {
-            ...option,
-            displayItinerary: buildOnboardItinerary(
-              trip,
-              vehicle,
-              option,
-              lastPosition
-            )
-          }
-        } catch {
-          return option
-        }
-      })
+      return decorateAlightOptions(ranked, trip, vehicle, lastPosition)
     }
 
     /**
@@ -2940,6 +2923,72 @@ export function buildOnboardItinerary(
     startTime: busLegStart,
     transfers: Math.max(0, transitLegCount - 1)
   } as Itinerary) as Itinerary
+}
+
+/**
+ * Decorate each ranked alight option with the itinerary the rider actually gets
+ * on tap — current-bus leg included, transfers recounted, real bike legs — so
+ * the results list displays exactly what confirmOnboardAlightStop will start.
+ * The 7/12 cards showed the ONWARD plan's numbers instead: "0 more transfers"
+ * became a 1-transfer trip after tapping.
+ *
+ * It also records where that built itinerary REALLY alights. An option's
+ * stopId/stopName are the planning anchor — the stop its onward plan was
+ * fetched from — and OTP's onward plan legitimately opens with the boarded trip
+ * CONTINUING, which mergeAdjacentSameTripLegs then folds into the synthesized
+ * bus leg as one ride running on to that leg's own alight stop. Live on
+ * 2026-09-02 (6.44): the row captioned "Off at I-35W & Lake St Station" started
+ * guidance that stayed aboard to Burnsville Heart of the City, the end of the
+ * line — legs BUS,BICYCLE, alighting at 1:56830. The merge is right (splitting
+ * one ride in two invented a fake transfer and charged the fare twice on 8/2);
+ * the caption was the liar, so `builtAlightStop` gives the list the truth to
+ * print.
+ *
+ * Once the anchors are collapsed like that, several candidate stops describe
+ * ONE ride — on the reproduction three of five options all rode to the
+ * terminus — so options whose built journey duplicates one already kept are
+ * dropped rather than offered as three choices that do the same thing. Ranked
+ * order is preserved, so the survivor of each set is the best-ranked one.
+ */
+export function decorateAlightOptions(
+  ranked: any[] | null | undefined,
+  trip: any,
+  vehicle: any,
+  lastPosition: GeolocationPosition | null
+): any[] {
+  const seen = new Set<string>()
+  const decorated: any[] = []
+  ;(ranked || []).forEach((option: any) => {
+    let displayItinerary: Itinerary
+    try {
+      displayItinerary = buildOnboardItinerary(
+        trip,
+        vehicle,
+        option,
+        lastPosition
+      )
+    } catch {
+      // Undecorated rather than dropped: an option the builder cannot splice
+      // still ranks, and the list falls back to its onward itinerary.
+      decorated.push(option)
+      return
+    }
+    const actual = builtAlightStop(displayItinerary, trip?.id)
+    const signature = journeySignature(
+      actual?.stopId ?? option.stopId,
+      displayItinerary
+    )
+    if (seen.has(signature)) return
+    seen.add(signature)
+    decorated.push({
+      ...option,
+      ...(actual && actual.stopId !== option.stopId
+        ? { alightStopId: actual.stopId, alightStopName: actual.stopName }
+        : {}),
+      displayItinerary
+    })
+  })
+  return decorated
 }
 
 /**

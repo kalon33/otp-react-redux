@@ -81,6 +81,12 @@ export interface OnboardCandidate {
 
 /** The chosen best stop to get off, with its remaining-journey itinerary. */
 export interface OnboardAlightOption {
+  /** Where `displayItinerary` ACTUALLY puts the rider down, when that is not
+   * `stopId` — set by decorateAlightOptions when the onward plan opens with the
+   * boarded trip continuing and the legs merge into one longer ride. The list
+   * captions the row with this, because it is the stop a tap guides to. */
+  alightStopId?: string
+  alightStopName?: string
   busArrivalEpoch: number
   /** The full trip a tap starts: current-bus leg + onward legs. What the
    * results list renders, so the display matches the outcome exactly. */

@@ -20,7 +20,7 @@ import { legLocationsAreEqual } from '../itinerary'
  */
 
 /** The trip a leg serves, in either shape the app produces. */
-function legTripId(leg: any): string | null {
+export function legTripId(leg: any): string | null {
   return leg?.trip?.gtfsId || leg?.tripId || null
 }
 

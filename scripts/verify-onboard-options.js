@@ -132,7 +132,13 @@ async function main() {
 
   // ---- 2. drive the app ----
   const browser = await puppeteer.launch({
-    args: ['--no-sandbox'],
+    // --disable-gpu is not cosmetic here: this host runs a real X session, and
+    // headless Chrome crashed on launch with "Protocol error
+    // (Target.setAutoAttach): Target closed" on 3 of 4 attempts without it and
+    // 0 of 7 with it (2026-09-02). --disable-dev-shm-usage is the usual
+    // companion; /dev/shm is roomy on this box but the pair is what was
+    // measured.
+    args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
     executablePath: CHROME,
     headless: 'new'
   })
@@ -209,7 +215,9 @@ async function main() {
         duration: o.itinerary.duration,
         legs: (o.itinerary.legs || []).map((l) => l.mode).join(','),
         stopId: o.stopId,
-        stopName: o.stopName,
+        // The caption the row shows and the stop a tap guides to: the planning
+        // anchor (stopName) only when the built ride does not run past it.
+        stopName: o.alightStopName || o.stopName,
         transfers: o.itinerary.transfers,
         walk: Math.round(o.itinerary.walkDistance || 0)
       })),
