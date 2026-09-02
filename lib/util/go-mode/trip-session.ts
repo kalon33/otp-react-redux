@@ -16,6 +16,7 @@ import type { StopCountLatch } from './next-stop'
  * `replayTrackedRouteId` deliberately outlive a trip today. They stay module
  * scoped in actions/go-mode.ts rather than change behaviour silently.
  */
+import type { BoardStopDwell } from './riding'
 import type { DepartureBaselineState } from './departure-drift'
 import type { DestinationProgressState } from './destination-progress'
 import type { MissedBusAttempt } from './missed-bus-recovery'
@@ -24,6 +25,13 @@ import type { RiderSpeedSample } from './rider-speed'
 import type { TimedSimulationPoint } from './geometry'
 
 export interface TripSession {
+  /**
+   * How long the rider has waited, continuously, at the boarding stop of the
+   * leg the matcher is on. The board gate's one non-instantaneous input — see
+   * BOARD_STOP_DWELL_MIN_MS in riding.ts.
+   */
+  boardStopDwell: BoardStopDwell | null
+
   /**
    * Closest approach to the destination so far, and how many re-plans have gone
    * out since it last improved. The only thing in Go Mode that remembers
@@ -184,6 +192,7 @@ export interface TripSession {
 /** A trip's state at its first GPS fix. */
 export function createTripSession(): TripSession {
   return {
+    boardStopDwell: null,
     destinationProgress: null,
     deviationHandledAtMs: null,
     earlyBoardReplan: null,

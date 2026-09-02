@@ -1,4 +1,5 @@
 import {
+  BOARD_STOP_DWELL_MIN_MS,
   decideRiding,
   firstEstablishmentIsCorroborated,
   RIDING_ESTABLISH_MAX_DISTANCE_M,
@@ -44,6 +45,12 @@ const onLeg = (over: any = {}) => ({
 
 const decide = (over: any = {}) =>
   decideRiding({
+    // The rider waited at the stop and then moved, which is what boarding a
+    // bus looks like — supplied so these cases still reach the subject they
+    // were written for. The gate that reads it is the 2026-09-01 one and has
+    // its own file (false-board-0901.ts); every case here is about the
+    // 2026-08-27 identity and distance rules that sit behind it.
+    boardStopDwellMs: BOARD_STOP_DWELL_MIN_MS,
     matchedLeg: plannedLeg(),
     nowMs: NOW,
     offRouteClearMs: OFF_ROUTE_CLEAR_MS,

@@ -45,6 +45,7 @@ import {
   UPDATE_TRACKING_INTERVAL,
   UPDATE_VEHICLE_MATCH
 } from '../actions/go-mode'
+import { ridingFactIsEvidenced } from '../util/go-mode/riding'
 import type { LiveLegTime, RidingState } from '../util/go-mode/types'
 import type {
   NearbyVehicleOption,
@@ -694,7 +695,23 @@ const goMode = handleActions<GoModeState, any>(
         originalFrom: originalFrom ?? null,
         progress: null,
         reRoute: { ...defaultState.reRoute },
-        riding: reanchorRiding(state.riding, itinerary),
+        // A mid-ride itinerary SWAP (isActive already true) keeps the fact:
+        // the rider is on the same bus, only the plan around them changed. A
+        // RESTART is different — Go Mode was stopped and started again, and
+        // the only reason a riding fact survives STOP_GO_MODE is so the "I'm
+        // on the bus" flow does not re-ask which bus (7/12). Resuming a fact
+        // that never named a bus resumes a guess: on 2026-09-01 the GPS-only
+        // board of 10:47:15 rode STOP_GO_MODE 10:48:47 -> START_GO_MODE
+        // 10:48:50 into the next trip, which therefore began already aboard,
+        // and TRANSITION_LEG stepped straight onto the bus leg one second
+        // later. An unevidenced fact has to be re-earned; an evidenced one
+        // (a real, non-synthetic vehicle id) is a physical fact and stays.
+        riding: reanchorRiding(
+          state.isActive || ridingFactIsEvidenced(state.riding)
+            ? state.riding
+            : null,
+          itinerary
+        ),
         routeMatch: null,
         tracking: {
           ...state.tracking,
