@@ -365,6 +365,7 @@ export const ONBOARD_CANDIDATE_SNAPSHOT = 'ONBOARD_CANDIDATE_SNAPSHOT'
 export const PAUSE_GPS_SIMULATION = 'PAUSE_GPS_SIMULATION'
 export const REROUTE_SNAPSHOT = 'REROUTE_SNAPSHOT'
 export const REPAIR_LEG_GEOMETRY = 'REPAIR_LEG_GEOMETRY'
+export const RESUME_GO_MODE = 'RESUME_GO_MODE'
 export const RESUME_GPS_SIMULATION = 'RESUME_GPS_SIMULATION'
 export const SET_ARRIVED = 'SET_ARRIVED'
 export const SET_DEPARTURE_OVERRIDE = 'SET_DEPARTURE_OVERRIDE'
@@ -418,6 +419,29 @@ export const startGoMode = createAction<{
   originalFrom?: any
 }>(START_GO_MODE)
 export const stopGoMode = createAction(STOP_GO_MODE)
+/**
+ * A trip picked up again after the page went away and came back — the marker a
+ * RESUMED ride begins with, and the only record that it did.
+ *
+ * It changes no state: create-otp-reducer has already rebuilt the trip from
+ * storage by the time this is dispatched, so there is nothing left to set (and
+ * so, deliberately, nothing in goModeReducer and nothing in that reducer's
+ * delegation list — the trap where a new goMode type is silently dropped does
+ * not apply to a type no reducer handles).
+ *
+ * What it is FOR is the record. A resumed ride emitted no START_GO_MODE, so
+ * build-fixture.js could not find where it began: the 2026-08-31 18:52 session
+ * ran 104 minutes and was unreplayable, and it is the session that turned out
+ * to matter most. The payload therefore carries the itinerary, exactly as
+ * START_GO_MODE does, so the same builder can bracket a resumed ride from it —
+ * and `arrivedAt`, because whether the trip it resumed was already OVER is the
+ * first thing anyone reading that log needs to know.
+ */
+export const resumeGoMode = createAction<{
+  arrivedAt: number | null
+  itinerary: Itinerary
+  resumed: true
+}>(RESUME_GO_MODE)
 export const updatePosition = createAction<GeolocationPosition>(UPDATE_POSITION)
 export const updateRouteMatch = createAction<RouteMatchResult | null>(
   UPDATE_ROUTE_MATCH
@@ -717,6 +741,20 @@ export function startGoModeTracking(
   options: { replay?: boolean } = {}
 ) {
   return async function (dispatch: any, getState: any) {
+    // A trip that had ALREADY ARRIVED when the page came back. Everything below
+    // that starts a repeating job — the boarding stop-time prefetch, live
+    // vehicle polling, the reroute-snapshot capture, and the GPS poll's own
+    // cadence — exists to serve a trip with something left to do, and this one
+    // has nothing. Restoring `arrivedAt` (cb453726) made the arrival visible
+    // here; this is what acts on it, and it is the difference between a resumed
+    // arrival card and the 2026-08-31 18:52 mount, which came back and armed
+    // the whole live-trip machine over a rider standing 41 m from their door.
+    //
+    // Position tracking still starts: the map and the arrival card stay honest,
+    // and handlePositionUpdate's post-arrival funnel holds the work to one fix
+    // per ARRIVED_TRACKING_INTERVAL_MS.
+    const resumedArrived = getState().otp?.goMode?.arrivedAt != null
+
     // A reroute or missed-bus auto-update swaps the itinerary without going
     // through endGoMode, so clear the per-leg transition guard here too.
     session.lastTransitionedLegIndex = null
@@ -738,7 +776,7 @@ export function startGoModeTracking(
       getCurrentTime().getTime(),
       getState().otp.config.homeTimezone
     )
-    for (const leg of itinerary.legs) {
+    for (const leg of resumedArrived ? [] : itinerary.legs) {
       const stopId = (leg as any).from?.stop?.gtfsId
       if (leg.transitLeg && stopId) {
         try {
@@ -782,14 +820,24 @@ export function startGoModeTracking(
       if (last) dispatch(handlePositionUpdate(last))
     }
 
-    // Set initial tracking interval based on first leg
-    const interval = getTrackingIntervalForLeg(itinerary.legs[0])
+    // Set initial tracking interval based on first leg — except on a trip that
+    // is already over, which resumes at the post-arrival cadence rather than
+    // at leg 0's. On 2026-08-31 both mounts dispatched `interval: 10000` for a
+    // finished trip's first leg and then streamed at 1 Hz for 104 minutes.
+    const interval = resumedArrived
+      ? ARRIVED_TRACKING_INTERVAL_MS
+      : getTrackingIntervalForLeg(itinerary.legs[0])
     dispatch(updateTrackingInterval({ interval }))
 
-    // Start vehicle tracking if first leg is transit
+    // Start vehicle tracking if first leg is transit. Never on a resumed
+    // arrival: there is no bus left to match, and this poll is the one that
+    // outlives the tick — it has no arrival guard of its own. Arming it here
+    // for a FINISHED trip whose leg 0 happened to be the bus is what produced
+    // 392 vehicle-position responses over the 104 minutes of the 2026-08-31
+    // 18:52 mount.
     const firstLeg = itinerary.legs[0]
     const firstLegRouteId = getLegRouteId(firstLeg)
-    if (firstLeg?.transitLeg && firstLegRouteId) {
+    if (!resumedArrived && firstLeg?.transitLeg && firstLegRouteId) {
       dispatch(startVehicleTracking(firstLegRouteId))
     }
 
@@ -801,7 +849,12 @@ export function startGoModeTracking(
 
     // Recording sessions only: periodically capture the "alternatives to finish
     // the trip" as request/response pairs for later replay/debugging.
-    if (isTripRecordingEnabled()) {
+    // ...but never for a trip that has already arrived: an "alternatives to
+    // finish the trip" probe on a finished trip is a real plan() call with
+    // nothing to plan toward. captureRerouteSnapshot stops the interval on its
+    // first tick, which bounds the damage at one probe and 90 s; not arming it
+    // is the honest version, and it is what the ×4 in the 18:52 session was.
+    if (isTripRecordingEnabled() && !resumedArrived) {
       startRerouteSnapshotCapture(dispatch)
     }
 
@@ -824,6 +877,34 @@ export function startGoModeTracking(
       // Request location permission and start tracking
       dispatch(startPositionTracking())
     }
+  }
+}
+
+/**
+ * Pick a saved trip back up after the page went away and came back.
+ *
+ * create-otp-reducer has already rebuilt the trip from storage by the time this
+ * runs; all that is left is to say so in the record and re-arm tracking. It
+ * exists as its own entry point, rather than a bare startGoModeTracking call in
+ * main.js, for one reason: a resumed ride had no beginning anyone could find.
+ * `beginGoMode` dispatches START_GO_MODE and the resume path did not, so
+ * build-fixture.js — which brackets a ride from START_GO_MODE to trip end —
+ * could not build one at all. The 2026-08-31 18:52 session is the case: 104
+ * minutes, 6,100 position/match/progress triples, and no way to replay a second
+ * of it.
+ */
+export function resumeGoModeTrip() {
+  return async function (dispatch: any, getState: any) {
+    const goMode = getState().otp?.goMode
+    if (!goMode?.isActive || !goMode.activeItinerary) return
+    dispatch(
+      resumeGoMode({
+        arrivedAt: goMode.arrivedAt ?? null,
+        itinerary: goMode.activeItinerary,
+        resumed: true
+      })
+    )
+    await dispatch(startGoModeTracking(goMode.activeItinerary))
   }
 }
 
@@ -1743,6 +1824,31 @@ function stopRerouteSnapshotCapture() {
   if (session.rerouteSnapshotIntervalId) {
     clearInterval(session.rerouteSnapshotIntervalId)
     session.rerouteSnapshotIntervalId = null
+  }
+}
+
+/**
+ * Silence the 15-second live-vehicle poll without touching the vehicle MATCH.
+ *
+ * stopVehicleTracking is the other half of a leg change and clears the match
+ * with it — right there, wrong at arrival, where the match is the record of the
+ * bus the rider actually rode and the arrival card may still be showing it.
+ * This drops only the timer.
+ *
+ * It needs dropping because the timer is the one piece of the trip that lives
+ * outside the tick and so is untouched by the arrival quiesce. It only survives
+ * arrival when the trip is still ON a transit leg — advanceToLeg stops it on
+ * the way to a walk or bike leg, which is why the 2026-09-01 rides, both ending
+ * on an access leg, show no vehicle traffic after their arrival cards. The
+ * 2026-08-31 18:52 mount is the case that does: it resumed a finished trip
+ * whose leg 0 was the bus, armed the poll from startGoModeTracking, and logged
+ * 392 REALTIME_VEHICLE_POSITIONS_RESPONSE over 104 minutes — one per 16 s, the
+ * interval exactly — from a phone parked 41 m from its destination.
+ */
+function stopVehiclePolling() {
+  if (session.vehiclePositionIntervalId) {
+    clearInterval(session.vehiclePositionIntervalId)
+    session.vehiclePositionIntervalId = null
   }
 }
 
@@ -3395,10 +3501,19 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     // recomputations. Judged on the fix's own timestamp, not the wall clock, so
     // a replayed ride tapers exactly where the live one did.
     if (goMode.arrivedAt != null) {
-      const sinceLastFixMs =
-        session.lastArrivedFixMs == null
-          ? Infinity
-          : position.timestamp - session.lastArrivedFixMs
+      // The baseline falls back to the ARRIVAL ITSELF, not to Infinity.
+      //
+      // `session.lastArrivedFixMs` lives on the trip session, which is a
+      // module-level object rebuilt from scratch on every page load, while
+      // `arrivedAt` lives in the store and now survives one (cb453726). Null
+      // therefore means two different things: "the first fix since we arrived",
+      // and "a re-mount threw the baseline away". Reading it as Infinity waved
+      // both through — harmless once, but on a phone that re-mounts twice in
+      // 41 s, as this one did on 2026-08-31, it is a free full tick per mount
+      // and the funnel visibly does not hold. Arrival is the true zero for
+      // this taper, and it is the one the store remembers.
+      const baselineMs = session.lastArrivedFixMs ?? goMode.arrivedAt
+      const sinceLastFixMs = position.timestamp - baselineMs
       // A device clock that steps backwards reads as a fresh fix rather than
       // jamming the gate shut for as long as the skew lasts.
       if (sinceLastFixMs >= 0 && sinceLastFixMs < ARRIVED_TRACKING_INTERVAL_MS)
@@ -3875,6 +3990,7 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       // ended it by hand at 23:37:04 — 48% of that ride's telemetry (16,740 of
       // 34,784 actions) was recorded in between.
       stopRerouteSnapshotCapture()
+      stopVehiclePolling()
       dispatch(
         updateTrackingInterval({ interval: ARRIVED_TRACKING_INTERVAL_MS })
       )
