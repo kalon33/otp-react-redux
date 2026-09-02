@@ -104,11 +104,14 @@ const WalkingNavigation = ({
   const accessEmoji = isBike ? '🚲' : '🚶'
 
   // Turn-by-turn guidance for this access leg, when the leg carries steps.
+  // Off the corridor the metres are a straight line from the rider's own fix
+  // to the corner, not a distance along a route they have left — say so, or
+  // the number reads as a countdown it isn't.
   const turnLine =
     progress.nextTurnCue && progress.distanceToNextTurn != null
       ? `${progress.nextTurnCue.instruction} · ${formatCueDistance(
           progress.distanceToNextTurn
-        )}`
+        )}${progress.turnDistanceIsDirect ? ' direct' : ''}`
       : null
   const thenLine = progress.followingTurnCue
     ? intl.formatMessage(
