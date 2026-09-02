@@ -129,6 +129,7 @@ import {
   isReplayActive,
   setReplayClock
 } from '../util/go-mode/replay/replay-engine'
+import { acceptAutoReplan } from '../util/go-mode/replan-acceptance'
 import { isTripRecordingEnabled } from '../util/debug-log'
 import { fetchOnboardContext } from '../util/go-mode/onboard-discovery'
 import {
@@ -211,6 +212,21 @@ function stopGpsWatchdog() {
 // surface them by timestamp for debugging. See captureRerouteSnapshot.
 // How often to capture; each tick is a real isolated plan() call.
 const REROUTE_SNAPSHOT_INTERVAL_MS = 90000
+
+// ...and how often while the rider is settled: verifiably aboard a vehicle,
+// with the match confirmed and the position on the route's own shape.
+//
+// The snapshot is a RECORDING, not a probe — nothing consumes REROUTE_SNAPSHOT
+// and no reducer handles it — but recording is not free: every tick is a real
+// isolated plan() call from a phone on cellular, plus a 200-580 KB debug-log
+// payload. On 2026-09-01's third ride 14 fired in 21 minutes, seven of them
+// while the rider was CONFIRM_VEHICLE-confirmed aboard a moving bus on I-35W,
+// against ONE real reroute all ride. Alternatives-to-finish-the-trip is the
+// least interesting question that can be asked of a rider who is sitting on
+// their bus and on their line; the onboard alight snapshots cover what is
+// interesting there. So the cadence stretches rather than stopping — the
+// record stays continuous, at a quarter of the cost.
+const REROUTE_SNAPSHOT_RIDING_INTERVAL_MS = 360000
 
 // Wall-clock throttle for re-polling live transit leg times off GTFS-realtime.
 // handlePositionUpdate fires on every GPS/simulation tick (as fast as ~1s), but
@@ -552,6 +568,41 @@ function getTrackingIntervalForLeg(leg: Leg | undefined): number {
  * and Go Mode has to keep drawing them.
  */
 const ARRIVED_TRACKING_INTERVAL_MS = 30000
+
+/**
+ * The one place an AUTOMATIC itinerary replacement is judged against the plan
+ * it would replace — arrival, and whether it starts where the rider is. Every
+ * auto-apply path funnels through here before its `beginGoMode`; the rules and
+ * the evidence behind them live in util/go-mode/replan-acceptance.
+ *
+ * Returns true when the swap must NOT happen. Callers settle their own
+ * bookkeeping (setRerouteResult / the quiet-replan miss streak) exactly as they
+ * do when a plan comes back empty, so retry semantics are unchanged: refusing a
+ * worse plan is the same outcome as finding no plan, not an error.
+ */
+function autoReplanRejected(
+  state: any,
+  candidate: Itinerary,
+  options: { currentPlanIsDead?: boolean; reason?: string | null } = {}
+): boolean {
+  const goMode = state?.otp?.goMode
+  const coords = goMode?.tracking?.lastPosition?.coords
+  const verdict = acceptAutoReplan(candidate, goMode?.activeItinerary, {
+    currentPlanIsDead: !!options.currentPlanIsDead,
+    position: coords
+      ? ([coords.latitude, coords.longitude] as [number, number])
+      : null,
+    riding: !!goMode?.riding?.tripId
+  })
+  if (verdict.accept) return false
+  // eslint-disable-next-line no-console
+  console.log(
+    `[go-mode] auto replan (${options.reason || 'unknown'}) refused: ${
+      verdict.reason
+    }`
+  )
+  return true
+}
 
 /**
  * Start Go Mode tracking for an itinerary
@@ -1061,6 +1112,17 @@ export function reRouteFromCurrentPosition(
     // Aboard a bus, prefer the rider's current route so "stay on this bus"
     // surfaces as the default choice. (The origin/time anchor for that case is
     // already applied above by currentPositionOrigin.)
+    //
+    // Soft, and deliberately so. The hard expression of "keep me on this bus"
+    // is a splice from riding.tripId, which is what the AUTOMATIC aboard paths
+    // now do (replanFromAboard, and the missed-bus branch of the position
+    // tick). Banning the complement the way route-lock does is the wrong tool
+    // here: route-lock means "ride this route and bike the rest", so it can ban
+    // everything else, whereas a rider mid-ride usually still needs the
+    // transfer that comes after this bus — banning it would return no plan at
+    // all. What reaches this line is a route-only riding fact (no tripId, so
+    // nothing to splice from), where a preference is the strongest honest
+    // statement available.
     const riding = goMode?.riding
     const nextStop = riding ? getNextStopOnRide(state) : null
     if (riding && nextStop && riding.routeId) {
@@ -1226,6 +1288,19 @@ export function applyAutoReroute(
       return
     }
 
+    // The missed-bus plan is the one case where a LATER arrival is the honest
+    // answer — the itinerary being replaced cannot happen at all — so only the
+    // origin half of the gate applies here.
+    if (
+      autoReplanRejected(state, best, {
+        currentPlanIsDead: true,
+        reason: goMode.reRoute?.reason ?? 'auto-reroute'
+      })
+    ) {
+      dispatch(setRerouteResult(null))
+      return
+    }
+
     dispatch(beginGoMode(best))
 
     // Confirm what changed — the new boarding is the fact the rider needs.
@@ -1285,6 +1360,25 @@ export function quietReplanAccessLeg() {
     const destLeg = legs[legs.length - 1]
     if (!goMode?.isActive || !itinerary || !lastPosition || !destLeg) return
     const nowMs = getCurrentTime().getTime()
+
+    // Verifiably aboard a known trip? Then the rider is on a bus, whatever the
+    // leg index says, and there is no access leg to re-plan. This matters
+    // because the two facts disagree: the route matcher advances
+    // routeMatch.legIndex on geometry alone and has run as much as four
+    // minutes ahead of the boarding it describes (2026-09-01 ride 2), so a
+    // rider still sitting on the bus can be "on" the bike leg after it, off
+    // its geometry by construction, and drifting further every second. The
+    // full-trip fallback below would then answer with an all-BICYCLE plan —
+    // pickAccessReplanCandidate accepts only non-transit itineraries once no
+    // boarding remains ahead — and swap the rider off the bus they are sitting
+    // on, silently. The rider's rule is that an automatic update keeps their
+    // route; getting off the vehicle is the largest possible change to it.
+    //
+    // Keyed on riding.tripId rather than the bare riding fact: a trip id is
+    // evidence of a specific vehicle, and a route-only fact is exactly the
+    // shape a false board leaves behind (6.1), which must not be able to
+    // silence a real access re-plan.
+    if (goMode.riding?.tripId) return
 
     const currentLegIndex = goMode.routeMatch?.legIndex ?? 0
     const currentLeg = legs[currentLegIndex]
@@ -1430,10 +1524,21 @@ export function quietReplanAccessLeg() {
               nextTransitRouteId: null
             })
       if (best) {
-        session.quietReplanMissStreak = 0
-        dispatch(
-          beginGoMode(spliceAccessOntoItinerary(itinerary, best, boardLegIndex))
+        const spliced = spliceAccessOntoItinerary(
+          itinerary,
+          best,
+          boardLegIndex
         )
+        if (
+          autoReplanRejected(getState(), spliced, {
+            reason: 'quiet-replan-scoped'
+          })
+        ) {
+          session.quietReplanMissStreak += 1
+          return
+        }
+        session.quietReplanMissStreak = 0
+        dispatch(beginGoMode(spliced))
         return
       }
       // Scoped plan found nothing usable — fall through to the full-trip
@@ -1485,6 +1590,14 @@ export function quietReplanAccessLeg() {
       return
     }
 
+    if (autoReplanRejected(getState(), best, { reason: 'quiet-replan' })) {
+      // Same settle as an empty fetch: the rider keeps the plan they have, the
+      // TripSheet is still their escape hatch, and the streak records that this
+      // attempt changed nothing.
+      session.quietReplanMissStreak += 1
+      return
+    }
+
     session.quietReplanMissStreak = 0
     dispatch(beginGoMode(best))
   }
@@ -1521,6 +1634,27 @@ export function captureRerouteSnapshot() {
       stopRerouteSnapshotCapture()
       return
     }
+
+    // Settled aboard: stretch the cadence (see
+    // REROUTE_SNAPSHOT_RIDING_INTERVAL_MS). "Settled" is all three facts
+    // together — the sticky riding fact names a trip, the vehicle match is
+    // confirmed, and the route match still has the rider on the shape — so a
+    // rider whose bus has diverted, or who never really boarded, keeps the
+    // full-rate record that a diagnosis of exactly that would need.
+    const settledAboard =
+      goMode?.riding?.tripId != null &&
+      goMode?.vehicleMatch?.match?.confidence === 'confirmed' &&
+      goMode?.routeMatch?.isOnRoute === true
+    const sinceLastMs =
+      getCurrentTime().getTime() - session.lastRerouteSnapshotAt
+    if (
+      settledAboard &&
+      session.lastRerouteSnapshotAt > 0 &&
+      sinceLastMs < REROUTE_SNAPSHOT_RIDING_INTERVAL_MS
+    ) {
+      return
+    }
+    session.lastRerouteSnapshotAt = getCurrentTime().getTime()
 
     const { homeTimezone } = state.otp.config
     const { modes, modeSettings, numItineraries } = getBasePlanParts(state)
@@ -2722,6 +2856,23 @@ export function replanFromAboard(
       // before the schedule fetch — that is the one about to be replaced.
       const activeNow = getState().otp?.goMode?.activeItinerary ?? itinerary
       if (itinerarySignature(spliced) === itinerarySignature(activeNow)) {
+        dispatch(setRerouteResult(null))
+        return
+      }
+
+      // Boarding an EARLIER bus must not cost the rider time. On 2026-09-01's
+      // first ride this path auto-applied a splice that moved the arrival
+      // 08:42:51 -> 08:51:45 (+8:54) with no rider action; a re-plan that
+      // arrives later than the plan in hand is not a recovery.
+      if (
+        autoReplanRejected(getState(), spliced, {
+          // A missed connection makes the plan in hand unachievable, so there
+          // is no arrival left to defend — only the boarded-earlier case is
+          // asked to be no worse than what it replaces.
+          currentPlanIsDead: options.reason === 'missed-bus',
+          reason: options.reason ?? 'boarded-earlier'
+        })
+      ) {
         dispatch(setRerouteResult(null))
         return
       }
@@ -4183,6 +4334,11 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     )
     session.missedBusRerouteAttempt = recovery.next
     if (recovery.replan && missedCtx) {
+      // Never reached while the rider is aboard: classifyMissedBus returns null
+      // outright when the sticky riding fact is set (notification-service,
+      // "Aboard already?"), so a missed-bus re-plan can only ever run for a
+      // rider who is not on a bus. That is what makes this path's
+      // currentPositionOrigin anchor — the next stop ahead — safe.
       dispatch(
         reRouteFromCurrentPosition({
           autoApply: recovery.autoApply,

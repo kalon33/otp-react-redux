@@ -111,6 +111,13 @@ export interface TripSession {
   lastQuietReplanAt: number
 
   /**
+   * Wall-clock ms of the last reroute snapshot that actually fetched, so the
+   * stretched cadence used while the rider is settled aboard has something to
+   * measure against. 0 before the first capture of the trip.
+   */
+  lastRerouteSnapshotAt: number
+
+  /**
    * A leg transition is side-effectful (vehicle tracking, GPS interval restart,
    * departure-override reset), so it must run once per leg. The route match is
    * recomputed from raw position every tick and cannot carry that fact.
@@ -206,6 +213,7 @@ export function createTripSession(): TripSession {
     lastLiveLegTimesAt: 0,
     lastPacingCard: null,
     lastQuietReplanAt: 0,
+    lastRerouteSnapshotAt: 0,
     lastTransitionedLegIndex: null,
     lastTurnCardKey: null,
     manualDepartureLock: false,
