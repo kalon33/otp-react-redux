@@ -14,9 +14,11 @@ import {
   hasLiveArrival,
   liveStopArrival,
   mergeLiveTimePoint,
+  ONBOARD_CANDIDATE_SETTLE_MS,
   pickSameRouteAlight,
   rankAlightOptions,
-  selectCandidateStops
+  selectCandidateStops,
+  settleCandidatePlans
 } from '../util/go-mode/alight-optimizer'
 import type { AlightCandidateResult } from '../util/go-mode/alight-optimizer'
 import {
@@ -133,7 +135,10 @@ import {
   isReplayActive,
   setReplayClock
 } from '../util/go-mode/replay/replay-engine'
-import { acceptAutoReplan } from '../util/go-mode/replan-acceptance'
+import {
+  acceptAutoReplan,
+  pickHopFreeSibling
+} from '../util/go-mode/replan-acceptance'
 import { isTripRecordingEnabled } from '../util/debug-log'
 import { fetchOnboardContext } from '../util/go-mode/onboard-discovery'
 import {
@@ -598,6 +603,21 @@ function getTrackingIntervalForLeg(leg: Leg | undefined): number {
 const ARRIVED_TRACKING_INTERVAL_MS = 30000
 
 /**
+ * The token-hop thresholds, from config where the deployment sets them. Same
+ * two keys the results list reads (narrative-itineraries), so the rule the
+ * rider sees applied to the list is the rule applied to an automatic swap.
+ * Undefined falls through to the defaults in util/itinerary.
+ */
+function tokenHopMeters(state: any): number | undefined {
+  return state?.otp?.config?.itinerary?.tokenTransitHopMeters
+}
+
+function tokenHopToleranceMs(state: any): number | undefined {
+  const minutes = state?.otp?.config?.itinerary?.tokenTransitHopToleranceMinutes
+  return minutes != null ? minutes * 60000 : undefined
+}
+
+/**
  * The one place an AUTOMATIC itinerary replacement is judged against the plan
  * it would replace — arrival, and whether it starts where the rider is. Every
  * auto-apply path funnels through here before its `beginGoMode`; the rules and
@@ -620,7 +640,9 @@ function autoReplanRejected(
     position: coords
       ? ([coords.latitude, coords.longitude] as [number, number])
       : null,
-    riding: !!goMode?.riding?.tripId
+    riding: !!goMode?.riding?.tripId,
+    tokenHopMaxMeters: tokenHopMeters(state),
+    tokenHopToleranceMs: tokenHopToleranceMs(state)
   })
   if (verdict.accept) return false
   // eslint-disable-next-line no-console
@@ -1354,10 +1376,19 @@ export function applyAutoReroute(
 
     // Search the FULL result set (the display list is capped at 5 by
     // duration, which is exactly the ranking that buried the next bus under
-    // bike-the-whole-way options).
-    const best = pickSameRouteReroute(
-      collectRerouteCandidates(allItineraries, 50),
-      goMode.reRoute?.keepRouteId
+    // bike-the-whole-way options)... then take the hop-free version of
+    // whatever the picker chose, if the same set carries one: keeping the
+    // rider's route is the rule, keeping a 602 m ride between two bike legs is
+    // not (2026-08-31, util/go-mode/replan-acceptance#pickHopFreeSibling).
+    const rerouteCandidates = collectRerouteCandidates(allItineraries, 50)
+    const best = pickHopFreeSibling(
+      pickSameRouteReroute(rerouteCandidates, goMode.reRoute?.keepRouteId),
+      rerouteCandidates,
+      {
+        maxHopMeters: tokenHopMeters(state),
+        requireRouteId: goMode.reRoute?.keepRouteId ?? null,
+        toleranceMs: tokenHopToleranceMs(state)
+      }
     )
     if (!best) {
       // No same-route option (last run of the day, outside the search
@@ -1661,15 +1692,24 @@ export function quietReplanAccessLeg() {
     // or a reroute may have started while the request was in flight.
     if (!stillReplannable()) return
 
+    const keepRouteId = nextTransitLeg
+      ? getLegRouteId(nextTransitLeg as Leg)
+      : null
     const best =
       error || !itineraries?.length
         ? null
-        : pickAccessReplanCandidate(itineraries, {
-            accessMode: currentLeg?.mode,
-            nextTransitRouteId: nextTransitLeg
-              ? getLegRouteId(nextTransitLeg as Leg)
-              : null
-          })
+        : pickHopFreeSibling(
+            pickAccessReplanCandidate(itineraries, {
+              accessMode: currentLeg?.mode,
+              nextTransitRouteId: keepRouteId
+            }),
+            itineraries,
+            {
+              maxHopMeters: tokenHopMeters(getState()),
+              requireRouteId: keepRouteId,
+              toleranceMs: tokenHopToleranceMs(getState())
+            }
+          )
     if (!best) {
       // Empty fetches or nothing qualifying under the
       // never-force-a-route-change rule. Settle silently: the ROUTE_DEVIATION
@@ -2332,8 +2372,32 @@ function optimizeAlightFromTrip(options: {
       to: { lat: to.lat, lon: to.lon, name: to.name }
     }
 
-    const results = await Promise.all(
-      candidates.map((c) => dispatch(fetchCandidatePlan(c, ctx)))
+    // Bounded, NOT Promise.all. Each candidate plan already carries its own
+    // request deadline (actions/api), and this is the backstop over the set:
+    // whatever has answered when the clock runs out is what gets ranked. On
+    // 2026-08-31 three of five candidate plans never settled, `Promise.all`
+    // never resolved, SET_ONBOARD_RESULT was never dispatched, and the onboard
+    // panel sat on 'optimizing' for 9m11s until the rider gave up. Two of five
+    // would have been a real answer; the rider got none.
+    const settleMs =
+      state.otp.config?.itinerary?.onboardSettleMs ??
+      ONBOARD_CANDIDATE_SETTLE_MS
+    const results = await settleCandidatePlans<AlightCandidateResult>(
+      candidates.map((c) =>
+        Promise.resolve(dispatch(fetchCandidatePlan(c, ctx)))
+      ),
+      settleMs,
+      (index) => ({
+        busArrivalEpoch: candidates[index].busArrivalEpoch,
+        // rankAlightOptions skips an errored result, which is exactly right:
+        // a candidate stop whose onward plan never came back is not a stop the
+        // rider can be told to get off at.
+        error: true,
+        itineraries: [],
+        realtime: candidates[index].realtime,
+        stopId: candidates[index].stop.id,
+        stopName: candidates[index].stop.name
+      })
     )
 
     const keepRouteId =
@@ -2344,6 +2408,8 @@ function optimizeAlightFromTrip(options: {
       keepRouteId,
       limit,
       nowMs,
+      tokenHopMaxMeters: tokenHopMeters(state),
+      tokenHopToleranceMs: tokenHopToleranceMs(state),
       walkOnlyMax
     })
     // Decorate each option with the itinerary the rider actually gets on tap

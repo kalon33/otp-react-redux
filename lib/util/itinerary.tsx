@@ -130,8 +130,21 @@ export const TOKEN_TRANSIT_HOP_METERS = 800
 export const TOKEN_TRANSIT_HOP_TOLERANCE_MS = 5 * 60 * 1000
 
 /** The itinerary's transit legs, in order. */
-function transitLegs(itinerary: Itinerary): Leg[] {
+export function transitLegs(itinerary: Itinerary): Leg[] {
   return itinerary.legs.filter((leg) => leg.transitLeg)
+}
+
+/**
+ * The route signature this itinerary would have WITHOUT its final transit leg —
+ * i.e. the shape of the same journey with the token hop dropped. Empty string
+ * when the hop was the only transit leg, which is the legitimate "just ride/walk
+ * the rest of the way" answer.
+ */
+export function signatureWithoutLastTransitLeg(itinerary: Itinerary): string {
+  return transitLegs(itinerary)
+    .map((leg) => leg.routeId ?? leg.mode)
+    .slice(0, -1)
+    .join('>')
 }
 
 /**
@@ -144,9 +157,9 @@ function transitLegs(itinerary: Itinerary): Leg[] {
  * followed by a street leg — a token hop that ends the journey has nothing to
  * be replaced by.
  */
-function hasTokenTransitHop(
+export function hasTokenTransitHop(
   itinerary: Itinerary,
-  maxHopMeters: number
+  maxHopMeters: number = TOKEN_TRANSIT_HOP_METERS
 ): boolean {
   const legs = itinerary.legs
   const lastTransitIndex = legs.map((leg) => !!leg.transitLeg).lastIndexOf(true)
@@ -179,19 +192,39 @@ function hasTokenTransitHop(
  */
 export function demoteTokenTransitHops<T extends Itinerary>(
   itineraries: T[],
+  options: { maxHopMeters?: number; toleranceMs?: number } = {}
+): T[] {
+  return demoteTokenTransitHopsBy(
+    itineraries,
+    (itinerary) => itinerary,
+    options
+  )
+}
+
+/**
+ * The same partition over anything that CARRIES an itinerary — the onboard
+ * optimizer ranks `{stopId, busArrivalEpoch, itinerary}` options, not bare
+ * itineraries, and the rider is owed the same answer whether the 602 m hop
+ * shows up in the results list or in "where do I get off this bus".
+ */
+export function demoteTokenTransitHopsBy<T>(
+  items: T[],
+  getItinerary: (item: T) => Itinerary,
   {
     maxHopMeters = TOKEN_TRANSIT_HOP_METERS,
     toleranceMs = TOKEN_TRANSIT_HOP_TOLERANCE_MS
   }: { maxHopMeters?: number; toleranceMs?: number } = {}
 ): T[] {
-  if (!itineraries || itineraries.length < 2) return itineraries || []
+  const itineraries = items || []
+  if (itineraries.length < 2) return itineraries
 
   // Earliest arrival on offer for each transit-route shape, so an itinerary can
   // ask "is the version of me without my last hop available, and when does it
   // land?" The empty signature (walk/bike the whole way) is a legitimate answer
   // here — it is exactly the "just ride to the destination" option.
   const earliestEndBySignature = new Map<string, number>()
-  itineraries.forEach((itin) => {
+  itineraries.forEach((item) => {
+    const itin = getItinerary(item)
     const signature = transitRouteSignature(itin)
     const end = Number(itin.endTime)
     if (!Number.isFinite(end)) return
@@ -201,10 +234,10 @@ export function demoteTokenTransitHops<T extends Itinerary>(
     }
   })
 
-  const isDemoted = (itin: T): boolean => {
+  const isDemoted = (item: T): boolean => {
+    const itin = getItinerary(item)
     if (!hasTokenTransitHop(itin, maxHopMeters)) return false
-    const routes = transitLegs(itin).map((leg) => leg.routeId ?? leg.mode)
-    const withoutHop = routes.slice(0, -1).join('>')
+    const withoutHop = signatureWithoutLastTransitLeg(itin)
     const alternativeEnd = earliestEndBySignature.get(withoutHop)
     if (alternativeEnd === undefined) return false
     return alternativeEnd <= Number(itin.endTime) + toleranceMs
@@ -212,7 +245,7 @@ export function demoteTokenTransitHops<T extends Itinerary>(
 
   const kept: T[] = []
   const demoted: T[] = []
-  itineraries.forEach((itin) => (isDemoted(itin) ? demoted : kept).push(itin))
+  itineraries.forEach((item) => (isDemoted(item) ? demoted : kept).push(item))
   if (demoted.length === 0 || kept.length === 0) return itineraries
   return [...kept, ...demoted]
 }

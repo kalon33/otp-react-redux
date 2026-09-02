@@ -32,10 +32,24 @@ export interface AccessibilityScoreConfig {
 /** OTP URL settings */
 export interface ApiConfig {
   basePath?: string
+  /**
+   * Deadline, in ms, for Go Mode's background plans (reroute snapshots, the
+   * onboard alight optimizer). Shorter than `timeoutMs` because no one is
+   * watching them and they are issued five at a time. Omit to take
+   * GO_MODE_FETCH_TIMEOUT_MS from actions/api.
+   */
+  goModeTimeoutMs?: number
   host: string
   // Soon to be deprecated
   path: string
   port: number
+  /**
+   * Deadline, in ms, after which a request is aborted and its error action
+   * dispatched. `fetch` has none of its own; without this a silent connection
+   * hangs its caller forever (2026-08-31, 9m11s of empty results). Omit to take
+   * DEFAULT_FETCH_TIMEOUT_MS from actions/api; 0 disables the deadline.
+   */
+  timeoutMs?: number
   // Soon to be deprecated
   v2?: boolean
 }
@@ -302,6 +316,13 @@ export interface ItineraryConfig {
   mergeByRouteSignature?: boolean
   mergeItineraries?: boolean
   mutedErrors?: string[]
+  /**
+   * How long the onboard alight optimizer waits for its candidate plans before
+   * ranking whatever has answered (see
+   * util/go-mode/alight-optimizer#settleCandidatePlans). Omit to take
+   * ONBOARD_CANDIDATE_SETTLE_MS.
+   */
+  onboardSettleMs?: number
   onlyShowCountdownForRealtime?: boolean
   previewOverlay?: boolean
   renderRouteNamesInBlocks?: boolean
