@@ -1,6 +1,10 @@
 import type { Itinerary } from '@opentripplanner/types'
 
-import { demoteTokenTransitHopsBy } from '../itinerary'
+import {
+  demoteTokenTransitHops,
+  demoteTokenTransitHopsBy,
+  transitRouteSignature
+} from '../itinerary'
 
 import { calculateDistance } from './position-matching'
 import { getLegRouteId } from './departure-anchor'
@@ -838,5 +842,89 @@ export function pickSameRouteAlight(
     (options || []).find(
       (o) => onwardRouteOfItinerary(o.itinerary) === routeId
     ) ?? null
+  )
+}
+
+/**
+ * One row of the onboard "where do you want to get off?" list.
+ *
+ * `option` is what the row renders and what a tap starts; `variants` is every
+ * option that folded into it, `option` first.
+ */
+export interface OnboardOptionGroup<T> {
+  option: T
+  variants: T[]
+}
+
+/** The itinerary an onboard option DISPLAYS: current-bus leg included. */
+function displayItineraryOf(option: {
+  displayItinerary?: Itinerary
+  itinerary: Itinerary
+}): Itinerary {
+  return option.displayItinerary || option.itinerary
+}
+
+/**
+ * Fold the ranked alight options into display rows, the way the planner's
+ * results list folds its itineraries.
+ *
+ * The rider, 2026-08-27: *"on the already on the bus search they aren't
+ * stacked, just a list of the same routes."* They were right — five ranked
+ * options off one bus are routinely the SAME route chain reached from five
+ * different alight stops, and `mergeByRouteSignature` (which fixed exactly
+ * this on the planner path, `0d37eed2`) is applied in
+ * narrative-itineraries.js and nowhere else. So this is the same idiom on the
+ * onboard path: group by `transitRouteSignature` of the displayed itinerary,
+ * keep the best-ranked member as the row, and hang the rest off it for the
+ * drill-down (the alight stop each one uses is a real choice — it can be a
+ * mile of closing bike either way — so nothing is dropped).
+ *
+ * An itinerary with no transit after the bus has an empty signature; those are
+ * NOT grouped together, for the same reason `itinerariesAreEqual` refuses to —
+ * "bike from 98th St" and "bike from Nicollet" share nothing but the absence
+ * of a route.
+ *
+ * Rows are then reordered by `demoteTokenTransitHops`, which the planner list
+ * applies to its own merged rows: a 602 m hop that ends in a 1743 m bike does
+ * not get to sit above the same journey without it. Reorder only; nothing is
+ * removed.
+ */
+export function groupAlightOptionsByRoute<
+  T extends { displayItinerary?: Itinerary; itinerary: Itinerary }
+>(
+  options: T[] | null | undefined,
+  {
+    maxHopMeters,
+    toleranceMs
+  }: { maxHopMeters?: number; toleranceMs?: number } = {}
+): Array<OnboardOptionGroup<T>> {
+  const groups: Array<OnboardOptionGroup<T>> = []
+  const bySignature = new Map<string, OnboardOptionGroup<T>>()
+
+  ;(options || []).forEach((option) => {
+    if (!option) return
+    const signature = transitRouteSignature(displayItineraryOf(option))
+    const existing = signature ? bySignature.get(signature) : undefined
+    if (existing) {
+      existing.variants.push(option)
+      return
+    }
+    const group: OnboardOptionGroup<T> = { option, variants: [option] }
+    if (signature) bySignature.set(signature, group)
+    groups.push(group)
+  })
+
+  if (groups.length < 2) return groups
+
+  // demoteTokenTransitHops is a stable partition over itineraries, so tag each
+  // row's displayed itinerary with its position, reorder, and read the rows
+  // back out. The tag is a shallow copy: nothing the caller holds is mutated.
+  const tagged = groups.map((group, index) =>
+    Object.assign({}, displayItineraryOf(group.option), {
+      __groupIndex: index
+    })
+  )
+  return demoteTokenTransitHops(tagged, { maxHopMeters, toleranceMs }).map(
+    (itin) => groups[itin.__groupIndex]
   )
 }

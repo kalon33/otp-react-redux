@@ -1,6 +1,7 @@
 import {
   clampNonLiveLegTimes,
   getDownstreamStops,
+  groupAlightOptionsByRoute,
   liveStopArrival,
   mergeLiveTimePoint,
   pickBestAlightOption,
@@ -675,5 +676,116 @@ describe('liveStopArrival projection for a schedule-only trip', () => {
     const stale = { epoch: NOW + 300_000, projected: true, realtime: false }
     const fresher = { epoch: NOW + 120_000, projected: true, realtime: false }
     expect(mergeLiveTimePoint(stale, fresher, NOW)).toEqual(fresher)
+  })
+})
+
+/**
+ * Rider ask #44 (2026-08-27): "on the already on the bus search they aren't
+ * stacked, just a list of the same routes." Five ranked options off one bus
+ * are routinely the same route chain reached from five alight stops.
+ */
+describe('groupAlightOptionsByRoute', () => {
+  const MIN = 60000
+  const T = 1700000000000
+
+  /** An onboard option whose DISPLAY itinerary rides `routes` in order. */
+  const option = (
+    stopName: string,
+    routes: string[],
+    { bikeAfter = 400, endTime = T + 30 * MIN, hopMeters = 5000 } = {}
+  ) =>
+    ({
+      busArrivalEpoch: T,
+      displayItinerary: {
+        endTime,
+        legs: [
+          ...routes.map((routeId, i) => ({
+            distance: i === routes.length - 1 ? hopMeters : 5000,
+            mode: 'BUS',
+            routeId,
+            transitLeg: true
+          })),
+          { distance: bikeAfter, mode: 'BICYCLE', transitLeg: false }
+        ],
+        startTime: T
+      },
+      itinerary: { legs: [] },
+      realtime: true,
+      stopId: `s:${stopName}`,
+      stopName
+    } as any)
+
+  it('folds same-route-chain options into one row, best-ranked first', () => {
+    const groups = groupAlightOptionsByRoute([
+      option('98th St', ['1:539', '1:465']),
+      option('Nicollet', ['1:539', '1:465']),
+      option('Burnsville', ['1:539', '1:465'])
+    ])
+    expect(groups).toHaveLength(1)
+    expect(groups[0].option.stopName).toBe('98th St')
+    expect(groups[0].variants.map((v: any) => v.stopName)).toEqual([
+      '98th St',
+      'Nicollet',
+      'Burnsville'
+    ])
+  })
+
+  it('keeps genuinely different route chains apart', () => {
+    const groups = groupAlightOptionsByRoute([
+      option('98th St', ['1:539', '1:465']),
+      option('Mall', ['1:Orange']),
+      option('Nicollet', ['1:539', '1:465'])
+    ])
+    expect(groups).toHaveLength(2)
+    expect(groups.map((g: any) => g.variants.length)).toEqual([2, 1])
+  })
+
+  // The empty signature is "no transit after the bus". Bike-from-98th and
+  // bike-from-Nicollet share nothing but the absence of a route, so they must
+  // not collapse — the same rule itinerariesAreEqual applies.
+  it('never folds two bike-the-rest-of-the-way options together', () => {
+    const groups = groupAlightOptionsByRoute([
+      { ...option('98th St', []), displayItinerary: { endTime: T, legs: [] } },
+      { ...option('Nicollet', []), displayItinerary: { endTime: T, legs: [] } }
+    ] as any)
+    expect(groups).toHaveLength(2)
+  })
+
+  // The 2026-08-31 602 m case, on the onboard path: a two-block hop that ends
+  // in a 1743 m bike does not outrank the same journey without it.
+  it('demotes a row whose last transit leg is a token hop', () => {
+    const withHop = option('98th & Dupont', ['1:Orange', '1:539'], {
+      bikeAfter: 1743,
+      endTime: T + 30 * MIN,
+      hopMeters: 602
+    })
+    const withoutHop = option('Mall', ['1:Orange'], {
+      bikeAfter: 3970,
+      endTime: T + 33 * MIN,
+      hopMeters: 5000
+    })
+    const groups = groupAlightOptionsByRoute([withHop, withoutHop])
+    expect(groups.map((g: any) => g.option.stopName)).toEqual([
+      'Mall',
+      '98th & Dupont'
+    ])
+  })
+
+  it('leaves the token hop alone when nothing replaces it', () => {
+    const withHop = option('98th & Dupont', ['1:Orange', '1:539'], {
+      bikeAfter: 1743,
+      hopMeters: 602
+    })
+    const other = option('Mall', ['1:465'])
+    const groups = groupAlightOptionsByRoute([withHop, other])
+    expect(groups.map((g: any) => g.option.stopName)).toEqual([
+      '98th & Dupont',
+      'Mall'
+    ])
+  })
+
+  it('survives an empty or absent list', () => {
+    expect(groupAlightOptionsByRoute([])).toEqual([])
+    expect(groupAlightOptionsByRoute(null)).toEqual([])
   })
 })
