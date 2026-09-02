@@ -1,6 +1,16 @@
 import { useEffect } from 'react'
 
 /**
+ * A refused wake lock is retried on this ladder, in addition to the visibility
+ * and focus listeners: 4 tries, 5 seconds apart, per return to visibility.
+ * Short enough that the screen does not lock under the rider mid-trip, bounded
+ * so a platform that will never grant one is asked a handful of times and then
+ * left alone.
+ */
+const WAKE_LOCK_RETRY_MS = 5000
+const WAKE_LOCK_RETRIES = 4
+
+/**
  * Side-effect guards that must hold for the WHOLE life of an active trip —
  * whether the Go Mode screen is on screen or the trip is backgrounded behind
  * the planner (ReturnToTripBanner mounts this too, so backgrounding never
@@ -17,6 +27,37 @@ export default function useActiveTripGuards(active: boolean): void {
     let wakeLock: any = null
     let disposed = false
     let pending = false
+    let retryTimer: ReturnType<typeof setTimeout> | null = null
+    let retriesLeft = WAKE_LOCK_RETRIES
+
+    const clearRetry = () => {
+      if (retryTimer !== null) {
+        clearTimeout(retryTimer)
+        retryTimer = null
+      }
+    }
+
+    // A refusal at load has to be retried on a clock as well as on an event,
+    // because we do not know which event the shell will give us. The 2026-08-31
+    // 18:52 mounts are the only two wake-lock refusals in a week of logs
+    // ("NotAllowedError: Permission was denied", both at page load with a trip
+    // restored from storage), and they are the case where nothing had fired
+    // yet: visibilityState was already "visible", so visibilitychange had
+    // nothing to report, and whether WKWebView delivers a window `focus` on
+    // becoming active is not something the log can answer. A short bounded
+    // ladder does not care: it asks again a few seconds later, when the app IS
+    // active, and stops the moment it holds a lock. Bounded because a genuine
+    // platform refusal — a browser without the API behind a flag — must not
+    // turn into a permanent timer.
+    const scheduleRetry = () => {
+      if (disposed || wakeLock || retryTimer !== null || retriesLeft <= 0)
+        return
+      retriesLeft -= 1
+      retryTimer = setTimeout(() => {
+        retryTimer = null
+        requestWakeLock()
+      }, WAKE_LOCK_RETRY_MS)
+    }
 
     const requestWakeLock = async () => {
       // A request made while the document is hidden is rejected outright
@@ -39,8 +80,10 @@ export default function useActiveTripGuards(active: boolean): void {
           return
         }
         wakeLock = lock
+        clearRetry()
       } catch (err) {
         console.warn('Wake lock request failed:', err)
+        scheduleRetry()
       } finally {
         pending = false
       }
@@ -54,6 +97,9 @@ export default function useActiveTripGuards(active: boolean): void {
         wakeLock = null
         return
       }
+      // Coming back on screen is a fresh chance, so the ladder is re-armed:
+      // the budget is per return-to-visibility, not per trip.
+      retriesLeft = WAKE_LOCK_RETRIES
       requestWakeLock()
     }
 
@@ -69,11 +115,16 @@ export default function useActiveTripGuards(active: boolean): void {
     // Mode was active at page load; every trip the rider STARTED by hand, in an
     // already-live page, took the lock first time.
     window.addEventListener('focus', requestWakeLock)
+    // ...and pageshow, which is what a webview restored from the page cache
+    // fires and `focus` does not.
+    window.addEventListener('pageshow', requestWakeLock)
 
     return () => {
       disposed = true
+      clearRetry()
       document.removeEventListener('visibilitychange', onVisibilityChange)
       window.removeEventListener('focus', requestWakeLock)
+      window.removeEventListener('pageshow', requestWakeLock)
       if (wakeLock) {
         wakeLock.release()
       }

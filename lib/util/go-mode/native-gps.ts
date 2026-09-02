@@ -40,6 +40,18 @@ export function hasNativeGps(): boolean {
 }
 
 let watcherId: string | null = null
+/**
+ * The `distanceFilter` the LIVE watcher was armed with, or null when nothing is
+ * streaming. Kept because the plugin has no way to ask, and because re-arming
+ * is a teardown — knowing we are already at the requested filter is what keeps
+ * `setNativeGpsDistanceFilter` from churning a healthy watcher on every tick.
+ */
+let watcherDistanceFilter: number | null = null
+
+/** The distance filter currently armed, or null when the stream is down. */
+export function nativeGpsDistanceFilter(): number | null {
+  return watcherId == null ? null : watcherDistanceFilter
+}
 
 /**
  * Start the native continuous location stream (keeps running with the screen
@@ -48,21 +60,30 @@ let watcherId: string | null = null
  */
 export async function startNativeGps(
   onPosition: (pos: GeolocationPosition) => void,
-  onError: (err: Error) => void
+  onError: (err: Error) => void,
+  options: { distanceFilter?: number } = {}
 ): Promise<boolean> {
   const plugin = bridge()
   if (!plugin) return false
   if (watcherId) return true // already streaming
 
+  // Default 0 — every fix — because that is what a live trip needs. The
+  // post-arrival value is chosen by the caller (tracking-gates.ts); this file
+  // only knows how to arm what it is handed.
+  const distanceFilter = options.distanceFilter ?? 0
+  watcherDistanceFilter = distanceFilter
   watcherId = await plugin.addWatcher(
     {
       // The presence of backgroundMessage is what enables background updates
       // (allowsBackgroundLocationUpdates) in the plugin.
       backgroundMessage: 'Navigating your trip',
       backgroundTitle: 'TransitNav is tracking your trip',
-      // We want every fix — vehicle matching benefits from ~1/s cadence and
-      // fixes are the app's background heartbeat (tick-on-position).
-      distanceFilter: 0,
+      // Live: every fix — vehicle matching benefits from ~1/s cadence and
+      // fixes are the app's background heartbeat (tick-on-position). After
+      // arrival the caller re-arms this coarse, which is the only thing that
+      // actually idles the chip; the consumer-side funnel throttles what
+      // arrives but the radio keeps running regardless of what we drop.
+      distanceFilter,
       requestPermissions: true,
       stale: false
     },
@@ -102,10 +123,37 @@ export async function startNativeGps(
  */
 export async function restartNativeGps(
   onPosition: (pos: GeolocationPosition) => void,
+  onError: (err: Error) => void,
+  options: { distanceFilter?: number } = {}
+): Promise<boolean> {
+  const previous = watcherDistanceFilter
+  await stopNativeGps()
+  return startNativeGps(onPosition, onError, {
+    distanceFilter: options.distanceFilter ?? previous ?? 0
+  })
+}
+
+/**
+ * Re-arm the live watcher at a different `distanceFilter`.
+ *
+ * There is no plugin call to change one in place, and `startNativeGps`
+ * early-returns on an existing watcher, so the ONLY way a filter change takes
+ * effect is a full teardown and re-add. That is what this is: a no-op when
+ * nothing is streaming (the caller should start instead) or when the watcher
+ * already holds the requested filter, and a genuine restart otherwise.
+ *
+ * Returns true when a new watcher was armed.
+ */
+export async function setNativeGpsDistanceFilter(
+  meters: number,
+  onPosition: (pos: GeolocationPosition) => void,
   onError: (err: Error) => void
 ): Promise<boolean> {
+  if (!bridge()) return false
+  if (!watcherId) return false
+  if (watcherDistanceFilter === meters) return false
   await stopNativeGps()
-  return startNativeGps(onPosition, onError)
+  return startNativeGps(onPosition, onError, { distanceFilter: meters })
 }
 
 /** Stop the native stream (trip ended) — kills the blue indicator + battery draw. */
@@ -114,6 +162,7 @@ export async function stopNativeGps(): Promise<void> {
   if (!plugin || !watcherId) return
   const id = watcherId
   watcherId = null
+  watcherDistanceFilter = null
   try {
     await plugin.removeWatcher({ id })
   } catch {

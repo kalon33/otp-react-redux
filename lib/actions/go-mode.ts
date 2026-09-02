@@ -143,10 +143,17 @@ import { isTripRecordingEnabled } from '../util/debug-log'
 import { fetchOnboardContext } from '../util/go-mode/onboard-discovery'
 import {
   hasNativeGps,
+  nativeGpsDistanceFilter,
   restartNativeGps,
+  setNativeGpsDistanceFilter,
   startNativeGps,
   stopNativeGps
 } from '../util/go-mode/native-gps'
+import {
+  nativeGpsDistanceFilterFor,
+  shouldRestartNativeWatcher,
+  shouldSeedProgressFromLastFix
+} from '../util/go-mode/tracking-gates'
 import {
   anchorBoardingStopId,
   currentServiceDate,
@@ -207,7 +214,25 @@ let lastFixAtMs = 0
 // watcher, still recovers within one missed traffic light.
 const GPS_WATCHDOG_MS = 45000
 // How often the watchdog looks. Cheap check, no dispatch on the happy path.
-const GPS_WATCHDOG_POLL_MS = 30000
+// 15s, not 30: the check interval is pure latency on top of the budget, and on
+// 2026-08-31 that made a 45s rule fire at exactly 60s of dead navigation.
+const GPS_WATCHDOG_POLL_MS = 15000
+// A restart is not proof of a fix. While one is still unproven the budget
+// shortens to this, for GPS_WATCHDOG_MAX_FAST_RETRIES tries, and then backs off
+// to GPS_WATCHDOG_MS — a radio that is genuinely dead must not be torn down and
+// rebuilt every 20 seconds for the rest of the trip. On 2026-08-31 the first
+// restart delivered one 1615m cell-tower fix and wedged again, and the rider
+// waited a second full 60s window for the restart that actually worked.
+const GPS_WATCHDOG_RETRY_MS = 20000
+const GPS_WATCHDOG_MAX_FAST_RETRIES = 2
+// Restarts since the last fix actually arrived. Reset by handlePositionUpdate,
+// which is the only proof the stream is alive.
+let nativeGpsRestartsSinceLastFix = 0
+// How old the last fix may be and still be worth re-running to fill the boot
+// card left by a mid-trip replan. Two minutes: long enough to cover the GPS
+// wedge that produced the 2026-08-31 blank screen, short enough that it can
+// never place the rider at a previous trip's position.
+const SEED_PROGRESS_MAX_AGE_MS = 120000
 
 function stopGpsWatchdog() {
   if (session.gpsWatchdogIntervalId) {
@@ -878,6 +903,38 @@ export function startGoModeTracking(
     // is the honest version, and it is what the ×4 in the 18:52 session was.
     if (isTripRecordingEnabled() && !resumedArrived) {
       startRerouteSnapshotCapture(dispatch)
+    }
+
+    // Fill the boot card, when there is an honest way to fill it.
+    //
+    // START_GO_MODE nulls `progress` (reducers/go-mode.ts:696) and GoModeScreen
+    // renders "Starting Trip… / Acquiring GPS signal…" while it is null. On a
+    // fresh trip that is the truth. On a mid-trip replan it is not: the rider
+    // is moving, the app knows where they are, and the screen goes blank until
+    // the next fix happens to land. On 2026-08-31 the auto-applied
+    // "boarded-earlier" replan re-dispatched START_GO_MODE at 17:15:01 and the
+    // native watcher wedged on the same second; the next position arrived at
+    // 17:16:01. The rider spent that minute on a bus platform looking at a boot
+    // screen — "What's going on / Why don't you answer me" — with the 17:15:01
+    // fix sitting in the store the whole time.
+    //
+    // Re-running that fix through the pipeline recomputes progress against the
+    // NEW itinerary, which is exactly what the screen is waiting for. Age-gated:
+    // a fix older than SEED_PROGRESS_MAX_AGE_MS would put the rider where they
+    // are not, and the honest card is better than that.
+    if (!session.simulationActive) {
+      const seedState = getState().otp?.goMode
+      const lastFix = seedState?.tracking?.lastPosition
+      if (
+        shouldSeedProgressFromLastFix({
+          hasProgress: seedState?.progress != null,
+          lastPositionMs: lastFix?.timestamp,
+          maxAgeMs: SEED_PROGRESS_MAX_AGE_MS,
+          nowMs: Date.now()
+        })
+      ) {
+        dispatch(handlePositionUpdate(lastFix))
+      }
     }
 
     // Check geolocation permission — if denied, still allow simulation
@@ -3183,30 +3240,74 @@ export function startPositionTracking() {
       const onNativeError = (error: Error) => {
         if (!session.simulationActive) dispatch(setTrackingError(error as any))
       }
-      startNativeGps(onNativePosition, onNativeError)
+      // Arm — or RE-arm — the watcher at the filter this trip's current state
+      // calls for. A live trip wants every fix; a trip that has already arrived
+      // wants a coarse one, because the funnel added in Session 1.3 throttles
+      // what we DO with fixes and does nothing at all about the chip that
+      // produces them (2026-08-28: 5,318 post-arrival fixes over 88 parked
+      // minutes, battery draw unchanged). This runs on every re-entry —
+      // beginGoMode, a mid-trip swap, and the arrival branch below all come
+      // back through here — and setNativeGpsDistanceFilter is a no-op when the
+      // watcher already holds the requested filter, so a healthy stream is
+      // never churned.
+      const desiredFilter = nativeGpsDistanceFilterFor(
+        getState().otp?.goMode?.arrivedAt != null
+      )
+      if (nativeGpsDistanceFilter() == null) {
+        startNativeGps(onNativePosition, onNativeError, {
+          distanceFilter: desiredFilter
+        })
+      } else {
+        setNativeGpsDistanceFilter(
+          desiredFilter,
+          onNativePosition,
+          onNativeError
+        )
+      }
       // Watchdog on the stream itself: a wedged watcher delivers no fix and no
       // error, so silence is the only symptom. Restart with the SAME handlers
       // after GPS_WATCHDOG_MS of quiet. Replaced (never stacked) on re-entry —
       // a mid-trip itinerary switch comes back through here.
       stopGpsWatchdog()
       lastFixAtMs = Date.now()
+      nativeGpsRestartsSinceLastFix = 0
       session.gpsWatchdogIntervalId = setInterval(() => {
         if (session.simulationActive || !getState().otp?.goMode?.isActive)
           return
         const silenceMs = Date.now() - lastFixAtMs
-        if (silenceMs > GPS_WATCHDOG_MS) {
-          // console.warn feeds the debug-log sink (installGlobalErrorCapture),
-          // so a remote device's wedge shows up in the jsonl with its timing.
-          console.warn(
-            `[Go Mode] GPS watchdog: no fix for ${Math.round(
-              silenceMs / 1000
-            )}s — restarting native watcher`
-          )
-          // Reset the clock so a watcher that stays dead restarts once per
-          // silence window, not on every 30s check.
-          lastFixAtMs = Date.now()
-          restartNativeGps(onNativePosition, onNativeError)
+        // Post-arrival the watcher is deliberately deaf: a parked phone under a
+        // 50m filter delivers nothing, which reads to this check exactly like a
+        // wedge. Restarting it would undo the idling and cost more battery than
+        // never idling at all — so arrival suppresses the restart, and the next
+        // trip re-arms the watcher by coming back through this function.
+        if (
+          !shouldRestartNativeWatcher({
+            arrived: getState().otp?.goMode?.arrivedAt != null,
+            maxFastRetries: GPS_WATCHDOG_MAX_FAST_RETRIES,
+            restartsSinceLastFix: nativeGpsRestartsSinceLastFix,
+            retryMs: GPS_WATCHDOG_RETRY_MS,
+            silenceMs,
+            watchdogMs: GPS_WATCHDOG_MS
+          })
+        ) {
+          return
         }
+        // console.warn feeds the debug-log sink (installGlobalErrorCapture),
+        // so a remote device's wedge shows up in the jsonl with its timing.
+        console.warn(
+          `[Go Mode] GPS watchdog: no fix for ${Math.round(
+            silenceMs / 1000
+          )}s — restarting native watcher (attempt ${
+            nativeGpsRestartsSinceLastFix + 1
+          })`
+        )
+        // Reset the clock so a watcher that stays dead restarts once per
+        // silence window, not on every poll.
+        lastFixAtMs = Date.now()
+        nativeGpsRestartsSinceLastFix += 1
+        restartNativeGps(onNativePosition, onNativeError, {
+          distanceFilter: nativeGpsDistanceFilterFor(false)
+        })
       }, GPS_WATCHDOG_POLL_MS)
       // Ask for notification permission alongside the location prompt — trip
       // start is the moment the rider understands why. Fire-and-forget; alerts
@@ -3546,8 +3647,11 @@ export function advanceToLeg(legIndex: number) {
 export function handlePositionUpdate(position: GeolocationPosition) {
   return function (dispatch: any, getState: any) {
     // Heartbeat for the native GPS watchdog — wall clock, unconditionally:
-    // ANY position arriving proves the stream is alive.
+    // ANY position arriving proves the stream is alive, and with it that the
+    // last restart worked, which is what returns the watchdog to its ordinary
+    // budget after a run of fast retries.
     lastFixAtMs = Date.now()
+    nativeGpsRestartsSinceLastFix = 0
 
     const state = getState()
     const goMode = state.otp?.goMode
