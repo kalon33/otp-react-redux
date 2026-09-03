@@ -85,6 +85,7 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico'],
+      filename: 'service-worker.js',
       manifest: {
         name: 'Transit Paris',
         short_name: 'OTP Paris',
