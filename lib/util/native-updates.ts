@@ -81,6 +81,21 @@ function defaultHasRendered(): boolean {
 }
 
 /**
+ * What the health gate decided, and why.
+ *
+ * Reported so the NEXT incident is diagnosable from the sink instead of from a
+ * rider's description of a blank screen. On 2026-09-02 the only way to know
+ * whether the gate had fired would have been to ask the phone, and the phone
+ * had already been force-quit. `withheld` is the interesting one: it means the
+ * bundle is about to be rolled back at the next launch, and the reason names
+ * which of the two symptoms was seen.
+ */
+export type BundleHealthVerdict = {
+  confirmed: boolean
+  reason: 'boot-error' | 'confirmed' | 'not-rendered'
+}
+
+/**
  * Confirm the bundle only once it has demonstrably survived its own boot.
  *
  * `confirmBundleHealthy` used to be called on the line after `render()`, which
@@ -109,32 +124,62 @@ function defaultHasRendered(): boolean {
  * thing is a pure function of its arguments and a test can run it twice.
  * No-op in a browser by way of `confirmBundleHealthy`, which returns without a
  * bridge.
+ *
+ * `brokeDuringBoot` exists so the caller can supply a reader that was armed
+ * EARLIER than this call. `main.js` does: `util/debug-log-boot` installs the
+ * one pair of window listeners at the app's very first import, which is the
+ * only place that sees a throw during module evaluation or inside `render()` —
+ * both of them before this function is reached at all. When a reader is given,
+ * no second pair of listeners is installed; the fallback pair below only
+ * covers a caller that has none (and the tests).
  */
 export function confirmBundleHealthyWhenStable(
   options: {
+    brokeDuringBoot?: () => boolean
     confirm?: () => Promise<void> | void
     graceMs?: number
     hasRendered?: () => boolean
+    onVerdict?: (verdict: BundleHealthVerdict) => void
   } = {}
 ): void {
   if (typeof window === 'undefined') return
   const {
     confirm = confirmBundleHealthy,
     graceMs = BUNDLE_HEALTH_GRACE_MS,
-    hasRendered = defaultHasRendered
+    hasRendered = defaultHasRendered,
+    onVerdict
   } = options
 
-  let brokeDuringBoot = false
+  let sawFailure = false
   const noteFailure = () => {
-    brokeDuringBoot = true
+    sawFailure = true
   }
-  window.addEventListener('error', noteFailure)
-  window.addEventListener('unhandledrejection', noteFailure)
+  const injected = options.brokeDuringBoot
+  const broke = injected ?? (() => sawFailure)
+  if (!injected) {
+    window.addEventListener('error', noteFailure)
+    window.addEventListener('unhandledrejection', noteFailure)
+  }
 
   setTimeout(() => {
-    window.removeEventListener('error', noteFailure)
-    window.removeEventListener('unhandledrejection', noteFailure)
-    if (brokeDuringBoot || !hasRendered()) return
+    if (!injected) {
+      window.removeEventListener('error', noteFailure)
+      window.removeEventListener('unhandledrejection', noteFailure)
+    }
+    const verdict: BundleHealthVerdict = broke()
+      ? { confirmed: false, reason: 'boot-error' }
+      : hasRendered()
+      ? { confirmed: true, reason: 'confirmed' }
+      : { confirmed: false, reason: 'not-rendered' }
+    // Reported BEFORE the confirm call and outside its result: the verdict is
+    // the fact worth keeping even if the bridge is absent or throws, and a
+    // reporter that throws must not be able to withhold a healthy confirm.
+    try {
+      onVerdict?.(verdict)
+    } catch {
+      // Diagnostics never break the boot path.
+    }
+    if (!verdict.confirmed) return
     confirm()
   }, graceMs)
 }

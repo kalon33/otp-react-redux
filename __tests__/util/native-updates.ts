@@ -80,6 +80,96 @@ describe('confirmBundleHealthyWhenStable', () => {
     expect(confirm).toHaveBeenCalledTimes(1)
   })
 
+  it('reports the verdict it reached, so the sink can show it', () => {
+    // 2026-09-02 was diagnosable only because the exact URL could be
+    // reconstructed by hand from the PREVIOUS day's log — nothing said whether
+    // the health gate had fired, and by then the phone had been force-quit.
+    const onVerdict = jest.fn()
+    confirmBundleHealthyWhenStable({
+      confirm: jest.fn(),
+      hasRendered: () => true,
+      onVerdict
+    })
+    jest.advanceTimersByTime(BUNDLE_HEALTH_GRACE_MS)
+    expect(onVerdict).toHaveBeenCalledWith({
+      confirmed: true,
+      reason: 'confirmed'
+    })
+  })
+
+  it('names WHICH symptom withheld the confirmation', () => {
+    const brokeVerdict = jest.fn()
+    confirmBundleHealthyWhenStable({
+      confirm: jest.fn(),
+      hasRendered: () => true,
+      onVerdict: brokeVerdict
+    })
+    window.dispatchEvent(new ErrorEvent('error', { message: 'boom' }))
+    jest.advanceTimersByTime(BUNDLE_HEALTH_GRACE_MS)
+    expect(brokeVerdict).toHaveBeenCalledWith({
+      confirmed: false,
+      reason: 'boot-error'
+    })
+
+    const blankVerdict = jest.fn()
+    confirmBundleHealthyWhenStable({
+      confirm: jest.fn(),
+      hasRendered: () => false,
+      onVerdict: blankVerdict
+    })
+    jest.advanceTimersByTime(BUNDLE_HEALTH_GRACE_MS)
+    expect(blankVerdict).toHaveBeenCalledWith({
+      confirmed: false,
+      reason: 'not-rendered'
+    })
+  })
+
+  it('a reporter that throws cannot withhold a healthy confirmation', () => {
+    const confirm = jest.fn()
+    confirmBundleHealthyWhenStable({
+      confirm,
+      hasRendered: () => true,
+      onVerdict: () => {
+        throw new Error('sink unreachable')
+      }
+    })
+    jest.advanceTimersByTime(BUNDLE_HEALTH_GRACE_MS)
+    expect(confirm).toHaveBeenCalledTimes(1)
+  })
+
+  it('uses an injected boot reader instead of listening a second time', () => {
+    // main.js passes the reader from util/debug-log-boot, armed at the app's
+    // very first import — the only thing that sees a throw out of render(),
+    // which is where 2026.0902.3 died and which listeners installed on the
+    // line AFTER render() can never see.
+    const confirm = jest.fn()
+    const added = jest.spyOn(window, 'addEventListener')
+    let broke = true
+    confirmBundleHealthyWhenStable({
+      brokeDuringBoot: () => broke,
+      confirm,
+      hasRendered: () => true
+    })
+    expect(
+      added.mock.calls.filter(
+        ([type]) => type === 'error' || type === 'unhandledrejection'
+      )
+    ).toHaveLength(0)
+    added.mockRestore()
+
+    jest.advanceTimersByTime(BUNDLE_HEALTH_GRACE_MS)
+    expect(confirm).not.toHaveBeenCalled()
+
+    broke = false
+    confirmBundleHealthyWhenStable({
+      brokeDuringBoot: () => broke,
+      confirm,
+      hasRendered: () => true
+    })
+    jest.advanceTimersByTime(BUNDLE_HEALTH_GRACE_MS)
+    expect(confirm).toHaveBeenCalledTimes(1)
+  })
+
   it('reads #main when no renderer check is injected', () => {
     const confirm = jest.fn()
     const main = document.createElement('div')
