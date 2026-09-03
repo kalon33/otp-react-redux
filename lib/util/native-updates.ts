@@ -24,11 +24,30 @@
  */
 
 interface UpdaterBridge {
+  addListener?: (
+    event: string,
+    listener: (data: unknown) => void
+  ) => Promise<unknown> | unknown
   current: () => Promise<{
     bundle?: { id?: string; version?: string }
     native?: string
   }>
+  /**
+   * The bundle QUEUED for the next reload, or null. Note the plugin's `next()`
+   * is a SETTER (`next({id})`, definitions.d.ts:545) — this is the reader, and
+   * it is the one this file wants.
+   */
+  getNextBundle?: () => Promise<PendingBundle | null>
   notifyAppReady: () => Promise<unknown>
+  /** Make a downloaded bundle current AND reload onto it. Never resolves. */
+  set?: (options: { id: string }) => Promise<unknown>
+}
+
+/** A downloaded bundle the plugin is holding, as the native side reports it. */
+export type PendingBundle = {
+  id?: string
+  status?: string
+  version?: string
 }
 
 function bridge(): UpdaterBridge | null {
@@ -93,6 +112,17 @@ function defaultHasRendered(): boolean {
 export type BundleHealthVerdict = {
   confirmed: boolean
   reason: 'boot-error' | 'confirmed' | 'not-rendered'
+}
+
+/**
+ * The verdict this boot reached, once it has. Null until the grace period is
+ * up — which is exactly the window in which nothing may swap the bundle.
+ */
+let lastHealthVerdict: BundleHealthVerdict | null = null
+
+/** What the health gate decided on this boot, or null before it has decided. */
+export function recordedBundleHealth(): BundleHealthVerdict | null {
+  return lastHealthVerdict
 }
 
 /**
@@ -171,6 +201,10 @@ export function confirmBundleHealthyWhenStable(
       : hasRendered()
       ? { confirmed: true, reason: 'confirmed' }
       : { confirmed: false, reason: 'not-rendered' }
+    // Kept where anything else on this boot can read it. The bundle-apply gate
+    // below will not hop off a bundle that has not proven itself, and this is
+    // the only record that it did.
+    lastHealthVerdict = verdict
     // Reported BEFORE the confirm call and outside its result: the verdict is
     // the fact worth keeping even if the bridge is absent or throws, and a
     // reporter that throws must not be able to withhold a healthy confirm.
@@ -202,5 +236,300 @@ export async function confirmBundleHealthy(): Promise<void> {
     await plugin.notifyAppReady()
   } catch {
     // A rollback at the next launch is the correct outcome here.
+  }
+}
+
+/**
+ * -------------------------------------------------------------------------
+ * Applying a downloaded bundle without waiting for a second launch.
+ * -------------------------------------------------------------------------
+ *
+ * WHAT THE PLUGIN ACTUALLY DOES, read out of @capgo/capacitor-updater 8.51.15
+ * rather than out of our own config comment, which was wrong:
+ *
+ *   `autoUpdate: 'onLaunch'` is not "download now, apply next launch". In this
+ *   version `onLaunch` is a DIRECT-update mode: `directUpdateModeForAutoUpdate\
+ *   Mode` maps it straight through (CapacitorUpdaterPlugin.java:2230,
+ *   .swift:3979) and `shouldUseDirectUpdate()` returns true for the FIRST
+ *   update check of a process (java:2113, swift:3878). That first check
+ *   downloads and reloads onto the new bundle inside the same launch —
+ *   measured on the genuine Play build on 2026-09-02: `New bundle: 2026.0902.4
+ *   found` → `directUpdate: true` → `Reloading:` → `Version successfully
+ *   loaded: 2026.0902.4`, 2.6 s end to end.
+ *
+ * So the gap is not the first launch. It is every check AFTER the first one in
+ * a long-lived process: `onLaunchDirectUpdateUsed` is consumed, so a bundle
+ * published while the app is already running is merely queued —
+ * `setNextBundle(...)` (CapgoUpdater.java:920, .swift:4474) — and applied only
+ * when the process is backgrounded (`installNext()` on
+ * appMovedToBackground/onActivityStopped) or relaunched. The app holds a
+ * process open for days on a background-location session, so "the next launch"
+ * can be a long way off, and the direct update can also simply fail
+ * (`applyDownloadedBundleForDirectUpdate` false → queued instead).
+ *
+ * That queued state is what this covers: if a bundle is sitting pending and
+ * the moment is safe, apply it now instead of waiting.
+ *
+ * SAFE means all three of:
+ *   * no Go Mode trip is running or waiting to be resumed — a bundle swap
+ *     destroys the JS context, and doing that to a rider following turn-by-turn
+ *     guidance is the one moment this app must never blink;
+ *   * the health gate above has CONFIRMED the bundle we are on — hopping off a
+ *     bundle that has not proven itself would strand the rollback: the plugin
+ *     reverts to the last bundle that called notifyAppReady, and that must not
+ *     be a bundle we chose while blind;
+ *   * we have not already applied one this boot.
+ *
+ * Anything else defers, and the plugin's own next-background/next-launch
+ * behaviour stands unchanged as the safety net.
+ */
+
+/** Why a bundle-apply attempt ended the way it did. */
+export type BundleApplyOutcome =
+  | 'applied'
+  | 'deferred: trip-active'
+  | 'deferred: unconfirmed'
+  | 'failed'
+  | 'none-pending'
+  | 'once-per-boot'
+
+/**
+ * Where the URL hash is parked across the reload.
+ *
+ * `reload()` does NOT keep it. The native reload rebuilds the URL as
+ * `new URL(protocol, host, port, path)` (CapacitorUpdaterPlugin.java:2962),
+ * which drops the ref entirely, and it only does even that much when
+ * `keepUrlPathAfterReload` is set, which our shell does not set. This app puts
+ * all of its route state in the hash (`createHashHistory` in main.js), so
+ * without this the rider's search is on the floor after an update.
+ */
+const APPLY_HASH_KEY = 'otp.bundleApplyHash'
+
+/**
+ * How stale a parked hash may be and still be restored.
+ *
+ * The reload is seconds away, so this is generous. It is bounded at all
+ * because a hash that outlives its reload is precisely the 2026-09-02 white
+ * screen (backlog 6.46): an old bundle's query, re-parsed by new code. One
+ * reload's worth of grace, and never a day later.
+ */
+const APPLY_HASH_MAX_AGE_MS = 120000
+
+/** Set once we have committed to a swap, so a boot can only do it once. */
+let bundleApplyStarted = false
+
+/** The last outcome recorded, so a foreground poll cannot flood the sink. */
+let lastReportedOutcome: BundleApplyOutcome | null = null
+
+/** Park the current hash so the reloaded bundle can pick the rider back up. */
+function stashHashForReload(): void {
+  try {
+    const hash = window.location?.hash
+    if (!hash || hash === '#' || hash === '#/') return
+    window.localStorage.setItem(
+      APPLY_HASH_KEY,
+      JSON.stringify({ at: Date.now(), hash })
+    )
+  } catch {
+    // A lost hash is a worse trip, not a broken one.
+  }
+}
+
+/**
+ * Put the rider back where they were before a bundle-apply reload.
+ *
+ * Call this BEFORE `createHashHistory()` in main.js: setting the hash first is
+ * what makes the router come up on the restored route rather than navigating
+ * to it afterwards. Consumes the parked value whether or not it is used, so a
+ * hash can never be restored twice.
+ */
+export function restoreHashAfterBundleApply(): void {
+  if (typeof window === 'undefined') return
+  let raw: string | null = null
+  try {
+    raw = window.localStorage.getItem(APPLY_HASH_KEY)
+    if (raw != null) window.localStorage.removeItem(APPLY_HASH_KEY)
+  } catch {
+    return
+  }
+  if (!raw) return
+  try {
+    const parked = JSON.parse(raw) as { at?: number; hash?: string }
+    if (!parked?.hash || typeof parked.at !== 'number') return
+    if (Date.now() - parked.at > APPLY_HASH_MAX_AGE_MS) return
+    // Only when the reload landed on the bare app. A hash that is already
+    // meaningful came from somewhere else and outranks anything we parked.
+    const current = window.location.hash
+    if (current && current !== '#' && current !== '#/') return
+    window.location.hash = parked.hash
+  } catch {
+    // Malformed park data is simply not a route.
+  }
+}
+
+/** Read the queued bundle from the plugin; null when nothing is queued. */
+async function defaultPendingBundle(): Promise<PendingBundle | null> {
+  const plugin = bridge()
+  if (!plugin?.getNextBundle) return null
+  try {
+    const next = await plugin.getNextBundle()
+    // The native side resolves with nothing when there is no queue, which
+    // arrives here as null, undefined or a bare {} depending on platform.
+    return next?.id ? next : null
+  } catch {
+    return null
+  }
+}
+
+/** The id of the bundle this app is running, or null. */
+async function defaultRunningBundleId(): Promise<string | null> {
+  const plugin = bridge()
+  if (!plugin) return null
+  try {
+    const info = await plugin.current()
+    return info?.bundle?.id ?? null
+  } catch {
+    return null
+  }
+}
+
+export interface PendingBundleDeps {
+  /** Make the named bundle current and reload onto it. */
+  apply?: (id: string) => Promise<unknown>
+  /** A bundle the caller already knows about (from a `setNext` event). */
+  candidate?: PendingBundle | null
+  /** Has the health gate pronounced the RUNNING bundle good? */
+  isHealthConfirmed?: () => boolean
+  /** Is a Go Mode trip running, or about to be resumed? */
+  isTripActive?: () => boolean
+  /** Told every outcome worth recording, deduped against the previous one. */
+  onOutcome?: (
+    outcome: BundleApplyOutcome,
+    bundle: PendingBundle | null
+  ) => void
+  /** Read the queued bundle. */
+  pendingBundle?: () => Promise<PendingBundle | null>
+  /** Id of the bundle currently running. */
+  runningBundleId?: () => Promise<string | null>
+  /** Park the URL hash across the reload. */
+  stashHash?: () => void
+}
+
+/**
+ * Apply a queued bundle now if — and only if — this is a safe moment to.
+ *
+ * Returns the outcome rather than throwing, because every caller is a
+ * best-effort hook (boot, foreground, a plugin event) and none of them has
+ * anything useful to do with a failure except record it.
+ *
+ * `apply` defaults to the plugin's `set({id})`, which makes the bundle current
+ * and reloads in one step (CapacitorUpdaterPlugin.java:3103 → `_reload()`).
+ * There is deliberately no `reload()` call after it: `set()` destroys the JS
+ * context, so nothing on the far side of it runs, and `reload()` on its own
+ * would apply whatever the plugin has queued rather than the bundle we
+ * decided was safe.
+ */
+export async function applyPendingBundleWhenSafe(
+  deps: PendingBundleDeps = {}
+): Promise<BundleApplyOutcome> {
+  const {
+    apply = defaultApplyBundle,
+    candidate = null,
+    isHealthConfirmed = () => recordedBundleHealth()?.confirmed === true,
+    isTripActive = () => false,
+    onOutcome,
+    pendingBundle = defaultPendingBundle,
+    runningBundleId = defaultRunningBundleId,
+    stashHash = stashHashForReload
+  } = deps
+
+  const report = (
+    outcome: BundleApplyOutcome,
+    bundle: PendingBundle | null
+  ): BundleApplyOutcome => {
+    // Deduped: this runs on every foreground, and "still nothing pending" is
+    // not news the sink needs a hundred copies of.
+    if (outcome !== lastReportedOutcome) {
+      lastReportedOutcome = outcome
+      try {
+        onOutcome?.(outcome, bundle)
+      } catch {
+        // Diagnostics never break an update path.
+      }
+    }
+    return outcome
+  }
+
+  if (bundleApplyStarted) return 'once-per-boot'
+
+  const pending = candidate?.id ? candidate : await pendingBundle()
+  if (!pending?.id) return report('none-pending', null)
+  // A bundle the plugin has already marked bad is what the rollback exists
+  // for; the plugin's own reload() refuses it too (java:3037).
+  if (pending.status === 'error') return report('none-pending', pending)
+  const running = await runningBundleId()
+  if (running && running === pending.id) return report('none-pending', pending)
+
+  if (!isHealthConfirmed()) return report('deferred: unconfirmed', pending)
+  if (isTripActive()) return report('deferred: trip-active', pending)
+
+  // Past this line we are committed: mark first, so a second trigger arriving
+  // while the reload is in flight cannot start another one.
+  bundleApplyStarted = true
+  report('applied', pending)
+  stashHash()
+  try {
+    await apply(pending.id)
+  } catch {
+    // set() rejects only when the bundle will not load, which the plugin
+    // handles by leaving us where we are. Do NOT fall back to reload(): that
+    // would apply the very bundle that just refused to.
+    bundleApplyStarted = false
+    lastReportedOutcome = null
+    return report('failed', pending)
+  }
+  return 'applied'
+}
+
+/** The real swap: make the bundle current and reload onto it. */
+async function defaultApplyBundle(id: string): Promise<unknown> {
+  const plugin = bridge()
+  if (!plugin?.set) throw new Error('no updater bridge')
+  return plugin.set({ id })
+}
+
+/**
+ * Watch for a bundle to become applicable, and apply it at the first safe
+ * moment.
+ *
+ * Three triggers, because each covers a case the others cannot:
+ *   * `setNext` — the plugin has just queued a bundle
+ *     (`notifyListeners("setNext", …)`, CapgoUpdater.java:3364, .swift:3530).
+ *     This is the in-session download, the case the launch-time direct update
+ *     does not cover;
+ *   * `visibilitychange` — the rider came back to the app. Covers a queue that
+ *     was filled while we were not listening, and is where a trip that has
+ *     since ENDED gets its deferred bundle;
+ *   * the caller's own boot call, made once the health gate has confirmed.
+ *
+ * `updateAvailable` is deliberately not one of them: on Android it is emitted
+ * BEFORE `setNextBundle` (CapgoUpdater.java:908 then :920), so a reader that
+ * fired on it would ask for the queue and be told there is none.
+ */
+export function watchForPendingBundle(deps: PendingBundleDeps = {}): void {
+  if (typeof window === 'undefined') return
+  const run = (candidate?: PendingBundle | null) => {
+    applyPendingBundleWhenSafe({ ...deps, candidate })
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') run()
+  })
+  const plugin = bridge()
+  try {
+    plugin?.addListener?.('setNext', (data) => {
+      run((data as { bundle?: PendingBundle })?.bundle ?? null)
+    })
+  } catch {
+    // No listener is a slower update, not a broken app.
   }
 }
