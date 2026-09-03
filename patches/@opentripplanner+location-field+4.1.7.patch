@@ -1,7 +1,8 @@
 diff --git a/node_modules/@opentripplanner/location-field/esm/index.js b/node_modules/@opentripplanner/location-field/esm/index.js
+index 153c58e..edaef32 100644
 --- a/node_modules/@opentripplanner/location-field/esm/index.js
 +++ b/node_modules/@opentripplanner/location-field/esm/index.js
-@@ -229,6 +229,8 @@
+@@ -229,6 +229,8 @@ var LocationField = function LocationField(_ref4) {
      _ref4$LocationIconCom = _ref4.LocationIconComponent,
      LocationIconComponent = _ref4$LocationIconCom === void 0 ? DefaultLocationIcon : _ref4$LocationIconCom,
      locationType = _ref4.locationType,
@@ -9,8 +10,8 @@ diff --git a/node_modules/@opentripplanner/location-field/esm/index.js b/node_mo
 +    mapPickOption = _ref4$mapPickOption === void 0 ? null : _ref4$mapPickOption,
      _ref4$nearbyStops = _ref4.nearbyStops,
      nearbyStops = _ref4$nearbyStops === void 0 ? [] : _ref4$nearbyStops,
-     onLocationSelected = _ref4.onLocationSelected,
-@@ -236,6 +238,8 @@
+     _ref4$onBlur = _ref4.onBlur,
+@@ -240,6 +242,8 @@ var LocationField = function LocationField(_ref4) {
      onTextInputClick = _ref4$onTextInputClic === void 0 ? null : _ref4$onTextInputClic,
      _ref4$operatorIconMap = _ref4.operatorIconMap,
      operatorIconMap = _ref4$operatorIconMap === void 0 ? {} : _ref4$operatorIconMap,
@@ -19,10 +20,10 @@ diff --git a/node_modules/@opentripplanner/location-field/esm/index.js b/node_mo
      _ref4$preferredLayers = _ref4.preferredLayers,
      preferredLayers = _ref4$preferredLayers === void 0 ? [] : _ref4$preferredLayers,
      _ref4$sessionOptionIc = _ref4.sessionOptionIcon,
-@@ -627,6 +631,23 @@
-     });
-   };
- 
+@@ -631,6 +635,22 @@ var LocationField = function LocationField(_ref4) {
+   // array of menu item ids and associated locationSelected handlers for onKeyDown
+   // (does not include non-selectable items e.g. dividers/headings)
+   var indexedOptionLookup = [];
 +  // TransitNav fork (backlog 3.9 / 3.10): `pinCurrentLocationFirst` moves the
 +  // current-location entry from the bottom of the list to the top, and
 +  // `mapPickOption` adds one extra entry ("Choose on map") directly beneath it.
@@ -39,11 +40,10 @@ diff --git a/node_modules/@opentripplanner/location-field/esm/index.js b/node_mo
 +      pushToIndexedOptions(mapPickOption.onClick, "choose-on-map");
 +    }
 +  }
-+
-   /* 0) Include user saved locations if the typed text contains those locations name. */
-   if (showUserSettings) {
-     var matchingLocations = getMatchingLocations(userLocationRenderData, stateValue);
-@@ -865,12 +886,17 @@
+   var userLocationRenderData = showUserSettings ? userLocationsAndRecentPlaces.map(function (loc) {
+     return getRenderData(loc, setLocation, UserLocationIconComponent, intl);
+   }) : [];
+@@ -879,12 +899,17 @@ var LocationField = function LocationField(_ref4) {
    }
    var optionId = "current-position";
  
@@ -64,7 +64,7 @@ diff --git a/node_modules/@opentripplanner/location-field/esm/index.js b/node_mo
        disabled: positionUnavailable,
        icon: optionIcon,
        id: optionId,
-@@ -880,6 +906,20 @@
+@@ -894,6 +919,20 @@ var LocationField = function LocationField(_ref4) {
        title: optionTitle
      }));
    }
@@ -85,7 +85,7 @@ diff --git a/node_modules/@opentripplanner/location-field/esm/index.js b/node_mo
    if (message && !message.includes("AbortError")) {
      if (geocodedFeatures.length === 0) {
        var icon = isFetching ? /*#__PURE__*/React.createElement(S.Spinner, {
-@@ -897,6 +937,12 @@
+@@ -911,6 +950,12 @@ var LocationField = function LocationField(_ref4) {
      statusMessages.push(message);
    }
  
@@ -99,14 +99,17 @@ diff --git a/node_modules/@opentripplanner/location-field/esm/index.js b/node_mo
    var menuItemCount = indexedOptionLookup.length;
  
 diff --git a/node_modules/@opentripplanner/location-field/lib/index.js b/node_modules/@opentripplanner/location-field/lib/index.js
+index 1b70e99..e409060 100644
 --- a/node_modules/@opentripplanner/location-field/lib/index.js
 +++ b/node_modules/@opentripplanner/location-field/lib/index.js
-@@ -217,10 +217,12 @@
+@@ -216,12 +216,14 @@ const LocationField = ({
    location = null,
    LocationIconComponent = DefaultLocationIcon,
    locationType,
 +  mapPickOption = null,
    nearbyStops = [],
+   onBlur = null,
+   onFocus = null,
    onLocationSelected,
    onTextInputClick = null,
    operatorIconMap = {},
@@ -114,10 +117,10 @@ diff --git a/node_modules/@opentripplanner/location-field/lib/index.js b/node_mo
    preferredLayers = [],
    sessionOptionIcon = /*#__PURE__*/_react.default.createElement(_Search.Search, {
      size: _options.ICON_SIZE
-@@ -580,6 +582,23 @@
-     });
-   };
- 
+@@ -583,6 +585,22 @@ const LocationField = ({
+   // array of menu item ids and associated locationSelected handlers for onKeyDown
+   // (does not include non-selectable items e.g. dividers/headings)
+   const indexedOptionLookup = [];
 +  // TransitNav fork (backlog 3.9 / 3.10): `pinCurrentLocationFirst` moves the
 +  // current-location entry from the bottom of the list to the top, and
 +  // `mapPickOption` adds one extra entry ("Choose on map") directly beneath it.
@@ -134,11 +137,10 @@ diff --git a/node_modules/@opentripplanner/location-field/lib/index.js b/node_mo
 +      pushToIndexedOptions(mapPickOption.onClick, "choose-on-map");
 +    }
 +  }
-+
-   /* 0) Include user saved locations if the typed text contains those locations name. */
-   if (showUserSettings) {
-     const matchingLocations = (0, _utils.getMatchingLocations)(userLocationRenderData, stateValue);
-@@ -814,12 +833,17 @@
+   const userLocationRenderData = showUserSettings ? userLocationsAndRecentPlaces.map(loc => (0, _options.getRenderData)(loc, setLocation, UserLocationIconComponent, intl)) : [];
+   const pushToIndexedOptions = (locationSelected, id) => {
+     indexedOptionLookup.push({
+@@ -825,12 +843,17 @@ const LocationField = ({
    }
    const optionId = `current-position`;
  
@@ -159,7 +161,7 @@ diff --git a/node_modules/@opentripplanner/location-field/lib/index.js b/node_mo
        disabled: positionUnavailable,
        icon: optionIcon,
        id: optionId,
-@@ -829,6 +853,20 @@
+@@ -840,6 +863,20 @@ const LocationField = ({
        title: optionTitle
      }));
    }
@@ -180,7 +182,7 @@ diff --git a/node_modules/@opentripplanner/location-field/lib/index.js b/node_mo
    if (message && !message.includes("AbortError")) {
      if (geocodedFeatures.length === 0) {
        const icon = isFetching ? /*#__PURE__*/_react.default.createElement(S.Spinner, {
-@@ -846,6 +884,12 @@
+@@ -857,6 +894,12 @@ const LocationField = ({
      statusMessages.push(message);
    }
  
@@ -194,13 +196,14 @@ diff --git a/node_modules/@opentripplanner/location-field/lib/index.js b/node_mo
    let menuItemCount = indexedOptionLookup.length;
  
 diff --git a/node_modules/@opentripplanner/location-field/lib/types.d.ts b/node_modules/@opentripplanner/location-field/lib/types.d.ts
+index f520750..e7d74da 100644
 --- a/node_modules/@opentripplanner/location-field/lib/types.d.ts
 +++ b/node_modules/@opentripplanner/location-field/lib/types.d.ts
-@@ -264,6 +264,20 @@
-     /**
+@@ -273,6 +273,20 @@ export interface LocationFieldProps {
       * If true, do not show nearbyStops or current location as options
       */
-+  /**
+     suppressNearby?: boolean;
++    /**
 +     * TransitNav fork: an extra option rendered directly under the current-location
 +     * option ("Choose on map"). Omit to render nothing.
 +     */
@@ -214,132 +217,6 @@ diff --git a/node_modules/@opentripplanner/location-field/lib/types.d.ts b/node_
 +     * top of the suggestion list instead of the bottom.
 +     */
 +    pinCurrentLocationFirst?: boolean;
-     suppressNearby?: boolean;
      /**
       * A custom component for rendering the icon for options that are either saved
-diff --git a/node_modules/@opentripplanner/location-field/src/index.tsx b/node_modules/@opentripplanner/location-field/src/index.tsx
---- a/node_modules/@opentripplanner/location-field/src/index.tsx
-+++ b/node_modules/@opentripplanner/location-field/src/index.tsx
-@@ -307,10 +307,12 @@
-   location = null,
-   LocationIconComponent = DefaultLocationIcon,
-   locationType,
-+  mapPickOption = null,
-   nearbyStops = [],
-   onLocationSelected,
-   onTextInputClick = null,
-   operatorIconMap = {},
-+  pinCurrentLocationFirst = false,
-   preferredLayers = [],
-   sessionOptionIcon = <Search size={ICON_SIZE} />,
-   sessionSearches = [],
-@@ -719,6 +721,28 @@
-     indexedOptionLookup.push({ id, locationSelected });
-   };
- 
-+  // TransitNav fork (backlog 3.9 / 3.10): `pinCurrentLocationFirst` moves the
-+  // current-location entry from the bottom of the list to the top, and
-+  // `mapPickOption` adds one extra entry ("Choose on map") directly beneath it.
-+  // Their keyboard handlers are registered here, ahead of every other category,
-+  // so the arrow-key order matches the order the rider sees; the option elements
-+  // themselves are still built at the end of the list and moved to the front
-+  // once every other category has been added.
-+  const pinnedMenuItems = [];
-+  if (pinCurrentLocationFirst) {
-+    if (!suppressNearby) {
-+      pushToIndexedOptions(
-+        currentPosition && !currentPosition.error
-+          ? useCurrentLocation
-+          : undefined,
-+        "current-position"
-+      );
-+    }
-+    if (mapPickOption) {
-+      pushToIndexedOptions(mapPickOption.onClick, "choose-on-map");
-+    }
-+  }
-+
-   /* 0) Include user saved locations if the typed text contains those locations name. */
-   if (showUserSettings) {
-     const matchingLocations = getMatchingLocations(
-@@ -1016,12 +1040,17 @@
- 
-   const optionId = `current-position`;
- 
--  // Add to the selection handler lookup (for use in onKeyDown)
--  pushToIndexedOptions(locationSelected, optionId);
-+  // Add to the selection handler lookup (for use in onKeyDown). Skipped when
-+  // the option is pinned (already registered above) and when it is suppressed
-+  // (registering a handler for an option that is never rendered shifts every
-+  // arrow-key index by one).
-+  if (!pinCurrentLocationFirst && !suppressNearby) {
-+    pushToIndexedOptions(locationSelected, optionId);
-+  }
- 
-   if (!suppressNearby) {
-     // Create and add the option item to the menu items array
--    menuItems.push(
-+    (pinCurrentLocationFirst ? pinnedMenuItems : menuItems).push(
-       <Option
-         disabled={positionUnavailable}
-         icon={optionIcon}
-@@ -1033,6 +1062,22 @@
-       />
-     );
-   }
-+
-+  if (mapPickOption) {
-+    if (!pinCurrentLocationFirst) {
-+      pushToIndexedOptions(mapPickOption.onClick, "choose-on-map");
-+    }
-+    (pinCurrentLocationFirst ? pinnedMenuItems : menuItems).push(
-+      <Option
-+        icon={mapPickOption.icon}
-+        id="choose-on-map"
-+        isActive={indexedOptionLookup[activeIndex]?.id === "choose-on-map"}
-+        key="choose-on-map"
-+        onClick={mapPickOption.onClick}
-+        title={mapPickOption.title}
-+      />
-+    );
-+  }
-   if (message && !message.includes("AbortError")) {
-     if (geocodedFeatures.length === 0) {
-       const icon = isFetching ? (
-@@ -1047,6 +1092,12 @@
-     statusMessages.push(message);
-   }
- 
-+  // Put the pinned options in front of everything else, including the geocoder
-+  // error row that is unshifted just above.
-+  if (pinnedMenuItems.length > 0) {
-+    menuItems = [...pinnedMenuItems, ...menuItems];
-+  }
-+
-   // Store the number of location-associated items for reference in the onKeyDown method
-   let menuItemCount = indexedOptionLookup.length;
- 
-diff --git a/node_modules/@opentripplanner/location-field/src/types.ts b/node_modules/@opentripplanner/location-field/src/types.ts
---- a/node_modules/@opentripplanner/location-field/src/types.ts
-+++ b/node_modules/@opentripplanner/location-field/src/types.ts
-@@ -270,6 +270,20 @@
-   /**
-    * If true, do not show nearbyStops or current location as options
-    */
-+  /**
-+   * TransitNav fork: an extra option rendered directly under the current-location
-+   * option ("Choose on map"). Omit to render nothing.
-+   */
-+  mapPickOption?: {
-+    icon?: React.ReactNode;
-+    onClick: () => void;
-+    title: string;
-+  };
-+  /**
-+   * TransitNav fork: render the current-location option (and mapPickOption) at the
-+   * top of the suggestion list instead of the bottom.
-+   */
-+  pinCurrentLocationFirst?: boolean;
-   suppressNearby?: boolean;
-   /**
-    * A custom component for rendering the icon for options that are either saved
+      * user locations or recent places. The component will be sent a single prop
