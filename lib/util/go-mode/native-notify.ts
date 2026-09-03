@@ -58,6 +58,15 @@ export interface PushPayload {
  */
 export const TURN_CARD_NOTIFICATION_ID = 1
 
+/**
+ * Reserved id for the ambiguous missed-bus outcome ("Orange Line likely missed
+ * · next in 12 min"). Stable for the same two reasons the turn card's is: a
+ * later, better answer must REPLACE it rather than stack under it, and a miss
+ * that the feed later disproves has to be taken back off the wrist. 3, after
+ * the turn card (1) and the pacing card (2).
+ */
+export const MISSED_BUS_NOTICE_ID = 3
+
 function bridge(): any | null {
   const cap = (window as any).Capacitor
   if (!cap?.isNativePlatform?.()) return null

@@ -59,18 +59,67 @@ describe('util > go-mode > missed-bus recovery', () => {
     })
   })
 
-  it('asks rather than auto-applies when the miss is ambiguous', () => {
+  it('plans but never applies when the miss is ambiguous', () => {
     const d = tick(null, {
       justRaised: true,
       missed: missed({ definitive: false })
     })
     expect(d.replan).toBe(true)
+    // The whole point of `definitive`: an ambiguous miss must not swap the
+    // rider's route on a guess. It shows what it found instead.
     expect(d.autoApply).toBe(false)
-    // An ambiguous miss keeps no retry schedule — the card is the rider's.
-    expect(d.next).toBeNull()
   })
 
-  it('supersedes a card already on screen, but never an in-flight search', () => {
+  it('an ambiguous miss searches without waiting to be told it was raised', () => {
+    // It cannot lean on justRaised the way a definitive miss does: nothing
+    // pushes a notification for an ambiguous miss any more (checkMissedBus
+    // returns null for one and waits for the outcome), so justRaised is false
+    // on every tick of it. A fresh record with lastAtMs 0 is what makes the
+    // first search due immediately.
+    const d = tick(null, { missed: missed({ definitive: false }) })
+    expect(d.replan).toBe(true)
+    expect(d.next).toEqual({
+      attempts: 1,
+      departureMs: DEPARTURE,
+      lastAtMs: T0
+    })
+  })
+
+  it('gives an ambiguous miss that found nothing the same second look', () => {
+    // Before 2026-09-03 retryDue was definitive-only, so an ambiguous miss got
+    // exactly one attempt and, if it came back empty, the rider standing at the
+    // stop was never looked at again.
+    const spent: MissedBusAttempt = {
+      attempts: 1,
+      departureMs: DEPARTURE,
+      lastAtMs: T0
+    }
+    const d = tick(spent, {
+      missed: missed({ definitive: false }),
+      nowMs: T0 + MISSED_BUS_REROUTE_RETRY_MS,
+      reRouteStatus: 'none'
+    })
+    expect(d.replan).toBe(true)
+    expect(d.autoApply).toBe(false)
+  })
+
+  it('does not re-search over alternatives the rider is being shown', () => {
+    // 'found' means the candidates are in the planner under them.
+    const spent: MissedBusAttempt = {
+      attempts: 1,
+      departureMs: DEPARTURE,
+      lastAtMs: T0
+    }
+    expect(
+      tick(spent, {
+        missed: missed({ definitive: false }),
+        nowMs: T0 + MISSED_BUS_REROUTE_RETRY_MS * 5,
+        reRouteStatus: 'found'
+      }).replan
+    ).toBe(false)
+  })
+
+  it('supersedes results already on screen, but never an in-flight search', () => {
     expect(
       tick(null, { justRaised: true, reRouteStatus: 'found' }).replan
     ).toBe(true)
@@ -79,7 +128,7 @@ describe('util > go-mode > missed-bus recovery', () => {
     ).toBe(false)
   })
 
-  it('leaves an ambiguous miss alone once a card is showing', () => {
+  it('leaves an ambiguous miss alone once results are showing', () => {
     // Only 'idle' lets an ambiguous miss through; it has no claim to replace
     // alternatives the rider is already reading.
     const d = tick(null, {

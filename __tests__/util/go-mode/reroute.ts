@@ -35,6 +35,7 @@ describe('go-mode re-route reducer', () => {
   it('starts with an idle reRoute state', () => {
     expect(initial.reRoute).toEqual({
       autoApply: false,
+      candidates: [],
       keepRouteId: null,
       reason: null,
       searchId: null,
@@ -47,6 +48,7 @@ describe('go-mode re-route reducer', () => {
     const state = goMode(initial, startReroute({ searchId: 'abc' }))
     expect(state.reRoute).toEqual({
       autoApply: false,
+      candidates: [],
       keepRouteId: null,
       reason: null,
       searchId: 'abc',
@@ -97,6 +99,26 @@ describe('go-mode re-route reducer', () => {
     expect(state.reRoute.searchId).toBe('abc')
   })
 
+  it('SET_REROUTE_RESULT KEEPS the itineraries, not just their count', () => {
+    // Until 2026-09-03 this slice threw the results away and kept only
+    // 'found'/'none'. An ambiguous missed bus, which must never auto-apply,
+    // therefore had a real answer and nowhere to put it — see
+    // __tests__/util/go-mode/ambiguous-missed-bus-0903.ts.
+    const searching = goMode(initial, startReroute({ searchId: 'abc' }))
+    const itineraries = [{ duration: 1200 }, { duration: 1500 }] as any
+    const state = goMode(searching, setRerouteResult(itineraries))
+    expect(state.reRoute.candidates).toEqual(itineraries)
+  })
+
+  it('a new search drops the last one\u2019s answer immediately', () => {
+    const found = goMode(
+      goMode(initial, startReroute({ searchId: 'abc' })),
+      setRerouteResult([{ duration: 1200 }] as any)
+    )
+    const restarted = goMode(found, startReroute({ searchId: 'def' }))
+    expect(restarted.reRoute.candidates).toEqual([])
+  })
+
   it('SET_REROUTE_RESULT with null -> none', () => {
     const searching = goMode(initial, startReroute({ searchId: 'abc' }))
     const state = goMode(searching, setRerouteResult(null))
@@ -111,6 +133,7 @@ describe('go-mode re-route reducer', () => {
     const state = goMode(found, clearReroute())
     expect(state.reRoute).toEqual({
       autoApply: false,
+      candidates: [],
       keepRouteId: null,
       reason: null,
       searchId: null,

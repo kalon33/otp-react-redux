@@ -1,6 +1,7 @@
 import {
   BOARD_APPROACH_METRES,
   BOARD_ARRIVE_METRES,
+  buildMissedBusOutcomeNotice,
   checkAlightAlerts,
   checkBoardVehicleApproach,
   checkConnectionWarning,
@@ -23,6 +24,7 @@ import {
   triggerVibration,
   wasRecentlySent
 } from '../../../lib/util/go-mode/notification-service'
+import { MISSED_BUS_NOTICE_ID } from '../../../lib/util/go-mode/native-notify'
 
 const makeProgress = (overrides: Record<string, any> = {}) => ({
   currentLegIndex: 0,
@@ -1831,13 +1833,15 @@ describe('missed-bus detection', () => {
       expect(event?.message).toContain('next departure')
     })
 
-    it('builds the checking-alternatives copy for an ambiguous miss', () => {
-      const event = checkMissedBus(
-        { ...ctxDefinitive, definitive: false },
-        legs,
-        []
-      )
-      expect(event?.message).toContain('may have left')
+    it('says NOTHING yet for an ambiguous miss', () => {
+      // It used to push "…may have left… — checking alternatives…" here, and
+      // that was the whole of it: the alternatives landed in goMode.reRoute a
+      // few seconds later and no screen had rendered that slice since eb74a9d8
+      // deleted the Switch/Keep card. The ambiguous story is now told once, by
+      // buildMissedBusOutcomeNotice, when there is an answer to tell.
+      expect(
+        checkMissedBus({ ...ctxDefinitive, definitive: false }, legs, [])
+      ).toBeNull()
     })
 
     it('dedups per missed departure (30 min window)', () => {
@@ -1857,6 +1861,66 @@ describe('missed-bus detection', () => {
         sent
       )
       expect(event).not.toBeNull()
+    })
+  })
+
+  describe('buildMissedBusOutcomeNotice', () => {
+    const legs = makeLegs()
+    const ctx = {
+      boardLegIndex: 1,
+      definitive: false,
+      effectiveBoardMs: BOARD,
+      realtime: false
+    }
+    const NOW = BOARD + 200_000
+    const alt = (atMs: number, routeShortName: string) => ({
+      duration: 1200,
+      legs: [{ routeShortName, startTime: atMs, transitLeg: true }]
+    })
+
+    it('carries the wait in minutes, and nothing else', () => {
+      const event = buildMissedBusOutcomeNotice({
+        candidates: [alt(NOW + 720_000, '546')] as any,
+        ctx,
+        legs,
+        nowMs: NOW
+      })
+      expect(event.message).toBe('546 likely missed \u00b7 next in 12 min')
+      // No clock time, no question, no coaching — the rider's standing rule.
+      expect(event.message).not.toMatch(/[ap]m/i)
+      expect(event.message).not.toContain('?')
+    })
+
+    it('names the route only when it is a different one', () => {
+      const event = buildMissedBusOutcomeNotice({
+        candidates: [alt(NOW + 240_000, '535')] as any,
+        ctx,
+        legs,
+        nowMs: NOW
+      })
+      expect(event.message).toBe('546 likely missed \u00b7 535 in 4 min')
+    })
+
+    it('says an empty answer out loud rather than going quiet', () => {
+      const event = buildMissedBusOutcomeNotice({
+        candidates: [],
+        ctx,
+        legs,
+        nowMs: NOW
+      })
+      expect(event.message).toBe('546 likely missed \u00b7 no alternatives')
+    })
+
+    it('carries a stable native id so it can be replaced and withdrawn', () => {
+      const event = buildMissedBusOutcomeNotice({
+        candidates: [],
+        ctx,
+        legs,
+        nowMs: NOW
+      })
+      expect(event.pushId).toBe(MISSED_BUS_NOTICE_ID)
+      expect(event.type).toBe('MISSED_BUS')
+      expect(event.priority).toBe('high')
     })
   })
 })
