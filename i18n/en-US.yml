@@ -445,6 +445,7 @@ components:
   ItinerarySummary:
     itineraryDetails: Itinerary details
   LocationSearch:
+    chooseOnMap: Choose on map
     enterLocation: Enter location
     setDestination: Set Destination
     setOrigin: Set Origin
@@ -458,6 +459,13 @@ components:
     stations: Transit Stations
     stops: Transit Stops
     streets: Streets
+  MapPointPicker:
+    cancel: Cancel
+    instructions: Drag the map to place the pin
+    setAsDestination: Set as destination
+    setAsStart: Set as start
+    titleFrom: Choose your starting point
+    titleTo: Choose your destination
   MapillaryFrame:
     title: Imagery of the street
   MetroUI:

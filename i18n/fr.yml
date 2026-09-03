@@ -451,6 +451,7 @@ components:
   ItinerarySummary:
     itineraryDetails: Détails du trajet
   LocationSearch:
+    chooseOnMap: Choisir sur la carte
     enterLocation: Entrez le lieu
     setDestination: Destination
     setOrigin: Point de départ
@@ -466,6 +467,13 @@ components:
     streets: Plan des rues
   MapillaryFrame:
     title: Vue panoramique
+  MapPointPicker:
+    cancel: Annuler
+    instructions: Déplacez la carte pour positionner le repère
+    setAsDestination: Définir comme destination
+    setAsStart: Définir comme point de départ
+    titleFrom: Choisissez votre point de départ
+    titleTo: Choisissez votre destination
   MetroUI:
     arriveAt: Vous arrivez à
     confirmSwitchTrip: "Basculer votre trajet actif sur cette ligne ? Vos indications seront mises à jour."
