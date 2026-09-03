@@ -144,6 +144,21 @@ export interface TripSession {
    */
   matchHeldSinceMs: number | null
 
+  /**
+   * What the rider was last told about an AMBIGUOUS missed bus, as
+   * `<departureMs>:found|none`, or null while there is nothing outstanding.
+   *
+   * Two jobs. It latches the one push and the one hand-off to the planner, so a
+   * settled re-plan is not re-announced on every tick — and, because the answer
+   * is part of the key, a retry that finally finds something IS announced,
+   * while a repeat of the same "nothing" is not. And it is the record that
+   * there is a claim to take back if the bus turns out not to have been missed.
+   *
+   * A definitive miss does not use it: that one auto-updates the trip and says
+   * so at the moment it happens.
+   */
+  missedBusNoticeKey: string | null
+
   /** Retry bookkeeping for the missed departure being recovered from. */
   missedBusRerouteAttempt: MissedBusAttempt | null
 
@@ -226,6 +241,7 @@ export function createTripSession(): TripSession {
     lastTurnCardKey: null,
     manualDepartureLock: false,
     matchHeldSinceMs: null,
+    missedBusNoticeKey: null,
     missedBusRerouteAttempt: null,
     prevDistanceFromRoute: null,
     quietReplanHistory: [],

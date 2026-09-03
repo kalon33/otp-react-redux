@@ -1,4 +1,4 @@
-import type { Leg } from '@opentripplanner/types'
+import type { Itinerary, Leg } from '@opentripplanner/types'
 
 import { asContinuation, formatCueDistance } from './turn-by-turn'
 import {
@@ -6,6 +6,7 @@ import {
   MATCH_CORRIDOR_TRANSIT_M
 } from './position-matching'
 import { hasArrivedAtDestination } from './progress-calculator'
+import { MISSED_BUS_NOTICE_ID } from './native-notify'
 import {
   stopsAheadFromNextStopId,
   VEHICLE_AT_BOARD_STOP_M,
@@ -50,6 +51,14 @@ export interface NotificationEvent {
   id: string
   message: string
   priority: 'low' | 'medium' | 'high'
+  /**
+   * Stable NATIVE notification id, when this alert needs to be replaceable or
+   * withdrawable on the phone (see PushPayload.id in native-notify.ts). Omitted
+   * by almost everything: a one-off alert wants its own entry in Notification
+   * Center. Set by the ambiguous missed-bus outcome, which is a claim about the
+   * world that can stop being true while the rider is looking at it.
+   */
+  pushId?: number
   timestamp: Date
   title: string
   type: NotificationType
@@ -65,7 +74,9 @@ const AUTO_REROUTE_TRIGGER_TYPES: NotificationType[] = [
  * Whether to kick off an automatic re-route suggestion this update: a
  * connection-risk or off-route notification just fired and no re-route is
  * already in progress or awaiting the rider's decision (status must be 'idle').
- * The suggestion is surfaced as a Switch/Keep card — never an automatic swap.
+ * Its one caller is the quiet access-leg re-plan — never an automatic swap of
+ * the transit half. (This used to say "surfaced as a Switch/Keep card"; that
+ * card was deleted in eb74a9d8 and nothing has rendered one since.)
  */
 export function shouldAutoReroute(
   notifications: NotificationEvent[],
@@ -612,7 +623,8 @@ const MISSED_BUS_GRACE_SCHEDULED_MS = 180_000
 // boarded even if vehicle matching hasn't confirmed yet.
 const MISSED_BUS_MAX_RIDER_SPEED_MPS = 4
 // Within this range of the boarding stop, schedule-only data can't distinguish
-// "bus hasn't come" from "rider missed it" — stay ambiguous (card, not swap).
+// "bus hasn't come" from "rider missed it" — stay ambiguous, which means plan
+// alternatives and show them, never swap the trip.
 const MISSED_BUS_AT_STOP_RADIUS_M = 50
 
 /** Everything classifyMissedBus needs to judge the upcoming boarding. */
@@ -688,7 +700,9 @@ export function findBoardLegIndex(
  * `definitive` drives what happens next: a definitive miss auto-updates the
  * trip (the app should never ask the rider to confirm what it already knows);
  * an ambiguous one (schedule-only data while standing at the stop — the bus
- * may simply be late) surfaces the regular Switch/Keep card instead.
+ * may simply be late) must NOT swap the route, so it re-plans without applying
+ * and hands the rider the alternatives in the planner — see the ambiguous
+ * branch of handlePositionUpdate and {@link buildMissedBusOutcomeNotice}.
  */
 export function classifyMissedBus(
   input: MissedBusInput
@@ -792,35 +806,107 @@ export function classifyMissedBus(
   }
 }
 
+/** The route as the rider would name it. */
+function legRouteName(leg: Leg | undefined): string {
+  return leg?.routeShortName || leg?.routeLongName || 'your bus'
+}
+
 /**
- * Build the missed-bus notification (once per missed departure — the id is
- * keyed to the departure epoch, so a later miss of the *next* bus re-fires).
+ * Build the missed-bus notification for a DEFINITIVE miss (once per missed
+ * departure — the id is keyed to the departure epoch, so a later miss of the
+ * *next* bus re-fires).
+ *
+ * An AMBIGUOUS miss deliberately returns null and says nothing yet. It used to
+ * push "…may have left… — checking alternatives…" the instant it was detected,
+ * and that was the whole of it: the alternatives landed in `goMode.reRoute`
+ * 4.5 s later (2 real itineraries, 2026-09-03 18:24:39 → 18:24:43) and no
+ * screen has rendered that slice since eb74a9d8 deleted the Switch/Keep card.
+ * The rider was told a search was running and then never told anything again.
+ * The honest version is one push carrying the outcome, sent once the candidates
+ * are in — {@link buildMissedBusOutcomeNotice}, raised by handlePositionUpdate.
  */
 export function checkMissedBus(
   ctx: MissedBusContext,
   legs: Leg[],
   sentNotifications: string[]
 ): NotificationEvent | null {
+  if (!ctx.definitive) return null
   const boardLeg = legs[ctx.boardLegIndex]
-  const routeName =
-    boardLeg.routeShortName || boardLeg.routeLongName || 'your bus'
-  const stopName = boardLeg.from?.name || 'the stop'
+  const routeName = legRouteName(boardLeg)
 
   const id = generateNotificationId(
     'MISSED_BUS',
-    `${routeName}_${stopName}_${ctx.effectiveBoardMs}`
+    `${routeName}_${boardLeg.from?.name || 'the stop'}_${ctx.effectiveBoardMs}`
   )
   if (wasRecentlySent(id, sentNotifications, 30 * 60 * 1000)) return null
 
-  const message = ctx.definitive
-    ? `Missed the ${routeName} — updating your trip to the next departure.`
-    : `The ${routeName} may have left ${stopName} — checking alternatives…`
-
   return {
     id,
-    message,
+    message: `Missed the ${routeName} — updating your trip to the next departure.`,
     priority: 'high',
     timestamp: new Date(),
+    title: 'Missed bus',
+    type: 'MISSED_BUS'
+  }
+}
+
+/**
+ * The one push an AMBIGUOUS missed bus gets, built once its re-plan has
+ * settled — so it carries the answer instead of promising one.
+ *
+ * Copy is the rider's standing rule for notification text: the numbers they
+ * act on and nothing else. No clock times (the wait in minutes is what a rider
+ * standing at a stop uses), no coaching, no question — an ambiguous miss must
+ * never swap their route, so there is nothing to confirm. The route is named
+ * only when the best alternative is a DIFFERENT one; when the next departure of
+ * their own route is the answer, repeating its name adds nothing.
+ *
+ * `candidates` is `goMode.reRoute.candidates` — the itineraries the re-plan
+ * actually returned, ranked as collectRerouteCandidates left them. Empty means
+ * the search settled with nothing, and the rider is told that in the same push
+ * rather than left waiting on a search that already finished.
+ */
+export function buildMissedBusOutcomeNotice(input: {
+  candidates: Itinerary[]
+  ctx: MissedBusContext
+  legs: Leg[]
+  nowMs: number
+}): NotificationEvent {
+  const { candidates, ctx, legs, nowMs } = input
+  const missedRouteName = legRouteName(legs[ctx.boardLegIndex])
+
+  const best = candidates[0]
+  const bestTransitLeg = (best?.legs || []).find((l: Leg) => l.transitLeg)
+  const bestName = bestTransitLeg ? legRouteName(bestTransitLeg) : null
+  const boardMs = Number(bestTransitLeg?.startTime ?? best?.startTime)
+  const minutes = Number.isFinite(boardMs)
+    ? Math.max(0, Math.round((boardMs - nowMs) / 60000))
+    : null
+
+  let message: string
+  if (!best) {
+    message = `${missedRouteName} likely missed · no alternatives`
+  } else if (minutes == null) {
+    message = `${missedRouteName} likely missed · ${candidates.length} options`
+  } else if (bestName && bestName !== missedRouteName) {
+    message = `${missedRouteName} likely missed · ${bestName} in ${minutes} min`
+  } else {
+    message = `${missedRouteName} likely missed · next in ${minutes} min`
+  }
+
+  return {
+    id: generateNotificationId(
+      'MISSED_BUS',
+      `outcome_${missedRouteName}_${ctx.effectiveBoardMs}`
+    ),
+    message,
+
+    priority: 'high',
+    // One stable native id, so a second push (nothing → alternatives) REPLACES
+    // the first rather than stacking, and so a miss that turns out not to have
+    // happened can be taken off the rider's lock screen and their wrist.
+    pushId: MISSED_BUS_NOTICE_ID,
+    timestamp: new Date(nowMs),
     title: 'Missed bus',
     type: 'MISSED_BUS'
   }
