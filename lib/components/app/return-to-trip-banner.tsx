@@ -1,10 +1,12 @@
 import { connect } from 'react-redux'
 import { CSSTransition, TransitionGroup } from 'react-transition-group'
+import { isMobile } from '@opentripplanner/core-utils/lib/ui'
 import { useIntl } from 'react-intl'
 import React, { useRef } from 'react'
 import styled from 'styled-components'
 
 import * as goModeActions from '../../actions/go-mode'
+import { MobileScreens } from '../../actions/ui-constants'
 import useActiveTripGuards from '../go-mode/use-active-trip-guards'
 import type { GoModeState } from '../../reducers/go-mode'
 
@@ -57,6 +59,7 @@ const TransitionStyles = styled.div`
 
 interface Props {
   goMode: GoModeState
+  mobileScreen: number
   returnToGoMode: () => void
 }
 
@@ -67,12 +70,29 @@ interface Props {
  * screen on tap. Also keeps the active-trip guards (wake lock, reload
  * warning) alive while the Go Mode screen is unmounted.
  */
-const ReturnToTripBanner = ({ goMode, returnToGoMode }: Props): JSX.Element => {
+const ReturnToTripBanner = ({
+  goMode,
+  mobileScreen,
+  returnToGoMode
+}: Props): JSX.Element => {
   const intl = useIntl()
   const bannerRef = useRef<HTMLButtonElement>(null)
 
+  // `backgrounded` is the deliberate step-out (backgroundGoMode, the app menu,
+  // browseFromCurrentPosition) and stays the primary signal. The second clause
+  // is the safety net: on a phone, ANY screen other than Go Mode while a trip
+  // is running means the rider is looking at something else and needs a way
+  // back, whether or not the code that moved them remembered to arm the flag.
+  // On 2026-09-03 (session mtlutz2c-mfb2nx) a from-location change dropped a
+  // live trip onto the bare search form with the flag unset and no route back.
+  // Desktop is excluded: there the Go Mode screen is chosen by
+  // `isActive && !backgrounded` (responsive-webapp), not by mobileScreen, so
+  // reading mobileScreen there would show the banner over the trip screen.
+  const strandedOnMobile = isMobile() && mobileScreen !== MobileScreens.GO_MODE
   const visible = Boolean(
-    goMode?.isActive && goMode.activeItinerary && goMode.ui?.backgrounded
+    goMode?.isActive &&
+      goMode.activeItinerary &&
+      (goMode.ui?.backgrounded || strandedOnMobile)
   )
   useActiveTripGuards(visible)
 
@@ -131,7 +151,8 @@ const ReturnToTripBanner = ({ goMode, returnToGoMode }: Props): JSX.Element => {
 }
 
 const mapStateToProps = (state: any) => ({
-  goMode: state.otp.goMode
+  goMode: state.otp.goMode,
+  mobileScreen: state.otp.ui.mobileScreen
 })
 
 const mapDispatchToProps = {
