@@ -1722,7 +1722,7 @@ export function quietReplanAccessLeg() {
       category: 'CURRENT_LOCATION',
       lat: lastPosition.coords.latitude,
       lon: lastPosition.coords.longitude,
-      name: 'Current location'
+      name: CURRENT_LOCATION_NAME
     }
 
     // Rider exited Go Mode / a reroute started while a request was in flight?
