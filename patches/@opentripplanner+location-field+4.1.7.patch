@@ -1,5 +1,5 @@
 diff --git a/node_modules/@opentripplanner/location-field/esm/index.js b/node_modules/@opentripplanner/location-field/esm/index.js
-index 153c58e..edaef32 100644
+index 153c58e..4da0310 100644
 --- a/node_modules/@opentripplanner/location-field/esm/index.js
 +++ b/node_modules/@opentripplanner/location-field/esm/index.js
 @@ -229,6 +229,8 @@ var LocationField = function LocationField(_ref4) {
@@ -20,10 +20,10 @@ index 153c58e..edaef32 100644
      _ref4$preferredLayers = _ref4.preferredLayers,
      preferredLayers = _ref4$preferredLayers === void 0 ? [] : _ref4$preferredLayers,
      _ref4$sessionOptionIc = _ref4.sessionOptionIcon,
-@@ -631,6 +635,22 @@ var LocationField = function LocationField(_ref4) {
-   // array of menu item ids and associated locationSelected handlers for onKeyDown
-   // (does not include non-selectable items e.g. dividers/headings)
-   var indexedOptionLookup = [];
+@@ -640,6 +644,22 @@ var LocationField = function LocationField(_ref4) {
+       locationSelected: locationSelected
+     });
+   };
 +  // TransitNav fork (backlog 3.9 / 3.10): `pinCurrentLocationFirst` moves the
 +  // current-location entry from the bottom of the list to the top, and
 +  // `mapPickOption` adds one extra entry ("Choose on map") directly beneath it.
@@ -40,9 +40,9 @@ index 153c58e..edaef32 100644
 +      pushToIndexedOptions(mapPickOption.onClick, "choose-on-map");
 +    }
 +  }
-   var userLocationRenderData = showUserSettings ? userLocationsAndRecentPlaces.map(function (loc) {
-     return getRenderData(loc, setLocation, UserLocationIconComponent, intl);
-   }) : [];
+ 
+   /* 0) Include user saved locations if the typed text contains those locations name. */
+   if (showUserSettings) {
 @@ -879,12 +899,17 @@ var LocationField = function LocationField(_ref4) {
    }
    var optionId = "current-position";
@@ -99,7 +99,7 @@ index 153c58e..edaef32 100644
    var menuItemCount = indexedOptionLookup.length;
  
 diff --git a/node_modules/@opentripplanner/location-field/lib/index.js b/node_modules/@opentripplanner/location-field/lib/index.js
-index 1b70e99..e409060 100644
+index 1b70e99..02b38b4 100644
 --- a/node_modules/@opentripplanner/location-field/lib/index.js
 +++ b/node_modules/@opentripplanner/location-field/lib/index.js
 @@ -216,12 +216,14 @@ const LocationField = ({
@@ -117,10 +117,10 @@ index 1b70e99..e409060 100644
    preferredLayers = [],
    sessionOptionIcon = /*#__PURE__*/_react.default.createElement(_Search.Search, {
      size: _options.ICON_SIZE
-@@ -583,6 +585,22 @@ const LocationField = ({
-   // array of menu item ids and associated locationSelected handlers for onKeyDown
-   // (does not include non-selectable items e.g. dividers/headings)
-   const indexedOptionLookup = [];
+@@ -590,6 +592,24 @@ const LocationField = ({
+       locationSelected
+     });
+   };
 +  // TransitNav fork (backlog 3.9 / 3.10): `pinCurrentLocationFirst` moves the
 +  // current-location entry from the bottom of the list to the top, and
 +  // `mapPickOption` adds one extra entry ("Choose on map") directly beneath it.
@@ -137,10 +137,12 @@ index 1b70e99..e409060 100644
 +      pushToIndexedOptions(mapPickOption.onClick, "choose-on-map");
 +    }
 +  }
-   const userLocationRenderData = showUserSettings ? userLocationsAndRecentPlaces.map(loc => (0, _options.getRenderData)(loc, setLocation, UserLocationIconComponent, intl)) : [];
-   const pushToIndexedOptions = (locationSelected, id) => {
-     indexedOptionLookup.push({
-@@ -825,12 +843,17 @@ const LocationField = ({
++    });
++  };
+ 
+   /* 0) Include user saved locations if the typed text contains those locations name. */
+   if (showUserSettings) {
+@@ -825,12 +845,17 @@ const LocationField = ({
    }
    const optionId = `current-position`;
  
@@ -161,7 +163,7 @@ index 1b70e99..e409060 100644
        disabled: positionUnavailable,
        icon: optionIcon,
        id: optionId,
-@@ -840,6 +863,20 @@ const LocationField = ({
+@@ -840,6 +865,20 @@ const LocationField = ({
        title: optionTitle
      }));
    }
@@ -182,7 +184,7 @@ index 1b70e99..e409060 100644
    if (message && !message.includes("AbortError")) {
      if (geocodedFeatures.length === 0) {
        const icon = isFetching ? /*#__PURE__*/_react.default.createElement(S.Spinner, {
-@@ -857,6 +894,12 @@ const LocationField = ({
+@@ -857,6 +896,12 @@ const LocationField = ({
      statusMessages.push(message);
    }
  
