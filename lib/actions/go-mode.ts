@@ -145,7 +145,8 @@ import {
 } from '../util/go-mode/replan-acceptance'
 import { accessArriveByTarget } from '../util/go-mode/arrive-on-time'
 import { ridingSuppressedByRider } from '../util/go-mode/boarding-confirmation'
-import { isTripRecordingEnabled } from '../util/debug-log'
+import { isTripRecordingEnabled, recordSessionEvent } from '../util/debug-log'
+import { holdBundleWhileTripActive } from '../util/native-updates'
 import { fetchOnboardContext } from '../util/go-mode/onboard-discovery'
 import {
   hasNativeGps,
@@ -710,6 +711,10 @@ export function beginGoMode(rawItinerary: Itinerary) {
       currentQuery?.from ||
       null
     dispatch(startGoMode({ itinerary, originalFrom }))
+    // Stop the live-update plugin from installing a queued bundle the next
+    // time the phone is pocketed: `installNext()` runs on every background and
+    // knows nothing about a trip. See util/native-updates.
+    holdBundleWhileTripActive({ onHoldChange: recordSessionEvent })
     // While the trip is backgrounded (rider browsing the planner), an
     // auto-update swapping the itinerary through here must not yank the
     // screen back to Go Mode — explicit returns go through returnToGoMode.
@@ -794,6 +799,12 @@ export function startGoModeTracking(
   options: { replay?: boolean } = {}
 ) {
   return async function (dispatch: any, getState: any) {
+    // Every door into a live trip passes through here — a fresh start, a
+    // replan, a reroute, and the resume from storage — so this is the one
+    // place that guarantees the updater is held for the whole of it. A
+    // redundant call writes nothing.
+    holdBundleWhileTripActive({ onHoldChange: recordSessionEvent })
+
     // A trip that had ALREADY ARRIVED when the page came back. Everything below
     // that starts a repeating job — the boarding stop-time prefetch, live
     // vehicle polling, the reroute-snapshot capture, and the GPS poll's own
@@ -1071,6 +1082,12 @@ export function endGoMode() {
     }
     stopGpsWatchdog()
     stopRerouteSnapshotCapture()
+    // ...and the updater is allowed to install again. A bundle queued during
+    // the ride lands at the next background, or sooner through the apply gate.
+    holdBundleWhileTripActive({
+      active: false,
+      onHoldChange: recordSessionEvent
+    })
     // Stop the native background-location stream (iOS shell) — ends the blue
     // location indicator and the battery draw between trips. Its watchdog is
     // already down, so it can't restart the stream it just lost.

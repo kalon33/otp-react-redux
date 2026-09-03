@@ -415,3 +415,151 @@ describe('applyPendingBundleWhenSafe', () => {
     expect(window.location.hash).toBe('')
   })
 })
+
+// ---------------------------------------------------------------------------
+// The install nobody asked for: the plugin runs `installNext()` on EVERY
+// background (CapacitorUpdaterPlugin.java:5302-5303, .swift:4674-4675) with no
+// notion of a trip. Measured on the Play build 2026-09-03: a live restored trip
+// in the store, the phone pocketed, and `Setting next active bundle` →
+// `Reloading:` 14 ms later. The gate above cannot see that happen; only a
+// native delay condition can stop it.
+// ---------------------------------------------------------------------------
+describe('holdBundleWhileTripActive', () => {
+  function freshModule(): typeof import('../../lib/util/native-updates') {
+    jest.resetModules()
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    return require('../../lib/util/native-updates')
+  }
+
+  it('arms the one delay kind that survives being backgrounded', async () => {
+    const { bundleHoldActive, holdBundleWhileTripActive } = freshModule()
+    const setDelay = jest.fn(async () => undefined)
+    const onHoldChange = jest.fn()
+
+    expect(await holdBundleWhileTripActive({ onHoldChange, setDelay })).toBe(
+      'held'
+    )
+    // `kill`, and nothing else. checkCancelDelay keeps a kill condition on
+    // BACKGROUND and on FOREGROUND and drops it only on KILLED
+    // (DelayUpdateUtils.java:89-99, .swift:88-95). A `background` condition is
+    // dropped by Android's next foreground WHATEVER its value
+    // (DelayUpdateUtils.java:50-88), so the rider's first glance at the app
+    // would release the hold mid-ride.
+    expect(setDelay).toHaveBeenCalledWith([{ kind: 'kill' }])
+    expect(bundleHoldActive()).toBe(true)
+    expect(onHoldChange).toHaveBeenCalledWith('bundle_hold', {
+      conditions: ['kill']
+    })
+  })
+
+  it('does not rewrite the hold on every replan', async () => {
+    // startGoModeTracking is re-entered by every reroute, every auto-update and
+    // the resume; a prefs write per tick is noise, not safety.
+    const { holdBundleWhileTripActive } = freshModule()
+    const setDelay = jest.fn(async () => undefined)
+
+    await holdBundleWhileTripActive({ setDelay })
+    expect(await holdBundleWhileTripActive({ setDelay })).toBe('unchanged')
+    expect(setDelay).toHaveBeenCalledTimes(1)
+  })
+
+  it('writes once when the boot path and the trip start race', async () => {
+    // A resumed trip calls this twice in the same tick — main.js's boot-path
+    // hold and the one inside startGoModeTracking. Measured on the Play build
+    // 2026-09-03: two `Delay update saved` lines 5 ms apart.
+    const { holdBundleWhileTripActive } = freshModule()
+    let release: () => void = () => undefined
+    const setDelay = jest.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve
+        })
+    )
+
+    const both = Promise.all([
+      holdBundleWhileTripActive({ setDelay }),
+      holdBundleWhileTripActive({ setDelay })
+    ])
+    release()
+    expect(await both).toEqual(['held', 'unchanged'])
+    expect(setDelay).toHaveBeenCalledTimes(1)
+  })
+
+  it('releases the hold when the trip ends', async () => {
+    const { bundleHoldActive, holdBundleWhileTripActive } = freshModule()
+    const cancel = jest.fn(async () => undefined)
+    const onHoldChange = jest.fn()
+
+    await holdBundleWhileTripActive({ setDelay: async () => undefined })
+    expect(
+      await holdBundleWhileTripActive({ active: false, cancel, onHoldChange })
+    ).toBe('released')
+    expect(cancel).toHaveBeenCalledTimes(1)
+    expect(bundleHoldActive()).toBe(false)
+    expect(onHoldChange).toHaveBeenCalledWith('bundle_release', {
+      conditions: []
+    })
+  })
+
+  it('is a no-op without a bridge rather than a throw', async () => {
+    // A browser, or a store build older than the plugin method. Both must
+    // behave exactly as they did before this existed.
+    const { bundleHoldActive, holdBundleWhileTripActive } = freshModule()
+    expect(await holdBundleWhileTripActive()).toBe('unavailable')
+    expect(bundleHoldActive()).toBe(false)
+  })
+})
+
+describe('applyPendingBundleWhenSafe + the native hold', () => {
+  function freshModule(): typeof import('../../lib/util/native-updates') {
+    jest.resetModules()
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    return require('../../lib/util/native-updates')
+  }
+
+  const pendingOne = { id: 'ajW1J3Y76Q', version: '2026.0903.7' }
+  const deps = (over = {}) => ({
+    apply: jest.fn(),
+    holdBundle: jest.fn(async () => undefined),
+    isHealthConfirmed: () => true,
+    pendingBundle: async () => pendingOne,
+    releaseHold: jest.fn(async () => undefined),
+    runningBundleId: async () => '06NY2QCmaY',
+    stashHash: () => undefined,
+    ...over
+  })
+
+  it('arms the hold the moment a bundle is queued mid-trip', async () => {
+    // `setNext` fires exactly here (watchForPendingBundle), which is the
+    // earliest point at which the danger is known to exist at all — before
+    // this the queue was empty and there was nothing to hold back.
+    const { applyPendingBundleWhenSafe } = freshModule()
+    const d = deps({ isTripActive: () => true })
+
+    expect(await applyPendingBundleWhenSafe(d)).toBe('deferred: trip-active')
+    expect(d.holdBundle).toHaveBeenCalledTimes(1)
+    expect(d.apply).not.toHaveBeenCalled()
+    expect(d.releaseHold).not.toHaveBeenCalled()
+  })
+
+  it('releases the hold before it applies once the trip is over', async () => {
+    // `set()` does not consult the delay list (java:3100), so the swap would
+    // otherwise succeed and leave a kill condition behind to block the NEXT
+    // bundle for the life of the install.
+    const { applyPendingBundleWhenSafe } = freshModule()
+    const order: string[] = []
+    const d = deps({
+      apply: jest.fn(async () => {
+        order.push('apply')
+      }),
+      isTripActive: () => false,
+      releaseHold: jest.fn(async () => {
+        order.push('release')
+      })
+    })
+
+    expect(await applyPendingBundleWhenSafe(d)).toBe('applied')
+    expect(order).toEqual(['release', 'apply'])
+    expect(d.holdBundle).not.toHaveBeenCalled()
+  })
+})

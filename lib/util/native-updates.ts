@@ -28,6 +28,8 @@ interface UpdaterBridge {
     event: string,
     listener: (data: unknown) => void
   ) => Promise<unknown> | unknown
+  /** Clear every delay condition (definitions.d.ts:846). */
+  cancelDelay?: () => Promise<unknown>
   current: () => Promise<{
     bundle?: { id?: string; version?: string }
     native?: string
@@ -41,6 +43,21 @@ interface UpdaterBridge {
   notifyAppReady: () => Promise<unknown>
   /** Make a downloaded bundle current AND reload onto it. Never resolves. */
   set?: (options: { id: string }) => Promise<unknown>
+  /** Persist the conditions that must be met before a queued bundle is installed. */
+  setMultiDelay?: (options: {
+    delayConditions: DelayCondition[]
+  }) => Promise<unknown>
+}
+
+/**
+ * One of the plugin's install-delay conditions (definitions.d.ts:2058).
+ *
+ * `value` is meaningless for `kill`, milliseconds for `background`, an ISO
+ * date for `date`, and a version string for `nativeVersion`.
+ */
+export type DelayCondition = {
+  kind: 'background' | 'date' | 'kill' | 'nativeVersion'
+  value?: string
 }
 
 /** A downloaded bundle the plugin is holding, as the native side reports it. */
@@ -241,6 +258,163 @@ export async function confirmBundleHealthy(): Promise<void> {
 
 /**
  * -------------------------------------------------------------------------
+ * Holding a downloaded bundle for the length of a Go Mode trip.
+ * -------------------------------------------------------------------------
+ *
+ * The gate below only declines to apply a bundle EARLY. It cannot stop the one
+ * apply nobody asked for: the plugin installs a queued bundle whenever the app
+ * is BACKGROUNDED, with no idea a trip is running.
+ *
+ *   `appMovedToBackground()` → `installNext()`
+ *   (CapacitorUpdaterPlugin.java:5302-5303, .swift:4674-4675)
+ *
+ * Measured on the genuine Play build on 2026-09-03 with a live restored trip in
+ * the store: `App moved to background` → `Setting next active bundle` →
+ * `Reloading:` — the new bundle was loaded 14 ms after the phone was pocketed.
+ * A rider following turn-by-turn with the screen locked is exactly that case,
+ * and the swap destroys the JS context mid-ride.
+ *
+ * `installNext()` reads the plugin's delay list FIRST and returns without doing
+ * anything while it is non-empty (java:5114-5118, swift:4524-4533), and so does
+ * the direct-update branch for an already-downloaded bundle (java:4932-4945).
+ * So a delay condition is the lever — but only one KIND of condition survives
+ * the very event we need to survive.
+ *
+ * `checkCancelDelay(source)` runs on background, on foreground and on kill, and
+ * prunes the list itself (DelayUpdateUtils.java:38-152, .swift:47-152):
+ *
+ *   * `background` — kept on BACKGROUND, and on Android dropped on the next
+ *     FOREGROUND **whatever its value is**: the foreground branch only chooses
+ *     which line to log and never re-adds the condition (java:50-88). iOS does
+ *     honour the duration (swift:64-80). So `{kind:'background', value:<long>}`
+ *     would hold on the phone and evaporate on the rider's first glance at the
+ *     Android app. Not usable.
+ *   * `date` — kept until the timestamp passes. Survives, but a trip has no
+ *     honest end time (this is an app whose ETAs slide), and a mis-set date
+ *     holds the rider's phone on a stale bundle for as long as it names.
+ *   * `nativeVersion` — kept until the store build changes. Effectively
+ *     permanent; wrong tool.
+ *   * `kill` — kept on BACKGROUND and on FOREGROUND, dropped only on KILLED
+ *     (java:89-99, swift:88-95).
+ *
+ * `kill` is therefore the only kind that holds a bundle across the whole
+ * background/foreground cycle on both platforms, which is what a trip is. The
+ * name is about when the condition EXPIRES, not about what it waits for; we
+ * cancel it ourselves at the end of the trip.
+ *
+ * The one thing it does not survive is a relaunch: the plugin runs
+ * `checkCancelDelay(.killed)` from `load()` (java:934, swift:460), so a process
+ * that is killed mid-ride comes back with no hold. That is what the boot-path
+ * call in main.js is for — a resumed live trip re-arms it before anything else.
+ */
+
+/**
+ * What the hold is made of. One condition, the only one that survives a
+ * background→foreground round trip on both platforms.
+ */
+export const TRIP_HOLD_CONDITIONS: DelayCondition[] = [{ kind: 'kill' }]
+
+/** What a hold call did. */
+export type BundleHoldOutcome =
+  | 'held'
+  | 'released'
+  | 'unavailable'
+  | 'unchanged'
+
+/** Whether THIS app instance has armed the hold. */
+let bundleHeldForTrip = false
+
+/** True while a Go Mode trip is holding the updater off. */
+export function bundleHoldActive(): boolean {
+  return bundleHeldForTrip
+}
+
+export interface BundleHoldDeps {
+  /** True to arm the hold (trip starting/running), false to release it. */
+  active?: boolean
+  /** Clear every delay condition. */
+  cancel?: () => Promise<unknown>
+  /** Told when the hold is armed or released, for the debug-log sink. */
+  onHoldChange?: (
+    event: 'bundle_hold' | 'bundle_release',
+    fields: Record<string, unknown>
+  ) => void
+  /** Persist the delay conditions. */
+  setDelay?: (conditions: DelayCondition[]) => Promise<unknown>
+}
+
+/**
+ * Arm (or release) the native install hold for the length of a trip.
+ *
+ * Safe to call repeatedly: arming while already armed writes nothing, which
+ * matters because the Go Mode lifecycle passes through `startGoModeTracking`
+ * on every replan and every reroute. Releasing always calls through, because
+ * the cost of a stale hold is a rider stuck on an old bundle and the cost of
+ * one redundant `cancelDelay()` is a preferences write.
+ *
+ * Never throws: in a browser there is no bridge at all, and a shell too old to
+ * have the method is a phone that behaves exactly as it did before this
+ * existed. Both report `unavailable`.
+ */
+export async function holdBundleWhileTripActive(
+  deps: BundleHoldDeps = {}
+): Promise<BundleHoldOutcome> {
+  const {
+    active = true,
+    cancel = defaultCancelDelay,
+    onHoldChange,
+    setDelay = defaultSetDelay
+  } = deps
+
+  if (active && bundleHeldForTrip) return 'unchanged'
+
+  // Claimed BEFORE the await. Two lifecycle calls land in the same tick on a
+  // resumed trip — main.js's boot-path hold and the one inside
+  // `startGoModeTracking` — and with the flag set afterwards both would read
+  // `false` and both write. Measured on the Play build 2026-09-03: two
+  // `Delay update saved` lines 5 ms apart on every resume.
+  const wasHeld = bundleHeldForTrip
+  bundleHeldForTrip = active
+
+  try {
+    if (active) await setDelay(TRIP_HOLD_CONDITIONS)
+    else await cancel()
+  } catch {
+    // No bridge, or a shell without the method. The plugin's own
+    // next-background behaviour stands, which is where we started.
+    bundleHeldForTrip = wasHeld
+    return 'unavailable'
+  }
+
+  if (!active && !wasHeld) return 'unchanged'
+  try {
+    onHoldChange?.(active ? 'bundle_hold' : 'bundle_release', {
+      conditions: active ? TRIP_HOLD_CONDITIONS.map((c) => c.kind) : []
+    })
+  } catch {
+    // Diagnostics never break the update path.
+  }
+  return active ? 'held' : 'released'
+}
+
+/** Write the delay conditions through the plugin. */
+async function defaultSetDelay(
+  delayConditions: DelayCondition[]
+): Promise<unknown> {
+  const plugin = bridge()
+  if (!plugin?.setMultiDelay) throw new Error('no updater bridge')
+  return plugin.setMultiDelay({ delayConditions })
+}
+
+/** Clear every delay condition through the plugin. */
+async function defaultCancelDelay(): Promise<unknown> {
+  const plugin = bridge()
+  if (!plugin?.cancelDelay) throw new Error('no updater bridge')
+  return plugin.cancelDelay()
+}
+
+/**
+ * -------------------------------------------------------------------------
  * Applying a downloaded bundle without waiting for a second launch.
  * -------------------------------------------------------------------------
  *
@@ -398,10 +572,14 @@ export interface PendingBundleDeps {
   apply?: (id: string) => Promise<unknown>
   /** A bundle the caller already knows about (from a `setNext` event). */
   candidate?: PendingBundle | null
+  /** Arm the native install hold, because a trip is running. */
+  holdBundle?: () => Promise<unknown>
   /** Has the health gate pronounced the RUNNING bundle good? */
   isHealthConfirmed?: () => boolean
   /** Is a Go Mode trip running, or about to be resumed? */
   isTripActive?: () => boolean
+  /** Told when this gate arms or releases the hold. */
+  onHoldChange?: BundleHoldDeps['onHoldChange']
   /** Told every outcome worth recording, deduped against the previous one. */
   onOutcome?: (
     outcome: BundleApplyOutcome,
@@ -409,6 +587,8 @@ export interface PendingBundleDeps {
   ) => void
   /** Read the queued bundle. */
   pendingBundle?: () => Promise<PendingBundle | null>
+  /** Release the native install hold, because the trip is over. */
+  releaseHold?: () => Promise<unknown>
   /** Id of the bundle currently running. */
   runningBundleId?: () => Promise<string | null>
   /** Park the URL hash across the reload. */
@@ -437,10 +617,17 @@ export async function applyPendingBundleWhenSafe(
     candidate = null,
     isHealthConfirmed = () => recordedBundleHealth()?.confirmed === true,
     isTripActive = () => false,
+    onHoldChange,
     onOutcome,
     pendingBundle = defaultPendingBundle,
     runningBundleId = defaultRunningBundleId,
     stashHash = stashHashForReload
+  } = deps
+  const {
+    holdBundle = () =>
+      holdBundleWhileTripActive({ active: true, onHoldChange }),
+    releaseHold = () =>
+      holdBundleWhileTripActive({ active: false, onHoldChange })
   } = deps
 
   const report = (
@@ -470,8 +657,21 @@ export async function applyPendingBundleWhenSafe(
   const running = await runningBundleId()
   if (running && running === pending.id) return report('none-pending', pending)
 
+  // A bundle is queued and a trip is running: this is the moment the native
+  // side would install it at the next background, so arm the hold here as well
+  // as from the trip lifecycle. `setNext` fires exactly here, which makes this
+  // the earliest point at which the danger is known to exist at all.
+  const tripActive = isTripActive()
+  if (tripActive) await holdBundle()
+
   if (!isHealthConfirmed()) return report('deferred: unconfirmed', pending)
-  if (isTripActive()) return report('deferred: trip-active', pending)
+  if (tripActive) return report('deferred: trip-active', pending)
+
+  // The trip is over (or there never was one) and we are about to swap the
+  // bundle ourselves. Release first: `set()` does not consult the delay list
+  // (java:3100), so the hold would otherwise survive the reload as a stale
+  // condition blocking the NEXT bundle for the life of the install.
+  await releaseHold()
 
   // Past this line we are committed: mark first, so a second trigger arriving
   // while the reload is in flight cannot start another one.
