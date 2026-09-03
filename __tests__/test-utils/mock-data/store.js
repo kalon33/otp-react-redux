@@ -45,11 +45,15 @@ export function getMockInitialState() {
 export function mockWithProvider(
   ConnectedComponent,
   connectedComponentProps,
-  storeState = getMockInitialState()
+  storeState = getMockInitialState(),
+  // Jest maps i18n/*.yml to an empty object, so FormattedMessage normally
+  // renders message ids. Pass real (flattened) messages to assert on the copy
+  // a rider actually sees.
+  messages = undefined
 ) {
   const store = configureStore(storeMiddleWare)(storeState)
   const wrapper = mount(
-    <IntlProvider defaultLocale="en-US" locale="en-US">
+    <IntlProvider defaultLocale="en-US" locale="en-US" messages={messages}>
       <Provider store={store}>
         <ConnectedComponent {...connectedComponentProps} />
       </Provider>

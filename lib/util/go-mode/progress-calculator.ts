@@ -76,6 +76,10 @@ export interface TripProgress {
   // True while turn announcements are settling after a rejoin/projection jump
   // (see selectCueForNavigation) — the cue itself stays current and passive.
   turnAnnouncementsHeld?: boolean
+  // True when distanceToNextTurn is a straight line from the rider's raw fix
+  // to the turn rather than a distance along the route: the rider is off the
+  // corridor, so there is no route under them to measure along.
+  turnDistanceIsDirect?: boolean
   // Seconds of estimated wait at next stop (walking legs only)
   waitTimeAtStop?: number
 }
@@ -113,6 +117,75 @@ export function calculateOverallProgress(
 }
 
 /**
+ * Ground the rider still has to cover: what is left of the leg they are on,
+ * plus every leg after it. Plan distances, which is the only distance an
+ * itinerary carries — the point is the shape of the remainder, not a survey.
+ */
+export function remainingTripDistanceM(
+  legs: Leg[] | undefined,
+  currentLegIndex: number,
+  progressInCurrentLeg: number
+): number | null {
+  if (!legs?.length) return null
+  const clamped = Math.max(0, Math.min(1, progressInCurrentLeg))
+  let remaining = 0
+  for (let i = Math.max(0, currentLegIndex); i < legs.length; i++) {
+    const d = legs[i].distance
+    if (!Number.isFinite(d as number)) continue
+    remaining +=
+      i === currentLegIndex ? (d as number) * (1 - clamped) : (d as number)
+  }
+  return Number.isFinite(remaining) ? remaining : null
+}
+
+/**
+ * Speeds to fall back on when the rider's own fix carries none, m/s. Ordinary
+ * figures, not optimistic ones: a countdown that is a little long is a rider
+ * who arrives early, and the alternative this replaces is a countdown of zero.
+ */
+const PACE_FALLBACK_MPS: Record<string, number> = {
+  BICYCLE: 4.5,
+  MICROMOBILITY: 4.5,
+  MICROMOBILITY_RENT: 4.5,
+  SCOOTER: 4.5,
+  WALK: 1.35
+}
+const PACE_FALLBACK_TRANSIT_MPS = 8
+
+/**
+ * A rider's fix reports 0 m/s at every stop light. Below this the reported
+ * speed is not a pace, so the mode's own figure stands in — otherwise the
+ * first red light would divide by nothing and print an infinite countdown.
+ */
+const PACE_MIN_TRUSTED_MPS = 0.5
+
+/** How the remaining time is measured when no future arrival time is left. */
+export interface PaceContext {
+  distanceRemainingM?: number | null
+  /** Mode of the leg the rider is on, for the fallback speed. */
+  mode?: string | null
+  /** The rider's own ground speed from this fix, when it carries one. */
+  speedMps?: number | null
+}
+
+function paceRemainingSeconds(pace?: PaceContext | null): number | null {
+  if (!pace) return null
+  const distance = pace.distanceRemainingM
+  if (distance == null || !Number.isFinite(distance) || distance <= 0) {
+    return null
+  }
+  const reported = pace.speedMps
+  const speed =
+    reported != null &&
+    Number.isFinite(reported) &&
+    reported >= PACE_MIN_TRUSTED_MPS
+      ? reported
+      : PACE_FALLBACK_MPS[pace.mode || ''] ?? PACE_FALLBACK_TRANSIT_MPS
+  const seconds = distance / speed
+  return Number.isFinite(seconds) ? seconds : null
+}
+
+/**
  * Calculate time remaining based on current progress and scheduled times
  */
 export function calculateTimeRemaining(
@@ -120,7 +193,12 @@ export function calculateTimeRemaining(
   itinerary: Itinerary,
   currentLegIndex: number,
   progressInCurrentLeg: number,
-  liveTripEndMs?: number | null
+  liveTripEndMs?: number | null,
+  /**
+   * How to answer once the anchor has gone. Optional: without it the old
+   * `Math.max(0, ...)` clamp stands, byte for byte.
+   */
+  pace?: PaceContext | null
 ): number {
   // A countdown against the clock, not plan-span arithmetic.
   //
@@ -138,7 +216,23 @@ export function calculateTimeRemaining(
   const end =
     liveTripEndMs ??
     legEndFallback(itinerary, currentLegIndex, progressInCurrentLeg)
-  return Math.max(0, (end - currentTime.getTime()) / 1000)
+  const remaining = (end - currentTime.getTime()) / 1000
+  if (remaining > 0) return remaining
+
+  // The anchor is in the past, so it has stopped being an answer. Clamping to
+  // zero is not the honest one: on 2026-09-01 the rider's closing bike leg was
+  // measured against a plan end that had already passed, and `timeRemaining`
+  // read 0 with `estimatedArrival = now` on all 487 ticks from 1068 m out,
+  // while `delay` climbed to 634 s. What is left is a distance and a speed, so
+  // the countdown becomes the one thing still true: how long the ground ahead
+  // takes at the pace the rider is keeping.
+  //
+  // Note this pace context is WHOLE-TRIP: `remainingTripDistanceM` sums the
+  // current leg's remainder plus every leg after it, bus and far-side bike leg
+  // included. It is therefore NOT the number the bike buffer (6.10a) is built
+  // on — that one needs leg-scoped ground and computes its own
+  // (`legMetresAhead`, `pacing-card.ts`).
+  return paceRemainingSeconds(pace) ?? 0
 }
 
 /**
@@ -197,6 +291,39 @@ export const ARRIVAL_RADIUS_M = 75
 export const ARRIVAL_MIN_PROGRESS = 90
 
 /**
+ * The measured distance that vetoes arrival outright, however complete the
+ * progress scalar claims to be.
+ *
+ * 2026-09-01 ride 3, 11:10:06: the projection snapped `progressAlongLeg`
+ * 0.000 -> 1.000 in one 1 s tick (segmentIndex 0 -> 40 on a 41-segment,
+ * 1587 m bike polyline, on a 4.3 m fix delta), `overallProgress` went to 100,
+ * and the 99.5 branch below fired on it alone. `SET_ARRIVED`, the
+ * TRIP_COMPLETE push and the drop to the 30 s arrived tracking interval all
+ * went out while `distanceToDestination` was 159 m and `distanceFromRoute`
+ * 132 m with `isOnRoute: false`. The rider first came within 32 m of home
+ * three and a half minutes later, by which time the trip was recorded at an
+ * eighth of the fix rate.
+ *
+ * A projected scalar is a claim; the metres between the rider's own fix and
+ * the last leg's `to` are a measurement, and a measurement outranks a claim.
+ * So when that distance is known, it can veto — never grant — arrival.
+ *
+ * Deliberately LARGER than ARRIVAL_RADIUS_M rather than the ~40 m the finding
+ * proposed. Below 75 m this constant would swallow the distance branch above
+ * and become the only arrival rule; above it, all it removes is the
+ * progress-only override, and only out where no plausible destination
+ * geocode or GPS error puts a rider who has actually arrived. The failure it
+ * guards against is one-way (setArrived is a latch and the rider loses
+ * navigation), but so is the opposite failure — a trip that can never
+ * complete tracks forever — so the veto is set where it cannot be wrong.
+ *
+ * Checked against every arrival in the recorded telemetry: 2026-08-31 16:22:05
+ * (70 m), 18:52:55 (41 m) and 2026-09-01 08:59:37 (81 m) all still latch;
+ * 2026-09-01 11:10:06 (159 m) no longer does.
+ */
+export const ARRIVAL_MAX_DISTANCE_M = 120
+
+/**
  * Has the rider reached the destination?
  *
  * Progress alone was the whole test until 2026-08-27, when a rider's final bike
@@ -210,6 +337,17 @@ export function hasArrivedAtDestination(
   actualProgress: number,
   distanceToDestination: number | null | undefined
 ): boolean {
+  // The measurement first, and as a veto: a rider this far from where they
+  // asked to go has not arrived, whatever the projection says about them.
+  // Only a distance we actually have can veto — a missing one leaves the
+  // progress rules below exactly as they were.
+  if (
+    distanceToDestination != null &&
+    Number.isFinite(distanceToDestination) &&
+    distanceToDestination > ARRIVAL_MAX_DISTANCE_M
+  ) {
+    return false
+  }
   if (actualProgress >= 99.5) return true
   return (
     distanceToDestination != null &&
@@ -420,21 +558,30 @@ function legacyStopEstimate(
  * `isOnRoute` defaults to true so legacy callers keep today's behavior; pass
  * the real route-match verdict to get honest guidance. Off the route the
  * nearest-point projection is a fiction (on 7/29 it swept past three turns
- * while the rider rode a parallel street), so no turn fields come back at all
- * — not even the "Continue to X" filler, which is exactly the stale line the
- * rider shouldn't see while off the plan. The deviation toast and the quiet
- * replan own that state.
+ * while the rider rode a parallel street), so the along-route figures are
+ * never quoted and the "Continue to X" filler is suppressed — that stale line
+ * is exactly what the rider shouldn't see while off the plan.
+ *
+ * The TURN itself is not suppressed, though, when `riderPosition` is supplied:
+ * `selectCueForNavigation` holds the turn the rider is nearest to and measures
+ * it as a straight line from their own fix, flagged `turnDistanceIsDirect` so
+ * consumers can say so. Going blank instead is what lost the 2026-09-01
+ * `LEFT East 32nd Street` cue for the whole 16 s excursion in which the rider
+ * rode up to that very turn. The deviation toast and the quiet replan still
+ * own the "you are off the plan" message.
  */
 export function getWalkingInstruction(
   leg: Leg,
   progressInLeg: number,
-  isOnRoute = true
+  isOnRoute = true,
+  riderPosition?: LatLngArray | null
 ): {
   distanceToNextTurn?: number
   followingTurnCue?: StepCue
   nextInstruction?: string
   nextTurnCue?: StepCue
   turnAnnouncementsHeld?: boolean
+  turnDistanceIsDirect?: boolean
 } {
   if (leg.mode !== 'WALK' && leg.mode !== 'BICYCLE') {
     return {}
@@ -442,12 +589,13 @@ export function getWalkingInstruction(
 
   // Real turn-by-turn when the leg carries usable steps. Always consulted so
   // the per-leg cursor sees every tick, including off-route ones.
-  const { announceHold, cue, distanceToNextTurn, following } =
-    selectCueForNavigation(leg, progressInLeg, isOnRoute)
-
-  if (!isOnRoute) {
-    return {}
-  }
+  const {
+    announceHold,
+    cue,
+    distanceToNextTurn,
+    following,
+    turnDistanceIsDirect
+  } = selectCueForNavigation(leg, progressInLeg, isOnRoute, riderPosition)
 
   if (cue) {
     return {
@@ -455,8 +603,16 @@ export function getWalkingInstruction(
       followingTurnCue: following,
       nextInstruction: cue.instruction,
       nextTurnCue: cue,
-      turnAnnouncementsHeld: announceHold
+      turnAnnouncementsHeld: announceHold,
+      turnDistanceIsDirect
     }
+  }
+
+  // Off the corridor with no held turn (no steps, no position, or every turn
+  // behind the rider): the along-route remainder below would be measured on a
+  // projection the rider isn't on, so say nothing.
+  if (!isOnRoute) {
+    return {}
   }
 
   // No steps (OTP omits them for some legs), or every turn is behind the rider
@@ -698,7 +854,16 @@ export function calculateTripProgress(
     itinerary,
     currentLegIndex,
     progressInCurrentLeg,
-    liveTripEndMs
+    liveTripEndMs,
+    {
+      distanceRemainingM: remainingTripDistanceM(
+        legs,
+        currentLegIndex,
+        progressInCurrentLeg
+      ),
+      mode: legs[currentLegIndex]?.mode,
+      speedMps: riderSpeedMps
+    }
   )
 
   const estimatedArrival = estimateArrival(currentTime, timeRemaining)
@@ -735,7 +900,8 @@ export function calculateTripProgress(
   const walkingInfo = getWalkingInstruction(
     currentLeg,
     progressInCurrentLeg,
-    routeMatch?.isOnRoute ?? false
+    routeMatch?.isOnRoute ?? false,
+    riderPosition
   )
 
   // Get upcoming transit timing

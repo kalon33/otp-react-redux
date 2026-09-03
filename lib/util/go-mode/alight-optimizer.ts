@@ -1,7 +1,14 @@
 import type { Itinerary } from '@opentripplanner/types'
 
+import {
+  demoteTokenTransitHops,
+  demoteTokenTransitHopsBy,
+  transitRouteSignature
+} from '../itinerary'
+
 import { calculateDistance } from './position-matching'
 import { getLegRouteId } from './departure-anchor'
+import { legTripId } from './leg-merge'
 
 // --- Types ---
 
@@ -63,6 +70,35 @@ export function findStopTimeIndex(
     : -1
   if (byId >= 0) return byId
   return stopName ? stopTimes.findIndex((s) => s.stop?.name === stopName) : -1
+}
+
+/**
+ * Where a BUILT onboard itinerary actually puts the rider back on the pavement:
+ * the end of its leg on the boarded trip.
+ *
+ * An alight option's `stopId`/`stopName` are the PLANNING ANCHOR — the stop its
+ * onward plan was fetched from — and that is not always where the ride ends.
+ * OTP's onward plan legitimately opens with the boarded trip CONTINUING (the
+ * `otherThanPreferredRoutesPenalty` bias at the fetch makes it common), and
+ * `mergeAdjacentSameTripLegs` then folds that leg into the synthesized bus leg,
+ * correctly, into one continuous ride running on to ITS alight stop. The anchor
+ * is then a stop the rider rides straight past.
+ *
+ * Returns null when the itinerary carries no leg on that trip, and when the
+ * boarded trip id is unknown — callers keep the anchor in both cases.
+ */
+export function builtAlightStop(
+  itinerary: Itinerary | null | undefined,
+  boardedTripId: string | null | undefined
+): { stopId: string; stopName: string } | null {
+  if (!boardedTripId) return null
+  const leg: any = (itinerary?.legs || []).find(
+    (l: any) => l.transitLeg && legTripId(l) === boardedTripId
+  )
+  const to = leg?.to
+  const stopId = to?.stop?.gtfsId || to?.stop?.id || to?.stopId
+  if (!stopId || !to?.name) return null
+  return { stopId, stopName: to.name }
 }
 
 /**
@@ -214,18 +250,36 @@ export function clampNonLiveLegTimes<
       changed = true
     }
     // Raising the board time past a still-past alight time inverts the leg —
-    // the rider would be shown arriving before they got on. Carry the alight
-    // with it. Scoped to the raise we just made: everywhere else board and
-    // alight are deliberately independent, and a merely-late live pair is
-    // honest data, not an inversion. (8/2: this shape drove the
-    // once-per-second SET_LIVE_LEG_TIMES churn through the whole ride.)
+    // the rider would be shown arriving before they got on. Scoped to the
+    // raise we just made: everywhere else board and alight are deliberately
+    // independent, and a merely-late live pair is honest data, not an
+    // inversion.
+    //
+    // WHICH end gives way depends on which one is evidence. A schedule-only
+    // alight is bookkeeping and moves with the board (8/2). A REALTIME alight
+    // is the feed's own statement about when this trip reaches the stop, and
+    // on 2026-09-01 moving it was trip-ending: the Orange Line's alight sat in
+    // the past at 13:50:00Z, flagged live and re-written by every 20 s poll,
+    // while the schedule-only board was raised to `now` on every 1 Hz tick and
+    // dragged the alight up with it. The trip's live end therefore became
+    // `now` once a second, so `timeRemaining` printed exactly 400.0 s — the
+    // trailing legs' duration — on every tick while `distanceToDestination`
+    // fell 1745 -> 1648 m, and `estimatedArrival` slid with the wall clock and
+    // could never arrive. Once per poll the real figure got through, and the
+    // rider saw 2.7 min / 13:51:41 and then 6.7 min / 13:55:38 one second
+    // apart. So when the alight is live, the BOARD gives way instead: a rider
+    // whose bus has already reached the alight stop boarded no later than
+    // that, and the leg stays the right way round either way.
     if (
       boardRaised &&
       next.alightEpoch != null &&
       next.boardEpoch != null &&
       next.alightEpoch < next.boardEpoch
     ) {
-      next = { ...next, alightEpoch: next.boardEpoch }
+      next =
+        next.alightRealtime ?? next.realtime
+          ? { ...next, boardEpoch: next.alightEpoch }
+          : { ...next, alightEpoch: next.boardEpoch }
     }
     out[idx] = next
   }
@@ -478,6 +532,102 @@ export interface AlightCandidateResult {
   stopName: string
 }
 
+/**
+ * How long the optimizer waits for ALL candidate plans before ranking whatever
+ * came back.
+ *
+ * The per-request deadline in actions/api (GO_MODE_FETCH_TIMEOUT_MS, 12 s) is
+ * the first line: it makes each candidate settle. This is the second, and it
+ * exists because the first one is a promise about one fetch and this is a
+ * promise to the rider about the whole answer. Before 2026-09-02 there was
+ * neither: `Promise.all` over five candidate plans resolved only when the last
+ * one did, and on 2026-08-31 three of the five never did — the rider watched an
+ * empty panel for 9m11s (17:22:25 to CLEAR_ONBOARD at 17:31:36) and no state
+ * anywhere said the search had failed.
+ *
+ * 15 s, comfortably past the per-request deadline so a straggler is normally
+ * killed by its own timeout and this never fires. It is the backstop for the
+ * failure the 08-31 log actually shows: a request that settles by no route at
+ * all.
+ */
+export const ONBOARD_CANDIDATE_SETTLE_MS = 15000
+
+/**
+ * Why a candidate was substituted rather than answered.
+ *
+ * `'rejected'` is final — that request is over and nothing will arrive later.
+ * `'timeout'` is not: the request is still in flight, and it is the only case
+ * where a straggler can still land (see `onLate`). The optimizer counts them
+ * apart so the rider is only told "still checking" about candidates that
+ * really might still answer.
+ */
+export type UnsettledReason = 'rejected' | 'timeout'
+
+/**
+ * Wait for candidate plans, but not forever: whatever has settled by the
+ * deadline is returned, and anything still outstanding is replaced by
+ * `onTimeout(index, reason)` — for the optimizer, a result marked `error`,
+ * which rankAlightOptions already skips.
+ *
+ * Two of five plans are a worse answer than five of five and a far better one
+ * than no answer, which is what waiting for all five bought on 08-31.
+ *
+ * `onLate` closes the other half of that trade: a plan that lands AFTER the
+ * deadline is otherwise thrown away, and the answer the rider is looking at
+ * stays permanently short. This stays a pure utility — it has no store and no
+ * idea what a re-rank would mean — so it only reports the late value and lets
+ * the caller decide whether it is still safe to use.
+ */
+export async function settleCandidatePlans<T>(
+  plans: Array<Promise<T>>,
+  timeoutMs: number,
+  onTimeout: (index: number, reason: UnsettledReason) => T,
+  onLate?: (index: number, value: T) => void
+): Promise<T[]> {
+  if (!plans.length) return []
+  const settled: Array<{ done: boolean; value?: T }> = plans.map(() => ({
+    done: false
+  }))
+  // Indices the caller was handed a substitute for. Filled synchronously
+  // below, before this function returns, so a plan whose `.then` runs in a
+  // later microtask can never be reported both ways.
+  const substituted = new Set<number>()
+  let handedOff = false
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let timer: any = null
+  const tracked = plans.map((plan, index) =>
+    plan.then(
+      (value) => {
+        settled[index] = { done: true, value }
+        // Landed after the answer was already handed to the caller.
+        if (handedOff && substituted.has(index) && onLate) onLate(index, value)
+      },
+      () => {
+        // A rejected plan is a failed candidate, not a failed optimize. The
+        // fetch layer resolves rather than rejects, so this is belt and braces.
+        settled[index] = { done: true, value: onTimeout(index, 'rejected') }
+      }
+    )
+  )
+  const deadline =
+    timeoutMs > 0
+      ? new Promise<void>((resolve) => {
+          timer = setTimeout(resolve, timeoutMs)
+        })
+      : null
+  await (deadline
+    ? Promise.race([Promise.all(tracked), deadline])
+    : Promise.all(tracked))
+  if (timer) clearTimeout(timer)
+  const results = settled.map((entry, index) => {
+    if (entry.done) return entry.value as T
+    substituted.add(index)
+    return onTimeout(index, 'timeout')
+  })
+  handedOff = true
+  return results
+}
+
 /** The chosen best stop to get off, with its remaining-journey itinerary. */
 export interface AlightOption {
   busArrivalEpoch: number
@@ -607,7 +757,7 @@ function compareAlightOptions(
  * leg), used to drop duplicate options the multi-stop search surfaces more than
  * once. Mirrors collectRerouteCandidates' dedup idiom in
  * lib/util/go-mode/reroute-candidates.ts. */
-function journeySignature(stopId: string, itinerary: Itinerary): string {
+export function journeySignature(stopId: string, itinerary: Itinerary): string {
   const legs = (itinerary.legs || [])
     .map(
       (l: any) =>
@@ -639,11 +789,15 @@ export function rankAlightOptions(
     keepRouteId = null,
     limit = 5,
     nowMs = null,
+    tokenHopMaxMeters,
+    tokenHopToleranceMs,
     walkOnlyMax = 1200
   }: {
     keepRouteId?: string | null
     limit?: number
     nowMs?: number | null
+    tokenHopMaxMeters?: number
+    tokenHopToleranceMs?: number
     walkOnlyMax?: number
   } = {}
 ): AlightOption[] {
@@ -666,6 +820,18 @@ export function rankAlightOptions(
 
   scored.sort((a, b) => compareAlightOptions(a, b, keepRouteId))
 
+  // An onward plan that ends with a token bus hop does not get to sit above the
+  // same journey without it (4.2). Applied BEFORE the dedupe and the cap, so a
+  // hop-free sibling that the arrival sort had pushed past `limit` gets its
+  // place back rather than being cut and then not found. Reorders only —
+  // keepRouteId's held slot below still works off the full deduped list, so the
+  // rider's own route can never be demoted out of the answer.
+  const ordered = demoteTokenTransitHopsBy(
+    scored,
+    (option) => option.itinerary,
+    { maxHopMeters: tokenHopMaxMeters, toleranceMs: tokenHopToleranceMs }
+  )
+
   const strip = (option: AlightOption & { arrival: number }): AlightOption => ({
     busArrivalEpoch: option.busArrivalEpoch,
     itinerary: option.itinerary,
@@ -677,7 +843,7 @@ export function rankAlightOptions(
   const seen = new Set<string>()
   const ranked: AlightOption[] = []
   const deduped: Array<AlightOption & { arrival: number }> = []
-  for (const option of scored) {
+  for (const option of ordered) {
     const sig = journeySignature(option.stopId, option.itinerary)
     if (seen.has(sig)) continue
     seen.add(sig)
@@ -735,5 +901,89 @@ export function pickSameRouteAlight(
     (options || []).find(
       (o) => onwardRouteOfItinerary(o.itinerary) === routeId
     ) ?? null
+  )
+}
+
+/**
+ * One row of the onboard "where do you want to get off?" list.
+ *
+ * `option` is what the row renders and what a tap starts; `variants` is every
+ * option that folded into it, `option` first.
+ */
+export interface OnboardOptionGroup<T> {
+  option: T
+  variants: T[]
+}
+
+/** The itinerary an onboard option DISPLAYS: current-bus leg included. */
+function displayItineraryOf(option: {
+  displayItinerary?: Itinerary
+  itinerary: Itinerary
+}): Itinerary {
+  return option.displayItinerary || option.itinerary
+}
+
+/**
+ * Fold the ranked alight options into display rows, the way the planner's
+ * results list folds its itineraries.
+ *
+ * The rider, 2026-08-27: *"on the already on the bus search they aren't
+ * stacked, just a list of the same routes."* They were right — five ranked
+ * options off one bus are routinely the SAME route chain reached from five
+ * different alight stops, and `mergeByRouteSignature` (which fixed exactly
+ * this on the planner path, `0d37eed2`) is applied in
+ * narrative-itineraries.js and nowhere else. So this is the same idiom on the
+ * onboard path: group by `transitRouteSignature` of the displayed itinerary,
+ * keep the best-ranked member as the row, and hang the rest off it for the
+ * drill-down (the alight stop each one uses is a real choice — it can be a
+ * mile of closing bike either way — so nothing is dropped).
+ *
+ * An itinerary with no transit after the bus has an empty signature; those are
+ * NOT grouped together, for the same reason `itinerariesAreEqual` refuses to —
+ * "bike from 98th St" and "bike from Nicollet" share nothing but the absence
+ * of a route.
+ *
+ * Rows are then reordered by `demoteTokenTransitHops`, which the planner list
+ * applies to its own merged rows: a 602 m hop that ends in a 1743 m bike does
+ * not get to sit above the same journey without it. Reorder only; nothing is
+ * removed.
+ */
+export function groupAlightOptionsByRoute<
+  T extends { displayItinerary?: Itinerary; itinerary: Itinerary }
+>(
+  options: T[] | null | undefined,
+  {
+    maxHopMeters,
+    toleranceMs
+  }: { maxHopMeters?: number; toleranceMs?: number } = {}
+): Array<OnboardOptionGroup<T>> {
+  const groups: Array<OnboardOptionGroup<T>> = []
+  const bySignature = new Map<string, OnboardOptionGroup<T>>()
+
+  ;(options || []).forEach((option) => {
+    if (!option) return
+    const signature = transitRouteSignature(displayItineraryOf(option))
+    const existing = signature ? bySignature.get(signature) : undefined
+    if (existing) {
+      existing.variants.push(option)
+      return
+    }
+    const group: OnboardOptionGroup<T> = { option, variants: [option] }
+    if (signature) bySignature.set(signature, group)
+    groups.push(group)
+  })
+
+  if (groups.length < 2) return groups
+
+  // demoteTokenTransitHops is a stable partition over itineraries, so tag each
+  // row's displayed itinerary with its position, reorder, and read the rows
+  // back out. The tag is a shallow copy: nothing the caller holds is mutated.
+  const tagged = groups.map((group, index) =>
+    Object.assign({}, displayItineraryOf(group.option), {
+      __groupIndex: index
+    })
+  )
+  return demoteTokenTransitHops(tagged, { maxHopMeters, toleranceMs }).map(
+    (itin) => groups[itin.__groupIndex]
   )
 }

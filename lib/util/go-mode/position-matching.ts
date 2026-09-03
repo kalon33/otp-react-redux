@@ -169,6 +169,16 @@ export interface RouteMatchResult {
   // 0-1
   progressAlongSegment: number
   segmentIndex: number
+  /**
+   * Ground metres the RIDER has covered that this projection never accounted
+   * for — their own displacement, less however far the projection actually
+   * moved along the leg, floored at zero and carried across ticks. Near zero
+   * while the projection tracks the rider; it grows only when the rider is
+   * moving and the projection is not, which is the one situation in which a
+   * large re-snap is owed. Set only when a caller supplies `movedSinceFixM`;
+   * callers that do not get the field-for-field old result.
+   */
+  unaccountedPathM?: number
 }
 
 /**
@@ -250,6 +260,34 @@ export const MATCH_JUMP_CEILING_TRANSIT_MPS = 40
 export const MATCH_JUMP_SLACK_M = 50
 
 /**
+ * The same slack, for callers that can say how far the rider actually moved.
+ *
+ * MATCH_JUMP_SLACK_M has to be generous because the only other term in the
+ * budget is a MODE ceiling — 15 m/s for a bicycle — which says nothing about
+ * whether this particular rider moved at all. That is precisely the hole 6.5
+ * fell through twice: 2026-09-01 08:56:20, a 6.9 m fix advanced the projection
+ * 0.0958 -> 0.1519 of a ~1030 m leg (~53 m) at a corner where the shape doubles
+ * back, and 11:10:06, a 4.3 m fix advanced it 0.000 -> 1.000 of a 1587 m leg.
+ * Both sit under 50 + 15, so the ceiling never saw either.
+ *
+ * With the rider's own displacement in hand the slack no longer has to stand in
+ * for it, so it can be half the size and still leave a moving rider several
+ * times the headroom they use.
+ */
+export const MATCH_JUMP_SLACK_MOVED_M = 25
+
+/**
+ * How much further than the unaccounted ground the projection may travel when
+ * it finally catches up.
+ *
+ * Displacement is a chord and the leg is a path, so the two are not the same
+ * quantity: corners, a shape that doubles back, and a sparse transit polyline
+ * all let honest along-leg movement exceed the straight line between fixes.
+ * Doubling it is the allowance for that.
+ */
+export const MATCH_PATH_FACTOR = 2
+
+/**
  * Same figure, and the same meaning, as `FIX_ACCURACY_MAX_M` in transit-trust —
  * duplicated rather than imported because transit-trust imports THIS module and
  * the cycle is not worth a shared constants file for one number. A fix that
@@ -269,6 +307,14 @@ export const MATCH_FIX_ACCURACY_TRUSTED_M = 100
 export type ContinuityGate = {
   /** Reported accuracy of THIS fix in metres (position.coords.accuracy). */
   accuracyM?: number | null
+  /**
+   * Ground metres between the PREVIOUS fix and this one. The rider's own
+   * displacement is the self-calibrating half of the budget: a bus on a
+   * freeway earns its own allowance, and a rider who has not moved earns
+   * none. Optional — omit it and the budget is the mode ceiling alone,
+   * exactly as before.
+   */
+  movedSinceFixM?: number | null
   /** Timestamp of THIS fix in epoch ms (position.timestamp). */
   nowMs?: number | null
   /**
@@ -314,7 +360,13 @@ function exceedsJumpBudget(
   winnerLegDistance: number,
   previousMatch: RouteMatchResult | null | undefined,
   legs: Leg[],
-  gate: ContinuityGate
+  gate: ContinuityGate,
+  /**
+   * Ground metres the rider has covered that the projection never accounted
+   * for, this fix included. Null when the caller supplies no displacement,
+   * which leaves the mode-ceiling budget untouched.
+   */
+  riderPathM: number | null
 ): boolean {
   if (previousMatch == null) return false
   // Elapsed is measured from when the held projection was ESTABLISHED, not from
@@ -330,11 +382,59 @@ function exceedsJumpBudget(
 
   const movedM = continuityGapM(previousMatch, winner, winnerLegDistance)
 
-  return (
-    movedM >
-    MATCH_JUMP_SLACK_M +
-      jumpCeilingMps(legs[winner.legIndex], gate.accuracyM) * elapsedSec
-  )
+  if (riderPathM == null || !Number.isFinite(riderPathM)) {
+    return (
+      movedM >
+      MATCH_JUMP_SLACK_M +
+        jumpCeilingMps(legs[winner.legIndex], gate.accuracyM) * elapsedSec
+    )
+  }
+
+  // With the rider's own ground in hand the clock drops out of the budget
+  // entirely, and that is the point.
+  //
+  // A mode ceiling is what the rider COULD have covered in the elapsed time,
+  // which means it issues licence to a rider who has not moved — it only has
+  // to be waited out. Replayed against ride 3's own track, the ceiling refused
+  // the 1587 m snap on the tick it arrived and then admitted 1545 m of it two
+  // minutes later, on a 16 m fix, purely because 15 m/s x 122 s had grown past
+  // the whole leg. Session 1.4 recorded that shape in the abstract ("a rate
+  // limiter defers a jump rather than removing it"); this is what the deferral
+  // costs, and it is why Session 1.9 asked for the rider's own displacement in
+  // its place.
+  //
+  // What is left is ground: what the rider has covered that the projection
+  // never accounted for, plus this fix's own step. A projection that tracks
+  // the rider is licensed by the step alone and never gated; one that has sat
+  // still while the rider rode earns its correction at the rate they ride, and
+  // one that wants to move a kilometre on a 4 m fix gets nothing.
+  //
+  // ...along ONE leg. A candidate on a different leg is not a claim about
+  // progress at all: `continuityGapM` switches to the straight line between
+  // the two nearest points, so what is being measured is the offset between
+  // where one polyline ends and where the rider projects onto the next — a
+  // change of reference line, not ground the projection says it covered.
+  //
+  // The halved slack was justified by displacement standing in for the mode
+  // ceiling, and displacement is the wrong quantity here for the one case that
+  // matters most: boarding. A rider waiting at the stop is stationary BY
+  // DEFINITION — that is what waiting is — so they earn no ground allowance on
+  // the tick the bus is finally due, and the leg-0 projection they are pinned
+  // to can never reach leg 1. Measured on the 2026-08-27 board-gate fixture:
+  // the bike leg's end and the bus leg's shape are 39.4 m apart, the rider's
+  // step between ticks is 0.00 m, and the trip never boards on any tick. Every
+  // sighting behind the ground budget (2026-09-01 08:56:20 and 11:10:06) is a
+  // same-leg snap, so the leg boundary is not where its evidence lives.
+  //
+  // So across a leg boundary the original slack stands. The clock still drops
+  // out — this is tighter than the mode-ceiling budget it replaced, which
+  // would have added 15 m/s of licence on top — and the rider's own ground
+  // still widens it.
+  const slackM =
+    winner.legIndex === previousMatch.legIndex
+      ? MATCH_JUMP_SLACK_MOVED_M
+      : MATCH_JUMP_SLACK_M
+  return movedM > slackM + riderPathM * MATCH_PATH_FACTOR
 }
 
 /**
@@ -490,14 +590,54 @@ export function matchPositionToRoute(
   }
   if (!gate || !winner) return winner
 
+  // Ground the rider has covered that the projection has not: the running
+  // total carried on the held match, plus this fix's own step.
+  const stepM = gate.movedSinceFixM
+  const hasStep = stepM != null && Number.isFinite(stepM) && stepM >= 0
+  const unaccountedM = hasStep
+    ? (previousMatch?.unaccountedPathM ?? 0) + (stepM as number)
+    : null
+
   // Held verbatim, stamp included: the previous projection is still the best
   // statement about where the rider is, and re-stamping it would reset the
-  // budget and pin the rider for good.
-  if (exceedsJumpBudget(winner, winnerLegDistance, previousMatch, legs, gate)) {
-    return previousMatch as RouteMatchResult
+  // budget and pin the rider for good. The path accumulator is the one thing
+  // that does advance — it is the evidence that will eventually release the
+  // hold, not part of the projection.
+  if (
+    exceedsJumpBudget(
+      winner,
+      winnerLegDistance,
+      previousMatch,
+      legs,
+      gate,
+      unaccountedM
+    )
+  ) {
+    const held = previousMatch as RouteMatchResult
+    return unaccountedM == null
+      ? held
+      : { ...held, unaccountedPathM: unaccountedM }
   }
 
-  return gate.nowMs == null ? winner : { ...winner, matchedAtMs: gate.nowMs }
+  // Accepted: whatever ground the projection just covered along the leg is
+  // ground it has now accounted for. A projection tracking the rider settles
+  // at zero; one that is accepted every tick but barely moves keeps the
+  // remainder, which is what stops a stuck-but-locally-best projection from
+  // resetting its own evidence and pinning the rider for good.
+  const accountedM =
+    unaccountedM == null || previousMatch == null
+      ? 0
+      : Math.max(
+          0,
+          unaccountedM -
+            continuityGapM(previousMatch, winner, winnerLegDistance)
+        )
+  const accepted = hasStep
+    ? { ...winner, unaccountedPathM: accountedM }
+    : winner
+  return gate.nowMs == null
+    ? accepted
+    : { ...accepted, matchedAtMs: gate.nowMs }
 }
 
 /**
@@ -525,6 +665,25 @@ export function matchPositionToRoute(
  */
 export const TRANSIT_BOARD_EARLY_MS = 5 * 60 * 1000
 
+/**
+ * How close to the target transit leg's shape the rider must be for the trip
+ * to step onto it.
+ *
+ * The clock says a bus is due; it says nothing about where the rider is. On
+ * 2026-09-01 ride 2 the matcher's own legIndex moved to the Orange Line leg at
+ * 10:37:33 while the rider was **810 m** off it, `isOnRoute: false`, cycling —
+ * and the board window opened at 10:42:09, so TRANSITION_LEG followed with the
+ * rider 1003.7 m away and still `isOnRoute: false`. Everything keyed off the
+ * transitioned leg then ran against a bus polyline for someone on a bicycle
+ * for the next four and a half minutes (backlog 6.3).
+ *
+ * Same figure as riding.ts's RIDING_ESTABLISH_MAX_DISTANCE_M and the matcher's
+ * own MATCH_CORRIDOR_ACTIVE_M — one metre-count for "the rider is at this
+ * line", not three. A rider waiting on the platform measures 20-31 m (ride 1,
+ * 08:25:30-08:26:26), so this does not delay the ordinary case by one tick.
+ */
+export const TRANSIT_BOARD_MAX_DISTANCE_M = MATCH_CORRIDOR_ACTIVE_M
+
 export type TransitionGate = {
   /** Live board epoch for the target leg, when one is known. */
   boardEpoch?: number | null
@@ -551,6 +710,12 @@ export function shouldTransitionToNextLeg(
   // Callers that supply no clock or no leg keep the old index-order behaviour.
   if (!targetLeg || nowMs == null) return true
   if (!legIsTransit(targetLeg)) return true
+
+  // The clock is not a statement about position. A rider four and a half
+  // minutes and 800 m from the stop is not boarding, whatever the timetable
+  // says — see TRANSIT_BOARD_MAX_DISTANCE_M.
+  if (!match.isOnRoute) return false
+  if (match.distanceFromRoute > TRANSIT_BOARD_MAX_DISTANCE_M) return false
 
   // Prefer the live board time; a bus running late should not pull the rider
   // onto its leg on the strength of the plan alone.

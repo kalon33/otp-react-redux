@@ -271,11 +271,100 @@ describe('util > go-mode > turn-by-turn', () => {
     // Progress fraction for a metre offset on that 2000 m leg.
     const at = (meters: number) => meters / (20 * VERTEX_M)
 
-    it('returns no cue at all while the rider is off the route', () => {
+    // A point `eastM` metres east of the leg's line, level with vertex
+    // `latVertex` — i.e. a rider on a parallel street.
+    const beside = (latVertex: number, eastM: number): [number, number] => [
+      ORIGIN_LAT + latVertex * STEP_DEG,
+      ORIGIN_LON + eastM / (111320 * Math.cos((ORIGIN_LAT * Math.PI) / 180))
+    ]
+
+    it('returns no cue off the route when the caller gives no position', () => {
       const leg = makeNavLeg()
       // The projection says ~40% along, but the rider is not on the route —
       // that projection is a fiction (7/29: it swept past three real turns).
+      // Without the rider's own fix there is nothing honest to measure with,
+      // so callers that pass none keep the old silence.
       expect(selectCueForNavigation(leg, at(800), false)).toEqual({})
+    })
+
+    it('holds a turn off the route, measured straight from the rider', () => {
+      const leg = makeNavLeg()
+      selectCueForNavigation(leg, at(250), true)
+      // Off on a parallel street 150 m east, level with vertex 5.5, with the
+      // projection dragged to 650 m. The rider is nearer the 700 m turn than
+      // the 300 m one they were last given, so that is the turn to hold.
+      const off = selectCueForNavigation(leg, at(650), false, beside(5.5, 150))
+      expect(off.cue!.instruction).toBe('Turn right on Colfax Ave S')
+      expect(off.turnDistanceIsDirect).toBe(true)
+      // Straight line to the corner (~150 m across, ~150 m up), NOT the 50 m
+      // the projection would have claimed.
+      expect(off.distanceToNextTurn).toBeGreaterThan(200)
+      expect(off.distanceToNextTurn).toBeLessThan(225)
+    })
+
+    it('never falls back to a turn given before the excursion', () => {
+      const leg = makeNavLeg()
+      selectCueForNavigation(leg, at(250), true)
+      // The projection stays pinned where the rider left the line (the
+      // 2026-09-01 freeze), so the held turn is the one that was current.
+      const off = selectCueForNavigation(leg, at(250), false, beside(3.5, 150))
+      expect(off.cue!.instruction).toBe('Turn left on W 24th St')
+      // …and never the one behind it, however near the rider drifts to it.
+      const back = selectCueForNavigation(leg, at(250), false, beside(0, 5))
+      expect(back.cue!.instruction).toBe('Turn left on W 24th St')
+    })
+
+    it('announces an off-route turn only once the rider is closing on it', () => {
+      const leg = makeNavLeg()
+      selectCueForNavigation(leg, at(250), true)
+      const held = [5.5, 6, 6.5, 7].map(
+        (v) =>
+          selectCueForNavigation(leg, at(650), false, beside(v, 150))
+            .announceHold
+      )
+      // Three closing ticks of evidence, then the buzz is allowed.
+      expect(held).toEqual([true, true, true, false])
+    })
+
+    it('stays silent about an off-route turn the rider rides away from', () => {
+      const leg = makeNavLeg()
+      selectCueForNavigation(leg, at(250), true)
+      const held = [7, 6.5, 6, 5.5, 5].map(
+        (v) =>
+          selectCueForNavigation(leg, at(650), false, beside(v, 150))
+            .announceHold
+      )
+      // The 7/29 complaint, verbatim: a turn behind the rider never converges,
+      // so it is never announced — it just sits on the card.
+      expect(held).toEqual([true, true, true, true, true])
+    })
+
+    it('drops a held turn silently when the rejoin lands past it', () => {
+      const leg = makeNavLeg()
+      const surfaced: string[] = []
+      const record = (r: ReturnType<typeof selectCueForNavigation>) => {
+        if (r.cue) surfaced.push(r.cue.instruction)
+        return r
+      }
+      record(selectCueForNavigation(leg, at(250), true))
+      for (const v of [5.5, 6, 6.5, 7]) {
+        record(selectCueForNavigation(leg, at(650), false, beside(v, 150)))
+      }
+      // Back on the line at 800 m: the 700 m turn is behind the rider, taken
+      // a block early. It must go without a word — never re-offered as next.
+      const rejoin = record(
+        selectCueForNavigation(leg, at(800), true, beside(8, 2))
+      )
+      expect(rejoin.cue!.instruction).toBe('Turn left on E 46th St')
+      expect(rejoin.turnDistanceIsDirect).toBeFalsy()
+      const after = record(
+        selectCueForNavigation(leg, at(850), true, beside(8.5, 2))
+      )
+      expect(after.cue!.instruction).toBe('Turn left on E 46th St')
+      expect(surfaced.slice(-2)).toEqual([
+        'Turn left on E 46th St',
+        'Turn left on E 46th St'
+      ])
     })
 
     it('matches getNextCue exactly on plausible on-route ticks, no hold', () => {
@@ -348,5 +437,78 @@ describe('util > go-mode > turn-by-turn', () => {
       expect(result.announceHold).toBeFalsy()
       expect(result.cue!.instruction).toBe('Turn left on W 24th St')
     })
+  })
+})
+
+/**
+ * Backlog 6.7 — the connector turns that made the 2026-09-01 legs shout.
+ *
+ * OTP names the eight-metre jog between two ways as a full step with its own
+ * relativeDirection, and every one of them became a turn cue with a prepare
+ * card and an act card. The 10:34 leg's steps, verbatim from that ride's
+ * START_GO_MODE payload:
+ *
+ *   DEPART sidewalk                       8.2 m
+ *   RIGHT  Elliot Avenue                 13.3 m
+ *   RIGHT  East Minnehaha Parkway       108.0 m
+ *   LEFT   Chicago Avenue                 8.5 m
+ *   RIGHT  Minnehaha Parkway Trail      224.1 m
+ *
+ * Four cues for two junctions, and the rider got three announcements in eleven
+ * seconds (10:34:24, 10:34:27, 10:34:35).
+ */
+describe('util > go-mode > turn-by-turn > connector turns (6.7)', () => {
+  it('announces the manoeuvre, not the eight-metre jog into it', () => {
+    const leg = makeLeg([
+      makeStep(0, 'DEPART', 'sidewalk', { distance: 8.2 }),
+      makeStep(1, 'RIGHT', 'Elliot Avenue', { distance: 13.3 }),
+      makeStep(2, 'RIGHT', 'East Minnehaha Parkway', { distance: 108 }),
+      makeStep(3, 'LEFT', 'Chicago Avenue', { distance: 8.5 }),
+      makeStep(4, 'RIGHT', 'Minnehaha Parkway Regional Trail', {
+        distance: 224.1
+      })
+    ])
+    expect(buildStepIndex(leg).map((c) => c.instruction)).toEqual([
+      'Turn right on East Minnehaha Parkway',
+      'Turn right on Minnehaha Parkway Regional Trail'
+    ])
+  })
+
+  it('keeps the indexes contiguous — they key the per-turn latch', () => {
+    const leg = makeLeg([
+      makeStep(0, 'DEPART', 'sidewalk', { distance: 15.2 }),
+      makeStep(1, 'RIGHT', 'service road', { distance: 7.8 }),
+      makeStep(2, 'LEFT', 'East 48th Street', { distance: 220.1 }),
+      makeStep(3, 'RIGHT', 'Park Avenue', { distance: 401.7 })
+    ])
+    expect(buildStepIndex(leg).map((c) => c.index)).toEqual([0, 1])
+  })
+
+  it('never folds the last turn away — it is the way into the block', () => {
+    // 2026-09-01 10:33: the leg ends `LEFT path 52.9 m`, `LEFT path 9.1 m`.
+    // The 9.1 m one is the rider's own driveway and the only thing left to say.
+    const leg = makeLeg([
+      makeStep(0, 'DEPART', 'sidewalk', { distance: 81.6 }),
+      makeStep(1, 'RIGHT', '2nd Avenue South', { distance: 191.1 }),
+      makeStep(2, 'LEFT', 'path', { distance: 52.9 }),
+      makeStep(3, 'LEFT', 'path', { distance: 9.1 })
+    ])
+    expect(buildStepIndex(leg)).toHaveLength(3)
+  })
+
+  it('gives the folded distance to the cue the rider is following', () => {
+    // "then in 0.3 mi" must not under-report because a connector vanished.
+    const leg = makeLeg([
+      makeStep(0, 'DEPART', 'sidewalk', { distance: 20 }),
+      makeStep(1, 'LEFT', 'Park Avenue', { distance: 400 }),
+      makeStep(2, 'RIGHT', 'service road', { distance: 10 }),
+      makeStep(3, 'LEFT', 'West 105th Street', { distance: 579 })
+    ])
+    const cues = buildStepIndex(leg)
+    expect(cues.map((c) => c.instruction)).toEqual([
+      'Turn left on Park Avenue',
+      'Turn left on West 105th Street'
+    ])
+    expect(cues[0].distanceMeters).toBe(410)
   })
 })

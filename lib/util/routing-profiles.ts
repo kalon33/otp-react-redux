@@ -42,6 +42,101 @@ export const LEVER_RANGES: Record<LeverKey, readonly [number, number]> = {
   walkSpeed: [0.5, 3]
 }
 
+/**
+ * What the routing server does today. Recorded here so the rider-facing help
+ * text cannot drift away from the engine: all three are `routingDefaults` in
+ * otp-minneapolis `{config,data}/router-config.json` —
+ * `bicycle.reluctance`, `bicycle.speed` (m/s) and
+ * `accessEgress.maxDurationForMode.BIKE`.
+ *
+ * Only the first of the three is a lever. OTP's `plan` field exposes
+ * bikeBoardCost / bikeReluctance / bikeSpeed / bikeSwitchCost / bikeSwitchTime /
+ * bikeWalkingReluctance and nothing that caps access duration or distance, so
+ * the 120-minute ceiling is server-wide and a rider control can only *show* it.
+ * bikeReluctance is a soft cost multiplier — at the shipped 0.5 a 14-mile bike
+ * to a trunk route is nearly free, which is the whole complaint; raising it
+ * makes long bike legs expensive, never forbidden.
+ */
+export const SERVER_BIKE_RELUCTANCE = 0.5
+export const SERVER_BIKE_SPEED_MPS = 5
+export const BIKE_ACCESS_CEILING_MINUTES = 120
+
+/**
+ * Ends and granularity of the panel's bike control. The slider reads as
+ * *willingness* (right = bike more) because that is the rider's question, while
+ * the lever underneath is *reluctance* (higher = bike less). Mirroring the two
+ * around the same interval keeps every reachable value inside
+ * LEVER_RANGES.bikeReluctance and makes the mapping its own inverse — the same
+ * trick trip-form's SLIDER `inverseKey` uses for mode settings.
+ *
+ * The right-hand end is SERVER_BIKE_RELUCTANCE, so a rider who never touches
+ * the slider gets exactly today's behaviour.
+ */
+export const BIKE_WILLINGNESS_RANGE: readonly [number, number] = [
+  SERVER_BIKE_RELUCTANCE,
+  8
+]
+export const BIKE_WILLINGNESS_STEP = 0.5
+
+const METERS_PER_MILE = 1609.344
+const MPS_TO_MPH = 2.23693629
+
+function mirrorBikeLever(value: number): number {
+  const [low, high] = BIKE_WILLINGNESS_RANGE
+  return Math.min(high, Math.max(low, low + high - value))
+}
+
+/** Slider position -> the bikeReluctance lever actually sent to OTP. */
+export function bikeWillingnessToReluctance(willingness: number): number {
+  return mirrorBikeLever(willingness)
+}
+
+/**
+ * The bikeReluctance lever -> slider position. An unset lever means "whatever
+ * the server does", which is the right-hand end.
+ */
+export function bikeReluctanceToWillingness(reluctance?: number): number {
+  if (typeof reluctance !== 'number' || Number.isNaN(reluctance)) {
+    return BIKE_WILLINGNESS_RANGE[1]
+  }
+  return mirrorBikeLever(reluctance)
+}
+
+/** The rider's bike speed in m/s, falling back to the server's. */
+export function effectiveBikeSpeedMps(bikeSpeedMps?: number): number {
+  const [min, max] = LEVER_RANGES.bikeSpeed
+  if (typeof bikeSpeedMps !== 'number' || Number.isNaN(bikeSpeedMps)) {
+    return SERVER_BIKE_SPEED_MPS
+  }
+  return Math.min(max, Math.max(min, bikeSpeedMps))
+}
+
+/** Same speed in mph, for a label a rider can read. */
+export function bikeSpeedMph(bikeSpeedMps?: number): number {
+  return effectiveBikeSpeedMps(bikeSpeedMps) * MPS_TO_MPH
+}
+
+/**
+ * How many miles of biking the server's duration ceiling allows at a given
+ * speed. The ceiling is a *duration*, so this number drifts with the bikeSpeed
+ * lever — 8.9 mi at that lever's 2 m/s floor against 35.8 mi at its 8 m/s
+ * ceiling, a 4x swing — which is exactly why the panel recomputes it from the
+ * live lever instead of printing a fixed mileage next to the slider.
+ */
+export function bikeCeilingMiles(bikeSpeedMps?: number): number {
+  return (
+    (effectiveBikeSpeedMps(bikeSpeedMps) * BIKE_ACCESS_CEILING_MINUTES * 60) /
+    METERS_PER_MILE
+  )
+}
+
+/**
+ * Steps offered by the panel's "how many options" control. The config default
+ * (`modes.numItineraries`, 40 on this deployment) is added at render time if it
+ * is not one of these, so the control can always show what is in effect.
+ */
+export const ITINERARY_COUNT_OPTIONS = [10, 20, 40]
+
 export interface RoutingProfile {
   description: string
   id: string
@@ -159,6 +254,63 @@ export function clampPreferences(
 }
 
 /**
+ * OTP's `searchWindow` — how far past the requested departure time Raptor is
+ * allowed to look for a departure. It is NOT a routing preference (it does not
+ * price anything), so it lives beside the levers rather than inside
+ * RoutingPreferences: `clampPreferences` must never see it.
+ *
+ * Sending nothing lets OTP auto-size the window, which on the rider's 07:23
+ * Bloomington -> 3322 Columbus Ave commute is 3000 s — about five Orange Line
+ * departures, and nothing else. Measured against the live server on 2026-09-02
+ * (TRANSIT+BICYCLE, numItineraries 40, after `itineraryFilters.debug` went off
+ * so every returned itinerary is one OTP actually kept):
+ *
+ *   auto   ->  6 itineraries, 2 distinct route chains
+ *   3600   ->  7 itineraries, 2 chains
+ *   7200   -> 12 itineraries, 3 chains
+ *   14400  -> 20 itineraries, 4 chains
+ *
+ * 7200 s roughly doubles the usable list for one extra hour of window, which is
+ * why it is the default. Note what it does NOT do: the 465 (22 min against the
+ * Orange Line's 28-30) does not appear at 07:23 at ANY window below 14400,
+ * because its first northbound trip from that origin is 10:15 — at 09:45 it
+ * comes back on the auto window with no help from us. The window buys
+ * departures and alternates, not that specific route.
+ *
+ * The GraphQL type is `Long`, not `Int`: declaring `$searchWindow: Int` is
+ * rejected by OTP with `VariableTypeMismatch`.
+ */
+export const SEARCH_WINDOW_RANGE: readonly [number, number] = [600, 21600]
+
+/** Default window for a rider-initiated plan (seconds). */
+export const DEFAULT_SEARCH_WINDOW_SECONDS = 7200
+
+/**
+ * Window for Go Mode's background plans (auto-reroute snapshots, the onboard
+ * alight optimizer). Deliberately half the planner's: those queries ask "how do
+ * I finish this trip now", so a departure two hours out answers a question
+ * nobody asked, and each extra departure is response bytes over a cell link on
+ * a moving bus — the onboard optimizer fires FIVE of these at once. Measured
+ * 2026-09-02 on the 2026-08-31 ride's own onboard queries (98th St -> Home at
+ * 17:35, 46th St -> Home at 17:22): auto gave 6 itineraries, 3600 gives 7-8,
+ * 7200 gives 13-17. One more departure per candidate stop, not three times the
+ * payload — and unlike the auto window it is bounded (the 08-31 run's auto
+ * window returned 32).
+ */
+export const GO_MODE_SEARCH_WINDOW_SECONDS = 3600
+
+/** Clamp a searchWindow to the allowed range; non-numbers fall back to `fallback`. */
+export function clampSearchWindow(
+  seconds?: number | null,
+  fallback: number = DEFAULT_SEARCH_WINDOW_SECONDS
+): number {
+  const [min, max] = SEARCH_WINDOW_RANGE
+  const value =
+    typeof seconds === 'number' && !Number.isNaN(seconds) ? seconds : fallback
+  return Math.round(Math.min(max, Math.max(min, value)))
+}
+
+/**
  * Plain-English summary of an active lever, with the raw value(s) kept around
  * for a hover tooltip. Used by the search-form indicator so a rider can see
  * what their description actually changed.
@@ -250,13 +402,91 @@ export function summarizePreferences(
 }
 
 /**
+ * A stop the trip must pass through (rider ask 4.9, "specific stop").
+ *
+ * Stored on the query as the rider picked it — an id plus the name to show —
+ * and turned into OTP's `via` argument at query time by
+ * planConstraintVariables.
+ */
+export interface ViaStop {
+  /**
+   * Every OTP stop id sharing this name, feed-prefixed: the two platforms of
+   * "Lake & Chicago Station" are 1:16871 and 1:56796, one per direction. OTP's
+   * `stopLocationIds` is satisfied by visiting ONE of the ids listed, so
+   * carrying all of them is what makes "must pass through Lake & Chicago" mean
+   * the place rather than one bay of it — pinning a single platform would
+   * quietly forbid the other direction.
+   */
+  ids: string[]
+  /** What the rider sees: "Lake & Chicago Station". */
+  name: string
+}
+
+/**
+ * "No transfers" as OTP counts them.
+ *
+ * `plan(maxTransfers:)` is documented on the live schema as "Maximum number of
+ * transfers. Default value: 2", and a transfer is a boarding after the first —
+ * so 0 means exactly one vehicle. Measured against the live graph 2026-09-02
+ * (Bloomington 44.8408,-93.2983 -> Oakdale 45.0000,-92.9600, 12:00,
+ * TRANSIT+WALK, numItineraries 8): unset returned 8 itineraries, every one of
+ * them 3-5 vehicles; `maxTransfers: 0` returned 0. That empty answer is the
+ * honest one for that pair, and it is why this is offered as a toggle the rider
+ * turns on deliberately rather than a lever with a slider — and why the
+ * bike/direct itineraries the mode fan-out returns alongside still fill the
+ * list for a rider who has BICYCLE enabled.
+ */
+export const NO_TRANSFERS_MAX_TRANSFERS = 0
+
+/** The hard constraints the panel can put on a search, as they sit on the query. */
+export interface PlanConstraints {
+  noTransfers?: boolean
+  viaStop?: ViaStop | null
+}
+
+/**
+ * Turn the rider's hard constraints into OTP `plan()` variables.
+ *
+ * Kept apart from clampPreferences because neither one *prices* anything: they
+ * forbid, the way searchWindow bounds. Returns only the keys that are actually
+ * in effect, so an untouched search sends neither and OTP uses its own defaults
+ * (maxTransfers 2, no via).
+ *
+ * `via` is verified against the live server: `plan(via: [{passThrough:
+ * {stopLocationIds: ["1:56796"]}}])` on Bloomington -> downtown 2026-09-02
+ * returned three itineraries that all route through Lake & Chicago, against a
+ * baseline (same query, no via) whose three itineraries used none of them.
+ */
+export function planConstraintVariables(
+  query?: PlanConstraints
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  if (query?.noTransfers) out.maxTransfers = NO_TRANSFERS_MAX_TRANSFERS
+  const stopIds = query?.viaStop?.ids?.filter(Boolean)
+  if (stopIds?.length) {
+    out.via = [{ passThrough: { stopLocationIds: stopIds } }]
+  }
+  return out
+}
+
+/**
  * Bookkeeping keys we stash in currentQuery (so they round-trip through the
  * query pipeline) but must NOT send to OTP as GraphQL variables.
  */
 export const NON_OTP_QUERY_KEYS = [
   'activeProfileId',
+  // Re-anchors Go Mode's scoped access re-plan onto an arrive-by deadline
+  // (util/go-mode/arrive-on-time.ts). It picks the time a query is asked at;
+  // it is not itself an argument OTP takes.
+  'arriveOnTimeAccess',
+  // Shapes the mode fan-out in routingQuery, not a plan() argument.
+  'hideWalkTransitOptions',
+  // Both become real plan() arguments via planConstraintVariables, but not
+  // under these names — the raw keys would be undeclared variables.
+  'noTransfers',
   'routeLock',
-  'routingPreferences'
+  'routingPreferences',
+  'viaStop'
 ]
 
 /**
@@ -277,20 +507,27 @@ export function applyRoutingPreferences(
 // Variable declarations + plan() arguments for the levers the default
 // core-utils planQuery does not already declare. Verified against OTP's
 // (deprecated but functional) plan field: bikeSpeed/waitReluctance are Float,
-// transferPenalty/minTransferTime/walkBoardCost are Int.
+// transferPenalty/minTransferTime/walkBoardCost are Int, and searchWindow is
+// Long (Int is rejected with VariableTypeMismatch).
 const EXTRA_VAR_DECLS =
   '$walkSpeed: Float\n' +
+  '  $searchWindow: Long\n' +
   '  $bikeSpeed: Float\n' +
   '  $waitReluctance: Float\n' +
   '  $transferPenalty: Int\n' +
   '  $minTransferTime: Int\n' +
+  '  $maxTransfers: Int\n' +
+  '  $via: [PlanViaLocationInput!]\n' +
   '  $walkBoardCost: Int'
 const EXTRA_PLAN_ARGS =
   'walkSpeed: $walkSpeed\n' +
+  '    searchWindow: $searchWindow\n' +
   '    bikeSpeed: $bikeSpeed\n' +
   '    waitReluctance: $waitReluctance\n' +
   '    transferPenalty: $transferPenalty\n' +
   '    minTransferTime: $minTransferTime\n' +
+  '    maxTransfers: $maxTransfers\n' +
+  '    via: $via\n' +
   '    walkBoardCost: $walkBoardCost'
 
 /**

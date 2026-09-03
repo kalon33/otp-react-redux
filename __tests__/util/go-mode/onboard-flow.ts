@@ -242,7 +242,12 @@ describe('replanFromAboard (mid-ride aboard-aware replan)', () => {
   // the boarded trip; the walk leg ends at the REAL destination.
   const makeItinerary = () => ({
     duration: 1800,
-    endTime: 2000000,
+    // A live clock, not 1970: the itinerary this one is compared against (the
+    // splice) is built from Date.now(), and an automatic replacement is now
+    // refused when it arrives later than the plan in hand
+    // (util/go-mode/replan-acceptance). Two itineraries on different clocks
+    // made every splice look like a 56-year delay.
+    endTime: Date.now() + 3600000,
     legs: [
       {
         from: { lat: 44.86, lon: -93.28, name: 'Knox & 76th St' },
@@ -259,7 +264,7 @@ describe('replanFromAboard (mid-ride aboard-aware replan)', () => {
         transitLeg: false
       }
     ],
-    startTime: 200000,
+    startTime: Date.now() - 600000,
     transfers: 0
   })
 
@@ -753,7 +758,12 @@ describe('replanFromAboard (mid-ride aboard-aware replan)', () => {
   /** The 8/9 shape: bus, bike, the rider's chosen D Line, bike. */
   const makeItineraryWithOnwardBus = () => ({
     duration: 1800,
-    endTime: 2000000,
+    // A live clock, not 1970: the itinerary this one is compared against (the
+    // splice) is built from Date.now(), and an automatic replacement is now
+    // refused when it arrives later than the plan in hand
+    // (util/go-mode/replan-acceptance). Two itineraries on different clocks
+    // made every splice look like a 56-year delay.
+    endTime: Date.now() + 3600000,
     legs: [
       {
         from: { lat: 44.86, lon: -93.28, name: 'Knox & 76th St' },
@@ -777,7 +787,7 @@ describe('replanFromAboard (mid-ride aboard-aware replan)', () => {
         transitLeg: false
       }
     ],
-    startTime: 200000,
+    startTime: Date.now() - 600000,
     transfers: 1
   })
 

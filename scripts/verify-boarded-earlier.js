@@ -22,6 +22,17 @@
  * along the planned itinerary, plus a synthetic vehicle-positions feed that
  * pins one vehicle to the rider's position with a real *other* trip's id
  * (deterministic — no dependence on a live bus being near the rider).
+ *
+ * The "actual" bus must be an EARLIER one (backlog 6.27). This script used to
+ * take the next same-route departure AFTER the planned trip, which alights
+ * later than the plan in hand — and since 6.12 (`acceptAutoReplan`,
+ * `replan-acceptance.ts`) an automatic replacement that arrives later than the
+ * plan it replaces is refused, on purpose, by the rider's own standing rule.
+ * Measured 2026-09-02 the synthetic bus alighted 10m34s late (08:11:42 vs
+ * 08:01:08) and the run died on `Waiting failed: 240000ms exceeded` with
+ * `[go-mode] auto replan (boarded-earlier) refused: arrives-later` in the page
+ * console. A boarded-EARLIER test needs a bus that boards earlier and alights
+ * no later; the later bus is now asserted separately, as the refusal it is.
  */
 const puppeteer = require('puppeteer')
 
@@ -134,9 +145,41 @@ async function main() {
       )
     })
     if (!ok.length) return null
-    ok.sort((a, b) => a.startTime - b.startTime)
-    window.__plannedItinerary = JSON.parse(JSON.stringify(ok[0]))
-    const legs = ok[0].legs
+    const busOf = (it) => it.legs[it.legs.findIndex((l) => l.transitLeg)]
+    ok.sort((a, b) => Number(busOf(a).startTime) - Number(busOf(b).startTime))
+
+    // The PLANNED trip must not be the first departure of its route from its
+    // boarding stop, or there is no earlier bus for the rider to have caught
+    // (measured 2026-09-02: the earliest walk→bus itinerary took the very next
+    // Orange Line departure, and `stoptimesForPatterns` only looks forward, so
+    // the candidate search found nothing earlier and the run failed on its own
+    // precondition). Boarded-EARLIER is a rider who planned a later bus, so
+    // plan a later bus: take the first itinerary that has a same-route,
+    // same-stop sibling leaving before it.
+    const key = (it) => {
+      const b = busOf(it)
+      return `${b.routeId ?? b.route?.gtfsId ?? b.route?.id}|${
+        b.from?.stop?.gtfsId ?? b.from?.stopId
+      }`
+    }
+    // A sibling only counts if it is a DIFFERENT run leaving STRICTLY earlier:
+    // the mode fan-out returns the same departure several times over (20
+    // itineraries, a handful of distinct trips), and counting those ties chose
+    // a duplicate of the first departure — the same dead end, one run later.
+    const tripOf = (it) => busOf(it).trip?.gtfsId ?? busOf(it).tripId
+    const withEarlierSibling = ok.filter((it, i) =>
+      ok
+        .slice(0, i)
+        .some(
+          (prev) =>
+            key(prev) === key(it) &&
+            tripOf(prev) !== tripOf(it) &&
+            Number(busOf(prev).startTime) < Number(busOf(it).startTime)
+        )
+    )
+    const picked = withEarlierSibling[0] || ok[0]
+    window.__plannedItinerary = JSON.parse(JSON.stringify(picked))
+    const legs = picked.legs
     const busIdx = legs.findIndex((l) => l.transitLeg)
     const bus = legs[busIdx]
     return {
@@ -144,6 +187,9 @@ async function main() {
       alightStopName: bus.to?.name,
       boardStopId: bus.from?.stop?.gtfsId,
       busIdx,
+      distinctTrips: [...new Set(ok.map(tripOf))].length,
+      earlierSiblings: withEarlierSibling.length,
+      itineraries: ok.length,
       plannedBoard: Number(bus.startTime),
       plannedEnd: Number(bus.endTime),
       plannedTripId: bus.trip?.gtfsId || bus.tripId,
@@ -158,6 +204,16 @@ async function main() {
       `${plan.boardStopId}, alight ${plan.alightStopName} ${fmt(
         plan.plannedEnd
       )}`
+  )
+  console.log(
+    `[setup] chosen from ${plan.itineraries} walk→bus itineraries ` +
+      `(${plan.distinctTrips} distinct runs); ` +
+      `${plan.earlierSiblings} of them have an earlier same-route departure ` +
+      'from the same stop' +
+      (plan.earlierSiblings
+        ? ' (the planned trip is one of those, so an earlier bus exists)'
+        : ' — the planned trip IS the first departure, and the ' +
+          'earlier-bus search below will say so')
   )
 
   // ---- pick a real OTHER trip on the same route: the bus we'll pretend the
@@ -177,7 +233,13 @@ async function main() {
       .map((p) => `${p.pattern.route.gtfsId}(${p.stoptimes.length})`)
       .join(' ')}`
   )
-  const candidates = allPatterns
+  const ARRIVAL_SLACK_MS = await page.evaluate(async () => {
+    // eslint-disable-next-line import/no-absolute-path
+    const ra = await import('/lib/util/go-mode/replan-acceptance.ts')
+    return ra.AUTO_REPLAN_ARRIVAL_SLACK_MS
+  })
+
+  const sameRoute = allPatterns
     .filter((p) => p.pattern.route.gtfsId === plan.routeId)
     .flatMap((p) => p.stoptimes)
     .map((st) => ({
@@ -186,16 +248,19 @@ async function main() {
       tripId: st.trip.gtfsId
     }))
     .filter((c) => c.tripId !== plan.plannedTripId && c.dep > Date.now())
+
+  // Earliest-first among the buses that leave BEFORE the planned one — those
+  // are the runs a rider can board earlier, and the ones whose alight can be
+  // no later than the plan's. Closest to the planned departure first, so the
+  // splice is anchored to a bus that is still near the rider.
+  const earlier = sameRoute
+    .filter((c) => c.dep < plan.plannedBoard)
+    .sort((a, b) => b.dep - a.dep)
+  const later = sameRoute
+    .filter((c) => c.dep > plan.plannedBoard)
     .sort((a, b) => a.dep - b.dep)
 
-  let other = null
-  let otherAlight = null
-  let otherStopIds = null
-  const seenTripIds = new Set()
-  for (const c of candidates) {
-    if (seenTripIds.has(c.tripId)) continue
-    seenTripIds.add(c.tripId)
-    if (seenTripIds.size > 8) break
+  const alightOf = async (c) => {
     const tq = await gql(`{ trip(id: "${c.tripId}") {
       stoptimesForDate { scheduledArrival realtimeArrival realtimeState
         serviceDay stop { gtfsId name } } } }`)
@@ -209,25 +274,62 @@ async function main() {
     const alight =
       sts.find((st) => st.stop.gtfsId === plan.alightStopId) ||
       sts.find((st) => st.stop.name === plan.alightStopName)
-    if (alight) {
-      other = c
-      otherAlight = stEpoch(alight, false)
-      // The spliced replan must board at one of THIS trip's own stops.
-      otherStopIds = sts.map((st) => st.stop.gtfsId)
-      break
+    if (!alight) return null
+    return {
+      alightEpoch: stEpoch(alight, false),
+      stopIds: sts.map((st) => st.stop.gtfsId)
+    }
+  }
+
+  // Walk the candidates once, keeping the first that serves both stops on each
+  // side of the planned departure: `other` is what the rider is pretended to
+  // be on, `laterBus` is the refusal case at the end of the run.
+  let other = null
+  let otherAlight = null
+  let otherStopIds = null
+  let laterBus = null
+  let laterAlight = null
+  const seenTripIds = new Set()
+  for (const c of [...earlier, ...later]) {
+    if (seenTripIds.has(c.tripId)) continue
+    seenTripIds.add(c.tripId)
+    if (seenTripIds.size > 10) break
+    if (other && laterBus) break
+    // eslint-disable-next-line no-await-in-loop
+    const info = await alightOf(c)
+    if (info) {
+      const arrivesLater = info.alightEpoch > plan.plannedEnd + ARRIVAL_SLACK_MS
+      if (!other && !arrivesLater) {
+        other = c
+        otherAlight = info.alightEpoch
+        // The spliced replan must board at one of THIS trip's own stops.
+        otherStopIds = info.stopIds
+      } else if (!laterBus && arrivesLater) {
+        laterBus = c
+        laterAlight = info.alightEpoch
+      }
     }
     // The OTP route is public and rate-limited; don't hammer it.
+    // eslint-disable-next-line no-await-in-loop
     await new Promise((resolve) => setTimeout(resolve, 400))
   }
   if (!other) {
     throw new Error(
-      `no other same-route trip serving both stops (checked ${seenTripIds.size} of ${candidates.length} candidates)`
+      'PRECONDITION: no same-route trip serving both stops alights within ' +
+        `${ARRIVAL_SLACK_MS / 1000}s of the planned ${fmt(plan.plannedEnd)} ` +
+        `(checked ${seenTripIds.size} of ${sameRoute.length} candidates, ` +
+        `${earlier.length} of them earlier than the planned departure). ` +
+        'A boarded-EARLIER test needs an earlier bus — a later one is refused ' +
+        'by acceptAutoReplan, which is the behaviour, not the bug (6.12/6.27).'
     )
   }
   console.log(
     `[setup] "actual" bus: trip ${other.tripId} "${other.headsign}" ` +
-      `departs board stop ${fmt(other.dep)}, alights ${fmt(otherAlight)} ` +
-      `(planned trip alights ${fmt(plan.plannedEnd)})`
+      `departs board stop ${fmt(other.dep)} (planned ${fmt(
+        plan.plannedBoard
+      )}), alights ${fmt(otherAlight)} ` +
+      `(planned trip alights ${fmt(plan.plannedEnd)}) — ` +
+      `${((plan.plannedEnd - otherAlight) / 60000).toFixed(1)} min earlier`
   )
   if (Math.abs(otherAlight - plan.plannedEnd) < 180000) {
     console.log(
@@ -493,12 +595,69 @@ async function main() {
     )
   }
 
+  // ---- (5): the LATER bus is REFUSED — the other half of the same rule, and
+  // the reason this harness had to be rebuilt (6.12/6.27). Asserted against
+  // the real gate with this run's own numbers: the same planned itinerary,
+  // once with the alight of a genuinely later same-route trip, once with an
+  // earlier one. ----
+  const laterEnd = laterAlight ?? plan.plannedEnd + ARRIVAL_SLACK_MS + 60000
+  console.log(
+    `[refusal] later bus ${
+      laterBus ? `trip ${laterBus.tripId}` : '(synthetic)'
+    } alights ${fmt(laterEnd)} — ${(
+      (laterEnd - plan.plannedEnd) /
+      60000
+    ).toFixed(1)} min after the plan (slack ${ARRIVAL_SLACK_MS / 1000}s)`
+  )
+  const verdicts = await page.evaluate(async (laterEnd) => {
+    // eslint-disable-next-line import/no-absolute-path
+    const ra = await import('/lib/util/go-mode/replan-acceptance.ts')
+    const planned = window.__plannedItinerary
+    const withEnd = (endTime) => ({
+      ...planned,
+      endTime,
+      legs: planned.legs.map((l, i) =>
+        i === planned.legs.length - 1 ? { ...l, endTime } : l
+      )
+    })
+    return {
+      earlier: ra.acceptAutoReplan(
+        withEnd(Number(planned.endTime) - 60000),
+        planned,
+        { riding: true }
+      ),
+      later: ra.acceptAutoReplan(withEnd(laterEnd), planned, { riding: true })
+    }
+  }, laterEnd)
+  if (
+    verdicts.later.accept !== false ||
+    verdicts.later.reason !== 'arrives-later'
+  ) {
+    throw new Error(
+      'FAIL: an automatic replan arriving ' +
+        `${((laterEnd - plan.plannedEnd) / 60000).toFixed(1)} min after the ` +
+        `plan was ${JSON.stringify(verdicts.later)} — expected ` +
+        "{ accept: false, reason: 'arrives-later' }"
+    )
+  }
+  if (verdicts.earlier.accept !== true) {
+    throw new Error(
+      `FAIL: an automatic replan arriving a minute EARLIER was refused: ${JSON.stringify(
+        verdicts.earlier
+      )}`
+    )
+  }
+  console.log(
+    '[refusal] later replan refused (arrives-later), earlier one accepted'
+  )
+
   await page.screenshot({ path: `${OUT}/boarded-earlier-after.png` })
   await page.evaluate(() => clearInterval(window.__vehicleInjector))
   await browser.close()
 
   console.log(
-    '\nPASS: matched tripId → riding fact → live leg times → auto-replan'
+    '\nPASS: matched tripId → riding fact → live leg times → auto-replan, ' +
+      'and a later bus is refused'
   )
 }
 

@@ -3,16 +3,14 @@ import React, { useMemo } from 'react'
 import type { Leg } from '@opentripplanner/types'
 
 import {
-  asContinuationWithIntl,
+  asContinuation,
   formatCueDistance
 } from '../../util/go-mode/turn-by-turn'
-import { formatPlaceName } from '../../util/format-place-name'
 import {
   getLegRouteId,
   getRouteDepartures,
   getSoonestCatchableMs
 } from '../../util/go-mode/departure-anchor'
-import { getWalkingInstructionWithIntl } from '../../util/go-mode/progress-calculator'
 import type { TripProgress } from '../../util/go-mode/progress-calculator'
 
 import {
@@ -39,7 +37,6 @@ interface Props {
   onExit?: () => void
   onSelectDeparture?: (epochMs: number | null) => void
   progress: TripProgress
-  units: 'imperial' | 'metric'
 }
 
 /**
@@ -60,8 +57,7 @@ const WalkingNavigation = ({
   nextLeg,
   onExit,
   onSelectDeparture,
-  progress,
-  units
+  progress
 }: Props) => {
   const intl = useIntl()
 
@@ -75,13 +71,13 @@ const WalkingNavigation = ({
   const transitEmoji = (mode?: string): string => {
     switch (mode) {
       case 'RAIL':
-        return '\ud83d\ude86'
+        return '🚆'
       case 'SUBWAY':
-        return '\ud83d\ude87'
+        return '🚇'
       case 'TRAM':
-        return '\ud83d\ude8a'
+        return '🚊'
       default:
-        return '\ud83d\ude8c'
+        return '🚌'
     }
   }
 
@@ -103,37 +99,24 @@ const WalkingNavigation = ({
   )
 
   const route = nextLeg?.routeShortName || nextLeg?.routeLongName || ''
-  const stopName = formatPlaceName(nextLeg?.from?.name || leg.to.name, intl)
+  const stopName = nextLeg?.from?.name || leg.to.name
   const isBike = leg.mode === 'BICYCLE'
-  const accessEmoji = isBike ? '\ud83d\udeb2' : '\ud83d\udeb6'
+  const accessEmoji = isBike ? '🚲' : '🚶'
 
   // Turn-by-turn guidance for this access leg, when the leg carries steps.
-  // Use localized version
-  const walkingInstruction = getWalkingInstructionWithIntl(
-    leg,
-    progress.currentLegProgress / 100,
-    intl
-  )
-
+  // Off the corridor the metres are a straight line from the rider's own fix
+  // to the corner, not a distance along a route they have left — say so, or
+  // the number reads as a countdown it isn't.
   const turnLine =
-    walkingInstruction.nextTurnCue &&
-    walkingInstruction.distanceToNextTurn != null
-      ? `${
-          walkingInstruction.nextTurnCue.instruction
-        } \u00b7 ${formatCueDistance(
-          walkingInstruction.distanceToNextTurn,
-          units
-        )}`
+    progress.nextTurnCue && progress.distanceToNextTurn != null
+      ? `${progress.nextTurnCue.instruction} · ${formatCueDistance(
+          progress.distanceToNextTurn
+        )}${progress.turnDistanceIsDirect ? ' direct' : ''}`
       : null
-  const thenLine = walkingInstruction.followingTurnCue
+  const thenLine = progress.followingTurnCue
     ? intl.formatMessage(
         { defaultMessage: 'then {turn}', id: 'components.GoMode.thenTurn' },
-        {
-          turn: asContinuationWithIntl(
-            walkingInstruction.followingTurnCue.instruction,
-            intl
-          )
-        }
+        { turn: asContinuation(progress.followingTurnCue.instruction) }
       )
     : null
 
@@ -168,7 +151,7 @@ const WalkingNavigation = ({
       routeDepartures.some(
         (d) => d.depMs === effectiveDepartureMs && d.realtime
       ),
-    [effectiveDepartureMs, routeDepartures]
+    [routeDepartures, effectiveDepartureMs]
   )
 
   const busInSeconds = effectiveDepartureMs
@@ -238,10 +221,10 @@ const WalkingNavigation = ({
     // foot — nothing else is competing for the space.
     eyebrow = intl.formatMessage(
       { defaultMessage: '{emoji} To {stop}', id: 'components.GoMode.toStop' },
-      { emoji: accessEmoji, stop: formatPlaceName(leg.to.name, intl) }
+      { emoji: accessEmoji, stop: leg.to.name }
     )
     hero = formatMinutes(rideSecondsRemaining)
-    sub = turnLine || walkingInstruction.nextInstruction || null
+    sub = turnLine || progress.nextInstruction || null
     foot = thenLine
   }
 
@@ -297,10 +280,7 @@ const WalkingNavigation = ({
                   alt: { departureMs: number; realtime: boolean },
                   idx: number
                 ) => {
-                  const minsAway =
-                    alt.departureMs && nowMs
-                      ? Math.round((alt.departureMs - nowMs) / 60000)
-                      : null
+                  const minsAway = Math.round((alt.departureMs - nowMs) / 60000)
                   return (
                     <AlternativeDeparture key={idx}>
                       <span
@@ -312,26 +292,20 @@ const WalkingNavigation = ({
                           whiteSpace: 'nowrap' as const
                         }}
                       >
-                        {minsAway !== null && alt.departureMs
-                          ? intl.formatMessage(
-                              {
-                                defaultMessage:
-                                  'Next: {time} ({mins} min away)',
-                                id: 'components.GoMode.nextDeparture'
-                              },
-                              {
-                                mins: minsAway,
-                                time: (
-                                  <RealtimeTime live={alt.realtime || false}>
-                                    {formatClockTime(alt.departureMs)}
-                                  </RealtimeTime>
-                                )
-                              }
+                        {intl.formatMessage(
+                          {
+                            defaultMessage: 'Next: {time} ({mins} min away)',
+                            id: 'components.GoMode.nextDeparture'
+                          },
+                          {
+                            mins: minsAway,
+                            time: (
+                              <RealtimeTime live={alt.realtime}>
+                                {formatClockTime(alt.departureMs)}
+                              </RealtimeTime>
                             )
-                          : intl.formatMessage({
-                              defaultMessage: 'Next departure',
-                              id: 'components.GoMode.nextDepartureNoInfo'
-                            })}
+                          }
+                        )}
                       </span>
                       <UseNextButton
                         onClick={() => onSelectDeparture?.(alt.departureMs)}
@@ -353,4 +327,4 @@ const WalkingNavigation = ({
   )
 }
 
-export default React.memo(WalkingNavigation)
+export default WalkingNavigation

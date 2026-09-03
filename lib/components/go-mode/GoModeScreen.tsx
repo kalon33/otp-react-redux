@@ -35,6 +35,7 @@ import BoardingPrompt from './BoardingPrompt'
 import CurrentLegPanel from './CurrentLegPanel'
 import GoModeMap from './GoModeMap'
 import GoModeNotifications from './GoModeNotifications'
+import GoModeStopViewer from './GoModeStopViewer'
 import TripSheet from './TripSheet'
 import useActiveTripGuards from './use-active-trip-guards'
 
@@ -364,6 +365,9 @@ const GoModeScreen = ({
           </SheetHandle>
         )}
         {sheetOpen && <TripSheet onClose={() => setSheetOpen(false)} />}
+        {/* Tapping a boarding stop in the sheet above opens its departures
+            here, over the trip rather than instead of it (rider ask #39). */}
+        <GoModeStopViewer />
         {simToolsEnabled && (
           <>
             <SimToggle

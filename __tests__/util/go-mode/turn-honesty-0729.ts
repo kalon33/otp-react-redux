@@ -18,15 +18,26 @@ import fixture from '../../../lib/util/go-mode/replay/fixtures/orange-line-0729.
  * them :)". Measured from this fixture: minutes 20.2–22.2 the rider rode a
  * street parallel to bike leg 0 (perpendicular distance flapping around the
  * 100 m on-route threshold) while the nearest-point projection slid
- * 537 m → 1509 m — sweeping past the cues at 822/992/1003 m. Ticks that dipped
+ * 537 m → 1509 m — sweeping past the cues at 822/1003 m. Ticks that dipped
  * back under the threshold announced those swept-past turns as if they were
  * still ahead.
+ *
+ * (A third swept cue used to sit at 992 m: `LEFT bike path`, a 10.5 m connector
+ * onto the Grand Rounds a dozen metres later. It is folded away now — see
+ * MICRO_STEP_METERS — so the sweep is two cues wide here rather than three.)
  *
  * This test replays leg 0's window through the same pure pipeline the app
  * runs per GPS tick — matchPositionToRoute → calculateTripProgress →
  * checkUpcomingTurn — and pins what an honest navigator must do with this
  * exact data. Against the pre-fix logic these assertions fail; that is the
  * point of the test.
+ *
+ * Off-corridor ticks are no longer silent (2026-09-01 ride 1 lost a 300 m turn
+ * to that silence — turn-off-corridor-0901), so the guard that matters here is
+ * the convergence one: the rider on the parallel street is riding AWAY from
+ * 822/1003 m, never towards them, so those turns still earn no announcement.
+ * "Announces nothing at all on deviated ticks" holds on this data for that
+ * reason, not because the code has nothing to say.
  */
 
 // Leg 0's window: departure through the ride to the boarding stop. 28 minutes
@@ -107,7 +118,14 @@ describe('util > go-mode > turn honesty on the 7/29 ride', () => {
         match,
         undefined,
         undefined,
-        fix.speed
+        fix.speed,
+        null,
+        null,
+        // The raw fix, as the live tick supplies it. Off the corridor this is
+        // now the only thing turn guidance has to measure with (a held turn,
+        // straight-line to the corner — see selectOffRouteCue), so leaving it
+        // out would exempt this ride from exactly the path it exists to guard.
+        [fix.lat, fix.lon]
       )
       const event = checkUpcomingTurn(progress, leg0, sentNotifications)
       if (!event) return
@@ -133,10 +151,12 @@ describe('util > go-mode > turn honesty on the 7/29 ride', () => {
   })
 
   it('exercises the data it claims to: real cues, real deviated stretch', () => {
-    // The three turns the rider bypassed on the parallel street.
+    // The turns the rider bypassed on the parallel street.
     expect(cues.map((c) => Math.round(c.offsetMeters))).toEqual(
-      expect.arrayContaining([822, 992, 1003])
+      expect.arrayContaining([822, 1003])
     )
+    // …and the 10.5 m connector between them is no longer a cue at all.
+    expect(cues.map((c) => Math.round(c.offsetMeters))).not.toContain(992)
     // The min 20.2–22.2 deviated stretch is in the window.
     expect(deviatedTickCount).toBeGreaterThan(30)
     // And honest guidance still announces the turns the rider does ride.
@@ -171,12 +191,12 @@ describe('util > go-mode > turn honesty on the 7/29 ride', () => {
     })
   })
 
-  it('stays silent about the swept-past turns at 822/992/1003 m', () => {
+  it('stays silent about the swept-past turns at 822/1003 m', () => {
     // The rider effectively took these on the parallel street; announcing them
     // afterwards is the complaint, verbatim. The rider's on-route travel never
     // brings them inside an announcement lead, so the honest count is zero.
     const sweptIndexes = cues
-      .filter((c) => [822, 992, 1003].includes(Math.round(c.offsetMeters)))
+      .filter((c) => [822, 1003].includes(Math.round(c.offsetMeters)))
       .map((c) => c.index)
     expect(emitted.filter((e) => sweptIndexes.includes(e.cueIndex))).toEqual([])
   })

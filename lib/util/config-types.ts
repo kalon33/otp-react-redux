@@ -10,7 +10,6 @@ import {
   ModeSetting,
   ModeSettingValues,
   TransitOperator,
-  UnitSystem,
   VehicleRentalMapOverlaySymbol
 } from '@opentripplanner/types'
 import { ControlPosition } from 'react-map-gl/maplibre'
@@ -33,10 +32,24 @@ export interface AccessibilityScoreConfig {
 /** OTP URL settings */
 export interface ApiConfig {
   basePath?: string
+  /**
+   * Deadline, in ms, for Go Mode's background plans (reroute snapshots, the
+   * onboard alight optimizer). Shorter than `timeoutMs` because no one is
+   * watching them and they are issued five at a time. Omit to take
+   * GO_MODE_FETCH_TIMEOUT_MS from actions/api.
+   */
+  goModeTimeoutMs?: number
   host: string
   // Soon to be deprecated
   path: string
   port: number
+  /**
+   * Deadline, in ms, after which a request is aborted and its error action
+   * dispatched. `fetch` has none of its own; without this a silent connection
+   * hangs its caller forever (2026-08-31, 9m11s of empty results). Omit to take
+   * DEFAULT_FETCH_TIMEOUT_MS from actions/api; 0 disables the deadline.
+   */
+  timeoutMs?: number
   // Soon to be deprecated
   v2?: boolean
 }
@@ -141,7 +154,6 @@ export type PersistenceConfig = (
 /** Popup target settings */
 export interface PopupTargetConfig {
   appendLocale?: boolean
-  appendParams?: boolean
   modal?: boolean
   url?: string
 }
@@ -199,6 +211,12 @@ export interface Otp1StopsOverlayConfig extends OverlayConfigBase {
 export interface Otp2TileLayer {
   color?: string
   initiallyVisible?: boolean
+  /**
+   * Zoom level at which the layer starts drawing. Mirror the matching layer's
+   * `minZoom` in the server's router-config.json `vectorTiles.layers`;
+   * @opentripplanner/otp2-tile-overlay defaults it to 14 when unset.
+   */
+  minZoom?: number
   network?: string
   type: 'stops' | 'stations' | 'rentalVehicles' | 'rentalStations'
 }
@@ -239,10 +257,25 @@ export interface TransitiveConfig {
   }
 }
 
+/**
+ * Go Mode map decoration for the line the rider is riding (rider ask #21).
+ * Both default ON; the rider asked for a switch because he named the clutter
+ * risk himself, so both are opt-OUT, not opt-in.
+ */
+export interface GoModeMapConfig {
+  /** Draw the ridden pattern's stops larger, in the route colour, while every
+   * other stop stays on the map as it was. Default true. */
+  emphasizeRouteStops?: boolean
+  /** Draw the ridden pattern's WHOLE shape faintly beneath the trip line, so
+   * the line reads before boarding and after alighting. Default true. */
+  fullRouteShape?: boolean
+}
+
 export interface MapConfig {
   autoFlyOnTripFormUpdate?: boolean
   baseLayers?: BaseLayerConfig[]
   forceDisplayEndpointsPopup?: boolean
+  goMode?: GoModeMapConfig
   initLat?: number
   initLon?: number
   initZoom?: number
@@ -256,7 +289,6 @@ export interface MapConfig {
 /** Settings for reporting issues */
 export interface ReportIssueConfig {
   mailto: string
-  subject?: string
 }
 
 export interface ItineraryCostConfig {
@@ -273,7 +305,6 @@ export type ItinerarySortOption =
   | 'COST'
   | 'DEPARTURETIME'
   | 'FARE'
-  | 'EMISSIONS'
 
 export interface ItineraryCostWeights {
   driveReluctance: number
@@ -294,16 +325,33 @@ export interface ItineraryConfig {
   disableMetroSeperatorDot?: true
   exclusiveErrors?: string[]
   fillModeIcons?: boolean
+  /**
+   * OTP `searchWindow`, in seconds, for Go Mode's background plans (reroute
+   * snapshots, the onboard alight optimizer). Clamped to SEARCH_WINDOW_RANGE;
+   * omit to take the default in util/routing-profiles.
+   */
+  goModeSearchWindowSeconds?: number
   groupByMode?: boolean
   groupTransitModes?: boolean
   hideSkeletons?: boolean
   mergeByRouteSignature?: boolean
   mergeItineraries?: boolean
   mutedErrors?: string[]
-  omitCanceledTrips?: boolean
+  /**
+   * How long the onboard alight optimizer waits for its candidate plans before
+   * ranking whatever has answered (see
+   * util/go-mode/alight-optimizer#settleCandidatePlans). Omit to take
+   * ONBOARD_CANDIDATE_SETTLE_MS.
+   */
+  onboardSettleMs?: number
   onlyShowCountdownForRealtime?: boolean
   previewOverlay?: boolean
   renderRouteNamesInBlocks?: boolean
+  /**
+   * OTP `searchWindow`, in seconds, for a rider-initiated plan. Clamped to
+   * SEARCH_WINDOW_RANGE; omit to take the default in util/routing-profiles.
+   */
+  searchWindowSeconds?: number
   showAllWalkLegs?: boolean
   showApproximatePrefixAccessLegs?: boolean
   showFirstResultByDefault?: boolean
@@ -316,6 +364,14 @@ export interface ItineraryConfig {
   showScheduleDeviation?: boolean
   sortModes?: ItinerarySortOption[]
   syncSortWithDepartArrive?: boolean
+  /**
+   * Token-transit-hop demotion (see util/itinerary#demoteTokenTransitHops):
+   * the length below which a closing transit leg counts as a token hop, and
+   * how much later the same trip without that hop may arrive and still push it
+   * down the list. Omit to take the defaults.
+   */
+  tokenTransitHopMeters?: number
+  tokenTransitHopToleranceMinutes?: number
   weights?: ItineraryCostWeights
 }
 
@@ -344,7 +400,6 @@ export interface TransitModeConfig {
 
 export interface ModesConfig {
   accessModes: TransitModeConfig[]
-  allowFlexWithoutTransit?: boolean
   initialState?: {
     enabledModeButtons?: string[]
     modeSettingValues?: ModeSettingValues
@@ -361,7 +416,7 @@ export interface ModeColorConfig {
 }
 
 export interface TransitOperatorConfig extends TransitOperator {
-  colorMode?: 'gtfs' | 'disabled'
+  colorMode?: 'gtfs' | 'gtfs-softened' | 'disabled'
   modeColors?: Record<string, ModeColorConfig>
   routeIcons?: boolean
 }
@@ -382,13 +437,6 @@ export interface RouteViewerConfig {
   sortRoutePatternsByVehicleCount?: boolean
   /** Whether to use the route color as the background color in the pattern viewer */
   useRouteColorAsBackground?: boolean
-  /** Configure the caret on the realtime vehicle bubble (settings from OTP-UI props) */
-  vehicleIconCaret?: {
-    height?: number
-    offset?: number
-    position?: 'inner' | 'outer'
-    width?: number
-  }
   /** Disable vehicle highlight if necessary (e.g. custom or inverted icons) */
   vehicleIconHighlight?: boolean
   /** Customize vehicle icon padding (the default iconPadding is 2px in otp-ui) */
@@ -406,14 +454,6 @@ export interface StopScheduleViewerConfig {
 export interface DateTimeConfig {
   dateFormat: string
   timeFormat: string
-}
-
-export type ExtraView = {
-  content: JSX.Element
-  icon?: JSX.Element
-  name: string
-  path: string
-  showInHeaderBar?: boolean
 }
 
 /** The main application configuration object */
@@ -471,7 +511,6 @@ export interface AppConfig {
   title?: string
   transitOperators?: TransitOperatorConfig[]
   translateExternalLinks?: boolean
-  units?: UnitSystem
 
   // Add other config items as needed.
 }

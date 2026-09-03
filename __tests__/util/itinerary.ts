@@ -1,4 +1,5 @@
 import {
+  demoteTokenTransitHops,
   getItineraryDefaultMonitoredDays,
   itinerariesAreEqual,
   itineraryCanBeMonitored,
@@ -233,5 +234,97 @@ describe('trip shape (mergeByRouteSignature)', () => {
     const bikeOnly = { legs: [bike(4)] }
     expect(same(walkOnly, bikeOnly)).toBe(false)
     expect(same(bikeOnly, bikeOnly)).toBe(true)
+  })
+})
+
+describe('token transit hops (2026-08-31 "Lmfao what is this route")', () => {
+  // Taken from the ONBOARD_CANDIDATE_SNAPSHOT the app recorded at 17:37:11 on
+  // 2026-08-31 (session mthnk1al-x7m0iv), planning I-35W & 98th St Station ->
+  // Home. Distances and arrival times are the real ones; geometry and stops
+  // are dropped.
+  const t = (hhmm: string) => {
+    const [h, m] = hhmm.split(':').map(Number)
+    return Date.UTC(2026, 7, 31, h + 5, m) // America/Chicago, CDT
+  }
+  const street = (distance: number) => ({
+    distance,
+    mode: 'BICYCLE',
+    transitLeg: false
+  })
+  const bus = (routeId: string, distance: number) => ({
+    distance,
+    mode: 'BUS',
+    routeId,
+    transitLeg: true
+  })
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const itin = (endTime: number, legs: any[]) => ({ endTime, legs } as never)
+  const routesOf = (list: readonly never[]) =>
+    list.map((i) => transitRouteSignature(i))
+
+  // The trip the rider screenshotted: bike 7 m, ride the 539 for 602 m, then
+  // bike 1743 m home. Arrives 17:49:11.
+  const tokenHop = itin(t('17:49'), [
+    street(7),
+    bus('1:539', 602),
+    street(1743)
+  ])
+  // The same journey with the hop dropped: bike the 3970 m. Arrives 17:48:50.
+  const rideIt = itin(t('17:48'), [street(3970)])
+  // A real ride, not a token hop: 1273 m on the bus, from the same response.
+  const realRide = itin(t('17:50'), [
+    street(7),
+    bus('1:540', 1273),
+    street(1408)
+  ])
+
+  it('demotes a 602 m closing hop below the trip without it', () => {
+    // Fails before the fix: the 602 m hop arrives 21 s earlier, so every sort
+    // in the app puts it first, which is exactly what the rider saw.
+    const out = demoteTokenTransitHops([tokenHop, rideIt, realRide])
+    expect(out.indexOf(rideIt)).toBeLessThan(out.indexOf(tokenHop))
+    expect(out[out.length - 1]).toBe(tokenHop)
+  })
+
+  it('leaves a genuine short ride alone', () => {
+    const out = demoteTokenTransitHops([realRide, rideIt])
+    expect(out).toEqual([realRide, rideIt])
+  })
+
+  it('demotes only against the same journey minus its last hop', () => {
+    // Orange Line > bike 70 m > 539 (602 m) > bike 1743 m, arriving 17:58:19,
+    // against Orange Line > bike 3970 m arriving 18:01:24 — 3m05s later, which
+    // is why the tolerance is five minutes and not three.
+    const viaOrangeThenHop = itin(t('17:58'), [
+      bus('1:904', 13279),
+      street(70),
+      bus('1:539', 602),
+      street(1743)
+    ])
+    const viaOrangeOnly = itin(t('18:01'), [bus('1:904', 13279), street(3970)])
+    const out = demoteTokenTransitHops([viaOrangeThenHop, viaOrangeOnly])
+    expect(routesOf(out)).toEqual(['1:904', '1:904>1:539'])
+  })
+
+  it('keeps the hop when nothing else rides the same prefix', () => {
+    // Without the hop-free alternative on offer, demoting would just bury the
+    // only trip that gets the rider home.
+    const out = demoteTokenTransitHops([tokenHop, realRide])
+    expect(out).toEqual([tokenHop, realRide])
+  })
+
+  it('keeps a token hop that ends at the door', () => {
+    // 400 m on a shuttle that sets the rider down at the destination is a fine
+    // last leg — there is no long street leg after it.
+    const doorstep = itin(t('17:49'), [street(7), bus('1:539', 400)])
+    const out = demoteTokenTransitHops([doorstep, rideIt])
+    expect(out).toEqual([doorstep, rideIt])
+  })
+
+  it('never empties or shortens the list', () => {
+    const input = [tokenHop, rideIt, realRide]
+    const out = demoteTokenTransitHops(input)
+    expect(out).toHaveLength(input.length)
+    expect(new Set(out)).toEqual(new Set(input))
   })
 })

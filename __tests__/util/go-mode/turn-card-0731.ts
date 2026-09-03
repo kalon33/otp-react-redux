@@ -70,7 +70,10 @@ describe('util > go-mode > the turn card over the 7/31 ride', () => {
     // The whole point of keying on the cue's identity. Per-tick posting would
     // be 300+.
     expect(posts.length).toBe(1)
-    expect(posts[0].post.title).toContain('Turn')
+    // The first cue of this leg is the bear-right onto Village Terrace. The
+    // 11.2 m `RIGHT Village Lane` that used to precede it is a connector, not a
+    // decision, and is folded away (MICRO_STEP_METERS).
+    expect(posts[0].post.title).toBe('Bear right on Village Terrace')
     // Passive: the buzz for this turn already went out as a TURN_ALERT.
     expect(posts[0].post.passive).toBe(true)
   })

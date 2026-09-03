@@ -109,6 +109,147 @@ export function transitRouteSignature(itinerary: Itinerary): string {
     .join('>')
 }
 
+/**
+ * Default length below which a CLOSING transit leg reads as a token hop rather
+ * than a ride. 800 m, not the 500 m first proposed: the leg the rider actually
+ * complained about ("Lmfao what is this route haha", 2026-08-31 17:32) was
+ * **602 m** — board 98th St Gate C, ride to 98th & Dupont, then bike 1743 m
+ * home — and 500 would have sailed straight past it. The nearest genuine ride
+ * in the same OTP response was 1273 m, so 800 separates them with room on both
+ * sides.
+ */
+export const TOKEN_TRANSIT_HOP_METERS = 800
+
+/**
+ * How much later the same journey WITHOUT the token hop may arrive and still
+ * push the hop down the list. Five minutes, because the 08-31 pair missed a
+ * three-minute window by five seconds: `Orange Line > bike 70 m > 539 602 m >
+ * bike 1743 m` arrived 17:58:19 and `Orange Line > bike 3970 m` — the same
+ * trip minus the hop — arrived 18:01:24, 3m05s later.
+ */
+export const TOKEN_TRANSIT_HOP_TOLERANCE_MS = 5 * 60 * 1000
+
+/** The itinerary's transit legs, in order. */
+export function transitLegs(itinerary: Itinerary): Leg[] {
+  return itinerary.legs.filter((leg) => leg.transitLeg)
+}
+
+/**
+ * The route signature this itinerary would have WITHOUT its final transit leg —
+ * i.e. the shape of the same journey with the token hop dropped. Empty string
+ * when the hop was the only transit leg, which is the legitimate "just ride/walk
+ * the rest of the way" answer.
+ */
+export function signatureWithoutLastTransitLeg(itinerary: Itinerary): string {
+  return transitLegs(itinerary)
+    .map((leg) => leg.routeId ?? leg.mode)
+    .slice(0, -1)
+    .join('>')
+}
+
+/**
+ * True when this itinerary ends with a transit leg so short, and a street leg
+ * after it so long, that the vehicle bought the rider almost nothing.
+ *
+ * Both halves are required. A 400 m shuttle that sets the rider down at the
+ * door is a fine last leg; what is not fine is riding 602 m and then cycling
+ * 1743 m anyway, which is the shape the rider caught. The hop must also be
+ * followed by a street leg — a token hop that ends the journey has nothing to
+ * be replaced by.
+ */
+export function hasTokenTransitHop(
+  itinerary: Itinerary,
+  maxHopMeters: number = TOKEN_TRANSIT_HOP_METERS
+): boolean {
+  const legs = itinerary.legs
+  const lastTransitIndex = legs.map((leg) => !!leg.transitLeg).lastIndexOf(true)
+  if (lastTransitIndex < 0 || lastTransitIndex === legs.length - 1) return false
+  const hop = legs[lastTransitIndex]
+  if (!(hop.distance < maxHopMeters)) return false
+  const after = legs
+    .slice(lastTransitIndex + 1)
+    .reduce((sum, leg) => sum + (leg.distance || 0), 0)
+  return after > hop.distance
+}
+
+/**
+ * Demote itineraries whose LAST transit leg is a token hop, when the same
+ * journey without that hop is also on offer and arrives within a few minutes.
+ *
+ * Rider-caught 2026-08-31: a **602 m** ride on the 539 survived four replans
+ * because `keepRouteId` pins the rider's chosen route and nothing ever asked
+ * whether the kept leg was worth keeping. The same OTP response carried the
+ * hop-free version of the trip; it was simply further down. This does not
+ * remove anything and does not touch the router — it is a stable partition
+ * (hop-free options first, in their existing order; token hops after, in
+ * theirs), the same idiom narrative-itineraries already uses for a route lock.
+ *
+ * Deliberately NOT left to OTP's `transit-vs-street-filter`: that compares a
+ * transit itinerary against the DIRECT street itinerary for the whole trip, so
+ * it can never see that `Orange Line > bike > 539(602 m) > bike` is beaten by
+ * `Orange Line > bike`. The comparison that matters is against the same trip
+ * minus its final hop, and only the client holds both.
+ */
+export function demoteTokenTransitHops<T extends Itinerary>(
+  itineraries: T[],
+  options: { maxHopMeters?: number; toleranceMs?: number } = {}
+): T[] {
+  return demoteTokenTransitHopsBy(
+    itineraries,
+    (itinerary) => itinerary,
+    options
+  )
+}
+
+/**
+ * The same partition over anything that CARRIES an itinerary — the onboard
+ * optimizer ranks `{stopId, busArrivalEpoch, itinerary}` options, not bare
+ * itineraries, and the rider is owed the same answer whether the 602 m hop
+ * shows up in the results list or in "where do I get off this bus".
+ */
+export function demoteTokenTransitHopsBy<T>(
+  items: T[],
+  getItinerary: (item: T) => Itinerary,
+  {
+    maxHopMeters = TOKEN_TRANSIT_HOP_METERS,
+    toleranceMs = TOKEN_TRANSIT_HOP_TOLERANCE_MS
+  }: { maxHopMeters?: number; toleranceMs?: number } = {}
+): T[] {
+  const itineraries = items || []
+  if (itineraries.length < 2) return itineraries
+
+  // Earliest arrival on offer for each transit-route shape, so an itinerary can
+  // ask "is the version of me without my last hop available, and when does it
+  // land?" The empty signature (walk/bike the whole way) is a legitimate answer
+  // here — it is exactly the "just ride to the destination" option.
+  const earliestEndBySignature = new Map<string, number>()
+  itineraries.forEach((item) => {
+    const itin = getItinerary(item)
+    const signature = transitRouteSignature(itin)
+    const end = Number(itin.endTime)
+    if (!Number.isFinite(end)) return
+    const known = earliestEndBySignature.get(signature)
+    if (known === undefined || end < known) {
+      earliestEndBySignature.set(signature, end)
+    }
+  })
+
+  const isDemoted = (item: T): boolean => {
+    const itin = getItinerary(item)
+    if (!hasTokenTransitHop(itin, maxHopMeters)) return false
+    const withoutHop = signatureWithoutLastTransitLeg(itin)
+    const alternativeEnd = earliestEndBySignature.get(withoutHop)
+    if (alternativeEnd === undefined) return false
+    return alternativeEnd <= Number(itin.endTime) + toleranceMs
+  }
+
+  const kept: T[] = []
+  const demoted: T[] = []
+  itineraries.forEach((item) => (isDemoted(item) ? demoted : kept).push(item))
+  if (demoted.length === 0 || kept.length === 0) return itineraries
+  return [...kept, ...demoted]
+}
+
 export function itinerariesAreEqual(
   itinerary: Itinerary,
   other: Itinerary,

@@ -57,9 +57,11 @@ Object {
     },
     "onboard": Object {
       "alightOptions": Array [],
+      "answeredCandidates": null,
       "bestAlightStop": null,
       "candidates": Array [],
       "keepRouteId": null,
+      "pendingCandidates": null,
       "status": "idle",
       "trip": null,
       "vehicle": null,
@@ -155,6 +157,7 @@ Object {
     "locale": null,
     "localizedMessages": null,
     "mainPanelContent": null,
+    "mapPickLocationType": null,
     "mobileScreen": 1,
     "nearbyView": Object {
       "filters": Object {

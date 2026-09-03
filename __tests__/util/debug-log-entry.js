@@ -69,9 +69,13 @@ describe('util > debug-log idempotency wiring', () => {
       source.indexOf('function push(entry)'),
       source.indexOf('export function recordSessionEvent')
     )
-    expect(push).toMatch(/entry\.id = mintEntryId\(\)/)
+    // The minter itself now lives in debug-log-boot.js, so that a boot crash
+    // beacon sent before this module has even evaluated draws from the SAME
+    // dense counter under the SAME session id. Where it is CALLED is the
+    // invariant, and it is unchanged.
+    expect(push).toMatch(/entry\.id = mintBootEntryId\(\)/)
     // ...and nowhere else: not in flush, buildBatch or flushBeacon.
-    expect(source.match(/mintEntryId\(\)/g)).toHaveLength(1)
+    expect(source.match(/mintBootEntryId\(\)/g)).toHaveLength(1)
   })
 
   it('bounds the buffer by bytes as well as by entry count', () => {

@@ -35,6 +35,7 @@ import {
   getCurrentPosition,
   GetCurrentPositionFunction
 } from '../../actions/location'
+import { getVectorTilesPath } from '../../util/config'
 import { MainPanelContent } from '../../actions/ui-constants'
 import { setLocation, setMapPopupLocationAndGeocode } from '../../actions/map'
 import { SetLocationHandler, SetViewedStopHandler } from '../util/types'
@@ -47,9 +48,12 @@ import ElevationPointMarker from './elevation-point-marker'
 import EndpointsOverlay from './connected-endpoints-overlay'
 import GeoJsonLayer from './connected-geojson-layer'
 import ItinSummaryOverlay from './itinerary-summary-overlay'
+import MapPointPicker from './map-point-picker'
 import NearbyViewDotOverlay from './nearby-view-dot-overlay'
 import ParkAndRideOverlay from './connected-park-and-ride-overlay'
 import PointPopup from './point-popup'
+import RiddenRouteShapeOverlay from './ridden-route-shape-overlay'
+import RiddenRouteStopsOverlay from './ridden-route-stops-overlay'
 import RoutePreviewOverlay from './route-preview-overlay'
 import RouteViewerOverlay from './connected-route-viewer-overlay'
 import StopsOverlay from './connected-stops-overlay'
@@ -61,6 +65,8 @@ import withMap from './with-map'
 
 const MapContainer = styled.div<{ hideLayerFilters: boolean }>`
   height: 100%;
+  /* The map-pick pin and its confirm bar are positioned against this box. */
+  position: relative;
   width: 100%;
 
   .map {
@@ -330,6 +336,10 @@ class DefaultMap extends Component<DefaultMapProps> {
   }
 
   onMapClick = (e) => {
+    // While the rider is choosing a point off the map (backlog 3.9), a
+    // long-press must not also raise the "plan a trip from here" popup — the
+    // two set the same thing and would fight over the same tap.
+    if (this.props.mapPickActive) return
     this.props.setMapPopupLocationAndGeocode(e)
   }
 
@@ -391,9 +401,11 @@ class DefaultMap extends Component<DefaultMapProps> {
       showViewStopInPopup = true
     } = mapConfig || {}
     const { lat, lon, zoom } = this.state
-    const vectorTilesEndpoint = `${assembleBasePath(config)}${
-      config.api?.path
-    }/vectorTiles`
+    // See getVectorTilesPath: this used to read the (deliberately unset) OTP1
+    // `api.path`, which made every tile URL "https://host:portundefined/...".
+    const vectorTilesEndpoint = `${assembleBasePath(
+      config
+    )}${getVectorTilesPath(config.api)}`
 
     const bikeStationsAndFloatingBikes = [
       ...bikeRentalStations,
@@ -457,6 +469,10 @@ class DefaultMap extends Component<DefaultMapProps> {
           <NearbyViewDotOverlay />
           <ItinSummaryOverlay />
           <RoutePreviewOverlay />
+          {/* The ridden line's full shape, faint and FIRST: everything below
+              paints over it, so only the run-in before boarding and the
+              run-out after alighting stay light. See rider ask #21. */}
+          <RiddenRouteShapeOverlay />
           {/* The default overlays */}
           <EndpointsOverlay />
           <RouteViewerOverlay />
@@ -563,6 +579,10 @@ class DefaultMap extends Component<DefaultMapProps> {
                 return null
             }
           })}
+          {/* Emphasis for the ridden pattern's stops. AFTER the configurable
+              overlays on purpose: it draws a ring on top of the OTP2 stops
+              tile layer they create, leaving every other stop visible. */}
+          <RiddenRouteStopsOverlay />
           {/* If set, custom overlays are shown if no active itinerary is shown or pending. */}
           {typeof getCustomMapOverlays === 'function' &&
             getCustomMapOverlays(!itinerary && !pending)}
@@ -575,6 +595,7 @@ class DefaultMap extends Component<DefaultMapProps> {
           />
           {children}
         </BaseMap>
+        <MapPointPicker />
       </MapContainer>
     )
   }
@@ -603,7 +624,7 @@ const mapStateToProps = (state) => {
             // Generate a list of every stop id the pattern stops at
             viewedRoutePatterns.reduce((acc, cur) => {
               // Convert pattern object to list of the pattern's stops
-              return [...cur?.[1]?.stops.map((s) => s.id), ...acc]
+              return [...(cur?.[1]?.stops?.map((s) => s.id) || []), ...acc]
             }, [])
           )
         )
@@ -618,6 +639,7 @@ const mapStateToProps = (state) => {
     feeds: state.otp.transitIndex.feeds,
     itinerary: getActiveItinerary(state),
     mapConfig: state.otp.config.map,
+    mapPickActive: Boolean(state.otp.ui.mapPickLocationType),
     nearbyFilters,
     nearbyViewActive:
       state.otp.ui.mainPanelContent === MainPanelContent.NEARBY_VIEW,

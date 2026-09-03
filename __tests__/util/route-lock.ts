@@ -1,11 +1,20 @@
 import {
+  applyRouteLockToItineraries,
   buildBannedRoutes,
+  firstTransitRouteId,
+  itineraryMatchesLock,
+  itineraryStartsOnRoute,
   itineraryUsesRoute,
   resolveRouteLock,
   ROUTE_LOCK_MIN_BIKE_RELUCTANCE,
+  routeLockIds,
   routeLockLabel,
+  routeLockRoutes,
+  routeLockScope,
+  routeLockText,
   withRouteLockPrefs
 } from '../../lib/util/route-lock'
+import type { RouteLock } from '../../lib/util/route-lock'
 
 // A slice of the real Twin Cities graph, including the things that make route
 // naming awkward: METRO lines carry no shortName, the suburban operator is a
@@ -143,5 +152,219 @@ describe('withRouteLockPrefs', () => {
       transferPenalty: 900,
       walkReluctance: 15
     })
+  })
+})
+
+// Rider ask #46: "use only these routes" — pick more than one.
+describe('buildBannedRoutes over a set', () => {
+  it('keeps every named route legal, not just the first', () => {
+    const banned = buildBannedRoutes(ROUTES, ['1:18', '1:904']).split(',')
+    expect(banned).not.toContain('1:18')
+    expect(banned).not.toContain('1:904')
+    expect(banned).toEqual(expect.arrayContaining(['1:118', '2:425', '1:921']))
+  })
+
+  it('still bans the complement across feeds', () => {
+    expect(buildBannedRoutes(ROUTES, ['1:18', '1:921'])).toContain('2:425')
+  })
+
+  it('bans nothing at all rather than banning the whole graph', () => {
+    // An empty selection is a released lock, never "forbid every route" — that
+    // would answer a query with nothing and read as the app being broken.
+    expect(buildBannedRoutes(ROUTES, [])).toBe('')
+  })
+
+  it('ignores empty ids mixed into the set', () => {
+    expect(buildBannedRoutes(ROUTES, ['1:18', ''])).not.toContain('1:18')
+  })
+})
+
+// Rider ask #45: "use as starting route", not "use only this route".
+describe('first-leg constraint', () => {
+  const eighteenThenOrange = {
+    legs: [
+      { mode: 'BICYCLE' },
+      { mode: 'BUS', route: { id: '1:18' } },
+      { mode: 'WALK' },
+      { mode: 'BUS', route: { id: '1:904' } }
+    ]
+  }
+  const orangeThenEighteen = {
+    legs: [
+      { mode: 'WALK' },
+      { mode: 'BUS', route: { id: '1:904' } },
+      { mode: 'WALK' },
+      { mode: 'BUS', route: { id: '1:18' } }
+    ]
+  }
+  const bikedAllTheWay = { legs: [{ mode: 'BICYCLE' }] }
+
+  it('reads the first vehicle, not just any vehicle', () => {
+    expect(firstTransitRouteId(eighteenThenOrange)).toBe('1:18')
+    expect(firstTransitRouteId(orangeThenEighteen)).toBe('1:904')
+    expect(firstTransitRouteId(bikedAllTheWay)).toBeNull()
+  })
+
+  it('accepts a trip that starts on the named route', () => {
+    expect(itineraryStartsOnRoute(eighteenThenOrange, '1:18')).toBe(true)
+  })
+
+  it('rejects a trip that only reaches the named route later', () => {
+    // This is the whole of the ask: "use only this route" would have taken
+    // this trip, because it does ride the 18 — just not first.
+    expect(itineraryUsesRoute(orangeThenEighteen, '1:18')).toBe(true)
+    expect(itineraryStartsOnRoute(orangeThenEighteen, '1:18')).toBe(false)
+  })
+
+  it('rejects a trip that boards nothing', () => {
+    expect(itineraryStartsOnRoute(bikedAllTheWay, '1:18')).toBe(false)
+  })
+
+  it('takes a set of starting routes', () => {
+    expect(itineraryStartsOnRoute(orangeThenEighteen, ['1:18', '1:904'])).toBe(
+      true
+    )
+  })
+})
+
+describe('itineraryMatchesLock', () => {
+  const rode18Second = {
+    legs: [
+      { mode: 'BUS', route: { id: '1:904' } },
+      { mode: 'BUS', route: { id: '1:18' } }
+    ]
+  }
+  const only: RouteLock = {
+    routes: [{ id: '1:18', label: '18' }],
+    scope: 'only'
+  }
+  const starting: RouteLock = {
+    routes: [{ id: '1:18', label: '18' }],
+    scope: 'starting'
+  }
+
+  it('asks a different question for each scope', () => {
+    expect(itineraryMatchesLock(rode18Second, only)).toBe(true)
+    expect(itineraryMatchesLock(rode18Second, starting)).toBe(false)
+  })
+
+  it('matches everything when no routes are named', () => {
+    expect(itineraryMatchesLock(rode18Second, undefined)).toBe(true)
+    expect(
+      itineraryMatchesLock(rode18Second, { routes: [], scope: 'only' })
+    ).toBe(true)
+  })
+})
+
+describe('routeLockText', () => {
+  it('names every route in one phrase', () => {
+    expect(
+      routeLockText({
+        routes: [
+          { id: '1:18', label: '18' },
+          { id: '1:904', label: 'METRO Orange Line' }
+        ],
+        scope: 'only'
+      })
+    ).toBe('18, METRO Orange Line')
+  })
+})
+
+describe('applyRouteLockToItineraries', () => {
+  const startsOn18 = {
+    id: 'a',
+    legs: [{ mode: 'BUS', route: { id: '1:18' } }]
+  }
+  const startsOnOrange = {
+    id: 'b',
+    legs: [{ mode: 'BUS', route: { id: '1:904' } }]
+  }
+  const biked = { id: 'c', legs: [{ mode: 'BICYCLE' }] }
+  const list = [startsOnOrange, biked, startsOn18]
+
+  it('partitions an "only these" lock without dropping anything', () => {
+    const out = applyRouteLockToItineraries(list, {
+      routes: [{ id: '1:18', label: '18' }],
+      scope: 'only'
+    })
+    expect(out.map((i) => i.id)).toEqual(['a', 'b', 'c'])
+  })
+
+  it('filters a starting-route lock down to the trips that start on it', () => {
+    const out = applyRouteLockToItineraries(list, {
+      routes: [{ id: '1:18', label: '18' }],
+      scope: 'starting'
+    })
+    expect(out.map((i) => i.id)).toEqual(['a'])
+  })
+
+  it('keeps both named starting routes', () => {
+    const out = applyRouteLockToItineraries(list, {
+      routes: [
+        { id: '1:18', label: '18' },
+        { id: '1:904', label: 'METRO Orange Line' }
+      ],
+      scope: 'starting'
+    })
+    expect(out.map((i) => i.id)).toEqual(['b', 'a'])
+  })
+
+  it('shows the whole list rather than nothing when nothing complies', () => {
+    // Narrowing to zero is not narrowing, it is a blank screen. The rows carry
+    // their own "doesn't start on X" note instead.
+    const out = applyRouteLockToItineraries(list, {
+      routes: [{ id: '1:921', label: 'METRO A Line' }],
+      scope: 'starting'
+    })
+    expect(out).toEqual(list)
+  })
+
+  it('leaves the list alone when no routes are named', () => {
+    expect(applyRouteLockToItineraries(list, undefined)).toBe(list)
+  })
+})
+
+// A phone that took the 09-02 web bundle reopens on the URL the PREVIOUS
+// bundle left behind, and `routeLock` rides on `currentQuery`, which is
+// serialised into that URL. So the first render after an update can be handed
+// the single-route lock builds up to 8534746f wrote — `{ id, label }`, with no
+// `routes` array and no `scope`. Every reader has to survive it.
+describe('a lock saved by a build before the route list (#46)', () => {
+  const legacy: any = { id: '1:904', label: 'METRO Orange Line' }
+
+  it('reads as the one route the rider had picked', () => {
+    expect(routeLockRoutes(legacy)).toEqual([
+      { id: '1:904', label: 'METRO Orange Line' }
+    ])
+    expect(routeLockIds(legacy)).toEqual(['1:904'])
+    expect(routeLockText(legacy)).toBe('METRO Orange Line')
+  })
+
+  it('falls back to the id when the old entry carried no label', () => {
+    expect(routeLockRoutes({ id: '1:18' } as any)).toEqual([
+      { id: '1:18', label: '1:18' }
+    ])
+  })
+
+  it('means "ride nothing else", which is all the old shape could say', () => {
+    expect(routeLockScope(legacy)).toBe('only')
+    expect(routeLockScope(null)).toBe('only')
+    expect(routeLockScope({ routes: [], scope: 'starting' })).toBe('starting')
+  })
+
+  it('still partitions a results list by the locked route', () => {
+    const onOrange = { legs: [{ route: { gtfsId: '1:904' } }] }
+    const allBike = { legs: [{ mode: 'BICYCLE' }] }
+    expect(itineraryMatchesLock(onOrange, legacy)).toBe(true)
+    expect(itineraryMatchesLock(allBike, legacy)).toBe(false)
+    expect(applyRouteLockToItineraries([allBike, onOrange], legacy)).toEqual([
+      onOrange,
+      allBike
+    ])
+  })
+
+  it('is empty for no lock at all', () => {
+    expect(routeLockRoutes(null)).toEqual([])
+    expect(routeLockRoutes(undefined)).toEqual([])
   })
 })

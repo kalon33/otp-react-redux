@@ -132,7 +132,13 @@ async function main() {
 
   // ---- 2. drive the app ----
   const browser = await puppeteer.launch({
-    args: ['--no-sandbox'],
+    // --disable-gpu is not cosmetic here: this host runs a real X session, and
+    // headless Chrome crashed on launch with "Protocol error
+    // (Target.setAutoAttach): Target closed" on 3 of 4 attempts without it and
+    // 0 of 7 with it (2026-09-02). --disable-dev-shm-usage is the usual
+    // companion; /dev/shm is roomy on this box but the pair is what was
+    // measured.
+    args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
     executablePath: CHROME,
     headless: 'new'
   })
@@ -209,7 +215,9 @@ async function main() {
         duration: o.itinerary.duration,
         legs: (o.itinerary.legs || []).map((l) => l.mode).join(','),
         stopId: o.stopId,
-        stopName: o.stopName,
+        // The caption the row shows and the stop a tap guides to: the planning
+        // anchor (stopName) only when the built ride does not run past it.
+        stopName: o.alightStopName || o.stopName,
         transfers: o.itinerary.transfers,
         walk: Math.round(o.itinerary.walkDistance || 0)
       })),
@@ -237,18 +245,67 @@ async function main() {
     path: path.join(OUT, 'onboard-options-list.png')
   })
 
-  // ---- 5. choose the SECOND option via the real UI (itinerary-list rows) ----
-  const target = opts[1]
-  const clicked = await page.evaluate(() => {
-    // Options render through the normal itinerary list; rows are li.result in
-    // alightOptions order. Tapping anywhere on the SECOND row selects it.
-    const rows = document.querySelectorAll('li.result')
-    if (rows.length < 2) return null
-    rows[1].dispatchEvent(new MouseEvent('click', { bubbles: true }))
-    return `clicked row #2 of ${rows.length}`
-  })
-  if (!clicked) throw new Error(`could not click row for "${target.stopName}"`)
-  console.log(`[click] chose option 2: "${target.stopName}" (${clicked})`)
+  // ---- 5. choose the SECOND ROW via the real UI (itinerary-list rows) ----
+  //
+  // Two things about this row list changed with `gomode/onboard-ui` (3.7), and
+  // both used to break this block (6.42):
+  //
+  //  1. Rows are NOT alightOptions 1:1 any more. `groupAlightOptionsByRoute`
+  //     stacks options riding the same chain of routes into one row and
+  //     reorders them (5 options → 3 rows on a typical run), so `opts[1]` is
+  //     not what row 2 shows. The row states its own stop in an "Off at X"
+  //     label (OnboardItineraryList.tsx), so read the target off the row and
+  //     match it back to an option by NAME rather than by index.
+  //  2. The tap target moved. `onClickCapture` sits on an inner <div> rather
+  //     than on `li.result`, so the variants drill-down can live outside it —
+  //     a synthetic click on the `li` never reaches the handler and the run
+  //     just times out waiting for guidance to start.
+  const defaultStopName = opts.find((o) => o.stopId === onboard.best)?.stopName
+  const chosen = await page.evaluate((defaultName) => {
+    const rows = [...document.querySelectorAll('li.result')]
+    if (rows.length < 2) return { error: `only ${rows.length} row(s) rendered` }
+    // The label is its own leaf <div> ("Off at {stop}", OnboardItineraryList).
+    // Match leaves only: every ancestor's textContent starts with it too, and
+    // the outermost one carries the whole itinerary body with it.
+    const nameOf = (row) => {
+      const label = [...row.querySelectorAll('*')]
+        .filter((el) => el.children.length === 0)
+        .map((el) => (el.textContent || '').trim())
+        .find((t) => /^Off at\s+\S/.test(t))
+      return label ? label.replace(/^Off at\s+/, '') : null
+    }
+    const names = rows.map(nameOf)
+    // Take the first row offering a stop OTHER than the one the app would pick
+    // on its own — the whole point of this block is that a non-default choice
+    // is honoured, and after grouping that stop is not reliably row 2.
+    const pick = names.findIndex((n) => n && n !== defaultName)
+    if (pick < 0) {
+      return {
+        error: `no row offered a stop other than "${defaultName}"`,
+        names
+      }
+    }
+    // The inner div carrying onClickCapture is the row's first element child;
+    // the variants drill-down deliberately sits outside it, so a click on the
+    // `li` itself (what this script used to do) reaches no handler at all.
+    const tapTarget = rows[pick].firstElementChild
+    if (!tapTarget) return { error: `row ${pick + 1} has no tap target`, names }
+    tapTarget.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    return { names, pick, rowCount: rows.length, stopName: names[pick] }
+  }, defaultStopName)
+  if (chosen.error)
+    throw new Error(`could not choose an onboard row: ${chosen.error}`)
+  const target = opts.find((o) => o.stopName === chosen.stopName)
+  if (!target)
+    throw new Error(
+      `row ${chosen.pick + 1} shows "${chosen.stopName}", which is not one ` +
+        `of the ranked options (${opts.map((o) => o.stopName).join(' | ')})`
+    )
+  console.log(
+    `[click] ${chosen.rowCount} row(s) from ${opts.length} option(s): ` +
+      `${chosen.names.join(' | ')} — chose row ${chosen.pick + 1} ` +
+      `"${chosen.stopName}" (default was "${defaultStopName}")`
+  )
 
   await page.waitForFunction(
     () => {
@@ -269,9 +326,20 @@ async function main() {
     }
   })
   console.log('[after]', JSON.stringify(after))
-  if (after.alightStop !== target.stopId)
+  // Assert on the stop the ROW promised, not on an option index: several
+  // options can share a stop name (grouping stacks them), so the row's own
+  // caption is the only thing the rider actually chose.
+  if (after.alightStopName !== chosen.stopName)
     throw new Error(
-      `guidance alight stop ${after.alightStop} != chosen ${target.stopId}`
+      `guidance alight stop "${after.alightStopName}" != chosen ` +
+        `"${chosen.stopName}" — rows were [${chosen.names.join(' | ')}], ` +
+        `row ${chosen.pick + 1} was tapped, and guidance came back with ` +
+        `legs ${after.legs} alighting at ${after.alightStop}`
+    )
+  if (after.alightStop === onboard.best)
+    throw new Error(
+      `guidance started on the DEFAULT stop ${onboard.best} — the rider's ` +
+        'non-default choice was not honoured'
     )
   if (!after.isActive) throw new Error('go mode not active after confirm')
   console.log(

@@ -16,6 +16,7 @@ import type { StopCountLatch } from './next-stop'
  * `replayTrackedRouteId` deliberately outlive a trip today. They stay module
  * scoped in actions/go-mode.ts rather than change behaviour silently.
  */
+import type { BoardStopDwell } from './riding'
 import type { DepartureBaselineState } from './departure-drift'
 import type { DestinationProgressState } from './destination-progress'
 import type { MissedBusAttempt } from './missed-bus-recovery'
@@ -24,6 +25,13 @@ import type { RiderSpeedSample } from './rider-speed'
 import type { TimedSimulationPoint } from './geometry'
 
 export interface TripSession {
+  /**
+   * How long the rider has waited, continuously, at the boarding stop of the
+   * leg the matcher is on. The board gate's one non-instantaneous input — see
+   * BOARD_STOP_DWELL_MIN_MS in riding.ts.
+   */
+  boardStopDwell: BoardStopDwell | null
+
   /**
    * Closest approach to the destination so far, and how many re-plans have gone
    * out since it last improved. The only thing in Go Mode that remembers
@@ -103,6 +111,13 @@ export interface TripSession {
   lastQuietReplanAt: number
 
   /**
+   * Wall-clock ms of the last reroute snapshot that actually fetched, so the
+   * stretched cadence used while the rider is settled aboard has something to
+   * measure against. 0 before the first capture of the trip.
+   */
+  lastRerouteSnapshotAt: number
+
+  /**
    * A leg transition is side-effectful (vehicle tracking, GPS interval restart,
    * departure-override reset), so it must run once per leg. The route match is
    * recomputed from raw position every tick and cannot carry that fact.
@@ -155,6 +170,14 @@ export interface TripSession {
   rerouteSnapshotIntervalId: ReturnType<typeof setInterval> | null
 
   /**
+   * When the rider last tapped "Not on the bus" on the trip sheet. Holds the
+   * automatic, evidence-free half of the board gate off for a few minutes so
+   * the matcher cannot immediately put them back aboard — see
+   * boarding-confirmation.ts. Trip state, never trip-crossing.
+   */
+  riderDeniedBoardingAtMs: number | null
+
+  /**
    * Recent ground speeds off the rider's own fixes while they are on a bike
    * leg, for the observed-bikeSpeed estimate a replan query carries. See
    * rider-speed.ts — this is a rolling estimate precisely because a single
@@ -184,6 +207,7 @@ export interface TripSession {
 /** A trip's state at its first GPS fix. */
 export function createTripSession(): TripSession {
   return {
+    boardStopDwell: null,
     destinationProgress: null,
     deviationHandledAtMs: null,
     earlyBoardReplan: null,
@@ -197,6 +221,7 @@ export function createTripSession(): TripSession {
     lastLiveLegTimesAt: 0,
     lastPacingCard: null,
     lastQuietReplanAt: 0,
+    lastRerouteSnapshotAt: 0,
     lastTransitionedLegIndex: null,
     lastTurnCardKey: null,
     manualDepartureLock: false,
@@ -206,6 +231,7 @@ export function createTripSession(): TripSession {
     quietReplanHistory: [],
     quietReplanMissStreak: 0,
     rerouteSnapshotIntervalId: null,
+    riderDeniedBoardingAtMs: null,
     riderSpeedSamples: [],
     simulatedTimeMs: 0,
     simulationActive: false,

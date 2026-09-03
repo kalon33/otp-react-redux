@@ -1,6 +1,7 @@
 import {
   clampNonLiveLegTimes,
   getDownstreamStops,
+  groupAlightOptionsByRoute,
   liveStopArrival,
   mergeLiveTimePoint,
   pickBestAlightOption,
@@ -500,10 +501,30 @@ describe('clampNonLiveLegTimes', () => {
     expect(out?.[2].alightEpoch).toBe(NOW)
   })
 
-  it('carries the alight along when raising the board past it', () => {
-    // 8/2: raising a non-live board time to now while a live alight sat in
-    // the past showed the rider arriving before they got on, and re-fired
-    // SET_LIVE_LEG_TIMES once a second for the whole ride.
+  it('carries a schedule-only alight along when raising the board past it', () => {
+    // 8/2: raising a non-live board time to now while the alight sat in the
+    // past showed the rider arriving before they got on.
+    const times = {
+      1: entry({
+        alightEpoch: NOW - 60000,
+        alightRealtime: false,
+        boardEpoch: NOW - 90000,
+        boardRealtime: false
+      })
+    }
+    const out = clampNonLiveLegTimes(times, NOW)
+    expect(out?.[1].boardEpoch).toBe(NOW)
+    expect(out?.[1].alightEpoch).toBe(NOW)
+  })
+
+  it('gives way at the BOARD when the alight is the feed’s own figure', () => {
+    // Corrected 2026-09-01. This case used to raise the live alight to now as
+    // well, which made the trip's live end slide with the wall clock: on ride
+    // 1 the Orange Line's realtime alight sat in the past and was re-written
+    // by every 20 s poll, while the schedule-only board was raised each 1 Hz
+    // tick and dragged it along. timeRemaining printed exactly 400.0 s on
+    // every tick and estimatedArrival could never arrive. The leg still may
+    // not read backwards — but it is the board, not the feed, that moves.
     const times = {
       1: entry({
         alightEpoch: NOW - 60000,
@@ -513,8 +534,11 @@ describe('clampNonLiveLegTimes', () => {
       })
     }
     const out = clampNonLiveLegTimes(times, NOW)
-    expect(out?.[1].boardEpoch).toBe(NOW)
-    expect(out?.[1].alightEpoch).toBe(NOW)
+    expect(out?.[1].alightEpoch).toBe(NOW - 60000)
+    expect(out?.[1].boardEpoch).toBe(NOW - 60000)
+    expect(out?.[1].boardEpoch).toBeLessThanOrEqual(
+      out?.[1].alightEpoch as number
+    )
   })
 
   it('leaves a merely-late live pair alone — that is honest data', () => {
@@ -652,5 +676,116 @@ describe('liveStopArrival projection for a schedule-only trip', () => {
     const stale = { epoch: NOW + 300_000, projected: true, realtime: false }
     const fresher = { epoch: NOW + 120_000, projected: true, realtime: false }
     expect(mergeLiveTimePoint(stale, fresher, NOW)).toEqual(fresher)
+  })
+})
+
+/**
+ * Rider ask #44 (2026-08-27): "on the already on the bus search they aren't
+ * stacked, just a list of the same routes." Five ranked options off one bus
+ * are routinely the same route chain reached from five alight stops.
+ */
+describe('groupAlightOptionsByRoute', () => {
+  const MIN = 60000
+  const T = 1700000000000
+
+  /** An onboard option whose DISPLAY itinerary rides `routes` in order. */
+  const option = (
+    stopName: string,
+    routes: string[],
+    { bikeAfter = 400, endTime = T + 30 * MIN, hopMeters = 5000 } = {}
+  ) =>
+    ({
+      busArrivalEpoch: T,
+      displayItinerary: {
+        endTime,
+        legs: [
+          ...routes.map((routeId, i) => ({
+            distance: i === routes.length - 1 ? hopMeters : 5000,
+            mode: 'BUS',
+            routeId,
+            transitLeg: true
+          })),
+          { distance: bikeAfter, mode: 'BICYCLE', transitLeg: false }
+        ],
+        startTime: T
+      },
+      itinerary: { legs: [] },
+      realtime: true,
+      stopId: `s:${stopName}`,
+      stopName
+    } as any)
+
+  it('folds same-route-chain options into one row, best-ranked first', () => {
+    const groups = groupAlightOptionsByRoute([
+      option('98th St', ['1:539', '1:465']),
+      option('Nicollet', ['1:539', '1:465']),
+      option('Burnsville', ['1:539', '1:465'])
+    ])
+    expect(groups).toHaveLength(1)
+    expect(groups[0].option.stopName).toBe('98th St')
+    expect(groups[0].variants.map((v: any) => v.stopName)).toEqual([
+      '98th St',
+      'Nicollet',
+      'Burnsville'
+    ])
+  })
+
+  it('keeps genuinely different route chains apart', () => {
+    const groups = groupAlightOptionsByRoute([
+      option('98th St', ['1:539', '1:465']),
+      option('Mall', ['1:Orange']),
+      option('Nicollet', ['1:539', '1:465'])
+    ])
+    expect(groups).toHaveLength(2)
+    expect(groups.map((g: any) => g.variants.length)).toEqual([2, 1])
+  })
+
+  // The empty signature is "no transit after the bus". Bike-from-98th and
+  // bike-from-Nicollet share nothing but the absence of a route, so they must
+  // not collapse — the same rule itinerariesAreEqual applies.
+  it('never folds two bike-the-rest-of-the-way options together', () => {
+    const groups = groupAlightOptionsByRoute([
+      { ...option('98th St', []), displayItinerary: { endTime: T, legs: [] } },
+      { ...option('Nicollet', []), displayItinerary: { endTime: T, legs: [] } }
+    ] as any)
+    expect(groups).toHaveLength(2)
+  })
+
+  // The 2026-08-31 602 m case, on the onboard path: a two-block hop that ends
+  // in a 1743 m bike does not outrank the same journey without it.
+  it('demotes a row whose last transit leg is a token hop', () => {
+    const withHop = option('98th & Dupont', ['1:Orange', '1:539'], {
+      bikeAfter: 1743,
+      endTime: T + 30 * MIN,
+      hopMeters: 602
+    })
+    const withoutHop = option('Mall', ['1:Orange'], {
+      bikeAfter: 3970,
+      endTime: T + 33 * MIN,
+      hopMeters: 5000
+    })
+    const groups = groupAlightOptionsByRoute([withHop, withoutHop])
+    expect(groups.map((g: any) => g.option.stopName)).toEqual([
+      'Mall',
+      '98th & Dupont'
+    ])
+  })
+
+  it('leaves the token hop alone when nothing replaces it', () => {
+    const withHop = option('98th & Dupont', ['1:Orange', '1:539'], {
+      bikeAfter: 1743,
+      hopMeters: 602
+    })
+    const other = option('Mall', ['1:465'])
+    const groups = groupAlightOptionsByRoute([withHop, other])
+    expect(groups.map((g: any) => g.option.stopName)).toEqual([
+      '98th & Dupont',
+      'Mall'
+    ])
+  })
+
+  it('survives an empty or absent list', () => {
+    expect(groupAlightOptionsByRoute([])).toEqual([])
+    expect(groupAlightOptionsByRoute(null)).toEqual([])
   })
 })

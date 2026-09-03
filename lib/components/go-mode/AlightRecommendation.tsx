@@ -13,6 +13,7 @@ import {
   RerouteCard,
   RerouteCardTitle,
   RerouteKeepButton,
+  RerouteSummary,
   RerouteSwitchButton
 } from './styled'
 import OnboardItineraryList from './OnboardItineraryList'
@@ -115,6 +116,12 @@ const AlightRecommendation = ({
   const options = onboard.alightOptions || []
   if (options.length === 0) return null
 
+  // The list is ranked from whatever answered by the optimizer's deadline
+  // (4.1), so it can legitimately be short. Say so rather than presenting two
+  // of five candidate stops as the whole answer — a straggler that lands is
+  // folded in behind this line (optimizeAlightFromTrip's foldInLateResult).
+  const stillChecking = onboard.pendingCandidates || 0
+
   return (
     <OnboardResultsScroll>
       <GoModeLiveBanner>
@@ -129,6 +136,21 @@ const AlightRecommendation = ({
           id: 'components.GoMode.whereToAlight'
         })}
       </RerouteCardTitle>
+      {stillChecking > 0 && (
+        <RerouteSummary
+          data-testid="onboard-still-checking"
+          style={{ marginBottom: 0, padding: '0 16px' }}
+        >
+          {intl.formatMessage(
+            {
+              defaultMessage:
+                'Still checking {count, plural, one {1 more stop} other {# more stops}}…',
+              id: 'components.GoMode.stillCheckingStops'
+            },
+            { count: stillChecking }
+          )}
+        </RerouteSummary>
+      )}
       <OnboardItineraryList
         onSelect={(option) => confirmOnboardAlightStop(option)}
         options={options}

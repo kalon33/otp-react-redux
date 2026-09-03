@@ -5,19 +5,112 @@ import { getLegRouteId } from './go-mode/departure-anchor'
 import { isFilterMatch } from './state'
 
 /**
- * "Ride this route and nothing else, bike the rest."
+ * "Ride these routes and nothing else, bike the rest" — or "start me on one of
+ * these and then do what you like".
  *
  * This OTP's plan() has no include-style route filter — `whiteListed` and
  * `preferred` route *restriction* don't exist on it, and `preferred` alone is
- * only a 900s bias. So a lock is expressed the only way the graph allows:
- * ban every OTHER route. With ~150 routes in the Twin Cities graph that's an
- * ~800-character `banned.routes` string, which OTP takes without complaint.
+ * only a 900s bias. So a whole-trip lock is expressed the only way the graph
+ * allows: ban every OTHER route. With ~150 routes in the Twin Cities graph
+ * that's an ~800-character `banned.routes` string, which OTP takes without
+ * complaint, and banning the complement of a SET costs exactly the same as
+ * banning the complement of one (rider ask #46).
+ *
+ * A *starting* route (rider ask #45) is a different shape and a ban list cannot
+ * express it: the rider wants the first vehicle pinned and everything after it
+ * free, so banning the complement would also forbid the connections they just
+ * said were fine. Nothing on this server expresses it either — `startTransitStopId`
+ * is documented on the live schema as "has currently no effect", and there is no
+ * first-leg route argument — so it is a soft `preferred` bias on the query plus
+ * a post-filter over the results (see `itineraryStartsOnRoute`).
  */
-export interface RouteLock {
+
+/** One route the rider named. */
+export interface LockedRoute {
   /** OTP route id, feed-prefixed: "1:18". */
   id: string
   /** What to call it in the UI: "18", "METRO Orange Line". */
   label: string
+}
+
+/**
+ * How a named route constrains the trip.
+ *
+ * - `only`: ride nothing but these routes, bike the rest (the original lock).
+ * - `starting`: the FIRST transit leg must be one of these; the rest is free.
+ */
+export type RouteLockScope = 'only' | 'starting'
+
+/** The rider's route selection as it sits on `currentQuery.routeLock`. */
+export interface RouteLock {
+  routes: LockedRoute[]
+  scope: RouteLockScope
+}
+
+/**
+ * A lock as builds before 2026-09-02 wrote it: the single route, inline, with
+ * no `routes` array and no `scope`.
+ *
+ * It still turns up, because a lock is not a transient: it rides on
+ * `currentQuery`, and `currentQuery` is serialised into the URL hash on every
+ * search. A phone that took the 09-02 web bundle reopens on the URL the
+ * PREVIOUS bundle left behind, so new code reads an old lock on the first
+ * render after an update — before anything has had a chance to rewrite it.
+ */
+export interface LegacyRouteLock {
+  id: string
+  label?: string
+}
+
+/** Either shape, as it may actually arrive on `currentQuery.routeLock`. */
+export type AnyRouteLock = RouteLock | LegacyRouteLock
+
+/**
+ * The routes in a lock, whichever shape it is — the ONE place the old single
+ * route form is turned into the new list.
+ *
+ * Every reader goes through this rather than touching `.routes`, because
+ * `lock?.routes` is `undefined` for an old lock and the optional chain stops at
+ * `lock`: `lock?.routes.map(...)` throws, and a throw in a render is a white
+ * screen, not a missing chip.
+ */
+export function routeLockRoutes(lock?: AnyRouteLock | null): LockedRoute[] {
+  if (!lock) return []
+  const { routes } = lock as RouteLock
+  if (Array.isArray(routes)) {
+    return routes.filter((route) => !!route?.id)
+  }
+  const legacy = lock as LegacyRouteLock
+  return legacy.id ? [{ id: legacy.id, label: legacy.label || legacy.id }] : []
+}
+
+/**
+ * The lock's scope. An old lock has none, and it means "ride nothing else" —
+ * that is the only thing the single-route lock ever expressed.
+ */
+export function routeLockScope(lock?: AnyRouteLock | null): RouteLockScope {
+  return (lock as RouteLock)?.scope === 'starting' ? 'starting' : 'only'
+}
+
+/** The ids in a lock, in the order the rider picked them. */
+export function routeLockIds(lock?: AnyRouteLock | null): string[] {
+  return routeLockRoutes(lock)
+    .map((route) => route.id)
+    .filter(Boolean)
+}
+
+/** The labels in a lock, for copy that has to name them in one breath. */
+export function routeLockLabels(lock?: AnyRouteLock | null): string[] {
+  return routeLockRoutes(lock).map((route) => route.label)
+}
+
+/**
+ * The lock's routes as one comma-joined phrase ("18, METRO Orange Line").
+ * Used where a message takes a single {route} value; the chips render one
+ * chip per route instead.
+ */
+export function routeLockText(lock?: AnyRouteLock | null): string {
+  return routeLockLabels(lock).join(', ')
 }
 
 /** The minimum a route needs for us to lock onto it. */
@@ -86,18 +179,26 @@ export function routeLockLabel(route: LockableRoute): string {
 }
 
 /**
- * Every route id EXCEPT the one being kept, comma-joined for `banned.routes`.
+ * Every route id EXCEPT the ones being kept, comma-joined for `banned.routes`.
  *
  * Must be built from the full OTP route index — the graph carries more than one
  * feed (Metro Transit plus the suburban operators), and any route missing from
  * this list stays legal for the planner to use.
+ *
+ * Takes one id or a set of them. Keeping a set is the whole of rider ask #46:
+ * the complement is still one string and OTP still takes it, so "only the 18
+ * and the Orange Line" costs the same query as "only the 18". Passing an empty
+ * set would ban the entire graph, which is never what anyone meant, so it
+ * returns '' (no ban) instead.
  */
 export function buildBannedRoutes(
   routes: Record<string, LockableRoute> | undefined,
-  keepId: string
+  keep: string | string[]
 ): string {
+  const kept = new Set((Array.isArray(keep) ? keep : [keep]).filter(Boolean))
+  if (kept.size === 0) return ''
   return Object.keys(routes || {})
-    .filter((id) => id !== keepId)
+    .filter((id) => !kept.has(id))
     .join(',')
 }
 
@@ -114,7 +215,7 @@ export function buildBannedRoutes(
 export function resolveRouteLock(
   routes: Record<string, LockableRoute> | undefined,
   text: string
-): RouteLock | null {
+): LockedRoute | null {
   const query = (text || '').trim()
   if (!query) return null
 
@@ -158,15 +259,104 @@ export function resolveRouteLock(
 }
 
 /**
- * Does this itinerary actually ride the locked route? OTP answers a locked
- * search with the bike-the-whole-way option too, so the results list has to be
- * able to tell the two apart rather than presenting a bike ride as a bus trip.
+ * Does this itinerary actually ride one of the locked routes? OTP answers a
+ * locked search with the bike-the-whole-way option too, so the results list has
+ * to be able to tell the two apart rather than presenting a bike ride as a bus
+ * trip. Takes one id or a set of them.
  */
 export function itineraryUsesRoute(
   itinerary: { legs?: Array<unknown> } | null | undefined,
-  routeId: string
+  route: string | string[]
 ): boolean {
-  return !!itinerary?.legs?.some(
-    (leg) => getLegRouteId(leg as never) === routeId
+  const wanted = new Set(
+    (Array.isArray(route) ? route : [route]).filter(Boolean)
   )
+  if (wanted.size === 0) return false
+  return !!itinerary?.legs?.some((leg) => {
+    const id = getLegRouteId(leg as never)
+    return !!id && wanted.has(id)
+  })
+}
+
+/**
+ * The route the itinerary's FIRST transit leg rides, or null when it never
+ * boards anything (a bike-the-whole-way answer).
+ *
+ * "First" is leg order, not the order OTP happened to return: legs come back in
+ * travel order and `getLegRouteId` is null for every street leg, so the first
+ * non-null one is the vehicle the rider boards first.
+ */
+export function firstTransitRouteId(
+  itinerary: { legs?: Array<unknown> } | null | undefined
+): string | null {
+  for (const leg of itinerary?.legs || []) {
+    const id = getLegRouteId(leg as never)
+    if (id) return id
+  }
+  return null
+}
+
+/**
+ * Rider ask #45: "use as starting route", not "use only this route".
+ *
+ * True when the first vehicle the itinerary boards is one of the named routes.
+ * A trip that boards nothing at all is NOT a match — the rider asked to start
+ * on a bus, and a bike-the-whole-way answer starts on no bus.
+ */
+export function itineraryStartsOnRoute(
+  itinerary: { legs?: Array<unknown> } | null | undefined,
+  route: string | string[]
+): boolean {
+  const wanted = new Set(
+    (Array.isArray(route) ? route : [route]).filter(Boolean)
+  )
+  if (wanted.size === 0) return false
+  const first = firstTransitRouteId(itinerary)
+  return !!first && wanted.has(first)
+}
+
+/**
+ * Does this itinerary satisfy the lock, whichever shape it is?
+ *
+ * The one place the two scopes are told apart, so the results list and any
+ * future consumer cannot drift on what "complies" means.
+ */
+export function itineraryMatchesLock(
+  itinerary: { legs?: Array<unknown> } | null | undefined,
+  lock?: AnyRouteLock | null
+): boolean {
+  const ids = routeLockIds(lock)
+  if (ids.length === 0) return true
+  return routeLockScope(lock) === 'starting'
+    ? itineraryStartsOnRoute(itinerary, ids)
+    : itineraryUsesRoute(itinerary, ids)
+}
+
+/**
+ * Order (or narrow) a results list to honour the rider's named routes.
+ *
+ * Two different treatments, because the two asks are different:
+ *
+ * - `only` (#46): a stable PARTITION — compliant trips first, the rest kept
+ *   below and labelled in the row. OTP answers a locked search with the
+ *   bike-the-whole-way option too, and sometimes that really is the better
+ *   trip, so nothing is thrown away.
+ * - `starting` (#45): a FILTER, because "my route is one row in forty" is the
+ *   complaint. It only ever narrows, and if the constraint would empty the list
+ *   the original list is returned untouched — a truthful list whose rows each
+ *   say "doesn't start on X" beats a blank screen.
+ *
+ * Returns the input array itself when there is no lock, so callers can use the
+ * result unconditionally.
+ */
+export function applyRouteLockToItineraries<
+  T extends { legs?: Array<unknown> }
+>(itineraries: T[], lock?: AnyRouteLock | null): T[] {
+  if (routeLockIds(lock).length === 0) return itineraries
+  const matches = (itinerary: T) => itineraryMatchesLock(itinerary, lock)
+  const kept = itineraries.filter(matches)
+  if (routeLockScope(lock) === 'starting') {
+    return kept.length > 0 ? kept : itineraries
+  }
+  return [...kept, ...itineraries.filter((itin) => !matches(itin))]
 }

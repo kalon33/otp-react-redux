@@ -16,9 +16,18 @@ import { SetActiveItineraryHandler } from './departure-times-list'
  * though — they board or alight a stop or two apart, which can be a mile of
  * biking either way — so the row offers a way back to them.
  */
+/**
+ * A variant may carry a one-word caption naming the axis it varies on. The
+ * planner passes none — there the row IS the journey and the times and
+ * distances say everything. Go Mode's onboard list passes the alight stop,
+ * because there "which stop do I get off at" is the whole choice being made
+ * and two variants can otherwise read as the same trip twice.
+ */
+export type VariantItinerary = ItineraryWithIndex & { variantLabel?: string }
+
 type Props = {
   itinerary: ItineraryWithIndex & {
-    sameShapeVariants?: ItineraryWithIndex[]
+    sameShapeVariants?: VariantItinerary[]
   }
   setActiveItinerary: SetActiveItineraryHandler
 }
@@ -134,6 +143,7 @@ const SameShapeVariants = ({
                   data-index={variant.index}
                   onClick={choose}
                 >
+                  {variant.variantLabel && `${variant.variantLabel} · `}
                   <FormattedTime value={variant.startTime} />
                   {' – '}
                   <FormattedTime value={variant.endTime} />
