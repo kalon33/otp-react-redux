@@ -35,7 +35,7 @@ export function getMainItineraryModes({
     if (isTransitLeg(leg) && duration > primaryTransitDuration) {
       primaryTransitDuration = duration
       transitMode = getFormattedMode(
-        combineTransitModes ? 'transit' : mode.toLowerCase(),
+        combineTransitModes ? 'transit' : mode?.toLowerCase?.() || mode,
         intl
       )
     }

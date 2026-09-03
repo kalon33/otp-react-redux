@@ -49,7 +49,7 @@ export function GeocodedOptionIcon({
       return (
         <IconWrapper>
           {/* role="img" is syntactically incorrect, but is needed for correct rendering in Webkit */}
-          <ModeIcon aria-hidden mode={modes[0].toLowerCase()} role="img" />
+          <ModeIcon aria-hidden mode={modes[0]?.toLowerCase?.() || modes[0]} role="img" />
         </IconWrapper>
       )
     }

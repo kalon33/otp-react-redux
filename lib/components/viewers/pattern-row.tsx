@@ -43,9 +43,9 @@ const renderDay = (homeTimezone: string, day: number): JSX.Element => {
             <FormattedDayOfWeek
               // 'iiii' returns the long ISO day of the week (independent of browser locale).
               // See https://date-fns.org/v2.28.0/docs/format
-              day={format(formattedDay, 'iiii', {
+              day={(format(formattedDay, 'iiii', {
                 timeZone: homeTimezone
-              }).toLowerCase()}
+              })?.toLowerCase?.() || '')}
             />
           </IconWithText>
         </p>

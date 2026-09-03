@@ -26,7 +26,7 @@ const FormattedCalendarString = ({ date, timeZone }: Props): JSX.Element => {
   const today = toDate(getCurrentDate(timeZone), { timeZone })
   const compareDate = toDate(date, { timeZone })
   const days = differenceInDays(compareDate, today)
-  const dayId = format(compareDate, 'eeee').toLowerCase()
+  const dayId = (format(compareDate, 'eeee')?.toLowerCase?.() || '')
 
   if (days > -7 && days < -1) {
     const formattedDayOfWeek = <FormattedDayOfWeek day={dayId} />

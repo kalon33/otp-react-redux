@@ -17,7 +17,7 @@ const getRealtimeStatusLabel = ({
     { id: 'common.time.tripDurationFormat' },
     { hours: 0, minutes: minutes, seconds: 0 }
   )
-  switch (status.toLowerCase()) {
+  switch (status?.toLowerCase?.() || status) {
     case 'early':
       return intl.formatMessage(
         { id: 'components.RealtimeStatusLabel.early' },

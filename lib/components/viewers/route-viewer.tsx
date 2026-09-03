@@ -206,7 +206,7 @@ class RouteViewer extends Component<Props, State> {
                 </option>
                 {modes.map((mode) => (
                   <option key={mode} value={mode.toUpperCase()}>
-                    {getFormattedMode(mode.toLowerCase(), intl)}
+                    {getFormattedMode(mode?.toLowerCase?.() || mode, intl)}
                   </option>
                 ))}
               </select>

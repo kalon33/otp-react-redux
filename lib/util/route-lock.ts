@@ -223,7 +223,7 @@ export function resolveRouteLock(
     ...route,
     id: route.id || id
   }))
-  const normalized = query.toLowerCase()
+  const normalized = query?.toLowerCase() || ''
 
   const exact = all.filter(
     (route) =>

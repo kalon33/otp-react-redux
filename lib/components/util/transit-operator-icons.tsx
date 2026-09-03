@@ -35,7 +35,7 @@ const Operator = ({ operator }: { operator?: TransitOperator }) => {
       // e.g. "sound-transit"
       <OperatorContainer
         className={
-          operator.name ? operator.name.replace(/\s+/g, '-').toLowerCase() : ''
+          operator.name ? (operator.name.replace(/\s+/g, '-')?.toLowerCase?.() || '') : ''
         }
       >
         <OperatorLogo alt={operatorLogoAriaLabel} operator={operator} styled />

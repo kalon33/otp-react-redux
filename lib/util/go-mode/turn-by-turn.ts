@@ -232,7 +232,7 @@ export function phraseInstructionWithIntl(step: Step, intl: IntlShape): string {
  * right on Oak").
  */
 export function asContinuation(instruction: string): string {
-  return instruction.charAt(0).toLowerCase() + instruction.slice(1)
+  return (instruction?.charAt?.(0)?.toLowerCase?.() || '') + (instruction?.slice?.(1) || '')
 }
 
 /**
@@ -245,7 +245,7 @@ export function asContinuationWithIntl(
 ): string {
   // For localized strings, we need to handle the capitalization carefully
   // Since the instruction is already localized, we just lowercase the first character
-  return instruction.charAt(0).toLowerCase() + instruction.slice(1)
+  return (instruction?.charAt?.(0)?.toLowerCase?.() || '') + (instruction?.slice?.(1) || '')
 }
 
 /** Abbreviated distance ("300 ft", "0.4 mi" or metric equivalent) for cue copy. */

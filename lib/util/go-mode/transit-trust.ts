@@ -330,7 +330,7 @@ function headsignsConsistent(
   b: string | null | undefined
 ): boolean {
   if (a == null || b == null) return true
-  return a.trim().toLowerCase() === b.trim().toLowerCase()
+  return (a?.trim?.()?.toLowerCase?.() || a) === (b?.trim?.()?.toLowerCase?.() || b)
 }
 
 /**

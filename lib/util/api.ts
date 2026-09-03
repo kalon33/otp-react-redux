@@ -108,7 +108,7 @@ export function getDefaultModeButtons(state: AppReduxState): string[] {
   if (userSavedTripDefaults) {
     const userSavedModes = JSON.parse(userSavedTripDefaults)
       .mode?.split(',')
-      .map((x: string) => x.toLowerCase())
+      .map((x: string) => x?.toLowerCase?.() || x)
     return userSavedModes ?? defaultModeButtons
   } else {
     return defaultModeButtons
