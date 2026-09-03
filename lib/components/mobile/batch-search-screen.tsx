@@ -66,6 +66,7 @@ interface Props {
   currentQuery: any
   intl: IntlShape
   map: React.ReactElement
+  mapPickActive: boolean
   routingQuery: any
   setMobileScreen: (screen: number) => void
   syncCurrentLocationOrigin: () => void
@@ -133,7 +134,7 @@ class BatchSearchScreen extends Component<Props> {
   }
 
   render() {
-    const { intl } = this.props
+    const { intl, mapPickActive } = this.props
     const { planTripClicked, showAdvancedModeSettings } = this.state
     const { departArrive } = this.props.currentQuery
     const dateTimeSelectorOpen = departArrive !== 'NOW'
@@ -148,91 +149,96 @@ class BatchSearchScreen extends Component<Props> {
           })}
         />
         <main tabIndex={-1}>
-          <MobileSearchSettings
-            advancedPanelOpen={showAdvancedModeSettings}
-            className={`batch-search-settings mobile-padding ${
-              showAdvancedModeSettings && 'advanced-mode-open'
-            }`}
-            transitionDelay={transitionDelay}
-            transitionDuration={transitionDuration}
-          >
-            <TransitionStyles transitionDelay={transitionDelay}>
-              <TransitionGroup style={{ display: 'content' }}>
-                {/* Unfortunately we can't use a ternary operator here because it is cancelling out the CSSTransition animations. */}
-                {!showAdvancedModeSettings && (
-                  <CSSTransition
-                    classNames={mainPanelClassName}
-                    nodeRef={this._mainPanelContentRef}
-                    timeout={transitionDurationWithDelay}
-                  >
-                    <div
-                      ref={this._mainPanelContentRef}
-                      style={{ display: 'content' }}
+          {/* While the rider is choosing a point off the map (backlog 3.9) the
+              form gets out of the way, so the map they are aiming is the whole
+              screen rather than the strip below the form. */}
+          {!mapPickActive && (
+            <MobileSearchSettings
+              advancedPanelOpen={showAdvancedModeSettings}
+              className={`batch-search-settings mobile-padding ${
+                showAdvancedModeSettings && 'advanced-mode-open'
+              }`}
+              transitionDelay={transitionDelay}
+              transitionDuration={transitionDuration}
+            >
+              <TransitionStyles transitionDelay={transitionDelay}>
+                <TransitionGroup style={{ display: 'content' }}>
+                  {/* Unfortunately we can't use a ternary operator here because it is cancelling out the CSSTransition animations. */}
+                  {!showAdvancedModeSettings && (
+                    <CSSTransition
+                      classNames={mainPanelClassName}
+                      nodeRef={this._mainPanelContentRef}
+                      timeout={transitionDurationWithDelay}
                     >
-                      <LocationField
-                        inputPlaceholder={intl.formatMessage({
-                          id: 'components.LocationSearch.setOrigin'
-                        })}
-                        isRequired
-                        locationType="from"
-                        onTextInputClick={this._fromFieldClicked}
-                        selfValidate={planTripClicked}
-                        showClearButton={false}
-                      />
-                      <LocationField
-                        inputPlaceholder={intl.formatMessage({
-                          id: 'components.LocationSearch.setDestination'
-                        })}
-                        isRequired
-                        locationType="to"
-                        onTextInputClick={this._toFieldClicked}
-                        selfValidate={planTripClicked}
-                        showClearButton={false}
-                      />
-                      <div className="switch-button-container-mobile">
-                        <SwitchButton />
+                      <div
+                        ref={this._mainPanelContentRef}
+                        style={{ display: 'content' }}
+                      >
+                        <LocationField
+                          inputPlaceholder={intl.formatMessage({
+                            id: 'components.LocationSearch.setOrigin'
+                          })}
+                          isRequired
+                          locationType="from"
+                          onTextInputClick={this._fromFieldClicked}
+                          selfValidate={planTripClicked}
+                          showClearButton={false}
+                        />
+                        <LocationField
+                          inputPlaceholder={intl.formatMessage({
+                            id: 'components.LocationSearch.setDestination'
+                          })}
+                          isRequired
+                          locationType="to"
+                          onTextInputClick={this._toFieldClicked}
+                          selfValidate={planTripClicked}
+                          showClearButton={false}
+                        />
+                        <div className="switch-button-container-mobile">
+                          <SwitchButton />
+                        </div>
+                        <BatchSettings
+                          onPlanTripClick={this.handlePlanTripClick}
+                          openAdvancedSettings={this.openAdvancedSettings}
+                        />
+                        <ActiveRoutingPreferences />
+                        <SavePlaceButton />
+                        <OnBusButton onClick={this._onBusClicked} type="button">
+                          {intl.formatMessage({
+                            defaultMessage: "I'm already on the bus",
+                            id: 'components.GoMode.onBusButton'
+                          })}
+                        </OnBusButton>
                       </div>
-                      <BatchSettings
-                        onPlanTripClick={this.handlePlanTripClick}
-                        openAdvancedSettings={this.openAdvancedSettings}
+                    </CSSTransition>
+                  )}
+                  {showAdvancedModeSettings && (
+                    <CSSTransition
+                      classNames={advancedPanelClassName}
+                      nodeRef={this._advancedSettingRef}
+                      timeout={{
+                        enter: transitionDuration,
+                        exit: transitionDurationWithDelay
+                      }}
+                    >
+                      <AdvancedSettingsPanel
+                        closeAdvancedSettings={this.closeAdvancedSettings}
+                        handlePlanTrip={this.handlePlanTripClick}
+                        innerRef={this._advancedSettingRef}
+                        setCloseAdvancedSettingsWithDelay={
+                          this.setCloseAdvancedSettingsWithDelay
+                        }
                       />
-                      <ActiveRoutingPreferences />
-                      <SavePlaceButton />
-                      <OnBusButton onClick={this._onBusClicked} type="button">
-                        {intl.formatMessage({
-                          defaultMessage: "I'm already on the bus",
-                          id: 'components.GoMode.onBusButton'
-                        })}
-                      </OnBusButton>
-                    </div>
-                  </CSSTransition>
-                )}
-                {showAdvancedModeSettings && (
-                  <CSSTransition
-                    classNames={advancedPanelClassName}
-                    nodeRef={this._advancedSettingRef}
-                    timeout={{
-                      enter: transitionDuration,
-                      exit: transitionDurationWithDelay
-                    }}
-                  >
-                    <AdvancedSettingsPanel
-                      closeAdvancedSettings={this.closeAdvancedSettings}
-                      handlePlanTrip={this.handlePlanTripClick}
-                      innerRef={this._advancedSettingRef}
-                      setCloseAdvancedSettingsWithDelay={
-                        this.setCloseAdvancedSettingsWithDelay
-                      }
-                    />
-                  </CSSTransition>
-                )}
-              </TransitionGroup>
-            </TransitionStyles>
-          </MobileSearchSettings>
+                    </CSSTransition>
+                  )}
+                </TransitionGroup>
+              </TransitionStyles>
+            </MobileSearchSettings>
+          )}
           <div
             className={`batch-search-map ${
-              dateTimeSelectorOpen ? 'dt-open' : ''
-            }`}
+              mapPickActive ? 'map-pick-open' : ''
+            } ${dateTimeSelectorOpen && !mapPickActive ? 'dt-open' : ''}`}
           >
             <DefaultMap />
           </div>
@@ -247,7 +253,8 @@ class BatchSearchScreen extends Component<Props> {
 const mapStateToProps = (state: any) => {
   const currentQuery = state.otp.currentQuery
   return {
-    currentQuery
+    currentQuery,
+    mapPickActive: Boolean(state.otp.ui.mapPickLocationType)
   }
 }
 

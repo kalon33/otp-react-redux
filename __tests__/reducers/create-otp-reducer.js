@@ -81,4 +81,40 @@ describe('lib > reducers > create-otp-reducer', () => {
     })
     expect(replanned.goMode.ui.mapFollowUser).toBe(false)
   })
+
+  // Rider ask, backlog 3.9: "Choose on map" puts the map into pick mode, and
+  // the mode has to outlive the full-screen mobile picker that started it —
+  // hence redux state rather than component state.
+  it('tracks which end of the trip is being picked off the map', () => {
+    setDefaultTestTime()
+    const reducer = createOtpReducer({})
+    const initial = reducer(undefined, { type: '@@INIT' })
+    expect(initial.ui.mapPickLocationType).toBeNull()
+
+    const picking = reducer(initial, {
+      payload: { locationType: 'from' },
+      type: 'SET_MAP_PICK_MODE'
+    })
+    expect(picking.ui.mapPickLocationType).toBe('from')
+
+    // Entering pick mode closes the map popup: both set the same thing, and
+    // two ways to set it fighting over one tap is what the rider hit.
+    const withPopup = reducer(initial, {
+      payload: { location: { lat: 44.98, lon: -93.27, name: 'Somewhere' } },
+      type: 'SET_MAP_POPUP_LOCATION'
+    })
+    expect(withPopup.ui.mapPopupLocation).not.toBeNull()
+    const popupClosed = reducer(withPopup, {
+      payload: { locationType: 'to' },
+      type: 'SET_MAP_PICK_MODE'
+    })
+    expect(popupClosed.ui.mapPopupLocation).toBeNull()
+
+    expect(
+      reducer(picking, {
+        payload: { locationType: null },
+        type: 'SET_MAP_PICK_MODE'
+      }).ui.mapPickLocationType
+    ).toBeNull()
+  })
 })

@@ -43,6 +43,7 @@ import ElevationPointMarker from './elevation-point-marker'
 import EndpointsOverlay from './connected-endpoints-overlay'
 import GeoJsonLayer from './connected-geojson-layer'
 import ItinSummaryOverlay from './itinerary-summary-overlay'
+import MapPointPicker from './map-point-picker'
 import NearbyViewDotOverlay from './nearby-view-dot-overlay'
 import ParkAndRideOverlay from './connected-park-and-ride-overlay'
 import PointPopup from './point-popup'
@@ -59,6 +60,8 @@ import withMap from './with-map'
 
 const MapContainer = styled.div<{ hideLayerFilters: boolean }>`
   height: 100%;
+  /* The map-pick pin and its confirm bar are positioned against this box. */
+  position: relative;
   width: 100%;
 
   .map {
@@ -319,6 +322,10 @@ class DefaultMap extends Component<DefaultMapProps> {
   }
 
   onMapClick = (e) => {
+    // While the rider is choosing a point off the map (backlog 3.9), a
+    // long-press must not also raise the "plan a trip from here" popup — the
+    // two set the same thing and would fight over the same tap.
+    if (this.props.mapPickActive) return
     this.props.setMapPopupLocationAndGeocode(e)
   }
 
@@ -559,6 +566,7 @@ class DefaultMap extends Component<DefaultMapProps> {
           />
           {children}
         </BaseMap>
+        <MapPointPicker />
       </MapContainer>
     )
   }
@@ -602,6 +610,7 @@ const mapStateToProps = (state) => {
     feeds: state.otp.transitIndex.feeds,
     itinerary: getActiveItinerary(state),
     mapConfig: state.otp.config.map,
+    mapPickActive: Boolean(state.otp.ui.mapPickLocationType),
     nearbyFilters,
     nearbyViewActive:
       state.otp.ui.mainPanelContent === MainPanelContent.NEARBY_VIEW,

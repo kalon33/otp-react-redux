@@ -156,6 +156,7 @@ Object {
     "locale": null,
     "localizedMessages": null,
     "mainPanelContent": null,
+    "mapPickLocationType": null,
     "mobileScreen": 1,
     "nearbyView": Object {
       "filters": Object {

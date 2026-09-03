@@ -133,6 +133,12 @@
   transition: all 200ms ease;
 }
 
+/* Choosing a point off the map (backlog 3.9): the search form is not rendered,
+   so the map runs from just under the navigation bar to the bottom. */
+.otp.mobile .batch-search-map.map-pick-open {
+  top: 50px;
+}
+
 /* Detailed options screen */
 
 .otp.mobile .options-main-content {
