@@ -220,6 +220,7 @@ const StartTripButton = styled.button`
   &:active {
     background-color: #3d8b40;
 
+`;
 type Props = {
   LegIcon: React.ReactNode
   accessibilityScoreGradationMap: { [value: number]: string }
