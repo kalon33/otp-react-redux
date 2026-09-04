@@ -24,6 +24,7 @@ import {
 } from '../util/go-mode/alight-optimizer'
 import type { AlightCandidateResult } from '../util/go-mode/alight-optimizer'
 import {
+  accessSecondsToBoardStop,
   calculateTripProgress,
   hasArrivedAtDestination
 } from '../util/go-mode/progress-calculator'
@@ -4880,12 +4881,25 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       const boardAlert = checkBoardVehicleApproach(
         boardLeg,
         {
+          // Gate A: the run the rider is actually targeting. A pick that names
+          // a different run makes the planned trip's vehicle somebody else's
+          // bus (2026-09-04: override 12:13 against a boarding at 11:15:30).
+          departureOverrideMs: departureOverride,
           liveBoardEpochMs:
             liveBoardForAlert?.boardRealtime &&
             liveBoardForAlert.boardEpoch != null
               ? liveBoardForAlert.boardEpoch
               : null,
           nowMs: currentTime.getTime(),
+          // Gate B: the ground still in front of them, at the pace they are
+          // actually keeping — the same access chain and the same observed
+          // pace the quiet re-plan and the pacing card already run on.
+          secondsToBoardStop: accessSecondsToBoardStop(
+            itinerary.legs,
+            routeMatch.legIndex,
+            progress.currentLegProgress,
+            observedBikeSpeedMps()
+          ),
           vehicle: boardVehicleInfo
         },
         goMode.notifications?.sentNotifications || []

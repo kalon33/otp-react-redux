@@ -336,16 +336,20 @@ describe('util > go-mode > 2026-09-01 ride 3 arrival latch', () => {
   })
 
   describe('6.4 one source of truth for the time remaining', () => {
+    // 11:48:57 local. The floor the clamp now raises to is 11:49:00's
+    // predecessor, 1788270540000 — see LIVE_TIME_CLAMP_GRANULARITY_MS.
+    const NOW_MS = 1788270557000
+    const FLOOR_MS = 1788270540000
+
     it('leaves a realtime alight alone when it raises a schedule board', () => {
-      // The shape the ride actually carried at 11:48:57 local: the feed's
-      // alight for the ridden trip already in the past and flagged realtime,
-      // the board schedule-only. The board is raised to now; the alight is
-      // evidence and must not be dragged with it.
-      const nowMs = 1788270557000
+      // The shape the ride actually carried: the feed's alight for the ridden
+      // trip already in the past and flagged realtime, the board
+      // schedule-only. The board may be raised; the alight is evidence and
+      // must not be dragged with it, so the board is capped back onto it.
       const clamped = clampNonLiveLegTimes(
         {
           0: {
-            alightEpoch: 1788270300000,
+            alightEpoch: FLOOR_MS - 5000,
             alightProjected: false,
             alightRealtime: true,
             boardEpoch: 1788270300000,
@@ -354,17 +358,36 @@ describe('util > go-mode > 2026-09-01 ride 3 arrival latch', () => {
             realtime: true
           }
         },
-        nowMs
+        NOW_MS
       )
       expect(clamped).not.toBeNull()
-      // The feed's alight survives; the board gives way to it instead, so the
-      // leg still cannot read backwards.
-      expect((clamped as any)[0].alightEpoch).toBe(1788270300000)
-      expect((clamped as any)[0].boardEpoch).toBe(1788270300000)
+      expect((clamped as any)[0].alightEpoch).toBe(FLOOR_MS - 5000)
+      expect((clamped as any)[0].boardEpoch).toBe(FLOOR_MS - 5000)
+    })
+
+    it('dispatches nothing when the cap hands the board straight back', () => {
+      // Corrected 2026-09-04. With board and alight already equal, the raise
+      // is undone by the cap and the record comes out byte-identical — which
+      // used to be reported as a change and dispatched on every 1 Hz tick.
+      expect(
+        clampNonLiveLegTimes(
+          {
+            0: {
+              alightEpoch: 1788270300000,
+              alightProjected: false,
+              alightRealtime: true,
+              boardEpoch: 1788270300000,
+              boardProjected: false,
+              boardRealtime: false,
+              realtime: true
+            }
+          },
+          NOW_MS
+        )
+      ).toBeNull()
     })
 
     it('still carries a non-live alight with the board it inverted', () => {
-      const nowMs = 1788270557000
       const clamped = clampNonLiveLegTimes(
         {
           0: {
@@ -375,10 +398,10 @@ describe('util > go-mode > 2026-09-01 ride 3 arrival latch', () => {
             realtime: false
           }
         },
-        nowMs
+        NOW_MS
       )
-      expect((clamped as any)[0].boardEpoch).toBe(nowMs)
-      expect((clamped as any)[0].alightEpoch).toBe(nowMs)
+      expect((clamped as any)[0].boardEpoch).toBe(FLOOR_MS)
+      expect((clamped as any)[0].alightEpoch).toBe(FLOOR_MS)
     })
 
     it('counts down from the ground ahead once the plan end has passed', () => {
