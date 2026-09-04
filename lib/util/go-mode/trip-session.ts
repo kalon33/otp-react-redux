@@ -131,6 +131,16 @@ export interface TripSession {
   lastTurnCardKey: string | null
 
   /**
+   * Identifies the lock-screen Live Activity this Go Mode session owns, so a
+   * card left running by a previous session (a page reload mid-trip: the web
+   * layer restarts, the OS's activity does not) is recognised as somebody
+   * else's and ended rather than updated. Minted per session, never persisted
+   * — a resumed trip is a NEW card by design. Null when no card was ever
+   * started. See util/go-mode/live-activity.ts; backlog 8.10.
+   */
+  liveActivityTripId: string | null
+
+  /**
    * The rider's explicit departure pick must never be fought by the
    * auto-anchor, so a manual selectDeparture locks auto-anchoring off for the
    * current boarding.
@@ -239,6 +249,7 @@ export function createTripSession(): TripSession {
     lastRerouteSnapshotAt: 0,
     lastTransitionedLegIndex: null,
     lastTurnCardKey: null,
+    liveActivityTripId: null,
     manualDepartureLock: false,
     matchHeldSinceMs: null,
     missedBusNoticeKey: null,
