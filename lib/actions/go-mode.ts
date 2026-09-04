@@ -49,6 +49,7 @@ import {
   getNextStopOnRide
 } from '../util/go-mode/next-stop'
 import {
+  buildMissedBusOutcomeNotice,
   checkBoardVehicleApproach,
   checkDestinationUnreachable,
   checkForNotifications,
@@ -145,7 +146,8 @@ import {
 } from '../util/go-mode/replan-acceptance'
 import { accessArriveByTarget } from '../util/go-mode/arrive-on-time'
 import { ridingSuppressedByRider } from '../util/go-mode/boarding-confirmation'
-import { isTripRecordingEnabled } from '../util/debug-log'
+import { isTripRecordingEnabled, recordSessionEvent } from '../util/debug-log'
+import { holdBundleWhileTripActive } from '../util/native-updates'
 import { fetchOnboardContext } from '../util/go-mode/onboard-discovery'
 import {
   hasNativeGps,
@@ -167,6 +169,7 @@ import {
   getRouteDepartures
 } from '../util/go-mode/departure-anchor'
 import {
+  MISSED_BUS_NOTICE_ID,
   TURN_CARD_NOTIFICATION_ID,
   cancelPush,
   ensureNativeNotifyPermission,
@@ -202,6 +205,7 @@ import {
   onboardGraphQLQuery
 } from './apiV2'
 import { MobileScreens } from './ui-constants'
+import { routingRequest, routingResponse } from './api'
 import { setMainPanelContent, setMobileScreen, setViewedStop } from './ui'
 import { setQueryParam } from './form'
 
@@ -713,6 +717,10 @@ export function beginGoMode(rawItinerary: Itinerary) {
       currentQuery?.from ||
       null
     dispatch(startGoMode({ itinerary, originalFrom }))
+    // Stop the live-update plugin from installing a queued bundle the next
+    // time the phone is pocketed: `installNext()` runs on every background and
+    // knows nothing about a trip. See util/native-updates.
+    holdBundleWhileTripActive({ onHoldChange: recordSessionEvent })
     // While the trip is backgrounded (rider browsing the planner), an
     // auto-update swapping the itinerary through here must not yank the
     // screen back to Go Mode — explicit returns go through returnToGoMode.
@@ -797,6 +805,12 @@ export function startGoModeTracking(
   options: { replay?: boolean } = {}
 ) {
   return async function (dispatch: any, getState: any) {
+    // Every door into a live trip passes through here — a fresh start, a
+    // replan, a reroute, and the resume from storage — so this is the one
+    // place that guarantees the updater is held for the whole of it. A
+    // redundant call writes nothing.
+    holdBundleWhileTripActive({ onHoldChange: recordSessionEvent })
+
     // A trip that had ALREADY ARRIVED when the page came back. Everything below
     // that starts a repeating job — the boarding stop-time prefetch, live
     // vehicle polling, the reroute-snapshot capture, and the GPS poll's own
@@ -1074,6 +1088,12 @@ export function endGoMode() {
     }
     stopGpsWatchdog()
     stopRerouteSnapshotCapture()
+    // ...and the updater is allowed to install again. A bundle queued during
+    // the ride lands at the next background, or sooner through the apply gate.
+    holdBundleWhileTripActive({
+      active: false,
+      onHoldChange: recordSessionEvent
+    })
     // Stop the native background-location stream (iOS shell) — ends the blue
     // location indicator and the battery draw between trips. Its watchdog is
     // already down, so it can't restart the stream it just lost.
@@ -1265,16 +1285,108 @@ export function browseFromCurrentPosition(
 }
 
 /**
+ * Put alternatives the app has ALREADY fetched in front of the rider, in the
+ * planner they know — without running a second search.
+ *
+ * browseFromCurrentPosition is the rider-initiated twin of this and differs in
+ * exactly one thing: it hands setQueryParam a searchId, which makes the real
+ * routingQuery run. Here the itineraries are in hand — an isolated re-plan
+ * already paid for them — so the query is written WITHOUT a searchId (currentQuery
+ * only, no fetch) and the results are seeded straight into state.otp.searches
+ * through the same two actions routingQuery would dispatch. Re-issuing the query
+ * would spend a second round trip to be told something the rider has already
+ * been pushed the numbers for, and a search window that has moved on can answer
+ * differently — the screen must show what the notification talked about.
+ *
+ * From there it is an ordinary results screen: the expand-map/list toggle, the
+ * per-leg zoom, and the "Switch to this trip" button metro-itinerary renders
+ * whenever goMode.isActive. Nothing is applied. Switching is the rider's tap,
+ * which is the entire point for an ambiguous missed bus — the app is not sure
+ * the bus is gone, so it must not change their route on a guess.
+ *
+ * Backgrounds the trip so the ReturnToTripBanner is there to go back with, the
+ * same as a browse; endGoMode restores goMode.originalFrom on exit, since the
+ * origin is now the rider's GPS position either way.
+ *
+ * Returns false, having done nothing, when there is no position, no destination
+ * or nothing to show — the caller keeps its own bookkeeping honest by that.
+ */
+export function showRerouteCandidates(candidates: Itinerary[]) {
+  return function (dispatch: any, getState: any): boolean {
+    const state = getState()
+    const itinerary: Itinerary | null = state.otp?.goMode?.activeItinerary
+    const legs = itinerary?.legs || []
+    const destLeg = legs[legs.length - 1]
+    const origin = currentPositionOrigin(state)
+    if (!candidates?.length || !itinerary || !destLeg || !origin) return false
+
+    dispatch(
+      setQueryParam({
+        date: origin.date,
+        // Force depart-at, for the same reason a browse does: an earlier
+        // arrive-by search must not carry into "leave from here, now".
+        departArrive: 'DEPART',
+        from: origin.from,
+        time: origin.time,
+        to: {
+          lat: destLeg.to.lat,
+          lon: destLeg.to.lon,
+          name: destLeg.to.name
+        }
+      })
+    )
+
+    const searchId = randId()
+    dispatch(
+      routingRequest({
+        activeItinerary: null,
+        pending: 1,
+        routingType: 'ITINERARY',
+        searchId,
+        updateSearchInReducer: false
+      })
+    )
+    dispatch(
+      routingResponse({
+        // No `index`: the reducer then appends the response, which is the
+        // shape a single non-mode-combination request produces.
+        response: {
+          plan: {
+            // Shallow-cloned because the ROUTING_RESPONSE reducer runs
+            // applyRouteModeOverrides over the itineraries IN PLACE, and these
+            // objects are still live in goMode.reRoute.candidates.
+            itineraries: candidates.map((i) => ({
+              ...i,
+              legs: (i.legs || []).map((l) => ({ ...l }))
+            })),
+            routingErrors: []
+          },
+          requestId: searchId
+        },
+        searchId
+      })
+    )
+
+    dispatch(setGoModeBackgrounded(true))
+    dispatch(setMobileScreen(MobileScreens.RESULTS_SUMMARY))
+    return true
+  }
+}
+
+/**
  * Re-plan from the rider's current GPS position to the trip destination as an
  * ISOLATED background plan (real OTP results — no fabricated data): no shared
  * currentQuery, no URL change, no active-search churn, so the trip planner the
  * rider may be browsing in the foreground is never disturbed. Results resolve
  * here in the thunk (screen-independent) into goMode.reRoute and are
  * auto-apply-or-discard: applyAutoReroute swaps in a same-route result, and
- * anything else settles as bookkeeping (nothing renders goMode.reRoute
- * candidates since eb74a9d8 replaced the Switch/Keep card with the planner —
- * manual alternatives live there via browseFromCurrentPosition). Optionally
- * applies a routing profile.
+ * anything else settles into goMode.reRoute (status AND, since 2026-09-03, the
+ * itineraries themselves). eb74a9d8 replaced the Switch/Keep card with the
+ * planner, so no screen renders that slice on its own; the two things that read
+ * it back out are the rider's own browse (browseFromCurrentPosition, a fresh
+ * search) and the AMBIGUOUS missed-bus branch of handlePositionUpdate, which
+ * hands these very candidates to the planner via showRerouteCandidates rather
+ * than discarding them. Optionally applies a routing profile.
  */
 export function reRouteFromCurrentPosition(
   options: {
@@ -1482,10 +1594,10 @@ export function reRouteFromCurrentPosition(
  * one that keeps the rider on the route they chose (same route, next
  * departure). Auto-updating must never force a different route or mode; when
  * nothing boards the same route, the attempt settles via setRerouteResult
- * (bookkeeping only — no UI renders the candidates since eb74a9d8, but the
- * 'none'-settle retry semantics are load-bearing for missed-bus retries).
- * Manual alternatives live in the planner via browseFromCurrentPosition,
- * behind the explicit "Find another way" button.
+ * (the 'none'-settle retry semantics are load-bearing for missed-bus retries).
+ * This is the DEFINITIVE-miss path only; an ambiguous miss never reaches here,
+ * because it never sets autoApply. Manual alternatives live in the planner via
+ * browseFromCurrentPosition, behind the explicit "Find another way" button.
  */
 export function applyAutoReroute(
   allItineraries: Itinerary[],
@@ -4691,6 +4803,70 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       )
     if (missedEvent) notifications.push(missedEvent)
 
+    // An AMBIGUOUS missed bus, once its re-plan has settled.
+    //
+    // checkMissedBus says nothing for an ambiguous miss (it returns null), and
+    // that is deliberate: from eb74a9d8 until 2026-09-03 the app pushed "…may
+    // have left… — checking alternatives…" the instant it detected one, ran a
+    // real search, put the answer in goMode.reRoute, and then showed the rider
+    // nothing at all, because the Switch/Keep card that used to render that
+    // slice had been deleted. Observed on the 18:24 ride: the push at
+    // 18:24:39.372, two real itineraries at 18:24:43.856, and no screen that
+    // could display them.
+    //
+    // So the story is told here instead, once, when there is something to tell:
+    // the candidates go to the planner (the rider's own "other ways from here"
+    // screen, with its "Switch to this trip" button — nothing is applied, which
+    // is the point, because the app is NOT sure the bus is gone), and one push
+    // carries the outcome in the numbers the rider acts on. When the search
+    // came back empty they are told that in the same push rather than left
+    // waiting on a search that already finished.
+    //
+    // Latched on the departure AND on what the rider was last told, so an
+    // improvement (settled with nothing, then a retry finds something) is worth
+    // a second push while a repeat of the same answer is not. The push carries
+    // a stable native id, so that second one replaces the first on the wrist.
+    const missedRecovery = getState().otp?.goMode?.reRoute
+    const missedSettled =
+      missedRecovery?.reason === 'missed-bus' &&
+      !missedRecovery.autoApply &&
+      (missedRecovery.status === 'found' || missedRecovery.status === 'none')
+    if (missedCtx && !missedCtx.definitive && missedSettled) {
+      const candidates: Itinerary[] = missedRecovery.candidates || []
+      const noticeKey = `${missedCtx.effectiveBoardMs}:${
+        candidates.length ? 'found' : 'none'
+      }`
+      if (session.missedBusNoticeKey !== noticeKey) {
+        session.missedBusNoticeKey = noticeKey
+        // Only claim the planner when there is something to put in it; a
+        // "no alternatives" push must not also throw the rider off their trip
+        // screen onto an empty results list.
+        if (candidates.length) dispatch(showRerouteCandidates(candidates))
+        notifications.push(
+          buildMissedBusOutcomeNotice({
+            candidates,
+            ctx: missedCtx,
+            legs: itinerary.legs,
+            nowMs: currentTime.getTime()
+          })
+        )
+      }
+    } else if (session.missedBusNoticeKey !== null && !missedCtx) {
+      // Withdrawn: the bus was not missed after all — the rider boarded, a
+      // vehicle match resumed, or the planned trip's own vehicle turned up at
+      // the stop, any of which makes classifyMissedBus return null again.
+      //
+      // Take the claim back off the phone and the wrist, and drop the settled
+      // re-plan so its now-irrelevant alternatives cannot be re-surfaced and so
+      // the next recovery starts from 'idle'. The screen is deliberately NOT
+      // yanked back: the rider may be reading, and the ReturnToTripBanner is
+      // already one tap away — stealing it is the churn the 8/31 ride was made
+      // of. Nothing new is pushed either; boarding announces itself.
+      session.missedBusNoticeKey = null
+      cancelPush(MISSED_BUS_NOTICE_ID)
+      if (missedSettled) dispatch(clearReroute())
+    }
+
     // "Your bus is coming", while the rider walks or bikes to the stop —
     // rider-requested from the kerb on 2026-08-27. Judged out here for the
     // same reason as missed-bus, on the same vehicle reading; skipped on a
@@ -4788,6 +4964,10 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         // Limited to a few types to avoid notification spam.
         if (PUSH_NOTIFICATION_TYPES.has(notification.type)) {
           sendPush({
+            // Almost always undefined — a one-off alert wants its own entry.
+            // An alert that carries one (the ambiguous missed-bus outcome) is
+            // saying "replace/withdraw me by this id" — see cancelPush.
+            id: notification.pushId,
             message: notification.message,
             priority: notification.priority === 'high' ? 1 : 0,
             title: notification.title

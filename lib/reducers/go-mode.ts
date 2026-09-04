@@ -190,11 +190,24 @@ export interface GoModeState {
   progress: TripProgress | null
 
   reRoute: {
-    // Apply the best result without asking (definitive missed bus). There is
-    // no Switch/Keep card: applyAutoReroute takes the itineraries as
-    // arguments, so this slice carries only the search's status, never its
-    // results.
+    // Apply the best result without asking (definitive missed bus).
     autoApply: boolean
+
+    /**
+     * What the last settled re-plan actually found, ranked as
+     * collectRerouteCandidates left it (capped at 5). Empty while searching,
+     * and empty for a search that came back with nothing.
+     *
+     * This slice used to carry only `status`, on the reasoning that
+     * applyAutoReroute takes the itineraries as arguments and no screen renders
+     * them. That reasoning outlived its truth: since eb74a9d8 deleted the
+     * Switch/Keep card, an AMBIGUOUS missed bus — which must never auto-apply —
+     * had nowhere to put its result, and on 2026-09-03 two real itineraries
+     * were computed and silently discarded while the rider stood at the stop.
+     * The position tick reads them from here to hand them to the planner and to
+     * put the wait, in minutes, in the one push it sends.
+     */
+    candidates: Itinerary[]
     // Auto-apply may only pick itineraries boarding this route — the one the
     // rider already chose. Null = no constraint (manual re-routes).
     keepRouteId: string | null
@@ -301,6 +314,7 @@ const defaultState: GoModeState = {
 
   reRoute: {
     autoApply: false,
+    candidates: [],
     keepRouteId: null,
     reason: null,
     searchId: null,
@@ -652,11 +666,15 @@ const goMode = handleActions<GoModeState, any>(
     }),
 
     [SET_REROUTE_RESULT]: (state, action) => {
-      // Payload is the full list of alternatives (or null/[] for "none").
-      // Only its emptiness is kept: nothing reads the itineraries back out.
-      const found: boolean = Array.isArray(action.payload)
-        ? action.payload.length > 0
-        : action.payload != null
+      // Payload is the full list of alternatives (or null/[] for "none"), or a
+      // single itinerary — the original one-result shape, still used by tests
+      // and by callers that have exactly one answer.
+      const payload = action.payload
+      const candidates: Itinerary[] = Array.isArray(payload)
+        ? payload
+        : payload
+        ? [payload]
+        : []
       return {
         ...state,
         reRoute: {
@@ -664,7 +682,8 @@ const goMode = handleActions<GoModeState, any>(
           // Results resolved (or "none") — the auto-apply moment, if there
           // was one, has passed.
           autoApply: false,
-          status: found ? ('found' as const) : ('none' as const)
+          candidates,
+          status: candidates.length ? ('found' as const) : ('none' as const)
         }
       }
     },
@@ -810,6 +829,10 @@ const goMode = handleActions<GoModeState, any>(
       ...state,
       reRoute: {
         autoApply: !!action.payload.autoApply,
+        // A new search invalidates the last one's answer immediately, not when
+        // it resolves: the alternatives to a trip that has just changed under
+        // the rider are not alternatives to anything.
+        candidates: [],
         keepRouteId: action.payload.keepRouteId ?? null,
         reason: action.payload.reason ?? null,
         searchId: action.payload.searchId,

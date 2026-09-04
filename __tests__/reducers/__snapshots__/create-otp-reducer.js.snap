@@ -70,8 +70,8 @@ Object {
     "progress": null,
     "reRoute": Object {
       "autoApply": false,
-      "candidate": null,
-      "candidates": [],
+      "candidates": Array [],
+      "keepRouteId": null,
       "reason": null,
       "searchId": null,
       "startedAtMs": null,
