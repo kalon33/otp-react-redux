@@ -186,12 +186,13 @@ const ErrorRenderer = ({
             )
           }
 
-          const localizedInputFieldList = Array.from(errors[error])?.map(
-            (inputField) =>
+          const localizedInputFieldList = Array.from(errors[error])
+            ?.filter((inputField): inputField is string => typeof inputField === 'string')
+            ?.map((inputField) =>
               intl.formatMessage({
                 id: `components.OTP2ErrorRenderer.inputFields.${inputField}`
               })
-          )
+            )
 
           return (
             <IconMessageContainer

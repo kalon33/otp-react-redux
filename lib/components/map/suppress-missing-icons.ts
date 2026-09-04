@@ -41,6 +41,11 @@ export function handleStyleImageMissing(
   const map = e.target
   const { id } = e
 
+  // Ignore numeric IDs or invalid image names
+  if (typeof id !== 'string' || /^\d+$/.test(id)) {
+    return
+  }
+
   // Guard against duplicate processing
   if (map.hasImage(id)) {
     return
