@@ -79,9 +79,87 @@ export function hasNativeNotify(): boolean {
 }
 
 /**
- * Ask iOS for notification permission if it hasn't been decided yet. Called at
- * trip start (next to the location permission) so the prompt appears exactly
+ * How far the notification permission has got. Module state, because the gate
+ * has to hold between the thunk that asks (trip start) and the GPS tick that
+ * pushes a card milliseconds later.
+ *
+ * - `unknown` — nobody has asked yet, so pushes go straight through. This is
+ *   the state an already-granted device spends its whole life in until trip
+ *   start, and it is why the fix adds no latency there.
+ * - `pending` — a system dialog is UP. Entered ONLY when the platform reports
+ *   the permission as undecided, so a device that already answered never
+ *   queues anything.
+ * - `granted` / `denied` — settled.
+ */
+type NotifyPermission = 'denied' | 'granted' | 'pending' | 'unknown'
+
+let permissionState: NotifyPermission = 'unknown'
+
+/**
+ * Whether the "alerts are off" line has already gone out. Separate from the
+ * state, because a rider who refuses is re-asked at every trip start and each
+ * refusal walks back through `pending` — one line per install, not per trip.
+ */
+let denialWarned = false
+
+/**
+ * Alerts raised while the dialog is up, newest per key. Bounded: a rider who
+ * leaves the dialog sitting for a whole leg must not accumulate a backlog that
+ * lands all at once, and a card older than the eight most recent is not worth
+ * replaying anyway.
+ */
+const MAX_QUEUED_PUSHES = 8
+const heldPushes = new Map<string, PushPayload>()
+
+/**
+ * The identity a queued alert replaces itself on. Stable-id cards (turn,
+ * pacing, missed bus) key on the id they already use to REPLACE each other on
+ * the wrist; one-off alerts have no id, so their title is the closest thing to
+ * a key — two "Board 539" pushes 20 s apart are one alert, and only the newer
+ * one is true.
+ */
+function heldPushKey(payload: PushPayload): string {
+  return payload.id == null ? `title:${payload.title}` : `id:${payload.id}`
+}
+
+/**
+ * Close the gate and deal with whatever piled up behind it. Granted replays
+ * the held alerts in arrival order (newest last, so the freshest card lands on
+ * top); denied drops them with ONE warning ever rather than one per card — the
+ * warn feeds the debug-log sink, and three identical lines in a single tick is
+ * exactly the noise 8.17 was reported as.
+ */
+function settleNotifyPermission(granted: boolean): boolean {
+  const held = Array.from(heldPushes.values())
+  heldPushes.clear()
+  if (granted) {
+    permissionState = 'granted'
+    held.forEach((payload) => {
+      // Fire-and-forget: schedulePush swallows its own failures.
+      schedulePush(payload)
+    })
+    return true
+  }
+  permissionState = 'denied'
+  if (!denialWarned) {
+    denialWarned = true
+    console.warn(
+      `[Go Mode] Notification permission denied — phone/wrist alerts are off (${held.length} held); in-app cards and haptics continue.`
+    )
+  }
+  return false
+}
+
+/**
+ * Ask the OS for notification permission if it hasn't been decided yet. Called
+ * at trip start (next to the location permission) so the prompt appears exactly
  * when the rider understands why. Resolves true when notifications may show.
+ *
+ * On iOS this is settled at first launch, so `checkPermissions` answers
+ * `granted` and the gate never opens. On Android 13+ `POST_NOTIFICATIONS` is a
+ * runtime permission denied by default, the dialog stays up for as long as the
+ * rider takes to read it — 28 s on the 2026-09-04 emulator trip — and every
+ * card scheduled in that window is lost. Hence the gate.
  */
 export async function ensureNativeNotifyPermission(): Promise<boolean> {
   const plugin = bridge()
@@ -89,11 +167,18 @@ export async function ensureNativeNotifyPermission(): Promise<boolean> {
   try {
     let display = (await plugin.checkPermissions()).display
     if (display === 'prompt' || display === 'prompt-with-rationale') {
+      // Only now: an undecided permission is the only case that can drop a
+      // card, and holding pushes on a device that already said yes would add
+      // latency for nothing.
+      permissionState = 'pending'
       display = (await plugin.requestPermissions()).display
     }
-    return display === 'granted'
+    return settleNotifyPermission(display === 'granted')
   } catch {
-    return false
+    // A bridge that can't answer is not a denial: leave an unasked device in
+    // `unknown` so pushes keep flowing exactly as they did before. Only a
+    // dialog we actually opened has a queue that must be resolved.
+    return permissionState === 'pending' ? settleNotifyPermission(false) : false
   }
 }
 
@@ -101,8 +186,34 @@ export async function ensureNativeNotifyPermission(): Promise<boolean> {
  * Raise the alert as an immediate system notification on the rider's phone.
  * No-op in a browser. Failures are swallowed: this runs inside the GPS update
  * loop and must never throw or block tracking — the in-app toast still shows.
+ *
+ * Gated on the permission state above (backlog 8.17): while a permission
+ * dialog is up the alert is HELD, newest per key, and replayed the moment the
+ * rider taps Allow; if they refuse, it is dropped. Either way the in-app card
+ * and its haptic are untouched — they go out through showNotification, which
+ * is a separate call at every one of these sites.
  */
 export async function sendPush(payload: PushPayload): Promise<void> {
+  if (!bridge()) return
+  if (permissionState === 'pending') {
+    // Re-insert so the newest of a key is also the LAST replayed.
+    heldPushes.delete(heldPushKey(payload))
+    heldPushes.set(heldPushKey(payload), payload)
+    while (heldPushes.size > MAX_QUEUED_PUSHES) {
+      heldPushes.delete(heldPushes.keys().next().value as string)
+    }
+    return
+  }
+  // Scheduling into a refused permission does not fail quietly: the Capacitor
+  // bridge logs `Notifications not enabled on this device` at error level
+  // BEFORE the promise rejects, so the try/catch below cannot silence it. Not
+  // calling is the only way to keep one denial from becoming one error a card.
+  if (permissionState === 'denied') return
+  await schedulePush(payload)
+}
+
+/** The unconditional schedule. Only {@link sendPush} and the replay call it. */
+async function schedulePush(payload: PushPayload): Promise<void> {
   const plugin = bridge()
   if (!plugin) return
   try {
@@ -136,9 +247,20 @@ export async function sendPush(payload: PushPayload): Promise<void> {
 export async function cancelPush(id: number): Promise<void> {
   const plugin = bridge()
   if (!plugin) return
+  // A card cancelled before the dialog closed was never scheduled: drop it
+  // from the queue instead of replaying a turn the rider has already taken.
+  heldPushes.delete(`id:${id}`)
+  if (permissionState === 'pending' || permissionState === 'denied') return
   try {
     await plugin.cancel({ notifications: [{ id }] })
   } catch {
     // Best-effort: clearing is cosmetic and must never disrupt navigation.
   }
+}
+
+/** Test seam. There is no other way to clear the module-private gate. */
+export function __resetNativeNotifyPermission(): void {
+  denialWarned = false
+  permissionState = 'unknown'
+  heldPushes.clear()
 }
