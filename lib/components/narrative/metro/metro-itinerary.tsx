@@ -424,8 +424,7 @@ class MetroItinerary extends NarrativeItinerary {
 
     // Use first leg's agency as a fallback
     return (
-      <div
-        className={`option metro-itin${active ? ' active' : ''}${expanded ? ' expanded' : ''}`}
+      <div className={'option metro-itin' + (active ? ' active' : '') + (expanded ? ' expanded' : '')}
       >
         <div
           className="header"
