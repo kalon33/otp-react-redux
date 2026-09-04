@@ -442,7 +442,7 @@ class MetroItinerary extends NarrativeItinerary {
           // TODO test this with a screen reader
           // tabIndex={expanded ? 1 : 0}
         >
-          <ItineraryWrapper className={`itin-wrapper${mini ? '-small' : ''}`}>
+          <ItineraryWrapper className={'itin-wrapper' + (mini ? '-small' : '')}>
             {emissionsNote && <ItineraryNote>{emissionsNote}</ItineraryNote>}
             {itineraryHasAccessibilityScore(itinerary) && (
               <AccessibilityRating
