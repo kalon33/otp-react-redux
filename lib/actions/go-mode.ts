@@ -31,10 +31,14 @@ import {
 import {
   BOARD_AUTO_CONFIRM_MIN_CONSECUTIVE,
   decideRiding,
+  riderStopOnLeg,
   ridingFactIsEvidenced,
   trackBoardStopDwell,
+  trackEarlyAlight,
+  vehiclePassedRiderStop,
   vehicleReachedBoardStop
 } from '../util/go-mode/riding'
+import type { EarlyAlightRecord } from '../util/go-mode/riding'
 import {
   estimateBikeSpeedMps,
   recordRiderSpeedSample,
@@ -414,6 +418,7 @@ export const RESUME_GO_MODE = 'RESUME_GO_MODE'
 export const RESUME_GPS_SIMULATION = 'RESUME_GPS_SIMULATION'
 export const SET_ARRIVED = 'SET_ARRIVED'
 export const SET_DEPARTURE_OVERRIDE = 'SET_DEPARTURE_OVERRIDE'
+export const SET_EARLY_ALIGHT = 'SET_EARLY_ALIGHT'
 export const SET_GO_MODE_ACTIVE_LEG = 'SET_GO_MODE_ACTIVE_LEG'
 export const SET_GO_MODE_BACKGROUNDED = 'SET_GO_MODE_BACKGROUNDED'
 export const SET_MAP_FOLLOW = 'SET_MAP_FOLLOW'
@@ -514,6 +519,12 @@ export const setArrived = createAction<number>(SET_ARRIVED)
 
 export const setRiding = createAction<RidingState>(SET_RIDING)
 export const clearRiding = createAction(CLEAR_RIDING)
+/**
+ * The rider got off early, at a stop still on the route (8.11). Drops the
+ * riding fact AND records where they stepped off, which is what re-anchors the
+ * next boarding — see the reducer case and handlePositionUpdate.
+ */
+export const setEarlyAlight = createAction<EarlyAlightRecord>(SET_EARLY_ALIGHT)
 export const addNotification = createAction<NotificationEvent>(ADD_NOTIFICATION)
 export const setTrackingError = createAction<GeolocationPositionError | null>(
   SET_TRACKING_ERROR
@@ -4323,11 +4334,72 @@ export function handlePositionUpdate(position: GeolocationPosition) {
 
       // Re-read riding: advanceToLeg above may have cleared it on alight.
       const ridingNow = getState().otp?.goMode?.riding ?? null
+
+      // "Have the rider and the bus they are aboard been drifting apart?" is
+      // likewise not a function of one fix (8.11). Accumulated here on the
+      // same terms as the dwell above and handed to the same decision: the
+      // rider standing at an on-route stop of THIS leg while the matched
+      // vehicle — the one `riding` names — gets further away from them, or
+      // serves stops past theirs. See EARLY_ALIGHT_MIN_MS in riding.ts.
+      //
+      // Only tracked while a riding fact is actually held and the matcher is
+      // on the transit leg it names: everywhere else there is nothing to
+      // diverge from, and a watch built on some other leg's stops would be
+      // about a different question.
+      const ridingMatch = goMode.vehicleMatch?.match ?? null
+      if (
+        ridingNow &&
+        matchedLeg?.transitLeg &&
+        ridingNow.legIndex === routeMatch.legIndex &&
+        ridingMatch?.vehicleId != null &&
+        ridingMatch.vehicleId === ridingNow.vehicleId
+      ) {
+        const riderStop = riderStopOnLeg(
+          matchedLeg,
+          position.coords.latitude,
+          position.coords.longitude,
+          calculateDistance
+        )
+        session.earlyAlightWatch = trackEarlyAlight(session.earlyAlightWatch, {
+          atStop: riderStop,
+          legIndex: routeMatch.legIndex,
+          nowMs: nowForRiding,
+          riderSpeedMps: position.coords.speed ?? null,
+          // Simulated and replayed fixes carry the sim clock, which the feed's
+          // own observation time knows nothing about — forced fresh so a
+          // fixture replays identically, exactly as the progress inputs below
+          // do with fixAgeMs.
+          vehicleAgeMs:
+            session.simulationActive || isReplayActive()
+              ? 0
+              : ridingMatch.lastSeen != null
+              ? nowForRiding - ridingMatch.lastSeen
+              : null,
+          vehicleDistanceM: ridingMatch.distanceMeters ?? null,
+          vehicleId: ridingMatch.vehicleId,
+          vehiclePassedStop: vehiclePassedRiderStop(
+            matchedLeg,
+            ridingMatch.nextStopId,
+            riderStop?.index ?? null
+          )
+        })
+      } else {
+        session.earlyAlightWatch = null
+      }
+
       const decision = decideRiding({
         boardStopDwellMs:
           session.boardStopDwell?.legIndex === routeMatch.legIndex
             ? session.boardStopDwell.dwellMs
             : null,
+        earlyAlight: session.earlyAlightWatch,
+        earlyAlightedFrom: goMode.earlyAlight
+          ? {
+              legIndex: goMode.earlyAlight.legIndex,
+              tripId: goMode.earlyAlight.tripId,
+              vehicleId: goMode.earlyAlight.vehicleId
+            }
+          : null,
         fixAccuracyM: position.coords.accuracy ?? null,
         matchedLeg,
         nowMs: nowForRiding,
@@ -4354,6 +4426,23 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         }
       } else if (decision.kind === 'clear') {
         dispatch(clearRiding())
+      } else if (decision.kind === 'alightedEarly') {
+        // Off the bus, at a stop that is still on its route (8.11). Three
+        // things have to happen together, or the fix is inert:
+        //
+        //  - the riding fact goes, and WHERE they got off is recorded, so the
+        //    boarding alerts and their vehicle poll re-anchor on the next
+        //    transit leg instead of the one the matcher is still sitting on
+        //    (SET_EARLY_ALIGHT does both);
+        //  - the confirmed vehicle match goes with it. It is the stickiest
+        //    fact Go Mode holds — refreshConfirmedMatch never re-matches — and
+        //    leaving it would have the matcher still asserting the rider is on
+        //    a bus that is by now a quarter-mile down the road;
+        //  - the watch is retired, so the next tick starts a fresh one rather
+        //    than re-firing on the same evidence.
+        dispatch(setEarlyAlight(decision.record))
+        dispatch(clearVehicleMatch())
+        session.earlyAlightWatch = null
       }
     }
 
@@ -4577,11 +4666,26 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       // Same 20s cadence as the rest of this block; the api layer's URL
       // throttle absorbs any overlap. Read-only: no vehicle MATCHING happens
       // while walking, this only fills the store the alert reads from.
+      //
+      // A rider who got off EARLY at an on-route stop (8.11) is in exactly the
+      // position this poll was written for — on foot, heading for their next
+      // bus — but the matcher is still on the transit leg they stepped off, so
+      // neither the WALK/BICYCLE test nor findBoardLegIndex from that index
+      // would name the right leg. `goMode.earlyAlight` is how this path is
+      // entered from there, and it is why the search starts one leg on: the
+      // leg the matcher favours IS a transit leg, and it is the one they just
+      // left.
       const accessLegNow: any = itinerary.legs[routeMatch.legIndex]
-      if (accessLegNow?.mode === 'WALK' || accessLegNow?.mode === 'BICYCLE') {
+      const alightedEarlyHere =
+        getState().otp?.goMode?.earlyAlight?.legIndex === routeMatch.legIndex
+      if (
+        accessLegNow?.mode === 'WALK' ||
+        accessLegNow?.mode === 'BICYCLE' ||
+        alightedEarlyHere
+      ) {
         const pollBoardLegIndex = findBoardLegIndex(
           itinerary.legs,
-          routeMatch.legIndex
+          alightedEarlyHere ? routeMatch.legIndex + 1 : routeMatch.legIndex
         )
         const pollBoardRouteId =
           pollBoardLegIndex >= 0
@@ -4790,7 +4894,24 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     // planned trip's own vehicle record rides along so the classifier can
     // cross-check a "departed" epoch against where the bus actually is (7/29:
     // the epoch said departed while bus 8140 was still pulling in).
-    const boardLegIndex = findBoardLegIndex(itinerary.legs, routeMatch.legIndex)
+    //
+    // After an early alight (8.11) the matcher is still on the transit leg the
+    // rider stepped off, so "the next boarding" has to be looked for one leg
+    // further on — otherwise findBoardLegIndex answers with the leg they just
+    // left. This index is shared with classifyMissedBus below on purpose: the
+    // two must be told about the SAME boarding or the classifier would judge
+    // the departed bus against the freshly-cleared riding fact and announce a
+    // missed bus for a ride the rider completed.
+    //
+    // Read fresh, not off the tick's opening snapshot: the riding decision
+    // above may have dispatched SET_EARLY_ALIGHT a few lines ago, and `goMode`
+    // predates it.
+    const earlyAlightNow = getState().otp?.goMode?.earlyAlight ?? null
+    const boardSearchLegIndex =
+      earlyAlightNow?.legIndex === routeMatch.legIndex
+        ? routeMatch.legIndex + 1
+        : routeMatch.legIndex
+    const boardLegIndex = findBoardLegIndex(itinerary.legs, boardSearchLegIndex)
     const boardLeg: any =
       boardLegIndex >= 0 ? itinerary.legs[boardLegIndex] : null
     const boardVehicleRecord = boardLeg
@@ -4820,7 +4941,7 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       : null
     const missedCtx = classifyMissedBus({
       boardVehicle: boardVehicleInfo,
-      currentLegIndex: routeMatch.legIndex,
+      currentLegIndex: boardSearchLegIndex,
       departureOverrideMs: departureOverride,
       legs: itinerary.legs,
       liveLegTimes: goMode.liveLegTimes || {},
@@ -4913,7 +5034,13 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       !goMode.riding &&
       boardLeg &&
       routeMatch.legIndex < boardLegIndex &&
-      (currentLeg?.mode === 'WALK' || currentLeg?.mode === 'BICYCLE')
+      (currentLeg?.mode === 'WALK' ||
+        currentLeg?.mode === 'BICYCLE' ||
+        // …or the rider got off early and is standing at an on-route stop with
+        // the matcher still on the bus leg they left (8.11). This is the whole
+        // point of the row: on 08-27 the rider transferred early and "was not
+        // receiving notifications then to board the next bus".
+        earlyAlightNow?.legIndex === routeMatch.legIndex)
     ) {
       const liveBoardForAlert = goMode.liveLegTimes?.[boardLegIndex]
       const boardAlert = checkBoardVehicleApproach(
@@ -4932,10 +5059,16 @@ export function handlePositionUpdate(position: GeolocationPosition) {
           // Gate B: the ground still in front of them, at the pace they are
           // actually keeping — the same access chain and the same observed
           // pace the quiet re-plan and the pacing card already run on.
+          // Measured from the leg the rider is actually walking now. After an
+          // early alight that is the transfer leg, not the bus leg the matcher
+          // still favours — and none of it is done yet, so no progress figure
+          // applies (the matcher's is progress along the BUS leg).
           secondsToBoardStop: accessSecondsToBoardStop(
             itinerary.legs,
-            routeMatch.legIndex,
-            progress.currentLegProgress,
+            boardSearchLegIndex,
+            boardSearchLegIndex === routeMatch.legIndex
+              ? progress.currentLegProgress
+              : null,
             observedBikeSpeedMps()
           ),
           vehicle: boardVehicleInfo

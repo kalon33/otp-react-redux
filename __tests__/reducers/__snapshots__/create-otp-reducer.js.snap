@@ -46,6 +46,7 @@ Object {
       "transitLegEnteredAt": null,
     },
     "departureOverride": null,
+    "earlyAlight": null,
     "isActive": false,
     "liveLegTimes": Object {},
     "notifications": Object {

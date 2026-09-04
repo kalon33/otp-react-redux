@@ -15,6 +15,7 @@ import {
   RESUME_GPS_SIMULATION,
   SET_ARRIVED,
   SET_DEPARTURE_OVERRIDE,
+  SET_EARLY_ALIGHT,
   SET_GO_MODE_ACTIVE_LEG,
   SET_GO_MODE_BACKGROUNDED,
   SET_LEG_TURN_CUES,
@@ -52,6 +53,7 @@ import {
   TurnCueSettings
 } from '../util/go-mode/turn-cue-settings'
 import { ridingFactIsEvidenced } from '../util/go-mode/riding'
+import type { EarlyAlightRecord } from '../util/go-mode/riding'
 import type { LiveLegTime, RidingState } from '../util/go-mode/types'
 import type {
   NearbyVehicleOption,
@@ -169,6 +171,19 @@ export interface GoModeState {
   }
 
   departureOverride: number | null
+
+  /**
+   * The rider got off a bus EARLY, at a stop that is still on the ridden leg's
+   * route (8.11). Held because nothing else in the trip's shape says so: the
+   * matcher stays on the transit leg (they are standing on its geometry), so
+   * `routeMatch.legIndex` still names the bus they left, and the boarding
+   * alerts and their vehicle poll would go on asking about that leg. While
+   * this is set, both read the NEXT transit leg instead.
+   *
+   * Cleared by anything that says the rider is aboard something again
+   * (SET_RIDING, CONFIRM_VEHICLE) and by transitioning past the leg it names.
+   */
+  earlyAlight: EarlyAlightRecord | null
 
   isActive: boolean
 
@@ -298,6 +313,8 @@ const defaultState: GoModeState = {
   },
 
   departureOverride: null,
+
+  earlyAlight: null,
 
   isActive: false,
   liveLegTimes: {},
@@ -526,6 +543,7 @@ const goMode = handleActions<GoModeState, any>(
         ...state.boardingPrompt,
         shown: false
       },
+      earlyAlight: null,
       vehicleMatch: {
         ...state.vehicleMatch,
         consecutiveMatches: 0,
@@ -584,6 +602,23 @@ const goMode = handleActions<GoModeState, any>(
     [SET_DEPARTURE_OVERRIDE]: (state, action) => ({
       ...state,
       departureOverride: action.payload
+    }),
+
+    [SET_EARLY_ALIGHT]: (state, action) => ({
+      ...state,
+      // An early alight IS an alight: record which trip they got off, the same
+      // way TRANSITION_LEG does, so beginOnboardFlow cannot read a surviving
+      // confirmed vehicleMatch as proof they are still aboard (the 8/9 hole).
+      alightedFrom: action.payload
+        ? {
+            tripId: action.payload.tripId ?? null,
+            vehicleId: action.payload.vehicleId ?? null
+          }
+        : state.alightedFrom,
+      // The plan's own departure pick belonged to the bus they just left.
+      departureOverride: null,
+      earlyAlight: action.payload,
+      riding: null
     }),
 
     [SET_GO_MODE_ACTIVE_LEG]: (state, action) => ({
@@ -711,6 +746,9 @@ const goMode = handleActions<GoModeState, any>(
     [SET_RIDING]: (state, action) => ({
       ...state,
       alightedFrom: action.payload ? null : state.alightedFrom,
+      // Aboard again outranks "got off early" — and it is the only thing
+      // besides a leg transition that may retire the re-anchoring.
+      earlyAlight: action.payload ? null : state.earlyAlight,
       riding: action.payload
     }),
 
@@ -948,6 +986,13 @@ const goMode = handleActions<GoModeState, any>(
             }
           : state.alightedFrom,
         departureOverride: null,
+        // The early-alight re-anchoring exists only while the matcher is still
+        // stuck on the leg the rider stepped off; once the trip has actually
+        // moved past it, the ordinary boarding path is back in charge.
+        earlyAlight:
+          state.earlyAlight != null && legIndex > state.earlyAlight.legIndex
+            ? null
+            : state.earlyAlight,
         riding: alighted ? null : state.riding,
         routeMatch: state.routeMatch
           ? {
