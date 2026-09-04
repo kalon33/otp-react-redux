@@ -461,7 +461,7 @@ export function getFare(
   )
 
   return {
-    fareCurrency: itineraryCost?.currency.code,
+    fareCurrency: itineraryCost?.currency?.code,
     maxTNCFare,
     minTNCFare,
     transitFare: itineraryCost?.amount
