@@ -411,6 +411,7 @@ components:
     fast: "Le plus rapide"
     fewerTransfers: "Moins de correspondances"
     lessWalking: "Moins de marche"
+    fastest: "Le plus rapide"
     liveBanner: "Mode Go actif — suivi de votre bus"
     loading: "Démarrage du trajet..."
     loadingSchedule: "Chargement des horaires de votre bus…"

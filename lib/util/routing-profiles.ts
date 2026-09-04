@@ -155,32 +155,32 @@ export const ROUTING_PROFILES: RoutingProfile[] = [
   {
     description: 'Balanced — uses the routing engine defaults.',
     id: 'fastest',
-    label: 'fastest',
+    label: 'Fastest',
     prefs: {}
   },
   {
     description: 'Favors itineraries with the least walking.',
     id: 'minimize-walking',
-    label: 'minimize-walking',
+    label: 'Less Walking',
     prefs: { walkReluctance: 8 }
   },
   {
     description:
       'Prefers staying on one vehicle over transferring or waiting at stops.',
     id: 'stay-seated',
-    label: 'stay-seated',
+    label: 'Fewer Transfers',
     prefs: { transferPenalty: 600, waitReluctance: 4 }
   },
   {
     description: 'Leans on biking; favors bike + transit combinations.',
     id: 'bike-forward',
-    label: 'bike-forward',
+    label: 'Bike Forward',
     prefs: { bikeReluctance: 0.6, bikeSpeed: 5.5 }
   },
   {
     description: 'Avoids biking in favor of walking and transit.',
     id: 'avoid-biking',
-    label: 'avoid-biking',
+    label: 'Avoid Biking',
     prefs: { bikeReluctance: 8 }
   },
   {
@@ -208,7 +208,7 @@ export const ROUTING_PROFILES: RoutingProfile[] = [
     description:
       'Builds in extra transfer buffer for more reliable connections.',
     id: 'reliable-transfers',
-    label: 'reliable-transfers',
+    label: 'Reliable Transfers',
     prefs: { minTransferTime: 300, transferPenalty: 180 }
   },
   {

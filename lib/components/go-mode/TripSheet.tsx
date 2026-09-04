@@ -52,6 +52,13 @@ const REROUTE_CHIPS = [
   { labelId: 'components.GoMode.avoidBiking', profileId: 'avoid-biking' },
   { labelId: 'components.GoMode.fastest', profileId: 'fastest' }
 ]
+// Map profile IDs to their translation keys for the dropdown
+const PROFILE_LABELS: Record<string, string> = {
+  'fastest': 'components.GoMode.fastest',
+  'minimize-walking': 'components.GoMode.lessWalking',
+  'stay-seated': 'components.GoMode.fewerTransfers',
+  'avoid-biking': 'components.GoMode.avoidBiking'
+}
 
 const TRANSIT_MODES = new Set(['BUS', 'FERRY', 'RAIL', 'SUBWAY', 'TRAM'])
 
