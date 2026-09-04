@@ -411,6 +411,8 @@ components:
     gpsError: GPS signal lost. Trying to reconnect...
     gpsErrorTitle: GPS Error
     headerDestination: To {destination}
+    hideLaterDepartures: Less
+    laterDepartures: Later departures
     legBike: Bike
     legStopsTo: "{count, plural, one {# stop} other {# stops}} to {dest}"
     legTo: to {dest}
@@ -448,6 +450,7 @@ components:
     rideToStop: "{emoji} {time} ride to {stop}"
     selectVehicle: This one
     sheetHandleLabel: View trip & other ways
+    showLaterDepartures: More
     stillCheckingStops: Still checking {count, plural, one {1 more stop} other {# more stops}}…
     stopDeparturesTitle: Departures
     stopsRemainingCompact: "{count, plural, one {1 stop} other {# stops}} remaining"

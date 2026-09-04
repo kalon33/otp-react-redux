@@ -1,5 +1,5 @@
 import { useIntl } from 'react-intl'
-import React, { useMemo } from 'react'
+import React, { useMemo, useState } from 'react'
 import type { Leg } from '@opentripplanner/types'
 
 import {
@@ -28,6 +28,18 @@ import {
   WalkingContainer
 } from './styled'
 import RealtimeTime from './RealtimeTime'
+
+/** Ties the toggle to the list it opens for assistive tech. */
+const LATER_DEPARTURES_ID = 'go-mode-later-departures'
+
+/** Verbatim the inline style the departure rows already used. */
+const ALTERNATIVE_TEXT_STYLE = {
+  fontSize: '13px',
+  minWidth: 0,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap' as const
+}
 
 interface Props {
   boardingStopData?: any
@@ -91,6 +103,29 @@ const WalkingNavigation = ({
       hour: 'numeric',
       minute: '2-digit'
     })
+
+  /**
+   * One later-departure line, in the copy the rider already reads — the same
+   * `nextDeparture` message whether it is the collapsed summary or a row of
+   * the open list, so collapsing never changes the wording of a time.
+   */
+  const departureLine = (alt?: { departureMs: number; realtime: boolean }) =>
+    alt
+      ? intl.formatMessage(
+          {
+            defaultMessage: 'Next: {time} ({mins} min away)',
+            id: 'components.GoMode.nextDeparture'
+          },
+          {
+            mins: Math.round((alt.departureMs - nowMs) / 60000),
+            time: (
+              <RealtimeTime live={alt.realtime}>
+                {formatClockTime(alt.departureMs)}
+              </RealtimeTime>
+            )
+          }
+        )
+      : null
 
   const nowMs = progress.currentTime.getTime()
   const rideSecondsRemaining = Math.max(
@@ -174,6 +209,16 @@ const WalkingNavigation = ({
   const showAlternatives = laterDepartures.length > 0 && waitAtStopSeconds < 120
   const showReset = !!progress.departureIsOverridden && !!onSelectDeparture
   const showExtras = (showAlternatives || showReset) && !!onSelectDeparture
+
+  // Rider ask 2026-09-04 15:08:30, with a screenshot: three `Next: … / Use
+  // this` rows took about a third of the card while the rider's actual next
+  // action was a 208 ft turn. Collapsed by default, so the list costs one line
+  // — the next departure, which is the only one they asked to keep — and the
+  // whole of today's list is one tap away. Collapsed is the state on every
+  // mount: this card re-renders on every GPS tick, and an expansion that
+  // survived a leg change would be a panel the rider never opened.
+  const [alternativesOpen, setAlternativesOpen] = useState(false)
+  const nextAlternative = laterDepartures[0]
 
   // Card content.
   let eyebrow: string
@@ -274,52 +319,64 @@ const WalkingNavigation = ({
                 })}
               </ResetButton>
             )}
-            {showAlternatives &&
-              laterDepartures.map(
-                (
-                  alt: { departureMs: number; realtime: boolean },
-                  idx: number
-                ) => {
-                  const minsAway = Math.round((alt.departureMs - nowMs) / 60000)
-                  return (
-                    <AlternativeDeparture key={idx}>
-                      <span
-                        style={{
-                          fontSize: '13px',
-                          minWidth: 0,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap' as const
-                        }}
-                      >
-                        {intl.formatMessage(
-                          {
-                            defaultMessage: 'Next: {time} ({mins} min away)',
-                            id: 'components.GoMode.nextDeparture'
-                          },
-                          {
-                            mins: minsAway,
-                            time: (
-                              <RealtimeTime live={alt.realtime}>
-                                {formatClockTime(alt.departureMs)}
-                              </RealtimeTime>
-                            )
-                          }
-                        )}
-                      </span>
-                      <UseNextButton
-                        onClick={() => onSelectDeparture?.(alt.departureMs)}
-                        type="button"
-                      >
-                        {intl.formatMessage({
-                          defaultMessage: 'Use this',
-                          id: 'components.GoMode.useThisDeparture'
-                        })}
-                      </UseNextButton>
-                    </AlternativeDeparture>
-                  )
-                }
-              )}
+            {showAlternatives && (
+              <>
+                {/* The summary row carries the same dashed rule and spacing as
+                    a departure row, so collapsing changes the card's height
+                    and nothing else about how it reads. */}
+                <AlternativeDeparture>
+                  <span style={ALTERNATIVE_TEXT_STYLE}>
+                    {alternativesOpen
+                      ? intl.formatMessage({
+                          defaultMessage: 'Later departures',
+                          id: 'components.GoMode.laterDepartures'
+                        })
+                      : departureLine(nextAlternative)}
+                  </span>
+                  <ResetButton
+                    aria-controls={LATER_DEPARTURES_ID}
+                    aria-expanded={alternativesOpen}
+                    onClick={() => setAlternativesOpen((open) => !open)}
+                    type="button"
+                  >
+                    {alternativesOpen
+                      ? `▴ ${intl.formatMessage({
+                          defaultMessage: 'Less',
+                          id: 'components.GoMode.hideLaterDepartures'
+                        })}`
+                      : `▾ ${intl.formatMessage({
+                          defaultMessage: 'More',
+                          id: 'components.GoMode.showLaterDepartures'
+                        })}`}
+                  </ResetButton>
+                </AlternativeDeparture>
+                {alternativesOpen && (
+                  <div id={LATER_DEPARTURES_ID}>
+                    {laterDepartures.map(
+                      (
+                        alt: { departureMs: number; realtime: boolean },
+                        idx: number
+                      ) => (
+                        <AlternativeDeparture key={idx}>
+                          <span style={ALTERNATIVE_TEXT_STYLE}>
+                            {departureLine(alt)}
+                          </span>
+                          <UseNextButton
+                            onClick={() => onSelectDeparture?.(alt.departureMs)}
+                            type="button"
+                          >
+                            {intl.formatMessage({
+                              defaultMessage: 'Use this',
+                              id: 'components.GoMode.useThisDeparture'
+                            })}
+                          </UseNextButton>
+                        </AlternativeDeparture>
+                      )
+                    )}
+                  </div>
+                )}
+              </>
+            )}
           </NavExtras>
         )}
       </NavCard>
