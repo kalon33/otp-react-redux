@@ -218,6 +218,7 @@ components:
     networkConnectionRestored: Connexion réseau restaurée
     openMenu: Ouvrir le menu
     settings: "Paramètres"
+    shareFeedback: "Envoyer un commentaire"
     shareDiagnosticsOff: "Partage des diagnostics : désactivé"
     shareDiagnosticsOn: "Partage des diagnostics : activé"
     skipNavigation: Sauter la navigation
@@ -365,6 +366,23 @@ components:
     nameTooLong: Le nom doit comporter {char} caractères maximum.
     placeNotFound: Lieu introuvable
     placeNotFoundDescription: Le lieu recherché est introuvable.
+  FeedbackScreen:
+    attachLabel: "Ajouter une photo ou une capture d'écran"
+    commentLabel: "Votre commentaire"
+    commentPlaceholder: "Que s'est-il passé ?"
+    failed: "Envoi impossible. Réessayez."
+    heading: "Envoyer un commentaire"
+    held: "Enregistré. L'envoi se fera à votre prochaine visite sur cet écran."
+    heldSent: "Un commentaire précédent vient d'être envoyé."
+    heldWaiting: "Un commentaire précédent est toujours en attente d'envoi. Il partira à votre prochaine visite sur cet écran."
+    imageRejected: "Ce fichier n'a pas pu être joint."
+    intro: "Dites-nous ce qui n'a pas marché. Une capture d'écran en dit plus qu'une phrase."
+    removeImage: "Retirer"
+    send: "Envoyer"
+    sendingHeld: "Envoi d'un commentaire précédent resté en attente…"
+    sent: "Envoyé. Merci."
+    sentWithoutImage: "Envoyé, mais l'image n'a pas pu être jointe."
+    thumbnailAlt: "L'image que vous avez jointe"
   FormNavigationButtons:
     ariaLabel: Navigation du formulaire
   GoMode:
