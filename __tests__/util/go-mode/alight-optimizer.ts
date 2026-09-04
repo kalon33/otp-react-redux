@@ -2,6 +2,7 @@ import {
   clampNonLiveLegTimes,
   getDownstreamStops,
   groupAlightOptionsByRoute,
+  LIVE_TIME_CLAMP_GRANULARITY_MS,
   liveStopArrival,
   mergeLiveTimePoint,
   pickBestAlightOption,
@@ -449,21 +450,82 @@ describe('clampNonLiveLegTimes', () => {
     ...over
   })
 
-  it('raises a non-live alight epoch that drifted behind now (7/21 case)', () => {
-    // 23:42:10 sampled at 23:42:16 — 6 s stale between 20 s refresh polls.
-    const times = { 1: entry({ alightEpoch: NOW - 6000 }) }
+  // The clamp's floor: 23:42:00. Raising to the minute rather than to the
+  // second is the 2026-09-04 rate fix — nothing displays seconds, so a value
+  // already inside the displayed minute is left where it is.
+  const FLOOR = NOW - 16000
+
+  it('raises a non-live alight epoch that fell out of the displayed minute (7/21 case)', () => {
+    // 23:41:50 sampled at 23:42:16 — an end-of-service realtime dropout left
+    // the alight time stale between 20 s refresh polls.
+    const times = { 1: entry({ alightEpoch: NOW - 26000 }) }
     expect(clampNonLiveLegTimes(times, NOW)).toEqual({
-      1: entry({ alightEpoch: NOW })
+      1: entry({ alightEpoch: FLOOR })
     })
+  })
+
+  it('leaves a drift the rider cannot see alone (2026-09-04 rate fix)', () => {
+    // 23:42:10 at 23:42:16: six seconds stale, and it renders as 23:42 either
+    // way. Raising it would cost a SET_LIVE_LEG_TIMES dispatch and change no
+    // displayed value — 312 consecutive ticks did exactly that on the kerb
+    // ride.
+    expect(
+      clampNonLiveLegTimes({ 1: entry({ alightEpoch: NOW - 6000 }) }, NOW)
+    ).toBeNull()
   })
 
   it('clamps board and alight independently', () => {
     const times = {
-      1: entry({ alightEpoch: NOW - 6000, boardEpoch: NOW - 9000 })
+      1: entry({ alightEpoch: NOW - 26000, boardEpoch: NOW - 29000 })
     }
     expect(clampNonLiveLegTimes(times, NOW)).toEqual({
-      1: entry({ alightEpoch: NOW, boardEpoch: NOW })
+      1: entry({
+        alightEpoch: FLOOR,
+        boardClamped: true,
+        boardEpoch: FLOOR
+      })
     })
+  })
+
+  it('bridges a departed board once, then leaves it where it is', () => {
+    // 2026-09-04 11:17:30 -> 11:22:42: `boardEpoch` equal to the current
+    // second on 312 consecutive ticks, `boardRealtime: false`, while the bus
+    // that served the run had already gone (REALTIME_VEHICLE_POSITIONS
+    // returned `vehicles: []` at 11:17:50). A departure is a one-way fact:
+    // bridge the poll gap once, then let classifyMissedBus tell the story.
+    let record: any = entry({
+      alightEpoch: NOW + 300000,
+      boardEpoch: NOW - 90000
+    })
+    let dispatches = 0
+    for (let tick = 0; tick < 60; tick++) {
+      const out = clampNonLiveLegTimes({ 1: record }, NOW + tick * 1000)
+      if (out) {
+        dispatches++
+        record = out[1]
+      }
+    }
+    expect(dispatches).toBe(1)
+    expect(record.boardEpoch).toBe(FLOOR)
+    expect(record.boardClamped).toBe(true)
+  })
+
+  it('dispatches once per displayed minute while a stale alight sits there', () => {
+    // Same 60 ticks against the alight half. 23:42:16 -> 23:43:15 crosses
+    // exactly one minute boundary, so the honest answer is two dispatches,
+    // not the sixty the old clamp produced.
+    let record: any = entry({ alightEpoch: NOW - 90000 })
+    let dispatches = 0
+    for (let tick = 0; tick < 60; tick++) {
+      const out = clampNonLiveLegTimes({ 1: record }, NOW + tick * 1000)
+      if (out) {
+        dispatches++
+        record = out[1]
+      }
+    }
+    expect(dispatches).toBe(2)
+    expect(record.alightEpoch).toBe(FLOOR + LIVE_TIME_CLAMP_GRANULARITY_MS)
+    expect(LIVE_TIME_CLAMP_GRANULARITY_MS).toBe(60000)
   })
 
   it('leaves live figures alone even when past (a live time may lag honestly)', () => {
@@ -495,10 +557,10 @@ describe('clampNonLiveLegTimes', () => {
 
   it('keeps untouched legs identical while clamping the stale one', () => {
     const fresh = entry({})
-    const times = { 1: fresh, 2: entry({ alightEpoch: NOW - 3000 }) }
+    const times = { 1: fresh, 2: entry({ alightEpoch: NOW - 26000 }) }
     const out = clampNonLiveLegTimes(times, NOW)
     expect(out?.[1]).toBe(fresh)
-    expect(out?.[2].alightEpoch).toBe(NOW)
+    expect(out?.[2].alightEpoch).toBe(FLOOR)
   })
 
   it('carries a schedule-only alight along when raising the board past it', () => {
@@ -513,8 +575,8 @@ describe('clampNonLiveLegTimes', () => {
       })
     }
     const out = clampNonLiveLegTimes(times, NOW)
-    expect(out?.[1].boardEpoch).toBe(NOW)
-    expect(out?.[1].alightEpoch).toBe(NOW)
+    expect(out?.[1].boardEpoch).toBe(FLOOR)
+    expect(out?.[1].alightEpoch).toBe(FLOOR)
   })
 
   it('gives way at the BOARD when the alight is the feed’s own figure', () => {
@@ -536,6 +598,10 @@ describe('clampNonLiveLegTimes', () => {
     const out = clampNonLiveLegTimes(times, NOW)
     expect(out?.[1].alightEpoch).toBe(NOW - 60000)
     expect(out?.[1].boardEpoch).toBe(NOW - 60000)
+    // ...and the tick after that dispatches nothing at all: the board is
+    // handed straight back to where it already was, which on 2026-09-04 was
+    // ten byte-identical SET_LIVE_LEG_TIMES in a row (11:22:29 -> 11:22:38).
+    expect(clampNonLiveLegTimes({ 1: out![1] }, NOW + 1000)).toBeNull()
     expect(out?.[1].boardEpoch).toBeLessThanOrEqual(
       out?.[1].alightEpoch as number
     )
