@@ -1,0 +1,142 @@
+diff --git a/node_modules/@opentripplanner/map-popup/esm/index.js b/node_modules/@opentripplanner/map-popup/esm/index.js
+--- a/node_modules/@opentripplanner/map-popup/esm/index.js
++++ b/node_modules/@opentripplanner/map-popup/esm/index.js
+@@ -108,7 +108,13 @@
+   }
+   var name = getNameFunc(entity, configCompanies, feedName);
+   var titleName = getNameFunc(entity, configCompanies, feedName, false);
+-  var stationNetwork = "rentalNetwork" in entity && (coreUtils.itinerary.getCompaniesLabelFromNetworks(entity === null || entity === void 0 ? void 0 : entity.rentalNetwork.networkId, configCompanies) || (entity === null || entity === void 0 ? void 0 : entity.rentalNetwork.networkId));
++  // The key can be PRESENT and null/undefined: @opentripplanner/otp2-tile-overlay's
++  // click handler assigns `rentalNetwork = undefined` on every tile feature,
++  // stops included, so `"rentalNetwork" in entity` is true for a tapped bus
++  // stop. Reading `.networkId` off it threw and took the whole app down
++  // (white screen, no error boundary) 50s into a live trip on 2026-09-04.
++  var rentalNetwork = "rentalNetwork" in entity ? entity.rentalNetwork : null;
++  var stationNetwork = !!(rentalNetwork && rentalNetwork.networkId) && (coreUtils.itinerary.getCompaniesLabelFromNetworks(rentalNetwork.networkId, configCompanies) || rentalNetwork.networkId);
+   var vehiclesAvailable = "availableVehicles" in entity;
+   var entityIsStationHub = vehiclesAvailable && (entity === null || entity === void 0 ? void 0 : entity.availableVehicles) !== undefined;
+   var stopId = entityIsStop(entity) ? entity.code : "";
+diff --git a/node_modules/@opentripplanner/map-popup/esm/util.js b/node_modules/@opentripplanner/map-popup/esm/util.js
+--- a/node_modules/@opentripplanner/map-popup/esm/util.js
++++ b/node_modules/@opentripplanner/map-popup/esm/util.js
+@@ -1,6 +1,8 @@
+ import coreUtils from "@opentripplanner/core-utils";
+ export function getNetwork(entity, configCompanies) {
+-  return "rentalNetwork" in entity && (coreUtils.itinerary.getCompaniesLabelFromNetworks(entity.rentalNetwork.networkId, configCompanies) || entity.rentalNetwork.networkId);
++  // `rentalNetwork` may be present with a null/undefined value (see index.js).
++  var rentalNetwork = "rentalNetwork" in entity ? entity.rentalNetwork : null;
++  return !!(rentalNetwork && rentalNetwork.networkId) && (coreUtils.itinerary.getCompaniesLabelFromNetworks(rentalNetwork.networkId, configCompanies) || rentalNetwork.networkId);
+ }
+ 
+ // eslint-disable-next-line import/prefer-default-export
+@@ -8,7 +10,7 @@
+   return function defaultGetEntityName(entity, configCompanies, feedName) {
+     var _entity$vehicleType, _entity$vehicleType2, _entity$vehicleType3;
+     var includeParenthetical = arguments.length > 3 && arguments[3] !== undefined ? arguments[3] : true;
+-    var stationName = entity.name || entity.id;
++    var stationName = entity.name || entity.id || "";
+     // If the station name or id is a giant UUID (with more than 3 "-" characters)
+     // best not to show that at all. The company name will still be shown.
+     // Also ignore "Default Vehicle Type"
+@@ -35,7 +37,7 @@
+         company: network,
+         name: stationName
+       });
+-    } else if ("vehicleType" in entity && !("availableVehicles" in entity) && (_entity$vehicleType3 = entity.vehicleType) !== null && _entity$vehicleType3 !== void 0 && _entity$vehicleType3.formFactor.startsWith("SCOOTER")) {
++    } else if ("vehicleType" in entity && !("availableVehicles" in entity) && (_entity$vehicleType3 = entity.vehicleType) !== null && _entity$vehicleType3 !== void 0 && (_entity$vehicleType3 = _entity$vehicleType3.formFactor) !== null && _entity$vehicleType3 !== void 0 && _entity$vehicleType3.startsWith("SCOOTER")) {
+       stationName = intl.formatMessage({
+         defaultMessage: defaultEnglishMessages["otpUi.MapPopup.floatingEScooter"],
+         description: "Popup title for a free-floating e-scooter",
+diff --git a/node_modules/@opentripplanner/map-popup/lib/index.js b/node_modules/@opentripplanner/map-popup/lib/index.js
+--- a/node_modules/@opentripplanner/map-popup/lib/index.js
++++ b/node_modules/@opentripplanner/map-popup/lib/index.js
+@@ -89,7 +89,13 @@
+     }
+     const name = getNameFunc(entity, configCompanies, feedName);
+     const titleName = getNameFunc(entity, configCompanies, feedName, false);
+-    const stationNetwork = "rentalNetwork" in entity && (core_utils_1.default.itinerary.getCompaniesLabelFromNetworks(entity === null || entity === void 0 ? void 0 : entity.rentalNetwork.networkId, configCompanies) || (entity === null || entity === void 0 ? void 0 : entity.rentalNetwork.networkId));
++    // The key can be PRESENT and null/undefined: @opentripplanner/otp2-tile-overlay's
++    // click handler assigns `rentalNetwork = undefined` on every tile feature,
++    // stops included, so `"rentalNetwork" in entity` is true for a tapped bus
++    // stop. Reading `.networkId` off it threw and took the whole app down
++    // (white screen, no error boundary) 50s into a live trip on 2026-09-04.
++    const rentalNetwork = "rentalNetwork" in entity ? entity.rentalNetwork : null;
++    const stationNetwork = !!(rentalNetwork && rentalNetwork.networkId) && (core_utils_1.default.itinerary.getCompaniesLabelFromNetworks(rentalNetwork.networkId, configCompanies) || rentalNetwork.networkId);
+     const vehiclesAvailable = "availableVehicles" in entity;
+     const entityIsStationHub = vehiclesAvailable && (entity === null || entity === void 0 ? void 0 : entity.availableVehicles) !== undefined;
+     const stopId = entityIsStop(entity) ? entity.code : "";
+diff --git a/node_modules/@opentripplanner/map-popup/lib/util.js b/node_modules/@opentripplanner/map-popup/lib/util.js
+--- a/node_modules/@opentripplanner/map-popup/lib/util.js
++++ b/node_modules/@opentripplanner/map-popup/lib/util.js
+@@ -6,16 +6,18 @@
+ exports.makeDefaultGetEntityName = exports.getNetwork = void 0;
+ const core_utils_1 = __importDefault(require("@opentripplanner/core-utils"));
+ function getNetwork(entity, configCompanies) {
+-    return ("rentalNetwork" in entity &&
+-        (core_utils_1.default.itinerary.getCompaniesLabelFromNetworks(entity.rentalNetwork.networkId, configCompanies) ||
+-            entity.rentalNetwork.networkId));
++    // `rentalNetwork` may be present with a null/undefined value (see index.js).
++    const rentalNetwork = "rentalNetwork" in entity ? entity.rentalNetwork : null;
++    return (!!(rentalNetwork && rentalNetwork.networkId) &&
++        (core_utils_1.default.itinerary.getCompaniesLabelFromNetworks(rentalNetwork.networkId, configCompanies) ||
++            rentalNetwork.networkId));
+ }
+ exports.getNetwork = getNetwork;
+ // eslint-disable-next-line import/prefer-default-export
+ function makeDefaultGetEntityName(intl, defaultEnglishMessages) {
+     return function defaultGetEntityName(entity, configCompanies, feedName, includeParenthetical = true) {
+         var _a, _b, _c;
+-        let stationName = entity.name || entity.id;
++        let stationName = entity.name || entity.id || "";
+         // If the station name or id is a giant UUID (with more than 3 "-" characters)
+         // best not to show that at all. The company name will still be shown.
+         // Also ignore "Default Vehicle Type"
+@@ -48,7 +50,7 @@
+         }
+         else if ("vehicleType" in entity &&
+             !("availableVehicles" in entity) &&
+-            ((_c = entity.vehicleType) === null || _c === void 0 ? void 0 : _c.formFactor.startsWith("SCOOTER"))) {
++            ((_c = entity.vehicleType) === null || _c === void 0 || (_c = _c.formFactor) === null || _c === void 0 ? void 0 : _c.startsWith("SCOOTER"))) {
+             stationName = intl.formatMessage({
+                 defaultMessage: defaultEnglishMessages["otpUi.MapPopup.floatingEScooter"],
+                 description: "Popup title for a free-floating e-scooter",
+diff --git a/node_modules/@opentripplanner/map-popup/src/index.tsx b/node_modules/@opentripplanner/map-popup/src/index.tsx
+--- a/node_modules/@opentripplanner/map-popup/src/index.tsx
++++ b/node_modules/@opentripplanner/map-popup/src/index.tsx
+@@ -146,7 +146,12 @@
+   const name = getNameFunc(entity, configCompanies, feedName);
+   const titleName = getNameFunc(entity, configCompanies, feedName, false);
+ 
+-  const stationNetwork = "rentalNetwork" in entity && (coreUtils.itinerary.getCompaniesLabelFromNetworks(entity?.rentalNetwork.networkId, configCompanies) || entity?.rentalNetwork.networkId);
++  // The key can be PRESENT and null/undefined: @opentripplanner/otp2-tile-overlay's
++  // click handler assigns `rentalNetwork = undefined` on every tile feature,
++  // stops included, so `"rentalNetwork" in entity` is true for a tapped bus
++  // stop. Reading `.networkId` off it threw and took the whole app down
++  // (white screen, no error boundary) 50s into a live trip on 2026-09-04.
++  const stationNetwork = !!entity?.rentalNetwork?.networkId && (coreUtils.itinerary.getCompaniesLabelFromNetworks(entity.rentalNetwork.networkId, configCompanies) || entity.rentalNetwork.networkId);
+ 
+   const vehiclesAvailable = "availableVehicles" in entity;
+   const entityIsStationHub = vehiclesAvailable && entity?.availableVehicles !== undefined;
+diff --git a/node_modules/@opentripplanner/map-popup/src/util.ts b/node_modules/@opentripplanner/map-popup/src/util.ts
+--- a/node_modules/@opentripplanner/map-popup/src/util.ts
++++ b/node_modules/@opentripplanner/map-popup/src/util.ts
+@@ -10,8 +10,9 @@
+ export type Entity = VehicleRentalStation | Stop | RentalVehicle;
+ 
+ export function getNetwork(entity: Entity, configCompanies: Company[]): string {
++  // `rentalNetwork` may be present with a null/undefined value (see index.tsx).
+   return (
+-    "rentalNetwork" in entity &&
++    !!entity?.rentalNetwork?.networkId &&
+     (coreUtils.itinerary.getCompaniesLabelFromNetworks(
+       entity.rentalNetwork.networkId,
+       configCompanies
+@@ -76,7 +77,7 @@
+     } else if (
+       "vehicleType" in entity &&
+       !("availableVehicles" in entity) &&
+-      entity.vehicleType?.formFactor.startsWith("SCOOTER")
++      entity.vehicleType?.formFactor?.startsWith("SCOOTER")
+     ) {
+       stationName = intl.formatMessage(
+         {

@@ -14,4 +14,14 @@ export function createDebugLogMiddleware() {
 
 export function installGlobalErrorCapture() {}
 
+/**
+ * Recorded rather than dropped, so a test can assert that a caught render
+ * error is reported (lib/components/util/error-boundary.tsx).
+ */
+export const recordedSessionEvents = []
+
+export function recordSessionEvent(event, fields) {
+  recordedSessionEvents.push({ event, ...fields })
+}
+
 export function startDebugLog() {}

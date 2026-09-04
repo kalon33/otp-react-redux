@@ -93,7 +93,7 @@ const mapStateToProps = (state: AppReduxState) => {
 
   const activeSearch = getActiveSearch(state)
   // @ts-expect-error state is not typed
-  const geometries = activeSearch?.response.flatMap(
+  const geometries = activeSearch?.response?.flatMap(
     (serverResponse: { plan?: { itineraries?: Itinerary[] } }) =>
       serverResponse?.plan?.itineraries?.flatMap((itinerary) => {
         return itinerary.legs?.map((leg) => leg.legGeometry.points)

@@ -1,0 +1,71 @@
+diff --git a/node_modules/@opentripplanner/otp2-tile-overlay/esm/index.js b/node_modules/@opentripplanner/otp2-tile-overlay/esm/index.js
+--- a/node_modules/@opentripplanner/otp2-tile-overlay/esm/index.js
++++ b/node_modules/@opentripplanner/otp2-tile-overlay/esm/index.js
+@@ -57,9 +57,17 @@
+     } : sourceLayer === "rentalStations" && "formFactors" in synthesizedEntity ? {
+       formFactor: synthesizedEntity.formFactors
+     } : undefined;
+-    synthesizedEntity.rentalNetwork = "network" in synthesizedEntity ? {
+-      networkId: synthesizedEntity.network
+-    } : undefined;
++    // Assigning `undefined` still CREATES the key, and map-popup gates on
++    // `"rentalNetwork" in entity`. A tapped bus stop therefore looked like a
++    // rental vehicle and MapPopup threw on `rentalNetwork.networkId`,
++    // blanking the app mid-trip (2026-09-04). Only set it when there is one.
++    if ("network" in synthesizedEntity && synthesizedEntity.network) {
++      synthesizedEntity.rentalNetwork = {
++        networkId: synthesizedEntity.network
++      };
++    } else {
++      delete synthesizedEntity.rentalNetwork;
++    }
+     if (sourceLayer === "rentalStations") {
+       synthesizedEntity.availableVehicles = undefined;
+       synthesizedEntity.availableSpaces = undefined;
+diff --git a/node_modules/@opentripplanner/otp2-tile-overlay/lib/index.js b/node_modules/@opentripplanner/otp2-tile-overlay/lib/index.js
+--- a/node_modules/@opentripplanner/otp2-tile-overlay/lib/index.js
++++ b/node_modules/@opentripplanner/otp2-tile-overlay/lib/index.js
+@@ -77,10 +77,16 @@
+                 : sourceLayer === "rentalStations" && "formFactors" in synthesizedEntity
+                     ? { formFactor: synthesizedEntity.formFactors }
+                     : undefined;
+-        synthesizedEntity.rentalNetwork =
+-            "network" in synthesizedEntity
+-                ? { networkId: synthesizedEntity.network }
+-                : undefined;
++        // Assigning `undefined` still CREATES the key, and map-popup gates on
++        // `"rentalNetwork" in entity`. A tapped bus stop therefore looked like a
++        // rental vehicle and MapPopup threw on `rentalNetwork.networkId`,
++        // blanking the app mid-trip (2026-09-04). Only set it when there is one.
++        if ("network" in synthesizedEntity && synthesizedEntity.network) {
++            synthesizedEntity.rentalNetwork = { networkId: synthesizedEntity.network };
++        }
++        else {
++            delete synthesizedEntity.rentalNetwork;
++        }
+         if (sourceLayer === "rentalStations") {
+             synthesizedEntity.availableVehicles = undefined;
+             synthesizedEntity.availableSpaces = undefined;
+diff --git a/node_modules/@opentripplanner/otp2-tile-overlay/src/index.tsx b/node_modules/@opentripplanner/otp2-tile-overlay/src/index.tsx
+--- a/node_modules/@opentripplanner/otp2-tile-overlay/src/index.tsx
++++ b/node_modules/@opentripplanner/otp2-tile-overlay/src/index.tsx
+@@ -116,10 +116,15 @@
+         : sourceLayer === "rentalStations" && "formFactors" in synthesizedEntity
+         ? { formFactor: synthesizedEntity.formFactors }
+         : undefined;
+-    synthesizedEntity.rentalNetwork =
+-      "network" in synthesizedEntity
+-        ? { networkId: synthesizedEntity.network }
+-        : undefined;
++    // Assigning `undefined` still CREATES the key, and map-popup gates on
++    // `"rentalNetwork" in entity`. A tapped bus stop therefore looked like a
++    // rental vehicle and MapPopup threw on `rentalNetwork.networkId`,
++    // blanking the app mid-trip (2026-09-04). Only set it when there is one.
++    if ("network" in synthesizedEntity && synthesizedEntity.network) {
++      synthesizedEntity.rentalNetwork = { networkId: synthesizedEntity.network };
++    } else {
++      delete synthesizedEntity.rentalNetwork;
++    }
+     if (sourceLayer === "rentalStations") {
+       synthesizedEntity.availableVehicles = undefined;
+       synthesizedEntity.availableSpaces = undefined;
