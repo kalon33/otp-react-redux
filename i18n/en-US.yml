@@ -205,6 +205,7 @@ components:
     settings: Settings
     shareDiagnosticsOff: "Share diagnostics: Off"
     shareDiagnosticsOn: "Share diagnostics: On"
+    shareFeedback: Share feedback
     skipNavigation: Skip navigation
   BackToTripPlanner:
     backToTripPlanner: Back to trip planner
@@ -357,6 +358,25 @@ components:
     nameTooLong: Name must be fewer than {char} characters.
     placeNotFound: Place not found
     placeNotFoundDescription: Sorry, the requested place was not found.
+  FeedbackScreen:
+    attachLabel: Add a photo or screenshot
+    commentLabel: Your comment
+    commentPlaceholder: What happened?
+    failed: Could not send. Try again.
+    heading: Share feedback
+    held: Saved. It will send the next time you open this screen.
+    heldSent: An earlier report has now been sent.
+    heldWaiting: >-
+      An earlier report is still waiting to send. It will go out next time you
+      open this screen.
+    imageRejected: That file could not be attached.
+    intro: Tell us what went wrong. A screenshot says more than a sentence.
+    removeImage: Remove
+    send: Send
+    sendingHeld: Sending an earlier report that could not go out…
+    sent: Sent. Thank you.
+    sentWithoutImage: Sent, but the picture could not be attached.
+    thumbnailAlt: The picture you attached
   FormNavigationButtons:
     ariaLabel: Form navigation
   GoMode:
@@ -753,6 +773,12 @@ components:
     tripNameRequired: Please enter a trip name.
   SequentialPaneDisplay:
     stepNumber: Step {step} of {total}
+  SessionTimeout:
+    body: >-
+      Your session will expire within a minute. Press 'Continue Session' to keep
+      your search.
+    header: Session about to timeout!
+    keepSession: Continue Session
   SettingsScreen:
     bikeSpeedHelp: >-
       How long the app thinks your bike legs take. Set it and every plan uses
@@ -769,21 +795,14 @@ components:
     speedLow: Slower
     turnByTurnHeader: Turn-by-turn
     turnByTurnHelp: >-
-      Off by default. With this off you can still switch turn-by-turn on for
-      one walking or biking leg from the trip overview once a trip has
-      started.
+      Off by default. With this off you can still switch turn-by-turn on for one
+      walking or biking leg from the trip overview once a trip has started.
     turnByTurnLabel: Turn-by-turn directions
     walkSpeedHelp: >-
-      How long the app thinks your walking legs take, including the walk to
-      your bus stop.
+      How long the app thinks your walking legs take, including the walk to your
+      bus stop.
     walkSpeedLabel: "Your walking speed: {speed} mph"
     walkSpeedSlider: Walking speed
-  SessionTimeout:
-    body: >-
-      Your session will expire within a minute. Press 'Continue Session' to keep
-      your search.
-    header: Session about to timeout!
-    keepSession: Continue Session
   SimpleRealtimeAnnotation:
     usingRealtimeInfo: This trip uses real-time traffic and delay information
   StackedPaneDisplay:

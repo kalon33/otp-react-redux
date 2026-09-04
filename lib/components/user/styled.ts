@@ -133,3 +133,51 @@ export const UnstyledLink = styled(Link)`
     text-decoration: none;
   }
 `
+
+/* --- "Share feedback" screen -------------------------------------------- */
+
+/** The comment box. Sized so the whole of a 500-character note is visible. */
+export const FeedbackTextarea = styled.textarea`
+  border: 1px solid #adadad;
+  border-radius: 4px;
+  display: block;
+  font-size: 16px;
+  min-height: 8em;
+  padding: 10px;
+  resize: vertical;
+  width: 100%;
+`
+
+/**
+ * The attach row: a real <input type="file"> wearing a label, because that is
+ * the control that offers the camera, the photo library AND the screenshot
+ * album on both iOS and Android with no native plugin behind it.
+ */
+export const FeedbackAttachRow = styled.div`
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 1em 0;
+
+  input[type='file'] {
+    font-size: 14px;
+    max-width: 100%;
+  }
+`
+
+/** What the rider is about to send, at a size that proves it is the right one. */
+export const FeedbackThumbnail = styled.img`
+  border: 1px solid #adadad;
+  border-radius: 4px;
+  max-height: 160px;
+  max-width: 100%;
+`
+
+/** Sent / held / failed. Never a spinner alone: the rider needs the words. */
+export const FeedbackStatus = styled.p<{ $failed?: boolean }>`
+  color: ${(props) => (props.$failed ? RED_ON_WHITE : '#186429')};
+  font-size: 14px;
+  font-weight: 700;
+  margin: 1em 0 0 0;
+`
