@@ -199,7 +199,7 @@ const FlexNoticeWrapper = styled.span`
   ::after {
     content: ' ';
   }
-`
+`;
 const StartTripButton = styled.button`
   background-color: #4caf50;
   border: none;
