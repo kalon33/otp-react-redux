@@ -10,6 +10,7 @@ import { History } from '@styled-icons/fa-solid/History'
 import { MapMarked } from '@styled-icons/fa-solid/MapMarked'
 import { MapMarkerAlt } from '@styled-icons/fa-solid/MapMarkerAlt'
 import { MapPin } from '@styled-icons/fa-solid/MapPin'
+import { Sliders } from '@styled-icons/fa-solid/Sliders'
 import { Undo } from '@styled-icons/fa-solid/Undo'
 import React, { Component, Fragment, useContext } from 'react'
 import SlidingPane from 'react-sliding-pane'
@@ -30,7 +31,7 @@ import {
   setDebugLogEnabled
 } from '../../util/debug-log'
 import { isModuleEnabled, Modules } from '../../util/config'
-import { LOCAL_PLACES_PATH } from '../../util/constants'
+import { LOCAL_PLACES_PATH, SETTINGS_PATH } from '../../util/constants'
 
 import AppMenuItem from './app-menu-item'
 import PopupTriggerText from './popup-trigger-text'
@@ -309,6 +310,20 @@ class AppMenu extends Component<
                 id: 'components.AppMenu.myPlaces'
               })}
               to={LOCAL_PLACES_PATH}
+            />
+            {/* The rider's routing levers and turn-by-turn default. Before
+                this they existed only inside the search form's advanced
+                panel — reachable only mid-plan — which is why no preference
+                was ever set on the 2026-09-04 ride ("Where my user params
+                at??"). */}
+            <AppMenuItem
+              icon={<Sliders />}
+              onClick={this._handleNavigate}
+              text={intl.formatMessage({
+                defaultMessage: 'Settings',
+                id: 'components.AppMenu.settings'
+              })}
+              to={SETTINGS_PATH}
             />
             <AppMenuItem
               icon={<Undo />}

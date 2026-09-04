@@ -17,6 +17,7 @@ import {
   SET_DEPARTURE_OVERRIDE,
   SET_GO_MODE_ACTIVE_LEG,
   SET_GO_MODE_BACKGROUNDED,
+  SET_LEG_TURN_CUES,
   SET_LIVE_LEG_TIMES,
   SET_MAP_FOLLOW,
   SET_NOTIFICATION_CONFIG,
@@ -28,6 +29,7 @@ import {
   SET_RIDING,
   SET_TRACKING_ERROR,
   SET_TRANSIT_LEG_ENTERED,
+  SET_TURN_CUE_DEFAULT,
   SHOW_BOARDING_PROMPT,
   START_GO_MODE,
   START_GPS_SIMULATION,
@@ -45,6 +47,10 @@ import {
   UPDATE_TRACKING_INTERVAL,
   UPDATE_VEHICLE_MATCH
 } from '../actions/go-mode'
+import {
+  DEFAULT_TURN_CUE_SETTINGS,
+  TurnCueSettings
+} from '../util/go-mode/turn-cue-settings'
 import { ridingFactIsEvidenced } from '../util/go-mode/riding'
 import type { LiveLegTime, RidingState } from '../util/go-mode/types'
 import type {
@@ -238,6 +244,13 @@ export interface GoModeState {
     lastPosition: GeolocationPosition | null
   }
 
+  /**
+   * The rider's turn-by-turn switch: a global default they set on the Settings
+   * screen, plus per-leg opt-ins they set from the trip sheet mid-trip. See
+   * util/go-mode/turn-cue-settings — the only consumer is checkUpcomingTurn.
+   */
+  turnCues: TurnCueSettings
+
   ui: {
     /**
      * Index of the leg the rider tapped in the trip sheet, or null for none.
@@ -339,6 +352,8 @@ const defaultState: GoModeState = {
     isTracking: false,
     lastPosition: null
   },
+
+  turnCues: { ...DEFAULT_TURN_CUE_SETTINGS },
 
   ui: {
     activeLeg: null,
@@ -587,6 +602,17 @@ const goMode = handleActions<GoModeState, any>(
       }
     }),
 
+    [SET_LEG_TURN_CUES]: (state, action) => ({
+      ...state,
+      turnCues: {
+        ...state.turnCues,
+        legOverrides: {
+          ...state.turnCues.legOverrides,
+          [action.payload.legIndex]: !!action.payload.enabled
+        }
+      }
+    }),
+
     [SET_LIVE_LEG_TIMES]: (state, action) => ({
       ...state,
       liveLegTimes: action.payload
@@ -706,6 +732,14 @@ const goMode = handleActions<GoModeState, any>(
       }
     }),
 
+    [SET_TURN_CUE_DEFAULT]: (state, action) => ({
+      ...state,
+      turnCues: {
+        ...state.turnCues,
+        enabledByDefault: !!action.payload
+      }
+    }),
+
     [SHOW_BOARDING_PROMPT]: (state) => ({
       ...state,
       boardingPrompt: {
@@ -772,6 +806,16 @@ const goMode = handleActions<GoModeState, any>(
           ...state.tracking,
           error: null,
           isTracking: true
+        },
+        // The global default is the rider's standing choice and survives; the
+        // per-leg opt-ins do not. They are keyed by leg INDEX, and this action
+        // is also how a mid-trip auto-update swaps the itinerary — leg 1 of the
+        // new plan is not the leg the rider opted in on, so carrying the map
+        // over would turn cues on for a leg they never chose (and off for one
+        // they did).
+        turnCues: {
+          enabledByDefault: state.turnCues.enabledByDefault,
+          legOverrides: {}
         },
         // The vehicle match belongs to the itinerary that just went away. It
         // was carried across untouched, so the first tick after a swap
@@ -848,6 +892,13 @@ const goMode = handleActions<GoModeState, any>(
       // the confirmed vehicle and re-ran (failing) discovery. Alight and
       // sustained off-route remain the only physical invalidators.
       riding: state.riding,
+      // The rider's global turn-by-turn choice is a SETTING, not trip state:
+      // ending a trip must not silently return it to the shipped default. The
+      // per-leg overrides go with the trip they belonged to (defaultState).
+      turnCues: {
+        enabledByDefault: state.turnCues.enabledByDefault,
+        legOverrides: {}
+      },
       vehicleMatch:
         state.vehicleMatch.match?.confidence === 'confirmed'
           ? state.vehicleMatch

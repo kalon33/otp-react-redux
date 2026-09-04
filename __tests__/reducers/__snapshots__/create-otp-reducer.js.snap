@@ -91,6 +91,10 @@ Object {
       "isTracking": false,
       "lastPosition": null,
     },
+    "turnCues": Object {
+      "enabledByDefault": false,
+      "legOverrides": Object {},
+    },
     "ui": Object {
       "activeLeg": null,
       "backgrounded": false,
