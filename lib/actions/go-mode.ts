@@ -167,6 +167,10 @@ import {
   stopNativeGps
 } from '../util/go-mode/native-gps'
 import {
+  stopLiveActivity,
+  syncLiveActivity
+} from '../util/go-mode/live-activity'
+import {
   nativeGpsDistanceFilterFor,
   shouldRestartNativeWatcher,
   shouldSeedProgressFromLastFix
@@ -736,6 +740,33 @@ function autoReplanRejected(
 }
 
 /**
+ * Put the trip on the lock screen — the rider's 2026-09-01 ask, backlog 8.10.
+ *
+ * Fire-and-forget on purpose. `syncLiveActivity` throttles itself (ActivityKit
+ * rate-limits, so a per-tick cadence would burn the budget in the first mile),
+ * swallows its own failures, and is a no-op in every shell without the native
+ * plugin — a browser, Android, and any iOS build older than the one that
+ * carries it. Nothing about a trip may depend on a lock-screen card, so nothing
+ * here is awaited and nothing here can reject.
+ */
+function pushLiveActivity(getState: any, nowMs: number): void {
+  const goMode = getState()?.otp?.goMode
+  if (!goMode?.isActive || session.liveActivityTripId == null) return
+  syncLiveActivity(
+    {
+      activeItinerary: goMode.activeItinerary ?? null,
+      arrivedAt: goMode.arrivedAt ?? null,
+      departureOverride: goMode.departureOverride ?? null,
+      liveLegTimes: goMode.liveLegTimes || {},
+      progress: goMode.progress ?? null,
+      riding: goMode.riding ?? null,
+      tripId: session.liveActivityTripId
+    },
+    nowMs
+  )
+}
+
+/**
  * Start Go Mode tracking for an itinerary
  */
 export function beginGoMode(rawItinerary: Itinerary) {
@@ -853,6 +884,25 @@ export function startGoModeTracking(
     // place that guarantees the updater is held for the whole of it. A
     // redundant call writes nothing.
     holdBundleWhileTripActive({ onHoldChange: recordSessionEvent })
+
+    // The lock-screen card, for the same reason and in the same place: this is
+    // the only door a resumed trip comes through as well as a started one, and
+    // the rider asked for a widget that stays up "when in go mode" (8.10), not
+    // one that only appears on trips begun by hand.
+    //
+    // ONE card per Go Mode SESSION, not per itinerary. Every mid-trip re-plan
+    // re-enters here — auto-reroute, onboard confirm, the aboard replan, the
+    // quiet access replan — and minting a fresh id each time would tear the
+    // card down and put a new one up on each of them; 2026-09-01's third ride
+    // re-planned 14 times in 21 minutes. The id is module state, cleared with
+    // the rest of TripSession by endGoMode, so a RESUMED page mints a new one
+    // and the plugin sweeps whatever orphan the previous page left running.
+    if (session.liveActivityTripId == null) {
+      session.liveActivityTripId = `ga-${Date.now()}`
+    }
+    // Immediately, not on the first GPS fix: starting a trip is the moment the
+    // phone goes in a pocket.
+    pushLiveActivity(getState, Date.now())
 
     // A trip that had ALREADY ARRIVED when the page came back. Everything below
     // that starts a repeating job — the boarding stop-time prefetch, live
@@ -1141,6 +1191,11 @@ export function endGoMode() {
     // location indicator and the battery draw between trips. Its watchdog is
     // already down, so it can't restart the stream it just lost.
     stopNativeGps()
+    // ...and the lock-screen card, immediately: the rider ended the trip by
+    // hand, so nothing on it is worth reading. An ARRIVAL ends it differently —
+    // with a final state that lingers a couple of minutes (see the arrival
+    // latch in handlePositionUpdate).
+    stopLiveActivity()
     if (session.lastTurnCardKey !== null) cancelPush(TURN_CARD_NOTIFICATION_ID)
     if (session.lastPacingCard !== null) cancelPush(PACING_CARD_NOTIFICATION_ID)
     // The per-leg turn-announcement latch lives in notification-service, keyed
@@ -4584,6 +4639,13 @@ export function handlePositionUpdate(position: GeolocationPosition) {
 
     dispatch(updateProgress(progress))
 
+    // The lock screen, throttled to once a minute plus anything the rider can
+    // actually see change (leg change, boarding, alighting). Read back from the
+    // store rather than from `progress`, so the card quotes the same live
+    // itinerary the trip sheet renders — in particular the ITINERARY's arrival
+    // and not the current leg's end, which is the 08-31/09-01 defect.
+    pushLiveActivity(getState, currentTime.getTime())
+
     // The only thing that remembers distanceToDestination past this tick. Until
     // now it was computed every tick and read by nothing but the arrival latch,
     // so no part of the app could see the 8/28 afternoon failure: 32 minutes of
@@ -4622,6 +4684,9 @@ export function handlePositionUpdate(position: GeolocationPosition) {
           }`
       )
       dispatch(setArrived(currentTime.getTime()))
+      // Take the card down with the arrival on it. Every later tick returns at
+      // the `hasArrived` guard below, so this is the only chance to say so.
+      pushLiveActivity(getState, currentTime.getTime())
       // The quiesce below only governs what THIS function does; the two
       // subsystems that live outside the tick have to be told separately, and
       // on 2026-08-28 neither was. The trip was over at 22:08:37 and the rider
