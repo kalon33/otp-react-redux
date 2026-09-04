@@ -759,7 +759,7 @@ const AdvancedSettingsPanel = ({
           name="routingProfile"
           onChange={onRoutingProfileChange}
           options={ROUTING_PROFILES.map((profile) => ({
-            text: intl.formatMessage({ id: `components.GoMode.${profile.id}` }),
+            text: intl.formatMessage({ id: `components.GoMode.${profile.id.replace(/-/g, '')}` }),
             value: profile.id
           }))}
           value={currentQuery.activeProfileId || DEFAULT_PROFILE_ID}
