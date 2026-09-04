@@ -389,7 +389,7 @@ class MetroItinerary extends NarrativeItinerary {
       setTimeout(
         () => document.querySelector('.itin-wrapper')?.scrollIntoView(),
         10
-      )
+      );
     }
     const formattedFare = fareCurrency
       ? intl.formatNumber(transitFare, {
@@ -419,7 +419,7 @@ class MetroItinerary extends NarrativeItinerary {
       console.log("Missing DefaultFareType! Can't display default fare")
       fareInfo = (
         <FormattedMessage id="common.itineraryDescriptions.noDefaultFareTypeConfigured" />
-      )
+      );
     }
 
     // Use first leg's agency as a fallback
