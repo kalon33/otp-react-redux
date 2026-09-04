@@ -229,6 +229,100 @@ describe('lib > reducers > create-user-reducer', () => {
       ).toHaveLength(1)
       expect(storedCustoms()).toEqual([])
     })
+
+    describe('recent place dedupe', () => {
+      const SOUTHDALE = {
+        address: 'Southdale Mall, 50th and France, Edina, MN',
+        icon: 'clock-o',
+        id: 'recent-shsni9qi1',
+        lat: 44.88768816033247,
+        lon: -93.34570485903102,
+        name: 'Southdale Mall, 50th and France, Edina, MN',
+        timestamp: 1788537165044,
+        type: 'recent'
+      }
+      const rememberRecent = (location) => ({
+        payload: { location, type: 'recent' },
+        type: 'REMEMBER_LOCAL_USER_PLACE'
+      })
+      const storedRecents = () =>
+        JSON.parse(window.localStorage.getItem('otp.recent') || '[]')
+
+      it('three responses for one search leave one recent', () => {
+        // The exact payloads from 2026-09-04 10:52:45/45/47: same
+        // coordinates, three freshly minted ids.
+        let state = reducer(freshState(), rememberRecent(SOUTHDALE))
+        state = reducer(
+          state,
+          rememberRecent({
+            ...SOUTHDALE,
+            id: 'recent-idfg17afy',
+            timestamp: 1788537165364
+          })
+        )
+        state = reducer(
+          state,
+          rememberRecent({
+            ...SOUTHDALE,
+            id: 'recent-gxln259t5',
+            timestamp: 1788537167182
+          })
+        )
+        expect(state.localUser.recentPlaces).toHaveLength(1)
+        expect(storedRecents()).toHaveLength(1)
+        // The id the rider's "forget" button targets never changed, but the
+        // timestamp is the newest one.
+        expect(state.localUser.recentPlaces[0].id).toEqual('recent-shsni9qi1')
+        expect(state.localUser.recentPlaces[0].timestamp).toEqual(1788537167182)
+      })
+
+      it('the same place searched again stays one recent, newest first', () => {
+        let state = reducer(freshState(), rememberRecent(SOUTHDALE))
+        const other = {
+          address: '300 Nicollet Mall',
+          icon: 'clock-o',
+          id: 'recent-nicollet',
+          lat: 44.97,
+          lon: -93.27,
+          name: '300 Nicollet Mall',
+          timestamp: 1788537166000,
+          type: 'recent'
+        }
+        state = reducer(state, rememberRecent(other))
+        // Re-searched a day later, geocoded a couple of metres away.
+        state = reducer(
+          state,
+          rememberRecent({
+            ...SOUTHDALE,
+            id: 'recent-later',
+            lat: SOUTHDALE.lat + 0.00002,
+            timestamp: 1788623565044
+          })
+        )
+        expect(state.localUser.recentPlaces).toHaveLength(2)
+        const southdale = state.localUser.recentPlaces[0]
+        expect(southdale.id).toEqual('recent-shsni9qi1')
+        expect(southdale.timestamp).toEqual(1788623565044)
+        expect(storedRecents()).toHaveLength(2)
+      })
+
+      it('a genuinely different destination is still added', () => {
+        let state = reducer(freshState(), rememberRecent(SOUTHDALE))
+        state = reducer(
+          state,
+          rememberRecent({
+            ...SOUTHDALE,
+            address: 'Mall of America',
+            id: 'recent-moa',
+            lat: 44.8548,
+            lon: -93.2422,
+            name: 'Mall of America',
+            timestamp: 1788537168000
+          })
+        )
+        expect(state.localUser.recentPlaces).toHaveLength(2)
+      })
+    })
   })
 
   describe('storeTripHistory default (persistence.trackRecentByDefault)', () => {
