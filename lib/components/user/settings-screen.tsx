@@ -2,7 +2,7 @@ import { connect } from 'react-redux'
 import { QueryParamChangeEvent } from '@opentripplanner/trip-form/lib/types'
 import { Styled as TripFormStyled } from '@opentripplanner/trip-form'
 import { useIntl } from 'react-intl'
-import React, { useCallback } from 'react'
+import React, { useCallback, useEffect, useRef } from 'react'
 
 import * as goModeActions from '../../actions/go-mode'
 import * as routingProfileActions from '../../actions/routing-profiles'
@@ -41,6 +41,22 @@ import PageTitle from '../util/page-title'
  */
 const BIKE_SPEED_STEP = 0.25
 const WALK_SPEED_STEP = 0.1
+
+/**
+ * Do two lever sets say the same thing? Only the numeric levers this screen
+ * writes are ever compared, so a shallow key/value check is exact — and it has
+ * to be exact, because it is what decides whether leaving the screen costs the
+ * rider a search. A drag out and back to where it started is not a change.
+ */
+function samePreferences(
+  a: RoutingPreferences,
+  b: RoutingPreferences
+): boolean {
+  const aKeys = Object.keys(a) as (keyof RoutingPreferences)[]
+  const bKeys = Object.keys(b) as (keyof RoutingPreferences)[]
+  if (aKeys.length !== bKeys.length) return false
+  return aKeys.every((key) => a[key] === b[key])
+}
 
 interface Props {
   bikeSpeed?: number
@@ -88,6 +104,46 @@ const SettingsScreen = ({
     id: 'components.SettingsScreen.heading'
   })
 
+  // Every notch of a slider is an onChange, and until 9.1 every one of them
+  // asked `setRoutingPreferences` for its default behaviour: replan. That
+  // dispatches `setQueryParam` with a search id, which runs `routingQuery`,
+  // which pushes a new path onto the router (actions/api.js `setUrlSearch`) —
+  // so the `/settings` route unmounted under the rider's thumb after a single
+  // notch. On the 2026-09-04 15:04 ride the lever moved exactly once per visit
+  // (15:01:34, 15:01:41, 15:06:11) and each time the next action in the log is
+  // `LOCATION_CHANGE "/"`. Four notches also bought four three-pending
+  // searches, two of which timed out 20 s later, long after the rider had
+  // gone.
+  //
+  // So: write and persist on every notch (`{ replan: false }` still stores the
+  // preference, which is the part that must not be lost), and buy exactly one
+  // search — when the rider leaves the screen, and only if the levers they
+  // leave with differ from the ones they arrived with.
+  const baselinePrefs = useRef<RoutingPreferences>(routingPreferences)
+  const latestPrefs = useRef<RoutingPreferences>(routingPreferences)
+  const leversChanged = useRef(false)
+  // The unmount effect must run once, so it cannot depend on the prop; hold
+  // the live dispatcher in a ref instead of closing over the mount-time one.
+  const setPrefs = useRef(setRoutingPreferences)
+  setPrefs.current = setRoutingPreferences
+
+  const applyPreferences = useCallback((next: RoutingPreferences) => {
+    latestPrefs.current = next
+    leversChanged.current = !samePreferences(next, baselinePrefs.current)
+    setPrefs.current(next, undefined, { replan: false })
+  }, [])
+
+  useEffect(
+    () => () => {
+      if (!leversChanged.current) return
+      // `setRoutingPreferences` still gates this on `queryIsValid`, so a rider
+      // who set levers before entering an origin and destination gets the
+      // preference stored and no doomed request.
+      setPrefs.current(latestPrefs.current, undefined, { replan: true })
+    },
+    []
+  )
+
   // The ceiling is a duration, so its mileage moves with the bikeSpeed lever —
   // read it back out of the live preferences every render, exactly as the
   // advanced panel does, so the number can never describe a speed the rider is
@@ -105,9 +161,9 @@ const SettingsScreen = ({
       // screens cannot disagree about whether a lever is "set".
       if (reluctance <= SERVER_BIKE_RELUCTANCE) delete prefs.bikeReluctance
       else prefs.bikeReluctance = reluctance
-      setRoutingPreferences(prefs)
+      applyPreferences(prefs)
     },
-    [routingPreferences, setRoutingPreferences]
+    [applyPreferences, routingPreferences]
   )
 
   const onBikeSpeedChange = useCallback(
@@ -121,9 +177,9 @@ const SettingsScreen = ({
       // pace mid-ride, which it must not do over a rider's explicit setting.
       if (Math.abs(speed - SERVER_BIKE_SPEED_MPS) < 1e-6) delete prefs.bikeSpeed
       else prefs.bikeSpeed = speed
-      setRoutingPreferences(prefs)
+      applyPreferences(prefs)
     },
-    [routingPreferences, setRoutingPreferences]
+    [applyPreferences, routingPreferences]
   )
 
   const onWalkSpeedChange = useCallback(
@@ -133,9 +189,9 @@ const SettingsScreen = ({
       const prefs: RoutingPreferences = { ...routingPreferences }
       if (Math.abs(speed - SERVER_WALK_SPEED_MPS) < 1e-6) delete prefs.walkSpeed
       else prefs.walkSpeed = speed
-      setRoutingPreferences(prefs)
+      applyPreferences(prefs)
     },
-    [routingPreferences, setRoutingPreferences]
+    [applyPreferences, routingPreferences]
   )
 
   const onTurnCuesChange = useCallback(
