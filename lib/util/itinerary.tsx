@@ -101,9 +101,21 @@ export function legLocationsAreEqual(legLocation: Place, other: Place) {
  * a trip: 465 > 94 > Gold Line is one shape whether you bike 4 miles or 6 at
  * the end. Empty for a walk- or bike-the-whole-way itinerary, which is why
  * callers must not treat two empty signatures as a match.
+ *
+ * An itinerary carrying no `legs` array at all gets that same empty signature
+ * rather than a TypeError — the contract is unchanged, because an empty
+ * signature already means "no shape to compare" and every caller either guards
+ * on it (groupAlightOptionsByRoute, itinerariesAreEqual) or treats it as its
+ * own bucket (demoteTokenTransitHops). Only synthetic data reaches here
+ * legless — a real OTP itinerary always has legs, and rankAlightOptions builds
+ * its options from settled plans — but 2026-09-02 the `?goModeDemo=1` gallery
+ * did exactly that (`Cannot read properties of undefined (reading 'filter')`),
+ * and since nothing wraps GoModeDemo in an error boundary the throw unmounted
+ * the WHOLE page, not just the frames after it. Same posture as the two
+ * sibling `itinerary?.legs` guards in this file.
  */
 export function transitRouteSignature(itinerary: Itinerary): string {
-  return itinerary.legs
+  return (itinerary?.legs || [])
     .filter((leg) => leg.transitLeg)
     .map((leg) => leg.routeId ?? leg.mode)
     .join('>')
@@ -161,7 +173,11 @@ export function hasTokenTransitHop(
   itinerary: Itinerary,
   maxHopMeters: number = TOKEN_TRANSIT_HOP_METERS
 ): boolean {
-  const legs = itinerary.legs
+  // Legless itineraries have no hop, by the same tolerance
+  // transitRouteSignature keeps: groupAlightOptionsByRoute calls both on the
+  // same options, so guarding only the signature just moves the TypeError two
+  // frames down (demoteTokenTransitHops → isDemoted → here).
+  const legs = itinerary?.legs || []
   const lastTransitIndex = legs.map((leg) => !!leg.transitLeg).lastIndexOf(true)
   if (lastTransitIndex < 0 || lastTransitIndex === legs.length - 1) return false
   const hop = legs[lastTransitIndex]
