@@ -296,11 +296,438 @@ export function ridingFactIsEvidenced(
   return !!id && !id.startsWith('route:')
 }
 
+/**
+ * ─── Getting off early, at a stop that is still on the route (backlog 8.11) ──
+ *
+ * The rider, 2026-08-27: *"I got off early for a transfer. It did not detect
+ * that I had gotten off the bus… Only problem is I was not receiving
+ * notifications then to board the next bus."*
+ *
+ * Until now the ONLY way out of `riding` was `offRouteSince` running past
+ * `offRouteClearMs` (90 s) — i.e. the rider physically leaving the bus's
+ * shape. A rider standing on the platform they alighted at never leaves it:
+ * the stop is ON the route, `isOnRoute` stays true, `progressAlongLeg` stays
+ * above RIDING_MIN_PROGRESS, and the fact is held for the rest of the leg. And
+ * a held `riding` fact silences every boarding path there is —
+ * `checkBoardVehicleApproach` is skipped while `goMode.riding` is set, and
+ * `classifyMissedBus` opens with `if (riding) return null`.
+ *
+ * The evidence that separates "still aboard" from "watched it leave" is not
+ * the rider's position at all — it is the rider's motion measured AGAINST the
+ * matched vehicle's. Two bodies that were together and are now apart were not
+ * together the whole time. `vehicleMatch.match` already carries the matched
+ * vehicle's own id, its distance to the rider (refreshConfirmedMatch rewrites
+ * `distanceMeters` from the feed on every poll) and its `nextStopId`; nothing
+ * had ever compared them.
+ *
+ * The whole rule, and every number in it, exists to make ONE case impossible:
+ * a bus dwelling at a stop with the rider aboard. Both are stationary and the
+ * gap between them is ~0, so the divergence test cannot fire however long the
+ * doors stay open — which is the case that made 6.38 rewrite the board gate.
+ */
+
+/**
+ * The rider's ground speed above which they are not standing at a stop.
+ *
+ * Below RIDING_ESTABLISH_MIN_SPEED_MPS (3 m/s), which this module already
+ * treats as "being carried by something", and above a brisk walk, so a rider
+ * pacing a platform still reads as parked. A rider genuinely aboard a bus that
+ * has covered EARLY_ALIGHT_VEHICLE_GAIN_M of ground cannot have been under
+ * this figure for the whole window — that is the physical statement the gate
+ * rests on.
+ *
+ * A fix with NO speed does not qualify. That is deliberate and it is the safe
+ * direction: an unqualified tick only ever means "no clear this tick", so a
+ * device that never publishes `coords.speed` keeps exactly today's behaviour
+ * (the 90 s off-route timer) rather than getting a guess.
+ */
+export const EARLY_ALIGHT_RIDER_MAX_SPEED_MPS = 2
+
+/**
+ * How close to a stop of the ridden leg counts as standing at it. Same figure
+ * and same meaning as BOARD_STOP_DWELL_RADIUS_M — a platform, its entrances
+ * and the kerb are all "at the stop", and the fix taken under a shelter is not
+ * a good one.
+ */
+export const EARLY_ALIGHT_STOP_RADIUS_M = 120
+
+/**
+ * How much the rider-to-vehicle gap must GROW, from its smallest reading while
+ * the rider has been parked at this stop, before the two are diverging.
+ *
+ * Measured against the minimum rather than an absolute distance because a
+ * GTFS-RT record lags a moving bus badly — on `orange-line-0729.json` bus 8140
+ * was already 230 m up the freeway on the first record after departure, with
+ * the rider aboard. Growth from the parked baseline is what a lagging feed
+ * cannot manufacture: while the rider is aboard, every fresh record re-lands
+ * near them and resets the minimum.
+ *
+ * 250 m is the figure this codebase already uses for "no longer at the stop"
+ * (VEHICLE_AT_BOARD_STOP_M / BOARD_ARRIVE_METRES in the boarding alerts). It
+ * is an order of magnitude outside GTFS-RT position noise, and at 10-13 m/s a
+ * departing bus covers it in about 20 s.
+ */
+export const EARLY_ALIGHT_VEHICLE_GAIN_M = 250
+
+/**
+ * …and the gap must also be at least this wide in absolute terms, so that a
+ * wobble around a near-zero baseline can never satisfy the growth test on its
+ * own. Same 250 m, for the same reason.
+ */
+export const EARLY_ALIGHT_VEHICLE_MIN_M = 250
+
+/**
+ * A vehicle record older than this says nothing about where the bus is now, so
+ * it may not be half of a divergence. Same figure as
+ * VEHICLE_RECORD_STALE_SEC (120 s); kept local because transit-trust imports
+ * this module.
+ */
+export const EARLY_ALIGHT_VEHICLE_MAX_AGE_MS = 120_000
+
+/**
+ * How many stops beyond the rider's own the vehicle's `nextStopId` has to name
+ * before that alone counts as divergence.
+ *
+ * TWO, not one. While the rider is aboard and the bus is pulling out of stop
+ * k, its `nextStopId` is k+1 while the nearest stop to the rider is still k —
+ * that is the normal shape of riding a bus, and a one-stop rule would clear
+ * the fact at every single stop of every leg. Two stops beyond means the bus
+ * has served a whole stop that the rider, parked at k for the whole window,
+ * did not.
+ */
+export const EARLY_ALIGHT_VEHICLE_STOPS_AHEAD = 2
+
+/**
+ * Consecutive diverging ticks required. The same discipline 6.1's board gate
+ * uses (BOARD_AUTO_CONFIRM_MIN_CONSECUTIVE = 3 polls) and the turn cues use
+ * (STATIONARY_HOLD_TICKS = 3): one tick is a wobble, and a single bad fix or a
+ * single ghost feed record must not be able to end a ride.
+ */
+export const EARLY_ALIGHT_MIN_TICKS = 5
+
+/**
+ * …sustained for this long. Half of RIDING_OFFROUTE_CLEAR_MS (90 s), which is
+ * the only exit that exists today and which the rider was waiting out on
+ * 08-27. Gentle on purpose: this is not a race with the off-route timer, it is
+ * a second, better-evidenced door out of the same room, and the cost of
+ * waiting three quarters of a minute for it is one missed boarding alert
+ * cycle, while the cost of firing it early is throwing a rider off a bus they
+ * are sitting on.
+ */
+export const EARLY_ALIGHT_MIN_MS = 45_000
+
+/**
+ * The most one tick may contribute. Same reason and same figure as
+ * BOARD_STOP_DWELL_MAX_STEP_MS: a backgrounded app delivers fixes minutes
+ * apart, and that gap is not 45 s of watching a bus drive away.
+ */
+export const EARLY_ALIGHT_MAX_STEP_MS = 10_000
+
+/** A stop of the ridden leg, as this module needs to talk about one. */
+export interface LegStop {
+  /** Position in the leg's own call order — from = 0, to = last. */
+  index: number
+  lat: number
+  lon: number
+  name: string
+  stopId: string | null
+}
+
+/** Ids arrive as `1:53543`, the bare `53543`, or a `Stop:1:52719` — normalize. */
+function stopKey(v: unknown): string | null {
+  if (typeof v !== 'string' || !v) return null
+  return v.slice(v.lastIndexOf(':') + 1)
+}
+
+/**
+ * The leg's stops in call order, from the boarding stop to the alight stop.
+ *
+ * `intermediatePlaces` is preferred over `intermediateStops` for the same
+ * reason next-stop.ts prefers it (gtfsIds and arrival times), with the same
+ * fallback when it carries entries that have no coordinates.
+ */
+export function legStopsInOrder(matchedLeg: any): LegStop[] {
+  const places: any[] = matchedLeg?.intermediatePlaces || []
+  const stops: any[] = matchedLeg?.intermediateStops || []
+  const usable = (list: any[]) =>
+    list.filter((p) => p?.lat != null && p?.lon != null)
+  let intermediates = usable(places)
+  if (places.length && intermediates.length < places.length) {
+    const alt = usable(stops)
+    if (alt.length > intermediates.length) intermediates = alt
+  }
+  const all = [matchedLeg?.from, ...intermediates, matchedLeg?.to]
+  const out: LegStop[] = []
+  for (const place of all) {
+    if (place?.lat == null || place?.lon == null) continue
+    out.push({
+      index: out.length,
+      lat: place.lat,
+      lon: place.lon,
+      name: place.name || 'Stop',
+      stopId:
+        place.stop?.gtfsId ??
+        place.stopId ??
+        place.stop?.code ??
+        place.stopCode ??
+        null
+    })
+  }
+  return out
+}
+
+/**
+ * The stop of this leg the rider is standing at, or null when they are not at
+ * one — the ALIGHT stop excluded.
+ *
+ * Excluding the last stop is what keeps a missed alight (the rider stays
+ * aboard past the stop they planned to get off at) out of this rule entirely:
+ * that is a different story with a different fix, and this decision must never
+ * be the thing that tells it. Everything from the boarding stop up to the last
+ * intermediate is in scope — including the boarding stop itself, where "the
+ * bus pulled away without me" is exactly the fact worth recording.
+ */
+export function riderStopOnLeg(
+  matchedLeg: any,
+  riderLat: number | null | undefined,
+  riderLon: number | null | undefined,
+  distanceM: (aLat: number, aLon: number, bLat: number, bLon: number) => number
+): (LegStop & { distanceM: number }) | null {
+  if (riderLat == null || riderLon == null) return null
+  const stops = legStopsInOrder(matchedLeg)
+  if (stops.length < 2) return null
+  let best: (LegStop & { distanceM: number }) | null = null
+  for (const stop of stops.slice(0, -1)) {
+    const d = distanceM(riderLat, riderLon, stop.lat, stop.lon)
+    if (!Number.isFinite(d)) continue
+    if (best == null || d < best.distanceM) best = { ...stop, distanceM: d }
+  }
+  if (best == null || best.distanceM > EARLY_ALIGHT_STOP_RADIUS_M) return null
+  return best
+}
+
+/**
+ * Has the matched vehicle's own next stop moved EARLY_ALIGHT_VEHICLE_STOPS_AHEAD
+ * or more past the stop the rider is standing at?
+ *
+ * Silent — false — on everything an agency may simply not publish: no next
+ * stop, a next stop that is not one of this leg's calls, a rider stop with no
+ * id. Same policy as the null-headsign and null-accuracy cases above: never
+ * conclude from missing data.
+ */
+export function vehiclePassedRiderStop(
+  matchedLeg: any,
+  nextStopId: string | null | undefined,
+  riderStopIndex: number | null | undefined
+): boolean {
+  const key = stopKey(nextStopId)
+  if (key == null || riderStopIndex == null) return false
+  const stops = legStopsInOrder(matchedLeg)
+  const at = stops.findIndex((s) => stopKey(s.stopId) === key)
+  if (at < 0) return false
+  return at - riderStopIndex >= EARLY_ALIGHT_VEHICLE_STOPS_AHEAD
+}
+
+/**
+ * The rider's continuous stay at one on-route stop, and how far the bus they
+ * are supposedly aboard has got from them while they stayed.
+ *
+ * Held on the trip session for the same reason BoardStopDwell is: "have these
+ * two been drifting apart" is not a function of one position, and the whole
+ * point of the rule is that a single fix cannot answer it.
+ */
+export interface EarlyAlightWatch {
+  /** ms spanned by those ticks, capped per tick at EARLY_ALIGHT_MAX_STEP_MS. */
+  divergingMs: number
+  /** Consecutive ticks whose divergence test passed. */
+  divergingTicks: number
+  /** The fix clock of the last tick folded in. */
+  lastTickMs: number
+  /** Which leg this watch is about. */
+  legIndex: number
+  /** Smallest rider-to-vehicle distance seen since the rider parked here. */
+  minDistanceM: number | null
+  stopId: string | null
+  /** Which of the leg's stops the rider has been standing at. */
+  stopIndex: number
+  stopLat: number
+  stopLon: number
+  stopName: string
+  /** The vehicle the divergence is about — the one `riding` names. */
+  vehicleId: string
+}
+
+export interface EarlyAlightSample {
+  /** The stop of the ridden leg the rider is at, per riderStopOnLeg. */
+  atStop: LegStop | null
+  legIndex: number
+  nowMs: number
+  riderSpeedMps: number | null
+  /** Age of the matched vehicle's feed record, in ms. */
+  vehicleAgeMs: number | null
+  /** Rider-to-vehicle distance from the matched record, in metres. */
+  vehicleDistanceM: number | null
+  /** The matched vehicle's id — must be the one `riding` names. */
+  vehicleId: string | null
+  /** vehiclePassedRiderStop, measured by the caller against the same leg. */
+  vehiclePassedStop: boolean
+}
+
+/**
+ * Fold one tick into the divergence watch.
+ *
+ * The watch has two layers, and they reset for different reasons:
+ *
+ *  - the WATCH itself is open while the rider is parked at one stop of one leg
+ *    with a fresh record of the vehicle they are supposed to be aboard. Moving
+ *    off, moving to a different stop or leg, losing the vehicle, or the record
+ *    going stale closes it and the baseline starts again;
+ *  - the STREAK inside it counts consecutive ticks that actually diverge. A
+ *    tick that is merely not-yet-divergent keeps the watch (and folds its
+ *    distance into the baseline minimum) but zeroes the streak, which is what
+ *    makes a single wobbling reading worthless.
+ */
+export function trackEarlyAlight(
+  prev: EarlyAlightWatch | null,
+  sample: EarlyAlightSample
+): EarlyAlightWatch | null {
+  const {
+    atStop,
+    legIndex,
+    nowMs,
+    riderSpeedMps,
+    vehicleAgeMs,
+    vehicleDistanceM,
+    vehicleId,
+    vehiclePassedStop
+  } = sample
+
+  const parked =
+    riderSpeedMps != null &&
+    Number.isFinite(riderSpeedMps) &&
+    riderSpeedMps <= EARLY_ALIGHT_RIDER_MAX_SPEED_MPS
+  // A synthetic `route:<routeId>` id is in no feed and carries no position, so
+  // it is exactly as much evidence as a null — see ridingFactIsEvidenced.
+  const recordUsable =
+    vehicleId != null &&
+    !!vehicleId &&
+    !vehicleId.startsWith('route:') &&
+    (vehicleAgeMs == null ||
+      (Number.isFinite(vehicleAgeMs) &&
+        vehicleAgeMs <= EARLY_ALIGHT_VEHICLE_MAX_AGE_MS))
+  if (atStop == null || vehicleId == null || !parked || !recordUsable) {
+    return null
+  }
+
+  const carried =
+    prev != null &&
+    prev.legIndex === legIndex &&
+    prev.stopIndex === atStop.index &&
+    prev.vehicleId === vehicleId
+      ? prev
+      : null
+  const base: EarlyAlightWatch = carried ?? {
+    divergingMs: 0,
+    divergingTicks: 0,
+    lastTickMs: nowMs,
+    legIndex,
+    minDistanceM: null,
+    stopId: atStop.stopId,
+    stopIndex: atStop.index,
+    stopLat: atStop.lat,
+    stopLon: atStop.lon,
+    stopName: atStop.name,
+    vehicleId
+  }
+
+  const d =
+    vehicleDistanceM != null && Number.isFinite(vehicleDistanceM)
+      ? vehicleDistanceM
+      : null
+  const minDistanceM =
+    d == null
+      ? base.minDistanceM
+      : base.minDistanceM == null
+      ? d
+      : Math.min(base.minDistanceM, d)
+
+  const grew =
+    d != null &&
+    minDistanceM != null &&
+    d >= EARLY_ALIGHT_VEHICLE_MIN_M &&
+    d - minDistanceM >= EARLY_ALIGHT_VEHICLE_GAIN_M
+  const diverging = grew || vehiclePassedStop
+
+  if (!diverging) {
+    return {
+      ...base,
+      divergingMs: 0,
+      divergingTicks: 0,
+      lastTickMs: nowMs,
+      minDistanceM
+    }
+  }
+  // Time only accrues BETWEEN diverging ticks: the tick that opens a streak
+  // contributes none, because the gap before it was not spent watching a bus
+  // drive away. Capped per tick for the same reason BOARD_STOP_DWELL_MAX_STEP_MS
+  // is — a backgrounded app delivers fixes minutes apart.
+  const step =
+    carried != null && base.divergingTicks > 0
+      ? Math.min(Math.max(0, nowMs - base.lastTickMs), EARLY_ALIGHT_MAX_STEP_MS)
+      : 0
+  return {
+    ...base,
+    divergingMs: base.divergingMs + step,
+    divergingTicks: base.divergingTicks + 1,
+    lastTickMs: nowMs,
+    minDistanceM
+  }
+}
+
+/** Has the watch met both halves of the sustained-divergence bar? */
+export function earlyAlightConfirmed(
+  watch: EarlyAlightWatch | null | undefined,
+  legIndex: number,
+  vehicleId: string | null | undefined
+): boolean {
+  if (!watch) return false
+  if (watch.legIndex !== legIndex) return false
+  if (!vehicleId || watch.vehicleId !== vehicleId) return false
+  return (
+    watch.divergingTicks >= EARLY_ALIGHT_MIN_TICKS &&
+    watch.divergingMs >= EARLY_ALIGHT_MIN_MS
+  )
+}
+
+/**
+ * The alight this decision records, and what the app should do about it: the
+ * next boarding is re-anchored HERE, at the stop the rider actually stepped
+ * off at, rather than at the alight stop the plan still names.
+ */
+export interface EarlyAlightRecord {
+  atMs: number
+  /** The leg the rider got off, NOT the one they board next. */
+  legIndex: number
+  stopId: string | null
+  stopLat: number
+  stopLon: number
+  stopName: string
+  tripId: string | null
+  vehicleId: string | null
+}
+
 export type RidingDecision =
   | { kind: 'none' }
   | { kind: 'set'; riding: RidingState }
   | { kind: 'markOffRoute'; riding: RidingState }
   | { kind: 'clear' }
+  /**
+   * The rider got off early, at a stop that is still on the route (8.11).
+   * Distinct from `clear` because the caller has more to do than drop the
+   * fact: it re-anchors the next boarding at `record.stopId` so the boarding
+   * alerts and their vehicle poll start from there. See EARLY_ALIGHT_MIN_MS.
+   */
+  | { kind: 'alightedEarly'; record: EarlyAlightRecord }
 
 export interface RidingDecisionInput {
   /**
@@ -309,6 +736,24 @@ export interface RidingDecisionInput {
    * refuses a first GPS-only establishment — see BOARD_STOP_DWELL_MIN_MS.
    */
   boardStopDwellMs?: number | null
+  /**
+   * The rider-versus-vehicle divergence watch for this leg, per
+   * {@link trackEarlyAlight}. Omitted (or null) reads as "no divergence
+   * observed", which is today's behaviour exactly.
+   */
+  earlyAlight?: EarlyAlightWatch | null
+  /**
+   * An early alight already recorded on this trip, per the last
+   * `alightedEarly` decision. While it stands, nothing but a trusted match on
+   * a DIFFERENT bus may put the rider back aboard that leg — the rider's own
+   * tap goes through confirmVehicleSelection, which dispatches SET_RIDING
+   * directly and never asks this function.
+   */
+  earlyAlightedFrom?: {
+    legIndex: number
+    tripId: string | null
+    vehicleId: string | null
+  } | null
   /** Reported accuracy of the fix behind this tick, in metres. */
   fixAccuracyM?: number | null
   /** The leg the matcher currently favours. */
@@ -430,6 +875,8 @@ export function firstEstablishmentIsCorroborated(input: {
 export function decideRiding(input: RidingDecisionInput): RidingDecision {
   const {
     boardStopDwellMs,
+    earlyAlight,
+    earlyAlightedFrom,
     fixAccuracyM,
     matchedLeg,
     nowMs,
@@ -452,6 +899,32 @@ export function decideRiding(input: RidingDecisionInput): RidingDecision {
     return nowMs - prevRiding.offRouteSince > offRouteClearMs
       ? { kind: 'clear' }
       : { kind: 'none' }
+  }
+
+  // Sustained divergence: the rider has stood at an on-route stop of this leg
+  // while the bus they are supposedly aboard drove away from them (8.11). This
+  // is checked BEFORE anything that could refresh the fact, because every
+  // establish/refresh path below reads as "still riding" for exactly the
+  // situation this describes — the rider is on the shape, past
+  // RIDING_MIN_PROGRESS, with a confirmed match still naming their bus.
+  if (
+    prevRiding &&
+    earlyAlightConfirmed(earlyAlight, routeMatch.legIndex, prevRiding.vehicleId)
+  ) {
+    const watch = earlyAlight as EarlyAlightWatch
+    return {
+      kind: 'alightedEarly',
+      record: {
+        atMs: nowMs,
+        legIndex: routeMatch.legIndex,
+        stopId: watch.stopId,
+        stopLat: watch.stopLat,
+        stopLon: watch.stopLon,
+        stopName: watch.stopName,
+        tripId: prevRiding.tripId,
+        vehicleId: prevRiding.vehicleId
+      }
+    }
   }
 
   const match = vehicleMatch?.match ?? null
@@ -503,6 +976,28 @@ export function decideRiding(input: RidingDecisionInput): RidingDecision {
     (prevRiding != null || vehicleReachedBoardStop(match, matchedLeg))
   const aboard = vehicleMayEstablish || gpsPlausiblyAboard
   if (!aboard) return { kind: 'none' }
+
+  // …and the rider cannot be put back on the bus they just stepped off.
+  //
+  // Without this the fix would be inert: the tick after `alightedEarly` the
+  // rider is still standing on the shape at progressAlongLeg well past
+  // RIDING_MIN_PROGRESS, and a `confirmed` match is the stickiest fact Go Mode
+  // holds (refreshConfirmedMatch never re-matches), so the very next tick
+  // would re-establish the identical fact. Only a trusted match naming a
+  // DIFFERENT bus gets through; the rider's own "I'm on the bus" bypasses this
+  // function entirely (confirmVehicleSelection dispatches SET_RIDING).
+  if (!prevRiding && earlyAlightedFrom?.legIndex === routeMatch.legIndex) {
+    // Only the MATCH is asked, never the leg: the leg's own trip id IS the run
+    // the rider alighted from, for the whole of the leg, so consulting it
+    // would refuse every re-boarding there is — including the next run of the
+    // same route from the same platform, which is the ordinary thing to do
+    // after getting off early.
+    const sameBus =
+      (match?.vehicleId != null &&
+        match.vehicleId === earlyAlightedFrom.vehicleId) ||
+      (match?.tripId != null && match.tripId === earlyAlightedFrom.tripId)
+    if (sameBus || !vehicleSpeaksForLeg) return { kind: 'none' }
+  }
 
   // The trip the rider is ACTUALLY on: a trusted vehicle match knows its
   // GTFS-RT trip, which outranks the planned leg's — the rider may have caught
