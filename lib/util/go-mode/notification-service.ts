@@ -548,8 +548,18 @@ export const ACT_REMINDER_MIN_GAP_SECONDS = 45
 export function checkUpcomingTurn(
   progress: TripProgress,
   currentLeg: Leg,
-  sentNotifications: string[]
+  sentNotifications: string[],
+  turnCuesEnabled = true
 ): NotificationEvent | null {
+  // The rider's own switch (util/go-mode/turn-cue-settings): the global default
+  // is OFF, and a leg they opted in from the trip sheet turns it back on. This
+  // is the FIRST gate on purpose — before the per-leg latch below is written —
+  // so a silenced approach doesn't burn the one cue the rider would get if they
+  // flipped the switch mid-leg. Defaults to true so a caller that knows nothing
+  // about the setting (the unit suites for the turn logic itself) still
+  // exercises the producer.
+  if (!turnCuesEnabled) return null
+
   const isBike = currentLeg.mode === 'BICYCLE'
   if (!isBike && currentLeg.mode !== 'WALK') return null
 
@@ -1748,7 +1758,13 @@ function pushIf(
 }
 
 /**
- * Process all notification checks and return any that should be triggered
+ * Process all notification checks and return any that should be triggered.
+ *
+ * `turnCuesEnabled` is the rider's turn-by-turn switch for the leg being
+ * checked — the global Settings default, overridden by a per-leg opt-in from
+ * the trip sheet (see util/go-mode/turn-cue-settings). It gates the turn cues
+ * ONLY; every other card here is about a bus the rider is going to miss or a
+ * stop they are going to sail past, and none of those are theirs to silence.
  */
 export function checkForNotifications(
   progress: TripProgress,
@@ -1760,7 +1776,8 @@ export function checkForNotifications(
   config: NotificationConfig,
   legs?: Leg[],
   alight?: AlightContext,
-  deviation?: DeviationAlertGate
+  deviation?: DeviationAlertGate,
+  turnCuesEnabled = true
 ): NotificationEvent[] {
   if (!config.enabled) {
     return []
@@ -1834,7 +1851,12 @@ export function checkForNotifications(
   if (!supersedesTurn) {
     pushIf(
       notifications,
-      checkUpcomingTurn(progress, currentLeg, sentNotifications)
+      checkUpcomingTurn(
+        progress,
+        currentLeg,
+        sentNotifications,
+        turnCuesEnabled
+      )
     )
   }
 

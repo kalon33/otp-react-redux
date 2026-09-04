@@ -50,6 +50,10 @@ import {
   getNextStopOnRide
 } from '../util/go-mode/next-stop'
 import {
+  TURN_CUE_STORAGE_KEY,
+  turnCuesEnabledForLeg
+} from '../util/go-mode/turn-cue-settings'
+import {
   buildMissedBusOutcomeNotice,
   checkBoardVehicleApproach,
   checkDestinationUnreachable,
@@ -392,7 +396,7 @@ function observedBikeSpeedMps(): number | null {
   )
 }
 
-const { randId } = coreUtils.storage
+const { randId, storeItem } = coreUtils.storage
 
 // Action types
 export const ADD_NOTIFICATION = 'ADD_NOTIFICATION'
@@ -418,6 +422,8 @@ export const SET_LIVE_LEG_TIMES = 'SET_LIVE_LEG_TIMES'
 export const SET_NOTIFICATION_CONFIG = 'SET_NOTIFICATION_CONFIG'
 export const SET_TRACKING_ERROR = 'SET_TRACKING_ERROR'
 export const SET_TRANSIT_LEG_ENTERED = 'SET_TRANSIT_LEG_ENTERED'
+export const SET_LEG_TURN_CUES = 'SET_LEG_TURN_CUES'
+export const SET_TURN_CUE_DEFAULT = 'SET_TURN_CUE_DEFAULT'
 export const SHOW_BOARDING_PROMPT = 'SHOW_BOARDING_PROMPT'
 export const START_GO_MODE = 'START_GO_MODE'
 export const START_GPS_SIMULATION = 'START_GPS_SIMULATION'
@@ -528,6 +534,34 @@ export const setGoModeBackgrounded = createAction<boolean>(
 export const setGoModeActiveLeg = createAction<number | null>(
   SET_GO_MODE_ACTIVE_LEG
 )
+
+const setTurnCueDefaultAction = createAction<boolean>(SET_TURN_CUE_DEFAULT)
+
+/**
+ * The rider's global turn-by-turn switch, from the Settings screen. Off is the
+ * shipped default (rider ask 2026-09-01: *"turn off turn by turn unless it's
+ * requested on a specific leg"*), so this is persisted under its OWN key —
+ * inside `routingProfile` it would be wiped by any reset to the default profile
+ * (actions/routing-profiles.ts), which is not what "reset my routing
+ * preferences" should mean.
+ */
+export function setTurnCueDefault(enabled: boolean) {
+  return function (dispatch: any): void {
+    dispatch(setTurnCueDefaultAction(enabled))
+    storeItem(TURN_CUE_STORAGE_KEY, { enabledByDefault: enabled })
+  }
+}
+
+/**
+ * Turn cues on (or off) for ONE leg of the running trip, from the trip sheet.
+ * Wins over the global default in both directions. Deliberately not persisted:
+ * it is scoped to this trip's leg indexes, and those stop meaning anything the
+ * moment the itinerary changes.
+ */
+export const setLegTurnCues = createAction<{
+  enabled: boolean
+  legIndex: number
+}>(SET_LEG_TURN_CUES)
 export const updateTrackingInterval = createAction<{ interval: number }>(
   UPDATE_TRACKING_INTERVAL
 )
@@ -4729,7 +4763,11 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         handledAtMs: session.deviationHandledAtMs,
         nowMs: currentTime.getTime(),
         replanImminent: quietReplanImminent
-      }
+      },
+      // The rider's turn-by-turn switch for the leg they are actually on: off
+      // globally unless they said otherwise on the Settings screen, and
+      // overridden either way by a per-leg opt-in from the trip sheet.
+      turnCuesEnabledForLeg(goMode.turnCues, routeMatch.legIndex)
     )
 
     // One clock for three arms — told, quietly re-planned around, or simply

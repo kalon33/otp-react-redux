@@ -217,6 +217,7 @@ components:
     networkConnectionLost: Erreur de connexion réseau
     networkConnectionRestored: Connexion réseau restaurée
     openMenu: Ouvrir le menu
+    settings: "Paramètres"
     shareDiagnosticsOff: "Partage des diagnostics : désactivé"
     shareDiagnosticsOn: "Partage des diagnostics : activé"
     skipNavigation: Sauter la navigation
@@ -440,6 +441,9 @@ components:
     thenTurn: "puis {turn}"
     toStop: "{emoji} Vers {stop}"
     trackingBus: "Suivi du bus n° {label}"
+    turnCuesLegLabel: "Navigation détaillée pour l'étape {leg}"
+    turnCuesOff: "Navigation détaillée : désactivée"
+    turnCuesOn: "Navigation détaillée : activée"
     tripSheetHeading: "Votre trajet"
     tripSheetTitle: "Aperçu du trajet"
     useThisDeparture: "Utiliser celui-ci"
@@ -768,6 +772,21 @@ components:
     tripNameRequired: Veuillez entrer un nom pour ce trajet.
   SequentialPaneDisplay:
     stepNumber: Étape {step} sur {total}
+  SettingsScreen:
+    bikeSpeedHelp: "Le temps que l'application attribue à vos étapes à vélo. Une fois réglée, cette vitesse est utilisée par tous les itinéraires, y compris avant que vous ayez roulé assez longtemps pour que l'application mesure votre allure."
+    bikeSpeedLabel: "Votre vitesse à vélo : {speed} mph"
+    bikeSpeedSlider: "Vitesse à vélo"
+    gettingAroundHeader: "Vos déplacements"
+    heading: "Paramètres"
+    routingHelp: "Ces réglages s'appliquent à tous les itinéraires que vous planifiez, ainsi qu'à tout trajet recalculé en cours de route."
+    speedHigh: "Plus vite"
+    speedLow: "Moins vite"
+    turnByTurnHeader: "Navigation détaillée"
+    turnByTurnHelp: "Désactivée par défaut. Même désactivée, vous pouvez l'activer pour une seule étape à pied ou à vélo depuis l'aperçu du trajet, une fois le trajet commencé."
+    turnByTurnLabel: "Navigation détaillée"
+    walkSpeedHelp: "Le temps que l'application attribue à vos étapes à pied, y compris la marche jusqu'à votre arrêt."
+    walkSpeedLabel: "Votre vitesse de marche : {speed} mph"
+    walkSpeedSlider: "Vitesse de marche"
   SessionTimeout:
     body: >-
       Votre session va expirer d'ici une minute. Appuyez sur 'Prolonger ma
