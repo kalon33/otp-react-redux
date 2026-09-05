@@ -144,7 +144,7 @@ class StopScheduleViewer extends Component<Props, State> {
 
     // We can use the first route, as this operator will only be used if there is only one operator
     return transitOperators.find(
-      (o) => o.agencyId === stopData?.routes?.[0]?.agency.gtfsId
+      (o) => o.agencyId === stopData?.routes?.[0]?.agency?.gtfsId
     )
   }
 

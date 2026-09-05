@@ -12,12 +12,17 @@ import {
   resolveBoardingOffer
 } from '../../util/go-mode/boarding-confirmation'
 import { buildLiveItinerary } from '../../util/go-mode/live-itinerary'
-import { formatPlaceName } from '../../util/format-place-name'
+import {
+  DEFAULT_TURN_CUE_SETTINGS,
+  isTurnCueLeg,
+  turnCuesEnabledForLeg
+} from '../../util/go-mode/turn-cue-settings'
 import { getModeIcon } from '../../util/go-mode/mode-icon'
 import { IconWithText } from '../util/styledIcon'
 import ItineraryBody from '../narrative/line-itin/connected-itinerary-body'
 import type { LiveLegTime, RidingState } from '../../util/go-mode/types'
 import type { TripProgress } from '../../util/go-mode/progress-calculator'
+import type { TurnCueSettings } from '../../util/go-mode/turn-cue-settings'
 
 import {
   BoardingOverlay,
@@ -78,6 +83,8 @@ interface Props {
   progress: TripProgress | null
   riding: RidingState | null
   setGoModeActiveLeg: (index: number | null) => void
+  setLegTurnCues: (payload: { enabled: boolean; legIndex: number }) => void
+  turnCues: TurnCueSettings
 }
 
 /**
@@ -105,7 +112,9 @@ const TripSheet = ({
   onClose,
   progress,
   riding,
-  setGoModeActiveLeg
+  setGoModeActiveLeg,
+  setLegTurnCues,
+  turnCues
 }: Props) => {
   const intl = useIntl()
   const [rerouteText, setRerouteText] = useState('')
@@ -265,6 +274,57 @@ const TripSheet = ({
   }
 
   /**
+   * Turn-by-turn for ONE leg (rider ask 2026-09-01: *"turn off turn by turn
+   * unless it's requested on a specific leg. Add controls to do this once a
+   * trip is started"*). The global default on the Settings screen is off; this
+   * chip is the "once a trip is started" half, and it wins over that default in
+   * both directions.
+   *
+   * Offered for the leg the rider is on when that leg can produce cues, and
+   * otherwise for the next one that can — so the walk to the bus stop is
+   * switchable while they are still on the bus, which is when they would think
+   * to. On a trip with no walking or biking left there is no chip at all: the
+   * turn-cue producer returns null for transit legs, so a switch there would be
+   * wired to nothing.
+   */
+  const renderTurnCueChip = () => {
+    const legIndex = isTurnCueLeg(currentLeg)
+      ? currentLegIndex
+      : isTurnCueLeg(legs[currentLegIndex + 1])
+      ? currentLegIndex + 1
+      : null
+    if (legIndex === null) return null
+    const leg = legs[legIndex]
+    const enabled = turnCuesEnabledForLeg(turnCues, legIndex)
+    return (
+      <RerouteChips>
+        <RerouteChip
+          aria-label={intl.formatMessage(
+            {
+              defaultMessage: 'Turn-by-turn directions for the {leg} leg',
+              id: 'components.GoMode.turnCuesLegLabel'
+            },
+            { leg: legTitle(leg) }
+          )}
+          aria-pressed={enabled}
+          onClick={() => setLegTurnCues({ enabled: !enabled, legIndex })}
+          type="button"
+        >
+          {enabled
+            ? intl.formatMessage({
+                defaultMessage: 'Turn-by-turn: On',
+                id: 'components.GoMode.turnCuesOn'
+              })
+            : intl.formatMessage({
+                defaultMessage: 'Turn-by-turn: Off',
+                id: 'components.GoMode.turnCuesOff'
+              })}
+        </RerouteChip>
+      </RerouteChips>
+    )
+  }
+
+  /**
    * The rider's own say on being aboard (6.10c). One chip, never a question:
    * the app already knows which bus is in the itinerary, and
    * `feedback_no_redundant_prompts` says it must not ask. Which chip — and
@@ -405,6 +465,7 @@ const TripSheet = ({
           })}
         </SheetSectionTitle>
         {renderCurrentLegCard()}
+        {renderTurnCueChip()}
         {renderBoardingChip()}
         {liveItinerary && (
           <ItineraryBody
@@ -494,7 +555,8 @@ const mapStateToProps = (state: any) => {
     liveLegTimes: goMode?.liveLegTimes || {},
     matchedVehicleId: goMode?.vehicleMatch?.match?.vehicleId || null,
     progress: goMode?.progress || null,
-    riding: goMode?.riding || null
+    riding: goMode?.riding || null,
+    turnCues: goMode?.turnCues || DEFAULT_TURN_CUE_SETTINGS
   }
 }
 
@@ -503,7 +565,8 @@ const mapDispatchToProps = {
   confirmBoardingByRider: goModeActions.confirmBoardingByRider,
   denyBoardingByRider: goModeActions.denyBoardingByRider,
   fetchPreferencesFromText: routingProfileActions.fetchPreferencesFromText,
-  setGoModeActiveLeg: goModeActions.setGoModeActiveLeg
+  setGoModeActiveLeg: goModeActions.setGoModeActiveLeg,
+  setLegTurnCues: goModeActions.setLegTurnCues
 }
 
 export default connect(mapStateToProps, mapDispatchToProps)(TripSheet)

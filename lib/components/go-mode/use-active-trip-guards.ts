@@ -1,5 +1,11 @@
 import { useEffect } from 'react'
 
+import {
+  hasNativeKeepAwake,
+  allowSleep as nativeAllowSleep,
+  keepAwake as nativeKeepAwake
+} from '../../util/go-mode/native-keep-awake'
+
 /**
  * A refused wake lock is retried on this ladder, in addition to the visibility
  * and focus listeners: 4 tries, 5 seconds apart, per return to visibility.
@@ -22,7 +28,44 @@ const WAKE_LOCK_RETRIES = 4
  */
 export default function useActiveTripGuards(active: boolean): void {
   useEffect(() => {
-    if (!active || !('wakeLock' in navigator)) return
+    if (!active) return
+
+    // The native shell first, when it has the plugin. WKWebView does not grant
+    // the web Screen Wake Lock API at all — every request comes back
+    // NotAllowedError, four times on the 2026-09-04 ride alone — so inside the
+    // app the ladder below is a loop that can only fail. `hasNativeKeepAwake`
+    // is a capability check, not a platform check: a shell built before
+    // @capacitor-community/keep-awake landed answers false and falls through
+    // to the web path, which is exactly what it does today. That is what makes
+    // this bundle safe on an older shell. Backlog 8.8; 4.16 was the web-layer
+    // attempt and it shipped and did not help.
+    if (hasNativeKeepAwake()) {
+      let released = false
+      // Follow visibility the same way the web lock does: hold the idle-timer
+      // override while the app is on screen, drop it while it is not. An
+      // override held by a backgrounded app is battery spent keeping a screen
+      // on that nobody is looking at, and it is not what keeps tracking alive
+      // — the CoreLocation session is (see capacitor.config.ts).
+      const sync = () => {
+        if (released) return
+        if (document.visibilityState === 'visible') {
+          // Fire-and-forget: both swallow their own failures, so there is
+          // nothing here to await and nothing that can reject.
+          nativeKeepAwake()
+        } else {
+          nativeAllowSleep()
+        }
+      }
+      sync()
+      document.addEventListener('visibilitychange', sync)
+      return () => {
+        released = true
+        document.removeEventListener('visibilitychange', sync)
+        nativeAllowSleep()
+      }
+    }
+
+    if (!('wakeLock' in navigator)) return
 
     let wakeLock: any = null
     let disposed = false

@@ -62,6 +62,16 @@ export const SERVER_BIKE_SPEED_MPS = 5
 export const BIKE_ACCESS_CEILING_MINUTES = 120
 
 /**
+ * OTP2's own default walking speed. Unlike the three above this is NOT in
+ * otp-minneapolis `router-config.json` — `routingDefaults` there sets
+ * `bicycle.speed` and nothing for walking (verified 2026-09-04), so the engine
+ * falls back to its built-in 1.33 m/s (~3.0 mph). Recorded so the Settings
+ * screen's walk slider can show the rider where "unset" actually sits instead
+ * of parking the handle at an arbitrary end of LEVER_RANGES.walkSpeed.
+ */
+export const SERVER_WALK_SPEED_MPS = 1.33
+
+/**
  * Ends and granularity of the panel's bike control. The slider reads as
  * *willingness* (right = bike more) because that is the rider's question, while
  * the lever underneath is *reluctance* (higher = bike less). Mirroring the two
@@ -114,6 +124,20 @@ export function effectiveBikeSpeedMps(bikeSpeedMps?: number): number {
 /** Same speed in mph, for a label a rider can read. */
 export function bikeSpeedMph(bikeSpeedMps?: number): number {
   return effectiveBikeSpeedMps(bikeSpeedMps) * MPS_TO_MPH
+}
+
+/** The rider's walking speed in m/s, falling back to the engine's. */
+export function effectiveWalkSpeedMps(walkSpeedMps?: number): number {
+  const [min, max] = LEVER_RANGES.walkSpeed
+  if (typeof walkSpeedMps !== 'number' || Number.isNaN(walkSpeedMps)) {
+    return SERVER_WALK_SPEED_MPS
+  }
+  return Math.min(max, Math.max(min, walkSpeedMps))
+}
+
+/** Any m/s figure in mph, for a label a rider can read. */
+export function speedMph(mps: number): number {
+  return mps * MPS_TO_MPH
 }
 
 /**

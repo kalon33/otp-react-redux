@@ -37,6 +37,7 @@ import {
 } from '../../actions/location'
 import { getVectorTilesPath } from '../../util/config'
 import { MainPanelContent } from '../../actions/ui-constants'
+import { MapLayerErrorBoundary } from '../util/error-boundary'
 import { setLocation, setMapPopupLocationAndGeocode } from '../../actions/map'
 import { SetLocationHandler, SetViewedStopHandler } from '../util/types'
 import { setViewedStop } from '../../actions/ui'
@@ -562,6 +563,15 @@ class DefaultMap extends Component<DefaultMapProps> {
                 // This must be a method that returns an array of JSX
                 // as the base-map requires that every toggleable layer
                 // is its own component, and not a subcomponent of another component
+                // Each generated layer gets its own error boundary. The
+                // library renders @opentripplanner/map-popup inside these, and
+                // on 2026-09-04 a tapped bus stop made that popup throw during
+                // render — with no boundary anywhere above it, React unmounted
+                // the entire app mid-ride and the rider got a white screen.
+                // A boundary per layer keeps such a throw inside one overlay,
+                // which then remounts without the popup that caused it.
+                // The wrapper forwards the props base-map reads off its direct
+                // children to build the layer selector (id/name/visible).
                 return generateOTP2TileLayers(
                   overlayConfig.layers.map((l) => ({
                     ...l,
@@ -574,7 +584,17 @@ class DefaultMap extends Component<DefaultMapProps> {
                   config.companies,
                   this.getEntityPrefix,
                   feeds
-                )
+                ).map((layer: JSX.Element) => (
+                  <MapLayerErrorBoundary
+                    alwaysShow={layer.props?.alwaysShow}
+                    id={layer.props?.id}
+                    key={layer.key ?? layer.props?.id}
+                    name={layer.props?.name}
+                    visible={layer.props?.visible}
+                  >
+                    {layer}
+                  </MapLayerErrorBoundary>
+                ))
               default:
                 return null
             }

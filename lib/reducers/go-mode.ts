@@ -15,8 +15,10 @@ import {
   RESUME_GPS_SIMULATION,
   SET_ARRIVED,
   SET_DEPARTURE_OVERRIDE,
+  SET_EARLY_ALIGHT,
   SET_GO_MODE_ACTIVE_LEG,
   SET_GO_MODE_BACKGROUNDED,
+  SET_LEG_TURN_CUES,
   SET_LIVE_LEG_TIMES,
   SET_MAP_FOLLOW,
   SET_NOTIFICATION_CONFIG,
@@ -28,6 +30,7 @@ import {
   SET_RIDING,
   SET_TRACKING_ERROR,
   SET_TRANSIT_LEG_ENTERED,
+  SET_TURN_CUE_DEFAULT,
   SHOW_BOARDING_PROMPT,
   START_GO_MODE,
   START_GPS_SIMULATION,
@@ -45,7 +48,12 @@ import {
   UPDATE_TRACKING_INTERVAL,
   UPDATE_VEHICLE_MATCH
 } from '../actions/go-mode'
+import {
+  DEFAULT_TURN_CUE_SETTINGS,
+  TurnCueSettings
+} from '../util/go-mode/turn-cue-settings'
 import { ridingFactIsEvidenced } from '../util/go-mode/riding'
+import type { EarlyAlightRecord } from '../util/go-mode/riding'
 import type { LiveLegTime, RidingState } from '../util/go-mode/types'
 import type {
   NearbyVehicleOption,
@@ -164,6 +172,19 @@ export interface GoModeState {
 
   departureOverride: number | null
 
+  /**
+   * The rider got off a bus EARLY, at a stop that is still on the ridden leg's
+   * route (8.11). Held because nothing else in the trip's shape says so: the
+   * matcher stays on the transit leg (they are standing on its geometry), so
+   * `routeMatch.legIndex` still names the bus they left, and the boarding
+   * alerts and their vehicle poll would go on asking about that leg. While
+   * this is set, both read the NEXT transit leg instead.
+   *
+   * Cleared by anything that says the rider is aboard something again
+   * (SET_RIDING, CONFIRM_VEHICLE) and by transitioning past the leg it names.
+   */
+  earlyAlight: EarlyAlightRecord | null
+
   isActive: boolean
 
   /** Live (or schedule-fallback) transit-leg times, keyed by leg index. Kept
@@ -238,6 +259,13 @@ export interface GoModeState {
     lastPosition: GeolocationPosition | null
   }
 
+  /**
+   * The rider's turn-by-turn switch: a global default they set on the Settings
+   * screen, plus per-leg opt-ins they set from the trip sheet mid-trip. See
+   * util/go-mode/turn-cue-settings — the only consumer is checkUpcomingTurn.
+   */
+  turnCues: TurnCueSettings
+
   ui: {
     /**
      * Index of the leg the rider tapped in the trip sheet, or null for none.
@@ -285,6 +313,8 @@ const defaultState: GoModeState = {
   },
 
   departureOverride: null,
+
+  earlyAlight: null,
 
   isActive: false,
   liveLegTimes: {},
@@ -339,6 +369,8 @@ const defaultState: GoModeState = {
     isTracking: false,
     lastPosition: null
   },
+
+  turnCues: { ...DEFAULT_TURN_CUE_SETTINGS },
 
   ui: {
     activeLeg: null,
@@ -517,6 +549,7 @@ const goMode = handleActions<GoModeState, any>(
         ...state.boardingPrompt,
         shown: false
       },
+      earlyAlight: null,
       vehicleMatch: {
         ...state.vehicleMatch,
         consecutiveMatches: 0,
@@ -577,6 +610,23 @@ const goMode = handleActions<GoModeState, any>(
       departureOverride: action.payload
     }),
 
+    [SET_EARLY_ALIGHT]: (state, action) => ({
+      ...state,
+      // An early alight IS an alight: record which trip they got off, the same
+      // way TRANSITION_LEG does, so beginOnboardFlow cannot read a surviving
+      // confirmed vehicleMatch as proof they are still aboard (the 8/9 hole).
+      alightedFrom: action.payload
+        ? {
+            tripId: action.payload.tripId ?? null,
+            vehicleId: action.payload.vehicleId ?? null
+          }
+        : state.alightedFrom,
+      // The plan's own departure pick belonged to the bus they just left.
+      departureOverride: null,
+      earlyAlight: action.payload,
+      riding: null
+    }),
+
     [SET_GO_MODE_ACTIVE_LEG]: (state, action) => ({
       ...state,
       ui: {
@@ -590,6 +640,17 @@ const goMode = handleActions<GoModeState, any>(
       ui: {
         ...state.ui,
         backgrounded: !!action.payload
+      }
+    }),
+
+    [SET_LEG_TURN_CUES]: (state, action) => ({
+      ...state,
+      turnCues: {
+        ...state.turnCues,
+        legOverrides: {
+          ...state.turnCues.legOverrides,
+          [action.payload.legIndex]: !!action.payload.enabled
+        }
       }
     }),
 
@@ -691,6 +752,9 @@ const goMode = handleActions<GoModeState, any>(
     [SET_RIDING]: (state, action) => ({
       ...state,
       alightedFrom: action.payload ? null : state.alightedFrom,
+      // Aboard again outranks "got off early" — and it is the only thing
+      // besides a leg transition that may retire the re-anchoring.
+      earlyAlight: action.payload ? null : state.earlyAlight,
       riding: action.payload
     }),
 
@@ -709,6 +773,14 @@ const goMode = handleActions<GoModeState, any>(
       boardingPrompt: {
         ...state.boardingPrompt,
         transitLegEnteredAt: action.payload
+      }
+    }),
+
+    [SET_TURN_CUE_DEFAULT]: (state, action) => ({
+      ...state,
+      turnCues: {
+        ...state.turnCues,
+        enabledByDefault: !!action.payload
       }
     }),
 
@@ -778,6 +850,16 @@ const goMode = handleActions<GoModeState, any>(
           ...state.tracking,
           error: null,
           isTracking: true
+        },
+        // The global default is the rider's standing choice and survives; the
+        // per-leg opt-ins do not. They are keyed by leg INDEX, and this action
+        // is also how a mid-trip auto-update swaps the itinerary — leg 1 of the
+        // new plan is not the leg the rider opted in on, so carrying the map
+        // over would turn cues on for a leg they never chose (and off for one
+        // they did).
+        turnCues: {
+          enabledByDefault: state.turnCues.enabledByDefault,
+          legOverrides: {}
         },
         // The vehicle match belongs to the itinerary that just went away. It
         // was carried across untouched, so the first tick after a swap
@@ -854,6 +936,13 @@ const goMode = handleActions<GoModeState, any>(
       // the confirmed vehicle and re-ran (failing) discovery. Alight and
       // sustained off-route remain the only physical invalidators.
       riding: state.riding,
+      // The rider's global turn-by-turn choice is a SETTING, not trip state:
+      // ending a trip must not silently return it to the shipped default. The
+      // per-leg overrides go with the trip they belonged to (defaultState).
+      turnCues: {
+        enabledByDefault: state.turnCues.enabledByDefault,
+        legOverrides: {}
+      },
       vehicleMatch:
         state.vehicleMatch.match?.confidence === 'confirmed'
           ? state.vehicleMatch
@@ -903,6 +992,13 @@ const goMode = handleActions<GoModeState, any>(
             }
           : state.alightedFrom,
         departureOverride: null,
+        // The early-alight re-anchoring exists only while the matcher is still
+        // stuck on the leg the rider stepped off; once the trip has actually
+        // moved past it, the ordinary boarding path is back in charge.
+        earlyAlight:
+          state.earlyAlight != null && legIndex > state.earlyAlight.legIndex
+            ? null
+            : state.earlyAlight,
         riding: alighted ? null : state.riding,
         routeMatch: state.routeMatch
           ? {

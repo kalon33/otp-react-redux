@@ -5,6 +5,7 @@ import { Provider } from 'react-redux'
 import React from 'react'
 
 import { ComponentContext } from '../../util/contexts'
+import DefaultItinerary from '../narrative/default/default-itinerary'
 import type { TripProgress } from '../../util/go-mode/progress-calculator'
 
 import AlightRecommendation from './AlightRecommendation'
@@ -112,10 +113,21 @@ const transitProgress: TripProgress = {
 
 // A minimal Redux store so the connected AlightRecommendation can render with a
 // fixed goMode state. dispatch is a no-op — buttons are inert in the gallery.
+// The config is not empty: the options list renders each row through the
+// planner's own connected ItineraryBody, which reads config off the store.
 const mockStore = (onboard: any) =>
   ({
     dispatch: () => undefined,
-    getState: () => ({ otp: { config: {}, goMode: { onboard } } }),
+    getState: () => ({
+      otp: {
+        config: {
+          homeTimezone: 'America/Chicago',
+          itinerary: { hideViewTripButton: true },
+          transitOperators: []
+        },
+        goMode: { onboard }
+      }
+    }),
     subscribe: () => () => undefined
   } as any)
 
@@ -126,42 +138,6 @@ const vehicleMatchStore = (vehicleMatch: any) =>
     getState: () => ({ otp: { config: {}, goMode: { vehicleMatch } } }),
     subscribe: () => () => undefined
   } as any)
-
-const readyOnboard = (realtime: boolean) => {
-  // A ranked list of onward options (earliest arrival first), each a stop the
-  // rider can pick to get off at.
-  const alightOptions = [
-    {
-      busArrivalEpoch: NOW + 11 * 60000,
-      itinerary: { duration: 240, transfers: 1, walkDistance: 140 },
-      realtime,
-      stopId: '1:9',
-      stopName: 'Nicollet Mall'
-    },
-    {
-      busArrivalEpoch: NOW + 13 * 60000,
-      itinerary: { duration: 180, transfers: 0, walkDistance: 220 },
-      realtime,
-      stopId: '1:12',
-      stopName: 'Government Plaza'
-    },
-    {
-      busArrivalEpoch: NOW + 16 * 60000,
-      itinerary: { duration: 120, transfers: 0, walkDistance: 300 },
-      realtime,
-      stopId: '1:15',
-      stopName: 'Target Field'
-    }
-  ]
-  return {
-    alightOptions,
-    bestAlightStop: alightOptions[0],
-    candidates: [],
-    status: 'ready',
-    trip: null,
-    vehicle: null
-  }
-}
 
 // Multi-leg journey for the trip-overview sheet: walking to the stop → METRO
 // Orange Line → walk. The rider is on the first walk leg, so the bus row shows
@@ -177,6 +153,215 @@ const walkStep = (relativeDirection: string, streetName: string) => ({
 })
 
 const place = (name: string, lat: number, lon: number) => ({ lat, lon, name })
+
+// --- Onboard "where do you want to get off?" options -----------------------
+//
+// These have to be WHOLE itineraries, not summary numbers. The onboard list
+// renders each option through the planner's own ItineraryBody and groups the
+// rows by `transitRouteSignature` of the displayed itinerary
+// (groupAlightOptionsByRoute), so an option with no `legs` array takes the
+// whole gallery down with it — which is exactly what happened between 3.7
+// shipping the grouping (2026-09-02) and 2026-09-04. Nothing wraps GoModeDemo
+// in an error boundary, so the page went blank entirely: measured 2026-09-04
+// against the unfixed tree on :9967, not even the <h1> survived. The live list
+// never sees that shape: rankAlightOptions builds its options from settled
+// candidate plans.
+//
+// `itinerary` is the onward plan FROM the alight stop (the ranking input) and
+// `displayItinerary` is what a tap actually starts — the bus the rider is on
+// plus those onward legs — mirroring decorateAlightOptions.
+
+const onboardBusLeg = (
+  routeId: string,
+  shortName: string,
+  fromName: string,
+  toName: string,
+  startTime: number,
+  endTime: number,
+  distance: number
+) => ({
+  distance,
+  duration: Math.round((endTime - startTime) / 1000),
+  endTime,
+  from: place(fromName, 44.948, -93.278),
+  intermediateStops: [],
+  mode: 'BUS',
+  route: { id: routeId, shortName },
+  routeId,
+  routeShortName: shortName,
+  startTime,
+  steps: [],
+  to: place(toName, 44.977, -93.271),
+  transitLeg: true
+})
+
+const onboardWalkLeg = (
+  fromName: string,
+  toName: string,
+  startTime: number,
+  endTime: number,
+  distance: number
+) => ({
+  distance,
+  duration: Math.round((endTime - startTime) / 1000),
+  endTime,
+  from: place(fromName, 44.977, -93.271),
+  intermediateStops: [],
+  mode: 'WALK',
+  startTime,
+  steps: [walkStep('DEPART', 'S 6th St'), walkStep('RIGHT', 'Nicollet Mall')],
+  to: place(toName, 44.978, -93.269),
+  transitLeg: false
+})
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const onboardItinerary = (legs: any[], transfers: number) => {
+  const duration = Math.round(
+    (legs[legs.length - 1].endTime - legs[0].startTime) / 1000
+  )
+  // walkTime and transitTime are not decoration: DefaultItinerary's summary
+  // row runs walkTime through toHoursMinutesSeconds, which renders "NaN hr NaN
+  // min" for an itinerary that omits it. OTP always sends all three.
+  const walkTime = legs
+    .filter((leg) => !leg.transitLeg)
+    .reduce((sum, leg) => sum + leg.duration, 0)
+  const transitTime = legs
+    .filter((leg) => leg.transitLeg)
+    .reduce((sum, leg) => sum + leg.duration, 0)
+  return {
+    duration,
+    endTime: legs[legs.length - 1].endTime,
+    legs,
+    startTime: legs[0].startTime,
+    transfers,
+    transitTime,
+    waitingTime: Math.max(0, duration - walkTime - transitTime),
+    walkDistance: legs
+      .filter((leg) => !leg.transitLeg)
+      .reduce((sum, leg) => sum + leg.distance, 0),
+    walkTime
+  }
+}
+
+const alightOption = (
+  stopId: string,
+  stopName: string,
+  busArrivalEpoch: number,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  onwardLegs: any[],
+  transfers: number,
+  realtime: boolean
+) => ({
+  busArrivalEpoch,
+  displayItinerary: onboardItinerary(
+    [
+      // The leg the rider is ALREADY riding, which every displayed option opens
+      // with — this is what gives all three rows the same leading `1:21`.
+      onboardBusLeg(
+        '1:21',
+        '21',
+        'Lake St & Hennepin Ave',
+        stopName,
+        NOW - 4 * 60000,
+        busArrivalEpoch,
+        4200
+      ),
+      ...onwardLegs
+    ],
+    transfers + 1
+  ),
+  itinerary: onboardItinerary(onwardLegs, transfers),
+  realtime,
+  stopId,
+  stopName
+})
+
+const readyOnboard = (realtime: boolean) => {
+  // A ranked list of onward options (earliest arrival first), each a stop the
+  // rider can pick to get off at. Two of them ride the SAME chain
+  // (21 > 6) from different alight stops, so the gallery also shows the
+  // stacked row and its "2 options" drill-down — the shape the rider asked for
+  // on 2026-08-27 and the reason the grouping exists at all.
+  const alightOptions = [
+    alightOption(
+      '1:9',
+      'Nicollet Mall',
+      NOW + 11 * 60000,
+      [
+        onboardWalkLeg(
+          'Nicollet Mall',
+          'Your destination',
+          NOW + 11 * 60000,
+          NOW + 15 * 60000,
+          140
+        )
+      ],
+      0,
+      realtime
+    ),
+    alightOption(
+      '1:12',
+      'Government Plaza',
+      NOW + 13 * 60000,
+      [
+        onboardBusLeg(
+          '1:6',
+          '6',
+          'Government Plaza',
+          'Hennepin Ave & 10th St',
+          NOW + 15 * 60000,
+          NOW + 19 * 60000,
+          1800
+        ),
+        onboardWalkLeg(
+          'Hennepin Ave & 10th St',
+          'Your destination',
+          NOW + 19 * 60000,
+          NOW + 22 * 60000,
+          220
+        )
+      ],
+      1,
+      realtime
+    ),
+    alightOption(
+      '1:15',
+      'Target Field',
+      NOW + 16 * 60000,
+      [
+        onboardBusLeg(
+          '1:6',
+          '6',
+          'Target Field',
+          'Hennepin Ave & 10th St',
+          NOW + 18 * 60000,
+          NOW + 22 * 60000,
+          2100
+        ),
+        onboardWalkLeg(
+          'Hennepin Ave & 10th St',
+          'Your destination',
+          NOW + 22 * 60000,
+          NOW + 26 * 60000,
+          300
+        )
+      ],
+      1,
+      realtime
+    )
+  ]
+  return {
+    alightOptions,
+    answeredCandidates: alightOptions.length,
+    bestAlightStop: alightOptions[0],
+    candidates: [],
+    keepRouteId: '1:21',
+    pendingCandidates: 0,
+    status: 'ready',
+    trip: null,
+    vehicle: null
+  }
+}
 
 const demoSheetItinerary = {
   endTime: NOW + 28 * 60000,
@@ -267,8 +452,17 @@ const demoSheetStore = {
 } as any
 
 // LegIconWithA11y (inside the real ItineraryBody) pulls LegIcon off the
-// component context that lib/app.js normally supplies.
-const demoComponentContext = { LegIcon: ClassicLegIcon } as any
+// component context that lib/app.js normally supplies — and OnboardItineraryList
+// pulls the ItineraryBody itself off it, returning null without one, so the
+// alight frames need the same component lib/app.js hands the running app.
+const demoComponentContext = {
+  // ItinerarySummary (inside DefaultItinerary) calls this per transit leg and
+  // does not guard it — lib/app.js:179 supplies exactly this.
+  getTransitiveRouteLabel: (leg: any) =>
+    leg.routeShortName || leg.route?.shortName,
+  ItineraryBody: DefaultItinerary,
+  LegIcon: ClassicLegIcon
+} as any
 
 const Frame = ({
   children,
@@ -310,8 +504,25 @@ const GoModeDemo = (): JSX.Element => (
   <IntlProvider
     defaultLocale="en-US"
     locale="en-US"
+    // The gallery is deliberately standalone, so it carries its own copy of
+    // just the ids it renders that have no `defaultMessage` — the app's real
+    // catalogue arrives through i18n-loader's `import.meta.glob`, which is
+    // vite-only and async. Verbatim from i18n/en-US.yml; the `components.*`
+    // block below is what the alight frames' ItineraryBody and the same-shape
+    // drill-down need. (The trip-sheet frame still shows raw `otpUi.*` ids for
+    // the same reason — those come from @opentripplanner packages.)
     messages={{
       'common.forms.back': 'Back',
+      'common.itineraryDescriptions.fareUnknown': 'No fare information',
+      'common.modes.bus': 'Bus',
+      'common.modes.walk': 'Walk',
+      'common.time.tripDurationFormat':
+        '{hours, plural, =0 {} other {# hr }}{minutes} min { seconds, plural, =0 {} other {# sec}}',
+      'components.DefaultItinerary.clickDetails': 'Click to view details',
+      'components.DefaultItinerary.multiModeSummary':
+        '{accessMode} + {transitMode}',
+      'components.MetroUI.sameShapeVariants':
+        '{count, plural, one {# option} other {# options}}',
       'components.StopTimeCell.realtime': 'Realtime',
       'components.StopTimeCell.scheduled': 'Scheduled'
     }}
@@ -426,12 +637,22 @@ const GoModeDemo = (): JSX.Element => (
         />
       </Frame>
 
-      <Frame note="On the bus, mid-leg progress." title="Transit progress">
-        <TransitProgress
-          leg={onBusLeg}
-          onExit={() => undefined}
-          progress={transitProgress}
-        />
+      <Frame
+        note="On the bus, mid-leg progress, with a confirmed live vehicle match."
+        title="Transit progress"
+      >
+        <Provider
+          store={vehicleMatchStore({
+            emptyPolls: 0,
+            match: { confidence: 'confirmed', label: '2018', lastSeen: NOW }
+          })}
+        >
+          <TransitProgress
+            leg={onBusLeg}
+            onExit={() => undefined}
+            progress={transitProgress}
+          />
+        </Provider>
       </Frame>
 
       <Frame
@@ -448,22 +669,26 @@ const GoModeDemo = (): JSX.Element => (
       </Frame>
 
       <Frame
-        minHeight={280}
-        note="Ranked list of onward options, earliest arrival first. Get-there time carries the LIVE waves glyph."
+        minHeight={420}
+        note="Ranked list of onward options, earliest arrival first, rendered through the planner's own ItineraryBody. The two 21 > 6 options share a row with a '2 options' drill-down (groupAlightOptionsByRoute)."
         title="Alight recommendation, LIVE"
       >
         <Provider store={mockStore(readyOnboard(true))}>
-          <AlightRecommendation />
+          <ComponentContext.Provider value={demoComponentContext}>
+            <AlightRecommendation />
+          </ComponentContext.Provider>
         </Provider>
       </Frame>
 
       <Frame
-        minHeight={280}
+        minHeight={420}
         note="Get-there time, no glyph."
         title="Alight recommendation, SCHEDULED"
       >
         <Provider store={mockStore(readyOnboard(false))}>
-          <AlightRecommendation />
+          <ComponentContext.Provider value={demoComponentContext}>
+            <AlightRecommendation />
+          </ComponentContext.Provider>
         </Provider>
       </Frame>
 

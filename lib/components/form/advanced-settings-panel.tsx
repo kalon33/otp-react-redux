@@ -1,11 +1,9 @@
 import {
   addSettingsToButton,
   AdvancedModeSubsettingsContainer,
-  CheckboxSelector,
   DropdownSelector,
   ModeSettingRenderer,
   populateSettingWithValue,
-  SliderSelector,
   Styled as TripFormStyled
 } from '@opentripplanner/trip-form'
 import { Check } from '@styled-icons/boxicons-regular'
@@ -77,8 +75,15 @@ import {
   setModeButton,
   tripPlannerValidationErrors
 } from './util'
+import {
+  GlobalSettingsContainer,
+  HelperText,
+  LeverContainer,
+  LeverSlider,
+  SettingCheckbox,
+  VisibleSubheader
+} from './styled'
 import { setModeButtonEnabled } from './batch-settings'
-import { styledCheckboxCss } from './styled'
 import ArriveOnTimeSetting from './arrive-on-time-setting'
 import DateTimeModal from './date-time-modal'
 
@@ -97,15 +102,6 @@ const PanelOverlay = styled.div`
   }
 `
 
-const GlobalSettingsContainer = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 13px;
-  margin-bottom: 2em;
-
-  ${styledCheckboxCss}
-`
-
 const HeaderContainer = styled.div`
   align-items: center;
   display: flex;
@@ -115,15 +111,6 @@ const HeaderContainer = styled.div`
 
 const InvisibleSubheader = styled.h2`
   ${invisibleCss}
-`
-const VisibleSubheader = styled.h2`
-  display: block;
-  font-size: 18px;
-  font-weight: 700;
-  height: auto;
-  margin: 1em 0;
-  position: static;
-  width: auto;
 `
 const ReturnToTripPlanButton = styled.button`
   align-items: center;
@@ -219,45 +206,8 @@ const NlStatus = styled.div`
   margin-top: 8px;
 `
 
-const BikePreferenceContainer = styled.div`
-  margin: 2em 0;
-
-  /* Same flush-left label as RoutingProfileDropdown, which zeroes the 6px
-     padding trip-form's SettingLabel carries. */
-  > label {
-    padding-left: 0;
-  }
-`
-
-// Same margins as RoutingProfileDropdown so the slider lines up with the
-// dropdowns above it rather than sitting in its own rhythm.
-const BikeWillingnessSlider = styled(SliderSelector)`
-  margin: 20px 0px;
-`
-
-const HelperText = styled.p`
-  color: #666;
-  font-size: 13px;
-  margin: 0;
-`
-
 const SearchOptionsContainer = styled.div`
   margin: 2em 0;
-`
-
-// trip-form wraps CheckboxSelector the same way for the mode sub-settings:
-// `display: inherit` is what makes the row pick up GlobalSettingsContainer's
-// column flex, which is in turn what styledCheckboxCss's space-between and
-// `order: 2` need in order to put the label on the left and the box on the
-// right. Without it the checkbox renders browser-default (box first) and stops
-// matching the trip-option checkboxes further down this same panel.
-const SearchOptionCheckbox = styled(CheckboxSelector)`
-  display: inherit;
-  margin-left: 4px;
-
-  input {
-    flex-shrink: 0;
-  }
 `
 
 const RouteLockContainer = styled.div`
@@ -820,7 +770,7 @@ const AdvancedSettingsPanel = ({
           </>
         )}
       </RouteLockContainer>
-      <BikePreferenceContainer>
+      <LeverContainer>
         <VisibleSubheader>
           <FormattedMessage id="components.BatchSearchScreen.bikeWillingnessHeader" />
         </VisibleSubheader>
@@ -830,7 +780,7 @@ const AdvancedSettingsPanel = ({
         >
           <FormattedMessage id="components.BatchSearchScreen.bikeWillingnessLabel" />
         </TripFormStyled.SettingLabel>
-        <BikeWillingnessSlider
+        <LeverSlider
           label={intl.formatMessage({
             id: 'components.BatchSearchScreen.bikeWillingnessLabel'
           })}
@@ -857,7 +807,7 @@ const AdvancedSettingsPanel = ({
             }}
           />
         </HelperText>
-      </BikePreferenceContainer>
+      </LeverContainer>
       <SearchOptionsContainer className="search-options-container">
         <VisibleSubheader>
           <FormattedMessage id="components.BatchSearchScreen.searchOptionsHeader" />
@@ -873,7 +823,7 @@ const AdvancedSettingsPanel = ({
         />
         <SearchOptionBlock>
           <GlobalSettingsContainer>
-            <SearchOptionCheckbox
+            <SettingCheckbox
               label={intl.formatMessage({
                 id: 'components.BatchSearchScreen.hideWalkTransitLabel'
               })}
@@ -888,7 +838,7 @@ const AdvancedSettingsPanel = ({
         </SearchOptionBlock>
         <SearchOptionBlock>
           <GlobalSettingsContainer>
-            <SearchOptionCheckbox
+            <SettingCheckbox
               label={intl.formatMessage({
                 id: 'components.BatchSearchScreen.noTransfersLabel'
               })}

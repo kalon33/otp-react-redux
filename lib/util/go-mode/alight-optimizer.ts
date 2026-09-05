@@ -204,18 +204,49 @@ export function mergeLiveTimePoint(
 }
 
 /**
+ * How coarse the between-polls clamp is allowed to be.
+ *
+ * The clamp runs on the 1 Hz position tick, and until 2026-09-04 it raised a
+ * stale epoch to `nowMs` exactly — a new value every single second, and a
+ * SET_LIVE_LEG_TIMES dispatch behind each one. Measured on the kerb ride
+ * (session mtn4ui3s-xfjx8m): 11:17:30 → 11:22:42, boardEpoch equal to the
+ * current second on all 312 consecutive ticks, against a poll path that emits
+ * one every ~20 s. Nothing displays seconds: the trip sheet, the pacing card
+ * and the alight banner all round to the minute. Raising to the minute FLOOR
+ * therefore changes no displayed value and re-arms the clamp at most once a
+ * minute per leg.
+ */
+export const LIVE_TIME_CLAMP_GRANULARITY_MS = 60000
+
+/**
  * mergeLiveTimePoint clamps at merge time, but merges only run once per
  * refresh poll (20 s apart) — between polls the clock keeps walking, so a
  * non-live epoch can sit up to a full poll interval in the past (seen
  * 2026-07-21: an end-of-service realtime dropout left the alight time 6 s
- * stale). Re-raise every non-live epoch that has fallen behind `nowMs`.
- * Returns the updated record, or null when nothing drifted so callers can
- * skip the dispatch.
+ * stale). Re-raise every non-live epoch that has fallen behind the current
+ * minute. Returns the updated record, or null when nothing actually moved so
+ * callers can skip the dispatch.
+ *
+ * Two rate rules, both from the 2026-09-04 ride:
+ *
+ *  - the floor is LIVE_TIME_CLAMP_GRANULARITY_MS, not `nowMs`, so a value
+ *    that is already inside the displayed minute is left alone;
+ *  - a BOARD epoch is bridged across the poll gap ONCE. A departure is a
+ *    one-way fact: the bus leaves when it leaves, and a boarding still being
+ *    projected forward on the hundredth tick is not late data, it is a run
+ *    that has gone. Marking the record (`boardClamped`) stops the walk;
+ *    the next refresh poll rebuilds the entry from scratch and the flag goes
+ *    with it, so genuinely fresh data is never held back. What happens to a
+ *    departed run is then classifyMissedBus's story to tell, and it can tell
+ *    it, now that getEffectiveBoardTimeMs reads the per-field boardRealtime
+ *    flag instead of the leg-level OR that made this clamped value look like
+ *    a live prediction.
  */
 export function clampNonLiveLegTimes<
   T extends {
     alightEpoch: number | null
     alightRealtime?: boolean
+    boardClamped?: boolean
     boardEpoch: number | null
     boardRealtime?: boolean
     realtime: boolean
@@ -225,6 +256,9 @@ export function clampNonLiveLegTimes<
   nowMs: number
 ): Record<number, T> | null {
   if (!times) return null
+  const floorMs =
+    Math.floor(nowMs / LIVE_TIME_CLAMP_GRANULARITY_MS) *
+    LIVE_TIME_CLAMP_GRANULARITY_MS
   let changed = false
   const out: Record<number, T> = {}
   for (const key of Object.keys(times)) {
@@ -234,20 +268,19 @@ export function clampNonLiveLegTimes<
     if (
       !(t.alightRealtime ?? t.realtime) &&
       t.alightEpoch != null &&
-      t.alightEpoch < nowMs
+      t.alightEpoch < floorMs
     ) {
-      next = { ...next, alightEpoch: nowMs }
-      changed = true
+      next = { ...next, alightEpoch: floorMs }
     }
     let boardRaised = false
     if (
       !(t.boardRealtime ?? t.realtime) &&
+      !t.boardClamped &&
       t.boardEpoch != null &&
-      t.boardEpoch < nowMs
+      t.boardEpoch < floorMs
     ) {
-      next = { ...next, boardEpoch: nowMs }
+      next = { ...next, boardClamped: true, boardEpoch: floorMs }
       boardRaised = true
-      changed = true
     }
     // Raising the board time past a still-past alight time inverts the leg —
     // the rider would be shown arriving before they got on. Scoped to the
@@ -281,7 +314,21 @@ export function clampNonLiveLegTimes<
           ? { ...next, boardEpoch: next.alightEpoch }
           : { ...next, alightEpoch: next.boardEpoch }
     }
-    out[idx] = next
+    // Changed means the times MOVED, not that a raise was attempted. The
+    // inversion branch above routinely hands a raised board straight back to
+    // where it started (2026-09-04 11:22:29 → 11:22:38: ten consecutive
+    // dispatches of a byte-identical record, because the board was capped
+    // back onto a live alight that had not moved). Compare the answer, not
+    // the intent.
+    if (
+      next !== t &&
+      (next.alightEpoch !== t.alightEpoch || next.boardEpoch !== t.boardEpoch)
+    ) {
+      changed = true
+      out[idx] = next
+    } else {
+      out[idx] = t
+    }
   }
   return changed ? out : null
 }

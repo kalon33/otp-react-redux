@@ -46,6 +46,7 @@ Object {
       "transitLegEnteredAt": null,
     },
     "departureOverride": null,
+    "earlyAlight": null,
     "isActive": false,
     "liveLegTimes": Object {},
     "notifications": Object {
@@ -90,6 +91,10 @@ Object {
       "interval": 8000,
       "isTracking": false,
       "lastPosition": null,
+    },
+    "turnCues": Object {
+      "enabledByDefault": false,
+      "legOverrides": Object {},
     },
     "ui": Object {
       "activeLeg": null,

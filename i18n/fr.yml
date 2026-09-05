@@ -219,6 +219,8 @@ components:
     networkConnectionLost: Erreur de connexion réseau
     networkConnectionRestored: Connexion réseau restaurée
     openMenu: Ouvrir le menu
+    settings: "Paramètres"
+    shareFeedback: "Envoyer un commentaire"
     shareDiagnosticsOff: "Partage des diagnostics : désactivé"
     shareDiagnosticsOn: "Partage des diagnostics : activé"
     skipNavigation: Sauter la navigation
@@ -371,6 +373,23 @@ components:
     nameTooLong: Le nom doit comporter {char} caractères maximum.
     placeNotFound: Lieu introuvable
     placeNotFoundDescription: Le lieu recherché est introuvable.
+  FeedbackScreen:
+    attachLabel: "Ajouter une photo ou une capture d'écran"
+    commentLabel: "Votre commentaire"
+    commentPlaceholder: "Que s'est-il passé ?"
+    failed: "Envoi impossible. Réessayez."
+    heading: "Envoyer un commentaire"
+    held: "Enregistré. L'envoi se fera à votre prochaine visite sur cet écran."
+    heldSent: "Un commentaire précédent vient d'être envoyé."
+    heldWaiting: "Un commentaire précédent est toujours en attente d'envoi. Il partira à votre prochaine visite sur cet écran."
+    imageRejected: "Ce fichier n'a pas pu être joint."
+    intro: "Dites-nous ce qui n'a pas marché. Une capture d'écran en dit plus qu'une phrase."
+    removeImage: "Retirer"
+    send: "Envoyer"
+    sendingHeld: "Envoi d'un commentaire précédent resté en attente…"
+    sent: "Envoyé. Merci."
+    sentWithoutImage: "Envoyé, mais l'image n'a pas pu être jointe."
+    thumbnailAlt: "L'image que vous avez jointe"
   FormNavigationButtons:
     ariaLabel: Navigation du formulaire
   GoMode:
@@ -404,6 +423,8 @@ components:
     gpsErrorTitle: "Erreur GPS"
     headerDestination: "Vers {destination}"
     legBike: "Vélo"
+    hideLaterDepartures: "Moins"
+    laterDepartures: "Départs suivants"
     legStopsTo: "{count, plural, one {# arrêt} other {# arrêts}} jusqu'à {dest}"
     legTo: "vers {dest}"
     legWait: "🕒 {mins} min d'attente"
@@ -454,6 +475,7 @@ components:
     returnBannerNoProgress: "Trajet en cours — touchez pour revenir"
     rideToStop: "{emoji} {time} de trajet jusqu'à {stop}"
     selectVehicle: "Celui-ci"
+    showLaterDepartures: "Plus"
     sheetHandleLabel: "Voir le trajet et les autres options"
     stillCheckingStops: "Vérification de {count, plural, one {1 arrêt supplémentaire} other {# arrêts supplémentaires}} en cours…"
     stopDeparturesTitle: "Départs"
@@ -462,6 +484,9 @@ components:
     thenTurn: "puis {turn}"
     toStop: "{emoji} Vers {stop}"
     trackingBus: "Suivi du bus n° {label}"
+    turnCuesLegLabel: "Navigation détaillée pour l'étape {leg}"
+    turnCuesOff: "Navigation détaillée : désactivée"
+    turnCuesOn: "Navigation détaillée : activée"
     tripSheetHeading: "Votre trajet"
     tripSheetTitle: "Aperçu du trajet"
     useThisDeparture: "Utiliser celui-ci"
@@ -811,6 +836,21 @@ components:
     tripNameRequired: Veuillez entrer un nom pour ce trajet.
   SequentialPaneDisplay:
     stepNumber: Étape {step} sur {total}
+  SettingsScreen:
+    bikeSpeedHelp: "Le temps que l'application attribue à vos étapes à vélo. Une fois réglée, cette vitesse est utilisée par tous les itinéraires, y compris avant que vous ayez roulé assez longtemps pour que l'application mesure votre allure."
+    bikeSpeedLabel: "Votre vitesse à vélo : {speed} mph"
+    bikeSpeedSlider: "Vitesse à vélo"
+    gettingAroundHeader: "Vos déplacements"
+    heading: "Paramètres"
+    routingHelp: "Ces réglages s'appliquent à tous les itinéraires que vous planifiez, ainsi qu'à tout trajet recalculé en cours de route."
+    speedHigh: "Plus vite"
+    speedLow: "Moins vite"
+    turnByTurnHeader: "Navigation détaillée"
+    turnByTurnHelp: "Désactivée par défaut. Même désactivée, vous pouvez l'activer pour une seule étape à pied ou à vélo depuis l'aperçu du trajet, une fois le trajet commencé."
+    turnByTurnLabel: "Navigation détaillée"
+    walkSpeedHelp: "Le temps que l'application attribue à vos étapes à pied, y compris la marche jusqu'à votre arrêt."
+    walkSpeedLabel: "Votre vitesse de marche : {speed} mph"
+    walkSpeedSlider: "Vitesse de marche"
   SessionTimeout:
     body: >-
       Votre session va expirer d'ici une minute. Appuyez sur 'Prolonger ma

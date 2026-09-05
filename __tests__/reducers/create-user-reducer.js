@@ -132,6 +132,83 @@ describe('lib > reducers > create-user-reducer', () => {
       expect(GYM.id.includes('recent')).toBe(false)
     })
 
+    it('a custom place named "Home" is adopted into an empty home slot on load', () => {
+      // What the rider's device actually held on 2026-09-04: a custom row
+      // named "Home" and no otp.home key, so Saved places showed two Homes.
+      const customHome = {
+        address: '2345 Old Shakopee Road West',
+        icon: 'map-marker',
+        id: 'place-oldshak',
+        lat: 44.8168,
+        lon: -93.3102,
+        name: 'Home',
+        type: 'custom'
+      }
+      window.localStorage.setItem(
+        'otp.savedPlaces',
+        JSON.stringify([customHome])
+      )
+      const state = freshState()
+      const homes = state.localUser.savedLocations.filter(
+        (l) => l.type === 'home' || l.name === 'Home'
+      )
+      expect(homes).toHaveLength(1)
+      expect(homes[0].type).toEqual('home')
+      expect(homes[0].address).toEqual('2345 Old Shakopee Road West')
+      expect(homes[0].icon).toEqual('home')
+      // Persisted both ways: the legacy key is written and savedPlaces is
+      // rewritten without the adopted row.
+      expect(JSON.parse(window.localStorage.getItem('otp.home')).name).toEqual(
+        '2345 Old Shakopee Road West'
+      )
+      expect(storedCustoms()).toEqual([])
+      // Idempotent: a second load changes nothing.
+      const reloaded = freshState()
+      expect(reloaded.localUser.savedLocations).toEqual(
+        state.localUser.savedLocations
+      )
+      expect(storedCustoms()).toEqual([])
+    })
+
+    it('an already-set home slot is never overwritten by a custom "Home"', () => {
+      window.localStorage.setItem(
+        'otp.home',
+        JSON.stringify({ lat: 1, lon: 2, name: '1 Home St', type: 'home' })
+      )
+      const customHome = {
+        address: '2345 Old Shakopee Road West',
+        icon: 'map-marker',
+        id: 'place-oldshak',
+        lat: 44.8168,
+        lon: -93.3102,
+        name: 'Home',
+        type: 'custom'
+      }
+      window.localStorage.setItem(
+        'otp.savedPlaces',
+        JSON.stringify([customHome])
+      )
+      const state = freshState()
+      expect(
+        state.localUser.savedLocations.find((l) => l.type === 'home').address
+      ).toEqual('1 Home St')
+      // The custom row survives — the rider still has both addresses.
+      expect(storedCustoms()).toEqual([customHome])
+      expect(state.localUser.savedLocations).toContainEqual(customHome)
+    })
+
+    it('remembering home fills address in state immediately (no reload needed)', () => {
+      const state = reducer(freshState(), {
+        payload: {
+          location: { lat: 3, lon: 4, name: '2 New Home Rd', type: 'home' },
+          type: 'home'
+        },
+        type: 'REMEMBER_LOCAL_USER_PLACE'
+      })
+      const home = state.localUser.savedLocations.find((l) => l.type === 'home')
+      expect(home.address).toEqual('2 New Home Rd')
+    })
+
     it('recents behavior is unchanged by the savedPlaces key', () => {
       const recent = {
         address: '300 Nicollet Mall',
@@ -151,6 +228,100 @@ describe('lib > reducers > create-user-reducer', () => {
         JSON.parse(window.localStorage.getItem('otp.recent'))
       ).toHaveLength(1)
       expect(storedCustoms()).toEqual([])
+    })
+
+    describe('recent place dedupe', () => {
+      const SOUTHDALE = {
+        address: 'Southdale Mall, 50th and France, Edina, MN',
+        icon: 'clock-o',
+        id: 'recent-shsni9qi1',
+        lat: 44.88768816033247,
+        lon: -93.34570485903102,
+        name: 'Southdale Mall, 50th and France, Edina, MN',
+        timestamp: 1788537165044,
+        type: 'recent'
+      }
+      const rememberRecent = (location) => ({
+        payload: { location, type: 'recent' },
+        type: 'REMEMBER_LOCAL_USER_PLACE'
+      })
+      const storedRecents = () =>
+        JSON.parse(window.localStorage.getItem('otp.recent') || '[]')
+
+      it('three responses for one search leave one recent', () => {
+        // The exact payloads from 2026-09-04 10:52:45/45/47: same
+        // coordinates, three freshly minted ids.
+        let state = reducer(freshState(), rememberRecent(SOUTHDALE))
+        state = reducer(
+          state,
+          rememberRecent({
+            ...SOUTHDALE,
+            id: 'recent-idfg17afy',
+            timestamp: 1788537165364
+          })
+        )
+        state = reducer(
+          state,
+          rememberRecent({
+            ...SOUTHDALE,
+            id: 'recent-gxln259t5',
+            timestamp: 1788537167182
+          })
+        )
+        expect(state.localUser.recentPlaces).toHaveLength(1)
+        expect(storedRecents()).toHaveLength(1)
+        // The id the rider's "forget" button targets never changed, but the
+        // timestamp is the newest one.
+        expect(state.localUser.recentPlaces[0].id).toEqual('recent-shsni9qi1')
+        expect(state.localUser.recentPlaces[0].timestamp).toEqual(1788537167182)
+      })
+
+      it('the same place searched again stays one recent, newest first', () => {
+        let state = reducer(freshState(), rememberRecent(SOUTHDALE))
+        const other = {
+          address: '300 Nicollet Mall',
+          icon: 'clock-o',
+          id: 'recent-nicollet',
+          lat: 44.97,
+          lon: -93.27,
+          name: '300 Nicollet Mall',
+          timestamp: 1788537166000,
+          type: 'recent'
+        }
+        state = reducer(state, rememberRecent(other))
+        // Re-searched a day later, geocoded a couple of metres away.
+        state = reducer(
+          state,
+          rememberRecent({
+            ...SOUTHDALE,
+            id: 'recent-later',
+            lat: SOUTHDALE.lat + 0.00002,
+            timestamp: 1788623565044
+          })
+        )
+        expect(state.localUser.recentPlaces).toHaveLength(2)
+        const southdale = state.localUser.recentPlaces[0]
+        expect(southdale.id).toEqual('recent-shsni9qi1')
+        expect(southdale.timestamp).toEqual(1788623565044)
+        expect(storedRecents()).toHaveLength(2)
+      })
+
+      it('a genuinely different destination is still added', () => {
+        let state = reducer(freshState(), rememberRecent(SOUTHDALE))
+        state = reducer(
+          state,
+          rememberRecent({
+            ...SOUTHDALE,
+            address: 'Mall of America',
+            id: 'recent-moa',
+            lat: 44.8548,
+            lon: -93.2422,
+            name: 'Mall of America',
+            timestamp: 1788537168000
+          })
+        )
+        expect(state.localUser.recentPlaces).toHaveLength(2)
+      })
     })
   })
 

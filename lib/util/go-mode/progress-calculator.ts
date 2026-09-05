@@ -168,6 +168,67 @@ export interface PaceContext {
   speedMps?: number | null
 }
 
+/**
+ * How long the rider still needs to reach their boarding stop, in seconds.
+ *
+ * The access chain from the leg they are on up to (not including) the next
+ * transit leg — the same span remainingAccessDistanceM measures for the quiet
+ * re-plan cooldown — with the current leg discounted by how far along it the
+ * matcher puts them, exactly as the pacing card's legMetresAhead does.
+ *
+ * Pace, per leg, in order: the rider's own observed rolling speed (rider-speed
+ * .ts, non-null only once they have really been moving on a bike leg) on a
+ * BICYCLE leg; else the leg's OWN planned pace, distance/duration, which is
+ * what OTP thought this stretch would take; else the mode's fallback figure.
+ * Null when there is no access leg left to measure or it carries no distance:
+ * callers read that as "unmeasurable" and must not gate on it.
+ *
+ * Built for Gate B of checkBoardVehicleApproach (2026-09-04): 4,443 m of
+ * unstarted bike leg at the plan's own 4.1 m/s is 18 minutes, and no bus
+ * arriving now is reachable across it.
+ */
+export function accessSecondsToBoardStop(
+  legs: Leg[] | undefined,
+  currentLegIndex: number,
+  progressInCurrentLegPct: number | null | undefined,
+  observedSpeedMps?: number | null
+): number | null {
+  if (!legs?.length) return null
+  const observed =
+    observedSpeedMps != null &&
+    Number.isFinite(observedSpeedMps) &&
+    observedSpeedMps > 0
+      ? observedSpeedMps
+      : null
+  let seconds = 0
+  let sawLeg = false
+  for (let i = Math.max(0, currentLegIndex); i < legs.length; i++) {
+    const leg = legs[i]
+    if (!leg || leg.transitLeg) break
+    const distance = leg.distance
+    if (typeof distance !== 'number' || !Number.isFinite(distance)) continue
+    const done =
+      i === currentLegIndex &&
+      Number.isFinite(progressInCurrentLegPct as number)
+        ? Math.max(0, Math.min(1, (progressInCurrentLegPct as number) / 100))
+        : 0
+    const metresAhead = distance * (1 - done)
+    const plannedPace =
+      leg.duration && leg.duration > 0 && distance > 0
+        ? distance / leg.duration
+        : null
+    const pace =
+      (leg.mode === 'BICYCLE' ? observed : null) ??
+      plannedPace ??
+      PACE_FALLBACK_MPS[leg.mode || ''] ??
+      PACE_FALLBACK_TRANSIT_MPS
+    if (!(pace > 0)) continue
+    sawLeg = true
+    seconds += metresAhead / pace
+  }
+  return sawLeg && Number.isFinite(seconds) ? seconds : null
+}
+
 function paceRemainingSeconds(pace?: PaceContext | null): number | null {
   if (!pace) return null
   const distance = pace.distanceRemainingM

@@ -1,5 +1,7 @@
 import {
+  CheckboxSelector,
   DateTimeSelector,
+  SliderSelector,
   Styled as TripFormClasses
 } from '@opentripplanner/trip-form'
 import { Input, MenuItemLi } from '@opentripplanner/location-field/lib/styled'
@@ -170,4 +172,75 @@ export const styledCheckboxCss = css`
       }
     }
   }
+`
+
+/*
+ * Below: the controls the advanced-settings panel and the Settings screen BOTH
+ * render. They live here rather than in either screen so the two are literally
+ * the same component — the rider's bike willingness slider has to look and
+ * behave identically whether they reach it from the search form or from the
+ * app menu, and a copy would have drifted the first time one of them was
+ * touched.
+ */
+
+/** A column of setting rows, with the checkbox styling the panel established. */
+export const GlobalSettingsContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  margin-bottom: 2em;
+
+  ${styledCheckboxCss}
+`
+
+/** A section heading inside a settings surface. */
+export const VisibleSubheader = styled.h2`
+  display: block;
+  font-size: 18px;
+  font-weight: 700;
+  height: auto;
+  margin: 1em 0;
+  position: static;
+  width: auto;
+`
+
+/** The sentence under a control that explains what it does. */
+export const HelperText = styled.p`
+  color: #666;
+  font-size: 13px;
+  margin: 0;
+`
+
+/**
+ * trip-form wraps CheckboxSelector the same way for the mode sub-settings:
+ * `display: inherit` is what makes the row pick up GlobalSettingsContainer's
+ * column flex, which is in turn what styledCheckboxCss's space-between and
+ * `order: 2` need in order to put the label on the left and the box on the
+ * right. Without it the checkbox renders browser-default (box first) and stops
+ * matching the trip-option checkboxes elsewhere on the same surface.
+ */
+export const SettingCheckbox = styled(CheckboxSelector)`
+  display: inherit;
+  margin-left: 4px;
+
+  input {
+    flex-shrink: 0;
+  }
+`
+
+/** A lever and its label, flush left. */
+export const LeverContainer = styled.div`
+  margin: 2em 0;
+
+  /* Same flush-left label as the panel's dropdowns, which zero the 6px padding
+     trip-form's SettingLabel carries. */
+  > label {
+    padding-left: 0;
+  }
+`
+
+// Same margins as the panel's dropdowns so a slider lines up with them rather
+// than sitting in its own rhythm.
+export const LeverSlider = styled(SliderSelector)`
+  margin: 20px 0px;
 `

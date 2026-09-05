@@ -19,6 +19,13 @@ export interface LiveLegTime {
   alightProjected?: boolean
   /** Whether alightEpoch is a live prediction (drives the pulsing icon). */
   alightRealtime?: boolean
+  /**
+   * Set by clampNonLiveLegTimes when it bridged a stale non-live board time
+   * across the poll gap, so the bridge happens once and a departed run is not
+   * projected forward on every tick. Cleared by the next refresh poll, which
+   * rebuilds the entry.
+   */
+  boardClamped?: boolean
   boardEpoch: number | null
   /** Mirrors alightProjected. */
   boardProjected?: boolean

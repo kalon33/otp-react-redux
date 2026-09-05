@@ -16,7 +16,7 @@ import type { StopCountLatch } from './next-stop'
  * `replayTrackedRouteId` deliberately outlive a trip today. They stay module
  * scoped in actions/go-mode.ts rather than change behaviour silently.
  */
-import type { BoardStopDwell } from './riding'
+import type { BoardStopDwell, EarlyAlightWatch } from './riding'
 import type { DepartureBaselineState } from './departure-drift'
 import type { DestinationProgressState } from './destination-progress'
 import type { MissedBusAttempt } from './missed-bus-recovery'
@@ -50,6 +50,14 @@ export interface TripSession {
    * of the session.
    */
   deviationHandledAtMs: number | null
+
+  /**
+   * The rider-versus-vehicle divergence watch behind the early-alight rule —
+   * see EARLY_ALIGHT_MIN_MS in riding.ts. Held here for the same reason
+   * boardStopDwell is: "have these two been drifting apart" cannot be answered
+   * by one fix.
+   */
+  earlyAlightWatch: EarlyAlightWatch | null
 
   /** The boarded-earlier replan's retry bookkeeping, per boarding. */
   earlyBoardReplan: {
@@ -129,6 +137,16 @@ export interface TripSession {
    * is re-posted only when the turn itself changes. Null when none is showing.
    */
   lastTurnCardKey: string | null
+
+  /**
+   * Identifies the lock-screen Live Activity this Go Mode session owns, so a
+   * card left running by a previous session (a page reload mid-trip: the web
+   * layer restarts, the OS's activity does not) is recognised as somebody
+   * else's and ended rather than updated. Minted per session, never persisted
+   * — a resumed trip is a NEW card by design. Null when no card was ever
+   * started. See util/go-mode/live-activity.ts; backlog 8.10.
+   */
+  liveActivityTripId: string | null
 
   /**
    * The rider's explicit departure pick must never be fought by the
@@ -225,6 +243,7 @@ export function createTripSession(): TripSession {
     boardStopDwell: null,
     destinationProgress: null,
     deviationHandledAtMs: null,
+    earlyAlightWatch: null,
     earlyBoardReplan: null,
     geometryChangedAtMs: null,
     gpsPollingIntervalId: null,
@@ -239,6 +258,7 @@ export function createTripSession(): TripSession {
     lastRerouteSnapshotAt: 0,
     lastTransitionedLegIndex: null,
     lastTurnCardKey: null,
+    liveActivityTripId: null,
     manualDepartureLock: false,
     matchHeldSinceMs: null,
     missedBusNoticeKey: null,

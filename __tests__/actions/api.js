@@ -77,4 +77,38 @@ describe('actions > api', () => {
       expect(mockDispatch.mock.calls).toMatchSnapshot()
     })
   })
+
+  /**
+   * Backlog 9.1. The router is a HASH history, so `window.location.pathname`
+   * is the document path and never the route; basing the push on it sent every
+   * query-param update to "/" and unmounted whatever screen the rider was on
+   * (a single bikeSpeed notch on `/settings`, ride 2026-09-04 15:06:11).
+   */
+  describe('setUrlSearch', () => {
+    const dispatchedFrom = (pathname) => {
+      const dispatch = jest.fn()
+      api.setUrlSearch({ ui_activeSearch: 'abc' })(dispatch, () => ({
+        router: { location: { pathname } }
+      }))
+      return dispatch.mock.calls[0][0]
+    }
+
+    it('keeps the route the rider is on', () => {
+      expect(dispatchedFrom('/settings').payload.args[0]).toBe(
+        '/settings?ui_activeSearch=abc'
+      )
+    })
+
+    it('is unchanged on the planner route', () => {
+      expect(dispatchedFrom('/').payload.args[0]).toBe('/?ui_activeSearch=abc')
+    })
+
+    it('falls back to the document path with no router in state', () => {
+      const dispatch = jest.fn()
+      api.setUrlSearch({ ui_activeSearch: 'abc' })(dispatch, () => ({}))
+      expect(dispatch.mock.calls[0][0].payload.args[0]).toBe(
+        `${window.location.pathname}?ui_activeSearch=abc`
+      )
+    })
+  })
 })

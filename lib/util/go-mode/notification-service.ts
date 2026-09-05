@@ -247,11 +247,72 @@ export const BOARD_ARRIVE_METRES = VEHICLE_AT_BOARD_STOP_M
 // One firing per stage per boarding; longer than any plausible approach.
 const BOARD_DEDUP_MS = 30 * 60 * 1000
 
+/**
+ * How far a rider-selected departure may sit from the itinerary's own board
+ * time and still be a statement about the SAME run.
+ *
+ * Two different things dispatch SET_DEPARTURE_OVERRIDE: the rider picking a
+ * later bus from the card (selectDeparture), and the auto-anchor re-targeting
+ * the soonest catchable departure of the same route (departure-anchor.ts).
+ * The second frequently writes the planned run's own live time, shifted by a
+ * few minutes of lateness — the same bus, re-timed. The first names a
+ * different vehicle entirely. Ten minutes separates them: a bus can plausibly
+ * run that late, and the route the rider was on runs every ~30 min, so the
+ * next run is never inside the window. Measured on 2026-09-04: planned board
+ * 11:15:30, override 12:13:00 — 57.5 min out, a different run beyond argument.
+ */
+export const SAME_RUN_TOLERANCE_MS = 10 * 60 * 1000
+
+/**
+ * Slack allowed before a boarding counts as one the rider cannot make.
+ *
+ * Generous on purpose: the alert exists to make a rider hurry, so a boarding
+ * they are two minutes short of is still worth shouting about — the bus may
+ * be late, or they may sprint. What it stops is the 2026-09-04 case, where
+ * 4.4 km of unstarted bike leg (~18 min at the planned pace) was announced as
+ * an arriving bus.
+ */
+export const BOARD_REACH_MARGIN_SECONDS = 120
+
+/**
+ * Whether a rider-selected departure names a run OTHER than the one this leg
+ * boards.
+ *
+ * Symmetric: an override EARLIER than the plan (the auto-anchor catching a
+ * bus the rider can still make) describes a different vehicle just as much as
+ * a later one does, and the planned trip's feed record says nothing about
+ * either. Unknowable inputs answer false — never silence on a missing number.
+ */
+export function overrideNamesAnotherRun(
+  plannedBoardMs: number | null | undefined,
+  departureOverrideMs: number | null | undefined
+): boolean {
+  if (departureOverrideMs == null || !Number.isFinite(departureOverrideMs)) {
+    return false
+  }
+  if (plannedBoardMs == null || !Number.isFinite(plannedBoardMs)) return false
+  return Math.abs(departureOverrideMs - plannedBoardMs) > SAME_RUN_TOLERANCE_MS
+}
+
 /** What the board-vehicle alerts need, measured in the action layer. */
 export interface BoardVehicleContext {
+  /**
+   * goMode.departureOverride — the departure the rider (or the auto-anchor)
+   * is actually targeting. Optional: absent means "no pick", and the gate
+   * that reads it stays open, so callers that never had one are unchanged.
+   */
+  departureOverrideMs?: number | null
   /** The live (realtime-flagged) board prediction for the boarding leg. */
   liveBoardEpochMs: number | null
   nowMs: number
+  /**
+   * Seconds of ground still in front of the rider before the boarding stop,
+   * at the pace they are actually keeping — accessSecondsToBoardStop in
+   * progress-calculator.ts, which is the same remaining-leg arithmetic the
+   * pacing card and the quiet re-plan already run. Optional; null/absent
+   * means unmeasurable, and the reachability gate stays open.
+   */
+  secondsToBoardStop?: number | null
   /** The PLANNED trip's own vehicle record — tripId-exact, never any bus of the route. */
   vehicle: {
     ageSec: number | null
@@ -267,15 +328,43 @@ export interface BoardVehicleContext {
  * only: both stages require a fresh feed record of the planned trip's own
  * vehicle — a schedule time with no vehicle behind it fires nothing, and a
  * vehicle already past the boarding stop is MISSED_BUS's story, not this one's.
+ *
+ * Two further gates, from the 2026-09-04 kerb ride, where both stages fired
+ * for a run the rider had stood down from while they were still 4.4 km away
+ * with the bike leg unstarted ("Pointless notification about a bus stop I'm
+ * not at yet and a bus before the one on the plan", 11:13:15):
+ *
+ *  - the run must still be THEIRS. A rider-selected departure that names a
+ *    different run makes the planned trip's vehicle somebody else's bus, and
+ *    its feed record is not news.
+ *  - the boarding must be one they could plausibly make. The check is against
+ *    the ground still ahead of them at their own pace, not their distance as
+ *    the crow flies — a rider 300 m from the stop by road is closer than one
+ *    100 m away across a freeway.
  */
 export function checkBoardVehicleApproach(
   boardLeg: Leg,
   ctx: BoardVehicleContext,
   sentNotifications: string[]
 ): NotificationEvent | null {
-  const { liveBoardEpochMs, nowMs, vehicle } = ctx
+  const {
+    departureOverrideMs,
+    liveBoardEpochMs,
+    nowMs,
+    secondsToBoardStop,
+    vehicle
+  } = ctx
   if (!vehicle) return null
   if (vehicle.ageSec != null && vehicle.ageSec > VEHICLE_RECORD_STALE_SEC) {
+    return null
+  }
+
+  // Gate A — the rider stood down from this run. The board leg still carries
+  // the planned trip, so `vehicle` is a real, fresh record of a real bus; it
+  // is simply not the bus they are going to get on.
+  if (
+    overrideNamesAnotherRun(Number(boardLeg.startTime), departureOverrideMs)
+  ) {
     return null
   }
 
@@ -303,6 +392,23 @@ export function checkBoardVehicleApproach(
     (vehicle.distanceToBoardStopM != null &&
       vehicle.distanceToBoardStopM <= BOARD_APPROACH_METRES)
   if (!atStop && !comingSoon) return null
+
+  // Gate B — can the rider actually be there? How long the bus is still going
+  // to be reachable for: at the stop it is leaving now; otherwise the feed's
+  // own prediction, or, with no prediction behind the distance trigger, the
+  // window that let this alert fire at all.
+  const secondsUntilVehicle = atStop
+    ? 0
+    : liveBoardEpochMs != null
+    ? Math.max(0, (liveBoardEpochMs - nowMs) / 1000)
+    : BOARD_APPROACH_SECONDS
+  if (
+    secondsToBoardStop != null &&
+    Number.isFinite(secondsToBoardStop) &&
+    secondsToBoardStop > secondsUntilVehicle + BOARD_REACH_MARGIN_SECONDS
+  ) {
+    return null
+  }
 
   const stage = atStop ? 'arriving' : 'approaching'
   const routeName =
@@ -443,8 +549,17 @@ export function checkUpcomingTurn(
   progress: TripProgress,
   currentLeg: Leg,
   sentNotifications: string[],
-  units: 'imperial' | 'metric' = 'imperial'
+  turnCuesEnabled = true
 ): NotificationEvent | null {
+  // The rider's own switch (util/go-mode/turn-cue-settings): the global default
+  // is OFF, and a leg they opted in from the trip sheet turns it back on. This
+  // is the FIRST gate on purpose — before the per-leg latch below is written —
+  // so a silenced approach doesn't burn the one cue the rider would get if they
+  // flipped the switch mid-leg. Defaults to true so a caller that knows nothing
+  // about the setting (the unit suites for the turn logic itself) still
+  // exercises the producer.
+  if (!turnCuesEnabled) return null
+
   const isBike = currentLeg.mode === 'BICYCLE'
   if (!isBike && currentLeg.mode !== 'WALK') return null
 
@@ -640,7 +755,10 @@ export interface MissedBusInput {
   currentLegIndex: number
   departureOverrideMs: number | null
   legs: Leg[]
-  liveLegTimes: Record<number, { boardEpoch: number | null; realtime: boolean }>
+  liveLegTimes: Record<
+    number,
+    { boardEpoch: number | null; boardRealtime?: boolean; realtime: boolean }
+  >
   nowMs: number
   riderPosition: [number, number] | null
   riderSpeedMps: number | null
@@ -659,22 +777,52 @@ export interface MissedBusContext {
 
 /**
  * The departure time the rider actually needs to make: a live (GPS-fed) board
- * epoch beats a rider-selected later departure, which beats the plan's
- * scheduled time. A realtime epoch still in the future means the bus is late,
- * not missed.
+ * epoch beats a rider-selected departure, which beats the plan's scheduled
+ * time. A realtime epoch still in the future means the bus is late, not
+ * missed.
+ *
+ * Two corrections from the 2026-09-04 kerb ride:
+ *
+ * 1. "Realtime" means the BOARD field's own flag. The leg-level `realtime` is
+ *    an OR across board and alight (live-itinerary.ts says the same of
+ *    legBoard/legAlight), and on that ride the boarding's alight was live
+ *    while its board was a schedule time clamped forward to `now` once a
+ *    second by clampNonLiveLegTimes. Reading the leg-level flag made that
+ *    fabricated "now" the effective departure, so classifyMissedBus could
+ *    never conclude the bus had gone: it declared the miss seven minutes late
+ *    (11:22:41), off a board time of 11:20:00 that no feed ever published,
+ *    when the run boarded at 11:15:30.
+ *
+ * 2. An override that names a DIFFERENT RUN is not an answer to this
+ *    question. This function says when the boarding IN THE ITINERARY happens
+ *    — which run the rider intends to take is a different fact, and the two
+ *    were being conflated. A late bus on the same run still outranks the
+ *    override (rank 1 below, unchanged); a rider-selected later run does not
+ *    push the planned boarding into the future, because the planned run
+ *    departs when it departs, and pretending otherwise is what suppressed
+ *    missed-bus recovery on a trip that was already un-flyable. Whether the
+ *    rider has declined a run is answered where it belongs — Gate A of
+ *    checkBoardVehicleApproach, which stays silent about that run's vehicle.
  */
 export function getEffectiveBoardTimeMs(
   leg: Leg,
-  liveLegTime: { boardEpoch: number | null; realtime: boolean } | undefined,
+  liveLegTime:
+    | { boardEpoch: number | null; boardRealtime?: boolean; realtime: boolean }
+    | undefined,
   departureOverrideMs: number | null
 ): { ms: number; realtime: boolean } {
-  if (liveLegTime?.realtime && liveLegTime.boardEpoch != null) {
+  const boardRealtime = liveLegTime?.boardRealtime ?? liveLegTime?.realtime
+  if (boardRealtime && liveLegTime?.boardEpoch != null) {
     return { ms: liveLegTime.boardEpoch, realtime: true }
   }
-  if (departureOverrideMs != null) {
+  const plannedMs = Number(leg.startTime)
+  if (
+    departureOverrideMs != null &&
+    !overrideNamesAnotherRun(plannedMs, departureOverrideMs)
+  ) {
     return { ms: departureOverrideMs, realtime: false }
   }
-  return { ms: Number(leg.startTime), realtime: false }
+  return { ms: plannedMs, realtime: false }
 }
 
 /**
@@ -1613,7 +1761,13 @@ function pushIf(
 }
 
 /**
- * Process all notification checks and return any that should be triggered
+ * Process all notification checks and return any that should be triggered.
+ *
+ * `turnCuesEnabled` is the rider's turn-by-turn switch for the leg being
+ * checked — the global Settings default, overridden by a per-leg opt-in from
+ * the trip sheet (see util/go-mode/turn-cue-settings). It gates the turn cues
+ * ONLY; every other card here is about a bus the rider is going to miss or a
+ * stop they are going to sail past, and none of those are theirs to silence.
  */
 export function checkForNotifications(
   progress: TripProgress,
@@ -1626,7 +1780,7 @@ export function checkForNotifications(
   legs?: Leg[],
   alight?: AlightContext,
   deviation?: DeviationAlertGate,
-  units: 'imperial' | 'metric' = 'imperial'
+  turnCuesEnabled = true
 ): NotificationEvent[] {
   if (!config.enabled) {
     return []
@@ -1700,7 +1854,12 @@ export function checkForNotifications(
   if (!supersedesTurn) {
     pushIf(
       notifications,
-      checkUpcomingTurn(progress, currentLeg, sentNotifications, units)
+      checkUpcomingTurn(
+        progress,
+        currentLeg,
+        sentNotifications,
+        turnCuesEnabled
+      )
     )
   }
 

@@ -1,5 +1,6 @@
 import { Bug } from '@styled-icons/fa-solid/Bug'
 import { Bus } from '@styled-icons/fa-solid/Bus'
+import { Comment } from '@styled-icons/fa-regular/Comment'
 import { connect } from 'react-redux'
 import { Envelope } from '@styled-icons/fa-regular/Envelope'
 import { ExternalLinkSquareAlt } from '@styled-icons/fa-solid/ExternalLinkSquareAlt'
@@ -10,6 +11,7 @@ import { History } from '@styled-icons/fa-solid/History'
 import { MapMarked } from '@styled-icons/fa-solid/MapMarked'
 import { MapMarkerAlt } from '@styled-icons/fa-solid/MapMarkerAlt'
 import { MapPin } from '@styled-icons/fa-solid/MapPin'
+import { Sliders } from '@styled-icons/fa-solid/Sliders'
 import { Undo } from '@styled-icons/fa-solid/Undo'
 import React, { Component, Fragment, useContext } from 'react'
 import SlidingPane from 'react-sliding-pane'
@@ -24,13 +26,17 @@ import { AppReduxState } from '../../util/state-types'
 import { ComponentContext } from '../../util/contexts'
 import { convertChineseLanguageCode, getLanguageOptions } from '../../util/i18n'
 import {
+  FEEDBACK_PATH,
+  LOCAL_PLACES_PATH,
+  SETTINGS_PATH
+} from '../../util/constants'
+import {
   getBuildInfo,
   getDeviceId,
   isDebugLogEnabled,
   setDebugLogEnabled
 } from '../../util/debug-log'
 import { isModuleEnabled, Modules } from '../../util/config'
-import { LOCAL_PLACES_PATH } from '../../util/constants'
 
 import AppMenuItem from './app-menu-item'
 import PopupTriggerText from './popup-trigger-text'
@@ -296,6 +302,33 @@ class AppMenu extends Component<
                 id: 'components.AppMenu.myPlaces'
               })}
               to={LOCAL_PLACES_PATH}
+            />
+            {/* The rider's routing levers and turn-by-turn default. Before
+                this they existed only inside the search form's advanced
+                panel — reachable only mid-plan — which is why no preference
+                was ever set on the 2026-09-04 ride ("Where my user params
+                at??"). */}
+            <AppMenuItem
+              icon={<Sliders />}
+              onClick={this._handleNavigate}
+              text={intl.formatMessage({
+                defaultMessage: 'Settings',
+                id: 'components.AppMenu.settings'
+              })}
+              to={SETTINGS_PATH}
+            />
+            {/* Next to Settings, and reachable mid-ride for the same reason:
+                _handleNavigate backgrounds an active trip rather than ending
+                it. A UI defect emits no telemetry, so the screenshot the rider
+                takes while looking at it is the only evidence there is. */}
+            <AppMenuItem
+              icon={<Comment />}
+              onClick={this._handleNavigate}
+              text={intl.formatMessage({
+                defaultMessage: 'Share feedback',
+                id: 'components.AppMenu.shareFeedback'
+              })}
+              to={FEEDBACK_PATH}
             />
             <AppMenuItem
               icon={<Undo />}
