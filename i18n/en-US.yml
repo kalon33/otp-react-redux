@@ -114,13 +114,11 @@ common:
     submitting: Submitting…
     "yes": "Yes"
   itineraryDescriptions:
-    containsCanceledTrip: This trip contains a canceled leg
     fareUnknown: No fare information
     noDefaultFareTypeConfigured: Multiple fares apply
     noItineraryToDisplay: No itinerary to display.
     relativeCo2: |
       {co2} {isMore, select, true {more} other {less} } CO₂ than driving alone
-    reservationRequired: Reservation required
     timeStartEnd: "{start} – {end}"
   linkOpensNewWindow: (Opens new window)
   modes:
@@ -393,10 +391,7 @@ components:
     busLabel: Bus {label}
     busNotBroadcasting: Bus not broadcasting yet — scheduled {time}
     changeBus: Choose bus
-    chooseBus: Choose bus
     confirmExit: Are you sure you want to stop tracking this trip?
-    deviationWarning: '{distance}m from route'
-    noBusesOrRoutesNearby: No buses or routes detected nearby. Try moving closer to a bus stop.
     directionEB: Eastbound
     directionNB: Northbound
     directionSB: Southbound
@@ -423,10 +418,6 @@ components:
     legTo: to {dest}
     legWait: 🕒 {mins} min wait
     legWalk: Walk
-    fast: Fastest
-    fewerTransfers: Fewer Transfers
-    lessWalking: Less Walking
-    avoidBiking: Avoid Biking
     liveBanner: Go Mode is live — tracking your bus
     loading: Starting Trip...
     loadingSchedule: Loading the schedule for your bus…
@@ -478,23 +469,6 @@ components:
     waitingGPS: Acquiring GPS signal...
     walkToStop: "{emoji} {time} walk to {stop}"
     whereToAlight: Where do you want to get off?
-    turnInstructions:
-      arrivingAt: Arriving at {destination}
-      bearLeft: Bear left
-      bearRight: Bear right
-      continue: Continue
-      continueOn: Continue on {name}
-      continueTo: Continue to {destination}
-      enterStation: Enter the station
-      exitStation: Exit the station
-      followSigns: Follow signs
-      sharpLeft: Sharp left
-      sharpRight: Sharp right
-      takeElevator: Take the elevator
-      takeRoundabout: Take the roundabout
-      turnLeft: Turn left
-      turnRight: Turn right
-      uTurn: U-turn
   ItinerarySummary:
     itineraryDetails: Itinerary details
   LocationSearch:
@@ -507,11 +481,9 @@ components:
     car-rental: Rental Car Locations
     micromobility-rental: "{companies} E-Scooters"
     park-and-ride: Park & Ride Locations
-    realtimeStops: Realtime stops
     satellite: Satellite
     shared-vehicles: Shared Vehicles
     stations: Transit Stations
-    OTP-UI-stopsAndStations: OTP-UI stops and stations
     stops: Transit Stops
     streets: Streets
   MapPointPicker:
@@ -598,7 +570,6 @@ components:
     selectCost: Cost
     selectDepartureTime: Departure time
     selectDuration: Duration
-    selectEmissions: Emissions
     selectFare: Transit fare
     selectWalkTime: Walk time
     sortResults: Sort results
@@ -742,7 +713,6 @@ components:
   ResultsError:
     backToSearch: Back to Search
   RouteDetails:
-    headsignFrom: '{headsign} (from {firstStop})'
     headsignTo: "{headsign} ({lastStop})"
     moreDetails: More Details
     operatedBy: Operated by {agencyName}
@@ -902,9 +872,7 @@ components:
     travelingAt: Traveling at {milesPerHour}
     vehicleName: Vehicle {vehicleNumber}
   TripBasicsPane:
-    checkAgain: Check again
     checkingItineraryExistence: Checking itinerary existence for each day of the week...
-    indicatesRequiredFields: Fields marked with an asterisk (*) are required
     onlyOnDate: Only on {date, date, ::eeeee yyyyMMdd}
     recurringEachWeek: On certain days each week
     tripDaysPrompt: What days do you take this trip?
