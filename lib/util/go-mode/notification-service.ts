@@ -1,6 +1,5 @@
 import type { Itinerary, Leg } from '@opentripplanner/types'
-
-import { asContinuation, formatCueDistance } from './turn-by-turn'
+import { asContinuation, formatCueDistance, formatCueDistanceImperial } from './turn-by-turn'
 import {
   calculateDistance,
   MATCH_CORRIDOR_TRANSIT_M
@@ -649,8 +648,8 @@ export function checkUpcomingTurn(
     : ''
   const message =
     stage === 'act'
-      ? formatCueDistance(distance, units)
-      : `In ${formatCueDistance(distance, units)}${then}`
+      ? formatCueDistanceImperial(distance)
+      : `In ${formatCueDistanceImperial(distance)}${then}`
 
   return {
     id,

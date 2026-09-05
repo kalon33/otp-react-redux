@@ -259,6 +259,14 @@ export function formatCueDistance(
 }
 
 /**
+ * Abbreviated imperial distance ("300 ft", "0.4 mi") for cue copy.
+ * Used when units are not specified or default to imperial.
+ */
+export function formatCueDistanceImperial(meters: number): string {
+  return humanizeDistanceStringImperial(meters, true)
+}
+
+/**
  * Offset in metres along `polyline` of the point nearest to `point`.
  *
  * Steps sit ON the leg geometry in principle, but OTP rounds step coordinates

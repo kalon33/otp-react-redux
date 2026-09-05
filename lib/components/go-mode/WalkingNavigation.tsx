@@ -4,7 +4,8 @@ import type { Leg } from '@opentripplanner/types'
 
 import {
   asContinuation,
-  formatCueDistance
+  formatCueDistance,
+  formatCueDistanceImperial
 } from '../../util/go-mode/turn-by-turn'
 import {
   getLegRouteId,
@@ -144,7 +145,7 @@ const WalkingNavigation = ({
   // the number reads as a countdown it isn't.
   const turnLine =
     progress.nextTurnCue && progress.distanceToNextTurn != null
-      ? `${progress.nextTurnCue.instruction} · ${formatCueDistance(
+      ? `${progress.nextTurnCue.instruction} · ${formatCueDistanceImperial(
           progress.distanceToNextTurn
         )}${progress.turnDistanceIsDirect ? ' direct' : ''}`
       : null
