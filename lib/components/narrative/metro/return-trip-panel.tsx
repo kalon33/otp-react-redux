@@ -12,7 +12,10 @@ import {
   planReturnTrip,
   selectReturnItinerary
 } from '../../../actions/round-trip'
-import { returnDepartureMs } from '../../../util/go-mode/round-trip'
+import {
+  returnDepartureMs,
+  timeAtDestinationMs
+} from '../../../util/go-mode/round-trip'
 import FormattedDuration from '../../util/formatted-duration'
 import Loading from '../loading'
 import type { ReturnPlanState } from '../../../actions/round-trip'
@@ -27,6 +30,11 @@ const { ensureAtLeastOneMinute } = coreUtils.time
  *
  * The list is sorted by departure and nothing is dropped for being slower —
  * the rider picks; "faster" is advice, not a filter.
+ *
+ * The stay the rider set is a MINIMUM: the query departs at
+ * `outbound.endTime + stay` and OTP answers with that departure and later ones.
+ * So the thing that actually differs between two ways back is how long each one
+ * leaves the rider at the destination, and every row prints it.
  */
 
 const Panel = styled.section`
@@ -89,6 +97,13 @@ const OptionRoutes = styled.span`
 const OptionTimes = styled.span`
   font-size: 14px;
   font-weight: 600;
+  grid-column: 1;
+`
+
+/** How long this way back leaves the rider there. See timeAtDestinationMs. */
+const OptionStay = styled.span`
+  color: #666;
+  font-size: 13px;
   grid-column: 1;
 `
 
@@ -169,7 +184,7 @@ function ReturnTripPanel({
       </Header>
       <Subhead>
         <FormattedMessage
-          defaultMessage="Leave {destination} at {time} · after {stay}"
+          defaultMessage="Leave {destination} no earlier than {time} · at least {stay} there"
           id="components.RoundTrip.leaveLine"
           values={{
             destination,
@@ -263,6 +278,26 @@ function ReturnTripPanel({
                     includeSeconds={false}
                   />
                 </OptionDuration>
+                {Number.isFinite(timeAtDestinationMs(itinerary, option)) && (
+                  <OptionStay>
+                    {/* "there" and not the stop name: the subhead two lines up
+                        already names it, and a long stop name wraps the row. */}
+                    <FormattedMessage
+                      defaultMessage="{duration} there"
+                      id="components.RoundTrip.timeThere"
+                      values={{
+                        duration: (
+                          <FormattedDuration
+                            duration={ensureAtLeastOneMinute(
+                              timeAtDestinationMs(itinerary, option) / 1000
+                            )}
+                            includeSeconds={false}
+                          />
+                        )
+                      }}
+                    />
+                  </OptionStay>
+                )}
               </OptionButton>
             )
           })}

@@ -1,5 +1,5 @@
 import { connect } from 'react-redux'
-import { useIntl } from 'react-intl'
+import { FormattedMessage, useIntl } from 'react-intl'
 import AnimateHeight from 'react-animate-height'
 import React, { useCallback, useState } from 'react'
 import styled from 'styled-components'
@@ -15,8 +15,13 @@ import { commonButtonCss, commonInputCss } from './styled'
 
 /**
  * The round-trip question, asked on the search form: "plan the way back too,
- * after a stay of N minutes". One quiet line when off; the stay chips open
- * under it when on.
+ * after AT LEAST N minutes at the destination". One quiet line when off; the
+ * stay chips open under it when on.
+ *
+ * The stay is a floor, not an exact wait — the return query departs at
+ * `outbound.endTime + stay` and the ways back come back at or after that (see
+ * util/go-mode/round-trip returnDepartureMs). Every string here says so, because
+ * a rider reading "staying 1 h" fairly expects to be moved at exactly 1 h.
  *
  * Neither value is an OTP argument — the return is a second, isolated plan run
  * under the outbound results (components/narrative/metro/return-trip-panel) —
@@ -40,6 +45,17 @@ const ChipRow = styled.div`
   flex-wrap: wrap;
   gap: 4px;
   padding-top: 6px;
+`
+
+const UnitLabel = styled.span`
+  color: #666;
+  font-size: 13px;
+`
+
+const Hint = styled.p`
+  color: #666;
+  font-size: 12px;
+  margin: 6px 0 0;
 `
 
 const CustomInput = styled.input`
@@ -136,7 +152,7 @@ function RoundTripSettings({
           <span style={{ color: '#666', fontSize: '13px' }}>
             {intl.formatMessage(
               {
-                defaultMessage: 'staying {stay}',
+                defaultMessage: 'at least {stay} there',
                 id: 'components.RoundTrip.stayingFor'
               },
               { stay: stayLabel(stayMinutes) }
@@ -151,7 +167,7 @@ function RoundTripSettings({
       >
         <ChipRow
           aria-label={intl.formatMessage({
-            defaultMessage: 'How long are you staying?',
+            defaultMessage: 'Minimum time at the destination',
             id: 'components.RoundTrip.stayGroupLabel'
           })}
           role="group"
@@ -184,7 +200,21 @@ function RoundTripSettings({
             type="number"
             value={draft ?? (isCustom ? String(stayMinutes) : '')}
           />
+          {/* The unit the box wants, on screen. The input's own aria-label
+              already says "in minutes", so this is decoration for readers. */}
+          <UnitLabel aria-hidden>
+            {intl.formatMessage({
+              defaultMessage: 'min',
+              id: 'components.RoundTrip.customStayUnit'
+            })}
+          </UnitLabel>
         </ChipRow>
+        <Hint>
+          <FormattedMessage
+            defaultMessage="Ways back leave once you have had at least this long there — later options are offered too."
+            id="components.RoundTrip.stayHint"
+          />
+        </Hint>
       </AnimateHeight>
     </div>
   )

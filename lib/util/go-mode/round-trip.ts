@@ -9,7 +9,8 @@ import { getLegRouteId } from './departure-anchor'
  * Go Mode side (the countdown at the destination, the "leave for the return"
  * alerts, and starting the return trip).
  *
- * Model: the rider plans OUT to a destination and says how long they will stay.
+ * Model: the rider plans OUT to a destination and says the MINIMUM time they
+ * need there.
  * The return is planned as a second, isolated OTP query from the outbound
  * itinerary's `to` back to its `from`, departing at
  * `outbound.endTime + stayMinutes`. The chosen return itinerary rides into Go
@@ -54,7 +55,11 @@ export interface RoundTripPlan {
   stayMinutes: number
 }
 
-/** Departure the return query asks for. NaN when the outbound has no usable end. */
+/**
+ * EARLIEST departure the return query asks for — the stay is a floor, not an
+ * exact wait, so the options that come back sit at or after this.
+ * NaN when the outbound has no usable end.
+ */
 export function returnDepartureMs(
   outbound: Itinerary | null | undefined,
   stayMinutes: number
@@ -62,6 +67,25 @@ export function returnDepartureMs(
   const end = epochMs(outbound?.endTime)
   if (!Number.isFinite(end)) return NaN
   return end + Math.max(0, stayMinutes) * 60000
+}
+
+/**
+ * How long the rider actually gets at the destination for one way back: the
+ * return's own departure minus the outbound arrival.
+ *
+ * `stayMinutes` is the MINIMUM the return was planned for — `returnDepartureMs`
+ * is the earliest departure the query asks for, and the options come back at or
+ * after it — so this is the number that differs between the ways back, and the
+ * one the rider is really choosing on. NaN when either end is unusable.
+ */
+export function timeAtDestinationMs(
+  outbound: Itinerary | null | undefined,
+  returnItinerary: Itinerary | null | undefined
+): number {
+  const end = epochMs(outbound?.endTime)
+  const depart = epochMs(returnItinerary?.startTime)
+  if (!Number.isFinite(end) || !Number.isFinite(depart)) return NaN
+  return Math.max(0, depart - end)
 }
 
 export function placeOf(place: any): RoundTripPlace | null {

@@ -128,13 +128,26 @@ beforeEach(() => {
 })
 
 describe('components > narrative > return trip panel', () => {
-  it('names the return departure the stay implies', () => {
+  it('names the return departure the stay implies, as a FLOOR', () => {
     const { wrapper } = render(readyPlan())
     expect(wrapper.text()).toContain('Return trip')
-    // Outbound ends 16:30 UTC; +1 h = 17:30 UTC = 12:30 PM in Chicago.
+    // Outbound ends 16:30 UTC; +1 h = 17:30 UTC = 12:30 PM in Chicago. The
+    // wording is "no earlier than" because the options come back at or after
+    // that departure, never before it (returnDepartureMs).
     expect(wrapper.text()).toContain(
-      'Leave Nicollet Mall at 12:30 PM · after 1 h'
+      'Leave Nicollet Mall no earlier than 12:30 PM · at least 1 h there'
     )
+  })
+
+  it('prints what each way back actually leaves the rider at the destination', () => {
+    const { wrapper } = render(readyPlan())
+    // The stay asked for 60 min and both options honour it, but they are 30 min
+    // apart: the rider is choosing between 1 h 5 min there and 1 h 35 min there.
+    // FormattedDuration is the row's own house style ("25 min" beside it), so
+    // the stay reads "1 hr 5 min", not the chips' "1 h 5 min".
+    const texts = rows(wrapper).map((n: any) => n.text().replace(/\s+/g, ' '))
+    expect(texts[0]).toContain('1 hr 5 min there')
+    expect(texts[1]).toContain('1 hr 35 min there')
   })
 
   it('lists every way back, with the chosen one pressed', () => {

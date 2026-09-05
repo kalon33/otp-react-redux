@@ -78,7 +78,26 @@ describe('components > form > round-trip settings', () => {
     )
     expect(pressed).toHaveLength(1)
     expect(pressed.at(0).text()).toBe('1 h 30 min')
-    expect(wrapper.text()).toContain('staying 1 h 30 min')
+    expect(wrapper.text()).toContain('at least 1 h 30 min there')
+  })
+
+  it('says on screen that the stay is a MINIMUM, and names the unit', () => {
+    const { wrapper } = render(true, 90)
+    const text = wrapper.text()
+    // The rider read "staying 1 h 30 min" as an exact wait; every surface now
+    // says the ways back leave at or after it.
+    expect(text).toContain('at least 1 h 30 min there')
+    expect(text).toContain(
+      'Ways back leave once you have had at least this long there'
+    )
+    expect(wrapper.find('[role="group"]').at(0).prop('aria-label')).toBe(
+      'Minimum time at the destination'
+    )
+    // The custom box is a bare number input; the unit belongs beside it.
+    expect(text).toContain('min')
+    expect(wrapper.find('input[type="number"]').prop('aria-label')).toBe(
+      'Custom stay, in minutes'
+    )
   })
 
   it('the toggle sets currentQuery.roundTrip without starting a search', () => {

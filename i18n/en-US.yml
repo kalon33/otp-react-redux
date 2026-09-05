@@ -722,15 +722,20 @@ components:
   RoundTrip:
     customStayLabel: Custom stay, in minutes
     customStayPlaceholder: Custom
+    customStayUnit: min
     header: Return trip
-    leaveLine: Leave {destination} at {time} · after {stay}
+    leaveLine: Leave {destination} no earlier than {time} · at least {stay} there
     noOptions: No return options found
     optionsGroupLabel: Ways back
     planError: Couldn’t plan the return
     retry: Retry
-    stayGroupLabel: How long are you staying?
+    stayGroupLabel: Minimum time at the destination
+    stayHint: >-
+      Ways back leave once you have had at least this long there — later options
+      are offered too.
     stayOption: "{hours, plural, =0 {} other {# h }}{minutes, plural, =0 {} other {# min}}"
-    stayingFor: staying {stay}
+    stayingFor: at least {stay} there
+    timeThere: "{duration} there"
     toggleLabel: Round trip
   RouteDetails:
     headsignTo: "{headsign} ({lastStop})"

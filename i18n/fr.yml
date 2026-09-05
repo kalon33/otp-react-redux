@@ -733,16 +733,20 @@ components:
   RoundTrip:
     customStayLabel: Durée personnalisée, en minutes
     customStayPlaceholder: Perso
+    customStayUnit: min
     header: Trajet retour
-    leaveLine: Partir de {destination} à {time} · après {stay}
+    leaveLine: Partir de {destination} au plus tôt à {time} · au moins {stay} sur place
     noOptions: Aucun trajet retour trouvé
     optionsGroupLabel: Trajets retour
     planError: Impossible de planifier le retour
     retry: Réessayer
-    stayGroupLabel: Combien de temps restez-vous ?
-    stayingFor: séjour de {stay}
+    stayGroupLabel: Temps minimum sur place
+    stayHint: Les trajets retour partent une fois ce temps minimum passé sur place —
+      des départs plus tardifs sont aussi proposés.
     stayOption: "{hours, plural, =0 {} other {# h }}{minutes, plural, =0 {} other
       {# min}}"
+    stayingFor: au moins {stay} sur place
+    timeThere: "{duration} sur place"
     toggleLabel: Aller-retour
   RouteDetails:
     headsignTo: "{headsign} ({lastStop})"

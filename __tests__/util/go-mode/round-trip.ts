@@ -8,7 +8,8 @@ import {
   RETURN_LEAVE_SOON_NOTIFICATION_ID,
   returnDepartureMs,
   routeSequence,
-  shouldRefreshReturnPlan
+  shouldRefreshReturnPlan,
+  timeAtDestinationMs
 } from '../../../lib/util/go-mode/round-trip'
 import type {
   ReturnCountdownState,
@@ -99,6 +100,33 @@ describe('util > go-mode > round-trip', () => {
           stayMinutes: 60
         })
       ).toBeNull()
+    })
+  })
+
+  describe('timeAtDestinationMs', () => {
+    it('is the return departure minus the outbound arrival, not the stay', () => {
+      // The stay asked for 120 min; this way back leaves at +150, so the rider
+      // actually gets 120 min of outbound-to-departure — 150 from NOW, less the
+      // 30-min ride out. The stay is the floor, this is the truth.
+      expect(timeAtDestinationMs(outbound, returnItinerary)).toBe(120 * MIN)
+    })
+
+    it('separates two ways back that share one stay', () => {
+      const later = itin(NOW + 195 * MIN, NOW + 225 * MIN, [
+        bus('1:21', NOW + 195 * MIN, NOW + 225 * MIN)
+      ])
+      expect(timeAtDestinationMs(outbound, later)).toBe(165 * MIN)
+      expect(timeAtDestinationMs(outbound, later)).toBeGreaterThan(
+        timeAtDestinationMs(outbound, returnItinerary)
+      )
+    })
+
+    it('never goes negative, and is NaN when either end is unusable', () => {
+      const before = itin(NOW + 10 * MIN, NOW + 20 * MIN, [])
+      expect(timeAtDestinationMs(outbound, before)).toBe(0)
+      expect(timeAtDestinationMs(null, returnItinerary)).toBeNaN()
+      expect(timeAtDestinationMs(outbound, null)).toBeNaN()
+      expect(timeAtDestinationMs(itin(NOW, NaN, []), returnItinerary)).toBeNaN()
     })
   })
 
