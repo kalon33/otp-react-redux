@@ -69,6 +69,7 @@ import {
   nextDeviationHandledAtMs,
   resetDelayAlerts,
   resetLegAnnouncements,
+  generateNotificationId,
   resetTurnAnnouncements,
   showNotification
 } from '../util/go-mode/notification-service'
@@ -193,6 +194,21 @@ import {
   PACING_CARD_NOTIFICATION_ID,
   evaluatePacingCard
 } from '../util/go-mode/pacing-card'
+import {
+  RETURN_LEAVE_NOW_NOTIFICATION_ID,
+  RETURN_LEAVE_SOON_MIN,
+  RETURN_LEAVE_SOON_NOTIFICATION_ID,
+  evaluateReturnCountdown,
+  pickRefreshedReturn,
+  pickReturnItinerary,
+  routeSequence,
+  shouldRefreshReturnPlan,
+  withReturnItinerary
+} from '../util/go-mode/round-trip'
+import type {
+  ReturnCountdownState,
+  RoundTripPlan
+} from '../util/go-mode/round-trip'
 import { evaluateTurnCard } from '../util/go-mode/turn-card'
 import { evaluateMissedBusRecovery } from '../util/go-mode/missed-bus-recovery'
 import {
@@ -451,6 +467,11 @@ export const UPDATE_VEHICLE_MATCH = 'UPDATE_VEHICLE_MATCH'
 // Live re-route action types
 export const CLEAR_REROUTE = 'CLEAR_REROUTE'
 export const SET_REROUTE_RESULT = 'SET_REROUTE_RESULT'
+
+// Round trip (see util/go-mode/round-trip.ts). Both MUST also appear in
+// create-otp-reducer's explicit goMode case list or they are silently dropped.
+export const SET_RETURN_COUNTDOWN = 'SET_RETURN_COUNTDOWN'
+export const SET_ROUND_TRIP = 'SET_ROUND_TRIP'
 export const START_REROUTE = 'START_REROUTE'
 
 // "I'm already on the bus" onboard-flow action types
@@ -473,6 +494,8 @@ export const showBoardingPromptAction = createAction(SHOW_BOARDING_PROMPT)
 export const startGoMode = createAction<{
   itinerary: Itinerary
   originalFrom?: any
+  /** The return half, when this trip is the outbound leg of a round trip. */
+  roundTrip?: RoundTripPlan | null
 }>(START_GO_MODE)
 export const stopGoMode = createAction(STOP_GO_MODE)
 /**
@@ -520,6 +543,18 @@ export const repairLegGeometry = createAction<{
 // Epoch ms of the moment trip progress first read "completed" — the rider is
 // at their destination and Go Mode shows the arrival card until they dismiss.
 export const setArrived = createAction<number>(SET_ARRIVED)
+
+/**
+ * Replace the round-trip plan — after a live refresh adopted a later run of
+ * the rider's own return, or (with null) when the trip stops being a round
+ * trip. Never dispatched on a one-way trip.
+ */
+export const setRoundTrip = createAction<RoundTripPlan | null>(SET_ROUND_TRIP)
+
+/** What the destination countdown has already said. See runReturnCountdown. */
+export const setReturnCountdown = createAction<ReturnCountdownState | null>(
+  SET_RETURN_COUNTDOWN
+)
 
 export const setRiding = createAction<RidingState>(SET_RIDING)
 export const clearRiding = createAction(CLEAR_RIDING)
@@ -760,6 +795,7 @@ function pushLiveActivity(getState: any, nowMs: number): void {
       liveLegTimes: goMode.liveLegTimes || {},
       progress: goMode.progress ?? null,
       riding: goMode.riding ?? null,
+      roundTrip: goMode.roundTrip ?? null,
       tripId: session.liveActivityTripId
     },
     nowMs
@@ -767,9 +803,21 @@ function pushLiveActivity(getState: any, nowMs: number): void {
 }
 
 /**
- * Start Go Mode tracking for an itinerary
+ * Start Go Mode tracking for an itinerary.
+ *
+ * `options.roundTrip` is the ONLY way a trip becomes a round trip: the planner
+ * builds the plan (util/go-mode/round-trip.ts) and hands it in here. It is
+ * deliberately not sticky — every internal caller (auto-reroute, quiet access
+ * replan, onboard confirm, session restore, the retry button) still calls with
+ * one argument, and each of those re-enters START_GO_MODE with no plan, which
+ * clears it. The one caller that must NOT lose it is a mid-trip auto-update of
+ * an outbound round trip, so that plan is read back off the store and passed
+ * through below.
  */
-export function beginGoMode(rawItinerary: Itinerary) {
+export function beginGoMode(
+  rawItinerary: Itinerary,
+  options: { roundTrip?: RoundTripPlan | null } = {}
+) {
   return async function (dispatch: any, getState: any) {
     // The one choke point every itinerary entering Go Mode passes through —
     // onboard confirm, aboard replan, auto-reroute, quiet access replan, the
@@ -790,7 +838,23 @@ export function beginGoMode(rawItinerary: Itinerary) {
       (priorGoMode?.isActive && priorGoMode?.originalFrom) ||
       currentQuery?.from ||
       null
-    dispatch(startGoMode({ itinerary, originalFrom }))
+    // A mid-trip swap of a LIVE round trip keeps the plan (the return is still
+    // the return; only the way there changed). An explicit `roundTrip` always
+    // wins, including an explicit null — that is how startReturnTrip's own
+    // beginGoMode enters as an ordinary one-way trip.
+    const roundTrip =
+      options.roundTrip !== undefined
+        ? options.roundTrip
+        : (priorGoMode?.isActive && priorGoMode?.roundTrip) || null
+    dispatch(startGoMode({ itinerary, originalFrom, roundTrip }))
+    if (roundTrip) {
+      // eslint-disable-next-line no-console
+      console.log(
+        `[go-mode] round trip: stay=${roundTrip.stayMinutes}min ` +
+          `leaveBy=${new Date(roundTrip.leaveByMs).toISOString()} ` +
+          `return=${routeSequence(roundTrip.returnItinerary) || 'walk'}`
+      )
+    }
     // Stop the live-update plugin from installing a queued bundle the next
     // time the phone is pocketed: `installNext()` runs on every background and
     // knows nothing about a trip. See util/native-updates.
@@ -1198,6 +1262,14 @@ export function endGoMode() {
     stopLiveActivity()
     if (session.lastTurnCardKey !== null) cancelPush(TURN_CARD_NOTIFICATION_ID)
     if (session.lastPacingCard !== null) cancelPush(PACING_CARD_NOTIFICATION_ID)
+    // ...and the two round-trip return alerts, which are the only pushes in Go
+    // Mode that can be sitting in the OS's queue DATED INTO THE FUTURE. Nothing
+    // else here would take them back: the trip session is about to be replaced,
+    // and with it every record that they were ever armed. Unconditional,
+    // because a plan may have been armed and then refreshed away, and
+    // cancelling an id that was never scheduled is a no-op.
+    cancelPush(RETURN_LEAVE_SOON_NOTIFICATION_ID)
+    cancelPush(RETURN_LEAVE_NOW_NOTIFICATION_ID)
     // The per-leg turn-announcement latch lives in notification-service, keyed
     // on the leg OBJECT, and is permanent for that object's life — which
     // assumes a new trip brings new legs. False on the retry path, where
@@ -3858,6 +3930,10 @@ export function startPositionTracking() {
 // so the rider's phone only buzzes for time-critical, act-now moments.
 const PUSH_NOTIFICATION_TYPES = new Set<NotificationType>([
   'LEAVE_SOON',
+  // The rider is somewhere else entirely — a shop, an office, a friend's
+  // kitchen — with the phone in a pocket. A toast reaches nobody; this is the
+  // whole delivery mechanism for the return half of a round trip.
+  'LEAVE_FOR_RETURN',
   'CONNECTION_WARNING',
   'ARRIVING_STOP',
   'MISSED_BUS',
@@ -3875,6 +3951,336 @@ const PUSH_NOTIFICATION_TYPES = new Set<NotificationType>([
   // vibration policy for the whole app, so restraint here IS the haptic design.
   'TURN_ALERT'
 ])
+
+/**
+ * Record an alert and, outside replay, actually raise it: the in-app toast and
+ * its haptic, plus the phone's (and so the wrist's) system notification for the
+ * types worth one.
+ *
+ * Lifted out of the tick's emission pass rather than copied, because the
+ * post-arrival return countdown raises its alert from a different place in the
+ * tick and everything that makes an alert behave — recording it always so
+ * replay assertions and the debug stream see the sequence, suppressing the
+ * real-world side effects during replay, and the `pushId` -> stable native id
+ * hand-off — has to be the same in both.
+ */
+function emitNotification(
+  dispatch: any,
+  notification: NotificationEvent,
+  config: any
+): void {
+  dispatch(addNotification(notification))
+  if (isReplayActive()) return
+  showNotification(
+    notification,
+    config || { enabled: true, soundEnabled: false, vibrationEnabled: true }
+  )
+  if (PUSH_NOTIFICATION_TYPES.has(notification.type)) {
+    sendPush({
+      // Almost always undefined — a one-off alert wants its own entry. An
+      // alert that carries one (the ambiguous missed-bus outcome, the two
+      // return-countdown alerts) is saying "replace/withdraw me by this id".
+      id: notification.pushId,
+      message: notification.message,
+      priority: notification.priority === 'high' ? 1 : 0,
+      title: notification.title
+    })
+  }
+}
+
+// -------------------------------------------------------------------------
+// Round trip: the countdown that runs after the outbound trip has ended
+// -------------------------------------------------------------------------
+
+/**
+ * How far ahead of `leaveByMs` the live refresh asks OTP to depart. The point
+ * of the refresh is to catch the rider's own run running late or early, so the
+ * query has to start a little BEFORE the planned departure or a run that has
+ * slipped five minutes earlier is outside the answer.
+ */
+const RETURN_REFRESH_LEAD_MS = 5 * 60 * 1000
+
+/**
+ * Hand the two return alerts to the OS, dated.
+ *
+ * Belt and braces for a locked phone, and the reason `PushPayload.at` exists.
+ * The tick-driven evaluator in {@link runReturnCountdown} is the primary path
+ * and the only one that can react to a refreshed departure — but it only runs
+ * while the JS layer is alive, and a rider at their destination pockets the
+ * phone for an hour or three, long past the point where iOS has suspended the
+ * WebView. These are scheduled at the SAME stable ids the evaluator posts
+ * under, so whichever arrives second replaces the first rather than buzzing
+ * the rider twice for one departure.
+ *
+ * Re-armed (cancel first, so a departure that moved out of the window leaves
+ * nothing pending) whenever a refresh moves `leaveByMs`.
+ */
+async function armReturnPushes(
+  plan: RoundTripPlan,
+  nowMs: number
+): Promise<void> {
+  await cancelPush(RETURN_LEAVE_SOON_NOTIFICATION_ID)
+  await cancelPush(RETURN_LEAVE_NOW_NOTIFICATION_ID)
+  const soonAtMs = plan.leaveByMs - RETURN_LEAVE_SOON_MIN * 60000
+  if (soonAtMs > nowMs) {
+    await sendPush({
+      at: soonAtMs,
+      id: RETURN_LEAVE_SOON_NOTIFICATION_ID,
+      message: '',
+      priority: 1,
+      title: `↩ Leave in ${RETURN_LEAVE_SOON_MIN} min`
+    })
+  }
+  if (plan.leaveByMs > nowMs) {
+    await sendPush({
+      at: plan.leaveByMs,
+      id: RETURN_LEAVE_NOW_NOTIFICATION_ID,
+      message: '',
+      priority: 1,
+      title: '↩ Leave now'
+    })
+  }
+}
+
+/**
+ * The post-arrival tick of a ROUND TRIP, and the whole of what Go Mode still
+ * does once the outbound trip is over: advance the countdown stage, raise at
+ * most one alert on a stage transition, and fire the single live refresh of
+ * the return plan when the departure comes into range.
+ *
+ * Every decision is in the pure evaluator (util/go-mode/round-trip.ts) so the
+ * cadence is unit-testable and follows the simulated clock — the same shape as
+ * the pacing card. This function is only the wiring.
+ */
+function runReturnCountdown(dispatch: any, getState: any, nowMs: number): void {
+  const goMode = getState()?.otp?.goMode
+  const plan: RoundTripPlan | null = goMode?.roundTrip ?? null
+  if (!plan) return
+
+  const prev: ReturnCountdownState | null = goMode.returnCountdown ?? null
+  const decision = evaluateReturnCountdown(prev, {
+    leaveByMs: plan.leaveByMs,
+    nowMs
+  })
+  // Shallow compare, not a blind dispatch: post-arrival ticks run for hours and
+  // an identical object every 30 s is a store write, a persistence write and a
+  // re-render for nothing.
+  if (
+    !prev ||
+    prev.stage !== decision.next.stage ||
+    prev.leaveByMs !== decision.next.leaveByMs
+  ) {
+    dispatch(setReturnCountdown(decision.next))
+  }
+
+  if (decision.post) {
+    const { post } = decision
+    const soon = post.id === RETURN_LEAVE_SOON_NOTIFICATION_ID
+    emitNotification(
+      dispatch,
+      {
+        id: generateNotificationId('LEAVE_FOR_RETURN', soon ? 'soon' : 'now'),
+        message: post.message,
+        priority: 'high',
+        // The stable native id: the OS-scheduled twin armed at arrival carries
+        // the same one, so this REPLACES it instead of stacking.
+        pushId: post.id,
+        timestamp: new Date(nowMs),
+        title: post.title,
+        type: 'LEAVE_FOR_RETURN'
+      },
+      goMode.notifications
+    )
+  }
+
+  // One live refresh per plan, inside the window. `shouldRefreshReturnPlan`
+  // stays true for the whole window until `refreshedAtMs` lands in the store,
+  // which is minutes after the first tick asked — so the in-flight flag on the
+  // trip session is what keeps a 30 s cadence from firing thirty plans.
+  if (!session.returnRefreshInFlight && shouldRefreshReturnPlan(plan, nowMs)) {
+    session.returnRefreshInFlight = true
+    dispatch(refreshReturnPlan())
+  }
+}
+
+/**
+ * Re-plan the return with live data as its departure comes into range, and
+ * adopt a fresher run OF THE RIDER'S OWN ROUTE if there is one.
+ *
+ * An ISOLATED plan (fetchOnboardCandidatePlan): no shared currentQuery, no URL
+ * change, no active-search churn — the rider may well be reading the planner
+ * while this runs, and a background refresh must not redraw it.
+ *
+ * `pickRefreshedReturn` is deliberately narrower than the picker
+ * `startReturnTrip` uses: a refresh may only move the rider to a different
+ * DEPARTURE of the sequence they chose, never to a different route. When
+ * nothing matches, the stored itinerary stands and `refreshedAtMs` is stamped
+ * anyway so the window does not re-ask every 30 s for the next quarter hour.
+ */
+export function refreshReturnPlan() {
+  return async function (dispatch: any, getState: any) {
+    const state = getState()
+    const plan: RoundTripPlan | null = state.otp?.goMode?.roundTrip ?? null
+    if (!plan) {
+      session.returnRefreshInFlight = false
+      return
+    }
+
+    const { homeTimezone } = state.otp.config
+    const nowMs = getCurrentTime().getTime()
+    // Never into the past — OTP will not plan it — and otherwise a little
+    // ahead of the departure, so a run that has slipped earlier is still in
+    // the answer.
+    const departAtMs = Math.max(nowMs, plan.leaveByMs - RETURN_REFRESH_LEAD_MS)
+    const zoned = utcToZonedTime(departAtMs, homeTimezone)
+    const { modes, modeSettings, numItineraries } = getBasePlanParts(state)
+    const combo = {
+      arriveBy: false,
+      date: format(zoned, coreUtils.time.OTP_API_DATE_FORMAT),
+      from: {
+        lat: plan.destination.lat,
+        lon: plan.destination.lon,
+        name: plan.destination.name
+      },
+      modes,
+      modeSettings,
+      numItineraries,
+      routingPreferences: state.otp.currentQuery?.routingPreferences,
+      time: format(zoned, coreUtils.time.OTP_API_TIME_FORMAT),
+      to: {
+        lat: plan.origin.lat,
+        lon: plan.origin.lon,
+        name: plan.origin.name
+      }
+    }
+
+    let itineraries: Itinerary[] = []
+    try {
+      const result = await dispatch(fetchOnboardCandidatePlan(combo))
+      itineraries = result?.itineraries || []
+    } catch {
+      // fetchOnboardCandidatePlan never rejects; this is the belt for a
+      // dispatch that throws before it. Keeping the planned departure is a
+      // perfectly good outcome.
+      itineraries = []
+    } finally {
+      session.returnRefreshInFlight = false
+    }
+
+    // The rider may have started the return, ended the trip, or had the plan
+    // replaced while this was in flight. Identity is the check: the plan we
+    // queried for has to still be the plan in the store.
+    const after = getState().otp?.goMode
+    if (!after?.isActive || after.roundTrip !== plan) return
+
+    const settledMs = getCurrentTime().getTime()
+    const picked = pickRefreshedReturn(itineraries, plan)
+    const updated = picked ? withReturnItinerary(plan, picked, settledMs) : plan
+    if (updated.refreshedAtMs == null) {
+      // No usable match (or a candidate with no readable startTime). Stamp the
+      // plan so the window closes; the rider keeps the departure they planned.
+      dispatch(setRoundTrip({ ...plan, refreshedAtMs: settledMs }))
+      // eslint-disable-next-line no-console
+      console.log(
+        '[go-mode] round trip: refresh kept the planned departure ' +
+          `(${itineraries.length} candidates, none on ` +
+          `${routeSequence(plan.returnItinerary) || 'walk'})`
+      )
+      return
+    }
+    dispatch(setRoundTrip(updated))
+    const movedMin = Math.round((updated.leaveByMs - plan.leaveByMs) / 60000)
+    // eslint-disable-next-line no-console
+    console.log(
+      '[go-mode] round trip: refreshed leaveBy=' +
+        `${new Date(updated.leaveByMs).toISOString()} moved=${movedMin}min ` +
+        `route=${routeSequence(updated.returnItinerary) || 'walk'}`
+    )
+    if (updated.leaveByMs !== plan.leaveByMs) {
+      armReturnPushes(updated, settledMs)
+    }
+  }
+}
+
+/**
+ * The rider tapped "Start return trip" on the countdown card.
+ *
+ * The return is a NEW one-way trip, not a phase of the old one: the outbound
+ * trip is ended outright (which tears down its timers, its wrist cards and its
+ * session), the planner's from/to are swapped so the app behind Go Mode
+ * reflects where the rider is actually going, and the return itinerary enters
+ * Go Mode through the same choke point as any other trip — with no `roundTrip`,
+ * so it does not arrive with a countdown of its own.
+ *
+ * One fresh plan first, departing NOW, because the stored return itinerary was
+ * planned hours ago against a schedule: `pickReturnItinerary` keeps the rider's
+ * chosen route sequence when the fresh answer still has it. Robust to the fetch
+ * coming back empty — the stored itinerary is the fallback, so the button
+ * always does something.
+ */
+export function startReturnTrip() {
+  return async function (dispatch: any, getState: any) {
+    const state = getState()
+    const plan: RoundTripPlan | null = state.otp?.goMode?.roundTrip ?? null
+    if (!plan) return
+
+    // The rider is acting on them right now; nothing pending is worth keeping.
+    cancelPush(RETURN_LEAVE_SOON_NOTIFICATION_ID)
+    cancelPush(RETURN_LEAVE_NOW_NOTIFICATION_ID)
+
+    const { homeTimezone } = state.otp.config
+    const nowMs = getCurrentTime().getTime()
+    const zoned = utcToZonedTime(nowMs, homeTimezone)
+    const { modes, modeSettings, numItineraries } = getBasePlanParts(state)
+    const from = {
+      lat: plan.destination.lat,
+      lon: plan.destination.lon,
+      name: plan.destination.name || 'Destination'
+    }
+    const to = {
+      lat: plan.origin.lat,
+      lon: plan.origin.lon,
+      name: plan.origin.name || 'Origin'
+    }
+
+    let fresh: Itinerary[] = []
+    try {
+      const result = await dispatch(
+        fetchOnboardCandidatePlan({
+          arriveBy: false,
+          date: format(zoned, coreUtils.time.OTP_API_DATE_FORMAT),
+          from,
+          modes,
+          modeSettings,
+          numItineraries,
+          routingPreferences: state.otp.currentQuery?.routingPreferences,
+          time: format(zoned, coreUtils.time.OTP_API_TIME_FORMAT),
+          to
+        })
+      )
+      fresh = result?.itineraries || []
+    } catch {
+      fresh = []
+    }
+
+    const picked = pickReturnItinerary(fresh, plan.returnItinerary)
+    const itinerary = picked || plan.returnItinerary
+    if (!itinerary) return
+
+    dispatch(endGoMode())
+    // The planner behind Go Mode is now showing the OUTBOUND search. Swap it so
+    // "back to the planner" is the return, not the trip that just finished. No
+    // searchId: this sets the query, it does not run a search.
+    dispatch(setQueryParam({ from, to }))
+    await dispatch(beginGoMode(itinerary, { roundTrip: null }))
+    dispatch(setMobileScreen(MobileScreens.GO_MODE))
+    // eslint-disable-next-line no-console
+    console.log(
+      `[go-mode] round trip: return started fresh=${!!picked} ` +
+        `route=${routeSequence(itinerary) || 'walk'}`
+    )
+  }
+}
 
 /**
  * Re-poll GTFS-realtime for the trip's upcoming transit legs so the trip
@@ -4687,6 +5093,23 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       // Take the card down with the arrival on it. Every later tick returns at
       // the `hasArrived` guard below, so this is the only chance to say so.
       pushLiveActivity(getState, currentTime.getTime())
+      // On a ROUND TRIP the arrival is a pause, not an ending: hand the two
+      // return alerts to the OS now, while the JS layer is certainly alive.
+      // The tick-driven countdown below is the primary path, but the rider is
+      // about to pocket the phone for hours and iOS will suspend this WebView
+      // long before the departure. Same stable ids either way, so at worst one
+      // replaces the other.
+      if (goMode.roundTrip) {
+        armReturnPushes(goMode.roundTrip, currentTime.getTime())
+        // eslint-disable-next-line no-console
+        console.log(
+          '[go-mode] round trip: countdown armed leaveBy=' +
+            `${new Date(goMode.roundTrip.leaveByMs).toISOString()} ` +
+            `remaining=${Math.round(
+              (goMode.roundTrip.leaveByMs - currentTime.getTime()) / 60000
+            )}min`
+        )
+      }
       // The quiesce below only governs what THIS function does; the two
       // subsystems that live outside the tick have to be told separately, and
       // on 2026-08-28 neither was. The trip was over at 22:08:37 and the rider
@@ -4711,6 +5134,16 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         dispatch(startPositionTracking())
       }
     } else if (hasArrived) {
+      // A ROUND TRIP is the one thing with work left after arrival. The rider
+      // is at their destination for the next hour or three, and the countdown
+      // to the return departure — its two alerts, and the one live refresh of
+      // the return plan — is the whole of what still runs. Everything the
+      // quiesce holds off stays held off: no live-times polling, no vehicle
+      // matching, no boarding, missed-bus or reroute activity for a trip that
+      // is over. See util/go-mode/round-trip.ts.
+      if (goMode.roundTrip) {
+        runReturnCountdown(dispatch, getState, currentTime.getTime())
+      }
       return
     }
 
@@ -5189,38 +5622,15 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     // (in-app toast/vibration and the phone's system notification) during replay
     // so a fast offline replay loop doesn't buzz the phone.
     const replaying = isReplayActive()
+    // The body of this loop is `emitNotification` above. Repeat suppression
+    // lives in each individual check, not there: turn cues are latched per
+    // (cue, stage) for the life of the leg in checkUpcomingTurn, with
+    // wasRecentlySent's window as a backstop; the others carry their own
+    // windows. This comment used to claim checkForNotifications guaranteed
+    // "each fires at most once" — it never did and gated nothing, and on 7/31 a
+    // stationary rider got the same turn pushed 14 times in 7 min.
     notifications.forEach((notification) => {
-      dispatch(addNotification(notification))
-      if (!replaying) {
-        showNotification(
-          notification,
-          goMode.notifications || {
-            enabled: true,
-            soundEnabled: false,
-            vibrationEnabled: true
-          }
-        )
-        // Raise the highest-value alerts as a system notification on the phone
-        // (native shell only; no-op in a browser). Repeat suppression lives in
-        // each individual check, not here: turn cues are latched per (cue,
-        // stage) for the life of the leg in checkUpcomingTurn, with
-        // wasRecentlySent's window as a backstop; the others carry their own
-        // windows. This comment used to claim checkForNotifications guaranteed
-        // "each fires at most once" — it never did and gated nothing, and on
-        // 7/31 a stationary rider got the same turn pushed 14 times in 7 min.
-        // Limited to a few types to avoid notification spam.
-        if (PUSH_NOTIFICATION_TYPES.has(notification.type)) {
-          sendPush({
-            // Almost always undefined — a one-off alert wants its own entry.
-            // An alert that carries one (the ambiguous missed-bus outcome) is
-            // saying "replace/withdraw me by this id" — see cancelPush.
-            id: notification.pushId,
-            message: notification.message,
-            priority: notification.priority === 'high' ? 1 : 0,
-            title: notification.title
-          })
-        }
-      }
+      emitNotification(dispatch, notification, goMode.notifications)
     })
 
     // The two sticky cards on the rider's wrist. Both sit BELOW the arrival

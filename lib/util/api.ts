@@ -5,6 +5,7 @@ import coreUtils from '@opentripplanner/core-utils'
 import qs from 'qs'
 
 import { AppConfig } from './config-types'
+import { DEFAULT_STAY_MINUTES } from './go-mode/round-trip'
 
 const { getUrlParams } = coreUtils.query
 const { getCurrentDate, getCurrentTime } = coreUtils.time
@@ -75,7 +76,12 @@ export function getDefaultQuery(config: AppConfig) {
     intermediatePlaces: [], // required to avoid crash
     mode: 'WALK,TRANSIT', // obsolete but required to avoid crash
     numItineraries: getDefaultNumItineraries(config),
+    // Round trip: plan the way back too, after a stay of this many minutes.
+    // Neither is an OTP argument — both are listed in NON_OTP_QUERY_KEYS and
+    // are restored from local storage rather than the URL.
+    roundTrip: false,
     routingType: 'ITINERARY', // obsolete but required to avoid crash
+    stayMinutes: DEFAULT_STAY_MINUTES,
     time: getCurrentTime()
   }
 }

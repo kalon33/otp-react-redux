@@ -105,6 +105,12 @@ export interface LiveActivityInput {
   liveLegTimes: Record<number, LiveLegTime>
   progress: TripProgress | null
   riding: RidingState | null
+  /**
+   * The return half of a round trip, when this trip is one. Read only by the
+   * arrived branch: it is what turns the final card from "you're here" into a
+   * countdown to the return departure.
+   */
+  roundTrip?: { leaveByMs: number } | null
   /** Identifies the card; the controller supplies it, one per Go Mode session. */
   tripId: string
 }
@@ -125,6 +131,7 @@ export function buildLiveActivityContent(
     liveLegTimes,
     progress,
     riding,
+    roundTrip,
     tripId
   } = input
   const legs: Leg[] = (activeItinerary?.legs as Leg[]) || []
@@ -160,11 +167,22 @@ export function buildLiveActivityContent(
   )
 
   // --- arrived: one last card, then it comes down --------------------------
+  //
+  // ...unless this is a ROUND TRIP, in which case the card stays up and counts
+  // down to the return departure. It does that through `boardEpochMs`, which
+  // the native widget ALREADY renders as a live countdown, and deliberately
+  // NOT through a new phase: the Swift side ships in the app binary and knows
+  // exactly four phase values, so inventing a fifth would render as nothing at
+  // all on every build already on a phone. `phase: 'arrived'` with a board
+  // time is a card the existing widget can draw today.
   if (arrivedAt != null) {
+    const leaveByMs = roundTrip?.leaveByMs
+    const returning =
+      typeof leaveByMs === 'number' && Number.isFinite(leaveByMs)
     return {
       arrivalEpochMs: arrivedAt,
       arrivalIsRealtime: false,
-      boardEpochMs: null,
+      boardEpochMs: returning ? (leaveByMs as number) : null,
       boardIsRealtime: false,
       destinationName,
       legDetail: '',

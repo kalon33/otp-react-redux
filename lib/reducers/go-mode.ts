@@ -27,7 +27,9 @@ import {
   SET_ONBOARD_TRIP,
   SET_ONBOARD_VEHICLE,
   SET_REROUTE_RESULT,
+  SET_RETURN_COUNTDOWN,
   SET_RIDING,
+  SET_ROUND_TRIP,
   SET_TRACKING_ERROR,
   SET_TRANSIT_LEG_ENTERED,
   SET_TURN_CUE_DEFAULT,
@@ -60,6 +62,10 @@ import type {
   VehicleMatchResult
 } from '../util/go-mode/vehicle-matching'
 import type { NotificationEvent } from '../util/go-mode/notification-service'
+import type {
+  ReturnCountdownState,
+  RoundTripPlan
+} from '../util/go-mode/round-trip'
 import type { RouteMatchResult } from '../util/go-mode/position-matching'
 import type { TripProgress } from '../util/go-mode/progress-calculator'
 
@@ -242,11 +248,32 @@ export interface GoModeState {
   }
 
   /**
+   * What the countdown at the destination has already told the rider, so the
+   * two "leave for the return" alerts fire on a stage TRANSITION and not on
+   * every 30 s post-arrival tick. Null until the first post-arrival tick of a
+   * round trip; null forever on a one-way trip. See util/go-mode/round-trip.
+   */
+  returnCountdown: ReturnCountdownState | null
+
+  /**
    * The durable "rider is aboard this vehicle" fact (see RidingState in
    * actions/go-mode). Survives new searches and itinerary switches; cleared
    * on alight, STOP_GO_MODE, or sustained off-route.
    */
   riding: RidingState | null
+
+  /**
+   * The return half of a ROUND TRIP, carried by the outbound trip: where the
+   * rider is going back to, when they have to leave, and the return itinerary
+   * itself. Null for an ordinary one-way trip, which is every trip that does
+   * not come from the round-trip form.
+   *
+   * It is the presence of this that turns the arrival card into a countdown,
+   * keeps the persisted session resumable for the hours of a real dwell, and
+   * lets the post-arrival tick do the one job it still has. See
+   * util/go-mode/round-trip.ts for the contract it shares with the planner.
+   */
+  roundTrip: RoundTripPlan | null
 
   routeMatch: RouteMatchResult | null
 
@@ -352,7 +379,11 @@ const defaultState: GoModeState = {
     status: 'idle'
   },
 
+  returnCountdown: null,
+
   riding: null,
+
+  roundTrip: null,
 
   routeMatch: null,
 
@@ -743,6 +774,11 @@ const goMode = handleActions<GoModeState, any>(
       }
     },
 
+    [SET_RETURN_COUNTDOWN]: (state, action) => ({
+      ...state,
+      returnCountdown: action.payload ?? null
+    }),
+
     [SET_RIDING]: (state, action) => ({
       ...state,
       alightedFrom: action.payload ? null : state.alightedFrom,
@@ -750,6 +786,15 @@ const goMode = handleActions<GoModeState, any>(
       // besides a leg transition that may retire the re-anchoring.
       earlyAlight: action.payload ? null : state.earlyAlight,
       riding: action.payload
+    }),
+
+    [SET_ROUND_TRIP]: (state, action) => ({
+      ...state,
+      // The countdown state is NOT cleared here. A refresh that keeps the same
+      // departure must not re-fire "leave in 10 min", and one that moves it
+      // re-arms on its own: evaluateReturnCountdown compares the stored
+      // leaveByMs with the plan's and treats a change as a re-arm.
+      roundTrip: action.payload ?? null
     }),
 
     [SET_TRACKING_ERROR]: (state, action) => {
@@ -787,7 +832,7 @@ const goMode = handleActions<GoModeState, any>(
     }),
 
     [START_GO_MODE]: (state, action) => {
-      const { itinerary, originalFrom } = action.payload
+      const { itinerary, originalFrom, roundTrip } = action.payload
 
       // `ui` is deliberately preserved: a background auto-update (missed bus,
       // quiet access replan) swaps the itinerary via this action while the
@@ -822,6 +867,13 @@ const goMode = handleActions<GoModeState, any>(
         originalFrom: originalFrom ?? null,
         progress: null,
         reRoute: { ...defaultState.reRoute },
+        // The countdown belongs to the plan, and the plan has just been
+        // (re)stated: a mid-trip itinerary swap on a round trip re-enters here
+        // with the SAME roundTrip, and re-arming from null is correct — the
+        // rider has not arrived yet, so there is no stage to preserve, and
+        // evaluateReturnCountdown's first-evaluation rule stops it buzzing for
+        // a window it is already inside.
+        returnCountdown: null,
         // A mid-ride itinerary SWAP (isActive already true) keeps the fact:
         // the rider is on the same bus, only the plan around them changed. A
         // RESTART is different — Go Mode was stopped and started again, and
@@ -839,6 +891,12 @@ const goMode = handleActions<GoModeState, any>(
             : null,
           itinerary
         ),
+        // Absent means one-way, explicitly: an auto-update that swaps the
+        // outbound itinerary mid-trip goes through beginGoMode with no
+        // options, and a round trip must not silently survive a re-plan the
+        // rider never tied a return to. beginGoMode passes the plan back in
+        // when it is still the same trip; everything else clears it.
+        roundTrip: roundTrip ?? null,
         routeMatch: null,
         tracking: {
           ...state.tracking,

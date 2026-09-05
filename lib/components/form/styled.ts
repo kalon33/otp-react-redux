@@ -11,7 +11,13 @@ import styled, { css } from 'styled-components'
 import { blue, grey } from '../util/colors'
 import { prefersReducedMotion } from '../util/prefersReducedMotion'
 
-const commonButtonCss = css`
+/**
+ * The look every small control on the search form shares — the mode buttons
+ * (through modeButtonButtonCss) and the round-trip toggle and stay chips.
+ * Exported so a new control is literally the same styling rather than a copy
+ * of it; `.active` is the selected state.
+ */
+export const commonButtonCss = css`
   -webkit-user-select: none;
   -moz-user-select: none;
   -ms-user-select: none;

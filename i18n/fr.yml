@@ -451,6 +451,13 @@ components:
     returnBannerArrived: "Vous êtes arrivé — touchez pour terminer"
     returnBannerLive: "En trajet · Prochain arrêt {stop} · Arrivée {eta} — touchez pour revenir"
     returnBannerNoProgress: "Trajet en cours — touchez pour revenir"
+    returnCountdownLabel: "Départ du retour dans"
+    returnLeaveBy: "Partir à {time}"
+    returnLeaveNow: "Partez maintenant"
+    returnMissed: "Départ du retour dépassé"
+    returnPlanNow: "Planifier le retour"
+    returnRouteDeparts: "{route} part à {time}"
+    returnStart: "Commencer le retour"
     rideToStop: "{emoji} {time} de trajet jusqu'à {stop}"
     selectVehicle: "Celui-ci"
     showLaterDepartures: "Plus"
@@ -723,6 +730,20 @@ components:
     scheduled: horaire
   ResultsError:
     backToSearch: Retour à la recherche
+  RoundTrip:
+    customStayLabel: Durée personnalisée, en minutes
+    customStayPlaceholder: Perso
+    header: Trajet retour
+    leaveLine: Partir de {destination} à {time} · après {stay}
+    noOptions: Aucun trajet retour trouvé
+    optionsGroupLabel: Trajets retour
+    planError: Impossible de planifier le retour
+    retry: Réessayer
+    stayGroupLabel: Combien de temps restez-vous ?
+    stayingFor: séjour de {stay}
+    stayOption: "{hours, plural, =0 {} other {# h }}{minutes, plural, =0 {} other
+      {# min}}"
+    toggleLabel: Aller-retour
   RouteDetails:
     headsignTo: "{headsign} ({lastStop})"
     moreDetails: Plus d'infos

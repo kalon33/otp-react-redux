@@ -28,6 +28,18 @@
 
 export interface PushPayload {
   /**
+   * Deliver at this epoch-ms instead of now. The OS holds it: the app does not
+   * have to be running, or even alive, when it fires — which is the entire
+   * point for the round-trip return alerts, where the rider is at their
+   * destination with the phone locked for an hour or more and the JS layer has
+   * long since been suspended. A time in the past (or absent) delivers
+   * immediately, exactly as before.
+   *
+   * Pair with a stable {@link id}: a re-armed schedule REPLACES the pending
+   * one rather than stacking a second buzz.
+   */
+  at?: number
+  /**
    * Stable notification id. Reusing one makes iOS REPLACE the existing
    * notification instead of stacking a new one — the mechanism behind the
    * sticky per-turn card, which holds one entry on the wrist and swaps its
@@ -216,6 +228,12 @@ export async function sendPush(payload: PushPayload): Promise<void> {
 async function schedulePush(payload: PushPayload): Promise<void> {
   const plugin = bridge()
   if (!plugin) return
+  // A future-dated push is handed to the OS to deliver on its own. `allowWhileIdle`
+  // is what gets it past Android's Doze bucketing; iOS ignores the key.
+  const future =
+    typeof payload.at === 'number' &&
+    Number.isFinite(payload.at) &&
+    payload.at > Date.now()
   try {
     await plugin.schedule({
       notifications: [
@@ -225,6 +243,12 @@ async function schedulePush(payload: PushPayload): Promise<void> {
           // alerts are seconds apart so collisions don't happen in practice.
           id: payload.id ?? Date.now() & 0x7fffffff,
           interruptionLevel: payload.passive ? 'passive' : undefined,
+          ...(future && {
+            schedule: {
+              allowWhileIdle: true,
+              at: new Date(payload.at as number)
+            }
+          }),
           sound:
             !payload.passive && payload.priority && payload.priority > 0
               ? 'default'

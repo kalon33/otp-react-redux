@@ -506,6 +506,10 @@ export const NON_OTP_QUERY_KEYS = [
   'noTransfers',
   'routeLock',
   'routingPreferences',
+  // The round-trip question is asked of the RESULTS (a second, isolated plan
+  // for the way back — actions/round-trip.ts), never of the outbound query.
+  'roundTrip',
+  'stayMinutes',
   'viaStop'
 ]
 

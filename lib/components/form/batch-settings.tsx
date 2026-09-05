@@ -38,6 +38,7 @@ import DateTimeModal, {
   DepartArriveValue,
   setQueryParamMiddleware
 } from './date-time-modal'
+import RoundTripSettings from './round-trip-settings'
 
 // TYPESCRIPT TODO: better types
 type Props = {
@@ -144,6 +145,10 @@ function BatchSettings({
       >
         <DateTimeModal />
       </AnimateHeight>
+
+      {/* Both the mobile search screen and the desktop routing panel render
+          BatchSettings, so this one placement covers both. */}
+      <RoundTripSettings />
 
       <ModeSelectorContainer>
         <MetroModeSelector

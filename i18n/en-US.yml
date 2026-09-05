@@ -447,6 +447,13 @@ components:
     returnBannerArrived: You've arrived — tap to finish
     returnBannerLive: On trip · Next stop {stop} · Arrive {eta} — tap to return
     returnBannerNoProgress: Trip in progress — tap to return
+    returnCountdownLabel: Leave for return in
+    returnLeaveBy: Leave by {time}
+    returnLeaveNow: Leave now
+    returnMissed: Return departure passed
+    returnPlanNow: Plan return now
+    returnRouteDeparts: "{route} departs {time}"
+    returnStart: Start return trip
     rideToStop: "{emoji} {time} ride to {stop}"
     selectVehicle: This one
     sheetHandleLabel: View trip & other ways
@@ -712,6 +719,19 @@ components:
     scheduled: scheduled
   ResultsError:
     backToSearch: Back to Search
+  RoundTrip:
+    customStayLabel: Custom stay, in minutes
+    customStayPlaceholder: Custom
+    header: Return trip
+    leaveLine: Leave {destination} at {time} · after {stay}
+    noOptions: No return options found
+    optionsGroupLabel: Ways back
+    planError: Couldn’t plan the return
+    retry: Retry
+    stayGroupLabel: How long are you staying?
+    stayOption: "{hours, plural, =0 {} other {# h }}{minutes, plural, =0 {} other {# min}}"
+    stayingFor: staying {stay}
+    toggleLabel: Round trip
   RouteDetails:
     headsignTo: "{headsign} ({lastStop})"
     moreDetails: More Details
