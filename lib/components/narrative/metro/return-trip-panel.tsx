@@ -1,13 +1,12 @@
 import { connect } from 'react-redux'
 import { FormattedMessage, FormattedTime, useIntl } from 'react-intl'
-import { Itinerary, Leg } from '@opentripplanner/types'
+import { Itinerary } from '@opentripplanner/types'
 import coreUtils from '@opentripplanner/core-utils'
 import React, { useCallback, useContext, useEffect } from 'react'
 import styled from 'styled-components'
 
 import { ComponentContext } from '../../../util/contexts'
 import { DARK_TEXT_GREY } from '../../util/colors'
-import { ItineraryDescription } from '../default/itinerary-description'
 import {
   outboundKeyOf,
   planReturnTrip,
@@ -18,7 +17,7 @@ import FormattedDuration from '../../util/formatted-duration'
 import Loading from '../loading'
 import type { ReturnPlanState } from '../../../actions/round-trip'
 
-import RouteBlock from './route-block'
+import MetroItineraryRoutes from './metro-itinerary-routes'
 
 const { ensureAtLeastOneMinute } = coreUtils.time
 
@@ -64,32 +63,38 @@ const OptionButton = styled.button<{ $selected: boolean }>`
       ? '2px solid var(--main-base-color, rgb(173, 216, 230))'
       : '1px solid rgb(187, 187, 187)'};
   display: grid;
-  gap: 2px 8px;
-  grid-template-columns: auto 1fr auto;
+  gap: 4px 8px;
+  grid-template-columns: 1fr auto;
   padding: 6px 8px;
   text-align: left;
   width: 100%;
+`
 
-  svg {
-    width: 28px;
+/**
+ * The same route strip the collapsed results rows carry. It expects to sit in
+ * a grid (its screen-reader header is parked in an unused second column) and
+ * brings a top margin sized for the results list, which here is just a gap.
+ */
+const OptionRoutes = styled.span`
+  display: grid;
+  grid-column: 1;
+  grid-template-columns: 1fr 0;
+  min-width: 0;
+
+  > div {
+    margin-top: 0 !important;
   }
 `
 
 const OptionTimes = styled.span`
   font-size: 14px;
   font-weight: 600;
-`
-
-const OptionDescription = styled.span`
-  color: #090909cc;
-  font-size: 12px;
-  grid-column: 2;
-  opacity: 0.8;
+  grid-column: 1;
 `
 
 const OptionDuration = styled.span`
   font-size: 14px;
-  grid-column: 3;
+  grid-column: 2;
   grid-row: 1 / span 2;
   text-align: right;
 `
@@ -115,11 +120,6 @@ type Props = {
   returnPlan: ReturnPlanState | null
   selectReturnItinerary: (index: number) => void
   stayMinutes: number
-}
-
-/** The leg that carries the trip — the same pick metro-itinerary's mini row makes. */
-function mainLegOf(legs: Leg[]): Leg {
-  return [...legs].sort((a: Leg, b: Leg) => b.distance - a.distance)[0]
 }
 
 function ReturnTripPanel({
@@ -229,7 +229,6 @@ function ReturnTripPanel({
         >
           {returnPlan.itineraries.map((option: Itinerary, index: number) => {
             const selected = index === returnPlan.selectedIndex
-            const mainLeg = mainLegOf(option.legs || [])
             return (
               <OptionButton
                 $selected={selected}
@@ -238,8 +237,14 @@ function ReturnTripPanel({
                 onClick={onSelect(index)}
                 type="button"
               >
-                {LegIcon && mainLeg && (
-                  <RouteBlock hideLongName leg={mainLeg} LegIcon={LegIcon} />
+                {LegIcon && (
+                  <OptionRoutes>
+                    <MetroItineraryRoutes
+                      expanded={false}
+                      itinerary={option}
+                      LegIcon={LegIcon}
+                    />
+                  </OptionRoutes>
                 )}
                 <OptionTimes>
                   <FormattedTime
@@ -258,9 +263,6 @@ function ReturnTripPanel({
                     includeSeconds={false}
                   />
                 </OptionDuration>
-                <OptionDescription>
-                  <ItineraryDescription itinerary={option} />
-                </OptionDescription>
               </OptionButton>
             )
           })}
