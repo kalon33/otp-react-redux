@@ -184,7 +184,7 @@ function ReturnTripPanel({
       </Header>
       <Subhead>
         <FormattedMessage
-          defaultMessage="Leave {destination} no earlier than {time} · at least {stay} there"
+          defaultMessage="Leave {destination} from {time} · {stay}+ there"
           id="components.RoundTrip.leaveLine"
           values={{
             destination,

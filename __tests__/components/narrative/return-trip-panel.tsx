@@ -131,11 +131,11 @@ describe('components > narrative > return trip panel', () => {
   it('names the return departure the stay implies, as a FLOOR', () => {
     const { wrapper } = render(readyPlan())
     expect(wrapper.text()).toContain('Return trip')
-    // Outbound ends 16:30 UTC; +1 h = 17:30 UTC = 12:30 PM in Chicago. The
-    // wording is "no earlier than" because the options come back at or after
-    // that departure, never before it (returnDepartureMs).
+    // Outbound ends 16:30 UTC; +1 h = 17:30 UTC = 12:30 PM in Chicago. "from"
+    // and "+" because the options come back at or after that departure, never
+    // before it (returnDepartureMs) — said in two marks, not a sentence.
     expect(wrapper.text()).toContain(
-      'Leave Nicollet Mall no earlier than 12:30 PM · at least 1 h there'
+      'Leave Nicollet Mall from 12:30 PM · 1 h+ there'
     )
   })
 

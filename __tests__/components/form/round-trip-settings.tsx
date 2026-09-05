@@ -78,18 +78,17 @@ describe('components > form > round-trip settings', () => {
     )
     expect(pressed).toHaveLength(1)
     expect(pressed.at(0).text()).toBe('1 h 30 min')
-    expect(wrapper.text()).toContain('at least 1 h 30 min there')
+    expect(wrapper.text()).toContain('1 h 30 min+ there')
   })
 
-  it('says on screen that the stay is a MINIMUM, and names the unit', () => {
+  it('says the stay is a MINIMUM in a mark, not a sentence', () => {
     const { wrapper } = render(true, 90)
     const text = wrapper.text()
-    // The rider read "staying 1 h 30 min" as an exact wait; every surface now
-    // says the ways back leave at or after it.
-    expect(text).toContain('at least 1 h 30 min there')
-    expect(text).toContain(
-      'Ways back leave once you have had at least this long there'
-    )
+    // The rider read "staying 1 h 30 min" as an exact wait. The "+" is the
+    // whole of the correction: no explanatory line on the form, by request.
+    expect(text).toContain('1 h 30 min+ there')
+    expect(text).not.toContain('Ways back leave')
+    expect(text).not.toMatch(/at least/)
     expect(wrapper.find('[role="group"]').at(0).prop('aria-label')).toBe(
       'Minimum time at the destination'
     )

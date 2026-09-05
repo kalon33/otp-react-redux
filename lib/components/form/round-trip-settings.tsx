@@ -1,5 +1,5 @@
 import { connect } from 'react-redux'
-import { FormattedMessage, useIntl } from 'react-intl'
+import { useIntl } from 'react-intl'
 import AnimateHeight from 'react-animate-height'
 import React, { useCallback, useState } from 'react'
 import styled from 'styled-components'
@@ -20,8 +20,9 @@ import { commonButtonCss, commonInputCss } from './styled'
  *
  * The stay is a floor, not an exact wait — the return query departs at
  * `outbound.endTime + stay` and the ways back come back at or after that (see
- * util/go-mode/round-trip returnDepartureMs). Every string here says so, because
- * a rider reading "staying 1 h" fairly expects to be moved at exactly 1 h.
+ * util/go-mode/round-trip returnDepartureMs). The "+" in "1 h 30 min+ there"
+ * is the whole of how that is said: no explanatory line, the control explains
+ * itself. Do not add one back.
  *
  * Neither value is an OTP argument — the return is a second, isolated plan run
  * under the outbound results (components/narrative/metro/return-trip-panel) —
@@ -50,12 +51,6 @@ const ChipRow = styled.div`
 const UnitLabel = styled.span`
   color: #666;
   font-size: 13px;
-`
-
-const Hint = styled.p`
-  color: #666;
-  font-size: 12px;
-  margin: 6px 0 0;
 `
 
 const CustomInput = styled.input`
@@ -152,7 +147,7 @@ function RoundTripSettings({
           <span style={{ color: '#666', fontSize: '13px' }}>
             {intl.formatMessage(
               {
-                defaultMessage: 'at least {stay} there',
+                defaultMessage: '{stay}+ there',
                 id: 'components.RoundTrip.stayingFor'
               },
               { stay: stayLabel(stayMinutes) }
@@ -209,12 +204,6 @@ function RoundTripSettings({
             })}
           </UnitLabel>
         </ChipRow>
-        <Hint>
-          <FormattedMessage
-            defaultMessage="Ways back leave once you have had at least this long there — later options are offered too."
-            id="components.RoundTrip.stayHint"
-          />
-        </Hint>
       </AnimateHeight>
     </div>
   )
