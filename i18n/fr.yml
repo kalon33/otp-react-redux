@@ -132,13 +132,11 @@ common:
     submitting: Envoi en cours…
     "yes": Oui
   itineraryDescriptions:
-    containsCanceledTrip: Ce trajet contient une étape annulée
     fareUnknown: Tarif inconnu
     noDefaultFareTypeConfigured: Multiple fares apply
     noItineraryToDisplay: Aucun trajet à afficher.
     relativeCo2: |
       {co2} de CO₂ en {isMore, select, true {plus} other {moins} } qu'en voiture
-    reservationRequired: Réservation obligatoire
     timeStartEnd: "{start} – {end}"
   linkOpensNewWindow: (Ouvre une nouvelle fenêtre)
   modes:
@@ -264,13 +262,8 @@ components:
     numItinerariesLabel: "Nombre d'options à rechercher"
     numItinerariesOption: "{count} options"
     routeLockAdd: "Ajouter une ligne…"
-    routeLockChip: "Uniquement {route}"
-    routeLockDetail: "Uniquement les trajets sur {route}, avec velo pour s'y rendre et en repartir"
     routeLockHeader: "Lignes"
-    routeLockLabel: "Nommer une ligne"
-    routeLockNotFound: "Aucune ligne appelee {route} - rien n'a ete verrouille"
     routeLockNotStarted: "Ne commence pas par {route}"
-    routeLockNotUsed: "N'utilise pas {route}"
     routeLockRemove: "Retirer {route}"
     routeLockScopeLabel: "Comment utiliser ces lignes"
     routeLockScopeOnly: "N'emprunter que ces lignes"
@@ -429,10 +422,6 @@ components:
     legTo: "vers {dest}"
     legWait: "🕒 {mins} min d'attente"
     legWalk: "Marche"
-    avoidBiking: "Éviter le vélo"
-    fast: "Le plus rapide"
-    fewerTransfers: "Moins de correspondances"
-    lessWalking: "Moins de marche"
     liveBanner: "Mode Go actif — suivi de votre bus"
     loading: "Démarrage du trajet..."
     loadingSchedule: "Chargement des horaires de votre bus…"
@@ -449,9 +438,6 @@ components:
     onboardError: "Impossible d'identifier votre bus. Réessayer ?"
     onboardTitle: "Dans le bus"
     openTripSheet: "Ouvrir l'aperçu du trajet"
-    chooseBus: "Choisir le bus"
-    deviationWarning: "{distance} m de la ligne"
-    noBusesOrRoutesNearby: "Aucun bus ou ligne détecté à proximité. Essayez de vous rapprocher d'un arrêt de bus."
     pickYourBus: "Dans quel bus êtes-vous ? Choisissez-le ci-dessous."
     pickYourRoute: "Aucun bus détecté en temps réel — choisissez votre ligne :"
     rerouteNlError: "Impossible de comprendre — réessayez."
@@ -487,23 +473,6 @@ components:
     waitingGPS: "Acquisition du signal GPS..."
     walkToStop: "{emoji} {time} de marche jusqu'à {stop}"
     whereToAlight: "Où voulez-vous descendre ?"
-    turnInstructions:
-      arrivingAt: "Arrivée à {destination}"
-      bearLeft: "Légèrement à gauche"
-      bearRight: "Légèrement à droite"
-      continue: "Continuer"
-      continueOn: "Continuer sur {name}"
-      continueTo: "Continuer vers {destination}"
-      enterStation: "Entrer dans la station"
-      exitStation: "Sortir de la station"
-      followSigns: "Suivre les panneaux"
-      sharpLeft: "Tourner fortement à gauche"
-      sharpRight: "Tourner fortement à droite"
-      takeElevator: "Prendre l'ascenseur"
-      takeRoundabout: "Prendre le rond-point"
-      turnLeft: "Tourner à gauche"
-      turnRight: "Tourner à droite"
-      uTurn: "Faire demi-tour"
   ItinerarySummary:
     itineraryDetails: Détails du trajet
   LocationSearch:
@@ -516,11 +485,9 @@ components:
     car-rental: Voitures en location
     micromobility-rental: Trottinettes {companies}
     park-and-ride: Parcs relais
-    realtimeStops: Arrêts en temps réel
     satellite: Satellite
     shared-vehicles: Véhicules en partage
     stations: Arrêts et stations
-    OTP-UI-stopsAndStations: Arrêts et stations OTP-UI
     stops: Arrêts et stations
     streets: Plan des rues
   MapillaryFrame:
@@ -609,7 +576,6 @@ components:
     selectDepartureTime: Heure de départ
     selectDuration: Durée
     selectFare: Prix du trajet
-    selectEmissions: Émissions
     selectWalkTime: Temps de marche
     sortResults: Trier les résultats
     viewAll: Toutes les options
@@ -758,7 +724,6 @@ components:
   ResultsError:
     backToSearch: Retour à la recherche
   RouteDetails:
-    headsignFrom: "{headsign} (depuis {firstStop})"
     headsignTo: "{headsign} ({lastStop})"
     moreDetails: Plus d'infos
     operatedBy: Exploité par {agencyName}
@@ -918,10 +883,8 @@ components:
     travelingAt: "Vitesse : {milesPerHour}"
     vehicleName: Véhicule {vehicleNumber}
   TripBasicsPane:
-    checkAgain: Vérifier à nouveau
     checkingItineraryExistence: Vérification du trajet pour chaque jour de la 
       semaine...
-    indicatesRequiredFields: Les champs marqués d'un astérisque (*) sont obligatoires
     onlyOnDate: "{date, date, ::eeeee yyyyMMdd} uniquement"
     recurringEachWeek: Certains jours chaque semaine
     tripDaysPrompt: Quels jours effectuez-vous ce trajet ?
