@@ -362,19 +362,30 @@ components:
     attachLabel: Add a photo or screenshot
     commentLabel: Your comment
     commentPlaceholder: What happened?
-    failed: Could not send. Try again.
+    failed: Could not send, and this device has no room to save it. Try again.
+    failedNotAllowed: >-
+      The server refused this report ({status}). It is saved, but it will not go
+      out from this network — reconnect to Tailscale and open this screen again.
+    failedTooLarge: >-
+      The server would not accept a report this large, even without the picture.
+      Saved — try again later.
     heading: Share feedback
-    held: Saved. It will send the next time you open this screen.
-    heldSent: An earlier report has now been sent.
-    heldWaiting: >-
-      An earlier report is still waiting to send. It will go out next time you
-      open this screen.
+    heldOffline: No connection. Saved — it will go out next time you open this screen.
+    heldSent: >-
+      {count, plural, one {An earlier report has} other {# earlier reports
+      have}} now been sent.
+    heldServer: >-
+      The server could not take it ({status}). Saved — it will go out next time
+      you open this screen.
     imageRejected: That file could not be attached.
     intro: Tell us what went wrong. A screenshot says more than a sentence.
     removeImage: Remove
     send: Send
     sendingHeld: Sending an earlier report that could not go out…
     sent: Sent. Thank you.
+    sentOthersWaiting: >-
+      Sent. {count, plural, one {An earlier report is} other {# earlier reports
+      are}} still waiting — {reason}
     sentWithoutImage: Sent, but the picture could not be attached.
     thumbnailAlt: The picture you attached
   FormNavigationButtons:
