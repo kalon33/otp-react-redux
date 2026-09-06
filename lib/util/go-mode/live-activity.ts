@@ -13,6 +13,7 @@ import {
   getEffectiveBoardTimeMs,
   itineraryArrivalMs
 } from './notification-service'
+import { RETURN_MISSED_AFTER_MIN } from './round-trip'
 import type { LiveLegTime, RidingState } from './types'
 import type { TripProgress } from './progress-calculator'
 
@@ -341,9 +342,20 @@ export async function syncLiveActivity(
     controller = null
   }
 
+  // A round trip's arrival is not the end of the card: it counts down to the
+  // return departure (boardEpochMs = leaveBy) until the return is well and
+  // truly missed. Before this the card ended at arrival and the countdown
+  // lasted only the plugin's dismissal window (backlog 10.5).
+  const returnPending =
+    payload.phase === 'arrived' &&
+    payload.boardEpochMs != null &&
+    nowMs < payload.boardEpochMs + RETURN_MISSED_AFTER_MIN * 60000
+
   if (controller == null) {
-    // Never open a card for a trip that is already over.
-    if (payload.phase === 'arrived') return
+    // Never open a card for a trip that is already over — unless it is a
+    // round trip at the destination (a resume during the stay), whose card
+    // is the countdown to the way back.
+    if (payload.phase === 'arrived' && !returnPending) return
     const started = await startLiveActivity(payload)
     if (!started) return
     controller = {
@@ -354,7 +366,7 @@ export async function syncLiveActivity(
     return
   }
 
-  if (payload.phase === 'arrived') {
+  if (payload.phase === 'arrived' && !returnPending) {
     controller = null
     // The arrival is the one thing worth leaving on a lock screen after the
     // trip: it comes down on the plugin's own dismissal timer.
