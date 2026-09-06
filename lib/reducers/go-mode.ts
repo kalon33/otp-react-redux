@@ -170,6 +170,24 @@ export interface GoModeState {
    * While set, position ticks quiesce and the arrival card is shown. */
   arrivedAt: number | null
 
+  /**
+   * The schedule delay measured on the ARRIVAL tick, in seconds — the last
+   * measurement that meant anything, held so every later tick can quote it.
+   *
+   * `computeCurrentDelay` measures the schedule against the wall clock, so on a
+   * finished trip it just counts the time since. The tick already refuses to
+   * re-measure (actions/go-mode.ts), but it did so by carrying the PREVIOUS
+   * tick's `progress.delay` forward, and `progress` is GPS-derived state that
+   * `session-persistence` deliberately does not save: a re-mount therefore came
+   * back with `arrivedAt` restored and `progress` null, re-measured once against
+   * the wall clock, and froze THAT — 534.7 s where the arrival measured 495.99 s
+   * on the 2026-09-01 ride, and unbounded on a round trip, whose session
+   * legitimately outlives the outbound arrival by hours.
+   *
+   * Recorded here instead so the fact travels with the trip.
+   */
+  arrivedDelay: number | null
+
   boardingPrompt: {
     lastDismissedAt: number | null
     shown: boolean
@@ -332,6 +350,8 @@ const defaultState: GoModeState = {
   alightedFrom: null,
 
   arrivedAt: null,
+
+  arrivedDelay: null,
 
   boardingPrompt: {
     lastDismissedAt: null,
@@ -627,7 +647,10 @@ const goMode = handleActions<GoModeState, any>(
 
     [SET_ARRIVED]: (state, action) => ({
       ...state,
-      arrivedAt: action.payload
+      arrivedAt: action.payload,
+      // The arrival tick dispatches UPDATE_PROGRESS before it dispatches this,
+      // so `state.progress.delay` here IS the measurement taken at arrival.
+      arrivedDelay: state.progress?.delay ?? null
     }),
 
     [SET_DEPARTURE_OVERRIDE]: (state, action) => ({
@@ -842,6 +865,7 @@ const goMode = handleActions<GoModeState, any>(
         ...state,
         activeItinerary: itinerary,
         arrivedAt: null,
+        arrivedDelay: null,
         isActive: true,
         liveLegTimes: {},
         notifications: {

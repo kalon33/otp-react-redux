@@ -66,6 +66,15 @@ export interface GoModeSession {
   // to do. Omitted before 2026-08-31, which is exactly how a finished trip
   // re-mounted as a running one.
   arrivedAt?: number | null
+  // How late the rider ARRIVED, in seconds — the measurement taken on the
+  // arrival tick. Saved WITH `arrivedAt` and for the same reason: the tick
+  // holds the delay steady after arrival by carrying the previous tick's
+  // `progress.delay` forward, and `progress` is GPS-derived state this session
+  // deliberately omits. A re-mount therefore came back with the trip finished
+  // but no measurement to hold, re-measured once against the wall clock and
+  // froze that instead — 534.7 s against a true 495.99 s on the 2026-09-01
+  // ride (mtin0l9c-yieexg), from a re-mount 61 s after the arrival.
+  arrivedDelay?: number | null
   // Whether the rider had stepped out to the planner (ReturnToTripBanner
   // showing) — restored so a reload doesn't force the Go Mode screen back.
   backgrounded?: boolean
@@ -195,6 +204,7 @@ export function saveGoModeSession(
     activeItinerary: goMode.activeItinerary,
     alightedFrom: goMode.alightedFrom ?? null,
     arrivedAt: goMode.arrivedAt ?? null,
+    arrivedDelay: goMode.arrivedDelay ?? null,
     backgrounded: !!goMode.ui?.backgrounded,
     debugSessionId: savedDebugSessionId,
     departureOverride: goMode.departureOverride ?? null,
