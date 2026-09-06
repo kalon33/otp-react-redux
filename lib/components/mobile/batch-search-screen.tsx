@@ -111,8 +111,14 @@ class BatchSearchScreen extends Component<Props> {
     // "Update the point with each search": a Current Location origin plans
     // from the freshest GPS fix, not the one captured when the field was set.
     syncCurrentLocationOrigin()
-    alertUserTripPlan(intl, currentQuery, routingQuery, () =>
-      this.setState({ planTripClicked: true })
+    // Declared order: (intl, query, onPlanTripClick, routingQuery). These two
+    // were swapped, so the search fired before validation and the invalid-
+    // query alert could never show on the phone (backlog 10.3).
+    alertUserTripPlan(
+      intl,
+      currentQuery,
+      () => this.setState({ planTripClicked: true }),
+      routingQuery
     )
   }
 

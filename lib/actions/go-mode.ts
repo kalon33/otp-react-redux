@@ -404,6 +404,16 @@ function getCurrentTime(): Date {
 }
 
 /**
+ * The tick's clock, for display code that must agree with it. Real ride: the
+ * wall clock. GPS simulation / `__advanceSimulatedTime`: the simulated clock,
+ * so a countdown rendered from this cannot disagree with the stage the tick
+ * stored (backlog 10.4). Read-only; nothing here is dispatched.
+ */
+export function goModeNowMs(): number {
+  return getCurrentTime().getTime()
+}
+
+/**
  * The rider's own measured cycling speed for a plan query, or null when there
  * is not enough evidence to improve on the profile / engine default.
  *

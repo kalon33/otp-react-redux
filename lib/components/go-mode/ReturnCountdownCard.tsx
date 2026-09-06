@@ -85,13 +85,16 @@ export const ReturnCountdownCard = ({
 }: Props): JSX.Element | null => {
   const intl = useIntl()
   const leaveByMs = plan?.leaveByMs
-  const [nowMs, setNowMs] = useState(() => Date.now())
+  const [nowMs, setNowMs] = useState(() => goModeActions.goModeNowMs())
 
   useEffect(() => {
-    // Wall clock on purpose: this is a rendering of "how long until that time",
-    // not a decision about the trip. Nothing here is dispatched, so it cannot
-    // disagree with the tick — it can only lag it by under a second.
-    const id = setInterval(() => setNowMs(Date.now()), 1000)
+    // The tick's own clock, not Date.now(): on a real ride they are the same
+    // thing, but under a GPS simulation the tick runs on the simulated clock
+    // and a wall-clock countdown showed a different stage from the one the
+    // tick had stored (backlog 10.4). Nothing here is dispatched; this is a
+    // rendering of "how long until that time" that can only lag the tick by
+    // under a second.
+    const id = setInterval(() => setNowMs(goModeActions.goModeNowMs()), 1000)
     return () => clearInterval(id)
   }, [])
 
