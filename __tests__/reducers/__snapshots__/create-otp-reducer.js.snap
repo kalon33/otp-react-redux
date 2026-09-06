@@ -42,6 +42,7 @@ Object {
     "activeItinerary": null,
     "alightedFrom": null,
     "arrivedAt": null,
+    "arrivedDelay": null,
     "boardingPrompt": Object {
       "lastDismissedAt": null,
       "shown": false,

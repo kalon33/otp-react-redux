@@ -5049,8 +5049,20 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     // card that quotes delay climbed with it. Carry the measurement taken on the
     // arrival tick instead — the last one that meant anything. Not a fabricated
     // number: it is the real delay, held at the moment it stopped changing.
-    if (goMode.arrivedAt != null && goMode.progress?.delay != null) {
-      progress.delay = goMode.progress.delay
+    // `arrivedDelay` is the measurement itself, recorded on the arrival tick and
+    // saved with the session; `progress.delay` is the same number arriving by
+    // the older route, the previous tick's copy of it. The store field is read
+    // FIRST because it is the one that survives a page load: `progress` is
+    // GPS-derived state session-persistence deliberately omits, so a re-mount
+    // onto a finished trip used to come back with nothing to hold, re-measure
+    // once against the wall clock, and freeze THAT — 534.7 s where the arrival
+    // measured 495.99 s, replaying 2026-09-01's ride 1 (mtin0l9c-yieexg)
+    // through a re-mount 61 s after arrival. Bounded at ~5 min for a one-way
+    // trip by ARRIVED_RESUME_GRACE_MS, and unbounded for a round trip, whose
+    // saved session outlives the outbound arrival by hours on purpose.
+    if (goMode.arrivedAt != null) {
+      const heldDelay = goMode.arrivedDelay ?? goMode.progress?.delay
+      if (heldDelay != null) progress.delay = heldDelay
     }
 
     dispatch(updateProgress(progress))
