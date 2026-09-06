@@ -242,10 +242,22 @@
   font-weight: bold;
 }
 
+/* "Skip navigation" is parked off the top of the viewport until it is focused.
+   The offset must not be a guess at how tall the button renders: it used to be
+   `top: -30px`, which is 1px more than the 29px the UA button box measures in
+   desktop WebKit/Blink but LESS than the box iOS gives it (bigger UA padding on
+   an 18px inherited font, plus the rounded corners it draws), so on the phone
+   the last ~2.7 CSS px of the button's light #e9e9ea face painted as a rounded
+   strip in the safe-area band above the navbar — the "white line along the top
+   border" seen in Go Mode on 2026-09-04 and on the feedback screen on
+   2026-09-06. `-100%` is a percentage of the initial containing block (the
+   viewport) for a fixed-position box, so it clears the screen whatever the UA
+   makes of the button, and the element stays in the a11y tree and focusable.
+   Do not put a pixel value back here. */
 .skip-nav-button {
   color: initial;
   position: fixed;
-  top: -30px;
+  top: -100%;
 }
 .skip-nav-button:focus {
   padding: 7px 24px;
