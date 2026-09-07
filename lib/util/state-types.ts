@@ -8,6 +8,7 @@ import {
 import { Leg, Location, ModeSetting } from '@opentripplanner/types'
 
 import type { GoModeState } from '../reducers/go-mode'
+import type { RoundTripState } from '../actions/round-trip'
 
 import { AppConfig, PopupTargetConfig } from './config-types'
 
@@ -30,6 +31,7 @@ export interface OtpState {
   location: any
   modeSettingDefinitions: ModeSetting[]
   overlay: any
+  roundTrip?: RoundTripState
   serviceTimeRange?: {
     end: number
     start: number

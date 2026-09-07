@@ -59,6 +59,26 @@ describe('lib > reducers > create-otp-reducer', () => {
     })
     expect(restarted.goMode.arrivedAt).toBeNull()
 
+    // REPAIR_LEG_GEOMETRY was dispatched and handled by the slice but absent
+    // from the case list from 2026-08-28 to 2026-09-06, so a match "held"
+    // through missing geometry could never heal (backlog 10.2). Through the
+    // ROOT reducer: the repaired leg is swapped, its neighbour is untouched.
+    const legA = { legGeometry: { length: 2, points: 'aa' }, mode: 'WALK' }
+    const legB = { legGeometry: null, mode: 'BUS' }
+    const withLegs = reducer(initial, {
+      payload: { itinerary: { legs: [legA, legB] }, originalFrom: null },
+      type: 'START_GO_MODE'
+    })
+    const repaired = reducer(withLegs, {
+      payload: { legGeometry: { length: 3, points: 'bbb' }, legIndex: 1 },
+      type: 'REPAIR_LEG_GEOMETRY'
+    })
+    expect(repaired.goMode.activeItinerary.legs[1].legGeometry).toEqual({
+      length: 3,
+      points: 'bbb'
+    })
+    expect(repaired.goMode.activeItinerary.legs[0]).toBe(legA)
+
     // SET_MAP_FOLLOW round-trip: a map drag auto-disengages follow (false)
     // and the follow button re-engages it (true). Follow defaults on, so the
     // disengage is the leg that proves delegation.

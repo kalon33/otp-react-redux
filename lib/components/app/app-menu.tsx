@@ -36,6 +36,7 @@ import {
   isDebugLogEnabled,
   setDebugLogEnabled
 } from '../../util/debug-log'
+import { getRunningBundle } from '../../util/native-updates'
 import { isModuleEnabled, Modules } from '../../util/config'
 
 import AppMenuItem from './app-menu-item'
@@ -73,6 +74,8 @@ type AppMenuProps = {
 type AppMenuState = {
   diagnosticsOn: boolean
   isPaneOpen: boolean
+  /** The live-update bundle + native build actually running, native only. */
+  runningBundle: { native: string | null; version: string | null } | null
 }
 
 /**
@@ -84,9 +87,20 @@ class AppMenu extends Component<
 > {
   static contextType = ComponentContext
 
-  state = {
+  state: AppMenuState = {
     diagnosticsOn: isDebugLogEnabled(),
-    isPaneOpen: false
+    isPaneOpen: false,
+    runningBundle: null
+  }
+
+  componentDidMount(): void {
+    // The footer names the bundle the rider is actually on. VITE_BUILD_INFO is
+    // the STORE build's stamp and an OTA bundle carries none, so on the phone
+    // the footer read "dev" after every update and nobody could tell which
+    // bundle a report came from (backlog 9.7). The updater plugin knows.
+    getRunningBundle().then((runningBundle) => {
+      if (runningBundle) this.setState({ runningBundle })
+    })
   }
 
   _startOver = () => {
@@ -408,7 +422,11 @@ class AppMenu extends Component<
             {this._addExtraMenuItems(extraMenuItems, translateExternalLinks)}
             {this._addExtraMenuItems(languageMenuItems)}
             <div className="app-menu-build-info">
-              TransitNav {getBuildInfo()}
+              {this.state.runningBundle
+                ? `TransitNav bundle ${
+                    this.state.runningBundle.version ?? '?'
+                  } · app ${this.state.runningBundle.native ?? '?'}`
+                : `TransitNav ${getBuildInfo()}`}
             </div>
           </div>
         </SlidingPane>

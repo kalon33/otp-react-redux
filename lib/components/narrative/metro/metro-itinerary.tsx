@@ -16,6 +16,10 @@ import styled, { keyframes } from 'styled-components'
 import * as goModeActions from '../../../actions/go-mode'
 import * as uiActions from '../../../actions/ui'
 import { AppReduxState } from '../../../util/state-types'
+import {
+  buildRoundTripPlan,
+  RoundTripPlan
+} from '../../../util/go-mode/round-trip'
 import { ComponentContext } from '../../../util/contexts'
 import { DARK_TEXT_GREY } from '../../util/colors'
 import { getActiveSearch } from '../../../util/state'
@@ -26,6 +30,7 @@ import { itineraryHasAccessibilityScore } from '../../../util/accessibility-rout
 import { ItineraryView } from '../../../util/ui'
 import { localizeGradationMap } from '../utils'
 import { MobileScreens } from '../../../actions/ui-constants'
+import { outboundKeyOf, ReturnPlanState } from '../../../actions/round-trip'
 import FormattedDuration from '../../util/formatted-duration'
 import ItineraryBody from '../line-itin/connected-itinerary-body'
 import NarrativeItinerary from '../narrative-itinerary'
@@ -41,6 +46,7 @@ import DepartureTimesList, {
   SetActiveItineraryHandler
 } from './departure-times-list'
 import MetroItineraryRoutes from './metro-itinerary-routes'
+import ReturnTripPanel from './return-trip-panel'
 import RouteBlock from './route-block'
 import RouteBlockWithModeDecoration from './route-block-with-mode-decoration'
 import SameShapeVariants from './same-shape-variants'
@@ -225,7 +231,10 @@ type Props = {
   LegIcon: React.ReactNode
   accessibilityScoreGradationMap: { [value: number]: string }
   active: boolean
-  beginGoMode?: (itinerary: Itinerary) => void
+  beginGoMode?: (
+    itinerary: Itinerary,
+    options?: { roundTrip?: RoundTripPlan | null }
+  ) => void
   defaultFareType: FareProductSelector
   /** This is true when there is only one itinerary being shown and the itinerary-body is visible */
   expanded: boolean
@@ -233,11 +242,16 @@ type Props = {
   itinerary: Itinerary
   mini?: boolean
   returnToGoMode?: () => void
+  /** state.otp.roundTrip — the return options planned for this outbound. */
+  roundTrip?: { returnPlan: ReturnPlanState | null }
+  /** currentQuery.roundTrip: the rider asked for a way back too. */
+  roundTripEnabled?: boolean
   setActiveItinerary: SetActiveItineraryHandler
   setActiveLeg: (leg: Leg) => void
   setItineraryView: (view: string) => void
   setMobileScreen?: (screen: number) => void
   showRealtimeAnnotation: () => void
+  stayMinutes?: number
   /** True while a Go Mode trip is running (start button becomes a switch). */
   tripActive?: boolean
 }
@@ -263,10 +277,36 @@ class MetroItinerary extends NarrativeItinerary {
     }
   }
 
+  /**
+   * The return the rider picked, packaged for Go Mode. Null unless the toggle
+   * is on AND a ready plan exists for THIS outbound — a plan left over from a
+   * different itinerary would send Go Mode the wrong way home.
+   */
+  _roundTripPlan = (): RoundTripPlan | null => {
+    const { itinerary, roundTrip, roundTripEnabled, stayMinutes } = this.props
+    const returnPlan = roundTrip?.returnPlan
+    if (
+      !roundTripEnabled ||
+      !returnPlan ||
+      returnPlan.status !== 'ready' ||
+      returnPlan.outboundKey !== outboundKeyOf(itinerary)
+    ) {
+      return null
+    }
+    const returnItinerary = returnPlan.itineraries[returnPlan.selectedIndex]
+    if (!returnItinerary) return null
+    return buildRoundTripPlan({
+      outbound: itinerary,
+      returnItinerary,
+      stayMinutes: returnPlan.stayMinutes ?? stayMinutes ?? 0
+    })
+  }
+
   _handleStartTrip = () => {
     const { beginGoMode, intl, itinerary, returnToGoMode, tripActive } =
       this.props
     if (!beginGoMode) return
+    const roundTripPlan = this._roundTripPlan()
     if (tripActive) {
       // A trip is already running (backgrounded behind the planner):
       // adopting an alternate is an explicit switch, so confirm — the current
@@ -282,11 +322,11 @@ class MetroItinerary extends NarrativeItinerary {
       ) {
         return
       }
-      beginGoMode(itinerary)
+      beginGoMode(itinerary, { roundTrip: roundTripPlan })
       returnToGoMode?.()
       return
     }
-    beginGoMode(itinerary)
+    beginGoMode(itinerary, { roundTrip: roundTripPlan })
   }
 
   _renderMainRouteBlock = (legs: Leg[]) => {
@@ -328,6 +368,7 @@ class MetroItinerary extends NarrativeItinerary {
       LegIcon,
       mini,
       pending,
+      roundTripEnabled,
       setActiveItinerary,
       setActiveLeg,
       setItineraryView,
@@ -630,6 +671,7 @@ class MetroItinerary extends NarrativeItinerary {
               RouteDescriptionOverride={RouteBlockWithModeDecoration}
               setActiveLeg={setActiveLeg}
             />
+            {roundTripEnabled && <ReturnTripPanel itinerary={itinerary} />}
             {beginGoMode && (
               <StartTripButton onClick={this._handleStartTrip}>
                 {tripActive ? (
@@ -665,10 +707,13 @@ const mapStateToProps = (state: AppReduxState, ownProps: Props) => {
     enableDot: !state.otp.config.itinerary?.disableMetroSeperatorDot,
     // @ts-expect-error TODO: type activeSearch
     pending: activeSearch ? Boolean(activeSearch.pending) : false,
+    roundTrip: state.otp.roundTrip,
+    roundTripEnabled: !!state.otp.currentQuery.roundTrip,
 
     showInlineItinerarySummary:
       state.otp.config.itinerary?.showInlineItinerarySummary,
     showLegDurations: state.otp.config.itinerary?.showLegDurations,
+    stayMinutes: Number(state.otp.currentQuery.stayMinutes),
     tripActive: Boolean(state.otp.goMode?.isActive)
   }
 }

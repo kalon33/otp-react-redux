@@ -28,6 +28,11 @@ export type NotificationType =
   | 'ROUTE_DEVIATION'
   | 'CONNECTION_WARNING'
   | 'LEAVE_SOON'
+  // Time to leave the destination for the RETURN half of a round trip. Raised
+  // by the post-arrival countdown (actions/go-mode runReturnCountdown) off the
+  // pure evaluator in round-trip.ts — the one notification in Go Mode that
+  // fires while the trip it belongs to is already over.
+  | 'LEAVE_FOR_RETURN'
   | 'MISSED_BUS'
   | 'TRIP_COMPLETE'
   | 'TRIP_UPDATED'
@@ -91,9 +96,14 @@ export function shouldAutoReroute(
 }
 
 /**
- * Generate unique ID for notification to prevent duplicates
+ * Generate unique ID for notification to prevent duplicates.
+ *
+ * Exported for the round-trip return countdown, which composes its alert in
+ * actions/go-mode (the state it dedupes against is the store's, not a leg's)
+ * but must carry an id of the same shape as everything else in
+ * `sentNotifications` — `wasRecentlySent` parses the trailing timestamp.
  */
-function generateNotificationId(
+export function generateNotificationId(
   type: NotificationType,
   context: string
 ): string {

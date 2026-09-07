@@ -375,17 +375,20 @@ components:
     attachLabel: "Ajouter une photo ou une capture d'écran"
     commentLabel: "Votre commentaire"
     commentPlaceholder: "Que s'est-il passé ?"
-    failed: "Envoi impossible. Réessayez."
+    failed: "Envoi impossible, et cet appareil n'a pas de place pour l'enregistrer. Réessayez."
+    failedNotAllowed: "Le serveur a refusé ce rapport ({status}). Il est enregistré, mais il ne partira pas depuis ce réseau — reconnectez-vous à Tailscale et rouvrez cet écran."
+    failedTooLarge: "Le serveur n'a pas accepté un rapport de cette taille, même sans l'image. Enregistré — réessayez plus tard."
     heading: "Envoyer un commentaire"
-    held: "Enregistré. L'envoi se fera à votre prochaine visite sur cet écran."
-    heldSent: "Un commentaire précédent vient d'être envoyé."
-    heldWaiting: "Un commentaire précédent est toujours en attente d'envoi. Il partira à votre prochaine visite sur cet écran."
+    heldOffline: "Aucune connexion. Enregistré — l'envoi se fera à votre prochaine visite sur cet écran."
+    heldSent: "{count, plural, one {Un commentaire précédent a} other {# commentaires précédents ont}} été envoyé."
+    heldServer: "Le serveur n'a pas pu le prendre ({status}). Enregistré — l'envoi se fera à votre prochaine visite sur cet écran."
     imageRejected: "Ce fichier n'a pas pu être joint."
     intro: "Dites-nous ce qui n'a pas marché. Une capture d'écran en dit plus qu'une phrase."
     removeImage: "Retirer"
     send: "Envoyer"
     sendingHeld: "Envoi d'un commentaire précédent resté en attente…"
     sent: "Envoyé. Merci."
+    sentOthersWaiting: "Envoyé. {count, plural, one {Un commentaire précédent est} other {# commentaires précédents sont}} toujours en attente — {reason}"
     sentWithoutImage: "Envoyé, mais l'image n'a pas pu être jointe."
     thumbnailAlt: "L'image que vous avez jointe"
   FormNavigationButtons:
@@ -472,6 +475,13 @@ components:
     returnBannerArrived: "Vous êtes arrivé — touchez pour terminer"
     returnBannerLive: "En trajet · Prochain arrêt {stop} · Arrivée {eta} — touchez pour revenir"
     returnBannerNoProgress: "Trajet en cours — touchez pour revenir"
+    returnCountdownLabel: "Départ du retour dans"
+    returnLeaveBy: "Partir à {time}"
+    returnLeaveNow: "Partez maintenant"
+    returnMissed: "Départ du retour dépassé"
+    returnPlanNow: "Planifier le retour"
+    returnRouteDeparts: "{route} part à {time}"
+    returnStart: "Commencer le retour"
     rideToStop: "{emoji} {time} de trajet jusqu'à {stop}"
     selectVehicle: "Celui-ci"
     showLaterDepartures: "Plus"
@@ -762,6 +772,22 @@ components:
     scheduled: horaire
   ResultsError:
     backToSearch: Retour à la recherche
+  RoundTrip:
+    customStayLabel: Durée personnalisée, en minutes
+    customStayPlaceholder: Perso
+    customStayUnit: min
+    header: Trajet retour
+    leaveLine: "Partir de {destination} à partir de {time} · {stay}+ sur place"
+    noOptions: Aucun trajet retour trouvé
+    optionsGroupLabel: Trajets retour
+    planError: Impossible de planifier le retour
+    retry: Réessayer
+    stayGroupLabel: Temps minimum sur place
+    stayOption: "{hours, plural, =0 {} other {# h }}{minutes, plural, =0 {} other
+      {# min}}"
+    stayingFor: "{stay}+ sur place"
+    timeThere: "{duration} sur place"
+    toggleLabel: Aller-retour
   RouteDetails:
     headsignTo: "{headsign} ({lastStop})"
     moreDetails: Plus d'infos

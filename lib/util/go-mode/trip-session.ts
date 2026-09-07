@@ -203,6 +203,15 @@ export interface TripSession {
   rerouteSnapshotIntervalId: ReturnType<typeof setInterval> | null
 
   /**
+   * A round-trip return refresh is out. Post-arrival ticks run every 30 s and
+   * `shouldRefreshReturnPlan` stays true for the whole 15-minute window until
+   * the answer lands in the store, so without this the first tick's fetch and
+   * the next twenty-nine all go out together. Cleared by the fetch settling —
+   * and by endGoMode, for free, with the rest of the session.
+   */
+  returnRefreshInFlight: boolean
+
+  /**
    * When the rider last tapped "Not on the bus" on the trip sheet. Holds the
    * automatic, evidence-free half of the board gate off for a few minutes so
    * the matcher cannot immediately put them back aboard — see
@@ -267,6 +276,7 @@ export function createTripSession(): TripSession {
     quietReplanHistory: [],
     quietReplanMissStreak: 0,
     rerouteSnapshotIntervalId: null,
+    returnRefreshInFlight: false,
     riderDeniedBoardingAtMs: null,
     riderSpeedSamples: [],
     simulatedTimeMs: 0,

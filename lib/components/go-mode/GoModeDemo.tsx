@@ -9,6 +9,7 @@ import DefaultItinerary from '../narrative/default/default-itinerary'
 import type { TripProgress } from '../../util/go-mode/progress-calculator'
 
 import AlightRecommendation from './AlightRecommendation'
+import ReturnCountdownCard from './ReturnCountdownCard'
 import TransitProgress from './TransitProgress'
 import TripSheet from './TripSheet'
 import WalkingNavigation from './WalkingNavigation'
@@ -464,6 +465,47 @@ const demoComponentContext = {
   LegIcon: ClassicLegIcon
 } as any
 
+// Round trip: the rider has arrived at the destination and is counting down to
+// the return departure, 42 minutes out. `startReturnTrip` is inert here — the
+// gallery's dispatch is a no-op.
+const demoRoundTripPlan = {
+  destination: { lat: 44.859, lon: -93.29, name: 'American Blvd & 34th Ave' },
+  leaveByMs: NOW + 42 * 60000,
+  origin: { lat: 44.948, lon: -93.288, name: 'Lake St & Hennepin Ave' },
+  plannedDepartMs: NOW + 42 * 60000,
+  refreshedAtMs: null,
+  returnItinerary: {
+    endTime: NOW + 78 * 60000,
+    legs: [
+      {
+        mode: 'WALK',
+        startTime: NOW + 42 * 60000,
+        to: place('American Blvd Station', 44.86, -93.291),
+        transitLeg: false
+      },
+      {
+        mode: 'BUS',
+        routeShortName: '539',
+        startTime: NOW + 48 * 60000,
+        transitLeg: true
+      }
+    ],
+    startTime: NOW + 42 * 60000
+  },
+  stayMinutes: 120
+} as any
+
+const roundTripStore = {
+  dispatch: () => undefined,
+  getState: () => ({
+    otp: {
+      config: { homeTimezone: 'America/Chicago' },
+      goMode: { arrivedAt: NOW, roundTrip: demoRoundTripPlan }
+    }
+  }),
+  subscribe: () => () => undefined
+} as any
+
 const Frame = ({
   children,
   minHeight = 150,
@@ -521,6 +563,15 @@ const GoModeDemo = (): JSX.Element => (
       'components.DefaultItinerary.clickDetails': 'Click to view details',
       'components.DefaultItinerary.multiModeSummary':
         '{accessMode} + {transitMode}',
+      'components.GoMode.arrivedDone': 'Done',
+      'components.GoMode.arrivedTitle': "\u{1F389} You've arrived!",
+      'components.GoMode.returnCountdownLabel': 'Leave for return in',
+      'components.GoMode.returnLeaveBy': 'Leave by {time}',
+      'components.GoMode.returnLeaveNow': 'Leave now',
+      'components.GoMode.returnMissed': 'Return departure passed',
+      'components.GoMode.returnPlanNow': 'Plan return now',
+      'components.GoMode.returnRouteDeparts': '{route} departs {time}',
+      'components.GoMode.returnStart': 'Start return trip',
       'components.MetroUI.sameShapeVariants':
         '{count, plural, one {# option} other {# options}}',
       'components.StopTimeCell.realtime': 'Realtime',
@@ -720,6 +771,16 @@ const GoModeDemo = (): JSX.Element => (
             </ComponentContext.Provider>
           </Provider>
         </div>
+      </Frame>
+
+      <Frame
+        minHeight={220}
+        note="Round trip, arrived: the countdown to the return departure replaces the plain arrival card, in the same RerouteCard primitives and the same place."
+        title="Return countdown"
+      >
+        <Provider store={roundTripStore}>
+          <ReturnCountdownCard onDone={() => undefined} />
+        </Provider>
       </Frame>
     </div>
   </IntlProvider>

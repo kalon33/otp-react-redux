@@ -6,6 +6,7 @@ import {
   captureNotificationLatches,
   NotificationLatches
 } from './notification-service'
+import type { ReturnCountdownState, RoundTripPlan } from './round-trip'
 
 const { getItem, removeItem, storeItem } = coreUtils.storage
 
@@ -65,6 +66,15 @@ export interface GoModeSession {
   // to do. Omitted before 2026-08-31, which is exactly how a finished trip
   // re-mounted as a running one.
   arrivedAt?: number | null
+  // How late the rider ARRIVED, in seconds — the measurement taken on the
+  // arrival tick. Saved WITH `arrivedAt` and for the same reason: the tick
+  // holds the delay steady after arrival by carrying the previous tick's
+  // `progress.delay` forward, and `progress` is GPS-derived state this session
+  // deliberately omits. A re-mount therefore came back with the trip finished
+  // but no measurement to hold, re-measured once against the wall clock and
+  // froze that instead — 534.7 s against a true 495.99 s on the 2026-09-01
+  // ride (mtin0l9c-yieexg), from a re-mount 61 s after the arrival.
+  arrivedDelay?: number | null
   // Whether the rider had stepped out to the planner (ReturnToTripBanner
   // showing) — restored so a reload doesn't force the Go Mode screen back.
   backgrounded?: boolean
@@ -95,9 +105,18 @@ export interface GoModeSession {
   // OBJECT and so die with the page; see notification-service.
   notificationLatches?: NotificationLatches | null
   originalFrom: any | null
+  // How far the round-trip countdown had got. Restored for the same reason
+  // `sentNotifications` is: a re-mount at the destination that came back with
+  // this null would re-fire "leave in 10 min" from the first-evaluation rule
+  // the moment it landed inside the window again.
+  returnCountdown?: ReturnCountdownState | null
   // Sticky "rider is aboard this vehicle" fact — kept across reloads so a
   // mid-ride refresh never re-asks which bus the rider is on.
   riding: any | null
+  // The return half of a round trip. Saved not only so the countdown card
+  // survives a reload, but because its `leaveByMs` REPLACES all three
+  // staleness windows below — see loadGoModeSession.
+  roundTrip?: RoundTripPlan | null
   // The ids of every notification already sent, which is the list
   // `wasRecentlySent` suppresses against. Without it a mid-trip re-mount comes
   // back with an empty dedupe list and re-fires every card whose condition
@@ -185,6 +204,7 @@ export function saveGoModeSession(
     activeItinerary: goMode.activeItinerary,
     alightedFrom: goMode.alightedFrom ?? null,
     arrivedAt: goMode.arrivedAt ?? null,
+    arrivedDelay: goMode.arrivedDelay ?? null,
     backgrounded: !!goMode.ui?.backgrounded,
     debugSessionId: savedDebugSessionId,
     departureOverride: goMode.departureOverride ?? null,
@@ -193,7 +213,9 @@ export function saveGoModeSession(
       goMode.activeItinerary?.legs
     ),
     originalFrom: goMode.originalFrom ?? null,
+    returnCountdown: goMode.returnCountdown ?? null,
     riding: goMode.riding ?? null,
+    roundTrip: goMode.roundTrip ?? null,
     sentNotifications: goMode.notifications?.sentNotifications ?? [],
     startedAt: sessionStartedAt,
     vehicleMatch: goMode.vehicleMatch?.match ?? null
@@ -217,20 +239,49 @@ export function loadGoModeSession(): GoModeSession | null {
   if (!session || !session.activeItinerary) return null
 
   const now = Date.now()
-  const tooOld =
-    typeof session.startedAt !== 'number' ||
-    now - session.startedAt > MAX_SESSION_AGE_MS
-  const endTime = session.activeItinerary.endTime
-  const alreadyEnded =
-    typeof endTime === 'number' && endTime + END_TIME_GRACE_MS < now
-  // A trip the rider has already finished. Resumable only for the few minutes
-  // in which the arrival card is still what they expect to see; after that it
-  // is not a trip any more and must not be resurrected as one.
-  const alreadyArrived =
-    typeof session.arrivedAt === 'number' &&
-    now - session.arrivedAt > ARRIVED_RESUME_GRACE_MS
 
-  if (tooOld || alreadyEnded || alreadyArrived) {
+  // A ROUND TRIP measures its own life against the RETURN departure, and none
+  // of the three windows below.
+  //
+  // All three were written for a one-way trip, where arriving is the end of the
+  // story — and every one of them would throw a round trip away in the middle
+  // of it. The dwell at the destination is the point of the feature and is
+  // routinely hours: `MAX_SESSION_AGE_MS` (3 h from the START of the outbound
+  // leg) expires during a matinee, `END_TIME_GRACE_MS` measured off the
+  // OUTBOUND itinerary's endTime expires 45 minutes after the rider walks in
+  // the door, and `ARRIVED_RESUME_GRACE_MS` — five minutes, deliberately short
+  // because "the only thing a resumed arrived trip has left to show is the
+  // arrival card" — is wrong by construction here: what a resumed arrived
+  // ROUND trip has left to show is the countdown to the return, which is the
+  // whole reason the session must survive.
+  //
+  // So one window replaces all three: the return departure plus the same 45
+  // minutes of grace the outbound end gets. Past that the rider has missed the
+  // return by three quarters of an hour and is planning afresh anyway.
+  const returnLeaveByMs = session.roundTrip?.leaveByMs
+  const isRoundTrip =
+    typeof returnLeaveByMs === 'number' && Number.isFinite(returnLeaveByMs)
+
+  const stale = isRoundTrip
+    ? now > (returnLeaveByMs as number) + END_TIME_GRACE_MS
+    : (() => {
+        const tooOld =
+          typeof session.startedAt !== 'number' ||
+          now - session.startedAt > MAX_SESSION_AGE_MS
+        const endTime = session.activeItinerary.endTime
+        const alreadyEnded =
+          typeof endTime === 'number' && endTime + END_TIME_GRACE_MS < now
+        // A trip the rider has already finished. Resumable only for the few
+        // minutes in which the arrival card is still what they expect to see;
+        // after that it is not a trip any more and must not be resurrected as
+        // one.
+        const alreadyArrived =
+          typeof session.arrivedAt === 'number' &&
+          now - session.arrivedAt > ARRIVED_RESUME_GRACE_MS
+        return tooOld || alreadyEnded || alreadyArrived
+      })()
+
+  if (stale) {
     clearGoModeSession()
     return null
   }

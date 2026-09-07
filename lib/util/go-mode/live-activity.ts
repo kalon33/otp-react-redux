@@ -13,6 +13,7 @@ import {
   getEffectiveBoardTimeMs,
   itineraryArrivalMs
 } from './notification-service'
+import { RETURN_MISSED_AFTER_MIN } from './round-trip'
 import type { LiveLegTime, RidingState } from './types'
 import type { TripProgress } from './progress-calculator'
 
@@ -105,6 +106,12 @@ export interface LiveActivityInput {
   liveLegTimes: Record<number, LiveLegTime>
   progress: TripProgress | null
   riding: RidingState | null
+  /**
+   * The return half of a round trip, when this trip is one. Read only by the
+   * arrived branch: it is what turns the final card from "you're here" into a
+   * countdown to the return departure.
+   */
+  roundTrip?: { leaveByMs: number } | null
   /** Identifies the card; the controller supplies it, one per Go Mode session. */
   tripId: string
 }
@@ -125,6 +132,7 @@ export function buildLiveActivityContent(
     liveLegTimes,
     progress,
     riding,
+    roundTrip,
     tripId
   } = input
   const legs: Leg[] = (activeItinerary?.legs as Leg[]) || []
@@ -160,11 +168,22 @@ export function buildLiveActivityContent(
   )
 
   // --- arrived: one last card, then it comes down --------------------------
+  //
+  // ...unless this is a ROUND TRIP, in which case the card stays up and counts
+  // down to the return departure. It does that through `boardEpochMs`, which
+  // the native widget ALREADY renders as a live countdown, and deliberately
+  // NOT through a new phase: the Swift side ships in the app binary and knows
+  // exactly four phase values, so inventing a fifth would render as nothing at
+  // all on every build already on a phone. `phase: 'arrived'` with a board
+  // time is a card the existing widget can draw today.
   if (arrivedAt != null) {
+    const leaveByMs = roundTrip?.leaveByMs
+    const returning =
+      typeof leaveByMs === 'number' && Number.isFinite(leaveByMs)
     return {
       arrivalEpochMs: arrivedAt,
       arrivalIsRealtime: false,
-      boardEpochMs: null,
+      boardEpochMs: returning ? (leaveByMs as number) : null,
       boardIsRealtime: false,
       destinationName,
       legDetail: '',
@@ -323,9 +342,20 @@ export async function syncLiveActivity(
     controller = null
   }
 
+  // A round trip's arrival is not the end of the card: it counts down to the
+  // return departure (boardEpochMs = leaveBy) until the return is well and
+  // truly missed. Before this the card ended at arrival and the countdown
+  // lasted only the plugin's dismissal window (backlog 10.5).
+  const returnPending =
+    payload.phase === 'arrived' &&
+    payload.boardEpochMs != null &&
+    nowMs < payload.boardEpochMs + RETURN_MISSED_AFTER_MIN * 60000
+
   if (controller == null) {
-    // Never open a card for a trip that is already over.
-    if (payload.phase === 'arrived') return
+    // Never open a card for a trip that is already over — unless it is a
+    // round trip at the destination (a resume during the stay), whose card
+    // is the countdown to the way back.
+    if (payload.phase === 'arrived' && !returnPending) return
     const started = await startLiveActivity(payload)
     if (!started) return
     controller = {
@@ -336,7 +366,7 @@ export async function syncLiveActivity(
     return
   }
 
-  if (payload.phase === 'arrived') {
+  if (payload.phase === 'arrived' && !returnPending) {
     controller = null
     // The arrival is the one thing worth leaving on a lock screen after the
     // trip: it comes down on the plugin's own dismissal timer.

@@ -27,7 +27,9 @@ Object {
     "intermediatePlaces": Array [],
     "mode": "WALK,TRANSIT",
     "numItineraries": 3,
+    "roundTrip": false,
     "routingType": "ITINERARY",
+    "stayMinutes": 60,
     "time": "19:34",
   },
   "filter": Object {
@@ -40,6 +42,7 @@ Object {
     "activeItinerary": null,
     "alightedFrom": null,
     "arrivedAt": null,
+    "arrivedDelay": null,
     "boardingPrompt": Object {
       "lastDismissedAt": null,
       "shown": false,
@@ -78,7 +81,9 @@ Object {
       "startedAtMs": null,
       "status": "idle",
     },
+    "returnCountdown": null,
     "riding": null,
+    "roundTrip": null,
     "routeMatch": null,
     "simulation": Object {
       "pointIndex": 0,
@@ -141,6 +146,9 @@ Object {
     "zipcar": Object {
       "locations": Array [],
     },
+  },
+  "roundTrip": Object {
+    "returnPlan": null,
   },
   "searches": Object {},
   "tnc": Object {

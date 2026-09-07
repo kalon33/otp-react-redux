@@ -36,6 +36,7 @@ import CurrentLegPanel from './CurrentLegPanel'
 import GoModeMap from './GoModeMap'
 import GoModeNotifications from './GoModeNotifications'
 import GoModeStopViewer from './GoModeStopViewer'
+import ReturnCountdownCard from './ReturnCountdownCard'
 import TripSheet from './TripSheet'
 import useActiveTripGuards from './use-active-trip-guards'
 
@@ -318,7 +319,14 @@ const GoModeScreen = ({
           </GpsWarningBanner>
         )}
 
-        {goMode.arrivedAt != null && (
+        {/* Arrived on a ROUND TRIP: the countdown to the return replaces the
+            plain arrival card. Same primitives, same place; see
+            ReturnCountdownCard. */}
+        {goMode.arrivedAt != null && goMode.roundTrip && (
+          <ReturnCountdownCard onDone={handleArrivedDone} />
+        )}
+
+        {goMode.arrivedAt != null && !goMode.roundTrip && (
           <RerouteBar>
             <RerouteCard role="status">
               <RerouteCardTitle>

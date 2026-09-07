@@ -420,6 +420,49 @@ describe('the lifecycle', () => {
     expect(liveActivityIsRunning()).toBe(false)
   })
 
+  it('keeps the card up at the destination of a round trip, counting down to the return', async () => {
+    const leaveByMs = T(46) + 90 * 60000
+    await syncLiveActivity(baseInput(), T(1))
+    await syncLiveActivity(
+      baseInput({ arrivedAt: T(46), roundTrip: { leaveByMs } }),
+      T(46)
+    )
+    expect(plugin.end).not.toHaveBeenCalled()
+    expect(liveActivityIsRunning()).toBe(true)
+    expect(plugin.update).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        arrivalEpochMs: T(46),
+        boardEpochMs: leaveByMs,
+        phase: 'arrived'
+      })
+    )
+    // A resume during the stay opens the countdown card too.
+    __resetLiveActivity()
+    plugin.start.mockClear()
+    await syncLiveActivity(
+      baseInput({ arrivedAt: T(46), roundTrip: { leaveByMs } }),
+      T(50)
+    )
+    expect(plugin.start).toHaveBeenCalledTimes(1)
+    expect(liveActivityIsRunning()).toBe(true)
+  })
+
+  it('takes the round-trip card down once the return is missed', async () => {
+    const leaveByMs = T(46) + 90 * 60000
+    await syncLiveActivity(baseInput(), T(1))
+    await syncLiveActivity(
+      baseInput({ arrivedAt: T(46), roundTrip: { leaveByMs } }),
+      T(46)
+    )
+    expect(liveActivityIsRunning()).toBe(true)
+    await syncLiveActivity(
+      baseInput({ arrivedAt: T(46), roundTrip: { leaveByMs } }),
+      leaveByMs + 21 * 60000
+    )
+    expect(plugin.end).toHaveBeenCalledTimes(1)
+    expect(liveActivityIsRunning()).toBe(false)
+  })
+
   it('ends the card immediately when the rider exits Go Mode', async () => {
     await syncLiveActivity(baseInput(), T(1))
     await stopLiveActivity()

@@ -19,8 +19,9 @@ Dedupe against the existing tiers first (a recurrence is an observation added to
 existing row, never a new row). Then: a numbered row with a bolded one-line finding and
 a Note carrying real evidence — `file:line`, actual numbers, timestamps, the measurement
 you ran; a Session index row naming the repo; a Sequencing constraint if order matters;
-and what you **ruled out**. Never delete a row — mark it `**DONE** <sha>` or move it to
-"Closed — do not re-plan".
+and what you **ruled out**. Closing a row means MOVING it: the backlog holds open rows only; a DONE row is cut out
+and appended, with sha + evidence, under its tier in `~/.claude/plans/transitnav-backlog-record.md`
+(closed rows, Session index, history — split 2026-09-05). Nothing is deleted from the record.
 
 **Nothing floats anywhere else.** No `## Fix backlog` in a ride report, no new plan file
 of open items, no `TODO(later)` in source, no scratch Markdown of things to fix.
