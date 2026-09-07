@@ -1,0 +1,66 @@
+diff --git a/node_modules/@opentripplanner/trip-details/src/components/fares-v2-table.tsx b/node_modules/@opentripplanner/trip-details/src/components/fares-v2-table.tsx
+index 1234567..abcdefg 100644
+--- a/node_modules/@opentripplanner/trip-details/src/components/fares-v2-table.tsx
++++ b/node_modules/@opentripplanner/trip-details/src/components/fares-v2-table.tsx
+@@ -139,7 +139,7 @@ const FaresV2Table = ({
+         <th key={leg.tripId} scope="col">
+           {getLegRouteName(leg)}
+         </th>
+-      )),
++      ))),
+       transitLegs.length > 1 ? (
+         <th key="total" style={{ textAlign: "right" }} scope="col">
+           <em>
+@@ -148,7 +148,7 @@ const FaresV2Table = ({
+       ) : (
+         <></>
+       )
+-    ]
++    ]
+   ];
+ 
+   // non-transit legs don't have fares
+@@ -164,7 +164,7 @@ const FaresV2Table = ({
+ 
+       // Only consider alternateFareProducts if current product is dependent
+       const dependentAlternateFareProducts =
+-        isDependent && alternateFareProducts;
++        isDependent ? alternateFareProducts : null;
+ 
+       // Calculate pre-tranfer amount either via alternate fare or fare-id matching (price.originalAmount)
+       const originalAmount =
+@@ -175,7 +175,7 @@ const FaresV2Table = ({
+           {index === 0 && (
+             <th style={{ textAlign: "left" }} scope="row">
+               {medium?.id && (
+-                <>
++                <span key="medium-name">
+                   <FormattedMessage
+                     id={`config.fares.media.${descope(medium.id)}`}
+                     defaultMessage={medium.name}
+@@ -182,7 +182,7 @@ const FaresV2Table = ({
+               )}
+               {rider?.id && (
+-                <FormattedMessage
++                <FormattedMessage key="rider-name"
+                   id={`config.fares.riderCategory.${descope(rider.id)}`}
+                   defaultMessage={rider.name}
+                 />
+@@ -243,9 +243,11 @@ const FaresV2Table = ({
+ 
+   return (
+     <StripedTable>
+       <InvisibleA11yCaption>
+         <FormattedMessage id="otpUi.TripDetails.transitFareTable" />
+       </InvisibleA11yCaption>
+-      {rows.map((r, index) => (
+-        <tr key={index}>{r}</tr>
+-      ))}
++      <tbody>
++        {rows.map((r, rowIndex) => (
++          <tr key={`row-${rowIndex}`}>{r.map((cell, cellIndex) => React.cloneElement(cell, { key: `cell-${rowIndex}-${cellIndex}` }))}</tr>
++        ))}
++      </tbody>
+     </StripedTable>
+   );
+ };
