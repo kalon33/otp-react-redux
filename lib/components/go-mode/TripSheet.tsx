@@ -5,6 +5,7 @@ import { ListUl } from '@styled-icons/fa-solid/ListUl'
 import React, { useRef, useState } from 'react'
 import type { Itinerary, Leg } from '@opentripplanner/types'
 
+import { formatPlaceName } from '../../util/format-place-name'
 import * as goModeActions from '../../actions/go-mode'
 import * as routingProfileActions from '../../actions/routing-profiles'
 import {

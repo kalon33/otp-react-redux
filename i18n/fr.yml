@@ -54,6 +54,8 @@ actions:
     userDeniedPermission: Refusé par l'utilisateur
   map:
     currentLocation: (Emplacement actuel)
+  GoMode:
+    currentLocation: (Emplacement actuel)
   user:
     accountDeleted: Votre compte utilisateur ({email}) a été supprimé.
     authTokenError: Erreur lors de l'obtention d'un jeton d'authentification.
@@ -262,8 +264,11 @@ components:
     numItinerariesLabel: "Nombre d'options à rechercher"
     numItinerariesOption: "{count} options"
     routeLockAdd: "Ajouter une ligne…"
+    routeLockChip: "Uniquement {route}"
+    routeLockDetail: "Uniquement les trajets sur {route}, vélo jusqu'à et depuis"
     routeLockHeader: "Lignes"
     routeLockNotStarted: "Ne commence pas par {route}"
+    routeLockLabel: "Nommer une ligne"
     routeLockRemove: "Retirer {route}"
     routeLockScopeLabel: "Comment utiliser ces lignes"
     routeLockScopeOnly: "N'emprunter que ces lignes"
@@ -388,6 +393,7 @@ components:
   GoMode:
     arrivedDone: "Terminé"
     arrivedTitle: "🎉 Vous êtes arrivé !"
+    arrivesAt: "arrive à {time}"
     arrivesIn: "arrive dans {time}"
     boardingConfirm: "Je suis dans le bus"
     boardingDeny: "Je ne suis pas dans le bus"
@@ -609,6 +615,7 @@ components:
     selectDuration: Durée
     selectFare: Prix du trajet
     selectWalkTime: Temps de marche
+    selectEmissions: Émissions de CO₂
     sortResults: Trier les résultats
     viewAll: Toutes les options
   NavLoginButton:
