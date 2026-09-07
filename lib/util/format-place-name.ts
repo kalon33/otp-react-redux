@@ -8,7 +8,8 @@ import type { IntlShape } from 'react-intl'
  */
 const STATIC_PLACE_NAMES: Record<string, string> = {
   '(Current Location)': 'components.GoMode.currentLocation',
-  'Current location': 'components.GoMode.currentLocation'
+  'Current location': 'components.GoMode.currentLocation',
+  'Current Location': 'components.GoMode.currentLocation'
 }
 
 /**

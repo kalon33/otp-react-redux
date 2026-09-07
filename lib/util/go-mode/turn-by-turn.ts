@@ -322,15 +322,16 @@ interface LegCues {
 // it's swapped out.
 const cueCache = new WeakMap<Leg, LegCues>()
 
-function buildLegCues(leg: Leg): LegCues {
-  const cached = cueCache.get(leg)
+function buildLegCues(leg: Leg, intl?: IntlShape): LegCues {
+  const cacheKey = intl ? `${leg?.id || 'leg'}-${intl.locale}` : leg?.id || 'leg'
+  const cached = cueCache.get(cacheKey)
   if (cached) return cached
 
   const steps = leg?.steps
   const polyline = decodeLegGeometry(leg)
   if (!steps?.length || polyline.length < 2) {
     const empty = { cues: [], legLength: 0 }
-    cueCache.set(leg, empty)
+    cueCache.set(cacheKey, empty)
     return empty
   }
 
@@ -353,7 +354,7 @@ function buildLegCues(leg: Leg): LegCues {
     raw.push({
       distanceMeters: step.distance || 0,
       index: raw.length,
-      instruction: phraseInstruction(step),
+      instruction: intl ? phraseInstructionWithIntl(step, intl) : phraseInstruction(step),
       lat: step.lat,
       lon: step.lon,
       offsetMeters: offsetAlongPolyline(polyline, cumulative, [
@@ -381,7 +382,7 @@ function buildLegCues(leg: Leg): LegCues {
   markSignificance(cues, speedMps)
 
   const built = { cues, legLength }
-  cueCache.set(leg, built)
+  cueCache.set(cacheKey, built)
   return built
 }
 
@@ -459,16 +460,16 @@ export function buildStepIndexWithIntl(leg: Leg, intl: IntlShape): StepCue[] {
  * Build the ordered turn list for an access leg. Returns [] when the leg has no
  * usable steps or geometry — callers fall back to destination-only guidance.
  */
-export function buildStepIndex(leg: Leg): StepCue[] {
-  return buildLegCues(leg).cues
+export function buildStepIndex(leg: Leg, intl?: IntlShape): StepCue[] {
+  return buildLegCues(leg, intl).cues
 }
 
 /**
  * The turn to announce for a rider `progressAlongLeg` (0-1) into `leg`, plus
  * the one after it. Returns {} when the leg has no cues left to give.
  */
-export function getNextCue(leg: Leg, progressAlongLeg: number): NextCueResult {
-  const { cues, legLength } = buildLegCues(leg)
+export function getNextCue(leg: Leg, progressAlongLeg: number, intl?: IntlShape): NextCueResult {
+  const { cues, legLength } = buildLegCues(leg, intl)
   if (!cues.length) return {}
 
   const currentOffset = Math.max(0, Math.min(1, progressAlongLeg)) * legLength
