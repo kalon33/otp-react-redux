@@ -789,7 +789,7 @@ function offRouteCueResult(
     offRouteCueIndex: held.cue.index
   })
 
-  const { cues } = buildLegCues(leg)
+  const { cues } = buildLegCues(leg, intl)
   return {
     announceHold: convergeTicks < OFF_ROUTE_CONVERGE_TICKS,
     cue: held.cue,
