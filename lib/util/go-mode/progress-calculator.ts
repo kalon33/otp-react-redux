@@ -699,29 +699,39 @@ export function getWalkingInstruction(
 export function getWalkingInstructionWithIntl(
   leg: Leg,
   progressInLeg: number,
-  intl: IntlShape
+  intl: IntlShape,
+  isOnRoute = true,
+  riderPosition?: LatLngArray | null
 ): {
   distanceToNextTurn?: number
   followingTurnCue?: StepCue
   nextInstruction?: string
   nextTurnCue?: StepCue
+  turnAnnouncementsHeld?: boolean
+  turnDistanceIsDirect?: boolean
 } {
   if (leg.mode !== 'WALK' && leg.mode !== 'BICYCLE') {
     return {}
   }
 
-  // Real turn-by-turn when the leg carries usable steps.
-  const { cue, distanceToNextTurn, following } = getNextCueWithIntl(
-    leg,
-    progressInLeg,
-    intl
-  )
+  // Real turn-by-turn when the leg carries usable steps. Always consulted so
+  // the per-leg cursor sees every tick, including off-route ones.
+  const {
+    announceHold,
+    cue,
+    distanceToNextTurn,
+    following,
+    turnDistanceIsDirect
+  } = selectCueForNavigation(leg, progressInLeg, isOnRoute, riderPosition)
+
   if (cue) {
     return {
       distanceToNextTurn,
       followingTurnCue: following,
       nextInstruction: cue.instruction,
-      nextTurnCue: cue
+      nextTurnCue: cue,
+      turnAnnouncementsHeld: announceHold,
+      turnDistanceIsDirect
     }
   }
 
@@ -958,9 +968,10 @@ export function calculateTripProgress(
   // Route honesty: a null match already reads as 'deviated' above, and the
   // same suppression applies — no turn guidance from a projection the rider
   // isn't actually on.
-  const walkingInfo = getWalkingInstruction(
+  const walkingInfo = getWalkingInstructionWithIntl(
     currentLeg,
     progressInCurrentLeg,
+    intl,
     routeMatch?.isOnRoute ?? false,
     riderPosition
   )
