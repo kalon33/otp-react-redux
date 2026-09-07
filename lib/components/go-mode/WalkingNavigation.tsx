@@ -3,7 +3,7 @@ import React, { useMemo, useState } from 'react'
 import type { Leg } from '@opentripplanner/types'
 
 import {
-  asContinuation,
+  asContinuationWithIntl,
   formatCueDistance
 } from '../../util/go-mode/turn-by-turn'
 import {
@@ -154,7 +154,7 @@ const WalkingNavigation = ({
   const thenLine = progress.followingTurnCue
     ? intl.formatMessage(
         { defaultMessage: 'then {turn}', id: 'components.GoMode.thenTurn' },
-        { turn: asContinuation(progress.followingTurnCue.instruction) }
+        { turn: asContinuationWithIntl(progress.followingTurnCue.instruction, intl) }
       )
     : null
 
