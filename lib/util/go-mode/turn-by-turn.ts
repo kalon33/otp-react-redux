@@ -323,15 +323,14 @@ interface LegCues {
 const cueCache = new WeakMap<Leg, LegCues>()
 
 function buildLegCues(leg: Leg, intl?: IntlShape): LegCues {
-  const cacheKey = intl ? `${leg?.id || 'leg'}-${intl.locale}` : leg?.id || 'leg'
-  const cached = cueCache.get(cacheKey)
+  const cached = cueCache.get(leg)
   if (cached) return cached
 
   const steps = leg?.steps
   const polyline = decodeLegGeometry(leg)
   if (!steps?.length || polyline.length < 2) {
     const empty = { cues: [], legLength: 0 }
-    cueCache.set(cacheKey, empty)
+    cueCache.set(leg, empty)
     return empty
   }
 
@@ -382,7 +381,7 @@ function buildLegCues(leg: Leg, intl?: IntlShape): LegCues {
   markSignificance(cues, speedMps)
 
   const built = { cues, legLength }
-  cueCache.set(cacheKey, built)
+  cueCache.set(leg, built)
   return built
 }
 
