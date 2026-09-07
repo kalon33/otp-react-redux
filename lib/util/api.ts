@@ -5,11 +5,8 @@ import coreUtils from '@opentripplanner/core-utils'
 import qs from 'qs'
 
 import { AppConfig } from './config-types'
-<<<<<<< HEAD
 import { AppReduxState } from './state-types'
-=======
 import { DEFAULT_STAY_MINUTES } from './go-mode/round-trip'
->>>>>>> origin/feature/go-mode
 
 const { getUrlParams } = coreUtils.query
 const { getCurrentDate, getCurrentTime } = coreUtils.time
