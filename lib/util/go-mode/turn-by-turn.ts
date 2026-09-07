@@ -322,7 +322,81 @@ interface LegCues {
 // it's swapped out.
 const cueCache = new WeakMap<Leg, LegCues>()
 
+// Separate cache for localized cues, keyed by leg + locale
+const localizedCueCache = new WeakMap<Leg, Map<string, LegCues>>()
+
 function buildLegCues(leg: Leg, intl?: IntlShape): LegCues {
+  // Use localized cache if intl is provided
+  if (intl) {
+    const locale = intl.locale
+    let legLocalizedCues = localizedCueCache.get(leg)
+    if (!legLocalizedCues) {
+      legLocalizedCues = new Map()
+      localizedCueCache.set(leg, legLocalizedCues)
+    }
+    const cached = legLocalizedCues.get(locale)
+    if (cached) return cached
+
+    const steps = leg?.steps
+    const polyline = decodeLegGeometry(leg)
+    if (!steps?.length || polyline.length < 2) {
+      const empty = { cues: [], legLength: 0 }
+      legLocalizedCues.set(locale, empty)
+      return empty
+    }
+
+    const cumulative = calculateCumulativeDistances(polyline)
+    const legLength = cumulative[cumulative.length - 1] || 0
+
+    const raw: StepCue[] = []
+    steps.forEach((step) => {
+      const isTurn =
+        !NON_TURN_DIRECTIONS.has(step.relativeDirection) && !step.stayOn
+      if (!isTurn) {
+        // Not a decision point. Its distance still belongs to the rider's current
+        // stretch, so fold it into the cue they're already following rather than
+        // dropping it — otherwise "then in 0.3 mi" under-reports.
+        const previous = raw[raw.length - 1]
+        if (previous) previous.distanceMeters += step.distance || 0
+        return
+      }
+
+      raw.push({
+        distanceMeters: step.distance || 0,
+        index: raw.length,
+        instruction: phraseInstructionWithIntl(step, intl),
+        lat: step.lat,
+        lon: step.lon,
+        offsetMeters: offsetAlongPolyline(polyline, cumulative, [
+          step.lat,
+          step.lon
+        ]),
+        relativeDirection: step.relativeDirection,
+        significant: false,
+        streetName: step.streetName
+      })
+    })
+
+    const legSeconds = leg.duration || 0
+    const legMeters = leg.distance || legLength
+    const speedMps =
+      legSeconds > 0 && legMeters > 0
+        ? legMeters / legSeconds
+        : FALLBACK_SPEED_MPS
+
+    // Fold the connector turns away BEFORE significance is judged: significance
+    // is about the gap the rider has just ridden without thinking, and a 8 m jog
+    // that is never announced must not break that gap in two.
+    const cues = foldMicroSteps(raw)
+
+    markSignificance(cues, speedMps)
+
+    const built = { cues, legLength }
+    legLocalizedCues.set(locale, built)
+    return built
+  }
+
+  // Use non-localized cache for English version
   const cached = cueCache.get(leg)
   if (cached) return cached
 
@@ -353,7 +427,7 @@ function buildLegCues(leg: Leg, intl?: IntlShape): LegCues {
     raw.push({
       distanceMeters: step.distance || 0,
       index: raw.length,
-      instruction: intl ? phraseInstructionWithIntl(step, intl) : phraseInstruction(step),
+      instruction: phraseInstruction(step),
       lat: step.lat,
       lon: step.lon,
       offsetMeters: offsetAlongPolyline(polyline, cumulative, [
@@ -385,8 +459,7 @@ function buildLegCues(leg: Leg, intl?: IntlShape): LegCues {
   return built
 }
 
-// Separate cache for localized cues, keyed by leg + locale
-const localizedCueCache = new WeakMap<Leg, Map<string, LegCues>>()
+
 
 /**
  * Build turn cues for a leg using i18n translations.
