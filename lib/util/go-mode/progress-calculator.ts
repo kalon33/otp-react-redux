@@ -892,7 +892,8 @@ export function calculateTripProgress(
   riderSpeedMps?: number | null,
   liveBoardMs?: number | null,
   liveAlightMs?: number | null,
-  riderPosition?: LatLngArray | null
+  riderPosition?: LatLngArray | null,
+  intl?: IntlShape
 ): TripProgress {
   const legs = itinerary.legs
   const currentLegIndex = routeMatch?.legIndex || 0
@@ -968,13 +969,20 @@ export function calculateTripProgress(
   // Route honesty: a null match already reads as 'deviated' above, and the
   // same suppression applies — no turn guidance from a projection the rider
   // isn't actually on.
-  const walkingInfo = getWalkingInstructionWithIntl(
-    currentLeg,
-    progressInCurrentLeg,
-    intl,
-    routeMatch?.isOnRoute ?? false,
-    riderPosition
-  )
+  const walkingInfo = intl
+    ? getWalkingInstructionWithIntl(
+        currentLeg,
+        progressInCurrentLeg,
+        intl,
+        routeMatch?.isOnRoute ?? false,
+        riderPosition
+      )
+    : getWalkingInstruction(
+        currentLeg,
+        progressInCurrentLeg,
+        routeMatch?.isOnRoute ?? false,
+        riderPosition
+      )
 
   // Get upcoming transit timing
   const nextLeg =

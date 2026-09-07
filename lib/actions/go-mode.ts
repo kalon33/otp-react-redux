@@ -4091,6 +4091,7 @@ export function handlePositionUpdate(position: GeolocationPosition) {
 
     const state = getState()
     const goMode = state.otp?.goMode
+    const intl = state.otp?.ui?.intl
 
     if (!goMode?.isActive) {
       return
@@ -4611,7 +4612,8 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       Number.isFinite(liveAlightMs) ? liveAlightMs : null,
       // The raw fix, so arrival can be judged by where the rider actually is
       // and not only by a progress scalar that can freeze short of the bar.
-      currentPosition
+      currentPosition,
+      intl
     )
 
     // A stop the rider has passed stays passed. calculateTripProgress is pure
