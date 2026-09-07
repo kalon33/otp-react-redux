@@ -476,6 +476,7 @@ export const showBoardingPromptAction = createAction(SHOW_BOARDING_PROMPT)
 export const startGoMode = createAction<{
   itinerary: Itinerary
   originalFrom?: any
+  units?: 'imperial' | 'metric'
 }>(START_GO_MODE)
 export const stopGoMode = createAction(STOP_GO_MODE)
 /**
@@ -793,7 +794,8 @@ export function beginGoMode(rawItinerary: Itinerary) {
       (priorGoMode?.isActive && priorGoMode?.originalFrom) ||
       currentQuery?.from ||
       null
-    dispatch(startGoMode({ itinerary, originalFrom }))
+    const units = getState().otp.config?.units || 'imperial'
+    dispatch(startGoMode({ itinerary, originalFrom, units }))
     // Stop the live-update plugin from installing a queued bundle the next
     // time the phone is pocketed: `installNext()` runs on every background and
     // knows nothing about a trip. See util/native-updates.
@@ -4938,7 +4940,8 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       // The rider's turn-by-turn switch for the leg they are actually on: off
       // globally unless they said otherwise on the Settings screen, and
       // overridden either way by a per-leg opt-in from the trip sheet.
-      turnCuesEnabledForLeg(goMode.turnCues, routeMatch.legIndex)
+      turnCuesEnabledForLeg(goMode.turnCues, routeMatch.legIndex),
+      goMode.units || 'imperial'
     )
 
     // One clock for three arms — told, quietly re-planned around, or simply

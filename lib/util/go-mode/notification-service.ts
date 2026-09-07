@@ -1,5 +1,5 @@
 import type { Itinerary, Leg } from '@opentripplanner/types'
-import { asContinuation, formatCueDistance, formatCueDistanceImperial } from './turn-by-turn'
+import { asContinuation, formatCueDistance } from './turn-by-turn'
 import {
   calculateDistance,
   MATCH_CORRIDOR_TRANSIT_M
@@ -548,7 +548,8 @@ export function checkUpcomingTurn(
   progress: TripProgress,
   currentLeg: Leg,
   sentNotifications: string[],
-  turnCuesEnabled = true
+  turnCuesEnabled = true,
+  units: 'imperial' | 'metric' = 'imperial'
 ): NotificationEvent | null {
   // The rider's own switch (util/go-mode/turn-cue-settings): the global default
   // is OFF, and a leg they opted in from the trip sheet turns it back on. This
@@ -648,8 +649,8 @@ export function checkUpcomingTurn(
     : ''
   const message =
     stage === 'act'
-      ? formatCueDistanceImperial(distance)
-      : `In ${formatCueDistanceImperial(distance)}${then}`
+      ? formatCueDistance(distance, units)
+      : `In ${formatCueDistance(distance, units)}${then}`
 
   return {
     id,
@@ -1779,7 +1780,8 @@ export function checkForNotifications(
   legs?: Leg[],
   alight?: AlightContext,
   deviation?: DeviationAlertGate,
-  turnCuesEnabled = true
+  turnCuesEnabled = true,
+  units: 'imperial' | 'metric' = 'imperial'
 ): NotificationEvent[] {
   if (!config.enabled) {
     return []
@@ -1857,7 +1859,8 @@ export function checkForNotifications(
         progress,
         currentLeg,
         sentNotifications,
-        turnCuesEnabled
+        turnCuesEnabled,
+        units
       )
     )
   }

@@ -4,8 +4,7 @@ import type { Leg } from '@opentripplanner/types'
 
 import {
   asContinuation,
-  formatCueDistance,
-  formatCueDistanceImperial
+  formatCueDistance
 } from '../../util/go-mode/turn-by-turn'
 import {
   getLegRouteId,
@@ -50,6 +49,7 @@ interface Props {
   onExit?: () => void
   onSelectDeparture?: (epochMs: number | null) => void
   progress: TripProgress
+  units?: 'imperial' | 'metric'
 }
 
 /**
@@ -70,7 +70,8 @@ const WalkingNavigation = ({
   nextLeg,
   onExit,
   onSelectDeparture,
-  progress
+  progress,
+  units = 'imperial'
 }: Props) => {
   const intl = useIntl()
 
@@ -145,8 +146,9 @@ const WalkingNavigation = ({
   // the number reads as a countdown it isn't.
   const turnLine =
     progress.nextTurnCue && progress.distanceToNextTurn != null
-      ? `${progress.nextTurnCue.instruction} · ${formatCueDistanceImperial(
-          progress.distanceToNextTurn
+      ? `${progress.nextTurnCue.instruction} · ${formatCueDistance(
+          progress.distanceToNextTurn,
+          units
         )}${progress.turnDistanceIsDirect ? ' direct' : ''}`
       : null
   const thenLine = progress.followingTurnCue

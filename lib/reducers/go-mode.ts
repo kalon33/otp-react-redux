@@ -266,6 +266,8 @@ export interface GoModeState {
    */
   turnCues: TurnCueSettings
 
+  units: 'imperial' | 'metric'
+
   ui: {
     /**
      * Index of the leg the rider tapped in the trip sheet, or null for none.
@@ -371,6 +373,8 @@ const defaultState: GoModeState = {
   },
 
   turnCues: { ...DEFAULT_TURN_CUE_SETTINGS },
+
+  units: 'imperial',
 
   ui: {
     activeLeg: null,
@@ -793,7 +797,7 @@ const goMode = handleActions<GoModeState, any>(
     }),
 
     [START_GO_MODE]: (state, action) => {
-      const { itinerary, originalFrom } = action.payload
+      const { itinerary, originalFrom, units = 'imperial' } = action.payload
 
       // `ui` is deliberately preserved: a background auto-update (missed bus,
       // quiet access replan) swaps the itinerary via this action while the
@@ -805,6 +809,7 @@ const goMode = handleActions<GoModeState, any>(
         arrivedAt: null,
         isActive: true,
         liveLegTimes: {},
+        units,
         notifications: {
           ...state.notifications,
           recentNotifications: [],
