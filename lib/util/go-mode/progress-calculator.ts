@@ -656,7 +656,7 @@ export function getWalkingInstruction(
     distanceToNextTurn,
     following,
     turnDistanceIsDirect
-  } = selectCueForNavigation(leg, progressInLeg, isOnRoute, riderPosition)
+  } = selectCueForNavigation(leg, progressInLeg, isOnRoute, riderPosition, intl)
 
   if (cue) {
     return {
@@ -722,7 +722,7 @@ export function getWalkingInstructionWithIntl(
     distanceToNextTurn,
     following,
     turnDistanceIsDirect
-  } = selectCueForNavigation(leg, progressInLeg, isOnRoute, riderPosition)
+  } = selectCueForNavigation(leg, progressInLeg, isOnRoute, riderPosition, intl)
 
   if (cue) {
     return {

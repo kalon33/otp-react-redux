@@ -619,9 +619,10 @@ function selectOffRouteCue(
   leg: Leg,
   progressAlongLeg: number,
   riderPosition: LatLngArray | null | undefined,
-  prev: CueCursor | undefined
+  prev: CueCursor | undefined,
+  intl?: IntlShape
 ): { cue: StepCue; distance: number } | null {
-  const { cues } = buildLegCues(leg)
+  const { cues } = buildLegCues(leg, intl)
   if (!cues.length || !riderPosition) return null
 
   const floor = prev?.offRouteCueIndex ?? prev?.lastCueIndex
@@ -631,7 +632,7 @@ function selectOffRouteCue(
   // what this function exists to avoid.
   if (floor == null || floor >= cues.length) return null
 
-  const projected = getNextCue(leg, progressAlongLeg).cue
+  const projected = getNextCue(leg, progressAlongLeg, intl).cue
   const ceiling = Math.min(
     cues.length - 1,
     Math.max(floor, projected?.index ?? floor)
@@ -668,7 +669,8 @@ function offRouteCueResult(
   leg: Leg,
   progressAlongLeg: number,
   riderPosition: LatLngArray | null | undefined,
-  prev: CueCursor | undefined
+  prev: CueCursor | undefined,
+  intl?: IntlShape
 ): NavigationCueResult {
   const carried = {
     holdTicks: prev?.holdTicks ?? 0,
@@ -677,7 +679,7 @@ function offRouteCueResult(
     lastOnRoute: false
   }
 
-  const held = selectOffRouteCue(leg, progressAlongLeg, riderPosition, prev)
+  const held = selectOffRouteCue(leg, progressAlongLeg, riderPosition, prev, intl)
   if (!held) {
     cursorCache.set(leg, {
       ...carried,
@@ -754,15 +756,16 @@ export function selectCueForNavigation(
   leg: Leg,
   progressAlongLeg: number,
   isOnRoute: boolean,
-  riderPosition?: LatLngArray | null
+  riderPosition?: LatLngArray | null,
+  intl?: IntlShape
 ): NavigationCueResult {
   const prev = cursorCache.get(leg)
 
   if (!isOnRoute) {
-    return offRouteCueResult(leg, progressAlongLeg, riderPosition, prev)
+    return offRouteCueResult(leg, progressAlongLeg, riderPosition, prev, intl)
   }
 
-  const { legLength } = buildLegCues(leg)
+  const { legLength } = buildLegCues(leg, intl)
   const offset = Math.max(0, Math.min(1, progressAlongLeg)) * legLength
 
   const jumped =
@@ -775,7 +778,7 @@ export function selectCueForNavigation(
     ? PLAUSIBLE_TICKS_TO_RESUME
     : Math.max(0, (prev?.holdTicks ?? 0) - 1)
 
-  const next = getNextCue(leg, progressAlongLeg)
+  const next = getNextCue(leg, progressAlongLeg, intl)
 
   cursorCache.set(leg, {
     holdTicks,
