@@ -30,7 +30,7 @@ index ee40370..47532f1 100644
          size: 16
 -      }), legPrice ? renderFare(legPrice === null || legPrice === void 0 || (_legPrice$currency2 = legPrice.currency) === null || _legPrice$currency2 === void 0 ? void 0 : _legPrice$currency2.code, legPrice === null || legPrice === void 0 ? void 0 : legPrice.amount) : FailDash));
 +      }) : null,
-       var nextRowIndex = currentRowIndex + 1;
+       const nextRowIndex = currentRowIndex + 1;
        if (!rows[nextRowIndex]) {
          rows[nextRowIndex] = [];
 @@ -198,10 +198,14 @@ var FaresV2Table = function FaresV2Table(_ref) {
