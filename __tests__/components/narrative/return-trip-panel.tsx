@@ -150,6 +150,20 @@ describe('components > narrative > return trip panel', () => {
     expect(texts[1]).toContain('1 hr 35 min there')
   })
 
+  it('prints the clock time each way back leaves the destination, and lands', () => {
+    // The rider's ask on 2026-09-05 was to see "the time at destination" on
+    // every way back — both halves of it. `option.startTime` is the itinerary's
+    // own start, i.e. when they walk out of the destination, and `endTime` is
+    // when they are home again; the row prints them in the same
+    // "depart – arrive" vocabulary the collapsed results rows use, so a rider
+    // can pick a row by saying "I'll leave at 1:05".
+    const { wrapper } = render(readyPlan())
+    const texts = rows(wrapper).map((n: any) => n.text().replace(/\s+/g, ' '))
+    // Outbound ends 11:30 AM Chicago; the two options leave +65 and +95 min.
+    expect(texts[0]).toContain('12:35 PM – 1:00 PM')
+    expect(texts[1]).toContain('1:05 PM – 1:30 PM')
+  })
+
   it('lists every way back, with the chosen one pressed', () => {
     const { wrapper } = render(readyPlan(1))
     expect(rows(wrapper)).toHaveLength(2)
