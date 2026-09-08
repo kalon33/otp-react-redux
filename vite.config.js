@@ -189,8 +189,6 @@ export default defineConfig({
     raw({
       fileRegex: /\.graphql$/
     }),
-    // Use dynamic import for ESM-only rollup-plugin-visualizer
-    (await import('rollup-plugin-visualizer')).default(),
     react()
   ],
   server: {
