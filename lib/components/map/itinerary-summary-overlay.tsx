@@ -18,6 +18,8 @@ import {
   getActiveSearch,
   getVisibleItineraryIndex
 } from '../../util/state'
+
+import { hidePlannerItineraryOverlay } from './connected-transitive-overlay'
 import { isDefined } from '../../util/ui'
 import FormattedDuration from '../util/formatted-duration'
 import MetroItineraryRoutes from '../narrative/metro/metro-itinerary-routes'
@@ -225,6 +227,12 @@ const mapStateToProps = (state: AppReduxState) => {
     return {}
   }
   if (!activeSearchId) return {}
+
+  // The planner's own layer; hidden while the live trip is in the foreground,
+  // for the reason spelled out in route-preview-overlay.tsx. Off by config
+  // today (`itinerary.previewOverlay: false`), gated anyway so turning it on
+  // does not put the ghost back.
+  if (hidePlannerItineraryOverlay(state.otp.goMode)) return {}
 
   const visibleItinerary = getVisibleItineraryIndex(state)
   const activeItinerary = getActiveItinerary(state)

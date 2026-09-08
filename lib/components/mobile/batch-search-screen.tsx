@@ -37,11 +37,14 @@ const MobileSearchSettings = styled.div<{
   background: white;
   box-shadow: 3px 0px 12px #00000052;
   height: ${(props) =>
-    props.advancedPanelOpen ? 'calc(100% - 50px)' : 'auto'};
+    props.advancedPanelOpen
+      ? 'calc(100% - 50px - var(--return-to-trip-banner-height, 0px))'
+      : 'auto'};
   left: 0;
   position: fixed;
   right: 0;
-  top: 50px;
+  /* Under the live-trip return banner, never behind it (2026-09-08). */
+  top: calc(50px + var(--return-to-trip-banner-height, 0px));
   transition: ${(props) => `all ${props.transitionDuration}ms ease`};
   transition-delay: ${(props) => props.transitionDelay}ms;
   /* Must appear under the 'hamburger' dropdown which has z-index of 1000, and the "network lost"

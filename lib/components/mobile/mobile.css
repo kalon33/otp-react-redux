@@ -1,3 +1,12 @@
+/* The live-trip return banner (return-to-trip-banner.tsx) sits in an absolute
+   strip directly under the 50px nav bar and publishes its measured height as
+   --return-to-trip-banner-height. Every fixed-position mobile screen below adds
+   that height to its top offset, so the banner pushes content down instead of
+   covering it. On 2026-09-08 the rider could not reach the results screen's
+   from/to fields or its Edit button because the banner sat on top of them.
+   The var is unset when no banner is up, and the 0px fallback keeps every
+   offset exactly where it was. */
+
 .otp.mobile .mobile-padding {
   padding: 10px;
 }
@@ -76,7 +85,7 @@
   left: 0;
   position: fixed;
   right: 0;
-  top: 50px;
+  top: calc(50px + var(--return-to-trip-banner-height, 0px));
 }
 
 .otp.mobile .welcome-map {
@@ -84,7 +93,7 @@
   left: 0;
   position: fixed;
   right: 0;
-  top: 110px;
+  top: calc(110px + var(--return-to-trip-banner-height, 0px));
 }
 
 /* Location search screen */
@@ -94,7 +103,7 @@
   left: 0;
   position: fixed;
   right: 0;
-  top: 50px;
+  top: calc(50px + var(--return-to-trip-banner-height, 0px));
 }
 
 /* Main search screen */
@@ -105,7 +114,7 @@
   left: 0;
   position: fixed;
   right: 0;
-  top: 50px;
+  top: calc(50px + var(--return-to-trip-banner-height, 0px));
 }
 
 .otp.mobile .search-map {
@@ -113,7 +122,7 @@
   left: 0;
   position: fixed;
   right: 0;
-  top: 300px;
+  top: calc(300px + var(--return-to-trip-banner-height, 0px));
 }
 
 /* Batch routing search screen */
@@ -123,20 +132,20 @@
   left: 0;
   position: fixed;
   right: 0;
-  top: 270px;
+  top: calc(270px + var(--return-to-trip-banner-height, 0px));
   transition: all 225ms ease;
   transition-delay: 50ms;
 }
 
 .otp.mobile .batch-search-map.dt-open {
-  top: 325px;
+  top: calc(325px + var(--return-to-trip-banner-height, 0px));
   transition: all 200ms ease;
 }
 
 /* Choosing a point off the map (backlog 3.9): the search form is not rendered,
    so the map runs from just under the navigation bar to the bottom. */
 .otp.mobile .batch-search-map.map-pick-open {
-  top: 50px;
+  top: calc(50px + var(--return-to-trip-banner-height, 0px));
 }
 
 /* Detailed options screen */
@@ -148,7 +157,7 @@
   overflow-y: auto;
   position: fixed;
   right: 0;
-  top: 50px;
+  top: calc(50px + var(--return-to-trip-banner-height, 0px));
 }
 
 .otp.mobile .options-lower-tray {
@@ -209,7 +218,7 @@
   left: 0;
   position: fixed;
   right: 0;
-  top: 100px;
+  top: calc(100px + var(--return-to-trip-banner-height, 0px));
 }
 
 /* Results screen: error display */
@@ -219,7 +228,7 @@
   left: 0;
   position: fixed;
   right: 0;
-  top: 100px;
+  top: calc(100px + var(--return-to-trip-banner-height, 0px));
 }
 
 .otp.mobile .results-error-message {
@@ -254,7 +263,7 @@
   overflow-y: auto;
   position: fixed;
   right: 0;
-  top: 250px;
+  top: calc(250px + var(--return-to-trip-banner-height, 0px));
 }
 
 .otp.mobile .viewer-map {
@@ -262,7 +271,7 @@
   left: 0;
   position: fixed;
   right: 0;
-  top: 50px;
+  top: calc(50px + var(--return-to-trip-banner-height, 0px));
 }
 
 .otp.mobile .route-viewer-header {
