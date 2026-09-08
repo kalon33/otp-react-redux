@@ -26,7 +26,10 @@ import AppFrame from '../app/app-frame'
 import PageTitle from '../util/page-title'
 
 import {
+  FeedbackAttachment,
+  FeedbackAttachments,
   FeedbackAttachRow,
+  FeedbackRemoveButton,
   FeedbackStatus,
   FeedbackTextarea,
   FeedbackThumbnail
@@ -95,6 +98,26 @@ interface Props {
  * rider's words: a 413 is retried without the picture so the sentence still
  * reaches `riderNotes`, and the status line names the reason instead of
  * promising a delivery that cannot happen.
+ *
+ * BOTH SHIPPED. otp-minneapolis `5412311` (public + rate-limited + 1536k on
+ * /api/ride-note; /api/ride-status keeps the tailnet gate) and `c884591`
+ * (`proxy_pass 127.0.0.1:8092`, so the Linode writes its own day file instead
+ * of proxying the append to the house and having rsync erase it) were deployed
+ * to both hosts 2026-09-06/07, and the rider's cellular test on 2026-09-06
+ * 20:00 CDT landed with `imageStored` and survived in the day file. The two
+ * blockers above are kept as the record of what was measured, not as open
+ * work. The honest-status handling stays: it is what makes the next failure
+ * legible.
+ *
+ * ONE PICTURE PER REPORT, said out loud. Rider note 2026-09-08 15:30:38:
+ * *"Weird format for selecting multiple photos"*. The server takes exactly one
+ * `image` per POST (transitnav preferences_api.py `_decode_feedback_image`
+ * reads a single string; FEEDBACK_IMAGE_MAX_BYTES 900,000 decoded is already
+ * ~1.2 MB of base64 against nginx's 1536k body cap on this route), so the
+ * input carries no `multiple` and the screen says the limit instead of
+ * offering choices it would drop. The attachment now renders once — a compact
+ * 96 px tile with its own remove control on its corner — rather than three
+ * times over.
  */
 const FeedbackScreen = ({ tripId }: Props): JSX.Element => {
   const intl = useIntl()
@@ -236,6 +259,20 @@ const FeedbackScreen = ({ tripId }: Props): JSX.Element => {
     if (fileRef.current) fileRef.current.value = ''
   }, [])
 
+  /**
+   * Open the picker from our own button.
+   *
+   * The rider's note on 2026-09-08 15:30:38 was *"Weird format for selecting
+   * multiple photos"*, against a screen showing WKWebView's bare "Choose File"
+   * pill, then ITS preview of the choice (a broken-image glyph and
+   * "IMG_3503.png"), then OUR thumbnail of the same picture, then a "Remove"
+   * button floating beside it. Three renderings of one attachment. The input
+   * still does the work — it is what reaches the camera roll and the
+   * screenshot album on both platforms — it is just no longer what the rider
+   * looks at.
+   */
+  const onOpenPicker = useCallback(() => fileRef.current?.click(), [])
+
   const onSend = useCallback(async () => {
     const payload: FeedbackPayload = makePayload({
       deviceId: getDeviceId(),
@@ -355,19 +392,40 @@ const FeedbackScreen = ({ tripId }: Props): JSX.Element => {
 
       <FeedbackAttachRow>
         {/* accept="image/*" is what puts the camera, the photo library and the
-            screenshot album in front of the rider on iOS and Android alike. */}
+            screenshot album in front of the rider on iOS and Android alike.
+            No `multiple`: /api/ride-note takes exactly one `image` per POST
+            (transitnav preferences_api.py), so offering a multi-select would
+            be offering choices the screen would then throw away. */}
         <input
           accept="image/*"
-          aria-label={intl.formatMessage({
-            defaultMessage: 'Add a photo or screenshot',
-            id: 'components.FeedbackScreen.attachLabel'
-          })}
+          aria-hidden
           onChange={onPickImage}
           ref={fileRef}
+          tabIndex={-1}
           type="file"
         />
-        {image && (
-          <>
+        <Button bsSize="small" onClick={onOpenPicker}>
+          {image
+            ? intl.formatMessage({
+                defaultMessage: 'Replace screenshot',
+                id: 'components.FeedbackScreen.replaceImage'
+              })
+            : intl.formatMessage({
+                defaultMessage: 'Add a screenshot',
+                id: 'components.FeedbackScreen.attachLabel'
+              })}
+        </Button>
+        <HelperText>
+          {intl.formatMessage({
+            defaultMessage: 'One screenshot per report.',
+            id: 'components.FeedbackScreen.oneImageOnly'
+          })}
+        </HelperText>
+      </FeedbackAttachRow>
+
+      {image && (
+        <FeedbackAttachments>
+          <FeedbackAttachment>
             <FeedbackThumbnail
               alt={intl.formatMessage({
                 defaultMessage: 'The picture you attached',
@@ -375,20 +433,25 @@ const FeedbackScreen = ({ tripId }: Props): JSX.Element => {
               })}
               src={image}
             />
-            <Button bsSize="small" onClick={onRemoveImage}>
-              {intl.formatMessage({
-                defaultMessage: 'Remove',
+            <FeedbackRemoveButton
+              aria-label={intl.formatMessage({
+                defaultMessage: 'Remove the screenshot',
                 id: 'components.FeedbackScreen.removeImage'
               })}
-            </Button>
-          </>
-        )}
-      </FeedbackAttachRow>
+              onClick={onRemoveImage}
+              type="button"
+            >
+              {'\u00d7'}
+            </FeedbackRemoveButton>
+          </FeedbackAttachment>
+        </FeedbackAttachments>
+      )}
 
       <Button
         bsStyle="primary"
         disabled={nothingToSend || status === 'sending'}
         onClick={onSend}
+        style={{ marginTop: '1em' }}
       >
         {intl.formatMessage({
           defaultMessage: 'Send',
