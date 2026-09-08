@@ -1,0 +1,81 @@
+diff --git a/node_modules/@opentripplanner/trip-details/src/components/fares-v2-table.tsx b/node_modules/@opentripplanner/trip-details/src/components/fares-v2-table.tsx
+index b522f41..f25e4fb 100644
+--- a/node_modules/@opentripplanner/trip-details/src/components/fares-v2-table.tsx
++++ b/node_modules/@opentripplanner/trip-details/src/components/fares-v2-table.tsx
+@@ -1,5 +1,5 @@
+ /* eslint-disable no-underscore-dangle */
+-import React from "react";
++import React, { Fragment } from "react";
+ import { Leg } from "@opentripplanner/types";
+ import coreUtils from "@opentripplanner/core-utils";
+ import { FormattedMessage, useIntl } from "react-intl";
+@@ -146,7 +146,7 @@ const FaresV2Table = ({
+           </em>
+         </th>
+       ) : (
+-        <></>
++        <Fragment />
+       )
+     ]
+   ];
+@@ -172,9 +172,9 @@ const FaresV2Table = ({
+ 
+       // Only consider alternateFareProducts if current product is dependent
+       const dependentAlternateFareProducts =
+-        isDependent && alternateFareProducts;
++        isDependent ? alternateFareProducts : null;
+ 
+-      // Calculate pre-tranfer amount either via alternate fare or fare-id matching (price.originalAmount)
++      // Calculate pre-transfer amount either via alternate fare or fare-id matching (price.originalAmount)
+       const originalAmount =
+         dependentAlternateFareProducts?.[0]?.price.amount - legPrice?.amount ||
+         appliedFareProduct?.price.amount - legPrice?.amount;
+@@ -185,15 +185,16 @@ const FaresV2Table = ({
+           {index === 0 && (
+             <th style={{ textAlign: "left" }} scope="row">
+               {medium?.id && (
+-                <>
++                <span key="medium-name">
+                   <FormattedMessage
+                     id={`config.fares.media.${descope(medium.id)}`}
+                     defaultMessage={medium.name}
+                   />{" "}
+-                </>
++                </span>
+               )}
+               {rider?.id && (
+                 <FormattedMessage
++                  key="rider-name"
+                   id={`config.fares.riderCategory.${descope(rider.id)}`}
+                   defaultMessage={rider.name}
+                 />
+@@ -225,7 +226,7 @@ const FaresV2Table = ({
+           >
+             {!Number.isNaN(originalAmount) &&
+               originalAmount > 0 &&
+-              index > 0 && <TransferIcon size={16} />}
++              index > 0 ? <TransferIcon size={16} /> : null}
+             {/* Leg Price will always be defined if the fare product has a price */}
+             {legPrice
+               ? renderFare(legPrice?.currency?.code, legPrice?.amount)
+@@ -273,9 +274,17 @@ const FaresV2Table = ({
+       <InvisibleA11yCaption>
+         <FormattedMessage id="otpUi.TripDetails.transitFareTable" />
+       </InvisibleA11yCaption>
+-      {rows.map((r, index) => (
+-        <tr key={index}>{r}</tr>
+-      ))}
++      <tbody>
++        {rows.map((r, rowIndex) => (
++          <tr key={`row-${rowIndex}`}>
++            {r.map((cell, cellIndex) => (
++              <Fragment key={`cell-${rowIndex}-${cellIndex}`}>
++                {cell}
++              </Fragment>
++            ))}
++          </tr>
++        ))}
++      </tbody>
+     </StripedTable>
+   );
+ };
