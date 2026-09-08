@@ -1,22 +1,18 @@
 #!/usr/bin/env node
 
 /**
- * Postinstall script to apply patches and recompile patched packages.
- * This is needed because patch-package only patches source TypeScript files,
- * but Vite uses the pre-compiled ESM/lib files.
+ * Postinstall script to apply patches and directly patch compiled files.
+ * 
+ * Strategy:
+ * 1. Apply patches with patch-package (modifies source TypeScript files)
+ * 2. For @opentripplanner/trip-details: Directly patch the ESM and lib JavaScript files
+ * 3. For @opentripplanner/trip-form: Directly patch the compiled files
  */
 
 const fs = require("fs");
 const path = require("path");
 const { execSync } = require("child_process");
 
-// Packages that need to be recompiled after patching
-const PACKAGES_TO_RECOMPILE = [
-  "@opentripplanner/trip-details",
-  "@opentripplanner/trip-form"
-];
-
-// Find the project root (where node_modules is)
 const projectRoot = process.cwd();
 const nodeModulesPath = path.join(projectRoot, "node_modules");
 
@@ -26,157 +22,161 @@ console.log(`Project root: ${projectRoot}`);
 try {
   // Step 1: Apply all patches using patch-package
   console.log("\n1. Applying patches with patch-package...");
-  execSync("patch-package", { cwd: projectRoot, stdio: "inherit" });
+  const patchOutput = execSync("patch-package", { cwd: projectRoot, encoding: "utf-8" });
+  console.log(patchOutput);
   console.log("✓ Patches applied successfully");
 
-  // Step 2: Recompile each patched package
-  for (const packageName of PACKAGES_TO_RECOMPILE) {
-    const packagePath = path.join(nodeModulesPath, packageName);
-    
-    if (!fs.existsSync(packagePath)) {
-      console.log(`\n⚠ Package ${packageName} not found, skipping...`);
-      continue;
-    }
+  // Step 2: Patch @opentripplanner/trip-details compiled files
+  console.log("\n2. Patching @opentripplanner/trip-details compiled files...");
+  patchTripDetailsCompiled();
 
-    console.log(`\n2. Recompiling ${packageName}...`);
-    
-    // Check if package has TypeScript config
-    const tsConfigPath = path.join(packagePath, "tsconfig.json");
-    if (!fs.existsSync(tsConfigPath)) {
-      console.log(`  ⚠ No tsconfig.json found for ${packageName}, skipping...`);
-      continue;
-    }
-
-    // Check if package has its own node_modules with TypeScript
-    const packageNodeModules = path.join(packagePath, "node_modules");
-    const packageTscPath = path.join(packageNodeModules, ".bin", "tsc");
-    
-    let tscPath = "tsc";
-    if (fs.existsSync(packageTscPath)) {
-      tscPath = packageTscPath;
-    }
-
-    // Run TypeScript compiler for this package
-    try {
-      execSync(
-        `${tscPath} -p ${tsConfigPath}`,
-        { 
-          cwd: packagePath,
-          stdio: "inherit",
-          env: {
-            ...process.env,
-            NODE_ENV: "production"
-          }
-        }
-      );
-      console.log(`  ✓ ${packageName} recompiled successfully`);
-    } catch (error) {
-      console.error(`  ✗ Failed to recompile ${packageName}:`, error.message);
-      // Continue with other packages even if one fails
-    }
-  }
-
-  // Step 3: Also copy src to esm for packages that use esm output
-  // Some packages compile to both lib (CommonJS) and esm (ES Modules)
-  // We need to ensure both are updated
-  for (const packageName of PACKAGES_TO_RECOMPILE) {
-    const packagePath = path.join(nodeModulesPath, packageName);
-    const srcPath = path.join(packagePath, "src");
-    const esmPath = path.join(packagePath, "esm");
-    const libPath = path.join(packagePath, "lib");
-
-    if (!fs.existsSync(srcPath)) {
-      continue;
-    }
-
-    // Check if package has a build script in its package.json
-    const packageJsonPath = path.join(packagePath, "package.json");
-    if (fs.existsSync(packageJsonPath)) {
-      const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf-8"));
-      
-      if (packageJson.scripts && packageJson.scripts.build) {
-        console.log(`\n3. Running build script for ${packageName}...`);
-        try {
-          execSync("yarn build", {
-            cwd: packagePath,
-            stdio: "inherit",
-            env: {
-              ...process.env,
-              NODE_ENV: "production"
-            }
-          });
-          console.log(`  ✓ ${packageName} build completed`);
-        } catch (error) {
-          console.error(`  ✗ Failed to build ${packageName}:`, error.message);
-        }
-      }
-    }
-
-    // If esm directory exists but is outdated, try to rebuild it
-    if (fs.existsSync(esmPath)) {
-      // Check if esm was built from src by comparing timestamps
-      const srcFiles = fs.readdirSync(srcPath).filter(f => f.endsWith(".ts") || f.endsWith(".tsx"));
-      const esmFiles = fs.readdirSync(esmPath).filter(f => f.endsWith(".js"));
-      
-      if (srcFiles.length > 0 && esmFiles.length > 0) {
-        // Simple check: if any source file is newer than esm, rebuild
-        const srcStats = fs.statSync(path.join(srcPath, srcFiles[0]));
-        const esmStats = fs.statSync(path.join(esmPath, esmFiles[0]));
-        
-        if (srcStats.mtime > esmStats.mtime) {
-          console.log(`\n3. Rebuilding ESM for ${packageName} (source newer than ESM)...`);
-          try {
-            // Try to use the package's own build command
-            const packageJsonPath = path.join(packagePath, "package.json");
-            const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf-8"));
-            
-            if (packageJson.scripts && packageJson.scripts.build) {
-              execSync("yarn build", {
-                cwd: packagePath,
-                stdio: "inherit"
-              });
-            } else {
-              // Manual copy from lib to esm if build script doesn't exist
-              if (fs.existsSync(libPath)) {
-                console.log(`  Copying lib to esm for ${packageName}...`);
-                copyDirectory(libPath, esmPath);
-              }
-            }
-            console.log(`  ✓ ESM rebuilt for ${packageName}`);
-          } catch (error) {
-            console.error(`  ✗ Failed to rebuild ESM for ${packageName}:`, error.message);
-          }
-        }
-      }
-    }
-  }
+  // Step 3: Patch @opentripplanner/trip-form compiled files  
+  console.log("\n3. Patching @opentripplanner/trip-form compiled files...");
+  patchTripFormCompiled();
 
   console.log("\n✓ Postinstall patch-compile completed!");
-  console.log("All patched packages have been recompiled.");
+  console.log("All patched packages have been updated in both source and compiled files.");
 
 } catch (error) {
   console.error("\n✗ Postinstall patch-compile failed:", error.message);
+  console.error(error.stack);
   process.exit(1);
 }
 
 /**
- * Helper function to recursively copy a directory
+ * Patch compiled files for @opentripplanner/trip-details
  */
-function copyDirectory(src, dest) {
-  if (!fs.existsSync(dest)) {
-    fs.mkdirSync(dest, { recursive: true });
+function patchTripDetailsCompiled() {
+  const packagePath = path.join(nodeModulesPath, "@opentripplanner/trip-details");
+  
+  if (!fs.existsSync(packagePath)) {
+    console.log("  ⚠ @opentripplanner/trip-details not found, skipping");
+    return;
   }
 
-  const entries = fs.readdirSync(src, { withFileTypes: true });
+  const esmFile = path.join(packagePath, "esm/components/fares-v2-table.js");
+  const libFile = path.join(packagePath, "lib/components/fares-v2-table.js");
 
-  for (const entry of entries) {
-    const srcPath = path.join(src, entry.name);
-    const destPath = path.join(dest, entry.name);
-
-    if (entry.isDirectory()) {
-      copyDirectory(srcPath, destPath);
-    } else {
-      fs.copyFileSync(srcPath, destPath);
+  // Patch ESM file
+  if (fs.existsSync(esmFile)) {
+    let content = fs.readFileSync(esmFile, "utf-8");
+    
+    // 1. Add Fragment import
+    if (!content.includes('import React, { Fragment }')) {
+      content = content.replace(
+        'import React from "react";',
+        'import React, { Fragment } from "react";'
+      );
     }
+    
+    // 2. Fix title attribute - change from && to ternary (part 1)
+    content = content.replace(
+      /title: !Number\.isNaN\(originalAmount\) && originalAmount > 0 && index > 0 && intl\.formatMessage\(/g,
+      'title: !Number.isNaN(originalAmount) && originalAmount > 0 && index > 0 ? intl.formatMessage('
+    );
+    
+    // 3. Fix the closing of title attribute (part 2) - match the pattern with proper escaping
+    content = content.replace(
+      /\}\), !Number\.isNaN\(originalAmount\) && originalAmount > 0 && index > 0 && \/\*#__PURE__\*\/React\.createElement\(TransferIcon/g,
+      '}) : undefined, !Number.isNaN(originalAmount) && originalAmount > 0 && index > 0 ? /*#__PURE__*/React.createElement(TransferIcon'
+    );
+    
+    // 4. Fix TransferIcon rendering - close the ternary
+    content = content.replace(
+      /\}\), legPrice \? renderFare\(/g,
+      '}) : null, legPrice ? renderFare('
+    );
+    
+    // 5. Add tbody and cell keys
+    const oldPattern = /rows\.map\(function \(r, index\) \{return \/\*#__PURE__\*\/React\.createElement\("tr", \{key: index\}, r\);\}\)/g;
+    const newPattern = buildTableReplacement();
+    
+    content = content.replace(oldPattern, newPattern);
+    
+    fs.writeFileSync(esmFile, content, "utf-8");
+    console.log("  ✓ ESM file patched");
+  } else {
+    console.log("  ⚠ ESM file not found");
   }
+
+  // Patch lib file
+  if (fs.existsSync(libFile)) {
+    let content = fs.readFileSync(libFile, "utf-8");
+    
+    // 1. Fix title attribute - change from && to ternary (part 1)
+    content = content.replace(
+      /title: !Number\.isNaN\(originalAmount\) && originalAmount > 0 && index > 0 && intl\.formatMessage\(/g,
+      'title: !Number.isNaN(originalAmount) && originalAmount > 0 && index > 0 ? intl.formatMessage('
+    );
+    
+    // 2. Fix the closing of title attribute (part 2)
+    content = content.replace(
+      /\}\), !Number\.isNaN\(originalAmount\) && originalAmount > 0 && index > 0 && \/\*#__PURE__\*\/_react\.default\.createElement\(TransferIcon/g,
+      '}) : undefined, !Number.isNaN(originalAmount) && originalAmount > 0 && index > 0 ? /*#__PURE__*/_react.default.createElement(TransferIcon'
+    );
+    
+    // 3. Fix TransferIcon rendering - close the ternary
+    content = content.replace(
+      /\}\), legPrice \? \(0, _utils\.renderFare\(/g,
+      '}) : null, legPrice ? (0, _utils.renderFare('
+    );
+    
+    // 4. Fix table rows and wrap with tbody - the lib file uses arrow function syntax with escaped quotes
+    // Pattern: rows.map((r, index) => /*#__PURE__*/_react.default.createElement("tr", {    key: index  }, r))
+    // We need to match the escaped quotes \"tr\" and wrap the whole thing in tbody
+    content = content.replace(
+      /rows\.map\(\(r, index\) => \/\*#__PURE__\*\/_react\.default\.createElement\("tr", \{\s*key: index\s*\}, r\)\)/g,
+      '/*#__PURE__*/_react.default.createElement("tbody", null, rows.map((r, rowIndex) => /*#__PURE__*/_react.default.createElement("tr", {key: "row-".concat(rowIndex)}, r.map((cell, cellIndex) => /*#__PURE__*/_react.default.createElement(_react.default.Fragment, {key: "cell-".concat(rowIndex, "-").concat(cellIndex)}, cell))))'
+    );
+    
+    fs.writeFileSync(libFile, content, "utf-8");
+    console.log("  ✓ lib file patched");
+  } else {
+    console.log("  ⚠ lib file not found");
+  }
+}
+
+function buildTableReplacement() {
+  return `rows.map(function (r, rowIndex) {return /*#__PURE__*/React.createElement("tr", {key: "row-".concat(rowIndex)}, r.map(function (cell, cellIndex) {return /*#__PURE__*/React.createElement(Fragment, {key: "cell-".concat(rowIndex, "-").concat(cellIndex)}, cell);}))}`;
+}
+
+/**
+ * Patch compiled files for @opentripplanner/trip-form
+ */
+function patchTripFormCompiled() {
+  const packagePath = path.join(nodeModulesPath, "@opentripplanner/trip-form");
+  
+  if (!fs.existsSync(packagePath)) {
+    console.log("  ⚠ @opentripplanner/trip-form not found, skipping");
+    return;
+  }
+
+  // The ModeSelector3 is in ModeSelector files
+  const filesToPatch = [
+    path.join(packagePath, "esm/ModeSelector/index.js"),
+    path.join(packagePath, "lib/ModeSelector/index.js"),
+    path.join(packagePath, "esm/ModeButton/index.js"),
+    path.join(packagePath, "lib/ModeButton/index.js")
+  ];
+
+  filesToPatch.forEach(file => {
+    if (fs.existsSync(file)) {
+      let content = fs.readFileSync(file, "utf-8");
+      
+      // Fix: Replace button.label with button.key
+      const replacements = [
+        { from: /key: button\.label/g, to: 'key: button.key' },
+        { from: /key: label/g, to: 'key: button.key' },
+        { from: /"key": button\.label/g, to: '"key": button.key' },
+        { from: /'key': button\.label/g, to: "'key': button.key" }
+      ];
+      
+      replacements.forEach(({ from, to }) => {
+        content = content.replace(from, to);
+      });
+      
+      fs.writeFileSync(file, content, "utf-8");
+      console.log(`  ✓ ${path.basename(file)} patched`);
+    }
+  });
 }
