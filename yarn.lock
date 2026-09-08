@@ -2238,7 +2238,7 @@
     "@turf/midpoint" "^7.3.5"
     lodash.isequal "^4.5.0"
 
-"@opentripplanner/trip-details@^9.1.3":
+"@opentripplanner/trip-details@9.1.3":
   version "9.1.3"
   resolved "https://registry.yarnpkg.com/@opentripplanner/trip-details/-/trip-details-9.1.3.tgz#51559dd3e24203dab64d57d81293ab69617efbfe"
   integrity sha512-LC9u12CF22/IohdYiF0Lo+YYfcOpl3W9t6G+EUdsK+l6pUSaCnZaeA/mK0IVTJOQUbmzLgzBlTuc6RfjWSbj/Q==
