@@ -87,7 +87,11 @@ function patchTripDetailsCompiled() {
       '}) : null, legPrice ? renderFare('
     );
     
-    // 5. Add tbody and cell keys
+    // 5. Fix var declarations to avoid esbuild errors
+    content = content.replace(/var nextRowIndex = currentRowIndex \+ 1;/g, 'const nextRowIndex = currentRowIndex + 1;');
+    content = content.replace(/var currentRowIndex = 0;/g, 'let currentRowIndex = 0;');
+    
+    // 6. Add tbody and cell keys
     const oldPattern = /rows\.map\(function \(r, index\) \{return \/\*#__PURE__\*\/React\.createElement\("tr", \{key: index\}, r\);\}\)/g;
     const newPattern = buildTableReplacement();
     
@@ -121,7 +125,11 @@ function patchTripDetailsCompiled() {
       '}) : null, legPrice ? (0, _utils.renderFare('
     );
     
-    // 4. Fix table rows and wrap with tbody - the lib file uses arrow function syntax with escaped quotes
+    // 4. Fix var declarations to avoid esbuild errors
+    content = content.replace(/var nextRowIndex = currentRowIndex \+ 1;/g, 'const nextRowIndex = currentRowIndex + 1;');
+    content = content.replace(/var currentRowIndex = 0;/g, 'let currentRowIndex = 0;');
+    
+    // 5. Fix table rows and wrap with tbody - the lib file uses arrow function syntax with escaped quotes
     // Pattern: rows.map((r, index) => /*#__PURE__*/_react.default.createElement("tr", {    key: index  }, r))
     // We need to match the escaped quotes \"tr\" and wrap the whole thing in tbody
     content = content.replace(
