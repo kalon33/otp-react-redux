@@ -130,7 +130,7 @@
     "yup": "^0.32.11"
   },
   "devDependencies": {
-    "@opentripplanner/scripts": "^0.1.0",
+    "@opentripplanner/scripts": "^1.2.0",
     "@testing-library/jest-dom": "^5.16.2",
     "@testing-library/react": "^11.2.7",
     "@testing-library/react-hooks": "^7.0.2",
