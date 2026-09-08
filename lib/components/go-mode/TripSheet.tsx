@@ -47,6 +47,7 @@ import {
   StopDot,
   StopList,
   StopRow,
+  VehicleTrackingBadge,
   WaitNote
 } from './styled'
 
@@ -125,7 +126,15 @@ const TripSheet = ({
   const activeLegRef = useRef<number | null>(activeLeg)
   activeLegRef.current = activeLeg
 
-  const legs = activeItinerary?.legs || []
+  // Everything on this sheet reads the LIVE itinerary — the rows below, the
+  // "Right now" card and the wait before the next bus alike. They used to
+  // disagree: the rows were built from buildLiveItinerary while the card and
+  // the wait arithmetic read activeItinerary's build-time figures, so the sheet
+  // could print two different clocks for the same stop.
+  const liveItinerary = activeItinerary
+    ? buildLiveItinerary(activeItinerary, liveLegTimes)
+    : null
+  const legs = liveItinerary?.legs || []
   const currentLegIndex = progress?.currentLegIndex ?? 0
   const currentLeg: Leg | undefined = legs[currentLegIndex]
 
@@ -279,6 +288,45 @@ const TripSheet = ({
     if (legIndex === null) return null
     const leg = legs[legIndex]
     const enabled = turnCuesEnabledForLeg(turnCues, legIndex)
+    // Which leg the switch is wired to has to be ON THE CHIP, not only in its
+    // aria-label. The chips sit directly under the "Right now" card, so on the
+    // 2026-09-08 Orange Line ride a bare "Turn-by-turn: Off" read as a control
+    // for the BUS the card names — "Why is turn by turn listed here? And not on
+    // bus?" — when it was the 232-foot walk at the far end it was offering.
+    // Name the leg whenever the chip has reached forward past the current one.
+    //
+    // One formatMessage call per string, spelled out: the i18n extractor reads
+    // these literally, and a descriptor chosen by a ternary INSIDE the call
+    // makes every id in it unfindable (check:i18n-en-fr then reports all four
+    // as unused).
+    const cueLabel = (): string => {
+      if (legIndex !== currentLegIndex) {
+        return enabled
+          ? intl.formatMessage(
+              {
+                defaultMessage: '{leg} turn-by-turn: On',
+                id: 'components.GoMode.turnCuesLegOn'
+              },
+              { leg: legTitle(leg) }
+            )
+          : intl.formatMessage(
+              {
+                defaultMessage: '{leg} turn-by-turn: Off',
+                id: 'components.GoMode.turnCuesLegOff'
+              },
+              { leg: legTitle(leg) }
+            )
+      }
+      return enabled
+        ? intl.formatMessage({
+            defaultMessage: 'Turn-by-turn: On',
+            id: 'components.GoMode.turnCuesOn'
+          })
+        : intl.formatMessage({
+            defaultMessage: 'Turn-by-turn: Off',
+            id: 'components.GoMode.turnCuesOff'
+          })
+    }
     return (
       <RerouteChips>
         <RerouteChip
@@ -293,15 +341,7 @@ const TripSheet = ({
           onClick={() => setLegTurnCues({ enabled: !enabled, legIndex })}
           type="button"
         >
-          {enabled
-            ? intl.formatMessage({
-                defaultMessage: 'Turn-by-turn: On',
-                id: 'components.GoMode.turnCuesOn'
-              })
-            : intl.formatMessage({
-                defaultMessage: 'Turn-by-turn: Off',
-                id: 'components.GoMode.turnCuesOff'
-              })}
+          {cueLabel()}
         </RerouteChip>
       </RerouteChips>
     )
@@ -315,16 +355,39 @@ const TripSheet = ({
    * util/go-mode/boarding-confirmation.ts.
    */
   const renderBoardingChip = () => {
+    const nextLeg = legs[currentLegIndex + 1]
     const { offer } = resolveBoardingOffer({
       currentLeg,
       matchedVehicleId,
-      nextLeg: legs[currentLegIndex + 1],
+      nextLeg,
       riding
     })
     if (!offer) return null
     const confirming = offer === BOARDING_CONFIRM
+    // The bus the offer is about: the one being ridden, else the one being
+    // walked to. resolveBoardingOffer picks between exactly these two.
+    const busLeg = currentLeg?.transitLeg ? currentLeg : nextLeg
     return (
       <RerouteChips>
+        {/* While riding, SAY so. The deny chip on its own carried the whole
+            state, and worded as a bare fact — "Not on the bus" — next to a
+            status chip ("Turn-by-turn: Off") it reads as the app's opinion
+            rather than the rider's button. On 2026-09-08 the rider read it
+            exactly that way, 3 minutes into a ride the app had matched to
+            vehicle 1:8146 and was tracking correctly. The badge is the
+            existing aboard-state pill from TransitProgress; the button keeps
+            the rider's override and now speaks in their voice. */}
+        {!confirming && busLeg && (
+          <VehicleTrackingBadge $confirmed>
+            {intl.formatMessage(
+              {
+                defaultMessage: 'On the {route}',
+                id: 'components.GoMode.boardingAboard'
+              },
+              { route: legTitle(busLeg) }
+            )}
+          </VehicleTrackingBadge>
+        )}
         <RerouteChip
           onClick={confirming ? confirmBoardingByRider : denyBoardingByRider}
           type="button"
@@ -335,7 +398,7 @@ const TripSheet = ({
                 id: 'components.GoMode.boardingConfirm'
               })
             : intl.formatMessage({
-                defaultMessage: 'Not on the bus',
+                defaultMessage: "I'm not on this bus",
                 id: 'components.GoMode.boardingDeny'
               })}
         </RerouteChip>
@@ -380,10 +443,6 @@ const TripSheet = ({
       setNlBusy(false)
     }
   }
-
-  const liveItinerary = activeItinerary
-    ? buildLiveItinerary(activeItinerary, liveLegTimes)
-    : null
 
   return (
     <>

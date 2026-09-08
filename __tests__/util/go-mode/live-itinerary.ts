@@ -112,6 +112,86 @@ describe('buildLiveItinerary', () => {
     expect(legs[0].endTime).toBe(SCHED_BOARD)
   })
 
+  it('anchors the walk to a SPLICED bus leg whose tail was left behind', () => {
+    // The 2026-09-08 Orange Line ride. buildOnboardItinerary synthesized a bus
+    // leg ending at the live arrival (11:41:09) and grafted the pre-boarding
+    // plan's tail on untouched, so the walk after it still started at the
+    // plan's 11:46:50 — 5m41s of a ride the rider was not going to take. The
+    // sheet prints the START time of the leg beginning at each place, so the
+    // alight stop read "11:46 AM" while liveLegTimes[0].alightEpoch said
+    // 11:41:09. A delta shift measured against leg.endTime is blind to this:
+    // the spliced leg ALREADY carried the live figure, so the shift was 0.
+    const SPLICED_END = SCHED_BOARD + 18 * 60 * 1000
+    const spliced: any = {
+      legs: [
+        {
+          endTime: SPLICED_END,
+          fareProducts: [],
+          mode: 'BUS',
+          routeLongName: 'METRO Orange Line',
+          startTime: SCHED_BOARD,
+          transitLeg: true
+        },
+        // The plan's own tail, five minutes adrift of the leg before it.
+        {
+          endTime: SPLICED_END + 6 * 60 * 1000,
+          mode: 'WALK',
+          startTime: SPLICED_END + 5 * 60 * 1000
+        },
+        {
+          arrivalDelay: 0,
+          departureDelay: 0,
+          endTime: SPLICED_END + 16 * 60 * 1000,
+          fareProducts: [],
+          mode: 'BUS',
+          realTime: false,
+          routeShortName: '546',
+          startTime: SPLICED_END + 10 * 60 * 1000,
+          transitLeg: true
+        }
+      ]
+    }
+    const legs = buildLiveItinerary(spliced, {
+      0: {
+        alightEpoch: SPLICED_END,
+        alightRealtime: true,
+        boardEpoch: null,
+        realtime: true
+      }
+    }).legs as any[]
+    // The walk now begins where the bus actually ends...
+    expect(legs[1].startTime).toBe(SPLICED_END)
+    // ...keeping its own duration (1 min), not its old anchor.
+    expect(legs[1].endTime).toBe(SPLICED_END + 60 * 1000)
+    // ...and the next bus still departs when it departs.
+    expect(legs[2].startTime).toBe(SPLICED_END + 10 * 60 * 1000)
+  })
+
+  it('pulls a spliced tail back even with no live times at all', () => {
+    // Same gap, no realtime: the leg boundary is still a lie and the sheet
+    // still prints it. Nothing to be live about, and nothing to excuse it.
+    const SPLICED_END = SCHED_BOARD + 18 * 60 * 1000
+    const spliced: any = {
+      legs: [
+        {
+          endTime: SPLICED_END,
+          fareProducts: [],
+          mode: 'BUS',
+          startTime: SCHED_BOARD,
+          transitLeg: true
+        },
+        {
+          endTime: SPLICED_END + 6 * 60 * 1000,
+          mode: 'WALK',
+          startTime: SPLICED_END + 5 * 60 * 1000
+        }
+      ]
+    }
+    const legs = buildLiveItinerary(spliced, {}).legs as any[]
+    expect(legs[1].startTime).toBe(SPLICED_END)
+    expect(legs[1].endTime).toBe(SPLICED_END + 60 * 1000)
+  })
+
   it('does not shift a later bus by an earlier bus running late', () => {
     // A downstream bus departs when it departs; sliding its clock would be a
     // lie, and would make a missed connection look catchable.
