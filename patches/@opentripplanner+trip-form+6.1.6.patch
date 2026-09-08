@@ -1,3 +1,16 @@
+diff --git a/node_modules/@opentripplanner/trip-form/lib/MetroModeSelector/index.js b/node_modules/@opentripplanner/trip-form/lib/MetroModeSelector/index.js
+index db92398..d5a0fca 100644
+--- a/node_modules/@opentripplanner/trip-form/lib/MetroModeSelector/index.js
++++ b/node_modules/@opentripplanner/trip-form/lib/MetroModeSelector/index.js
+@@ -77,7 +77,7 @@ function ModeSelector({
+     activeHoverColor: activeHoverColor,
+     fillModeIcons: fillModeIcons,
+     id: button.key,
+-    key: button.label,
++    key: button.key,
+     modeButton: button,
+     onSettingsUpdate: onSettingsUpdate,
+     onToggle: (0, _react.useCallback)(() => {
 diff --git a/node_modules/@opentripplanner/trip-form/src/MetroModeSelector/index.tsx b/node_modules/@opentripplanner/trip-form/src/MetroModeSelector/index.tsx
 index 58fefaa..6f58b5c 100644
 --- a/node_modules/@opentripplanner/trip-form/src/MetroModeSelector/index.tsx
