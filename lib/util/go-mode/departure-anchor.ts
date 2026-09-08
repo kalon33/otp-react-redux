@@ -26,6 +26,17 @@ export const AUTO_ANCHOR_MIN_GAIN_MS = 120000
 // Absorbs a late bus that isn't reporting realtime; see getSoonestCatchableMs.
 export const DEPARTURE_OVERDUE_GRACE_MS = 60000
 
+// The rider must still have at least this much of the access leg left before
+// the anchor is allowed to RELEASE an unreachable departure.
+//
+// It is the whole of the 7/22 protection. Standing at the stop the rider has
+// no ride time left, so "unreachable" degenerates into "overdue" — and an
+// overdue bus with no realtime is a LATE bus, not a gone one ("showed 465 at
+// 0135 before mine even left"). Releasing is therefore only ever done to a
+// rider who is still travelling toward the stop, where the deficit is a
+// measured travel-time shortfall rather than a bus running behind.
+export const RELEASE_MIN_RIDE_SECONDS = 60
+
 export interface RouteDeparture {
   depMs: number
   realtime: boolean
@@ -126,6 +137,39 @@ export function getSoonestCatchableMs(
 }
 
 /**
+ * Whether a departure already in force is one the rider provably cannot make —
+ * the exact negation of the test `getSoonestCatchableMs` applies when it picks
+ * one, so a departure this calls unreachable is one that function would skip.
+ *
+ * Guarded by RELEASE_MIN_RIDE_SECONDS: with no ride time left the inequality
+ * says nothing but "overdue", and an overdue bus may simply be late.
+ *
+ * 2026-09-08, session mtssjvee-mtc2dx. A `departureOverride` of 10:07:33 was
+ * restored from the saved session at 09:57:39. OTP's own bike leg put the
+ * rider at the boarding stop at 10:12:59 — five and a half minutes after that
+ * bus — and the first progress tick measured `waitTimeAtStop` at -281 s. The
+ * override was never re-examined: the anchor leaves alone any override it did
+ * not itself set, START_GO_MODE does not clear it, and missed-bus deliberately
+ * ignores an override naming another run. So the card headlined 10:07 AM for
+ * the whole 11.7-minute ride and, 109 s after the bus had gone, still read
+ * "arrives in <1 min" (a negative countdown rounds to "<1 min"), with the
+ * rider's actual bus — the live 10:25 — demoted to a "Later departures" row.
+ */
+export function departureIsUnreachable(
+  departureMs: number | null | undefined,
+  nowMs: number,
+  rideSecondsRemaining: number,
+  graceMs = DEPARTURE_OVERDUE_GRACE_MS
+): boolean {
+  if (departureMs == null || !Number.isFinite(departureMs)) return false
+  if (rideSecondsRemaining <= RELEASE_MIN_RIDE_SECONDS) return false
+  const optimismMs = Math.min(180000, rideSecondsRemaining * 1000 * 0.25)
+  return (
+    departureMs - nowMs < rideSecondsRemaining * 1000 - optimismMs - graceMs
+  )
+}
+
+/**
  * Whether the anchor should adopt `candidateMs` over the departure currently in
  * force (a previous anchor, else the plan's board time).
  *
@@ -169,6 +213,13 @@ export function anchorBoardingStopId(
 export interface AnchorDecision {
   /** The departure to anchor to, or null to leave the override alone. */
   anchorMs: number | null
+  /**
+   * Drop the override in force — it names a bus the rider cannot reach. Not
+   * the same as `anchorMs: null`, which means "leave it alone"; the caller
+   * must dispatch an explicit null so the card falls back to the soonest
+   * departure the rider CAN catch.
+   */
+  clear?: boolean
   /** The last auto-anchored departure, to carry into the next tick. */
   next: number | null
 }
@@ -209,6 +260,22 @@ export function evaluateDepartureAnchor(
   // Never fight the rider's own choice, and never overwrite an override this
   // anchor did not set.
   if (manualLock) return { anchorMs: null, next: prev }
+
+  // ...but "leave it alone" cannot mean "keep it forever". An override naming
+  // a departure the rider is measurably too far away to reach is not a choice
+  // any more, whoever set it — including one restored from a saved session,
+  // which arrives with `prev` rebuilt as null and so is frozen by the very
+  // guard below (9/8, see departureIsUnreachable). Release it and let the
+  // ordinary path re-acquire: with the override gone the display and the
+  // anchor both fall back to the soonest departure the rider CAN catch, which
+  // is the same route's next run — the rider's standing rule.
+  if (
+    departureOverride != null &&
+    departureIsUnreachable(departureOverride, nowMs, rideSecondsRemaining)
+  ) {
+    return { anchorMs: null, clear: true, next: null }
+  }
+
   if (departureOverride != null && departureOverride !== prev) {
     return { anchorMs: null, next: prev }
   }
