@@ -224,21 +224,28 @@ export function checkAlightAlerts(
     `${stopKey}_${stage}`
   )
   if (wasRecentlySent(id, sentNotifications, ALIGHT_DEDUP_MS)) return null
+  // Copy is the rider's standing notification rule (auto-memory
+  // `minimal-notification-text`): the facts they act on, middot-separated, and
+  // nothing else. The in-app toast renders the MESSAGE only
+  // (GoModeNotifications.tsx), so the message has to stand alone; the title is
+  // what the phone's notification and the wrist show above it.
   return stage === 'act'
     ? {
         id,
-        message: `Prepare to exit at ${stopName}`,
+        message: stopName,
         priority: 'high',
         timestamp: new Date(),
-        title: 'Next Stop: Your Stop!',
+        title: 'Next stop',
         type: 'ARRIVING_STOP'
       }
     : {
         id,
-        message: `Get ready! Your stop (${stopName}) is about 2 minutes away.`,
+        // The lead is ALIGHT_PREPARE_SECONDS, so the number is derived rather
+        // than the hard-coded "about 2 minutes" the sentence used to carry.
+        message: `${stopName} · ${Math.round(ALIGHT_PREPARE_SECONDS / 60)} min`,
         priority: 'high',
         timestamp: new Date(),
-        title: 'Approaching Your Stop',
+        title: 'Your stop',
         type: 'APPROACH_STOP'
       }
 }
@@ -437,21 +444,32 @@ export function checkBoardVehicleApproach(
     `${stopKey}_${tripKey}_${stage}`
   )
   if (wasRecentlySent(id, sentNotifications, BOARD_DEDUP_MS)) return null
+  // Minutes only when the FEED said so. Behind the distance trigger there is
+  // no prediction and BOARD_APPROACH_SECONDS is the window that let the alert
+  // fire rather than a measurement, so quoting it as "4 min" would hand the
+  // rider a number they cannot act on.
+  const busAwayMin =
+    liveBoardEpochMs != null
+      ? Math.max(1, Math.round((liveBoardEpochMs - nowMs) / 60000))
+      : null
   return stage === 'arriving'
     ? {
         id,
-        message: `${routeName} is arriving at ${stopName}`,
+        message: `${routeName} · ${stopName}`,
         priority: 'high',
         timestamp: new Date(),
-        title: 'Your Bus Is Here',
+        title: 'Bus here',
         type: 'BOARD_BUS_ARRIVING'
       }
     : {
         id,
-        message: `${routeName} is a few minutes from ${stopName}`,
+        message:
+          busAwayMin != null
+            ? `${routeName} · ${busAwayMin} min · ${stopName}`
+            : `${routeName} · ${stopName}`,
         priority: 'high',
         timestamp: new Date(),
-        title: 'Your Bus Is Coming',
+        title: 'Bus coming',
         type: 'BOARD_BUS_APPROACHING'
       }
 }
@@ -714,7 +732,6 @@ export function checkLeaveSoon(
   const routeName =
     nextLeg.routeShortName || nextLeg.routeLongName || 'your bus'
   const stopName = nextLeg.from?.name || currentLeg.to?.name || 'the stop'
-  const verb = currentLeg.mode === 'BICYCLE' ? 'bike' : 'walk'
   const busAwayMin = Math.max(
     1,
     Math.round((progress.timeUntilNextDeparture ?? 0) / 60)
@@ -724,17 +741,22 @@ export function checkLeaveSoon(
   // Long window so it fires once for this connection, not every GPS tick.
   if (wasRecentlySent(id, sentNotifications, 30 * 60 * 1000)) return null
 
-  const message =
+  // The rider's standing rule, in the shape the return-half countdown already
+  // ships (↩ Leave in 9 min / ↩ Leave now, round-trip.ts): the deadline is
+  // the title, the facts are the body. The old copy said "Time to go" in the
+  // title, again at the head of the body, then "now to catch" — three
+  // coaching moves carrying no fact the middot list does not.
+  const title =
     leaveInSeconds <= 0
-      ? `Leave now — ${verb} to ${stopName} to catch ${routeName} (${busAwayMin} min away).`
-      : `Time to go: ${verb} to ${stopName} now to catch ${routeName} (${busAwayMin} min away).`
+      ? 'Leave now'
+      : `Leave in ${Math.max(1, Math.round(leaveInSeconds / 60))} min`
 
   return {
     id,
-    message,
+    message: `${routeName} · ${busAwayMin} min · ${stopName}`,
     priority: 'high',
     timestamp: new Date(),
-    title: 'Time to go',
+    title,
     type: 'LEAVE_SOON'
   }
 }
@@ -1001,7 +1023,7 @@ export function checkMissedBus(
 
   return {
     id,
-    message: `Missed the ${routeName} — updating your trip to the next departure.`,
+    message: `${routeName} missed · next departure`,
     priority: 'high',
     timestamp: new Date(),
     title: 'Missed bus',
@@ -1306,10 +1328,10 @@ export function checkRouteDeviation(
 
   return {
     id,
-    message: `You are ${Math.round(distanceFromRoute)}m from the planned route`,
+    message: `${Math.round(distanceFromRoute)}m from the route`,
     priority: 'high',
     timestamp: new Date(),
-    title: 'Off Route',
+    title: 'Off route',
     type: 'ROUTE_DEVIATION'
   }
 }
@@ -1427,12 +1449,13 @@ export function checkDestinationUnreachable(
       : 'some way'
   return {
     id,
-    message:
-      `Still ${howFar}${where} and re-planning isn't closing the gap — ` +
-      'the last stretch may not be on the map. Finish from here your own way.',
+    // Two facts and no advice. "Finish from here your own way" was the app
+    // telling the rider what to do with their own legs; the distance and
+    // "not getting closer" are the whole of what it actually knows.
+    message: `${howFar}${where} · not getting closer`,
     priority: 'high',
     timestamp: new Date(),
-    title: 'This is as close as routing gets',
+    title: 'Routing stops here',
     type: 'DESTINATION_UNREACHABLE'
   }
 }
@@ -1475,18 +1498,16 @@ function connectionWarningCopy(
   delaySeconds: number,
   slackSeconds: number
 ): { message: string; title: string } {
-  const atStop = stopName ? ` at ${stopName}` : ''
+  const atStop = stopName ? ` · ${stopName}` : ''
   if (slackSeconds < 0) {
     const lateMin = Math.max(1, Math.round(delaySeconds / 60))
     return {
-      message: `Running ${lateMin} min late — you may miss ${routeName}${atStop}.`,
+      message: `${routeName} · ${lateMin} min late${atStop}`,
       title: 'Connection at risk'
     }
   }
   return {
-    message: `Tight connection — about ${Math.round(
-      slackSeconds
-    )}s to catch ${routeName}${atStop}.`,
+    message: `${routeName} · ${Math.round(slackSeconds)}s${atStop}`,
     title: 'Tight connection'
   }
 }
@@ -1714,7 +1735,7 @@ export function checkDelayAlert(
 
   return {
     id,
-    message: `${routeName} is running about ${lateMin} min late.`,
+    message: `${routeName} · ${lateMin} min late`,
     priority: 'medium',
     timestamp: new Date(),
     title: 'Running late',
@@ -1745,10 +1766,10 @@ export function checkTripComplete(
     if (!wasRecentlySent(id, sentNotifications)) {
       return {
         id,
-        message: 'You have arrived at your destination!',
+        message: 'Arrived',
         priority: 'medium',
         timestamp: new Date(),
-        title: 'Trip Complete',
+        title: 'Trip complete',
         type: 'TRIP_COMPLETE'
       }
     }
