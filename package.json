@@ -151,7 +151,7 @@
     "@types/react-router": "^5.1.18",
     "@types/react-router-dom": "^5.3.3",
     "@types/redux-actions": "^2.6.2",
-    "@types/reselect": "^4.0.0",
+    "@types/reselect": "^2.2.0",
     "@types/styled-components": "^5.1.26",
     "@types/uuid": "^9.0.0",
     "@vitejs/plugin-react": "^4.2.1",
