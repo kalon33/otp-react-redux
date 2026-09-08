@@ -394,8 +394,9 @@ components:
     arrivedDone: Done
     arrivedTitle: 🎉 You've arrived!
     arrivesIn: arrives in {time}
+    boardingAboard: On the {route}
     boardingConfirm: I'm on the bus
-    boardingDeny: Not on the bus
+    boardingDeny: I'm not on this bus
     boardingQuestion: Are you on the bus?
     boardingSubtitle: Looking for {route} nearby
     busHeadsign: to {headsign}
@@ -479,6 +480,8 @@ components:
     tripSheetHeading: Your trip
     tripSheetTitle: Trip overview
     turnCuesLegLabel: Turn-by-turn directions for the {leg} leg
+    turnCuesLegOff: "{leg} turn-by-turn: Off"
+    turnCuesLegOn: "{leg} turn-by-turn: On"
     turnCuesOff: "Turn-by-turn: Off"
     turnCuesOn: "Turn-by-turn: On"
     useThisDeparture: Use this

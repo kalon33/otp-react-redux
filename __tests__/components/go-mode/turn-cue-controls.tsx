@@ -187,7 +187,7 @@ describe('components > the turn-by-turn controls the rider asked for (8.9)', () 
       wrapper
         .find('button')
         .map((b) => b.text())
-        .filter((t: string) => t.startsWith('Turn-by-turn'))
+        .filter((t: string) => /turn-by-turn/i.test(t))
 
     it('offers the current walking leg, off by default', () => {
       expect(
@@ -248,12 +248,13 @@ describe('components > the turn-by-turn controls the rider asked for (8.9)', () 
         state,
         messages
       )
+      // ...and says WHICH leg, because the card above it names the bus.
       expect(
         wrapper
           .find('button')
           .map((b) => b.text())
-          .filter((t: string) => t.startsWith('Turn-by-turn'))
-      ).toEqual(['Turn-by-turn: On'])
+          .filter((t: string) => /turn-by-turn/i.test(t))
+      ).toEqual(['Walk turn-by-turn: On'])
     })
 
     it('offers nothing when no walking or biking leg is left', () => {

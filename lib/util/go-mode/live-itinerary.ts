@@ -83,6 +83,27 @@ export function buildLiveItinerary(
   // matter how late this one runs, so reaching a transit leg resets the slip.
   let shift = 0
 
+  // The end the transit leg before this one ACTUALLY has once the live figures
+  // are in — the anchor the access leg that follows must hang off.
+  //
+  // The slip cannot be measured as (live alight − leg.endTime), which is what
+  // this did until 2026-09-08. That assumes leg[i].startTime === leg[i-1].endTime,
+  // and Go Mode's own itineraries break that: buildOnboardItinerary synthesizes
+  // a bus leg ending at the LIVE arrival and grafts the pre-boarding plan's tail
+  // onto it UNTOUCHED (actions/go-mode.ts buildOnboardItinerary → busLegEnd +
+  // `onward.legs`; repairLegTimeInversions only ever pushes legs later, never
+  // pulls them back). On the 11:23 Orange Line ride that left leg 0 ending at
+  // the live 11:41:09 while leg 1 — the walk — still started at the plan's
+  // 11:46:50, and since the sheet prints the START time of the leg beginning at
+  // each place, the alight stop read "11:46 AM": five minutes of a bus ride the
+  // rider was not going to take, with the correct figure sitting in
+  // liveLegTimes[0].alightEpoch the whole time.
+  //
+  // Anchoring instead of delta-shifting is identical on a contiguous itinerary
+  // (start === prev end makes the two arithmetics the same) and right on a
+  // spliced one.
+  let prevTransitEnd: number | null = null
+
   live.legs = live.legs.map((leg: Leg, i: number) => {
     // The fare table does `transitLegs.flatMap(leg => leg.fareProducts)` and
     // then reads `.product` off every entry, so a transit leg with a MISSING
@@ -98,6 +119,11 @@ export function buildLiveItinerary(
     }
 
     if (!TRANSIT_MODES.has(leg.mode)) {
+      if (prevTransitEnd != null) {
+        const start = Number(leg.startTime)
+        shift = Number.isFinite(start) ? prevTransitEnd - start : 0
+        prevTransitEnd = null
+      }
       if (!shift) return leg
       const moved: any = { ...leg }
       const start = Number(leg.startTime)
@@ -133,12 +159,9 @@ export function buildLiveItinerary(
       const scheduled = Number(leg.endTime)
       next.endTime = alightMs
       next.realTime = true
-      if (Number.isFinite(scheduled)) {
-        next.arrivalDelay = Math.round((alightMs - scheduled) / 1000)
-        shift = alightMs - scheduled
-      } else {
-        next.arrivalDelay = 0
-      }
+      next.arrivalDelay = Number.isFinite(scheduled)
+        ? Math.round((alightMs - scheduled) / 1000)
+        : 0
     } else if (alight.projected && Number.isFinite(alightMs)) {
       // A projected time DOES get shown — the alternative is the plan's
       // build-time arrival, frozen at the moment the trip was planned and
@@ -148,9 +171,7 @@ export function buildLiveItinerary(
       // it live would claim a confidence nobody has. Leaving realTime false is
       // the honest signal, and the delay fields stay untouched so the striking
       // -through of a "scheduled" time never fires on an estimate.
-      const scheduled = Number(leg.endTime)
       next.endTime = alightMs
-      if (Number.isFinite(scheduled)) shift = alightMs - scheduled
     }
 
     // board and alight are applied independently, so a live board time that
@@ -164,6 +185,11 @@ export function buildLiveItinerary(
         Number(next.startTime) +
         (Number.isFinite(plannedRun) ? Math.max(0, plannedRun) : 0)
     }
+
+    // Read AFTER the inversion clamp, so the walk hangs off the end the sheet
+    // actually prints rather than the one the clamp threw away.
+    const effectiveEnd = Number(next.endTime)
+    prevTransitEnd = Number.isFinite(effectiveEnd) ? effectiveEnd : null
 
     return next as Leg
   })
