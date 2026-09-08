@@ -1,26 +1,24 @@
 diff --git a/node_modules/@opentripplanner/trip-details/src/components/fares-v2-table.tsx b/node_modules/@opentripplanner/trip-details/src/components/fares-v2-table.tsx
-index 1234567..abcdefg 100644
+index b522f41..d2eae02 100644
 --- a/node_modules/@opentripplanner/trip-details/src/components/fares-v2-table.tsx
 +++ b/node_modules/@opentripplanner/trip-details/src/components/fares-v2-table.tsx
-@@ -139,7 +139,7 @@ const FaresV2Table = ({
-         <th key={leg.tripId} scope="col">
-           {getLegRouteName(leg)}
+@@ -1,5 +1,5 @@
+ /* eslint-disable no-underscore-dangle */
+-import React from "react";
++import React, { Fragment } from "react";
+ import { Leg } from "@opentripplanner/types";
+ import coreUtils from "@opentripplanner/core-utils";
+ import { FormattedMessage, useIntl } from "react-intl";
+@@ -146,7 +146,7 @@ const FaresV2Table = ({
+           </em>
          </th>
--      )),
-+      ))),
-       transitLegs.length > 1 ? (
-         <th key="total" style={{ textAlign: "right" }} scope="col">
-           <em>
-@@ -148,7 +148,7 @@ const FaresV2Table = ({
        ) : (
-         <></>
+-        <></>
++        <Fragment />
        )
--    ]
-+    ]
+     ]
    ];
- 
-   // non-transit legs don't have fares
-@@ -164,7 +164,7 @@ const FaresV2Table = ({
+@@ -172,7 +172,7 @@ const FaresV2Table = ({
  
        // Only consider alternateFareProducts if current product is dependent
        const dependentAlternateFareProducts =
@@ -29,7 +27,7 @@ index 1234567..abcdefg 100644
  
        // Calculate pre-tranfer amount either via alternate fare or fare-id matching (price.originalAmount)
        const originalAmount =
-@@ -175,7 +175,7 @@ const FaresV2Table = ({
+@@ -185,15 +185,16 @@ const FaresV2Table = ({
            {index === 0 && (
              <th style={{ textAlign: "left" }} scope="row">
                {medium?.id && (
@@ -38,18 +36,46 @@ index 1234567..abcdefg 100644
                    <FormattedMessage
                      id={`config.fares.media.${descope(medium.id)}`}
                      defaultMessage={medium.name}
-@@ -182,7 +182,7 @@ const FaresV2Table = ({
+                   />{" "}
+-                </>
++                </span>
                )}
                {rider?.id && (
--                <FormattedMessage
-+                <FormattedMessage key="rider-name"
+                 <FormattedMessage
++                  key="rider-name"
                    id={`config.fares.riderCategory.${descope(rider.id)}`}
                    defaultMessage={rider.name}
                  />
-@@ -243,9 +243,11 @@ const FaresV2Table = ({
- 
-   return (
-     <StripedTable>
+@@ -206,17 +207,17 @@ const FaresV2Table = ({
+             title={
+               !Number.isNaN(originalAmount) &&
+               originalAmount > 0 &&
+-              index > 0 &&
+-              intl.formatMessage(
+-                {
+-                  description:
+-                    "Text explaining the transfer discount applied to this fare.",
+-                  id: "otpUi.TripDetails.transferDiscountExplanation"
+-                },
+-                {
+-                  transferAmount: intl.formatNumber(originalAmount, {
+-                    currency: legPrice?.currency?.code,
+-                    currencyDisplay: "narrowSymbol",
++              index > 0
++                ? intl.formatMessage(
++                    {
++                      description:
++                        "Text explaining the transfer discount applied to this fare.",
++                      id: "otpUi.TripDetails.transferDiscountExplanation"
++                    },
++                    {
++                      transferAmount: intl.formatNumber(originalAmount, {
++                        currency: legPrice?.currency?.code,
++                        currencyDisplay: "narrowSymbol",
+                     style: "currency"
+                   })
+                 }
+@@ -273,9 +274,17 @@ const FaresV2Table = ({
        <InvisibleA11yCaption>
          <FormattedMessage id="otpUi.TripDetails.transitFareTable" />
        </InvisibleA11yCaption>
@@ -58,7 +84,13 @@ index 1234567..abcdefg 100644
 -      ))}
 +      <tbody>
 +        {rows.map((r, rowIndex) => (
-+          <tr key={`row-${rowIndex}`}>{r.map((cell, cellIndex) => React.cloneElement(cell, { key: `cell-${rowIndex}-${cellIndex}` }))}</tr>
++          <tr key={`row-${rowIndex}`}>
++            {r.map((cell, cellIndex) => (
++              <Fragment key={`cell-${rowIndex}-${cellIndex}`}>
++                {cell}
++              </Fragment>
++            ))}
++          </tr>
 +        ))}
 +      </tbody>
      </StripedTable>

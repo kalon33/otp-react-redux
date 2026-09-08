@@ -1,15 +1,13 @@
 diff --git a/node_modules/@opentripplanner/trip-form/src/MetroModeSelector/index.tsx b/node_modules/@opentripplanner/trip-form/src/MetroModeSelector/index.tsx
-index 1234567..abcdefg 100644
+index 58fefaa..6f58b5c 100644
 --- a/node_modules/@opentripplanner/trip-form/src/MetroModeSelector/index.tsx
 +++ b/node_modules/@opentripplanner/trip-form/src/MetroModeSelector/index.tsx
-@@ -235,7 +235,7 @@ export default function ModeSelector({
-       <ModeButton
-         accentColor={accentColor}
-         activeHoverColor={activeHoverColor}
-         fillModeIcons={fillModeIcons}
-         id={button.key}
--        key={button.label}
-+        key={button.key}
-         modeButton={button}
-         onSettingsUpdate={onSettingsUpdate}
-         onToggle={useCallback(() => {
+@@ -241,7 +241,7 @@ export default function ModeSelector({
+           activeHoverColor={activeHoverColor}
+           fillModeIcons={fillModeIcons}
+           id={button.key}
+-          key={button.label}
++          key={button.key}
+           modeButton={button}
+           onSettingsUpdate={onSettingsUpdate}
+           onToggle={useCallback(() => {
