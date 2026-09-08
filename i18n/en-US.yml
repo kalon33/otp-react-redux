@@ -359,7 +359,7 @@ components:
     placeNotFound: Place not found
     placeNotFoundDescription: Sorry, the requested place was not found.
   FeedbackScreen:
-    attachLabel: Add a photo or screenshot
+    attachLabel: Add a screenshot
     commentLabel: Your comment
     commentPlaceholder: What happened?
     failed: Could not send, and this device has no room to save it. Try again.
@@ -379,7 +379,9 @@ components:
       you open this screen.
     imageRejected: That file could not be attached.
     intro: Tell us what went wrong. A screenshot says more than a sentence.
-    removeImage: Remove
+    oneImageOnly: One screenshot per report.
+    removeImage: Remove the screenshot
+    replaceImage: Replace screenshot
     send: Send
     sendingHeld: Sending an earlier report that could not go out…
     sent: Sent. Thank you.

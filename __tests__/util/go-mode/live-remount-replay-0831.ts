@@ -179,7 +179,7 @@ describe('a live trip the app re-mounted inside (2026-08-31)', () => {
         itinerary.legs as any
       )
       expect(boarded?.message).toBe('Board 546 to Old Shakopee Rd')
-      expect(late?.message).toBe('546 is running about 3 min late.')
+      expect(late?.message).toBe('546 · 3 min late')
 
       let live: any = { ...initial, activeItinerary: itinerary, isActive: true }
       ;[boarded, late].forEach((payload) => {
@@ -232,7 +232,7 @@ describe('a live trip the app re-mounted inside (2026-08-31)', () => {
           restored.notifications.sentNotifications,
           restored.activeItinerary.legs
         )?.message
-      ).toBe('546 is running about 6 min late.')
+      ).toBe('546 · 6 min late')
     })
 
     it('re-arms for a leg the rider had not reached when the page went', () => {

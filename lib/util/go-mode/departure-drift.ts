@@ -1,4 +1,3 @@
-import { classifyBuffer } from './pacing-card'
 import type { NotificationEvent } from './notification-service'
 
 /**
@@ -11,7 +10,9 @@ import type { NotificationEvent } from './notification-service'
  * math, the pacing card and the "time to go" alert all ran on a departure that
  * had stopped being true. Requested after the 8/9 ride: track the arrival time
  * for jumps against the initial estimate, and when it moves, say what changed
- * AND how hard to push on the rest of the approach.
+ * and what slack is left. (The "how hard to push" half of that ask shipped as
+ * pacing words and was retired 2026-09-08: it is coaching, and the rider's
+ * standing rule forbids it — the haptic carries the urgency instead.)
  *
  * The baseline is captured once per boarding and held. Quoting total drift is
  * the point — "6 min later" is actionable in a way that three separate "2 min
@@ -62,30 +63,7 @@ export interface DepartureDriftInput {
 }
 
 /**
- * The words the rider asked for, from the same three-way split the pacing card
- * buzzes on (classifyBuffer) — so the card's haptics and this sentence can
- * never tell different stories.
- */
-export function paceAdvice(waitSeconds: number): string {
-  switch (classifyBuffer(waitSeconds)) {
-    case 'atRisk':
-      return 'hurry'
-    case 'tight':
-      return 'pick up the pace'
-    default:
-      return 'take your time'
-  }
-}
-
-function formatClockTime(epochMs: number): string {
-  return new Date(epochMs).toLocaleTimeString([], {
-    hour: 'numeric',
-    minute: '2-digit'
-  })
-}
-
-/**
- * "8 min slack at the stop" / "2 min short at the stop" / '' when unknown.
+ * "8 min slack" / "2 min short" / '' when unknown.
  *
  * Negative waits round AWAY from zero, the same rule the pacing card's copy
  * follows: 30 s short is "1 min short", never a falsely reassuring "0 min
@@ -97,11 +75,21 @@ function slackPhrase(waitSeconds: number | null | undefined): string {
     waitSeconds < 0
       ? Math.floor(waitSeconds / 60)
       : Math.round(waitSeconds / 60)
-  return mins < 0
-    ? `${-mins} min short at the stop`
-    : `${mins} min slack at the stop`
+  return mins < 0 ? `${-mins} min short` : `${mins} min slack`
 }
 
+/**
+ * Copy is the rider's standing notification rule (auto-memory
+ * `minimal-notification-text`): the numbers they act on and nothing else.
+ *
+ * Two things it deliberately no longer does. It quoted the new departure as a
+ * CLOCK TIME in the title — the rule's own words are that the wait in minutes
+ * is what a rider on the pavement uses — and it appended `paceAdvice`
+ * ("hurry" / "pick up the pace" / "take your time"), which is verbatim the
+ * coaching the rider killed on 2026-07-22 ("Woah way way way too much info").
+ * The haptic already carries the urgency: `losingSlack` below is what decides
+ * whether the wrist buzzes, and it is unchanged.
+ */
 function composeAlert(
   input: DepartureDriftInput,
   driftMs: number,
@@ -111,14 +99,12 @@ function composeAlert(
   const driftMin = Math.round(driftMs / 60000)
   const change =
     driftMin === 0
-      ? 'Back to the original time'
-      : `${Math.abs(driftMin)} min ${
-          driftMin > 0 ? 'later' : 'earlier'
-        } than first estimated`
+      ? 'back on time'
+      : `${Math.abs(driftMin)} min ${driftMin > 0 ? 'later' : 'earlier'}`
 
-  const advice = waitSeconds != null ? paceAdvice(waitSeconds) : ''
   const slack = slackPhrase(waitSeconds)
-  const tail = [advice, slack].filter(Boolean).join(', ')
+  // Minutes until the departure, never its clock time.
+  const awayMin = Math.max(0, Math.round((departureMs - nowMs) / 60000))
 
   // Losing slack is the case worth a buzz on the wrist; a bus handing time back
   // is good news and arrives without one (showNotification vibrates on 'high'
@@ -127,10 +113,12 @@ function composeAlert(
 
   return {
     id: `DEPARTURE_CHANGED_${boardingKey}_${nowMs}`,
-    message: tail ? `${change} — ${tail}.` : `${change}.`,
+    // The toast renders the message alone, so it repeats the drift rather
+    // than leaning on the title for it.
+    message: slack ? `${change} · ${slack}` : change,
     priority: losingSlack ? 'high' : 'medium',
     timestamp: new Date(nowMs),
-    title: `${routeName} now ${formatClockTime(departureMs)}`,
+    title: `${routeName} · ${awayMin} min`,
     type: 'DEPARTURE_CHANGED'
   }
 }

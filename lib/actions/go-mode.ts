@@ -1841,18 +1841,20 @@ export function applyAutoReroute(
     dispatch(beginGoMode(best))
 
     // Confirm what changed — the new boarding is the fact the rider needs.
+    // Copy is the rider's standing notification rule: middot-separated facts,
+    // and the wait in MINUTES rather than the clock time this used to quote.
     const firstTransitLeg = (best.legs || []).find((l: any) => l.transitLeg)
-    const message = `Trip updated — ${
+    const departsInMin = Math.max(
+      0,
+      Math.round(
+        (Number(firstTransitLeg.startTime) - getCurrentTime().getTime()) / 60000
+      )
+    )
+    const message = `${
       firstTransitLeg.routeShortName ||
       firstTransitLeg.routeLongName ||
       'your bus'
-    } departs ${firstTransitLeg.from?.name || 'the stop'} at ${format(
-      utcToZonedTime(
-        Number(firstTransitLeg.startTime),
-        getState().otp.config.homeTimezone
-      ),
-      'h:mm a'
-    )}.`
+    } · in ${departsInMin} min · ${firstTransitLeg.from?.name || 'the stop'}`
     const notification: NotificationEvent = {
       id: `TRIP_UPDATED_auto_${Date.now()}`,
       message,
@@ -3691,13 +3693,13 @@ export function replanFromAboard(
       const arrivalText =
         arrivalMs == null
           ? ''
-          : ` Arriving ${format(
-              utcToZonedTime(arrivalMs, getState().otp.config.homeTimezone),
-              'h:mm a'
-            )}.`
-      const message = `Trip updated — ${
+          : ` · arriving in ${Math.max(
+              0,
+              Math.round((arrivalMs - getCurrentTime().getTime()) / 60000)
+            )} min`
+      const message = `${
         busLeg?.routeShortName || busLeg?.routeLongName || 'your bus'
-      }, off at ${busLeg?.to?.name || 'your stop'}.${arrivalText}`
+      } · off at ${busLeg?.to?.name || 'your stop'}${arrivalText}`
       const notification: NotificationEvent = {
         id: `TRIP_UPDATED_auto_${Date.now()}`,
         message,

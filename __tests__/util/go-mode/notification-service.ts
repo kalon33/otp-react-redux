@@ -6,7 +6,9 @@ import {
   checkBoardVehicleApproach,
   checkConnectionWarning,
   checkDelayAlert,
+  checkDestinationUnreachable,
   checkForNotifications,
+  checkLeaveSoon,
   checkLegTransition,
   checkMissedBus,
   checkRouteDeviation,
@@ -664,6 +666,7 @@ describe('util > go-mode > notification-service', () => {
       expect(result!.type).toBe('ROUTE_DEVIATION')
       expect(result!.priority).toBe('high')
       expect(result!.message).toContain('250m')
+      expect(result!.title).toBe('Off route')
     })
 
     it('should return null when close to route', () => {
@@ -943,7 +946,7 @@ describe('util > go-mode > notification-service', () => {
       const result = checkTripComplete(progress, [])
       expect(result).not.toBeNull()
       expect(result!.type).toBe('TRIP_COMPLETE')
-      expect(result!.message).toContain('arrived')
+      expect(result!.message).toBe('Arrived')
     })
 
     it('should return notification when progress >= 99.5', () => {
@@ -1829,7 +1832,7 @@ describe('missed-bus detection', () => {
       const event = checkMissedBus(ctxDefinitive, legs, [])
       expect(event?.type).toBe('MISSED_BUS')
       expect(event?.priority).toBe('high')
-      expect(event?.message).toContain('Missed the 546')
+      expect(event?.message).toContain('546 missed')
       expect(event?.message).toContain('next departure')
     })
 
@@ -1983,7 +1986,7 @@ describe('go-mode > the 2026-09-01 notification repeats', () => {
 
       const first = checkDelayAlert(delayProgress(190), leg, sent, [leg])
       expect(first).not.toBeNull()
-      expect(first!.message).toContain('about 3 min late')
+      expect(first!.message).toContain('3 min late')
       sent.push(first!.id)
 
       // 08:35:25 — 587 s on, still ~3 min late. This is the push the rider got.
@@ -2006,14 +2009,14 @@ describe('go-mode > the 2026-09-01 notification repeats', () => {
       nowMs = 1788270319144
       const worse = checkDelayAlert(delayProgress(300), leg, sent, [leg])
       expect(worse).not.toBeNull()
-      expect(worse!.message).toContain('about 5 min late')
+      expect(worse!.message).toContain('5 min late')
       sent.push(worse!.id)
 
       // 08:50:20 — 8 min late.
       nowMs = 1788270620155
       const worst = checkDelayAlert(delayProgress(480), leg, sent, [leg])
       expect(worst).not.toBeNull()
-      expect(worst!.message).toContain('about 8 min late')
+      expect(worst!.message).toContain('8 min late')
     })
 
     it('does not chatter on a delay swinging a minute either way', () => {
@@ -2255,6 +2258,161 @@ describe('go-mode > the 2026-09-01 notification repeats', () => {
           replanImminent: true
         })
       ).toBe(FIRST_CARD)
+    })
+  })
+})
+
+/**
+ * Backlog 12.12 — the rider's standing notification rule.
+ *
+ * Auto-memory `minimal-notification-text` (2026-07-22, on the first pacing
+ * card: "Woah way way way too much info … Ride time left. And projected wait
+ * time. That's it."): notification copy carries only the numbers the rider
+ * acts on. No coaching phrases, no clock times, no exclamation marks — the
+ * haptic channel already carries urgency.
+ *
+ * Two strings from 2026-09-08 opened the row: LEAVE_SOON's "Time to go: walk
+ * to I-35W & Lake St Station now to catch METRO Orange Line (6 min away)."
+ * (11:23:19) and APPROACH_STOP's "Get ready! Your stop (Old Shakopee Rd &
+ * Queen Ave S) is about 2 minutes away." (11:55:17). The TRIGGERS were right
+ * both times — the rider boarded 22 s after the first — so nothing here
+ * asserts on when an alert fires, only on what it says.
+ */
+describe('go-mode > 12.12 — notification copy follows the rider rule', () => {
+  beforeEach(() => {
+    resetLegAnnouncements()
+    resetConnectionWarnings()
+    resetDelayAlerts()
+  })
+
+  const walkLeg = { mode: 'WALK', to: { name: 'the corner' } } as any
+  const busLeg = {
+    from: { name: 'I-35W & Lake St Station' },
+    mode: 'BUS',
+    routeShortName: 'METRO Orange Line',
+    to: { name: 'Old Shakopee Rd & Queen Ave S' }
+  } as any
+
+  describe('checkLeaveSoon', () => {
+    it('states route, bus-away minutes and stop — and nothing else', () => {
+      const event = checkLeaveSoon(
+        makeProgress({ timeUntilNextDeparture: 360, waitTimeAtStop: 90 }),
+        walkLeg,
+        busLeg,
+        []
+      )
+      expect(event).not.toBeNull()
+      expect(event!.type).toBe('LEAVE_SOON')
+      expect(event!.priority).toBe('high')
+      expect(event!.message).toBe(
+        'METRO Orange Line · 6 min · I-35W & Lake St Station'
+      )
+      // The deadline is the title; the body never repeats it.
+      expect(event!.title).toBe('Leave in 2 min')
+    })
+
+    it('says Leave now once the slack is gone', () => {
+      const event = checkLeaveSoon(
+        makeProgress({ timeUntilNextDeparture: 300, waitTimeAtStop: -20 }),
+        { mode: 'BICYCLE', to: { name: 'the corner' } } as any,
+        busLeg,
+        []
+      )
+      expect(event!.title).toBe('Leave now')
+      // The access verb was pure narration — the rider knows they are on a
+      // bike, and it cost the line four words.
+      expect(event!.message).not.toMatch(/bike|walk/i)
+    })
+
+    it('carries none of the copy the rule forbids', () => {
+      const event = checkLeaveSoon(
+        makeProgress({ timeUntilNextDeparture: 360, waitTimeAtStop: 90 }),
+        walkLeg,
+        busLeg,
+        []
+      )!
+      const line = `${event.title} ${event.message}`
+      expect(line).not.toMatch(/time to go|now to catch|get ready|hurry/i)
+      expect(line).not.toContain('!')
+      expect(line).not.toMatch(/\d{1,2}:\d{2}\s?[ap]m/i)
+    })
+  })
+
+  describe('checkAlightAlerts', () => {
+    it('gives the stop and the lead minutes, with no exclamation', () => {
+      const event = checkAlightAlerts(
+        makeProgress(),
+        busLeg,
+        { distanceMetres: 3000, etaSeconds: 110 },
+        []
+      )!
+      expect(event.type).toBe('APPROACH_STOP')
+      expect(event.message).toBe('Old Shakopee Rd & Queen Ave S · 2 min')
+      expect(event.title).toBe('Your stop')
+      expect(`${event.title} ${event.message}`).not.toContain('!')
+    })
+
+    it('names the stop alone at the door', () => {
+      const event = checkAlightAlerts(
+        makeProgress(),
+        busLeg,
+        { distanceMetres: 900, etaSeconds: 20 },
+        []
+      )!
+      expect(event.type).toBe('ARRIVING_STOP')
+      expect(event.message).toBe('Old Shakopee Rd & Queen Ave S')
+      expect(event.title).toBe('Next stop')
+    })
+  })
+
+  it('checkTripComplete drops the exclamation mark', () => {
+    const event = checkTripComplete(
+      makeProgress({ overallProgress: 100, status: 'completed' }),
+      []
+    )!
+    expect(event.type).toBe('TRIP_COMPLETE')
+    expect(event.message).toBe('Arrived')
+    expect(`${event.title} ${event.message}`).not.toContain('!')
+  })
+
+  it('checkDestinationUnreachable states the gap, not what to do about it', () => {
+    const event = checkDestinationUnreachable([], 454, 'State Fairgrounds')!
+    expect(event.type).toBe('DESTINATION_UNREACHABLE')
+    expect(event.message).toBe(
+      '454m from State Fairgrounds · not getting closer'
+    )
+    // "Finish from here your own way" was the app directing the rider's legs.
+    expect(event.message).not.toMatch(/your own way|may not be on the map/i)
+  })
+
+  it('no notification this file builds carries a clock time', () => {
+    const clock = /\d{1,2}:\d{2}\s?[ap]m/i
+    const events = [
+      checkLeaveSoon(
+        makeProgress({ timeUntilNextDeparture: 360, waitTimeAtStop: 90 }),
+        walkLeg,
+        busLeg,
+        []
+      ),
+      checkAlightAlerts(
+        makeProgress(),
+        busLeg,
+        { distanceMetres: 3000, etaSeconds: 110 },
+        []
+      ),
+      checkDelayAlert(makeProgress({ delay: 240 }), busLeg, []),
+      checkRouteDeviation(250, [], walkLeg),
+      checkTripComplete(
+        makeProgress({ overallProgress: 100, status: 'completed' }),
+        []
+      ),
+      checkDestinationUnreachable([], 454, 'State Fairgrounds')
+    ]
+    expect(events.every((e) => e != null)).toBe(true)
+    events.forEach((e) => {
+      const line = `${e!.title} ${e!.message}`
+      expect(line).not.toMatch(clock)
+      expect(line).not.toContain('!')
     })
   })
 })
