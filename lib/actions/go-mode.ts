@@ -5265,7 +5265,15 @@ export function handlePositionUpdate(position: GeolocationPosition) {
           )
         })
         session.lastAutoAnchorMs = anchor.next
-        if (anchor.anchorMs != null) {
+        if (anchor.clear) {
+          // The departure in force is one the rider cannot reach. Dropping it
+          // is not the same as leaving it alone: the card, progress and the
+          // pacing math all read `departureOverride ||` first, so only an
+          // explicit null hands them back to the soonest catchable departure.
+          if (departureOverride != null) {
+            dispatch(setDepartureOverride(null))
+          }
+        } else if (anchor.anchorMs != null) {
           dispatch(setDepartureOverride(anchor.anchorMs))
         }
       }
