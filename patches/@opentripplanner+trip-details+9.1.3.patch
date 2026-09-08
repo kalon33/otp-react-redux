@@ -1,5 +1,58 @@
+diff --git a/node_modules/@opentripplanner/trip-details/esm/components/fares-v2-table.js b/node_modules/@opentripplanner/trip-details/esm/components/fares-v2-table.js
+index ee40370..47532f1 100644
+--- a/node_modules/@opentripplanner/trip-details/esm/components/fares-v2-table.js
++++ b/node_modules/@opentripplanner/trip-details/esm/components/fares-v2-table.js
+@@ -1,6 +1,6 @@
+ import _toConsumableArray from "@babel/runtime/helpers/toConsumableArray";
+ /* eslint-disable no-underscore-dangle */
+-import React from "react";
++import React, { Fragment } from "react";
+ import coreUtils from "@opentripplanner/core-utils";
+ import { FormattedMessage, useIntl } from "react-intl";
+ import styled from "styled-components";
+@@ -162,7 +162,7 @@ var FaresV2Table = function FaresV2Table(_ref) {
+         style: {
+           textAlign: legPrice ? "right" : "center"
+         },
+-        title: !Number.isNaN(originalAmount) && originalAmount > 0 && index > 0 && intl.formatMessage({
++        title: !Number.isNaN(originalAmount) && originalAmount > 0 && index > 0 ? intl.formatMessage({
+           description: "Text explaining the transfer discount applied to this fare.",
+           id: "otpUi.TripDetails.transferDiscountExplanation"
+         }, {
+@@ -171,10 +171,10 @@ var FaresV2Table = function FaresV2Table(_ref) {
+             currencyDisplay: "narrowSymbol",
+             style: "currency"
+           })
+-        })
+-      }, !Number.isNaN(originalAmount) && originalAmount > 0 && index > 0 && /*#__PURE__*/React.createElement(TransferIcon, {
++      }) : undefined,
++      }, !Number.isNaN(originalAmount) && originalAmount > 0 && index > 0 ? /*#__PURE__*/React.createElement(TransferIcon, {
+         size: 16
+-      }), legPrice ? renderFare(legPrice === null || legPrice === void 0 || (_legPrice$currency2 = legPrice.currency) === null || _legPrice$currency2 === void 0 ? void 0 : _legPrice$currency2.code, legPrice === null || legPrice === void 0 ? void 0 : legPrice.amount) : FailDash));
++      }) : null,
+       var nextRowIndex = currentRowIndex + 1;
+       if (!rows[nextRowIndex]) {
+         rows[nextRowIndex] = [];
+@@ -198,10 +198,14 @@ var FaresV2Table = function FaresV2Table(_ref) {
+   });
+   return /*#__PURE__*/React.createElement(StripedTable, null, /*#__PURE__*/React.createElement(InvisibleA11yCaption, null, /*#__PURE__*/React.createElement(FormattedMessage, {
+     id: "otpUi.TripDetails.transitFareTable"
+-  })), rows.map(function (r, index) {
++  })), /*#__PURE__*/React.createElement("tbody", null, rows.map(function (r, rowIndex) {
+     return /*#__PURE__*/React.createElement("tr", {
+-      key: index
+-    }, r);
++      key: "row-".concat(rowIndex)
++    }, r.map(function (cell, cellIndex) {
++      return /*#__PURE__*/React.createElement(Fragment, {
++        key: "cell-".concat(rowIndex, "-").concat(cellIndex)
++      }, cell);
++    })));
+   }));
+ };
+ export default FaresV2Table;
 diff --git a/node_modules/@opentripplanner/trip-details/src/components/fares-v2-table.tsx b/node_modules/@opentripplanner/trip-details/src/components/fares-v2-table.tsx
-index b522f41..f25e4fb 100644
+index b522f41..3a6d16e 100644
 --- a/node_modules/@opentripplanner/trip-details/src/components/fares-v2-table.tsx
 +++ b/node_modules/@opentripplanner/trip-details/src/components/fares-v2-table.tsx
 @@ -1,5 +1,5 @@
@@ -49,7 +102,42 @@ index b522f41..f25e4fb 100644
                    id={`config.fares.riderCategory.${descope(rider.id)}`}
                    defaultMessage={rider.name}
                  />
-@@ -225,7 +226,7 @@ const FaresV2Table = ({
+@@ -206,26 +207,27 @@ const FaresV2Table = ({
+             title={
+               !Number.isNaN(originalAmount) &&
+               originalAmount > 0 &&
+-              index > 0 &&
+-              intl.formatMessage(
+-                {
+-                  description:
+-                    "Text explaining the transfer discount applied to this fare.",
+-                  id: "otpUi.TripDetails.transferDiscountExplanation"
+-                },
+-                {
+-                  transferAmount: intl.formatNumber(originalAmount, {
+-                    currency: legPrice?.currency?.code,
+-                    currencyDisplay: "narrowSymbol",
+-                    style: "currency"
+-                  })
+-                }
+-              )
++              index > 0
++                ? intl.formatMessage(
++                    {
++                      description:
++                        "Text explaining the transfer discount applied to this fare.",
++                      id: "otpUi.TripDetails.transferDiscountExplanation"
++                    },
++                    {
++                      transferAmount: intl.formatNumber(originalAmount, {
++                        currency: legPrice?.currency?.code,
++                        currencyDisplay: "narrowSymbol",
++                        style: "currency"
++                      })
++                    }
++                  )
++                : undefined
+             }
            >
              {!Number.isNaN(originalAmount) &&
                originalAmount > 0 &&
@@ -58,7 +146,7 @@ index b522f41..f25e4fb 100644
              {/* Leg Price will always be defined if the fare product has a price */}
              {legPrice
                ? renderFare(legPrice?.currency?.code, legPrice?.amount)
-@@ -273,9 +274,17 @@ const FaresV2Table = ({
+@@ -273,9 +275,17 @@ const FaresV2Table = ({
        <InvisibleA11yCaption>
          <FormattedMessage id="otpUi.TripDetails.transitFareTable" />
        </InvisibleA11yCaption>
