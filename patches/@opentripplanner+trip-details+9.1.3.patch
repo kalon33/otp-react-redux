@@ -1,5 +1,5 @@
 diff --git a/node_modules/@opentripplanner/trip-details/esm/components/fares-v2-table.js b/node_modules/@opentripplanner/trip-details/esm/components/fares-v2-table.js
-index ee40370..c5a692f 100644
+index ee40370..d81daef 100644
 --- a/node_modules/@opentripplanner/trip-details/esm/components/fares-v2-table.js
 +++ b/node_modules/@opentripplanner/trip-details/esm/components/fares-v2-table.js
 @@ -126,7 +126,7 @@ var FaresV2Table = function FaresV2Table(_ref) {
@@ -20,6 +20,18 @@ index ee40370..c5a692f 100644
            description: "Text explaining the transfer discount applied to this fare.",
            id: "otpUi.TripDetails.transferDiscountExplanation"
          }, {
+@@ -172,9 +172,9 @@ var FaresV2Table = function FaresV2Table(_ref) {
+             style: "currency"
+           })
+         })
+-      }, !Number.isNaN(originalAmount) && originalAmount > 0 && index > 0 && /*#__PURE__*/React.createElement(TransferIcon, {
++      }, !Number.isNaN(originalAmount) && originalAmount > 0 && index > 0 ? /*#__PURE__*/React.createElement(TransferIcon, {
+         size: 16
+-      }), legPrice ? renderFare(legPrice === null || legPrice === void 0 || (_legPrice$currency2 = legPrice.currency) === null || _legPrice$currency2 === void 0 ? void 0 : _legPrice$currency2.code, legPrice === null || legPrice === void 0 ? void 0 : legPrice.amount) : FailDash));
++      }) : null, legPrice ? renderFare(legPrice === null || legPrice === void 0 || (_legPrice$currency2 = legPrice.currency) === null || _legPrice$currency2 === void 0 ? void 0 : _legPrice$currency2.code, legPrice === null || legPrice === void 0 ? void 0 : legPrice.amount) : FailDash));
+       var nextRowIndex = currentRowIndex + 1;
+       if (!rows[nextRowIndex]) {
+         rows[nextRowIndex] = [];
 @@ -198,11 +198,15 @@ var FaresV2Table = function FaresV2Table(_ref) {
    });
    return /*#__PURE__*/React.createElement(StripedTable, null, /*#__PURE__*/React.createElement(InvisibleA11yCaption, null, /*#__PURE__*/React.createElement(FormattedMessage, {
