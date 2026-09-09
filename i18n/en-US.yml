@@ -114,7 +114,9 @@ common:
     submitting: Submitting…
     "yes": "Yes"
   itineraryDescriptions:
+    containsCanceledTrip: This itinerary contains a canceled trip.
     fareUnknown: No fare information
+    reservationRequired: Reservation required.
     noDefaultFareTypeConfigured: Multiple fares apply
     noItineraryToDisplay: No itinerary to display.
     relativeCo2: |
@@ -292,7 +294,6 @@ components:
       redirect you to the login page...
   CallTakerPanel:
     advancedOptions: Advanced options
-    groupSize: "Group size:"
     intermediateDestination: Enter intermediate destination
   CompanionsPane:
     addNewCompanion: Add a new travel companion
@@ -405,11 +406,13 @@ components:
     busLabel: Bus {label}
     busNotBroadcasting: Bus not broadcasting yet — scheduled {time}
     changeBus: Choose bus
+    chooseBus: Choose bus
     confirmExit: Are you sure you want to stop tracking this trip?
     directionEB: Eastbound
     directionNB: Northbound
     directionSB: Southbound
     directionWB: Westbound
+    deviationWarning: "{distance} m off route"
     errorPermissionDenied: >-
       Location permission denied. Please enable location access in your browser
       settings.
@@ -438,7 +441,7 @@ components:
     locatingBus: Locating your bus...
     nextBusesAtStop: Next buses at {stop}
     nextDeparture: "Next: {time} ({mins} min away)"
-    noBusesNearby: No buses detected nearby
+    noBusesOrRoutesNearby: No bus or route detected nearby. Try moving closer to a bus stop.
     noLiveVehicleData: No live bus data — tracking by GPS
     notYet: Not yet
     offAtStop: Off at {stop}
@@ -492,6 +495,23 @@ components:
     waitingGPS: Acquiring GPS signal...
     walkToStop: "{emoji} {time} walk to {stop}"
     whereToAlight: Where do you want to get off?
+    turnInstructions:
+      arrivingAt: Arriving at {destination}
+      bearLeft: Bear left
+      bearRight: Bear right
+      continue: Continue
+      continueOn: Continue on {name}
+      continueTo: Continue to {destination}
+      enterStation: Enter the station
+      exitStation: Exit the station
+      followSigns: Follow the signs
+      sharpLeft: Sharp left
+      sharpRight: Sharp right
+      takeElevator: Take the elevator
+      takeRoundabout: Take the roundabout
+      turnLeft: Turn left
+      turnRight: Turn right
+      uTurn: Make a U-turn
   ItinerarySummary:
     itineraryDetails: Itinerary details
   LocationSearch:
@@ -503,7 +523,9 @@ components:
     bike-rental: "{companies} Shared Bikes"
     car-rental: Rental Car Locations
     micromobility-rental: "{companies} E-Scooters"
+    OTP-UI-stopsAndStations: Stops and stations
     park-and-ride: Park & Ride Locations
+    realtimeStops: Realtime stops
     satellite: Satellite
     shared-vehicles: Shared Vehicles
     stations: Transit Stations
@@ -594,6 +616,7 @@ components:
     selectDepartureTime: Departure time
     selectDuration: Duration
     selectFare: Transit fare
+    selectEmissions: CO₂ emissions
     selectWalkTime: Walk time
     sortResults: Sort results
     viewAll: View all options
@@ -751,6 +774,7 @@ components:
     timeThere: "{duration} there"
     toggleLabel: Round trip
   RouteDetails:
+    headsignFrom: "{headsign} (from {firstStop})"
     headsignTo: "{headsign} ({lastStop})"
     moreDetails: More Details
     operatedBy: Operated by {agencyName}
@@ -904,13 +928,12 @@ components:
       trips in order to improve transit services in my area.
       <termsOfStorageLink>More info...</termsOfStorageLink>
   TransitVehicleOverlay:
-    in_transit_to: "Next stop: {stop}"
-    incoming_at: "Approaching: {stop}"
-    stopped_at: Doors open at {stop}
     travelingAt: Traveling at {milesPerHour}
     vehicleName: Vehicle {vehicleNumber}
   TripBasicsPane:
+    checkAgain: Check again
     checkingItineraryExistence: Checking itinerary existence for each day of the week...
+    indicatesRequiredFields: Indicates required fields
     onlyOnDate: Only on {date, date, ::eeeee yyyyMMdd}
     recurringEachWeek: On certain days each week
     tripDaysPrompt: What days do you take this trip?
@@ -1042,10 +1065,8 @@ components:
     endOfTrip: Trip ends here
     header: Trip Viewer
     listOfRouteStops: List of stops on this route
-    routeHeader: "Route: <strong>{routeShortName}</strong> {routeLongName}"
     startOfTrip: Trip begins here
     tripDescription: Board at {boardAtStop} and disembark at {disembarkAtStop}
-    viewStop: View
   UserAccountScreen:
     confirmDelete: >-
       Are you sure you would like to delete your user account? Once you do so,

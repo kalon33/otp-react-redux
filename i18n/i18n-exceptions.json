@@ -64,10 +64,27 @@
       "nlPreferencesHeader",
       "nlPreferencesLoading",
       "nlPreferencesPlaceholder"
+    ],
+    "components.GoMode.turnInstructions.*": [
+      "bearLeft",
+      "bearRight",
+      "enterStation",
+      "exitStation",
+      "followSigns",
+      "sharpLeft",
+      "sharpRight",
+      "takeElevator",
+      "takeRoundabout",
+      "turnLeft",
+      "turnRight",
+      "uTurn"
     ]
   },
   "ignoredIds": [
     "components.AppMenu.openRideConsole",
+    "components.GoMode.avoidBiking",
+    "components.GoMode.fewerTransfers",
+    "components.GoMode.lessWalking",
     "components.BatchSearchScreen.routeLockAny",
     "components.BatchSearchScreen.routeLockChip",
     "components.BatchSearchScreen.routeLockDetail",

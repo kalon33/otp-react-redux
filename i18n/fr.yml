@@ -54,8 +54,6 @@ actions:
     userDeniedPermission: Refusé par l'utilisateur
   map:
     currentLocation: (Emplacement actuel)
-  GoMode:
-    currentLocation: (Emplacement actuel)
   user:
     accountDeleted: Votre compte utilisateur ({email}) a été supprimé.
     authTokenError: Erreur lors de l'obtention d'un jeton d'authentification.
@@ -134,7 +132,9 @@ common:
     submitting: Envoi en cours…
     "yes": Oui
   itineraryDescriptions:
+    containsCanceledTrip: Cet itinéraire contient un trajet annulé.
     fareUnknown: Tarif inconnu
+    reservationRequired: Réservation requise.
     noDefaultFareTypeConfigured: Multiple fares apply
     noItineraryToDisplay: Aucun trajet à afficher.
     relativeCo2: |
@@ -305,7 +305,6 @@ components:
       pendant que nous vous redirigeons vers la page de connexion...
   CallTakerPanel:
     advancedOptions: Options avancées
-    groupSize: "Taille du groupe :"
     intermediateDestination: Entrez la destination intermédiaire
   CompanionsPane:
     addNewCompanion: Ajouter un accompagnateur
@@ -398,7 +397,6 @@ components:
   GoMode:
     arrivedDone: "Terminé"
     arrivedTitle: "🎉 Vous êtes arrivé !"
-    arrivesAt: "arrive à {time}"
     arrivesIn: "arrive dans {time}"
     boardingAboard: "À bord du {route}"
     boardingConfirm: "Je suis dans le bus"
@@ -435,17 +433,8 @@ components:
     legWait: "🕒 {mins} min d'attente"
     legWalk: "Marche"
     avoidBiking: "Éviter le vélo"
-    fast: "Le plus rapide"
     fewerTransfers: "Moins de correspondances"
     lessWalking: "Moins de marche"
-    fastest: "Le plus rapide"
-    minimizewalking: "Moins de marche"
-    stayseated: "Moins de correspondances"
-    bikeforward: "Privilégier le vélo"
-    avoidbiking: "Éviter le vélo"
-    stayaboard: "Rester à bord"
-    reliabletransfers: "Correspondances fiables"
-    accessible: "Accessible"
     chooseBus: "Choisir le bus"
     deviationWarning: "{distance} m de la ligne"
     noBusesOrRoutesNearby: "Aucun bus ou ligne détecté à proximité. Essayez de vous rapprocher d'un arrêt de bus."
@@ -455,7 +444,6 @@ components:
     locatingBus: "Localisation de votre bus..."
     nextBusesAtStop: "Prochains bus à {stop}"
     nextDeparture: "Prochain : {time} (dans {mins} min)"
-    noBusesNearby: "Aucun bus détecté à proximité"
     noLiveVehicleData: "Pas de données en temps réel — suivi par GPS"
     notYet: "Pas encore"
     offAtStop: "Descente à {stop}"
@@ -536,8 +524,10 @@ components:
   MapLayers:
     bike-rental: Vélos partagés {companies}
     car-rental: Voitures en location
+    OTP-UI-stopsAndStations: Arrêts et stations
     micromobility-rental: Trottinettes {companies}
     park-and-ride: Parcs relais
+    realtimeStops: Arrêts en temps réel
     satellite: Satellite
     shared-vehicles: Véhicules en partage
     stations: Arrêts et stations
@@ -794,6 +784,7 @@ components:
     timeThere: "{duration} sur place"
     toggleLabel: Aller-retour
   RouteDetails:
+    headsignFrom: "{headsign} (depuis {firstStop})"
     headsignTo: "{headsign} ({lastStop})"
     moreDetails: Plus d'infos
     operatedBy: Exploité par {agencyName}
@@ -947,13 +938,12 @@ components:
       recherches afin d'améliorer les transports publics dans ma region.
       <termsOfStorageLink>Plus d'informations...</termsOfStorageLink>
   TransitVehicleOverlay:
-    in_transit_to: "Prochain arrêt : {stop}"
-    incoming_at: Approchant {stop}
-    stopped_at: À quai à {stop}
     travelingAt: "Vitesse : {milesPerHour}"
     vehicleName: Véhicule {vehicleNumber}
   TripBasicsPane:
+    checkAgain: Revérifier
     checkingItineraryExistence: Vérification du trajet pour chaque jour de la 
+    indicatesRequiredFields: Indique les champs obligatoires
       semaine...
     onlyOnDate: "{date, date, ::eeeee yyyyMMdd} uniquement"
     recurringEachWeek: Certains jours chaque semaine
@@ -1094,10 +1084,8 @@ components:
     endOfTrip: Fin du trajet
     header: Info trajet
     listOfRouteStops: Liste des arrêts sur cette ligne
-    routeHeader: "Ligne : <strong>{routeShortName}</strong> {routeLongName}"
     startOfTrip: Début du trajet
     tripDescription: Montez à {boardAtStop} et descendez à {disembarkAtStop}
-    viewStop: Info
   UserAccountScreen:
     confirmDelete: >-
       Voulez-vous vraiment supprimer votre compte ? Cette action est
