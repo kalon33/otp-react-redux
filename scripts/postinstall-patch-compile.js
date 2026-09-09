@@ -22,7 +22,7 @@ console.log(`Project root: ${projectRoot}`);
 try {
   // Step 1: Apply all patches using patch-package
   console.log("\n1. Applying patches with patch-package...");
-  const patchOutput = execSync("patch-package", { cwd: projectRoot, encoding: "utf-8" });
+  const patchOutput = execSync("patch-package", { cwd: projectRoot, encoding: "utf-8", env: { PATH: process.env.PATH + ':' + path.join(nodeModulesPath, '.bin') } });
   console.log(patchOutput);
   console.log("✓ Patches applied successfully");
 
