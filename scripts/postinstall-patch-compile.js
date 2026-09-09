@@ -53,6 +53,12 @@ try {
   console.error(error.stack);
 }
 
+// Clear Vite's dependency optimization cache so the dev server re-bundles the
+// (now patched) compiled files instead of serving a stale pre-bundled copy.
+// Without this, Vite can keep serving the unpatched trip-details from
+// node_modules/.vite after the files were fixed, reproducing runtime warnings.
+clearViteDepCache();
+
 console.log("\n✓ Postinstall patch-compile completed!");
 console.log("All patched packages have been updated in both source and compiled files.");
 
@@ -167,6 +173,24 @@ function buildTableReplacement() {
 }
 
 
+
+/**
+ * Remove Vite's dependency optimization cache (node_modules/.vite) so the dev
+ * server re-bundles dependencies from the freshly-patched files. Stale caches
+ * can make Vite serve the old (unpatched) compiled output even after the
+ * on-disk files were fixed.
+ */
+function clearViteDepCache() {
+  const viteCache = path.join(nodeModulesPath, ".vite");
+  if (fs.existsSync(viteCache)) {
+    try {
+      fs.rmSync(viteCache, { recursive: true, force: true });
+      console.log("\n➜ Cleared Vite dependency cache (node_modules/.vite)");
+    } catch (e) {
+      console.error("\n⚠ Could not clear Vite cache:", e.message);
+    }
+  }
+}
 
 /**
  * Detect whether the compiled trip-details files are in a stale or
