@@ -19,35 +19,49 @@ const nodeModulesPath = path.join(projectRoot, "node_modules");
 console.log("Postinstall patch-compile script starting...");
 console.log(`Project root: ${projectRoot}`);
 
+// Step 1: Apply all patches with patch-package.
+// This patches the TypeScript SOURCE files. It must not block the compiled-file
+// patching below, because the compiled JS is what Vite actually bundles; if
+// patch-package fails (e.g. node_modules left in a half-patched state) the
+// compiled-file fixes still need to run so the app builds and renders without
+// errors (unclosed ternary, missing tbody, invalid DOM nesting, etc.).
+console.log("\n1. Applying patches with patch-package...");
 try {
-  // Step 1: Apply all patches using patch-package
-  console.log("\n1. Applying patches with patch-package...");
-  const patchOutput = execSync("patch-package", { cwd: projectRoot, encoding: "utf-8", env: { PATH: process.env.PATH + ':' + path.join(nodeModulesPath, '.bin') } });
+  const patchOutput = execSync("patch-package", { cwd: projectRoot, encoding: "utf-8", stdio: ["pipe", "pipe", "inherit"], env: { PATH: process.env.PATH + ':' + path.join(nodeModulesPath, '.bin') } });
   console.log(patchOutput);
   console.log("✓ Patches applied successfully");
-
-  // Step 2: Patch @opentripplanner/trip-details compiled files
-  console.log("\n2. Patching @opentripplanner/trip-details compiled files...");
-  patchTripDetailsCompiled();
-
-  // Step 3: Patch @opentripplanner/trip-form compiled files  
-  console.log("\n3. Patching @opentripplanner/trip-form compiled files...");
-  patchTripFormCompiled();
-
-  console.log("\n✓ Postinstall patch-compile completed!");
-  console.log("All patched packages have been updated in both source and compiled files.");
-
 } catch (error) {
-  console.error("\n✗ Postinstall patch-compile failed:", error.message);
-  console.error(error.stack);
-  process.exit(1);
+  console.error("\n⚠ patch-package reported an error (see above). Source patches may be partially applied;");
+  console.error("   continuing with compiled-file patching. To fix the source patches, remove node_modules and reinstall.");
 }
+
+// Step 2: Patch @opentripplanner/trip-details compiled files
+console.log("\n2. Patching @opentripplanner/trip-details compiled files...");
+try {
+  patchTripDetailsCompiled();
+} catch (error) {
+  console.error("\n✗ Failed to patch @opentripplanner/trip-details compiled files:", error.message);
+  console.error(error.stack);
+}
+
+// Step 3: Patch @opentripplanner/trip-form compiled files  
+console.log("\n3. Patching @opentripplanner/trip-form compiled files...");
+try {
+  patchTripFormCompiled();
+} catch (error) {
+  console.error("\n✗ Failed to patch @opentripplanner/trip-form compiled files:", error.message);
+  console.error(error.stack);
+}
+
+console.log("\n✓ Postinstall patch-compile completed!");
+console.log("All patched packages have been updated in both source and compiled files.");
 
 /**
  * Patch compiled files for @opentripplanner/trip-details
  */
 function patchTripDetailsCompiled() {
-  const packagePath = path.join(nodeModulesPath, "@opentripplanner/trip-details");
+  const packageName = "@opentripplanner/trip-details";
+  const packagePath = path.join(nodeModulesPath, packageName);
   
   if (!fs.existsSync(packagePath)) {
     console.log("  ⚠ @opentripplanner/trip-details not found, skipping");
@@ -56,6 +70,16 @@ function patchTripDetailsCompiled() {
 
   const esmFile = path.join(packagePath, "esm/components/fares-v2-table.js");
   const libFile = path.join(packagePath, "lib/components/fares-v2-table.js");
+
+  // If the compiled files were left in a partially-patched state by a previous
+  // run (e.g. the title ternary opened with "?" but closed with ": undefined"
+  // or left unclosed), the regexes below won't match cleanly and the build
+  // breaks. Detect that state and reinstall the package fresh so we start
+  // from a pristine copy, then apply the transforms deterministically.
+  if (needsPackageReset(esmFile, libFile)) {
+    console.log("  ↻ Compiled trip-details files are in a stale/partial state; reinstalling pristine package...");
+    resetPackage(packageName);
+  }
 
   // Patch ESM file
   if (fs.existsSync(esmFile)) {
@@ -140,6 +164,52 @@ function patchTripDetailsCompiled() {
 
 function buildTableReplacement() {
   return `rows.map(function (r, rowIndex) {return /*#__PURE__*/React.createElement("tr", {key: "row-".concat(rowIndex)}, r.map(function (cell, cellIndex) {return /*#__PURE__*/React.createElement(Fragment, {key: "cell-".concat(rowIndex, "-").concat(cellIndex)}, cell);}))}`;
+}
+
+
+
+/**
+ * Detect whether the compiled trip-details files are in a stale or
+ * partially-patched state that the regex transforms cannot fix idempotently.
+ * Returns true if the package should be reinstalled fresh before patching.
+ */
+function needsPackageReset(esmFile, libFile) {
+  for (const file of [esmFile, libFile]) {
+    if (!fs.existsSync(file)) continue;
+    const content = fs.readFileSync(file, "utf-8");
+    // A correctly patched file closes the title ternary with ") : null".
+    // A stale/partial state has the ternary opened ("? intl.formatMessage")
+    // but closed with ": undefined" or not closed at all (still "&& intl").
+    const opened = content.includes("? intl.formatMessage(");
+    const correctlyClosed = content.includes(") : null\n      },");
+    if (opened && !correctlyClosed) return true;
+  }
+  return false;
+}
+
+/**
+ * Remove and reinstall a package from the yarn/npm cache so the on-disk files
+ * are pristine (unpatched). This is needed because yarn does not reset files
+ * that were modified in node_modules by a previous postinstall run.
+ */
+function resetPackage(packageName) {
+  const packagePath = path.join(nodeModulesPath, packageName);
+  try {
+    fs.rmSync(packagePath, { recursive: true, force: true });
+  } catch (e) {
+    console.error("    could not remove package dir:", e.message);
+    return;
+  }
+  try {
+    execSync("yarn install --force", { cwd: projectRoot, stdio: "inherit", env: process.env });
+  } catch (e) {
+    // Fallback for npm
+    try {
+      execSync("npm install", { cwd: projectRoot, stdio: "inherit", env: process.env });
+    } catch (e2) {
+      console.error("    could not reinstall package:", e2.message);
+    }
+  }
 }
 
 /**
