@@ -114,7 +114,7 @@ function patchTripDetailsCompiled() {
     content = content.replace(/var currentRowIndex = 0;/g, 'let currentRowIndex = 0;');
     
     // 6. Add tbody and cell keys
-    const oldPattern = /rows\.map\(function \(r, index\) \{return \/\*#__PURE__\*\/React\.createElement\("tr", \{key: index\}, r\);\}\)/g;
+    const oldPattern = /rows\.map\(function \(r, index\) \{\s*return \/\*#__PURE__\*\/React\.createElement\("tr", \{\s*key: index\s*\}, r\);\s*\}\)/g;
     const newPattern = buildTableReplacement();
     
     content = content.replace(oldPattern, newPattern);
@@ -163,7 +163,7 @@ function patchTripDetailsCompiled() {
 }
 
 function buildTableReplacement() {
-  return `rows.map(function (r, rowIndex) {return /*#__PURE__*/React.createElement("tr", {key: "row-".concat(rowIndex)}, r.map(function (cell, cellIndex) {return /*#__PURE__*/React.createElement(Fragment, {key: "cell-".concat(rowIndex, "-").concat(cellIndex)}, cell);}))}`;
+  return `/*#__PURE__*/React.createElement("tbody", null, rows.map(function (r, rowIndex) {return /*#__PURE__*/React.createElement("tr", {key: "row-".concat(rowIndex)}, r.map(function (cell, cellIndex) {return /*#__PURE__*/React.createElement(Fragment, {key: "cell-".concat(rowIndex, "-").concat(cellIndex)}, cell);}));}))`;
 }
 
 
