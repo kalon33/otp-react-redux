@@ -43,6 +43,7 @@ try {
   try {
     resetPackage("@opentripplanner/trip-details");
     resetPackage("@opentripplanner/trip-form");
+    resetPackage("@opentripplanner/transitive-overlay");
     const patchOutput2 = execSync("patch-package", { cwd: projectRoot, encoding: "utf-8", stdio: ["pipe", "pipe", "inherit"], env: { PATH: process.env.PATH + ':' + path.join(nodeModulesPath, '.bin') } });
     console.log(patchOutput2);
     console.log("✓ Patches applied successfully after recovery");
@@ -302,6 +303,15 @@ function resetStalePatchedPackages() {
       isPristine: (c) => !c.includes("index > 0\n                ? intl.formatMessage(") && !c.includes("fare?.amount === undefined\n                ? intl.formatMessage({"),
       // Fully current (this patch applied): both titles are ternaries.
       isCurrent: (c) => c.includes("index > 0\n                ? intl.formatMessage(") && c.includes("fare?.amount === undefined\n                ? intl.formatMessage({")
+    },
+    {
+      name: "@opentripplanner/transitive-overlay",
+      file: path.join(nodeModulesPath, "@opentripplanner/transitive-overlay", "src/index.tsx"),
+      // Pristine source calls addImage directly after loadImage resolves, with
+      // neither the duplicate-add guard nor the decode wait added by the patches.
+      isPristine: (c) => c.includes("map.addImage(img.id, response.data, img.options);") && !c.includes("maybeDecode") && !c.includes("if (map.hasImage(img.id)) return;"),
+      // Current patch waits for the image to decode before addImage.
+      isCurrent: (c) => c.includes("maybeDecode")
     }
   ];
   for (const { name, file, isPristine, isCurrent } of checks) {

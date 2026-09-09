@@ -1,48 +1,100 @@
 diff --git a/node_modules/@opentripplanner/transitive-overlay/esm/index.js b/node_modules/@opentripplanner/transitive-overlay/esm/index.js
-index 0d45537..77de65c 100644
+index 0d45537..0939165 100644
 --- a/node_modules/@opentripplanner/transitive-overlay/esm/index.js
 +++ b/node_modules/@opentripplanner/transitive-overlay/esm/index.js
-@@ -133,6 +133,11 @@ var loadImages = function loadImages(map, images) {
+@@ -133,7 +133,24 @@ var loadImages = function loadImages(map, images) {
      if (!map.hasImage(img.id)) {
        // Only load if the image hasn't already been added
        map.loadImage(img.url).then(function (response) {
+-        map.addImage(img.id, response.data, img.options);
 +        // The guard above ran synchronously and this runs a microtask
 +        // later, so two effects mounting in the same frame both pass it
 +        // and the second addImage throws "An image named ... already
 +        // exists": 18 of them per map mount on 2026-08-31.
 +        if (map.hasImage(img.id)) return;
-         map.addImage(img.id, response.data, img.options);
++        // maplibre-gl's addImage reads the .width/.height of an
++        // HTMLImageElement to validate the `content` option, but those
++        // properties are 0 until the element is decoded, which makes
++        // addImage fire "Image "<id>" has invalid "content" value". Wait
++        // for decode() (HTMLImageElement) / the bitmap to be ready first.
++        var maybeDecode = response.data && typeof response.data.decode === "function" ? response.data.decode() : Promise.resolve();
++        maybeDecode.then(function () {
++          if (map.hasImage(img.id)) return;
++          map.addImage(img.id, response.data, img.options);
++        })["catch"](function (error) {
++          // eslint-disable-next-line no-console
++          console.error("Error loading image ".concat(img.id, ":"), error);
++        });
        })["catch"](function (error) {
          // eslint-disable-next-line no-console
+         console.error("Error loading image ".concat(img.id, ":"), error);
 diff --git a/node_modules/@opentripplanner/transitive-overlay/lib/index.js b/node_modules/@opentripplanner/transitive-overlay/lib/index.js
-index 5af2e61..a7152ea 100644
+index 5af2e61..d60cf17 100644
 --- a/node_modules/@opentripplanner/transitive-overlay/lib/index.js
 +++ b/node_modules/@opentripplanner/transitive-overlay/lib/index.js
-@@ -145,6 +145,11 @@ const loadImages = (map, images) => {
+@@ -145,7 +145,29 @@ const loadImages = (map, images) => {
      if (!map.hasImage(img.id)) {
        // Only load if the image hasn't already been added
        map.loadImage(img.url).then(response => {
+-        map.addImage(img.id, response.data, img.options);
 +        // The guard above ran synchronously and this runs a microtask
 +        // later, so two effects mounting in the same frame both pass it
 +        // and the second addImage throws "An image named ... already
 +        // exists": 18 of them per map mount on 2026-08-31.
 +        if (map.hasImage(img.id)) return;
-         map.addImage(img.id, response.data, img.options);
++        // maplibre-gl's addImage reads the .width/.height of an
++        // HTMLImageElement to validate the `content` option, but those
++        // properties are 0 until the element is decoded, which makes
++        // addImage fire "Image "<id>" has invalid "content" value". Wait
++        // for decode() (HTMLImageElement) / the bitmap to be ready first.
++        const maybeDecode =
++          response.data && typeof response.data.decode === "function"
++            ? response.data.decode()
++            : Promise.resolve();
++        maybeDecode
++          .then(() => {
++            if (map.hasImage(img.id)) return;
++            map.addImage(img.id, response.data, img.options);
++          })
++          .catch(error => {
++            // eslint-disable-next-line no-console
++            console.error(`Error loading image ${img.id}:`, error);
++          });
        }).catch(error => {
          // eslint-disable-next-line no-console
+         console.error(`Error loading image ${img.id}:`, error);
 diff --git a/node_modules/@opentripplanner/transitive-overlay/src/index.tsx b/node_modules/@opentripplanner/transitive-overlay/src/index.tsx
-index 5e3e06b..ec61f1b 100644
+index 5e3e06b..1260cdb 100644
 --- a/node_modules/@opentripplanner/transitive-overlay/src/index.tsx
 +++ b/node_modules/@opentripplanner/transitive-overlay/src/index.tsx
-@@ -193,6 +193,11 @@ const loadImages = (map: MapRef, images: MapImage[]) => {
+@@ -193,7 +193,29 @@ const loadImages = (map: MapRef, images: MapImage[]) => {
        map
          .loadImage(img.url)
          .then(response => {
+-          map.addImage(img.id, response.data, img.options);
 +          // The guard above ran synchronously and this runs a microtask
 +          // later, so two effects mounting in the same frame both pass it
 +          // and the second addImage throws "An image named ... already
 +          // exists": 18 of them per map mount on 2026-08-31.
 +          if (map.hasImage(img.id)) return;
-           map.addImage(img.id, response.data, img.options);
++          // maplibre-gl's addImage reads the .width/.height of an
++          // HTMLImageElement to validate the `content` option, but those
++          // properties are 0 until the element is decoded, which makes
++          // addImage fire "Image "<id>" has invalid "content" value". Wait
++          // for decode() (HTMLImageElement) / the bitmap to be ready first.
++          const maybeDecode =
++            response.data && typeof response.data.decode === "function"
++              ? response.data.decode()
++              : Promise.resolve();
++          maybeDecode
++            .then(() => {
++              if (map.hasImage(img.id)) return;
++              map.addImage(img.id, response.data, img.options);
++            })
++            .catch(error => {
++              // eslint-disable-next-line no-console
++              console.error(`Error loading image ${img.id}:`, error);
++            });
          })
          .catch(error => {
+           // eslint-disable-next-line no-console
