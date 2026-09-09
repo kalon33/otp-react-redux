@@ -1,5 +1,5 @@
 diff --git a/node_modules/@opentripplanner/trip-details/esm/components/fares-v2-table.js b/node_modules/@opentripplanner/trip-details/esm/components/fares-v2-table.js
-index ee40370..c649419 100644
+index ee403703f1a8b50f078441fa4f71b795e48de8b5..90d2741b7a42e5a5f3e2943b76d3d5feee63d506 100644
 --- a/node_modules/@opentripplanner/trip-details/esm/components/fares-v2-table.js
 +++ b/node_modules/@opentripplanner/trip-details/esm/components/fares-v2-table.js
 @@ -1,6 +1,6 @@
@@ -10,7 +10,7 @@ index ee40370..c649419 100644
  import coreUtils from "@opentripplanner/core-utils";
  import { FormattedMessage, useIntl } from "react-intl";
  import styled from "styled-components";
-@@ -162,7 +162,7 @@ var FaresV2Table = function FaresV2Table(_ref) {
+@@ -162,7 +162,7 @@
          style: {
            textAlign: legPrice ? "right" : "center"
          },
@@ -19,22 +19,25 @@ index ee40370..c649419 100644
            description: "Text explaining the transfer discount applied to this fare.",
            id: "otpUi.TripDetails.transferDiscountExplanation"
          }, {
-@@ -174,8 +174,8 @@ var FaresV2Table = function FaresV2Table(_ref) {
-         })
+@@ -171,11 +171,11 @@
+             currencyDisplay: "narrowSymbol",
+             style: "currency"
+           })
+-        })
++        }) : null
        }, !Number.isNaN(originalAmount) && originalAmount > 0 && index > 0 && /*#__PURE__*/React.createElement(TransferIcon, {
          size: 16
--      }), legPrice ? renderFare(legPrice === null || legPrice === void 0 || (_legPrice$currency2 = legPrice.currency) === null || _legPrice$currency2 === void 0 ? void 0 : _legPrice$currency2.code, legPrice === null || legPrice === void 0 ? void 0 : legPrice.amount) : FailDash));
+       }), legPrice ? renderFare(legPrice === null || legPrice === void 0 || (_legPrice$currency2 = legPrice.currency) === null || _legPrice$currency2 === void 0 ? void 0 : _legPrice$currency2.code, legPrice === null || legPrice === void 0 ? void 0 : legPrice.amount) : FailDash));
 -      var nextRowIndex = currentRowIndex + 1;
-+      }) : null, legPrice ? renderFare(legPrice === null || legPrice === void 0 || (_legPrice$currency2 = legPrice.currency) === null || _legPrice$currency2 === void 0 ? void 0 : _legPrice$currency2.code, legPrice === null || legPrice === void 0 ? void 0 : legPrice.amount) : FailDash));
 +      const nextRowIndex = currentRowIndex + 1;
        if (!rows[nextRowIndex]) {
          rows[nextRowIndex] = [];
        }
 diff --git a/node_modules/@opentripplanner/trip-details/lib/components/fares-v2-table.js b/node_modules/@opentripplanner/trip-details/lib/components/fares-v2-table.js
-index c3aa5f1..fd4c5b1 100644
+index c3aa5f1c8e8973ab6236a03c8dada20a1e22d66a..1c0da211f5fafb93bd0e492f882b8276f18fe7fe 100644
 --- a/node_modules/@opentripplanner/trip-details/lib/components/fares-v2-table.js
 +++ b/node_modules/@opentripplanner/trip-details/lib/components/fares-v2-table.js
-@@ -158,7 +158,7 @@ const FaresV2Table = ({
+@@ -158,7 +158,7 @@
          style: {
            textAlign: legPrice ? "right" : "center"
          },
@@ -43,14 +46,23 @@ index c3aa5f1..fd4c5b1 100644
            description: "Text explaining the transfer discount applied to this fare.",
            id: "otpUi.TripDetails.transferDiscountExplanation"
          }, {
-@@ -194,9 +194,7 @@ const FaresV2Table = ({
+@@ -167,7 +167,7 @@
+             currencyDisplay: "narrowSymbol",
+             style: "currency"
+           })
+-        })
++        }) : null
+       }, !Number.isNaN(originalAmount) && originalAmount > 0 && index > 0 && /*#__PURE__*/_react.default.createElement(TransferIcon, {
+         size: 16
+       }), legPrice ? (0, _utils.renderFare)(legPrice === null || legPrice === void 0 || (_legPrice$currency2 = legPrice.currency) === null || _legPrice$currency2 === void 0 ? void 0 : _legPrice$currency2.code, legPrice === null || legPrice === void 0 ? void 0 : legPrice.amount) : FailDash));
+@@ -194,9 +194,7 @@
    });
    return /*#__PURE__*/_react.default.createElement(StripedTable, null, /*#__PURE__*/_react.default.createElement(_styled.InvisibleA11yCaption, null, /*#__PURE__*/_react.default.createElement(_reactIntl.FormattedMessage, {
      id: "otpUi.TripDetails.transitFareTable"
 -  })), rows.map((r, index) => /*#__PURE__*/_react.default.createElement("tr", {
 -    key: index
 -  }, r)));
-+  })), /*#__PURE__*/_react.default.createElement("tbody", null, rows.map((r, rowIndex) => /*#__PURE__*/_react.default.createElement("tr", {key: "row-".concat(rowIndex)}, r.map((cell, cellIndex) => /*#__PURE__*/_react.default.createElement(_react.default.Fragment, {key: "cell-".concat(rowIndex, "-").concat(cellIndex)}, cell)))));
++  })), /*#__PURE__*/_react.default.createElement("tbody", null, rows.map((r, rowIndex) => /*#__PURE__*/_react.default.createElement("tr", {key: "row-".concat(rowIndex)}, r.map((cell, cellIndex) => /*#__PURE__*/_react.default.createElement(_react.default.Fragment, {key: "cell-".concat(rowIndex, "-").concat(cellIndex)}, cell))))));
  };
  var _default = exports.default = FaresV2Table;
  //# sourceMappingURL=fares-v2-table.js.map
