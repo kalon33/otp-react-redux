@@ -26,13 +26,30 @@ console.log(`Project root: ${projectRoot}`);
 // compiled-file fixes still need to run so the app builds and renders without
 // errors (unclosed ternary, missing tbody, invalid DOM nesting, etc.).
 console.log("\n1. Applying patches with patch-package...");
+// patch-package cannot re-apply a patch on top of a node_modules left in a
+// half-patched state by a previous run (e.g. an older version of this same
+// patch was applied, so the context lines the current patch expects are gone).
+// When that happens patch-package fails with "Failed to apply patch". Detect
+// the stale source state up front for the packages we patch, reinstall them
+// pristine, then apply all patches on a clean base.
+resetStalePatchedPackages();
 try {
   const patchOutput = execSync("patch-package", { cwd: projectRoot, encoding: "utf-8", stdio: ["pipe", "pipe", "inherit"], env: { PATH: process.env.PATH + ':' + path.join(nodeModulesPath, '.bin') } });
   console.log(patchOutput);
   console.log("✓ Patches applied successfully");
 } catch (error) {
   console.error("\n⚠ patch-package reported an error (see above). Source patches may be partially applied;");
-  console.error("   continuing with compiled-file patching. To fix the source patches, remove node_modules and reinstall.");
+  console.error("   Attempting one recovery reinstall + retry...");
+  try {
+    resetPackage("@opentripplanner/trip-details");
+    resetPackage("@opentripplanner/trip-form");
+    const patchOutput2 = execSync("patch-package", { cwd: projectRoot, encoding: "utf-8", stdio: ["pipe", "pipe", "inherit"], env: { PATH: process.env.PATH + ':' + path.join(nodeModulesPath, '.bin') } });
+    console.log(patchOutput2);
+    console.log("✓ Patches applied successfully after recovery");
+  } catch (error2) {
+    console.error("\n⚠ patch-package still failing after recovery. Source patches may be partially applied;");
+    console.error("   continuing with compiled-file patching. To fix the source patches, remove node_modules and reinstall.");
+  }
 }
 
 // Step 2: Patch @opentripplanner/trip-details compiled files
@@ -256,6 +273,46 @@ function needsPackageReset(esmFile, libFile) {
     if (opened && !correctlyClosed) return true;
   }
   return false;
+}
+
+/**
+ * Detect whether the trip-details source (.tsx) or compiled files are in a
+ * stale/partially-patched state left by a PREVIOUS run (e.g. an older version
+ * of the patch was applied), and reinstall the affected packages pristine so
+ * the current patch can apply cleanly. Without this, patch-package fails with
+ * "Failed to apply patch" because the context lines it expects are gone.
+ *
+ * A source file is considered stale when it is NOT in the pristine state but
+ * also NOT in the fully-current-patched state (i.e. it shows signs of an older
+ * patch). We detect by looking for the missingFareTotal title: pristine source
+ * uses the `&&` short-circuit, the current patch turns it into a ternary with
+ * `: undefined`. A source missing BOTH markers, or showing the `&&` form but
+ * also other (older) patched markers, is treated as stale and reset.
+ */
+function resetStalePatchedPackages() {
+  const checks = [
+    {
+      name: "@opentripplanner/trip-details",
+      file: path.join(nodeModulesPath, "@opentripplanner/trip-details", "src/components/fares-v2-table.tsx"),
+      // Pristine source: "fare?.amount === undefined &&" then "intl.formatMessage({"
+      // Current patch: "fare?.amount === undefined" then "? intl.formatMessage({"
+      // Pristine (unpatched) source: the transferDiscount title still uses the
+      // `&&` short-circuit before intl.formatMessage, i.e. "index > 0 &&" then
+      // "intl.formatMessage(" on the same logical form (no `?` ternary).
+      isPristine: (c) => !c.includes("index > 0\n                ? intl.formatMessage(") && !c.includes("fare?.amount === undefined\n                ? intl.formatMessage({"),
+      // Fully current (this patch applied): both titles are ternaries.
+      isCurrent: (c) => c.includes("index > 0\n                ? intl.formatMessage(") && c.includes("fare?.amount === undefined\n                ? intl.formatMessage({")
+    }
+  ];
+  for (const { name, file, isPristine, isCurrent } of checks) {
+    if (!fs.existsSync(file)) continue;
+    const content = fs.readFileSync(file, "utf-8");
+    if (isCurrent(content)) continue;       // already at the current patched state
+    if (isPristine(content)) continue;       // pristine, patch will apply cleanly
+    // Anything else is a stale/half-patched state from an older patch run.
+    console.log(`  ↻ ${name} source is in a stale/partial state; reinstalling pristine...`);
+    resetPackage(name);
+  }
 }
 
 /**
