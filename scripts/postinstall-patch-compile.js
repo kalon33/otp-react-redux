@@ -115,7 +115,15 @@ function patchTripDetailsCompiled() {
       '$1) : null\n      }, $2/*#__PURE__*/React.createElement(TransferIcon'
     );
     
-    // 4. Fix var declarations to avoid esbuild errors
+    // 4. Fix the second title attribute (missingFareTotal). The original
+    //    source uses `fare?.amount === undefined && intl.formatMessage(...)`, so
+    //    when fare.amount IS defined the && short-circuits to `false` and React
+    //    warns `Received false for a non-boolean attribute title`. Convert it to
+    //    a ternary that yields null when the condition is false. The inner
+    //    `id: "otpUi.TripDetails.missingFareTotal"` makes this match unambiguous.
+    content = patchMissingFareTitle(content, "React.createElement");
+
+    // 5. Fix var declarations to avoid esbuild errors
     content = content.replace(/var nextRowIndex = currentRowIndex \+ 1;/g, 'const nextRowIndex = currentRowIndex + 1;');
     content = content.replace(/var currentRowIndex = 0;/g, 'let currentRowIndex = 0;');
     
@@ -149,7 +157,11 @@ function patchTripDetailsCompiled() {
       '$1) : null\n      }, $2/*#__PURE__*/_react.default.createElement(TransferIcon'
     );
     
-    // 3. Fix var declarations to avoid esbuild errors
+    // 3. Fix the second title attribute (missingFareTotal) in the lib file.
+    //    Same transformation as the ESM file: `&&` ternary that yields null.
+    content = patchMissingFareTitle(content, "_react.default.createElement");
+
+    // 4. Fix var declarations to avoid esbuild errors
     content = content.replace(/var nextRowIndex = currentRowIndex \+ 1;/g, 'const nextRowIndex = currentRowIndex + 1;');
     content = content.replace(/var currentRowIndex = 0;/g, 'let currentRowIndex = 0;');
     
@@ -166,6 +178,41 @@ function patchTripDetailsCompiled() {
   } else {
     console.log("  ⚠ lib file not found");
   }
+}
+
+/**
+ * Convert the `missingFareTotal` title attribute from a short-circuiting `&&`
+ * expression to a ternary that yields `null` when the condition is false.
+ * The original compiled form is:
+ *   title: (fare === null || fare === void 0 ? void 0 : fare.amount) === undefined && intl.formatMessage({
+ *       id: "otpUi.TripDetails.missingFareTotal"
+ *     })
+ * which evaluates to `false` (not null) when fare.amount is defined, triggering
+ * the React warning `Received false for a non-boolean attribute title`.
+ * `createElementFn` is "React.createElement" for ESM or "_react.default.createElement"
+ * for lib; it is only used to keep the regex from matching the wrong file.
+ */
+function patchMissingFareTitle(content, createElementFn) {
+  // Open the ternary: `=== undefined && intl.formatMessage({`  ->  `... ? intl.formatMessage({`
+  // This exact fragment is unique to the missingFareTotal title (the first
+  // title uses `index > 0 && intl.formatMessage(`), so a plain string replace is safe.
+  const openNeedle = "=== undefined && intl.formatMessage({";
+  if (content.indexOf(openNeedle) === -1) return content;
+  content = content.split(openNeedle).join("=== undefined ? intl.formatMessage({");
+
+  // Close the ternary: the formatMessage call ends with a `})` line followed by
+  // `}, /*#__PURE__*/<createElementFn>("em", null, (fare...) !== undefined`.
+  // Insert ` : null` right after that `})` so the ternary is well-formed.
+  const closeNeedleTail = "}, /*#__PURE__*/" + createElementFn + "(\"em\", null, (fare === null || fare === void 0 ? void 0 : fare.amount) !== undefined";
+  const closeIdx = content.indexOf(closeNeedleTail);
+  if (closeIdx === -1) return content;
+  // Walk back from closeIdx to the nearest preceding "          })" (the call end).
+  const callEnd = "          })\n";
+  const callEndIdx = content.lastIndexOf(callEnd, closeIdx);
+  if (callEndIdx === -1) return content;
+  const insertionPoint = callEndIdx + callEnd.length - 1; // after the ")"
+  content = content.slice(0, insertionPoint) + " : null" + content.slice(insertionPoint);
+  return content;
 }
 
 function buildTableReplacement() {

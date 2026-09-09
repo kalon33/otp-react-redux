@@ -1,5 +1,5 @@
 diff --git a/node_modules/@opentripplanner/trip-details/src/components/fares-v2-table.tsx b/node_modules/@opentripplanner/trip-details/src/components/fares-v2-table.tsx
-index b522f410fedffb182f26129f24f367b5001fd8ec..3a6d16e3180db170a1e78d55b8dd4b6fdb27b37a 100644
+index b522f41..47bab05 100644
 --- a/node_modules/@opentripplanner/trip-details/src/components/fares-v2-table.tsx
 +++ b/node_modules/@opentripplanner/trip-details/src/components/fares-v2-table.tsx
 @@ -1,5 +1,5 @@
@@ -9,7 +9,7 @@ index b522f410fedffb182f26129f24f367b5001fd8ec..3a6d16e3180db170a1e78d55b8dd4b6f
  import { Leg } from "@opentripplanner/types";
  import coreUtils from "@opentripplanner/core-utils";
  import { FormattedMessage, useIntl } from "react-intl";
-@@ -146,7 +146,7 @@
+@@ -146,7 +146,7 @@ const FaresV2Table = ({
            </em>
          </th>
        ) : (
@@ -18,7 +18,7 @@ index b522f410fedffb182f26129f24f367b5001fd8ec..3a6d16e3180db170a1e78d55b8dd4b6f
        )
      ]
    ];
-@@ -172,9 +172,9 @@
+@@ -172,9 +172,9 @@ const FaresV2Table = ({
  
        // Only consider alternateFareProducts if current product is dependent
        const dependentAlternateFareProducts =
@@ -30,7 +30,7 @@ index b522f410fedffb182f26129f24f367b5001fd8ec..3a6d16e3180db170a1e78d55b8dd4b6f
        const originalAmount =
          dependentAlternateFareProducts?.[0]?.price.amount - legPrice?.amount ||
          appliedFareProduct?.price.amount - legPrice?.amount;
-@@ -185,15 +185,16 @@
+@@ -185,15 +185,16 @@ const FaresV2Table = ({
            {index === 0 && (
              <th style={{ textAlign: "left" }} scope="row">
                {medium?.id && (
@@ -49,7 +49,7 @@ index b522f410fedffb182f26129f24f367b5001fd8ec..3a6d16e3180db170a1e78d55b8dd4b6f
                    id={`config.fares.riderCategory.${descope(rider.id)}`}
                    defaultMessage={rider.name}
                  />
-@@ -206,26 +207,27 @@
+@@ -206,26 +207,27 @@ const FaresV2Table = ({
              title={
                !Number.isNaN(originalAmount) &&
                originalAmount > 0 &&
@@ -93,7 +93,23 @@ index b522f410fedffb182f26129f24f367b5001fd8ec..3a6d16e3180db170a1e78d55b8dd4b6f
              {/* Leg Price will always be defined if the fare product has a price */}
              {legPrice
                ? renderFare(legPrice?.currency?.code, legPrice?.amount)
-@@ -273,9 +275,17 @@
+@@ -251,10 +253,11 @@ const FaresV2Table = ({
+           <td
+             style={{ textAlign: fare?.amount ? "right" : "center" }}
+             title={
+-              fare?.amount === undefined &&
+-              intl.formatMessage({
+-                id: "otpUi.TripDetails.missingFareTotal"
+-              })
++              fare?.amount === undefined
++                ? intl.formatMessage({
++                    id: "otpUi.TripDetails.missingFareTotal"
++                  })
++                : undefined
+             }
+           >
+             <em>
+@@ -273,9 +276,17 @@ const FaresV2Table = ({
        <InvisibleA11yCaption>
          <FormattedMessage id="otpUi.TripDetails.transitFareTable" />
        </InvisibleA11yCaption>
