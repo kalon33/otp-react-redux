@@ -2,6 +2,7 @@ import { Panel } from 'react-bootstrap'
 import styled, { css } from 'styled-components'
 
 import { getBaseColor, RED_ON_WHITE } from '../util/colors'
+import { invisibleCss } from '../util/invisible-a11y-label'
 import Link from '../util/link'
 
 const baseColor = getBaseColor()
@@ -153,29 +154,95 @@ export const FeedbackTextarea = styled.textarea`
 `
 
 /**
- * The attach row: a real <input type="file"> wearing a label, because that is
- * the control that offers the camera, the photo library AND the screenshot
- * album on both iOS and Android with no native plugin behind it.
+ * The attach row: our own button, plus the real `<input type="file">` kept in
+ * the DOM but out of sight.
+ *
+ * The input is still the control that offers the camera, the photo library AND
+ * the screenshot album on both iOS and Android with no native plugin behind it
+ * — but WKWebView renders it as a bare "Choose File" pill and, once a file is
+ * picked, appends its own preview: a broken-image glyph and the raw filename
+ * ("IMG_3503.png"), which sat above OUR thumbnail of the same picture. That
+ * doubled preview is what the rider called a "weird format" on 2026-09-08
+ * 15:30:38. `invisibleCss` (not `display: none`) because a zero-size clipped
+ * input still opens the picker from `.click()` everywhere, and the button
+ * beside it carries the accessible name.
  */
 export const FeedbackAttachRow = styled.div`
   align-items: center;
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
-  margin: 1em 0;
+  gap: 8px 12px;
+  margin: 1em 0 0 0;
 
   input[type='file'] {
-    font-size: 14px;
-    max-width: 100%;
+    ${invisibleCss}
+    position: absolute;
   }
+`
+
+/**
+ * The attached pictures, as a compact row.
+ *
+ * A row rather than a single slot because the shape of the thing is a list —
+ * but the server takes exactly ONE `image` per POST (transitnav
+ * preferences_api.py `_decode_feedback_image(data.get("image"))`, one string),
+ * and 900,000 decoded bytes is already 1.2 MB of base64 against nginx's
+ * 1536k body cap for `location /api/ride-note`. So the screen says "one
+ * screenshot per report" out loud rather than offering a `multiple` picker
+ * whose extra choices it would silently drop.
+ */
+export const FeedbackAttachments = styled.ul`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  list-style: none;
+  margin: 12px 0 0 0;
+  padding: 0;
+`
+
+/** One attachment: the picture, with its own remove control on its corner. */
+export const FeedbackAttachment = styled.li`
+  position: relative;
 `
 
 /** What the rider is about to send, at a size that proves it is the right one. */
 export const FeedbackThumbnail = styled.img`
   border: 1px solid #adadad;
   border-radius: 4px;
-  max-height: 160px;
-  max-width: 100%;
+  display: block;
+  height: 96px;
+  object-fit: cover;
+  width: 96px;
+`
+
+/**
+ * Remove, on the picture it removes.
+ *
+ * It used to be a full-width-ish bootstrap button floating at the vertical
+ * middle of a 160 px thumbnail with nothing tying the two together; on the
+ * rider's screenshot it reads as an unrelated control. Sized to the 44 px
+ * touch target Apple asks for, minus the 8 px of overhang.
+ */
+export const FeedbackRemoveButton = styled.button`
+  align-items: center;
+  background: #fff;
+  border: 1px solid #adadad;
+  border-radius: 50%;
+  color: #333;
+  display: flex;
+  font-size: 18px;
+  height: 28px;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+  position: absolute;
+  right: -8px;
+  top: -8px;
+  width: 28px;
+
+  &:focus {
+    outline: 2px solid ${baseColor};
+  }
 `
 
 /** Sent / held / failed. Never a spinner alone: the rider needs the words. */

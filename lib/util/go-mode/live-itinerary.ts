@@ -195,3 +195,21 @@ export function buildLiveItinerary(
   })
   return live
 }
+
+/**
+ * The live end of the trip: the last leg's end time once the live figures have
+ * been folded in — i.e. exactly the arrival the trip sheet prints.
+ *
+ * Anything that shows the rider an arrival time should read this rather than
+ * re-deriving one, so two surfaces cannot disagree. Returns null when the
+ * itinerary has no usable end (no legs, or non-numeric times).
+ */
+export function liveArrivalMs(
+  itinerary: Itinerary | null | undefined,
+  liveLegTimes: Record<number, LiveLegTime>
+): number | null {
+  if (!itinerary?.legs?.length) return null
+  const legs = buildLiveItinerary(itinerary, liveLegTimes || {}).legs
+  const end = Number(legs[legs.length - 1]?.endTime)
+  return Number.isFinite(end) ? end : null
+}

@@ -5,6 +5,7 @@ import React, { useContext } from 'react'
 
 import { ComponentContext } from '../../../util/contexts'
 import { getFormattedMode } from '../../../util/i18n'
+import { itineraryAccessModeId } from '../../../util/itinerary'
 import FormattedMode from '../../util/formatted-mode'
 
 const { isRideshareLeg } = coreUtils.itinerary
@@ -28,10 +29,9 @@ export function getMainItineraryModes({
   transitMode?: string
 } {
   let primaryTransitDuration = 0
-  let accessModeId = 'walk'
   let transitMode
-  itinerary.legs.forEach((leg, i) => {
-    const { duration, mode, rentedBike, rentedVehicle } = leg
+  itinerary.legs.forEach((leg) => {
+    const { duration, mode } = leg
     if (isTransitLeg(leg) && duration > primaryTransitDuration) {
       primaryTransitDuration = duration
       transitMode = getFormattedMode(
@@ -39,16 +39,16 @@ export function getMainItineraryModes({
         intl
       )
     }
-    if (isBicycle(mode)) accessModeId = 'bicycle'
-    if (rentedBike) accessModeId = 'bicycle_rent'
-    if (isMicromobility(mode)) accessModeId = 'micromobility'
-    if (rentedVehicle || (isMicromobility(mode) && rentedBike))
-      accessModeId = 'micromobility_rent'
-    if (mode === 'CAR') accessModeId = 'drive'
-    if (isRideshareLeg(leg)) accessModeId = 'ride'
   })
 
-  return { mainMode: getFormattedMode(accessModeId, intl), transitMode }
+  // The access half of the heading now comes from the shared helper, because
+  // doMergeItineraries uses the SAME function to decide whether two itineraries
+  // may fold into one card. When the two disagreed, a bike itinerary could be
+  // merged away under a walk heading (2026-09-08 rider report).
+  return {
+    mainMode: getFormattedMode(itineraryAccessModeId(itinerary), intl),
+    transitMode
+  }
 }
 
 /**

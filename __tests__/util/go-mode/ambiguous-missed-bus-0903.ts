@@ -413,7 +413,7 @@ describe('a definitive missed bus is unchanged (2026-09-03)', () => {
     await new Promise((resolve) => setTimeout(resolve, 0))
 
     expect(missedBusMessages(store)).toEqual([
-      'Missed the Orange Line — updating your trip to the next departure.'
+      'Orange Line missed · next departure'
     ])
     const started = store.of('START_REROUTE')
     expect(started).toHaveLength(1)

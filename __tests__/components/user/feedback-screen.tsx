@@ -231,3 +231,99 @@ describe('components > user > feedback screen (the 2026-09-06 silent hold)', () 
     })
   })
 })
+
+/**
+ * Rider note 2026-09-08 15:30:38, with a screenshot of this screen:
+ * *"Weird format for selecting multiple photos"*
+ * (`~/otp-debug-logs/feedback/mtt4i5o2-gy56xv-1788899438491.jpg`).
+ *
+ * What the picture shows is one attachment rendered THREE times: WKWebView's
+ * bare "Choose File" pill, then its own preview of the pick (a broken-image
+ * glyph plus "IMG_3503.png"), then our 160 px thumbnail, with a "Remove"
+ * button floating at the thumbnail's vertical middle and nothing tying the two
+ * together. "Multiple photos" is the other half of the note: there is no
+ * `multiple` on the input and there cannot be — `/api/ride-note` decodes a
+ * single `image` string per POST, and one 900,000-byte picture is already
+ * ~1.2 MB of base64 against the route's 1536k body cap.
+ */
+describe('components > user > feedback screen (2026-09-08 picker)', () => {
+  beforeEach(() => {
+    setDefaultTestTime()
+    window.localStorage.clear()
+    recorded.length = 0
+  })
+
+  it('offers one picture, and says so, rather than a multi-select it would drop', () => {
+    const { wrapper } = renderScreen()
+    const input = wrapper.find('input[type="file"]')
+    // The server takes one `image` per POST. A `multiple` picker would let the
+    // rider choose four and silently send the first.
+    expect(input.prop('multiple')).toBeFalsy()
+    expect(wrapper.text()).toContain('One screenshot per report')
+  })
+
+  it('keeps the real input in the DOM but out of the rider’s way', () => {
+    const { wrapper } = renderScreen()
+    const input = wrapper.find('input[type="file"]')
+    // It still has to exist: it is the only control that reaches the camera
+    // roll and the screenshot album on iOS and Android without a plugin.
+    expect(input).toHaveLength(1)
+    expect(input.prop('accept')).toBe('image/*')
+    // But it is not what the rider looks at, so WKWebView cannot paint its
+    // "Choose File" pill and its broken-image filename preview over our own.
+    expect(input.prop('aria-hidden')).toBe(true)
+    expect(input.prop('tabIndex')).toBe(-1)
+  })
+
+  it('opens the picker from our own button', () => {
+    const { wrapper } = renderScreen()
+    const node = wrapper
+      .find('input[type="file"]')
+      .getDOMNode() as HTMLInputElement
+    const click = jest.spyOn(node, 'click')
+    const button = wrapper
+      .find('button')
+      .filterWhere((b: { text: () => string }) =>
+        /Add a screenshot/.test(b.text())
+      )
+    expect(button).toHaveLength(1)
+    button.simulate('click')
+    expect(click).toHaveBeenCalled()
+  })
+
+  it('renders an attachment exactly once, with its own remove control', async () => {
+    const { wrapper } = renderScreen()
+    expect(wrapper.find('img')).toHaveLength(0)
+    attach(wrapper)
+    // downscaleImage is a promise even in the mock, so the tile appears a
+    // microtask after the pick.
+    await settle(wrapper)
+
+    // One thumbnail — not a filename row above it and a second preview below.
+    expect(wrapper.find('img')).toHaveLength(1)
+    const remove = wrapper.find('button[aria-label="Remove the screenshot"]')
+    expect(remove).toHaveLength(1)
+    // The button offers the honest next action once a picture is attached.
+    expect(wrapper.text()).toContain('Replace screenshot')
+    expect(wrapper.text()).not.toContain('Add a screenshot')
+
+    remove.simulate('click')
+    wrapper.update()
+    expect(wrapper.find('img')).toHaveLength(0)
+    expect(wrapper.text()).toContain('Add a screenshot')
+  })
+
+  it('still sends the picked screenshot with the report', async () => {
+    const calls = scriptFetch([{ body: { imageStored: true, ok: true } }])
+    const { wrapper } = renderScreen()
+    type(wrapper, 'Mixing biking and walking routes here')
+    attach(wrapper)
+    await settle(wrapper)
+    await send(wrapper)
+    expect(calls).toHaveLength(1)
+    expect(calls[0].image).toBe('data:image/jpeg;base64,AAAA')
+    expect(calls[0].text).toBe('Mixing biking and walking routes here')
+    // Sent clears the tile, so the next report does not re-attach this one.
+    expect(wrapper.find('img')).toHaveLength(0)
+  })
+})

@@ -188,10 +188,9 @@ describe('2026-09-04 kerb ride — boarding alerts for a declined, unreachable r
     )
     expect(event).not.toBeNull()
     expect(event!.type).toBe('BOARD_BUS_APPROACHING')
-    // Copy unchanged: only the numbers the rider acts on.
-    expect(event!.message).toBe(
-      '537 is a few minutes from France Ave S & 90th St W'
-    )
+    // Only the facts the rider acts on, middot-separated. The 3 min comes
+    // from the FEED (liveBoardEpochMs), never from BOARD_APPROACH_SECONDS.
+    expect(event!.message).toBe('537 · 3 min · France Ave S & 90th St W')
   })
 
   it('a bus running late on the SAME run is still their bus', () => {

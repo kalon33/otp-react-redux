@@ -2,6 +2,7 @@ import {
   demoteTokenTransitHops,
   getItineraryDefaultMonitoredDays,
   itinerariesAreEqual,
+  itineraryAccessModeId,
   itineraryCanBeMonitored,
   transitRouteSignature
 } from '../../lib/util/itinerary'
@@ -234,6 +235,86 @@ describe('trip shape (mergeByRouteSignature)', () => {
     const bikeOnly = { legs: [bike(4)] }
     expect(same(walkOnly, bikeOnly)).toBe(false)
     expect(same(bikeOnly, bikeOnly)).toBe(true)
+  })
+
+  // 2026-09-08, "Why am I only getting one bike route??" / "Mixing biking and
+  // walking routes here". Old Shakopee Rd -> Perennial Cycle, TRANSIT+BICYCLE.
+  // The batch search fans out into three OTP calls (TRANSIT, BICYCLE,
+  // TRANSIT+BICYCLE); replayed against the live graph at 15:30/15:32/15:33/16:05
+  // the TRANSIT+BICYCLE call returned FIVE distinct route shapes, but because
+  // the route signature ignores access and egress, three of them folded into
+  // WALK-access rows from the plain-TRANSIT call — and the representative is
+  // the EARLIEST departure, which a 27-minute walk to the stop wins over an
+  // 8-minute ride to it. bike 2.2 km > 465 > bike 4.0 km (37 min) vanished
+  // under a 74-minute walk card; bike > Orange Line > bike (42 min) under a
+  // 79-minute one, which is exactly the "1 hr 1 min walking" screen the rider
+  // sent.
+  const walk = (lat: number) => ({
+    from: place(2, 2),
+    mode: 'WALK',
+    to: place(lat, 9),
+    transitLeg: false
+  })
+  const bikeAccess = (routeId: string) => ({
+    legs: [
+      { ...bike(2), from: place(0, 0), to: place(1, 1) },
+      ride(routeId),
+      bike(4)
+    ]
+  })
+  const walkAccess = (routeId: string) => ({
+    legs: [
+      { ...walk(2), from: place(0, 0), to: place(1, 1) },
+      ride(routeId),
+      walk(4)
+    ]
+  })
+
+  it('never folds a bike-access itinerary into a walk-access one', () => {
+    expect(same(bikeAccess('1:902'), walkAccess('1:902'))).toBe(false)
+    // ...and the fold it was built for still works.
+    expect(same(bikeAccess('1:902'), bikeAccess('1:902'))).toBe(true)
+    expect(same(walkAccess('1:902'), walkAccess('1:902'))).toBe(true)
+  })
+
+  it('folds only within one access mode, so a card cannot span two headings', () => {
+    const rows: Array<{ legs: unknown[] }> = []
+    // The five shapes the TRANSIT+BICYCLE call returned, plus the walk-access
+    // twins of three of them that the TRANSIT call returned.
+    const candidates = [
+      bikeAccess('1:901'), // Orange Line
+      bikeAccess('1:4'),
+      bikeAccess('1:465'),
+      walkAccess('1:901'),
+      walkAccess('1:465'),
+      walkAccess('1:4')
+    ]
+    candidates.forEach((cur) => {
+      if (!rows.some((row) => same(row, cur))) rows.push(cur)
+    })
+    expect(rows.length).toBe(6)
+    expect(
+      rows.filter((r) => itineraryAccessModeId(r as never) === 'bicycle')
+    ).toHaveLength(3)
+  })
+})
+
+describe('itineraryAccessModeId', () => {
+  it('reads any bicycle leg as a bike itinerary', () => {
+    expect(
+      itineraryAccessModeId({
+        legs: [walkLeg, { mode: 'BUS', transitLeg: true }, bikeLeg]
+      } as never)
+    ).toBe('bicycle')
+  })
+  it('defaults to walk, and survives a legless itinerary', () => {
+    expect(itineraryAccessModeId({ legs: [walkLeg] } as never)).toBe('walk')
+    expect(itineraryAccessModeId({} as never)).toBe('walk')
+  })
+  it('reads a car leg as driving', () => {
+    expect(itineraryAccessModeId({ legs: [{ mode: 'CAR' }] } as never)).toBe(
+      'drive'
+    )
   })
 })
 

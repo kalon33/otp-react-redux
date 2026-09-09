@@ -372,7 +372,7 @@ components:
     placeNotFound: Lieu introuvable
     placeNotFoundDescription: Le lieu recherché est introuvable.
   FeedbackScreen:
-    attachLabel: "Ajouter une photo ou une capture d'écran"
+    attachLabel: "Ajouter une capture d'écran"
     commentLabel: "Votre commentaire"
     commentPlaceholder: "Que s'est-il passé ?"
     failed: "Envoi impossible, et cet appareil n'a pas de place pour l'enregistrer. Réessayez."
@@ -384,7 +384,9 @@ components:
     heldServer: "Le serveur n'a pas pu le prendre ({status}). Enregistré — l'envoi se fera à votre prochaine visite sur cet écran."
     imageRejected: "Ce fichier n'a pas pu être joint."
     intro: "Dites-nous ce qui n'a pas marché. Une capture d'écran en dit plus qu'une phrase."
-    removeImage: "Retirer"
+    oneImageOnly: "Une seule capture d'écran par rapport."
+    removeImage: "Retirer la capture d'écran"
+    replaceImage: "Remplacer la capture d'écran"
     send: "Envoyer"
     sendingHeld: "Envoi d'un commentaire précédent resté en attente…"
     sent: "Envoyé. Merci."

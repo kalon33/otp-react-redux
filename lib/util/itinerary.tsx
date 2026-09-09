@@ -15,6 +15,10 @@ import { AppConfig, CO2Config } from './config-types'
 import { checkForRouteModeOverride } from './config'
 import { WEEKDAYS, WEEKEND_DAYS } from './monitored-trip'
 
+// Same helpers the itinerary-description component uses to pick a heading; see
+// itineraryAccessModeId below.
+const { isBicycle, isMicromobility, isRideshareLeg } = coreUtils.itinerary
+
 export interface ItineraryStartTime {
   itinerary: ItineraryWithIndex
   legs: Leg[]
@@ -266,6 +270,31 @@ export function demoteTokenTransitHopsBy<T>(
   return [...kept, ...demoted]
 }
 
+/**
+ * The access-mode class an itinerary reads as: the mode a rider would name if
+ * asked "how do you get to the bus?". Mirrors the priority chain in
+ * `getMainItineraryModes` (lib/components/narrative/default/itinerary-description.tsx),
+ * which builds the group heading — the two MUST agree, which is why that
+ * function now calls this one.
+ *
+ * Returned as the message id half of the heading ("walk", "bicycle", "drive",
+ * …), not a display string, so it is intl-free and safe to use as a merge key.
+ */
+export function itineraryAccessModeId(itinerary: Itinerary): string {
+  let accessModeId = 'walk'
+  ;(itinerary?.legs || []).forEach((leg) => {
+    const { mode, rentedBike, rentedVehicle } = leg
+    if (isBicycle(mode)) accessModeId = 'bicycle'
+    if (rentedBike) accessModeId = 'bicycle_rent'
+    if (isMicromobility(mode)) accessModeId = 'micromobility'
+    if (rentedVehicle || (isMicromobility(mode) && rentedBike))
+      accessModeId = 'micromobility_rent'
+    if (mode === 'CAR') accessModeId = 'drive'
+    if (isRideshareLeg(leg)) accessModeId = 'ride'
+  })
+  return accessModeId
+}
+
 export function itinerariesAreEqual(
   itinerary: Itinerary,
   other: Itinerary,
@@ -290,6 +319,23 @@ export function itinerariesAreEqual(
     if (signature !== '') {
       return (
         signature === transitRouteSignature(other) &&
+        // ...but HOW the rider reaches that chain is not an alighting detail,
+        // it is the whole question they asked. The route signature ignores the
+        // access/egress legs, so without this line a WALK-access itinerary from
+        // the plain-transit sub-query and a BICYCLE-access itinerary from the
+        // transit+bike sub-query — same bus, wildly different trips — fold into
+        // one row, and the row is represented by whichever leaves FIRST, which
+        // is almost always the walk one (a 27-minute walk to the stop starts
+        // long before an 8-minute ride to it). Measured against the live graph
+        // 2026-09-08, Old Shakopee Rd -> Perennial Cycle, 15:30-16:05: OTP
+        // returned FIVE distinct bike+transit route shapes and the list showed
+        // two or three "Bike + Transit" cards; the best of them (bike 2.2 km >
+        // 465 > bike 4.0 km, 37 min) was folded into a 74-minute WALK card, and
+        // bike > Orange Line > bike (42 min) into a 79-minute one. Grouping
+        // reads the same access mode this compares, so the invariant is simply:
+        // two itineraries that would be filed under different headings are
+        // never the same itinerary.
+        itineraryAccessModeId(itinerary) === itineraryAccessModeId(other) &&
         getFare(itinerary, defaultFareType).transitFare ===
           getFare(other, defaultFareType).transitFare
       )
