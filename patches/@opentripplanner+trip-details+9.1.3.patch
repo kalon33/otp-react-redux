@@ -1,69 +1,47 @@
-diff --git a/node_modules/@opentripplanner/trip-details/esm/components/fares-v2-table.js b/node_modules/@opentripplanner/trip-details/esm/components/fares-v2-table.js
-index ee403703f1a8b50f078441fa4f71b795e48de8b5..90d2741b7a42e5a5f3e2943b76d3d5feee63d506 100644
---- a/node_modules/@opentripplanner/trip-details/esm/components/fares-v2-table.js
-+++ b/node_modules/@opentripplanner/trip-details/esm/components/fares-v2-table.js
-@@ -1,6 +1,6 @@
- import _toConsumableArray from "@babel/runtime/helpers/toConsumableArray";
- /* eslint-disable no-underscore-dangle */
--import React from "react";
-+import React, { Fragment } from "react";
- import coreUtils from "@opentripplanner/core-utils";
- import { FormattedMessage, useIntl } from "react-intl";
- import styled from "styled-components";
-@@ -162,7 +162,7 @@
-         style: {
-           textAlign: legPrice ? "right" : "center"
-         },
--        title: !Number.isNaN(originalAmount) && originalAmount > 0 && index > 0 && intl.formatMessage({
-+        title: !Number.isNaN(originalAmount) && originalAmount > 0 && index > 0 ? intl.formatMessage({
-           description: "Text explaining the transfer discount applied to this fare.",
-           id: "otpUi.TripDetails.transferDiscountExplanation"
-         }, {
-@@ -171,11 +171,11 @@
-             currencyDisplay: "narrowSymbol",
-             style: "currency"
-           })
--        })
-+        }) : null
-       }, !Number.isNaN(originalAmount) && originalAmount > 0 && index > 0 && /*#__PURE__*/React.createElement(TransferIcon, {
-         size: 16
-       }), legPrice ? renderFare(legPrice === null || legPrice === void 0 || (_legPrice$currency2 = legPrice.currency) === null || _legPrice$currency2 === void 0 ? void 0 : _legPrice$currency2.code, legPrice === null || legPrice === void 0 ? void 0 : legPrice.amount) : FailDash));
--      var nextRowIndex = currentRowIndex + 1;
-+      const nextRowIndex = currentRowIndex + 1;
-       if (!rows[nextRowIndex]) {
-         rows[nextRowIndex] = [];
-       }
-diff --git a/node_modules/@opentripplanner/trip-details/lib/components/fares-v2-table.js b/node_modules/@opentripplanner/trip-details/lib/components/fares-v2-table.js
-index c3aa5f1c8e8973ab6236a03c8dada20a1e22d66a..1c0da211f5fafb93bd0e492f882b8276f18fe7fe 100644
---- a/node_modules/@opentripplanner/trip-details/lib/components/fares-v2-table.js
-+++ b/node_modules/@opentripplanner/trip-details/lib/components/fares-v2-table.js
-@@ -158,7 +158,7 @@
-         style: {
-           textAlign: legPrice ? "right" : "center"
-         },
--        title: !Number.isNaN(originalAmount) && originalAmount > 0 && index > 0 && intl.formatMessage({
-+        title: !Number.isNaN(originalAmount) && originalAmount > 0 && index > 0 ? intl.formatMessage({
-           description: "Text explaining the transfer discount applied to this fare.",
-           id: "otpUi.TripDetails.transferDiscountExplanation"
-         }, {
-@@ -167,7 +167,7 @@
-             currencyDisplay: "narrowSymbol",
-             style: "currency"
-           })
--        })
-+        }) : null
-       }, !Number.isNaN(originalAmount) && originalAmount > 0 && index > 0 && /*#__PURE__*/_react.default.createElement(TransferIcon, {
-         size: 16
-       }), legPrice ? (0, _utils.renderFare)(legPrice === null || legPrice === void 0 || (_legPrice$currency2 = legPrice.currency) === null || _legPrice$currency2 === void 0 ? void 0 : _legPrice$currency2.code, legPrice === null || legPrice === void 0 ? void 0 : legPrice.amount) : FailDash));
-@@ -194,9 +194,7 @@
-   });
-   return /*#__PURE__*/_react.default.createElement(StripedTable, null, /*#__PURE__*/_react.default.createElement(_styled.InvisibleA11yCaption, null, /*#__PURE__*/_react.default.createElement(_reactIntl.FormattedMessage, {
-     id: "otpUi.TripDetails.transitFareTable"
--  })), rows.map((r, index) => /*#__PURE__*/_react.default.createElement("tr", {
--    key: index
--  }, r)));
-+  })), /*#__PURE__*/_react.default.createElement("tbody", null, rows.map((r, rowIndex) => /*#__PURE__*/_react.default.createElement("tr", {key: "row-".concat(rowIndex)}, r.map((cell, cellIndex) => /*#__PURE__*/_react.default.createElement(_react.default.Fragment, {key: "cell-".concat(rowIndex, "-").concat(cellIndex)}, cell))))));
+diff --git a/node_modules/@opentripplanner/trip-details/src/components/fares-v2-table.tsx b/node_modules/@opentripplanner/trip-details/src/components/fares-v2-table.tsx
+index b522f410fedffb182f26129f24f367b5001fd8ec..de01c4c7778206932977bf8efd8a9a073eeaa159 100644
+--- a/node_modules/@opentripplanner/trip-details/src/components/fares-v2-table.tsx
++++ b/node_modules/@opentripplanner/trip-details/src/components/fares-v2-table.tsx
+@@ -172,7 +172,7 @@
+ 
+       // Only consider alternateFareProducts if current product is dependent
+       const dependentAlternateFareProducts =
+-        isDependent && alternateFareProducts;
++        isDependent ? alternateFareProducts : null;
+ 
+       // Calculate pre-tranfer amount either via alternate fare or fare-id matching (price.originalAmount)
+       const originalAmount =
+@@ -185,15 +185,15 @@
+           {index === 0 && (
+             <th style={{ textAlign: "left" }} scope="row">
+               {medium?.id && (
+-                <>
++                <span key="medium-name">
+                   <FormattedMessage
+                     id={`config.fares.media.${descope(medium.id)}`}
+                     defaultMessage={medium.name}
+                   />{" "}
+-                </>
++                </span>
+               )}
+               {rider?.id && (
+-                <FormattedMessage
++                <FormattedMessage key="rider-name"
+                   id={`config.fares.riderCategory.${descope(rider.id)}`}
+                   defaultMessage={rider.name}
+                 />
+@@ -273,9 +273,11 @@
+       <InvisibleA11yCaption>
+         <FormattedMessage id="otpUi.TripDetails.transitFareTable" />
+       </InvisibleA11yCaption>
+-      {rows.map((r, index) => (
+-        <tr key={index}>{r}</tr>
+-      ))}
++      <tbody>
++        {rows.map((r, rowIndex) => (
++          <tr key={`row-${rowIndex}`}>{r.map((cell, cellIndex) => React.cloneElement(cell, { key: `cell-${rowIndex}-${cellIndex}` }))}</tr>
++        ))}
++      </tbody>
+     </StripedTable>
+   );
  };
- var _default = exports.default = FaresV2Table;
- //# sourceMappingURL=fares-v2-table.js.map
-\ No newline at end of file

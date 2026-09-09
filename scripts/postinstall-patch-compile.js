@@ -75,19 +75,17 @@ function patchTripDetailsCompiled() {
       'title: !Number.isNaN(originalAmount) && originalAmount > 0 && index > 0 ? intl.formatMessage('
     );
     
-    // 3. Fix the closing of title attribute (part 2) - match the pattern with proper escaping
+    // 3. Close the title ternary opened in step 2. The compiled output ends the
+    //    intl.formatMessage(...) call with a "        })\n      }," sequence before
+    //    the TransferIcon child; insert " : null" right after that call so the
+    //    ternary (title: COND ? intl.formatMessage(...) : null) is well-formed.
+    //    Without this, esbuild fails with "Expected ":" but found "}"".
     content = content.replace(
-      /\}\), !Number\.isNaN\(originalAmount\) && originalAmount > 0 && index > 0 && \/\*#__PURE__\*\/React\.createElement\(TransferIcon/g,
-      '}) : undefined, !Number.isNaN(originalAmount) && originalAmount > 0 && index > 0 ? /*#__PURE__*/React.createElement(TransferIcon'
+      /(\n        \})\)\n      \}, (!Number\.isNaN\(originalAmount\) && originalAmount > 0 && index > 0 && )\/\*#__PURE__\*\/React\.createElement\(TransferIcon/g,
+      '$1) : null\n      }, $2/*#__PURE__*/React.createElement(TransferIcon'
     );
     
-    // 4. Fix TransferIcon rendering - close the ternary
-    content = content.replace(
-      /\}\), legPrice \? renderFare\(/g,
-      '}) : null, legPrice ? renderFare('
-    );
-    
-    // 5. Fix var declarations to avoid esbuild errors
+    // 4. Fix var declarations to avoid esbuild errors
     content = content.replace(/var nextRowIndex = currentRowIndex \+ 1;/g, 'const nextRowIndex = currentRowIndex + 1;');
     content = content.replace(/var currentRowIndex = 0;/g, 'let currentRowIndex = 0;');
     
@@ -113,19 +111,15 @@ function patchTripDetailsCompiled() {
       'title: !Number.isNaN(originalAmount) && originalAmount > 0 && index > 0 ? intl.formatMessage('
     );
     
-    // 2. Fix the closing of title attribute (part 2)
+    // 2. Close the title ternary opened in step 1. Insert " : null" right after
+    //    the intl.formatMessage(...) call so the ternary is well-formed.
+    //    Without this, the build fails with "Expected ":" but found "}"".
     content = content.replace(
-      /\}\), !Number\.isNaN\(originalAmount\) && originalAmount > 0 && index > 0 && \/\*#__PURE__\*\/_react\.default\.createElement\(TransferIcon/g,
-      '}) : undefined, !Number.isNaN(originalAmount) && originalAmount > 0 && index > 0 ? /*#__PURE__*/_react.default.createElement(TransferIcon'
+      /(\n        \})\)\n      \}, (!Number\.isNaN\(originalAmount\) && originalAmount > 0 && index > 0 && )\/\*#__PURE__\*\/_react\.default\.createElement\(TransferIcon/g,
+      '$1) : null\n      }, $2/*#__PURE__*/_react.default.createElement(TransferIcon'
     );
     
-    // 3. Fix TransferIcon rendering - close the ternary
-    content = content.replace(
-      /\}\), legPrice \? \(0, _utils\.renderFare\(/g,
-      '}) : null, legPrice ? (0, _utils.renderFare('
-    );
-    
-    // 4. Fix var declarations to avoid esbuild errors
+    // 3. Fix var declarations to avoid esbuild errors
     content = content.replace(/var nextRowIndex = currentRowIndex \+ 1;/g, 'const nextRowIndex = currentRowIndex + 1;');
     content = content.replace(/var currentRowIndex = 0;/g, 'let currentRowIndex = 0;');
     
