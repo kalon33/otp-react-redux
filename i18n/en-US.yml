@@ -407,6 +407,17 @@ components:
     busNotBroadcasting: Bus not broadcasting yet — scheduled {time}
     changeBus: Choose bus
     chooseBus: Choose bus
+    accessible: Accessible
+    avoidBiking: Avoid Biking
+    avoidbiking: Avoid Biking
+    bikeforward: Bike Forward
+    fastest: Fastest
+    fewerTransfers: Fewer Transfers
+    lessWalking: Less Walking
+    minimizewalking: Less Walking
+    reliabletransfers: Reliable Transfers
+    stayaboard: Stay on board
+    stayseated: Fewer Transfers
     confirmExit: Are you sure you want to stop tracking this trip?
     directionEB: Eastbound
     directionNB: Northbound
