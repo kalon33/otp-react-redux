@@ -738,6 +738,33 @@ function getTrackingIntervalForLeg(leg: Leg | undefined): number {
 const ARRIVED_TRACKING_INTERVAL_MS = 30000
 
 /**
+ * How long an arrived trip sits on screen before it ends itself.
+ *
+ * Rider ask, 2026-09-09 09:03:42: *"We should finish a trip on auto if within x
+ * distance for x time"*. That morning `SET_ARRIVED` fired at 08:57:48 (87 m
+ * from the door, overallProgress 99.52%) and the only exit was the rider's own
+ * Done tap at 09:03:47 — 5m59s of a finished trip held the screen, the wake
+ * lock and the reload warning.
+ *
+ * The "within x distance" half is already spent by the time this matters: the
+ * arrival latch itself is the distance test (ARRIVAL_RADIUS_M / the >= 99.5%
+ * branch of hasArrivedAtDestination), and it is one-way, so `arrivedAt` means
+ * "the rider reached the destination and has been treated as there ever
+ * since". This is the second half — the dwell.
+ *
+ * Three minutes: long enough that the arrival card is read rather than
+ * snatched away (the 09-09 rider took six), short enough that a pocketed phone
+ * is not still running a trip a quarter of an hour later. Checked on the
+ * arrived tick, which runs at ARRIVED_TRACKING_INTERVAL_MS above, so the real
+ * end lands within 30 s of the threshold — which is the resolution the ask
+ * wanted anyway.
+ *
+ * A ROUND TRIP never auto-ends: its arrival is a pause with the return
+ * countdown still to run (see the tick's arrived branch and runReturnCountdown).
+ */
+const AUTO_END_AFTER_ARRIVAL_MS = 3 * 60 * 1000
+
+/**
  * The token-hop thresholds, from config where the deployment sets them. Same
  * two keys the results list reads (narrative-itineraries), so the rule the
  * rider sees applied to the list is the rule applied to an automatic swap.
@@ -1343,6 +1370,23 @@ export function endGoMode() {
     ) {
       dispatch(setQueryParam({ from: originalFrom }))
     }
+  }
+}
+
+/**
+ * Put a FINISHED trip away: end Go Mode and land on the search form, never on a
+ * stale results list.
+ *
+ * The one place that happens, because there are now two callers and they must
+ * not drift: the rider's own "Done" on the arrival card (GoModeScreen's
+ * handleArrivedDone) and the tick's auto-end after AUTO_END_AFTER_ARRIVAL_MS.
+ * Both dispatches go out together, so the screen swaps before GoModeScreen's
+ * inactive-redirect effect can route to RESULTS_SUMMARY.
+ */
+export function finishArrivedTrip() {
+  return function (dispatch: any) {
+    dispatch(endGoMode())
+    dispatch(setMobileScreen(MobileScreens.SEARCH_FORM))
   }
 }
 
@@ -5184,6 +5228,23 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       // is over. See util/go-mode/round-trip.ts.
       if (goMode.roundTrip) {
         runReturnCountdown(dispatch, getState, currentTime.getTime())
+        return
+      }
+      // A ONE-WAY trip has nothing left at all, so after the dwell it puts
+      // itself away — exactly what the rider's Done tap does, through the same
+      // action, so the two cannot drift (AUTO_END_AFTER_ARRIVAL_MS above).
+      if (
+        goMode.arrivedAt != null &&
+        currentTime.getTime() - goMode.arrivedAt >= AUTO_END_AFTER_ARRIVAL_MS
+      ) {
+        // eslint-disable-next-line no-console
+        console.log(
+          '[go-mode] auto-end: arrived ' +
+            `${Math.round(
+              (currentTime.getTime() - goMode.arrivedAt) / 1000
+            )}s ago, ending the trip`
+        )
+        dispatch(finishArrivedTrip())
       }
       return
     }
