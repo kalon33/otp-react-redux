@@ -235,7 +235,12 @@ import {
 } from './apiV2'
 import { MobileScreens } from './ui-constants'
 import { routingRequest, routingResponse } from './api'
-import { setMainPanelContent, setMobileScreen, setViewedStop } from './ui'
+import {
+  routeTo,
+  setMainPanelContent,
+  setMobileScreen,
+  setViewedStop
+} from './ui'
 import { setQueryParam } from './form'
 
 // The mutable state of the trip in progress. One object, one lifetime: created
@@ -934,9 +939,21 @@ export function returnToGoMode() {
     // a viewed stop AHEAD of the mobile screen, so a rider who reached one of
     // those from the app menu would tap the banner, be back in Go Mode by every
     // measure of state, and still be looking at the viewer.
-    const { ui } = getState().otp
+    const state = getState()
+    const { ui } = state.otp
     if (ui.mainPanelContent !== null) dispatch(setMainPanelContent(null))
     if (ui.viewedStop) dispatch(setViewedStop(null))
+    // ...and the ROUTE, which is a layer above all of that. `/feedback` and
+    // `/settings` are real routes in the top-level Switch (webapp-routes,
+    // responsive-webapp) — they render INSTEAD of the web app, so the whole
+    // mobile-screen tree the three dispatches above address is unmounted and
+    // the banner tap changes nothing the rider can see. On 2026-09-09 the
+    // rider tapped it four times from `/feedback` (08:33:43-51: backgrounded
+    // false + mobile screen GO_MODE each time, and no LOCATION_CHANGE in the
+    // stream) and only escaped with the back gesture, 4m18s after the first
+    // visit. routeTo carries the query string over, so the trip's URL state
+    // survives the hop back.
+    if (state.router?.location?.pathname !== '/') dispatch(routeTo('/'))
     dispatch(setGoModeBackgrounded(false))
     dispatch(setMobileScreen(MobileScreens.GO_MODE))
   }
