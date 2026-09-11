@@ -885,7 +885,16 @@ const goMode = handleActions<GoModeState, any>(
               id.startsWith('APPROACH_STOP_') ||
               id.startsWith('ARRIVING_STOP_') ||
               id.startsWith('BOARD_BUS_APPROACHING_') ||
-              id.startsWith('BOARD_BUS_ARRIVING_')
+              id.startsWith('BOARD_BUS_ARRIVING_') ||
+              // "Time to go" is keyed on route + boarding stop, and a
+              // same-connection swap changes neither: the rider leaves for the
+              // same stop to catch the same route. On 2026-09-09 the ride's two
+              // itinerary swaps re-fired it at 08:17:34, 08:21:49 and 08:22:31
+              // — three "Time to go" pushes in 4m57s, each in the same second
+              // as a START_GO_MODE (daemon page `notification-repeat`). A
+              // re-plan onto a different route or a different boarding stop
+              // carries a different context and still re-arms.
+              id.startsWith('LEAVE_SOON_')
           )
         },
         originalFrom: originalFrom ?? null,

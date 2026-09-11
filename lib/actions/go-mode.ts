@@ -4494,6 +4494,24 @@ export function advanceToLeg(legIndex: number) {
   }
 }
 
+/**
+ * Progress along the leg the trip has actually REACHED, for the boarding-stop
+ * term of `shouldTransitionToNextLeg`.
+ *
+ * The stored match is last tick's, and once the matcher nominates the transit
+ * leg it is the transit leg it speaks about — so it only answers this question
+ * while its own legIndex is still the transitioned one. Null (unknown) in
+ * every other case, which the gate reads as "nothing to say" rather than as a
+ * reason to refuse; a refused nomination is re-matched over the reached legs,
+ * so in the ordinary flow the number is there on the next tick.
+ */
+function accessProgressOf(goMode: any, transitionedLegIndex: number) {
+  const match = goMode?.routeMatch
+  if (!match || match.legIndex !== transitionedLegIndex) return null
+  const progress = Number(match.progressAlongLeg)
+  return Number.isFinite(progress) ? progress : null
+}
+
 export function handlePositionUpdate(position: GeolocationPosition) {
   return function (dispatch: any, getState: any) {
     // Heartbeat for the native GPS watchdog — wall clock, unconditionally:
@@ -4627,9 +4645,16 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     if (
       routeMatch.legIndex > transitionedLegIndex &&
       !shouldTransitionToNextLeg(routeMatch, transitionedLegIndex, {
+        // Last tick's stored match, and only while it still speaks about the
+        // leg the trip has actually reached: that is the access-leg progress
+        // the arrival term judges. Read from the tick's own `goMode`
+        // snapshot, so BOTH gate calls below see the same number.
+        accessLegProgress: accessProgressOf(goMode, transitionedLegIndex),
         boardEpoch: goMode.liveLegTimes?.[routeMatch.legIndex]?.boardEpoch,
         isRiding: goMode.riding?.legIndex === routeMatch.legIndex,
         nowMs: getCurrentTime().getTime(),
+        riderPosition: currentPosition,
+        riderSpeedMps: position.coords.speed ?? null,
         targetLeg: itinerary.legs[routeMatch.legIndex]
       })
     ) {
@@ -4756,9 +4781,12 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     if (
       !alreadyArrived &&
       shouldTransitionToNextLeg(routeMatch, previousLegIndex, {
+        accessLegProgress: accessProgressOf(goMode, previousLegIndex),
         boardEpoch: goMode.liveLegTimes?.[routeMatch.legIndex]?.boardEpoch,
         isRiding: riding?.legIndex === routeMatch.legIndex,
         nowMs: nowForRiding,
+        riderPosition: currentPosition,
+        riderSpeedMps: position.coords.speed ?? null,
         targetLeg: matchedLeg
       }) &&
       routeMatch.legIndex !== session.lastTransitionedLegIndex
