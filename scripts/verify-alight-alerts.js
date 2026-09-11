@@ -23,6 +23,18 @@
  *
  * Harness: same as verify-leg-transition — real app at :9967, real plan,
  * handlePositionUpdate invoked directly with a fixed position.
+ *
+ * The rider is put ON the bus the way the product now requires. 99001e54
+ * (2026-09-02, "go mode: board a bus on evidence, not on being near one",
+ * backlog 6.1/6.3/4.4) made GPS alone establish riding only AFTER the rider has
+ * waited at the leg's boarding stop, and put the matcher's leg nomination
+ * through the transition gate before it is stored. Teleporting straight onto
+ * the middle of the bus leg — what this script used to do, restarting Go Mode
+ * once per sample position — therefore stopped advancing the leg at all, and
+ * from 2026-09-03 every nightly run died on this script's own precondition
+ * ("matched leg 0 is not a transit leg"). It is one continuous trip now: stand
+ * at the boarding stop, then ride, which is also what makes "at most one door
+ * alert per leg" a real assertion rather than one reset between samples.
  */
 const puppeteer = require('puppeteer')
 
@@ -82,9 +94,11 @@ async function main() {
     { polling: 500, timeout: 60000 }
   )
 
-  // A transit leg that is NOT the last leg: parking at the very end of the
-  // final leg trips the arrival short-circuit, which quiesces notifications
-  // and would make this pass for the wrong reason.
+  // A walk access leg into a transit leg that is NOT the last leg: the walk is
+  // where the rider waits for the bus (the boarding evidence 6.1 now requires),
+  // and parking at the very end of the FINAL leg would trip the arrival
+  // short-circuit, which quiesces notifications and would make this pass for
+  // the wrong reason.
   const chosen = await page.evaluate(async () => {
     // eslint-disable-next-line import/no-absolute-path
     const pm = await import('/lib/util/go-mode/position-matching.js')
@@ -94,14 +108,57 @@ async function main() {
       .flatMap((r) => r?.plan?.itineraries || [])
     const ok = itins.filter((it) => {
       const legs = it.legs || []
-      const t = legs.findIndex((l) => l.transitLeg)
-      return t > 0 && t < legs.length - 1
+      return (
+        legs[0]?.mode === 'WALK' &&
+        legs[1]?.transitLeg &&
+        legs.length > 2 &&
+        (legs[1].steps || legs[1].legGeometry) != null
+      )
     })
     if (!ok.length) return null
     ok.sort((a, b) => a.startTime - b.startTime)
-    window.__alightItinerary = ok[0]
-    const legIndex = ok[0].legs.findIndex((l) => l.transitLeg)
-    const busLeg = ok[0].legs[legIndex]
+
+    // Same clock treatment as verify-leg-transition: prefer a bus already
+    // inside the board window, else shift every leg time by one CONSTANT so it
+    // is, which leaves every duration, ordering and geometry exactly as the
+    // graph produced them. Without it the board gate refuses a bus that is
+    // three quarters of an hour away and the rider never gets on.
+    const EARLY = pm.TRANSIT_BOARD_EARLY_MS
+    const now = Date.now()
+    const boardOf = (it) => Number(it.legs[1].startTime)
+    const natural = ok.find((it) => {
+      const lead = boardOf(it) - now
+      return lead < EARLY && lead > -EARLY
+    })
+    let picked = natural || ok[0]
+    let shiftedByMs = 0
+    if (!natural) {
+      shiftedByMs = now + EARLY / 2 - boardOf(picked)
+      const shift = (v) =>
+        Number.isFinite(Number(v)) ? Number(v) + shiftedByMs : v
+      picked = {
+        ...picked,
+        endTime: shift(picked.endTime),
+        legs: picked.legs.map((l) => ({
+          ...l,
+          endTime: shift(l.endTime),
+          startTime: shift(l.startTime)
+        })),
+        startTime: shift(picked.startTime)
+      }
+    }
+    window.__alightItinerary = picked
+
+    const legIndex = 1
+    const busLeg = picked.legs[legIndex]
+
+    // Where the rider waits: on the access leg's own polyline, a few metres
+    // short of the stop. Sitting exactly on the stop can instead match the
+    // transit leg at 0%, which is not waiting.
+    const walkPoly = pm.decodeLegGeometry(picked.legs[0])
+    const walkCum = pm.calculateCumulativeDistances(walkPoly)
+    let w = walkCum.findIndex((d) => d >= walkCum[walkCum.length - 1] * 0.99)
+    if (w < 1) w = walkPoly.length - 1
 
     const poly = pm.decodeLegGeometry(busLeg)
     const cum = pm.calculateCumulativeDistances(poly)
@@ -114,6 +171,7 @@ async function main() {
 
     return {
       alightStop: busLeg.to?.name,
+      boardStop: busLeg.from?.name,
       busRoute: busLeg.routeShortName || busLeg.routeLongName,
       legIndex,
       // Mid-ride, and then a few seconds from the door.
@@ -121,29 +179,49 @@ async function main() {
       nearExit: at(0.97),
       rideMinutes: Math.round(
         (Number(busLeg.endTime) - Number(busLeg.startTime)) / 60000
-      )
+      ),
+      shiftedByMs,
+      waitAt: { lat: walkPoly[w][0], lon: walkPoly[w][1] }
     }
   })
-  if (!chosen) throw new Error('no itinerary with a transit leg before the end')
+  if (!chosen) throw new Error('no walk→bus itinerary with a leg after the bus')
   console.log(
-    `[setup] ${chosen.busRoute} (leg ${chosen.legIndex}), ${chosen.rideMinutes} min ride, exit at ${chosen.alightStop}`
+    `[setup] ${chosen.busRoute} (leg ${chosen.legIndex}), ${chosen.rideMinutes} min ride, ` +
+      `board at ${chosen.boardStop}, exit at ${chosen.alightStop}` +
+      (chosen.shiftedByMs
+        ? ` (clock shifted ${(chosen.shiftedByMs / 60000).toFixed(
+            1
+          )} min: no natural departure was inside the board window)`
+        : '')
+  )
+
+  // ONE trip, walked through in order: wait at the stop, ride, reach the door.
+  // Go Mode is NOT restarted between positions any more — a restart would drop
+  // the riding fact this trip had to earn (6.3: "a Go Mode restart no longer
+  // resumes a riding fact that never named one"), and the rider would be back
+  // on the access leg for every sample.
+  await page.setGeolocation({
+    accuracy: 10,
+    latitude: chosen.waitAt.lat,
+    longitude: chosen.waitAt.lon
+  })
+  await page.evaluate(() => window.__endGoMode && window.__endGoMode())
+  await page.evaluate(() => window.__beginGoMode(window.__alightItinerary))
+  await page.waitForFunction(
+    () => window.store.getState().otp.goMode.isActive,
+    {
+      polling: 300,
+      timeout: 20000
+    }
   )
 
   // Fire N ticks at a fixed position and report the alight alerts they raise.
-  // Go Mode is restarted for each position so the two cases are independent
-  // (notification state, riding fact and leg guard all reset with the trip).
   const runAt = async (at, ticks) => {
     await page.setGeolocation({
       accuracy: 10,
       latitude: at.lat,
       longitude: at.lon
     })
-    await page.evaluate(() => window.__endGoMode && window.__endGoMode())
-    await page.evaluate(() => window.__beginGoMode(window.__alightItinerary))
-    await page.waitForFunction(
-      () => window.store.getState().otp.goMode.isActive,
-      { polling: 300, timeout: 20000 }
-    )
     return page.evaluate(
       async (at, ticks) => {
         // eslint-disable-next-line import/no-absolute-path
@@ -190,6 +268,15 @@ async function main() {
     )
   }
 
+  // (0) Waiting at the boarding stop. Nothing about the exit is due here, and
+  //     this is the stretch that earns the riding fact the ride phases need.
+  const waiting = await runAt(chosen.waitAt, 15)
+  console.log(
+    `[at stop] leg ${waiting.legIndex} at ${(
+      (waiting.legProgress ?? 0) * 100
+    ).toFixed(0)}%: ${waiting.alightAlerts.length} alight alert(s)`
+  )
+
   const mid = await runAt(chosen.midRide, 6)
   console.log(
     `[mid-ride] leg ${mid.legIndex} at ${((mid.legProgress ?? 0) * 100).toFixed(
@@ -219,6 +306,12 @@ async function main() {
   if (exit.exitStop !== chosen.alightStop) {
     throw new Error(
       `test setup drifted: heading for "${exit.exitStop}", expected "${chosen.alightStop}"`
+    )
+  }
+  if (waiting.alightAlerts.length > 0) {
+    throw new Error(
+      `FAIL: ${waiting.alightAlerts.length} alight alert(s) while the rider ` +
+        'was still standing at the boarding stop'
     )
   }
   if (mid.alightAlerts.length > 0) {

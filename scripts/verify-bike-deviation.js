@@ -852,6 +852,19 @@ async function verifyTurnSilenceWhileDeviated(page, offAt) {
         getState().otp.goMode.routeMatch?.isOnRoute === false ||
         getState().otp.goMode.progress?.status === 'deviated'
       if (deviatedNow) deviatedTicks += 1
+      // The same two facts as the tick JUDGED them, before the sleep below
+      // lets the real GPS watcher run. `deviated` is charged on either
+      // reading (see below) but `direct` is read only from the post-sleep
+      // state, and that asymmetry is the first thing to rule out when a write
+      // comes back "not labelled direct": a card written by an ON-route tick
+      // is legitimately not direct, and a watcher tick during the sleep can
+      // still flip the state to deviated underneath it. Recorded rather than
+      // acted on — this block has failed on two of the last four nightlies
+      // (2026-09-09, 09-10, both "Turn right on East 38th Street") and passed
+      // on the other two with no product change between them, and the message
+      // named nothing that separated the two explanations.
+      const directNow =
+        getState().otp.goMode.progress?.turnDistanceIsDirect === true
       // sendPush/cancelPush are async, so the bridge records after the thunk
       // returns; read the log once the tick has had time to land.
       await new Promise((resolve) => setTimeout(resolve, 150))
@@ -869,7 +882,9 @@ async function verifyTurnSilenceWhileDeviated(page, offAt) {
               deviatedNow ||
               after.routeMatch?.isOnRoute === false ||
               after.progress?.status === 'deviated',
+            deviatedNow,
             direct: after.progress?.turnDistanceIsDirect === true,
+            directNow,
             kind: p.kind,
             title: p.title ?? null
           })
@@ -891,7 +906,12 @@ async function verifyTurnSilenceWhileDeviated(page, offAt) {
       turnNotifications,
       undirectedWrites: deviatedWrites
         .filter((e) => !e.direct)
-        .map((e) => e.title)
+        .map(
+          (e) =>
+            `${e.title} [when written: deviated=${e.deviatedNow} ` +
+            `direct=${e.directNow}; after the tick: deviated=${e.deviated} ` +
+            'direct=false]'
+        )
     }
   }, deviateAt)
 

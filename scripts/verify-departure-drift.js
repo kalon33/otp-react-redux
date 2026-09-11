@@ -8,8 +8,11 @@
  * prediction for that bus is watched against the estimate in force when the
  * boarding became current. Nothing is said on first sight. When it moves ≥2 min
  * a single DEPARTURE_CHANGED alert goes to the phone (and so to the wrist)
- * carrying BOTH the change and the pace line, and the sticky pacing card
- * silently re-posts the new numbers. Further movement re-alerts only in 2-min
+ * carrying BOTH the change and the slack left at the stop, and the sticky
+ * pacing card silently re-posts the new numbers. (The "how fast you need to
+ * move" half of the 8/11 ask shipped as pacing words and was retired by 12.12,
+ * c788f6c9 — it is coaching, which the rider's minimal-text rule forbids; the
+ * haptic carries the urgency now.) Further movement re-alerts only in 2-min
  * steps from the figure the rider was last given.
  *
  * Harness: the same one verify-bike-pacing.js uses — plan a real all-bike trip
@@ -242,8 +245,17 @@ async function main() {
     )
 
   const pushLog = () => page.evaluate(() => window.__pushLog || [])
-  const isDrift = (p) => p.kind === 'schedule' && /now \d/u.test(p.title || '')
   const isCard = (p) => p.id === 2
+  // 12.12 (c788f6c9) rewrote this alert to the rider's minimal-text rule: the
+  // title lost the clock time and became `${routeName} · ${awayMin} min`
+  // (departure-drift.ts:107-108), and the drift itself now lives in the body as
+  // `${change} · ${slack}`. Identify the alert by that body — the only other
+  // 'schedule' write in this trip is the pacing card, which posts an EMPTY
+  // message under its stable id 2 (pacing-card.ts:118).
+  const isDrift = (p) =>
+    p.kind === 'schedule' &&
+    !isCard(p) &&
+    /^(?:back on time|\d+ min (?:later|earlier))(?: · .+)?$/u.test(p.body || '')
 
   const { boardLegIndex, busStart } = plan
 
@@ -312,14 +324,23 @@ async function main() {
   if (first.length !== 1) {
     fail(`expected exactly 1 alert on the 6-min slip, got ${first.length}`)
   }
-  if (!/6 min later than first estimated/u.test(first[0].body || '')) {
+  if (!/^6 min later\b/u.test(first[0].body || '')) {
     fail(`alert did not quote the drift: "${first[0].body}"`)
   }
-  if (
-    !/(hurry|pick up the pace|take your time)/u.test(first[0].body || '') ||
-    !/min (slack|short) at the stop/u.test(first[0].body || '')
-  ) {
-    fail(`alert carried no pace guidance: "${first[0].body}"`)
+  // Total drift is quoted against the ORIGINAL estimate even though the words
+  // "than first estimated" are gone (12.12, c788f6c9) — phase 4 below is what
+  // proves it, by demanding "8 min later" rather than a "2 min" increment.
+  if (!/ · \d+ min (?:slack|short)$/u.test(first[0].body || '')) {
+    fail(`alert did not carry the slack left at the stop: "${first[0].body}"`)
+  }
+  // The pacing words the 8/11 ask called for were retired by the rider's
+  // minimal-text rule (12.12); the urgency rides the haptic instead, and the
+  // title is now the route plus minutes away, never a clock time.
+  if (/(?:hurry|pick up the pace|take your time)/u.test(first[0].body || '')) {
+    fail(`alert coached the rider: "${first[0].body}"`)
+  }
+  if (!/ · \d+ min$/u.test(first[0].title || '')) {
+    fail(`alert title is not "<route> · <n> min": "${first[0].title}"`)
   }
   // The card must keep pace with the new numbers, silently.
   const cardWrites = phase2.filter(isCard).filter((p) => p.kind === 'schedule')
@@ -333,13 +354,14 @@ async function main() {
   if (second.length !== 1) {
     fail(`expected exactly 1 re-alert at +8 min, got ${second.length}`)
   }
-  if (!/8 min later than first estimated/u.test(second[0].body || '')) {
+  if (!/^8 min later\b/u.test(second[0].body || '')) {
     fail(`re-alert quoted an increment, not total drift: "${second[0].body}"`)
   }
 
   console.log(
     '\nPASS: silent on first sight, one alert per 2 min of movement, each ' +
-      'quoting total drift from the original estimate plus how hard to push.'
+      'quoting total drift from the original estimate plus the slack left, ' +
+      'under a "<route> · <n> min" title.'
   )
 }
 

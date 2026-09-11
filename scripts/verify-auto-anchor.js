@@ -204,6 +204,16 @@ async function main() {
   }, anchoredBaseline)
 
   let worstOverride = anchoredBaseline
+  // `worstOverride` only ever moves UP, so on its own it cannot tell "the
+  // anchor held" from "the override was dropped": a null leaves it reading the
+  // baseline either way. 12.3's `departureIsUnreachable` (departure-anchor.ts
+  // :158-176, c156e811) RELEASES an override the rider provably cannot reach,
+  // and this loop time-travels straight past the anchored departure, so a
+  // release here is a live possibility that the log has to be able to name —
+  // the "Reset to planned" button below renders only while
+  // `progress.departureIsOverridden` (WalkingNavigation.tsx:210), and a
+  // released override would take it away.
+  let released = false
   for (let i = 0; i < 15; i++) {
     // Halfway through, push well past the grace as well — a bus that really is
     // gone still must not be quietly swapped for a later one by the anchor.
@@ -216,12 +226,14 @@ async function main() {
     const now = await page.evaluate(
       () => window.store.getState().otp.goMode.departureOverride
     )
+    if (now == null) released = true
     if (now != null && now > worstOverride) worstOverride = now
     await new Promise((resolve) => setTimeout(resolve, 2000))
   }
   console.log(
     `[overdue] anchored ${fmt(anchoredBaseline)}; latest override seen ` +
-      `${fmt(worstOverride)} after time-travelling past it`
+      `${fmt(worstOverride)} after time-travelling past it` +
+      `${released ? ' (override was RELEASED at least once)' : ''}`
   )
   if (worstOverride > anchoredBaseline + 1000) {
     throw new Error(
@@ -234,15 +246,47 @@ async function main() {
   // (2) Manual reset must lock the anchor off. Click the REAL "Reset to
   // planned" button — a dynamic import of go-mode.ts would create a second
   // Vite module instance whose lock flag the app never reads.
+  //
+  // When it is NOT there, say why rather than just that it is missing: this
+  // step has failed on 7 of the 16 nightly runs on record (2026-08-29, 09-01,
+  // 09-02, 09-03, 09-05, 09-10, 09-11) with identical setup numbers on every
+  // one of them, and the bare message named nothing a later session could act
+  // on. The button's only condition is `progress.departureIsOverridden`
+  // (WalkingNavigation.tsx:210), which in turn needs the override still in
+  // force AND the rider still on the access leg with that card rendered — so
+  // the override, the flag, the matched leg, the riding fact and the buttons
+  // that ARE on screen are what separate the candidate causes.
   const clicked = await page.evaluate(() => {
     const btn = Array.from(document.querySelectorAll('button')).find((b) =>
       b.textContent?.includes('Reset to planned')
     )
-    if (!btn) return false
-    btn.click()
-    return true
+    if (btn) {
+      btn.click()
+      return null
+    }
+    const g = window.store.getState().otp.goMode
+    return {
+      buttons: Array.from(document.querySelectorAll('button'))
+        .map((b) => (b.textContent || '').trim())
+        .filter(Boolean),
+      departureIsOverridden: g.progress?.departureIsOverridden ?? null,
+      departureOverride: g.departureOverride ?? null,
+      matchedLeg: g.routeMatch?.legIndex ?? null,
+      riding: g.riding ? g.riding.tripId || 'yes' : null,
+      status: g.progress?.status ?? null
+    }
   })
-  if (!clicked) throw new Error('Reset to planned button not found in the UI')
+  if (clicked) {
+    await page.screenshot({ path: `${OUT}/auto-anchor-no-reset.png` })
+    throw new Error(
+      'Reset to planned button not found in the UI — ' +
+        `departureOverride=${fmt(clicked.departureOverride)}, ` +
+        `departureIsOverridden=${clicked.departureIsOverridden}, ` +
+        `matched leg ${clicked.matchedLeg}, riding=${clicked.riding}, ` +
+        `status=${clicked.status}, buttons on screen: ` +
+        `[${clicked.buttons.join(' | ')}]`
+    )
+  }
   // Wait past a full throttle window with ticks flowing; the anchor must NOT
   // re-fire over the rider's explicit reset.
   await new Promise((resolve) => setTimeout(resolve, 25000))
