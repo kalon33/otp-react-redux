@@ -1,5 +1,6 @@
 import {
   DESTINATION_GAIN_MIN_M,
+  DESTINATION_REPLAN_MOTION_MIN_M,
   DESTINATION_STALL_REPLANS,
   destinationStalled,
   noteDestinationDistance,
@@ -78,5 +79,102 @@ describe('util > go-mode > destination progress across re-plans', () => {
     let state = stalledAt(454)
     state = noteDestinationDistance(state, 420)
     expect(destinationStalled(state, 'BICYCLE')).toBe(true)
+  })
+
+  describe('what makes a re-plan evidence at all (2026-09-09)', () => {
+    // Two fixes ~25 m apart, well under the motion floor: the 09-09 rider, who
+    // stood still from 09:40:47 while the app re-planned around them.
+    const STOOD: [number, number] = [44.825207, -93.286268]
+    const STILL_THERE: [number, number] = [44.825207, -93.28596]
+    // 300 m on: the same rider ten seconds earlier, still riding.
+    const RIDING: [number, number] = [44.825207, -93.282436]
+
+    it('does not count a re-plan over a rider who has not moved', () => {
+      let state = noteDestinationDistance(null, 1670)
+      for (let i = 0; i < DESTINATION_STALL_REPLANS + 3; i++) {
+        state = noteReplanAttempt(state, 'BICYCLE', {
+          point: i === 0 ? STOOD : STILL_THERE
+        })
+      }
+      // Only the first one, which had nothing to be measured against.
+      expect(state?.replansSinceGain).toBe(1)
+      expect(destinationStalled(state, 'BICYCLE')).toBe(false)
+    })
+
+    it('counts one the rider rode to', () => {
+      let state = noteDestinationDistance(null, 1670)
+      state = noteReplanAttempt(state, 'BICYCLE', { point: STOOD })
+      state = noteReplanAttempt(state, 'BICYCLE', { point: RIDING })
+      state = noteReplanAttempt(state, 'BICYCLE', { point: STOOD })
+      expect(state?.replansSinceGain).toBe(DESTINATION_STALL_REPLANS)
+      expect(destinationStalled(state, 'BICYCLE')).toBe(true)
+    })
+
+    it('does not count a re-plan that never came back', () => {
+      // 09:41:34.878 went out, 09:41:46.878 aborted on the 12 s Go Mode
+      // timeout — and was counted against the destination 11.8 s before that.
+      let state = noteDestinationDistance(null, 1670)
+      state = noteReplanAttempt(state, 'BICYCLE', { point: STOOD })
+      state = noteReplanAttempt(state, 'BICYCLE', {
+        point: RIDING,
+        returned: false
+      })
+      state = noteReplanAttempt(state, 'BICYCLE', {
+        point: STOOD,
+        returned: false
+      })
+      expect(state?.replansSinceGain).toBe(1)
+      expect(destinationStalled(state, 'BICYCLE')).toBe(false)
+    })
+
+    it('counts an answer that came back with nothing usable', () => {
+      // An empty plan is an answer: the server was asked from a place the
+      // rider rode to, and what came back does not get them closer. That is
+      // the 08-28 Fairgrounds, and it still retires the mode.
+      let state = noteDestinationDistance(null, 454)
+      state = noteReplanAttempt(state, 'BICYCLE', {
+        point: STOOD,
+        returned: true
+      })
+      state = noteReplanAttempt(state, 'BICYCLE', {
+        point: RIDING,
+        returned: true
+      })
+      state = noteReplanAttempt(state, 'BICYCLE', {
+        point: STOOD,
+        returned: true
+      })
+      expect(destinationStalled(state, 'BICYCLE')).toBe(true)
+    })
+
+    it('remembers where an attempt it threw away was asked from', () => {
+      let state = noteDestinationDistance(null, 1670)
+      state = noteReplanAttempt(state, 'BICYCLE', { point: STOOD })
+      // Rode 300 m, but the answer never came: uncounted, and yet the next
+      // re-plan is measured from HERE, not from where the rider set off.
+      state = noteReplanAttempt(state, 'BICYCLE', {
+        point: RIDING,
+        returned: false
+      })
+      expect(state?.lastAttemptPoint).toEqual(RIDING)
+      state = noteReplanAttempt(state, 'BICYCLE', { point: RIDING })
+      expect(state?.replansSinceGain).toBe(1)
+    })
+
+    it('cannot rule out an attempt whose position it does not know', () => {
+      // progress-calculator can return null for either end of the
+      // measurement; an unknown position is not evidence of stillness.
+      let state = noteDestinationDistance(null, 454)
+      for (let i = 0; i < DESTINATION_STALL_REPLANS; i++) {
+        state = noteReplanAttempt(state, 'BICYCLE')
+      }
+      expect(destinationStalled(state, 'BICYCLE')).toBe(true)
+    })
+
+    it('keeps the floor above the scatter of a bad fix', () => {
+      // 2026-09-09 09:42:33: a fix reporting 114.4 m of accuracy put a
+      // stationary rider 32.4 m from where they had been a minute earlier.
+      expect(DESTINATION_REPLAN_MOTION_MIN_M).toBeGreaterThan(32.4)
+    })
   })
 })
