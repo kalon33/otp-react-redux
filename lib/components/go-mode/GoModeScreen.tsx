@@ -45,6 +45,7 @@ interface Props {
   clearOnboard: () => void
   departureOverride: number | null
   endGoMode: () => void
+  finishArrivedTrip: () => void
   goMode: GoModeState
   pauseGpsSimulation: () => void
   resumeGpsSimulation: () => void
@@ -62,6 +63,7 @@ const GoModeScreen = ({
   clearOnboard,
   departureOverride,
   endGoMode,
+  finishArrivedTrip,
   goMode,
   pauseGpsSimulation,
   resumeGpsSimulation,
@@ -146,14 +148,11 @@ const GoModeScreen = ({
     }
   }
 
-  // Trip complete: the rider dismisses the arrival card themselves — landing
-  // on the home screen, not a stale results list. (Both dispatches happen in
-  // one handler, so the parent swaps screens before the inactive-redirect
-  // effect can route to RESULTS_SUMMARY.)
-  const handleArrivedDone = () => {
-    endGoMode()
-    setMobileScreen(MobileScreens.SEARCH_FORM)
-  }
+  // Trip complete: the rider dismisses the arrival card — landing on the home
+  // screen, not a stale results list. The same action the tick's auto-end
+  // dispatches after AUTO_END_AFTER_ARRIVAL_MS, so the rider's exit and the
+  // automatic one cannot diverge.
+  const handleArrivedDone = finishArrivedTrip
 
   // "I'm on the bus" onboard flow: discovery, the bus picker, and the
   // alight-stop recommendation. Pre-trip there is no itinerary yet and back
@@ -280,6 +279,7 @@ const GoModeScreen = ({
       />
       <ScreenMain>
         <CurrentLegPanel
+          arrived={goMode.arrivedAt != null}
           boardingStopData={boardingStopData}
           departureOverride={departureOverride}
           leg={currentLeg}
@@ -506,6 +506,7 @@ const mapDispatchToProps = {
   beginGoMode: goModeActions.beginGoMode,
   clearOnboard: goModeActions.clearOnboard,
   endGoMode: goModeActions.endGoMode,
+  finishArrivedTrip: goModeActions.finishArrivedTrip,
   pauseGpsSimulation: goModeActions.pauseGpsSimulation,
   resumeGpsSimulation: goModeActions.resumeGpsSimulation,
   setDepartureOverride: goModeActions.selectDeparture,

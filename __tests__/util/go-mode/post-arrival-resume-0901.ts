@@ -160,10 +160,23 @@ const makeStore = (goModeOverrides: any = {}) => {
 const NOW = Date.UTC(2026, 8, 1, 13, 59, 37)
 const ARRIVED_AT = NOW - 20_000
 
+/**
+ * The same 20-second-old arrival, on the REAL clock.
+ *
+ * The tick reads `getCurrentTime()` — `new Date()` outside simulation — which
+ * `setTestTime`'s `Date.now` spy never touches. An arrival pinned to NOW is
+ * therefore days old as far as the tick is concerned, and the 13.5 auto-end
+ * (AUTO_END_AFTER_ARRIVAL_MS) would end the trip in the middle of this block.
+ * Nothing here is testing a clock: the post-arrival funnel compares fix
+ * timestamps with each other and with `session.lastArrivedFixMs`, so anchoring
+ * the block on the real clock leaves what it measures unchanged.
+ */
+const REAL_ARRIVED_AT = new Date().getTime() - 20_000
+
 const arrivedStore = () =>
   makeStore({
     activeItinerary: walkItinerary(NOW - 60_000),
-    arrivedAt: ARRIVED_AT,
+    arrivedAt: REAL_ARRIVED_AT,
     isActive: true,
     tracking: { ...initial.tracking, isTracking: true }
   })
@@ -188,20 +201,20 @@ describe('the post-arrival funnel across a re-mount (2026-09-01)', () => {
     // the trip session was rebuilt and remembers nothing. Reading that null as
     // Infinity waved this fix through and ran a full tick on a finished trip.
     const store = arrivedStore()
-    store.run(handlePositionUpdate(fixAt(DEST, ARRIVED_AT + 5_000)))
+    store.run(handlePositionUpdate(fixAt(DEST, REAL_ARRIVED_AT + 5_000)))
     expect(store.types()).not.toContain('UPDATE_POSITION')
     expect(store.types()).not.toContain('UPDATE_PROGRESS')
   })
 
   it('CONTROL: lets a fix through once the interval has genuinely elapsed', () => {
     const store = arrivedStore()
-    store.run(handlePositionUpdate(fixAt(DEST, ARRIVED_AT + 40_000)))
+    store.run(handlePositionUpdate(fixAt(DEST, REAL_ARRIVED_AT + 40_000)))
     expect(store.types()).toContain('UPDATE_POSITION')
   })
 
   it('CONTROL: holds the next one, so the cadence is the taper and not the GPS stream', () => {
     const store = arrivedStore()
-    store.run(handlePositionUpdate(fixAt(DEST, ARRIVED_AT + 45_000)))
+    store.run(handlePositionUpdate(fixAt(DEST, REAL_ARRIVED_AT + 45_000)))
     expect(store.types()).not.toContain('UPDATE_POSITION')
   })
 })
