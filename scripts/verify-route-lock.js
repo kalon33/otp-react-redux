@@ -146,10 +146,24 @@ async function main() {
   // --- 1. locked search --------------------------------------------------
   const locked = await runSearch(page, LOCKED_ROUTE)
 
-  if (locked.routeLock?.id !== LOCKED_ROUTE) {
+  // 5da3f1c8 (2026-09-02, "route selection: name several routes, or just the
+  // one you start on") replaced the single inline `{ id, label }` lock with
+  // `{ routes: LockedRoute[], scope: 'only' | 'starting' }`
+  // (lib/util/route-lock.ts:29-48). A whole-trip lock — the one this script
+  // verifies, the one that bans the complement — is `scope: 'only'` with the
+  // named route in `routes`.
+  const lockedIds = (locked.routeLock?.routes || []).map((r) => r.id)
+  if (
+    locked.routeLock?.scope !== 'only' ||
+    lockedIds.length !== 1 ||
+    lockedIds[0] !== LOCKED_ROUTE
+  ) {
     fail(`route lock not applied (got ${JSON.stringify(locked.routeLock)})`)
   } else {
-    console.log(`PASS: lock applied — "${locked.routeLock.label}"`)
+    console.log(
+      `PASS: lock applied — "${locked.routeLock.routes[0].label}" ` +
+        `(scope: ${locked.routeLock.scope})`
+    )
   }
 
   if (!planQueries.length) {
