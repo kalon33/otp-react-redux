@@ -25,7 +25,12 @@ const riding: RidingState = {
 }
 
 describe('START_GO_MODE swap-exemption for stop-keyed alerts', () => {
-  it('keeps alight and board-vehicle ids, frees everything else to re-fire', () => {
+  // LEAVE_SOON joined the survivors on 2026-09-09 (backlog 13.2): it is keyed
+  // on route + boarding stop, which a same-connection swap does not change,
+  // and the ride's two swaps re-fired it three times in 4m57s. See
+  // leave-soon-swap-0909.ts. ROUTE_DEVIATION is about the trip that just
+  // changed and is still freed.
+  it('keeps the ids a swap cannot invalidate, frees the rest to re-fire', () => {
     const withSent = {
       ...initial,
       notifications: {
@@ -48,7 +53,8 @@ describe('START_GO_MODE swap-exemption for stop-keyed alerts', () => {
       'APPROACH_STOP_1:stop_prepare_123',
       'ARRIVING_STOP_1:stop_act_123',
       'BOARD_BUS_APPROACHING_1:stop_1:trip_approaching_123',
-      'BOARD_BUS_ARRIVING_1:stop_1:trip_arriving_123'
+      'BOARD_BUS_ARRIVING_1:stop_1:trip_arriving_123',
+      'LEAVE_SOON_leg1_123'
     ])
   })
 })

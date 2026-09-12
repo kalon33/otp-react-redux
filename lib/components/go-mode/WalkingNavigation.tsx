@@ -42,6 +42,8 @@ const ALTERNATIVE_TEXT_STYLE = {
 }
 
 interface Props {
+  /** Trip over (goMode.arrivedAt set): no turn cues. See CurrentLegPanel. */
+  arrived?: boolean
   boardingStopData?: any
   departureOverride?: number | null
   leg: Leg
@@ -64,6 +66,7 @@ interface Props {
  * you see it.
  */
 const WalkingNavigation = ({
+  arrived,
   boardingStopData,
   departureOverride,
   leg,
@@ -144,19 +147,27 @@ const WalkingNavigation = ({
   // Off the corridor the metres are a straight line from the rider's own fix
   // to the corner, not a distance along a route they have left — say so, or
   // the number reads as a countdown it isn't.
+  //
+  // Once the rider has ARRIVED there is no next turn to take, and the cue is
+  // stale by construction — progress stops being recomputed for a finished
+  // trip, so whatever corner was pending at the latch stays on the card. On
+  // 2026-09-09 that put "<1 min · Turn right on alley · 39 ft" directly above
+  // "🎉 You've arrived!". Nothing here is a notification, so there is no copy
+  // to replace it with: the lines simply go.
   const turnLine =
-    progress.nextTurnCue && progress.distanceToNextTurn != null
+    !arrived && progress.nextTurnCue && progress.distanceToNextTurn != null
       ? `${progress.nextTurnCue.instruction} · ${formatCueDistance(
           progress.distanceToNextTurn,
           units
         )}${progress.turnDistanceIsDirect ? ' direct' : ''}`
       : null
-  const thenLine = progress.followingTurnCue
-    ? intl.formatMessage(
-        { defaultMessage: 'then {turn}', id: 'components.GoMode.thenTurn' },
-        { turn: asContinuationWithIntl(progress.followingTurnCue.instruction, intl) }
-      )
-    : null
+  const thenLine =
+    !arrived && progress.followingTurnCue
+      ? intl.formatMessage(
+          { defaultMessage: 'then {turn}', id: 'components.GoMode.thenTurn' },
+          { turn: asContinuationWithIntl(progress.followingTurnCue.instruction, intl) }
+        )
+      : null
 
   const nextLegRouteId = getLegRouteId(nextLeg)
 
@@ -272,7 +283,9 @@ const WalkingNavigation = ({
       { emoji: accessEmoji, stop: leg.to.name }
     )
     hero = formatMinutes(rideSecondsRemaining)
-    sub = turnLine || progress.nextInstruction || null
+    // `nextInstruction` is the same turn in plainer words, so it goes with the
+    // rest of them once the trip is over.
+    sub = arrived ? null : turnLine || progress.nextInstruction || null
     foot = thenLine
   }
 

@@ -235,7 +235,12 @@ import {
 } from './apiV2'
 import { MobileScreens } from './ui-constants'
 import { routingRequest, routingResponse } from './api'
-import { setMainPanelContent, setMobileScreen, setViewedStop } from './ui'
+import {
+  routeTo,
+  setMainPanelContent,
+  setMobileScreen,
+  setViewedStop
+} from './ui'
 import { setQueryParam } from './form'
 
 // Translation key for "Current location" to be used in place names
@@ -737,6 +742,33 @@ function getTrackingIntervalForLeg(leg: Leg | undefined): number {
 const ARRIVED_TRACKING_INTERVAL_MS = 30000
 
 /**
+ * How long an arrived trip sits on screen before it ends itself.
+ *
+ * Rider ask, 2026-09-09 09:03:42: *"We should finish a trip on auto if within x
+ * distance for x time"*. That morning `SET_ARRIVED` fired at 08:57:48 (87 m
+ * from the door, overallProgress 99.52%) and the only exit was the rider's own
+ * Done tap at 09:03:47 — 5m59s of a finished trip held the screen, the wake
+ * lock and the reload warning.
+ *
+ * The "within x distance" half is already spent by the time this matters: the
+ * arrival latch itself is the distance test (ARRIVAL_RADIUS_M / the >= 99.5%
+ * branch of hasArrivedAtDestination), and it is one-way, so `arrivedAt` means
+ * "the rider reached the destination and has been treated as there ever
+ * since". This is the second half — the dwell.
+ *
+ * Three minutes: long enough that the arrival card is read rather than
+ * snatched away (the 09-09 rider took six), short enough that a pocketed phone
+ * is not still running a trip a quarter of an hour later. Checked on the
+ * arrived tick, which runs at ARRIVED_TRACKING_INTERVAL_MS above, so the real
+ * end lands within 30 s of the threshold — which is the resolution the ask
+ * wanted anyway.
+ *
+ * A ROUND TRIP never auto-ends: its arrival is a pause with the return
+ * countdown still to run (see the tick's arrived branch and runReturnCountdown).
+ */
+const AUTO_END_AFTER_ARRIVAL_MS = 3 * 60 * 1000
+
+/**
  * The token-hop thresholds, from config where the deployment sets them. Same
  * two keys the results list reads (narrative-itineraries), so the rule the
  * rider sees applied to the list is the rule applied to an automatic swap.
@@ -939,9 +971,21 @@ export function returnToGoMode() {
     // a viewed stop AHEAD of the mobile screen, so a rider who reached one of
     // those from the app menu would tap the banner, be back in Go Mode by every
     // measure of state, and still be looking at the viewer.
-    const { ui } = getState().otp
+    const state = getState()
+    const { ui } = state.otp
     if (ui.mainPanelContent !== null) dispatch(setMainPanelContent(null))
     if (ui.viewedStop) dispatch(setViewedStop(null))
+    // ...and the ROUTE, which is a layer above all of that. `/feedback` and
+    // `/settings` are real routes in the top-level Switch (webapp-routes,
+    // responsive-webapp) — they render INSTEAD of the web app, so the whole
+    // mobile-screen tree the three dispatches above address is unmounted and
+    // the banner tap changes nothing the rider can see. On 2026-09-09 the
+    // rider tapped it four times from `/feedback` (08:33:43-51: backgrounded
+    // false + mobile screen GO_MODE each time, and no LOCATION_CHANGE in the
+    // stream) and only escaped with the back gesture, 4m18s after the first
+    // visit. routeTo carries the query string over, so the trip's URL state
+    // survives the hop back.
+    if (state.router?.location?.pathname !== '/') dispatch(routeTo('/'))
     dispatch(setGoModeBackgrounded(false))
     dispatch(setMobileScreen(MobileScreens.GO_MODE))
   }
@@ -1331,6 +1375,23 @@ export function endGoMode() {
     ) {
       dispatch(setQueryParam({ from: originalFrom }))
     }
+  }
+}
+
+/**
+ * Put a FINISHED trip away: end Go Mode and land on the search form, never on a
+ * stale results list.
+ *
+ * The one place that happens, because there are now two callers and they must
+ * not drift: the rider's own "Done" on the arrival card (GoModeScreen's
+ * handleArrivedDone) and the tick's auto-end after AUTO_END_AFTER_ARRIVAL_MS.
+ * Both dispatches go out together, so the screen swaps before GoModeScreen's
+ * inactive-redirect effect can route to RESULTS_SUMMARY.
+ */
+export function finishArrivedTrip() {
+  return function (dispatch: any) {
+    dispatch(endGoMode())
+    dispatch(setMobileScreen(MobileScreens.SEARCH_FORM))
   }
 }
 
@@ -4498,6 +4559,24 @@ export function advanceToLeg(legIndex: number) {
   }
 }
 
+/**
+ * Progress along the leg the trip has actually REACHED, for the boarding-stop
+ * term of `shouldTransitionToNextLeg`.
+ *
+ * The stored match is last tick's, and once the matcher nominates the transit
+ * leg it is the transit leg it speaks about — so it only answers this question
+ * while its own legIndex is still the transitioned one. Null (unknown) in
+ * every other case, which the gate reads as "nothing to say" rather than as a
+ * reason to refuse; a refused nomination is re-matched over the reached legs,
+ * so in the ordinary flow the number is there on the next tick.
+ */
+function accessProgressOf(goMode: any, transitionedLegIndex: number) {
+  const match = goMode?.routeMatch
+  if (!match || match.legIndex !== transitionedLegIndex) return null
+  const progress = Number(match.progressAlongLeg)
+  return Number.isFinite(progress) ? progress : null
+}
+
 export function handlePositionUpdate(position: GeolocationPosition) {
   return function (dispatch: any, getState: any) {
     // Heartbeat for the native GPS watchdog — wall clock, unconditionally:
@@ -4632,9 +4711,16 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     if (
       routeMatch.legIndex > transitionedLegIndex &&
       !shouldTransitionToNextLeg(routeMatch, transitionedLegIndex, {
+        // Last tick's stored match, and only while it still speaks about the
+        // leg the trip has actually reached: that is the access-leg progress
+        // the arrival term judges. Read from the tick's own `goMode`
+        // snapshot, so BOTH gate calls below see the same number.
+        accessLegProgress: accessProgressOf(goMode, transitionedLegIndex),
         boardEpoch: goMode.liveLegTimes?.[routeMatch.legIndex]?.boardEpoch,
         isRiding: goMode.riding?.legIndex === routeMatch.legIndex,
         nowMs: getCurrentTime().getTime(),
+        riderPosition: currentPosition,
+        riderSpeedMps: position.coords.speed ?? null,
         targetLeg: itinerary.legs[routeMatch.legIndex]
       })
     ) {
@@ -4761,9 +4847,12 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     if (
       !alreadyArrived &&
       shouldTransitionToNextLeg(routeMatch, previousLegIndex, {
+        accessLegProgress: accessProgressOf(goMode, previousLegIndex),
         boardEpoch: goMode.liveLegTimes?.[routeMatch.legIndex]?.boardEpoch,
         isRiding: riding?.legIndex === routeMatch.legIndex,
         nowMs: nowForRiding,
+        riderPosition: currentPosition,
+        riderSpeedMps: position.coords.speed ?? null,
         targetLeg: matchedLeg
       }) &&
       routeMatch.legIndex !== session.lastTransitionedLegIndex
@@ -5173,6 +5262,23 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       // is over. See util/go-mode/round-trip.ts.
       if (goMode.roundTrip) {
         runReturnCountdown(dispatch, getState, currentTime.getTime())
+        return
+      }
+      // A ONE-WAY trip has nothing left at all, so after the dwell it puts
+      // itself away — exactly what the rider's Done tap does, through the same
+      // action, so the two cannot drift (AUTO_END_AFTER_ARRIVAL_MS above).
+      if (
+        goMode.arrivedAt != null &&
+        currentTime.getTime() - goMode.arrivedAt >= AUTO_END_AFTER_ARRIVAL_MS
+      ) {
+        // eslint-disable-next-line no-console
+        console.log(
+          '[go-mode] auto-end: arrived ' +
+            `${Math.round(
+              (currentTime.getTime() - goMode.arrivedAt) / 1000
+            )}s ago, ending the trip`
+        )
+        dispatch(finishArrivedTrip())
       }
       return
     }

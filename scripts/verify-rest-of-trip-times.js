@@ -159,14 +159,27 @@ async function main() {
   )
   // choose the FIRST (default) option — item 4 is about times, not choice.
   // Options render through the normal itinerary list (li.result rows, see
-  // verify-onboard-options); a tap anywhere on the row selects it.
+  // verify-onboard-options).
+  //
+  // The tap target is the row's inner <div>, not the <li>. 7dc13053 (2026-09-02,
+  // "stack the onboard options, and open a stop's departures inside the trip")
+  // moved `onClickCapture` onto that inner div (OnboardItineraryList.tsx:113-119)
+  // so the variants drill-down could sit outside it; a synthetic click on the
+  // `li` reaches no handler at all and the run just times out waiting for
+  // guidance to start. That is exactly the 20 s timeout this script has reported
+  // every night since 2026-09-03, and it is the same break 6.42 fixed in
+  // verify-onboard-options (scripts/verify-onboard-options.js:259-263).
   const started = await page.evaluate(() => {
     const row = document.querySelector('li.result')
-    if (!row) return false
-    row.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-    return true
+    if (!row) return 'no rows'
+    const tapTarget = row.firstElementChild
+    if (!tapTarget) return 'row has no tap target'
+    tapTarget.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    return null
   })
-  if (!started) throw new Error('no alight-option rows — onboard flow failed')
+  if (started) {
+    throw new Error(`no alight-option rows — onboard flow failed (${started})`)
+  }
   await page.waitForFunction(
     () => window.store.getState().otp.goMode.activeItinerary != null,
     { polling: 300, timeout: 20000 }

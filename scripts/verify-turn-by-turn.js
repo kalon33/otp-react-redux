@@ -156,6 +156,44 @@ async function main() {
     { polling: 300, timeout: 20000 }
   )
 
+  // Turn cues are OFF for a rider who has never touched the switch, and have
+  // been since a2d5314a (2026-09-04, "settings: a tab for the rider's own
+  // parameters, and turn cues they can silence", backlog 8.9): the rider asked
+  // for exactly that on 2026-09-01 ("turn off turn by turn unless it's
+  // requested on a specific leg"). DEFAULT_TURN_CUE_SETTINGS.enabledByDefault
+  // is false (turn-cue-settings.ts:34-37) and the gate is threaded into
+  // checkForNotifications (actions/go-mode.ts:5404), so neither TURN_ALERT nor
+  // UPCOMING_TURN leaves the producer until the rider turns cues on. That is
+  // why this script reported "0 turn cues, 0 buzzing" every night from
+  // 2026-09-05 (the first nightly after the merge) — the product was doing what
+  // it was asked, and the script was asserting the behaviour of the build
+  // before it.
+  //
+  // Assert the default first, then turn cues ON: what this script is for is the
+  // QUALITY of the cues (real instructions off leg.steps, sane timing, only a
+  // minority promoted to the wrist), and none of that is observable with the
+  // producer silenced.
+  const cueDefault = await page.evaluate(
+    () => window.store.getState().otp.goMode.turnCues?.enabledByDefault
+  )
+  if (cueDefault !== false) {
+    throw new Error(
+      `turn cues are not off by default (enabledByDefault=${cueDefault}) — ` +
+        'silence is what the rider asked for (8.9, a2d5314a)'
+    )
+  }
+  await page.evaluate(async () => {
+    // eslint-disable-next-line import/no-absolute-path
+    const goMode = await import('/lib/actions/go-mode.js')
+    window.store.dispatch(goMode.setTurnCueDefault(true))
+  })
+  await page.waitForFunction(
+    () =>
+      window.store.getState().otp.goMode.turnCues?.enabledByDefault === true,
+    { polling: 200, timeout: 10000 }
+  )
+  console.log('[cues] default off as shipped; switched ON for this run')
+
   // Only now inject a fake Capacitor bridge, so the real sendPush/cancelPush
   // path runs during the ride and records what would land on the phone (and
   // thus the watch over ANCS). Injecting AFTER beginGoMode keeps that call on

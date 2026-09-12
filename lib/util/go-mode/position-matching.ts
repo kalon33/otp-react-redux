@@ -684,14 +684,134 @@ export const TRANSIT_BOARD_EARLY_MS = 5 * 60 * 1000
  */
 export const TRANSIT_BOARD_MAX_DISTANCE_M = MATCH_CORRIDOR_ACTIVE_M
 
+/**
+ * How far from the boarding stop the rider may be and still be said to have
+ * REACHED it.
+ *
+ * The board window and the corridor between them say "a bus is due here soon"
+ * and "the rider is beside this line" — and on 2026-09-09 both were true of a
+ * cyclist who had not arrived. The Hennepin bike trail runs inside the I-35W
+ * busway corridor, so at 08:24:55 the rider sat 5.7 m from the Orange Line
+ * shape, 59 m from I-35W & 98th St Station — and still 360 m of bike path
+ * short of it, because the leg's last stretch is the ramp over the freeway.
+ * TRANSITION_LEG fired there; `SET_RIDING` did not come until 08:27:31.
+ *
+ * Same figure as riding.ts's BOARD_STOP_DWELL_RADIUS_M: one metre-count for
+ * "the rider is at this stop", not two. Restated here rather than imported —
+ * riding.ts already imports this module, and the cycle is not worth one
+ * number.
+ */
+export const TRANSIT_BOARD_STOP_RADIUS_M = 120
+
+/**
+ * The speed above which a rider is still TRAVELLING to the stop rather than
+ * standing at it. Walking pace: below riding.ts's
+ * RIDING_ESTABLISH_MIN_SPEED_MPS (3), because a rider crossing the platform
+ * must still count as arrived.
+ *
+ * 2026-09-09 ride 1 read 5.9 m/s at the tick that transitioned, and did not
+ * drop below this until 08:25:20 — the moment they actually stopped at the
+ * platform. 2026-09-09 ride 2 read 5.14 m/s at ITS transition and was right
+ * to transition, which is why speed alone cannot decide this: that rider was
+ * already aboard a bus pulling out, 99.3 % along their access leg.
+ */
+export const TRANSIT_BOARD_ARRIVED_MAX_SPEED_MPS = 1.5
+
+/**
+ * Access-leg progress at which the leg is finished for this purpose. The
+ * ordinary way to reach a boarding stop is to run the access leg out.
+ */
+export const TRANSIT_BOARD_ACCESS_DONE = 0.95
+
+/**
+ * Metres along the TRANSIT leg past which the boarding stop is behind the
+ * rider and the question no longer applies — a trip joined mid-route, or a
+ * bus already moving. Without this the arrival terms could hold a rider who
+ * never had a transition to refuse (Go Mode started aboard, or a stop node
+ * that sits well off the platform) on the access leg for good, and
+ * `advanceToLeg` is the only place vehicle tracking starts.
+ */
+export const TRANSIT_BOARD_PAST_STOP_M = 150
+
 export type TransitionGate = {
+  /**
+   * Progress (0-1) along the leg the trip has actually reached, i.e. the
+   * access leg the rider is still on. Null when unknown.
+   */
+  accessLegProgress?: number | null
   /** Live board epoch for the target leg, when one is known. */
   boardEpoch?: number | null
   /** True when the riding state already places the rider on the target leg. */
   isRiding?: boolean
   nowMs?: number
+  /** The rider's own fix, for the distance to the boarding stop. */
+  riderPosition?: LatLngArray | null
+  /** Reported ground speed at that fix, m/s. Null when the platform gave none. */
+  riderSpeedMps?: number | null
   /** The leg the match wants to move to — itinerary.legs[match.legIndex]. */
   targetLeg?: Leg
+}
+
+/**
+ * Has the rider REACHED the boarding stop?
+ *
+ * Only positive evidence refuses. Missing inputs (no fix, no progress, no
+ * speed) read as "nothing to say" and leave the older gates to decide, so a
+ * caller that supplies none behaves exactly as it did before this term
+ * existed.
+ */
+function hasReachedBoardingStop(
+  match: RouteMatchResult,
+  gate: TransitionGate
+): boolean {
+  const { accessLegProgress, riderPosition, riderSpeedMps, targetLeg } = gate
+
+  // The access leg run out is the ordinary way to arrive, and it is what
+  // separated 2026-09-09's two rides: 99.3 % (ride 2, aboard) from 71.88 %
+  // (ride 1, still on the trail).
+  if (
+    accessLegProgress != null &&
+    accessLegProgress >= TRANSIT_BOARD_ACCESS_DONE
+  ) {
+    return true
+  }
+
+  // Already down the line: the stop is behind them.
+  const legDistanceM = Number((targetLeg as any)?.distance)
+  if (
+    Number.isFinite(legDistanceM) &&
+    match.progressAlongLeg * legDistanceM >= TRANSIT_BOARD_PAST_STOP_M
+  ) {
+    return true
+  }
+
+  const stop: any = (targetLeg as any)?.from
+  if (
+    !riderPosition ||
+    stop?.lat == null ||
+    stop?.lon == null ||
+    !Number.isFinite(Number(stop.lat)) ||
+    !Number.isFinite(Number(stop.lon))
+  ) {
+    return true
+  }
+
+  const distanceToStopM = calculateDistance(
+    riderPosition[0],
+    riderPosition[1],
+    Number(stop.lat),
+    Number(stop.lon)
+  )
+  // Measurably short of the stop.
+  if (distanceToStopM > TRANSIT_BOARD_STOP_RADIUS_M) return false
+
+  // At the stop, but still moving like someone on their way to it. A speed
+  // the platform never reported is not evidence of travel.
+  return !(
+    riderSpeedMps != null &&
+    Number.isFinite(riderSpeedMps) &&
+    riderSpeedMps > TRANSIT_BOARD_ARRIVED_MAX_SPEED_MPS
+  )
 }
 export function shouldTransitionToNextLeg(
   match: RouteMatchResult,
@@ -720,7 +840,12 @@ export function shouldTransitionToNextLeg(
   // Prefer the live board time; a bus running late should not pull the rider
   // onto its leg on the strength of the plan alone.
   const board = Number(boardEpoch ?? targetLeg.startTime)
-  if (!Number.isFinite(board)) return true
+  if (Number.isFinite(board) && nowMs < board - TRANSIT_BOARD_EARLY_MS) {
+    return false
+  }
 
-  return nowMs >= board - TRANSIT_BOARD_EARLY_MS
+  // ...and the clock is not a statement about ARRIVAL either. A rider still
+  // travelling at access speed, with their access leg unfinished, has not
+  // reached the boarding stop however close the bus is (2026-09-09 08:24:55).
+  return hasReachedBoardingStop(match, gate)
 }
