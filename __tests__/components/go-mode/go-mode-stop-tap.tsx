@@ -26,10 +26,12 @@ const LEG = {
     name: '98th St Station',
     stop: {
       gtfsId: '1:51455',
+      id: '1:51455',
       lat: 44.86,
       lon: -93.28,
       name: '98th St Station'
-    }
+    },
+    stopId: '1:51455'
   },
   mode: 'BUS',
   routeShortName: '539',

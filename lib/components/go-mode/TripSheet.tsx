@@ -196,7 +196,6 @@ const TripSheet = ({
     const stops = leg.intermediateStops || []
     if (stops.length === 0) return null
     const k = stops.length
-    const intl = useIntl()
     const remaining = progress?.stopsRemaining ?? k + 1
     return (
       <StopList>

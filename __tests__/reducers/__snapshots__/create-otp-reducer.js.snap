@@ -106,6 +106,7 @@ Object {
       "backgrounded": false,
       "mapFollowUser": true,
     },
+    "units": "imperial",
     "vehicleMatch": Object {
       "consecutiveMatches": 0,
       "emptyPolls": 0,

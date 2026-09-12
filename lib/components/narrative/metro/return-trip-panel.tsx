@@ -254,11 +254,7 @@ function ReturnTripPanel({
               >
                 {LegIcon && (
                   <OptionRoutes>
-                    <MetroItineraryRoutes
-                      expanded={false}
-                      itinerary={option}
-                      LegIcon={LegIcon}
-                    />
+                    <MetroItineraryRoutes expanded={false} itinerary={option} />
                   </OptionRoutes>
                 )}
                 <OptionTimes>

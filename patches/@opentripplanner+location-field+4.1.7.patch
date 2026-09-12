@@ -117,7 +117,7 @@ index 1b70e99..02b38b4 100644
    preferredLayers = [],
    sessionOptionIcon = /*#__PURE__*/_react.default.createElement(_Search.Search, {
      size: _options.ICON_SIZE
-@@ -590,6 +592,24 @@ const LocationField = ({
+@@ -590,6 +592,22 @@ const LocationField = ({
        locationSelected
      });
    };
@@ -137,8 +137,6 @@ index 1b70e99..02b38b4 100644
 +      pushToIndexedOptions(mapPickOption.onClick, "choose-on-map");
 +    }
 +  }
-+    });
-+  };
  
    /* 0) Include user saved locations if the typed text contains those locations name. */
    if (showUserSettings) {

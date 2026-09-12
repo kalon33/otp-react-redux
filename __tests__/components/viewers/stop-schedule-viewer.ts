@@ -6,12 +6,27 @@ import {
 import { restoreDateNowBehavior, setDefaultTestTime } from '../../test-utils'
 import StopScheduleViewer from '../../../lib/components/viewers/stop-schedule-viewer'
 
+import nock from 'nock'
+
 describe('components > viewers > stop viewer', () => {
-  afterEach(restoreDateNowBehavior)
+  afterEach(() => {
+    nock.cleanAll()
+    restoreDateNowBehavior()
+  })
   beforeEach(setDefaultTestTime)
 
   it('should render with initial stop id and no stop times', () => {
+    nock('https://example.com')
+      .persist()
+      .get(/.*/)
+      .reply(200, {})
+      .post(/.*/)
+      .reply(200, {})
     const mockState = getMockInitialState()
+    mockState.otp.config.api = {
+      host: 'https://example.com',
+      path: '/otp/routers/default'
+    }
     mockState.otp.ui.viewedStop = {
       stopId: 'TriMet:13170'
     }

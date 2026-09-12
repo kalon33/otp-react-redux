@@ -1,0 +1,29 @@
+name: Regenerate Snapshots
+on:
+  push:
+    branches:
+      - vibe/fix-ci-go-mode-54df65
+jobs:
+  regen:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: yarn
+      - name: Install
+        run: yarn install --frozen-lockfile
+      - name: Regenerate snapshots
+        run: NODE_ENV=test TZ=America/Chicago yarn jest __tests__/components/date-time-options.js __tests__/components/viewers/stop-schedule-viewer.ts __tests__/components/viewers/nearby-view.js -u
+      - name: Commit snapshots
+        run: |
+          git config user.email "actions@github.com"
+          git config user.name "github-actions[bot]"
+          git add -A
+          git commit -m "Regenerate snapshots for date-time-options, stop-schedule-viewer, nearby-view" || echo "nothing to commit"
+          git push

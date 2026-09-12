@@ -232,7 +232,10 @@ export function phraseInstructionWithIntl(step: Step, intl: IntlShape): string {
  * right on Oak").
  */
 export function asContinuation(instruction: string): string {
-  return (instruction?.charAt?.(0)?.toLowerCase?.() || '') + (instruction?.slice?.(1) || '')
+  return (
+    (instruction?.charAt?.(0)?.toLowerCase?.() || '') +
+    (instruction?.slice?.(1) || '')
+  )
 }
 
 /**
@@ -245,7 +248,10 @@ export function asContinuationWithIntl(
 ): string {
   // For localized strings, we need to handle the capitalization carefully
   // Since the instruction is already localized, we just lowercase the first character
-  return (instruction?.charAt?.(0)?.toLowerCase?.() || '') + (instruction?.slice?.(1) || '')
+  return (
+    (instruction?.charAt?.(0)?.toLowerCase?.() || '') +
+    (instruction?.slice?.(1) || '')
+  )
 }
 
 /** Abbreviated distance ("300 ft", "0.4 mi" or metric equivalent) for cue copy. */
@@ -459,8 +465,6 @@ function buildLegCues(leg: Leg, intl?: IntlShape): LegCues {
   return built
 }
 
-
-
 /**
  * Build turn cues for a leg using i18n translations.
  * This version accepts an intl context for localized instruction strings.
@@ -504,6 +508,8 @@ export function buildStepIndexWithIntl(leg: Leg, intl: IntlShape): StepCue[] {
       distanceMeters: step.distance || 0,
       index: cues.length,
       instruction: phraseInstructionWithIntl(step, intl),
+      lat: step.lat,
+      lon: step.lon,
       offsetMeters: offsetAlongPolyline(polyline, cumulative, [
         step.lat,
         step.lon
@@ -540,7 +546,11 @@ export function buildStepIndex(leg: Leg, intl?: IntlShape): StepCue[] {
  * The turn to announce for a rider `progressAlongLeg` (0-1) into `leg`, plus
  * the one after it. Returns {} when the leg has no cues left to give.
  */
-export function getNextCue(leg: Leg, progressAlongLeg: number, intl?: IntlShape): NextCueResult {
+export function getNextCue(
+  leg: Leg,
+  progressAlongLeg: number,
+  intl?: IntlShape
+): NextCueResult {
   const { cues, legLength } = buildLegCues(leg, intl)
   if (!cues.length) return {}
 
@@ -752,7 +762,13 @@ function offRouteCueResult(
     lastOnRoute: false
   }
 
-  const held = selectOffRouteCue(leg, progressAlongLeg, riderPosition, prev, intl)
+  const held = selectOffRouteCue(
+    leg,
+    progressAlongLeg,
+    riderPosition,
+    prev,
+    intl
+  )
   if (!held) {
     cursorCache.set(leg, {
       ...carried,

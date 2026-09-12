@@ -114,9 +114,9 @@ describe('routing-profiles', () => {
         'avoid-biking',
         'reliable-transfers'
       ]
-      const actualLabels = ROUTING_PROFILES.map((p) => p.label)
+      const actualIds = ROUTING_PROFILES.map((p) => p.id)
       expectedLabels.forEach((label) => {
-        expect(actualLabels).toContain(label)
+        expect(actualIds).toContain(label)
       })
     })
   })
@@ -199,6 +199,15 @@ describe('routing-profiles', () => {
       expect(NON_OTP_QUERY_KEYS).toContain('activeProfileId')
       expect(NON_OTP_QUERY_KEYS).toContain('routingPreferences')
     })
+    // A minimal plan query that contains the walkSpeed anchor
+    // extendPlanQueryWithLevers requires before it will inject the levers.
+    const baseQuery = `
+      query TripQuery(
+        $walkSpeed: Float
+      ) {
+        walkSpeed: $walkSpeed
+      }
+    `
 
     // 5.2: the client never sent searchWindow, so OTP auto-sized it to 3000 s
     // on the rider's commute and returned five Orange Line departures and
