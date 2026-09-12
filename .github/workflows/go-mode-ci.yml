@@ -14,9 +14,9 @@ name: Go Mode CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, feature/go-mode ]
   pull_request:
-    branches: [main]
+    branches: [main, feature/go-mode]
 
 jobs:
   test:
