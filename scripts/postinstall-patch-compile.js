@@ -188,7 +188,7 @@ function patchTripDetailsCompiled() {
     // We need to match the escaped quotes \"tr\" and wrap the whole thing in tbody
     content = content.replace(
       /rows\.map\(\(r, index\) => \/\*#__PURE__\*\/_react\.default\.createElement\("tr", \{\s*key: index\s*\}, r\)\)/g,
-      '/*#__PURE__*/_react.default.createElement("tbody", null, rows.map((r, rowIndex) => /*#__PURE__*/_react.default.createElement("tr", {key: "row-".concat(rowIndex)}, r.map((cell, cellIndex) => /*#__PURE__*/_react.default.createElement(_react.default.Fragment, {key: "cell-".concat(rowIndex, "-").concat(cellIndex)}, cell))))'
+      '/*#__PURE__*/_react.default.createElement("tbody", null, rows.map((r, rowIndex) => /*#__PURE__*/_react.default.createElement("tr", {key: "row-".concat(rowIndex)}, r.map((cell, cellIndex) => /*#__PURE__*/_react.default.createElement(_react.default.Fragment, {key: "cell-".concat(rowIndex, "-").concat(cellIndex)}, cell)))))'
     );
     
     fs.writeFileSync(libFile, content, "utf-8");
