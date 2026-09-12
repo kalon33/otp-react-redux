@@ -10,6 +10,7 @@ import nearbyScootersInvalidDates from './nearby-mocks/nearby-scooters-invalid-d
 describe('components > viewers > nearby view', () => {
   it('renders nothing on a blank page', () => {
     const mockState = getMockInitialState()
+    mockState.otp.config.api = { host: 'https://example.com', path: '/otp/routers/default' }
     mockState.otp.transitIndex.nearby = {
       data: []
     }
@@ -21,6 +22,7 @@ describe('components > viewers > nearby view', () => {
 
   it('renders proper scooter dates', () => {
     const mockState = getMockInitialState()
+    mockState.otp.config.api = { host: 'https://example.com', path: '/otp/routers/default' }
     mockState.otp.transitIndex.nearby = {
       data: nearbyScootersInvalidDates
     }

@@ -12,6 +12,7 @@ describe('components > viewers > stop viewer', () => {
 
   it('should render with initial stop id and no stop times', () => {
     const mockState = getMockInitialState()
+    mockState.otp.config.api = { host: 'https://example.com', path: '/otp/routers/default' }
     mockState.otp.ui.viewedStop = {
       stopId: 'TriMet:13170'
     }

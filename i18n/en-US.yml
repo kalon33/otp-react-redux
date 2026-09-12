@@ -177,11 +177,25 @@ components:
       Your changes have been saved. You are ready to start planning trips. Click
       the "Finish" button to return to trip planner.
   ActiveRoutingPreferences:
+    avoidingBiking: avoiding biking
+    briskerWalking: brisker walking
     clear: Clear
+    fasterBiking: faster biking
+    fewerTransfers: fewer transfers
+    gentlerWalking: gentler walking
     label: "Preferences:"
+    lessWaiting: less waiting
+    lessWalking: less walking
+    longerTransferBuffer: longer transfer buffer
+    moreBiking: more biking
+    moreTransfers: more transfers
+    moreWalking: more walking
     noTransfers: No transfers
     noWalkTransit: No walk + transit
+    okayWaiting: okay with waiting
     optionCount: "{count} options"
+    shorterTransferBuffer: shorter transfer buffer
+    slowerBiking: slower biking
     viaStop: Via {stop}
   AddPlaceButton:
     addPlace: Add place

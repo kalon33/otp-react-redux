@@ -225,11 +225,25 @@ components:
     shareDiagnosticsOn: "Partage des diagnostics : activé"
     skipNavigation: Sauter la navigation
   ActiveRoutingPreferences:
+    avoidingBiking: "éviter le vélo"
+    briskerWalking: "marche plus rapide"
     clear: Effacer
+    fasterBiking: "vélo plus rapide"
+    fewerTransfers: "moins de correspondances"
+    gentlerWalking: "marche plus douce"
     label: "Préférences :"
+    lessWaiting: "moins d'attente"
+    lessWalking: "moins de marche"
+    longerTransferBuffer: "marge de correspondance plus longue"
+    moreBiking: "plus de vélo"
+    moreTransfers: "plus de correspondances"
+    moreWalking: "plus de marche"
     noTransfers: "Sans correspondance"
     noWalkTransit: "Sans marche + transports"
+    okayWaiting: "attente acceptable"
     optionCount: "{count} options"
+    shorterTransferBuffer: "marge de correspondance plus courte"
+    slowerBiking: "vélo plus lent"
     viaStop: "Via {stop}"
   BackToTripPlanner:
     backToTripPlanner: Retour au planificateur de trajets
