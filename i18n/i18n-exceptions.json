@@ -65,6 +65,22 @@
       "nlPreferencesLoading",
       "nlPreferencesPlaceholder"
     ],
+    "components.ActiveRoutingPreferences.*": [
+      "avoidingBiking",
+      "briskerWalking",
+      "fasterBiking",
+      "fewerTransfers",
+      "gentlerWalking",
+      "lessWaiting",
+      "lessWalking",
+      "longerTransferBuffer",
+      "moreBiking",
+      "moreTransfers",
+      "moreWalking",
+      "okayWaiting",
+      "shorterTransferBuffer",
+      "slowerBiking"
+    ],
     "components.GoMode.turnInstructions.*": [
       "bearLeft",
       "bearRight",
