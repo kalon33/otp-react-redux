@@ -1,4 +1,3 @@
-import nock from 'nock'
 import '../../test-utils/mock-window-url'
 import {
   getMockInitialState,
@@ -7,6 +6,7 @@ import {
 import NearbyView from '../../../lib/components/viewers/nearby/nearby-view'
 
 import nearbyScootersInvalidDates from './nearby-mocks/nearby-scooters-invalid-dates.json'
+import nock from 'nock'
 
 describe('components > viewers > nearby view', () => {
   afterEach(() => {
@@ -21,7 +21,10 @@ describe('components > viewers > nearby view', () => {
       .post(/.*/)
       .reply(200, {})
     const mockState = getMockInitialState()
-    mockState.otp.config.api = { host: 'https://example.com', path: '/otp/routers/default' }
+    mockState.otp.config.api = {
+      host: 'https://example.com',
+      path: '/otp/routers/default'
+    }
     mockState.otp.transitIndex.nearby = {
       data: []
     }
@@ -39,7 +42,10 @@ describe('components > viewers > nearby view', () => {
       .post(/.*/)
       .reply(200, {})
     const mockState = getMockInitialState()
-    mockState.otp.config.api = { host: 'https://example.com', path: '/otp/routers/default' }
+    mockState.otp.config.api = {
+      host: 'https://example.com',
+      path: '/otp/routers/default'
+    }
     mockState.otp.transitIndex.nearby = {
       data: nearbyScootersInvalidDates
     }
