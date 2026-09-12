@@ -70,18 +70,19 @@ index 1401af3..e830f2d 100644
    const entityIsStationHub = vehiclesAvailable && (entity === null || entity === void 0 ? void 0 : entity.availableVehicles) !== undefined;
    const stopId = entityIsStop(entity) ? entity.code : "";
 diff --git a/node_modules/@opentripplanner/map-popup/lib/util.js b/node_modules/@opentripplanner/map-popup/lib/util.js
-index 9bb3ab0..39942ce 100644
+index 9bb3ab0..38531f9 100644
 --- a/node_modules/@opentripplanner/map-popup/lib/util.js
 +++ b/node_modules/@opentripplanner/map-popup/lib/util.js
-@@ -10,3 +10,5 @@ function getNetwork(entity, configCompanies) {
+@@ -9,14 +9,15 @@ exports.makeDefaultGetEntityName = makeDefaultGetEntityName;
+ var _coreUtils = _interopRequireDefault(require("@opentripplanner/core-utils"));
  function getNetwork(entity, configCompanies) {
    var _entity$rentalNetwork, _entity$rentalNetwork2;
 -  return "rentalNetwork" in entity && (_coreUtils.default.itinerary.getCompaniesLabelFromNetworks(entity === null || entity === void 0 || (_entity$rentalNetwork = entity.rentalNetwork) === null || _entity$rentalNetwork === void 0 ? void 0 : _entity$rentalNetwork.networkId, configCompanies) || (entity === null || entity === void 0 || (_entity$rentalNetwork2 = entity.rentalNetwork) === null || _entity$rentalNetwork2 === void 0 ? void 0 : _entity$rentalNetwork2.networkId));
 +  var rentalNetwork = "rentalNetwork" in entity ? entity.rentalNetwork : null;
 +  return !!(rentalNetwork && rentalNetwork.networkId) && (_coreUtils.default.itinerary.getCompaniesLabelFromNetworks(rentalNetwork.networkId, configCompanies) || rentalNetwork.networkId);
  }
-
-@@ -16,7 +16,7 @@ function getNetwork(entity, configCompanies) {
+ 
+ // eslint-disable-next-line import/prefer-default-export
  function makeDefaultGetEntityName(intl, defaultEnglishMessages) {
    return function defaultGetEntityName(entity, configCompanies, feedName, includeParenthetical = true) {
      var _entity$vehicleType, _entity$vehicleType2, _entity$vehicleType3;
@@ -90,7 +91,7 @@ index 9bb3ab0..39942ce 100644
      // If the station name or id is a giant UUID (with more than 3 "-" characters)
      // best not to show that at all. The company name will still be shown.
      // Also ignore "Default Vehicle Type"
-@@ -43,7 +43,7 @@ function makeDefaultGetEntityName(intl, defaultEnglishMessages) {
+@@ -43,7 +44,7 @@ function makeDefaultGetEntityName(intl, defaultEnglishMessages) {
          company: network,
          name: stationName
        });
