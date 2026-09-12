@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - master
+      - feature/go-mode
   pull_request:
 
 jobs:
