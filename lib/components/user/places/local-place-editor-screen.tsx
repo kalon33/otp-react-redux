@@ -1,3 +1,4 @@
+import * as yup from 'yup'
 import { connect } from 'react-redux'
 import { Form, Formik } from 'formik'
 import { FormattedMessage, useIntl } from 'react-intl'
@@ -6,8 +7,6 @@ import clone from 'clone'
 import coreUtils from '@opentripplanner/core-utils'
 import React, { useState } from 'react'
 import styled from 'styled-components'
-// @ts-expect-error Package yup does not have type declarations.
-import * as yup from 'yup'
 
 import * as userActions from '../../../actions/user'
 import {

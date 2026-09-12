@@ -15,6 +15,7 @@ const ViewSwitcher = (): JSX.Element => {
   const intl = useIntl()
   // @ts-expect-error Context not typed
   const { extraViews } = useContext(ComponentContext)
+  const views = extraViews || []
   return (
     <div
       aria-label={intl.formatMessage({
@@ -33,7 +34,7 @@ const ViewSwitcher = (): JSX.Element => {
       <Link to="/nearby" tracking>
         <FormattedMessage id="components.ViewSwitcher.nearby" />
       </Link>
-      {extraViews
+      {views
         .filter((v: ExtraView) => !!v?.name && v?.showInHeaderBar)
         .map((view: ExtraView) => (
           <Link key={view.path} to={view.path} tracking>

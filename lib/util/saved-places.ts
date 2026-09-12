@@ -35,7 +35,7 @@ export function isCustomPlace(place?: UserSavedLocation | null): boolean {
 
 /** Reads the rider's custom places, dropping malformed entries. */
 export function loadCustomPlaces(): UserSavedLocation[] {
-  const places = getItem(SAVED_PLACES_KEY, [])
+  const places = getItem<UserSavedLocation[]>(SAVED_PLACES_KEY, [])
   if (!Array.isArray(places)) return []
   return places.filter(
     (p) => p && p.id && typeof p.lat === 'number' && typeof p.lon === 'number'

@@ -1,4 +1,3 @@
-// @ts-expect-error No TypeScript for yup.
 import * as yup from 'yup'
 import {
   ControlLabel,

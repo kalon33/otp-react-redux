@@ -1,3 +1,4 @@
+import 'react-sliding-pane/dist/react-sliding-pane.css'
 import { Bug } from '@styled-icons/fa-solid/Bug'
 import { Bus } from '@styled-icons/fa-solid/Bus'
 import { Comment } from '@styled-icons/fa-regular/Comment'
@@ -15,7 +16,6 @@ import { Sliders } from '@styled-icons/fa-solid/Sliders'
 import { Undo } from '@styled-icons/fa-solid/Undo'
 import React, { Component, Fragment, useContext } from 'react'
 import SlidingPane from 'react-sliding-pane'
-import 'react-sliding-pane/dist/react-sliding-pane.css'
 import type { WrappedComponentProps } from 'react-intl'
 
 import * as callTakerActions from '../../actions/call-taker'
@@ -63,6 +63,12 @@ type AppMenuProps = {
   callTakerEnabled?: boolean
   extraMenuItems?: AppMenuItemConfig[]
   fieldTripEnabled?: boolean
+  language?: LanguageConfig
+  languageOptions: Record<string, any> | null
+  mailablesEnabled?: boolean
+  popupTarget?: string
+  resetAndToggleCallHistory?: () => void
+  resetAndToggleFieldTrips?: () => void
   rideConsoleDeviceIds?: string[]
   rideConsoleUrl?: string
   setLocale: (locale: string) => void
@@ -207,9 +213,12 @@ class AppMenu extends Component<
       languageOptions,
       mailablesEnabled,
       popupTarget,
+      resetAndToggleCallHistory,
       resetAndToggleFieldTrips,
       rideConsoleDeviceIds,
       rideConsoleUrl,
+      setLocale,
+      toggleMailables,
       translateExternalLinks
     } = this.props
     const languageMenuItems: MenuItem[] | null = languageOptions && [
