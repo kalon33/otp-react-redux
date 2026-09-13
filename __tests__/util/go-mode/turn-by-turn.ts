@@ -99,7 +99,14 @@ describe('util > go-mode > turn-by-turn', () => {
       'components.GoMode.turnInstructions.turnLeft': 'Tourner à gauche'
     }
     const intl = createIntl(
-      { locale: 'fr', messages: frMessages },
+      {
+        locale: 'fr',
+        messages: frMessages,
+        onError: (err) => {
+          if (err && err.code === 'MISSING_TRANSLATION') return
+          console.error(err)
+        }
+      },
       createIntlCache()
     )
 

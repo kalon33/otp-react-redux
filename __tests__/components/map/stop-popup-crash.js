@@ -53,13 +53,21 @@ const stopEntityFromTile = (overrides) => ({
 function renderIntoDom(element) {
   const container = document.createElement('div')
   document.body.appendChild(container)
+  const onError = (err) => {
+    if (err && err.code === 'MISSING_TRANSLATION') return
+    console.error(err)
+  }
+  // ReactDOM.render/unmountComponentAtNode are the correct APIs on React 16;
+  // react/no-deprecated targets the React 18 client API which is absent here.
+  // eslint-disable-next-line react/no-deprecated
   ReactDOM.render(
-    <IntlProvider locale="en-US" messages={{}}>
+    <IntlProvider locale="en-US" messages={{}} onError={onError}>
       {element}
     </IntlProvider>,
     container
   )
   const html = container.innerHTML
+  // eslint-disable-next-line react/no-deprecated
   ReactDOM.unmountComponentAtNode(container)
   container.remove()
   return html

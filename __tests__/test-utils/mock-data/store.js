@@ -52,8 +52,20 @@ export function mockWithProvider(
   messages = undefined
 ) {
   const store = configureStore(storeMiddleWare)(storeState)
+  // Silence the MISSING_TRANSLATION noise in CI: tests that don't pass real
+  // messages intentionally render message ids as fallback, which react-intl
+  // otherwise logs as a console error for every rendered FormattedMessage.
+  const onError = (err) => {
+    if (err && err.code === 'MISSING_TRANSLATION') return
+    console.error(err)
+  }
   const wrapper = mount(
-    <IntlProvider defaultLocale="en-US" locale="en-US" messages={messages}>
+    <IntlProvider
+      defaultLocale="en-US"
+      locale="en-US"
+      messages={messages}
+      onError={onError}
+    >
       <Provider store={store}>
         <ConnectedComponent {...connectedComponentProps} />
       </Provider>
