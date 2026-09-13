@@ -24,7 +24,10 @@ const MAKI_ICON_BASE_URL =
  * missing image ids mapping to the same Maki icon share a single loadImage
  * call while still each getting their own placeholder replaced.
  */
-const pendingMakiLoads = new Map<string, Promise<maplibregl.ImageData>>()
+const pendingMakiLoads = new Map<
+  string,
+  ReturnType<maplibregl.Map['loadImage']>
+>()
 
 export function resetLoadedMakiIcons(): void {
   pendingMakiLoads.clear()
@@ -60,7 +63,9 @@ export function handleStyleImageMissing(
   const makiIconId = MAKI_ICON_MAPPINGS[id]
 
   if (makiIconId) {
-    const applyIcon = (image: maplibregl.ImageData) => {
+    const applyIcon = (
+      image: Awaited<ReturnType<maplibregl.Map['loadImage']>>
+    ) => {
       if (!map.hasImage(makiIconId)) {
         map.addImage(makiIconId, image.data)
       }
@@ -73,9 +78,7 @@ export function handleStyleImageMissing(
     let loadPromise = pendingMakiLoads.get(makiIconId)
     if (!loadPromise) {
       const iconUrl = `${MAKI_ICON_BASE_URL}/${makiIconId}.svg`
-      loadPromise = (
-        map.loadImage(iconUrl) as Promise<maplibregl.ImageData>
-      ).then(
+      loadPromise = map.loadImage(iconUrl).then(
         (image) => {
           pendingMakiLoads.delete(makiIconId)
           return image
