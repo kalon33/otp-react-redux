@@ -2,7 +2,7 @@ import { Route } from '@opentripplanner/types'
 
 import { Pattern, StopData, StopTime } from '../components/util/types'
 
-import { extractHeadsignFromPattern, getRouteIdForPattern } from './viewer'
+import { extractHeadsignFromPattern } from './viewer'
 import { isBlank } from './ui'
 
 interface StopTimesForPattern {
@@ -37,7 +37,7 @@ function getStopTimesByPattern(
   if (stopData && stopData.routes && stopData.stoptimesForPatterns) {
     const { routes, stoptimesForPatterns } = stopData
     stoptimesForPatterns.forEach(({ pattern, stoptimes }) => {
-      const routeId = getRouteIdForPattern(pattern)
+      const routeId = (pattern.route as { gtfsId?: string })?.gtfsId
 
       let headsign = stoptimes[0] && stoptimes[0].headsign
       // If times didn't provide a headsign, extract it from the pattern
