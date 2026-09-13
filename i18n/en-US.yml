@@ -453,8 +453,11 @@ components:
     offAtStop: Off at {stop}
     onBus: "On Bus #{label}"
     onBusButton: I'm already on the bus
+    onboardAssumedRoute: On the {route}
+    onboardAssumedVehicle: On the {route} · {vehicle}
     onboardCancel: Cancel
     onboardError: Couldn't work out your bus. Try again?
+    onboardNotThisVehicle: Not this one
     onboardTitle: On the bus
     openTripSheet: Open trip overview
     pickYourBus: Which bus are you on? Pick it below.
