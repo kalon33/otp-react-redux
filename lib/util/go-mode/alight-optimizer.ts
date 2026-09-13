@@ -746,16 +746,44 @@ function isReachableItinerary(
 }
 
 /**
+ * How far a street-only plan makes the rider travel, from its legs. Falls back
+ * to `itinerary.walkDistance` only when the legs carry no distance (synthetic
+ * fixtures); OTP legs always do. The fallback of last resort is Infinity, so a
+ * plan nothing can measure is not offered.
+ */
+function streetDistance(itin: Itinerary): number {
+  const measured = (itin.legs || []).reduce(
+    (sum, leg) => sum + (Number(leg.distance) || 0),
+    0
+  )
+  if (measured > 0) return measured
+  return typeof itin.walkDistance === 'number' ? itin.walkDistance : Infinity
+}
+
+/**
  * Whether an onward itinerary is worth offering. A plan with a transit leg
- * always is. A walk-only plan is kept only when the walk is short — OTP returns
- * a walk-the-whole-way itinerary as a fallback even from a far stop, which we
- * don't want to recommend; but a short final walk (alight stop ~at the
- * destination) is legitimate.
+ * always is. A street-only plan is judged by what it asks of the rider:
+ *
+ * - bike-only is always a real answer — "get off here and ride the rest of the
+ *   way" is exactly the option the rider asked for on 2026-09-13 (backlog
+ *   15.1), and the arrival sort decides where it lands against the bus
+ *   options; a slow bike ranks low, it does not vanish;
+ * - walk-only is kept only when the walk is short — OTP returns a
+ *   walk-the-whole-way itinerary as a fallback even from a far stop, which we
+ *   don't want to recommend; but a short final walk (alight stop ~at the
+ *   destination) is legitimate.
+ *
+ * The walk is measured from the legs, not from `itinerary.walkDistance`: the
+ * plan query never requests that field, so it was always undefined here and
+ * `undefined ?? Infinity` failed every street-only plan closed. That is how a
+ * 35-minute bike from Hamline Ave Station never made the list while three
+ * bus-plus-bike options did.
  */
 function isUsableItinerary(itin: Itinerary, walkOnlyMax: number): boolean {
-  const hasTransit = (itin.legs || []).some((leg) => leg.transitLeg)
-  if (hasTransit) return true
-  return (itin.walkDistance ?? Infinity) <= walkOnlyMax
+  const legs = itin.legs || []
+  if (legs.some((leg) => leg.transitLeg)) return true
+  if (legs.some((leg) => leg.mode === 'BICYCLE')) return true
+  return streetDistance(itin) <= walkOnlyMax
 }
 
 /**
