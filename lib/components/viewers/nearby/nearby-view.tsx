@@ -338,6 +338,7 @@ function NearbyView({
           n.place?.stopRoutes?.map((sr: { gtfsId?: string }) => sr?.gtfsId)
         )
         .flat(Infinity)
+        .filter((id: unknown): id is string => typeof id === 'string')
     )
   )
 
