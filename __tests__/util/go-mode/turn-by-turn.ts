@@ -1,3 +1,4 @@
+import { createIntl, createIntlCache } from 'react-intl'
 import { encode } from '@mapbox/polyline'
 
 import {
@@ -5,6 +6,7 @@ import {
   formatCueDistance,
   getNextCue,
   phraseInstruction,
+  phraseInstructionWithIntl,
   selectCueForNavigation
 } from '../../../lib/util/go-mode/turn-by-turn'
 
@@ -86,6 +88,46 @@ describe('util > go-mode > turn-by-turn', () => {
       expect(
         phraseInstruction(makeStep(0, 'CONTINUE', 'Bryant Ave S') as any)
       ).toBe('Continue on Bryant Ave S')
+    })
+  })
+
+  describe('phraseInstructionWithIntl', () => {
+    const frMessages = {
+      'components.GoMode.turnInstructions.bearRight': 'Légèrement à droite',
+      'components.GoMode.turnInstructions.continue': 'Continuer',
+      'components.GoMode.turnInstructions.continueOn': 'Continuer sur {name}',
+      'components.GoMode.turnInstructions.turnLeft': 'Tourner à gauche'
+    }
+    const intl = createIntl(
+      { locale: 'fr', messages: frMessages },
+      createIntlCache()
+    )
+
+    it('returns the localized verb with street name for French', () => {
+      expect(
+        phraseInstructionWithIntl(
+          makeStep(0, 'SLIGHTLY_RIGHT', 'Village Terrace') as any,
+          intl
+        )
+      ).toBe('Légèrement à droite sur Village Terrace')
+    })
+
+    it('returns the localized verb without street name when bogus', () => {
+      expect(
+        phraseInstructionWithIntl(
+          makeStep(0, 'LEFT', 'path', { bogusName: true }) as any,
+          intl
+        )
+      ).toBe('Tourner à gauche')
+    })
+
+    it('falls back to a localized continue phrasing for unknown directions', () => {
+      expect(
+        phraseInstructionWithIntl(
+          makeStep(0, 'CONTINUE', 'Bryant Ave S') as any,
+          intl
+        )
+      ).toBe('Continuer sur Bryant Ave S')
     })
   })
 
