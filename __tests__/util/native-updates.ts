@@ -563,3 +563,252 @@ describe('applyPendingBundleWhenSafe + the native hold', () => {
     expect(d.holdBundle).not.toHaveBeenCalled()
   })
 })
+
+// ---------------------------------------------------------------------------
+// The quiet period (backlog 15.6).
+//
+// Measured on the dev app 2026-09-13, session mu01c0py-nrwza6: bundle
+// 2026.0913.2 was queued mid-ride and correctly deferred
+// (`bundle_apply {"outcome":"deferred: trip-active"}`, t=1789317571388), and
+// then installed 18 ms after the rider tapped Stop to re-run "I'm on the bus"
+// — `bundle_release` t=1789317647611, `bundle_apply applied` t=1789317647629,
+// with the next onboard flow five seconds later. A trip boundary is not the
+// unit; quiet time is.
+// ---------------------------------------------------------------------------
+describe('the Go Mode quiet period', () => {
+  function freshModule(): typeof import('../../lib/util/native-updates') {
+    jest.resetModules()
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    return require('../../lib/util/native-updates')
+  }
+
+  /** A hold whose two plugin writes are observable. */
+  const holdDeps = () => ({
+    cancel: jest.fn(async () => undefined),
+    setDelay: jest.fn(async () => undefined)
+  })
+
+  beforeEach(() => {
+    jest.useFakeTimers()
+  })
+  afterEach(() => {
+    jest.useRealTimers()
+  })
+
+  it('does not release the hold when a trip stops — it starts a clock', () => {
+    const {
+      beginGoModeQuietPeriod,
+      bundleHoldActive,
+      goModeQuietPeriodPending,
+      noteGoModeActivity
+    } = freshModule()
+    const d = holdDeps()
+
+    noteGoModeActivity(d)
+    expect(bundleHoldActive()).toBe(true)
+
+    beginGoModeQuietPeriod({ ...d, onQuiet: jest.fn() })
+    // The 11:40:47 moment: nothing may come off here.
+    expect(d.cancel).not.toHaveBeenCalled()
+    expect(bundleHoldActive()).toBe(true)
+    expect(goModeQuietPeriodPending()).toBe(true)
+  })
+
+  it('refreshes the clock on every further stop rather than releasing', () => {
+    // The rider stopped four times in three minutes on 2026-09-13. Each stop
+    // must buy another full period, not bring the deadline closer.
+    const { beginGoModeQuietPeriod, bundleHoldActive, noteGoModeActivity } =
+      freshModule()
+    const d = holdDeps()
+    const onQuiet = jest.fn()
+    const quietMs = 600000
+
+    noteGoModeActivity(d)
+    beginGoModeQuietPeriod({ ...d, onQuiet, quietMs })
+    jest.advanceTimersByTime(quietMs - 1000)
+    beginGoModeQuietPeriod({ ...d, onQuiet, quietMs })
+    jest.advanceTimersByTime(quietMs - 1000)
+
+    // Nearly twice the period has elapsed in wall time, and the hold stands.
+    expect(onQuiet).not.toHaveBeenCalled()
+    expect(d.cancel).not.toHaveBeenCalled()
+    expect(bundleHoldActive()).toBe(true)
+  })
+
+  it('releases and applies once the period elapses with nothing running', () => {
+    // The session that never starts another trip still has to get the bundle:
+    // the timer is the only thing that can deliver it without a relaunch.
+    const {
+      beginGoModeQuietPeriod,
+      bundleHoldActive,
+      GO_MODE_QUIET_PERIOD_MS,
+      goModeQuietPeriodPending,
+      noteGoModeActivity
+    } = freshModule()
+    const d = holdDeps()
+    const onQuiet = jest.fn()
+
+    noteGoModeActivity(d)
+    beginGoModeQuietPeriod({ ...d, onQuiet })
+
+    jest.advanceTimersByTime(GO_MODE_QUIET_PERIOD_MS - 1)
+    expect(onQuiet).not.toHaveBeenCalled()
+
+    jest.advanceTimersByTime(1)
+    expect(d.cancel).toHaveBeenCalledTimes(1)
+    expect(onQuiet).toHaveBeenCalledTimes(1)
+    expect(bundleHoldActive()).toBe(false)
+    expect(goModeQuietPeriodPending()).toBe(false)
+  })
+
+  it('ten minutes, so a transfer wait cannot be mistaken for being done', () => {
+    const { GO_MODE_QUIET_PERIOD_MS } = freshModule()
+    expect(GO_MODE_QUIET_PERIOD_MS).toBe(600000)
+  })
+
+  it('cancels the clock when Go Mode starts again', () => {
+    // The onboard flow five seconds after the Stop. This is the case the trip
+    // boundary got wrong.
+    const {
+      beginGoModeQuietPeriod,
+      bundleHoldActive,
+      GO_MODE_QUIET_PERIOD_MS,
+      goModeQuietPeriodPending,
+      noteGoModeActivity
+    } = freshModule()
+    const d = holdDeps()
+    const onQuiet = jest.fn()
+
+    noteGoModeActivity(d)
+    beginGoModeQuietPeriod({ ...d, onQuiet })
+    jest.advanceTimersByTime(5000)
+    noteGoModeActivity(d)
+
+    expect(goModeQuietPeriodPending()).toBe(false)
+    jest.advanceTimersByTime(GO_MODE_QUIET_PERIOD_MS * 2)
+    expect(onQuiet).not.toHaveBeenCalled()
+    expect(d.cancel).not.toHaveBeenCalled()
+    expect(bundleHoldActive()).toBe(true)
+  })
+
+  it('waits another period when the timer finds a trip running', () => {
+    // A trip restored by a path that does not call noteGoModeActivity. Quiet
+    // means quiet: wait again rather than swap the bundle under it.
+    const { beginGoModeQuietPeriod, GO_MODE_QUIET_PERIOD_MS } = freshModule()
+    const d = holdDeps()
+    const onQuiet = jest.fn()
+    let active = true
+
+    beginGoModeQuietPeriod({ ...d, isTripActive: () => active, onQuiet })
+    jest.advanceTimersByTime(GO_MODE_QUIET_PERIOD_MS)
+    expect(onQuiet).not.toHaveBeenCalled()
+
+    active = false
+    jest.advanceTimersByTime(GO_MODE_QUIET_PERIOD_MS)
+    expect(onQuiet).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the apply across a refresh that does not carry one', () => {
+    // One STOP starts the same quiet period twice — endGoMode and main.js's
+    // store subscription — and only the second knows how to apply a bundle.
+    // Whichever lands last, the apply must survive.
+    const { beginGoModeQuietPeriod, GO_MODE_QUIET_PERIOD_MS } = freshModule()
+    const d = holdDeps()
+    const onQuiet = jest.fn()
+
+    beginGoModeQuietPeriod({ ...d, onQuiet })
+    beginGoModeQuietPeriod(d)
+    jest.advanceTimersByTime(GO_MODE_QUIET_PERIOD_MS)
+
+    expect(onQuiet).toHaveBeenCalledTimes(1)
+  })
+
+  it('defers a queued bundle for the whole quiet period', async () => {
+    const {
+      applyPendingBundleWhenSafe,
+      beginGoModeQuietPeriod,
+      GO_MODE_QUIET_PERIOD_MS,
+      noteGoModeActivity
+    } = freshModule()
+    const d = holdDeps()
+    const pending = { id: 'ajW1J3Y76Q', version: '2026.0913.2' }
+    const gate = {
+      apply: jest.fn(),
+      holdBundle: jest.fn(async () => undefined),
+      isHealthConfirmed: () => true,
+      isTripActive: () => false,
+      pendingBundle: async () => pending,
+      releaseHold: jest.fn(async () => undefined),
+      runningBundleId: async () => '06NY2QCmaY',
+      stashHash: () => undefined
+    }
+
+    noteGoModeActivity(d)
+    beginGoModeQuietPeriod({ ...d, onQuiet: () => undefined })
+
+    // main.js's store subscription, and every foreground after it.
+    expect(await applyPendingBundleWhenSafe(gate)).toBe(
+      'deferred: quiet-period'
+    )
+    expect(gate.apply).not.toHaveBeenCalled()
+    // Held on the native side too: the plugin would otherwise install it at
+    // the next background all by itself.
+    expect(gate.holdBundle).toHaveBeenCalledTimes(1)
+
+    jest.advanceTimersByTime(GO_MODE_QUIET_PERIOD_MS)
+    expect(await applyPendingBundleWhenSafe(gate)).toBe('applied')
+    expect(gate.apply).toHaveBeenCalledWith('ajW1J3Y76Q')
+  })
+
+  it('ends the quiet period when the rider backgrounds the app', () => {
+    // The one install moment the plugin has always owned: get out of its way
+    // rather than reloading a webview the OS is suspending.
+    const {
+      beginGoModeQuietPeriod,
+      bundleHoldActive,
+      endGoModeQuietPeriodOnBackground,
+      goModeQuietPeriodPending,
+      noteGoModeActivity
+    } = freshModule()
+    const d = holdDeps()
+    const onQuiet = jest.fn()
+
+    noteGoModeActivity(d)
+    beginGoModeQuietPeriod({ ...d, onQuiet })
+    endGoModeQuietPeriodOnBackground(d)
+
+    expect(d.cancel).toHaveBeenCalledTimes(1)
+    expect(bundleHoldActive()).toBe(false)
+    expect(goModeQuietPeriodPending()).toBe(false)
+    // No apply from here: `set()` reloads, and the app is on its way out.
+    expect(onQuiet).not.toHaveBeenCalled()
+  })
+
+  it('never releases on a background while a trip is running', () => {
+    // A rider following turn-by-turn with the screen locked backgrounds the
+    // app constantly. That is the case the hold exists for.
+    const {
+      beginGoModeQuietPeriod,
+      bundleHoldActive,
+      endGoModeQuietPeriodOnBackground,
+      noteGoModeActivity
+    } = freshModule()
+    const d = holdDeps()
+
+    noteGoModeActivity(d)
+    beginGoModeQuietPeriod({ ...d, isTripActive: () => true })
+    endGoModeQuietPeriodOnBackground({ ...d, isTripActive: () => true })
+
+    expect(d.cancel).not.toHaveBeenCalled()
+    expect(bundleHoldActive()).toBe(true)
+  })
+
+  it('is inert on a background with no quiet period pending', () => {
+    // A cold launch has neither hold nor timer (the plugin drops the kill
+    // condition in its own load()), and this must not invent work for it.
+    const { endGoModeQuietPeriodOnBackground } = freshModule()
+    const d = holdDeps()
+    endGoModeQuietPeriodOnBackground(d)
+    expect(d.cancel).not.toHaveBeenCalled()
+  })
+})

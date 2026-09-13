@@ -157,7 +157,10 @@ import {
 import { accessArriveByTarget } from '../util/go-mode/arrive-on-time'
 import { ridingSuppressedByRider } from '../util/go-mode/boarding-confirmation'
 import { isTripRecordingEnabled, recordSessionEvent } from '../util/debug-log'
-import { holdBundleWhileTripActive } from '../util/native-updates'
+import {
+  beginGoModeQuietPeriod,
+  noteGoModeActivity
+} from '../util/native-updates'
 import { fetchOnboardContext } from '../util/go-mode/onboard-discovery'
 import {
   hasNativeGps,
@@ -912,8 +915,9 @@ export function beginGoMode(
     }
     // Stop the live-update plugin from installing a queued bundle the next
     // time the phone is pocketed: `installNext()` runs on every background and
-    // knows nothing about a trip. See util/native-updates.
-    holdBundleWhileTripActive({ onHoldChange: recordSessionEvent })
+    // knows nothing about a trip. Also cancels any quiet timer left over from
+    // the trip before this one. See util/native-updates.
+    noteGoModeActivity({ onHoldChange: recordSessionEvent })
     // While the trip is backgrounded (rider browsing the planner), an
     // auto-update swapping the itinerary through here must not yank the
     // screen back to Go Mode — explicit returns go through returnToGoMode.
@@ -1014,7 +1018,7 @@ export function startGoModeTracking(
     // replan, a reroute, and the resume from storage — so this is the one
     // place that guarantees the updater is held for the whole of it. A
     // redundant call writes nothing.
-    holdBundleWhileTripActive({ onHoldChange: recordSessionEvent })
+    noteGoModeActivity({ onHoldChange: recordSessionEvent })
 
     // The lock-screen card, for the same reason and in the same place: this is
     // the only door a resumed trip comes through as well as a started one, and
@@ -1312,10 +1316,14 @@ export function endGoMode() {
     }
     stopGpsWatchdog()
     stopRerouteSnapshotCapture()
-    // ...and the updater is allowed to install again. A bundle queued during
-    // the ride lands at the next background, or sooner through the apply gate.
-    holdBundleWhileTripActive({
-      active: false,
+    // ...and the updater's clock starts. NOT a release: "Stop" is routinely a
+    // step inside a ride — the rider taps it to re-run "I'm on the bus" — and
+    // releasing here installed a queued bundle 18 ms later on 2026-09-13,
+    // destroying the JS context five seconds before their next onboard flow
+    // (backlog 15.6). The hold comes off after a quiet period instead, and
+    // every further stop refreshes it. See util/native-updates.
+    beginGoModeQuietPeriod({
+      isTripActive: () => getState().otp?.goMode?.isActive === true,
       onHoldChange: recordSessionEvent
     })
     // Stop the native background-location stream (iOS shell) — ends the blue
@@ -2459,6 +2467,13 @@ export function beginOnboardFlow() {
       afterLegIndex: before.otp.goMode?.riding?.legIndex ?? -1,
       boardedRouteId: before.otp.goMode?.riding?.routeId ?? null
     })
+    // The onboard flow is a ride in progress even though no trip is running:
+    // BEGIN_ONBOARD_FLOW sets `isActive` without ever passing through
+    // startGoModeTracking, so until this call nothing armed the native hold
+    // during one (measured 2026-09-13: no `bundle_hold` across three flows
+    // between 11:38:18 and 11:39:31). It also cancels the quiet timer that the
+    // Stop the rider tapped a moment ago started.
+    noteGoModeActivity({ onHoldChange: recordSessionEvent })
     dispatch(beginOnboardFlowAction({ keepRouteId, originalFrom }))
     dispatch(setMobileScreen(MobileScreens.GO_MODE))
     dispatch(updateTrackingInterval({ interval: 5000 }))
