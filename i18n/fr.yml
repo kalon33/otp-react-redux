@@ -403,6 +403,7 @@ components:
     boardingConfirm: "Je suis dans le bus"
     boardingDeny: "Je ne suis pas dans ce bus"
     boardingQuestion: "Êtes-vous dans le bus ?"
+    boardingSearching: "Recherche…"
     boardingSubtitle: "Recherche du {route} à proximité"
     busHeadsign: "vers {headsign}"
     busLabel: "Bus {label}"

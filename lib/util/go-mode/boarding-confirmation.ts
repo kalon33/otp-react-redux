@@ -95,6 +95,33 @@ export function ridingSuppressedByRider(input: {
   return boardingDenialHolds(deniedAtMs, nowMs)
 }
 
+/** What the boarding sheet shows under its title. */
+export type BoardingPromptBody = 'none' | 'routes' | 'searching' | 'vehicles'
+
+/**
+ * Which body the boarding prompt shows.
+ *
+ * The order matters, and the only interesting rule is the last one: an empty
+ * vehicle list is NOT the same fact as a search that has not answered yet.
+ * On 2026-09-13 the sheet said "No buses detected nearby" to a rider sitting
+ * on a train 76 m away, because on an access leg nothing had ever written the
+ * list it was reporting on. "No buses" is a finding, so it is reachable only
+ * once a poll has been compared against the rider's position; while the search
+ * is running the sheet says it is looking, and the manual route picker waits
+ * too rather than pre-empting an answer that is seconds away.
+ */
+export function boardingPromptBody(input: {
+  nearbyRouteCount: number
+  nearbyVehicleCount: number
+  searching: boolean
+}): BoardingPromptBody {
+  const { nearbyRouteCount, nearbyVehicleCount, searching } = input
+  if (nearbyVehicleCount > 0) return 'vehicles'
+  if (searching) return 'searching'
+  if (nearbyRouteCount > 0) return 'routes'
+  return 'none'
+}
+
 /**
  * What the trip sheet should offer the rider right now, and which vehicle a
  * confirmation should name.

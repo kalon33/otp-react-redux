@@ -313,6 +313,15 @@ const REROUTE_SNAPSHOT_RIDING_INTERVAL_MS = 360000
 // tick fetches immediately.
 const LIVE_LEG_TIMES_INTERVAL_MS = 20000
 
+// Radius base for a picker the RIDER reads — the boarding prompt and the
+// onboard flow's discovery. Deliberately far wider than the matcher's 80/200 m:
+// a picker offers candidates for a person to recognise, so a bus listed in
+// error costs a glance, while one omitted is the failure the rider reported on
+// 2026-09-13 (train 76 m away, "No buses detected nearby"). GTFS-RT frames also
+// arrive well behind the vehicle — the 11:36 Green Line frames were stamped
+// 60-70 s old, beyond what speedAdjustedRadius's lag term covers.
+const PICKER_RADIUS_METERS = 750
+
 // Quiet access-leg replans that keep coming back empty (fetch failed, or the
 // never-force-a-route-change picker rejected everything) are counted but
 // settle silently: the ROUTE_DEVIATION notification already fired and the
@@ -457,6 +466,7 @@ export const SET_EARLY_ALIGHT = 'SET_EARLY_ALIGHT'
 export const SET_GO_MODE_ACTIVE_LEG = 'SET_GO_MODE_ACTIVE_LEG'
 export const SET_GO_MODE_BACKGROUNDED = 'SET_GO_MODE_BACKGROUNDED'
 export const SET_MAP_FOLLOW = 'SET_MAP_FOLLOW'
+export const SET_BOARDING_SEARCHING = 'SET_BOARDING_SEARCHING'
 export const SET_RIDING = 'SET_RIDING'
 export const SET_LIVE_LEG_TIMES = 'SET_LIVE_LEG_TIMES'
 export const SET_NOTIFICATION_CONFIG = 'SET_NOTIFICATION_CONFIG'
@@ -505,6 +515,9 @@ export type { LiveLegTime, RidingState } from '../util/go-mode/types'
 
 export const clearVehicleMatch = createAction(CLEAR_VEHICLE_MATCH)
 export const dismissBoardingPrompt = createAction(DISMISS_BOARDING_PROMPT)
+export const setBoardingSearching = createAction<boolean>(
+  SET_BOARDING_SEARCHING
+)
 export const showBoardingPromptAction = createAction(SHOW_BOARDING_PROMPT)
 export const startGoMode = createAction<{
   itinerary: Itinerary
@@ -2572,7 +2585,7 @@ export function discoverNearbyVehicles(attempt = 0) {
     const context = await fetchOnboardContext(
       lat,
       lon,
-      speedAdjustedRadius(750, pos.coords.speed)
+      speedAdjustedRadius(PICKER_RADIUS_METERS, pos.coords.speed)
     )
     const candidates = context?.routes
     // vehicleId -> {direction, headsign}; empty when the sidecar is unreachable
@@ -2633,7 +2646,7 @@ export function discoverNearbyVehicles(attempt = 0) {
       lat,
       lon,
       allVehicles,
-      speedAdjustedRadius(750, pos.coords.speed)
+      speedAdjustedRadius(PICKER_RADIUS_METERS, pos.coords.speed)
     ).map((v) => ({ ...v, ...(vehicleDetails[v.vehicleId] || {}) }))
 
     dispatch({ payload: nearby, type: UPDATE_NEARBY_VEHICLES })
@@ -6214,6 +6227,89 @@ export function performVehicleMatching(routeId: string) {
 }
 
 /**
+ * Search the rider's OWN boarding route for live vehicles around them, then
+ * open the boarding prompt on what that search found.
+ *
+ * The prompt renders `vehicleMatch.nearbyVehicles`, and until 2026-09-13 the
+ * only writer of that list was `performVehicleMatching`, which the 15 s
+ * `startVehicleTracking` interval runs and which is armed only when a TRANSIT
+ * leg becomes current. A rider who boards early — while Go Mode still has them
+ * on the bike/walk access leg — therefore tapped "I'm on the bus" into a list
+ * nothing had ever written: 11:36:24 and 11:36:37 that day, aboard Green Line
+ * train 1:32141, zero UPDATE_NEARBY_VEHICLES in the window, and the sheet said
+ * "No buses detected nearby" while the app's own 20 s poll of route 1:902 (the
+ * access-leg poll in handlePositionUpdate) held that train in every response.
+ *
+ * So the tap runs the search itself, against the route the rider already chose
+ * — the itinerary's next transit leg, never a wider set of routes or modes.
+ * The sheet opens immediately in its searching state; the empty-list copy is
+ * only reachable once a poll has actually been compared against a fix.
+ */
+export function searchBoardingVehicles() {
+  return async function (dispatch: any, getState: any) {
+    const goMode = getState().otp?.goMode
+    const legs: any[] = goMode?.activeItinerary?.legs ?? []
+    const matcherLegIndex = goMode?.routeMatch?.legIndex ?? 0
+    // After an early alight (8.11) the matcher still sits on the transit leg
+    // the rider stepped off, so the boarding to look for starts one leg on —
+    // the same rule the tick's access-leg poll and classifyMissedBus use.
+    const searchFromIndex =
+      goMode?.earlyAlight?.legIndex === matcherLegIndex
+        ? matcherLegIndex + 1
+        : matcherLegIndex
+    const boardLegIndex = findBoardLegIndex(legs, searchFromIndex)
+    const boardLeg: any = boardLegIndex >= 0 ? legs[boardLegIndex] : null
+    const routeId = boardLeg ? getLegRouteId(boardLeg) : null
+
+    // With no route to poll there is no search to announce, and the prompt
+    // keeps exactly the behaviour it had.
+    if (!routeId) {
+      dispatch(showBoardingPromptAction())
+      return
+    }
+    // Otherwise the sheet opens on the same tick as the tap, already saying it
+    // is looking — the poll below is a round trip away.
+    dispatch(setBoardingSearching(true))
+    dispatch(showBoardingPromptAction())
+
+    try {
+      // Refresh rather than trust the store: the access-leg poll runs at 20 s
+      // and the tap can land just before the next one.
+      await dispatch(getVehiclePositionsForRoute(routeId))
+      const state = getState()
+      const pos = state.otp?.goMode?.tracking?.lastPosition
+      // No fix means nothing to compare a frame against — leaving the list
+      // untouched keeps the sheet honest about what it does not know.
+      if (!pos) return
+      // Feed records carry no route name or colour; the leg the rider picked
+      // does, and every vehicle here is on that leg's route by construction.
+      const vehicles = (
+        state.otp?.transitIndex?.routes?.[routeId]?.vehicles || []
+      ).map((v: Record<string, unknown>) => ({
+        ...v,
+        routeColor: v.routeColor ?? boardLeg.routeColor ?? null,
+        routeName:
+          v.routeName ??
+          (boardLeg.routeShortName || boardLeg.routeLongName || null),
+        routeTextColor: v.routeTextColor ?? boardLeg.routeTextColor ?? null
+      }))
+      const nearby = findNearbyVehicles(
+        pos.coords.latitude,
+        pos.coords.longitude,
+        vehicles,
+        speedAdjustedRadius(PICKER_RADIUS_METERS, pos.coords.speed)
+      )
+      dispatch({ payload: nearby, type: UPDATE_NEARBY_VEHICLES })
+    } catch {
+      // Best-effort: a feed that will not answer is reported by the sheet
+      // ending its search, not by an unhandled rejection off a button tap.
+    } finally {
+      dispatch(setBoardingSearching(false))
+    }
+  }
+}
+
+/**
  * The rider says they ARE on the bus (trip-sheet button, 6.10c).
  *
  * Deliberately not a new way to write `riding`: it routes through
@@ -6224,8 +6320,9 @@ export function performVehicleMatching(routeId: string) {
  * the access re-plan's aboard check, the stop counter).
  *
  * With no vehicle matched yet there is nothing honest to name, so the existing
- * boarding prompt opens and the rider picks from the buses actually nearby.
- * No new surface, and no guessing.
+ * boarding prompt opens — over a search this tap starts itself, because on an
+ * access leg nothing else ever fills the list it shows (see
+ * {@link searchBoardingVehicles}). No new surface, and no guessing.
  */
 export function confirmBoardingByRider() {
   return function (dispatch: any, getState: any) {
@@ -6234,11 +6331,11 @@ export function confirmBoardingByRider() {
     // answer, and the hold exists to respect them, not to outlive them.
     session.riderDeniedBoardingAtMs = null
     const vehicleId = goMode?.vehicleMatch?.match?.vehicleId || null
-    if (vehicleId) {
-      dispatch(confirmVehicleSelection(vehicleId))
-    } else {
-      dispatch(showBoardingPromptAction())
-    }
+    // Returned, not swallowed: the search is asynchronous and a caller (a test,
+    // or any future sequencing) needs a handle on when it has settled.
+    return vehicleId
+      ? dispatch(confirmVehicleSelection(vehicleId))
+      : dispatch(searchBoardingVehicles())
   }
 }
 

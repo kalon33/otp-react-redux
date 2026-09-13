@@ -408,6 +408,7 @@ components:
     boardingConfirm: I'm on the bus
     boardingDeny: I'm not on this bus
     boardingQuestion: Are you on the bus?
+    boardingSearching: Looking…
     boardingSubtitle: Looking for {route} nearby
     busHeadsign: to {headsign}
     busLabel: Bus {label}
