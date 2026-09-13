@@ -201,7 +201,7 @@ export function phraseInstructionWithIntl(step: Step, intl: IntlShape): string {
     if (street) {
       return intl.formatMessage(
         { id: 'components.GoMode.turnInstructions.continueOn' },
-        { street }
+        { name: street }
       )
     }
     return intl.formatMessage({

@@ -3,6 +3,7 @@
    hoisting a type import above sibling value imports); order is hand-maintained. */
 import { createAction } from 'redux-actions'
 import { format, utcToZonedTime } from 'date-fns-tz'
+import { createIntl, createIntlCache } from 'react-intl'
 import coreUtils from '@opentripplanner/core-utils'
 import polyline from '@mapbox/polyline'
 import type { Itinerary, LatLngArray, Leg } from '@opentripplanner/types'
@@ -242,6 +243,8 @@ import {
   setViewedStop
 } from './ui'
 import { setQueryParam } from './form'
+
+const intlCache = createIntlCache()
 
 // Translation key for "Current location" to be used in place names
 const CURRENT_LOCATION_NAME = '(Current Location)'
@@ -4588,7 +4591,14 @@ export function handlePositionUpdate(position: GeolocationPosition) {
 
     const state = getState()
     const goMode = state.otp?.goMode
-    const intl = state.otp?.ui?.intl
+    const ui = state.otp?.ui
+    const intl =
+      ui?.locale && ui?.localizedMessages
+        ? createIntl(
+            { locale: ui.locale, messages: ui.localizedMessages },
+            intlCache
+          )
+        : undefined
 
     if (!goMode?.isActive) {
       return
