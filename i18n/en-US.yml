@@ -269,6 +269,14 @@ components:
     saveAndReturn: Save and return
     saved: Saved
     searchOptionsHeader: Options shown
+    stopCapHelp: >-
+      How far from your start and end to look for a stop to board or leave at. A
+      wider search finds more bike + transit options from outlying places and
+      takes a few seconds longer.
+    stopCapLabel: How far to look for a stop
+    stopCapQuick: Nearby stops only (fastest)
+    stopCapStandard: Standard
+    stopCapThorough: Every stop in range (slowest)
     submodeSelectorLabel: Select travel modes and submodes
     tripOptions: Trip Options
     viaStopHelp: Every trip shown will serve this stop, in either direction.

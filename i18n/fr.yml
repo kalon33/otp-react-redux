@@ -275,6 +275,11 @@ components:
     saveAndReturn: Enregistrer et fermer
     saved: Enregistré
     searchOptionsHeader: "Options affichées"
+    stopCapHelp: "Jusqu'où chercher, autour du départ et de l'arrivée, un arrêt où monter ou descendre. Une recherche plus large trouve plus d'options vélo + transports depuis les zones éloignées et prend quelques secondes de plus."
+    stopCapLabel: "Jusqu'où chercher un arrêt"
+    stopCapQuick: "Arrêts proches seulement (le plus rapide)"
+    stopCapStandard: "Standard"
+    stopCapThorough: "Tous les arrêts accessibles (le plus lent)"
     submodeSelectorLabel: Sélectionnez vos modes et sous-modes de déplacement
     tripOptions: Options concernant le trajet
     viaStopHelp: "Tous les trajets affichés desserviront cet arrêt, dans un sens comme dans l'autre."

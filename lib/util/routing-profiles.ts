@@ -323,6 +323,88 @@ export const DEFAULT_SEARCH_WINDOW_SECONDS = 7200
  */
 export const GO_MODE_SEARCH_WINDOW_SECONDS = 3600
 
+/**
+ * OTP's `accessEgress.maxStopCount` — how many stops the access/egress street
+ * search may collect (per street mode) before the transit search runs. It is
+ * the other half of the bike-access budget beside the 120-minute ceiling, and
+ * like searchWindow it prices nothing, so it lives here and not in
+ * RoutingPreferences.
+ *
+ * It is a server `routingDefaults` value, and production runs it at 2000 for
+ * the 2-vCPU box's sake (otp-minneapolis `deployment/.env`); the desktop runs
+ * 20000. Backlog 14.1, measured 2026-09-12 on Lake Elmo Park Reserve ->
+ * Hiawatha Church at 08:35, TRANSIT+BICYCLE, searchWindow 7200, best of two
+ * runs on 2-CPU containers over the same graph:
+ *
+ *   2000  ->  2 itineraries (1 transit)   2.2 s
+ *   5000  ->  2 (1)                       3.1 s
+ *   10000 ->  8 (7 transit, 5 chains)     5.7 s
+ *   20000 ->  8 (7, 5)                    6.0 s
+ *
+ * The rider saw the 2000 row as "one route". So the planner sends its own cap
+ * per request (the OTP fork's `plan(maxStopCount:)`, added the same day —
+ * OTP's stock schema has no such argument, and a server without it rejects the
+ * whole query, which is why the fork must be deployed before this ships).
+ * Go Mode's background plans send nothing and take the server value: they run
+ * from a rider already on or near transit, and five of them fire at once.
+ */
+export const STOP_CAP_RANGE: readonly [number, number] = [2000, 20000]
+
+/** What a rider-initiated plan asks for unless the rider or config says otherwise. */
+export const DEFAULT_MAX_STOP_COUNT = 10000
+
+/** Steps offered by the panel's "how far to look for a stop" control. */
+export const STOP_CAP_OPTIONS = [2000, 10000, 20000]
+
+/** Clamp a stop cap to the allowed range; non-numbers fall back to `fallback`. */
+export function clampStopCap(
+  value?: number | null,
+  fallback: number = DEFAULT_MAX_STOP_COUNT
+): number {
+  const [min, max] = STOP_CAP_RANGE
+  if (typeof value !== 'number' || Number.isNaN(value)) return fallback
+  return Math.min(max, Math.max(min, Math.round(value)))
+}
+
+/**
+ * The cap in effect for a rider-initiated plan: the rider's choice, else the
+ * config's (`itinerary.maxStopCount`), else the default — each clamped.
+ */
+export function effectiveStopCap(
+  requested?: number | null,
+  configured?: number | null
+): number {
+  return clampStopCap(requested, clampStopCap(configured))
+}
+
+/**
+ * The `maxStopCount` plan() variable for a query, or nothing at all for a
+ * background plan so OTP keeps its server default there.
+ */
+export function stopCapVariables(
+  requested?: number | null,
+  configured?: number | null,
+  background = false
+): { maxStopCount?: number } {
+  if (background) return {}
+  return { maxStopCount: effectiveStopCap(requested, configured) }
+}
+
+/**
+ * Which label names a cap. The three steps read as speed-vs-reach because that
+ * is the trade the rider is making; an off-step value from config or an older
+ * build lands on the nearest neighbour rather than on a number.
+ */
+export function stopCapMessageId(cap: number): string {
+  if (cap <= STOP_CAP_OPTIONS[0]) {
+    return 'components.BatchSearchScreen.stopCapQuick'
+  }
+  if (cap >= STOP_CAP_OPTIONS[STOP_CAP_OPTIONS.length - 1]) {
+    return 'components.BatchSearchScreen.stopCapThorough'
+  }
+  return 'components.BatchSearchScreen.stopCapStandard'
+}
+
 /** Clamp a searchWindow to the allowed range; non-numbers fall back to `fallback`. */
 export function clampSearchWindow(
   seconds?: number | null,
@@ -536,6 +618,7 @@ export function applyRoutingPreferences(
 const EXTRA_VAR_DECLS =
   '$walkSpeed: Float\n' +
   '  $searchWindow: Long\n' +
+  '  $maxStopCount: Int\n' +
   '  $bikeSpeed: Float\n' +
   '  $waitReluctance: Float\n' +
   '  $transferPenalty: Int\n' +
@@ -546,6 +629,7 @@ const EXTRA_VAR_DECLS =
 const EXTRA_PLAN_ARGS =
   'walkSpeed: $walkSpeed\n' +
   '    searchWindow: $searchWindow\n' +
+  '    maxStopCount: $maxStopCount\n' +
   '    bikeSpeed: $bikeSpeed\n' +
   '    waitReluctance: $waitReluctance\n' +
   '    transferPenalty: $transferPenalty\n' +
