@@ -248,10 +248,15 @@ class DefaultMap extends Component<DefaultMapProps> {
       : false
 
     const stopId = firstStopOfStationId || entity.gtfsId
-    this.props.findStopTimesForStop({
-      date: getCurrentDate(),
-      stopId
-    })
+    // This callback runs during MapPopup's render. Deferring the dispatch
+    // avoids a React "setState while rendering a different component" warning
+    // (the dispatch triggers a redux store notification chain).
+    setTimeout(() => {
+      this.props.findStopTimesForStop({
+        date: getCurrentDate(),
+        stopId
+      })
+    }, 0)
     return <TransitOperatorIcons stopId={stopId} />
   }
 
