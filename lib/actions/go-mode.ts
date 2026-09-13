@@ -2456,7 +2456,20 @@ export function beginOnboardFlow() {
     // instead of re-running discovery and re-asking which bus they're on.
     const riding: RidingState | null = getState().otp.goMode?.riding ?? null
     if (riding?.tripId) {
-      const label = riding.routeShortName || riding.headsign || riding.routeId
+      // The label is what the onboard screen NAMES the assumed vehicle with
+      // (15.3), so reach past the leg's own field for it: on 2026-09-13 the
+      // Green Line's `routeShortName` was null and this fell straight through
+      // to the headsign, so the only thing the rider could have been shown was
+      // "Mpls-Target Field". The route index has the rider-facing name
+      // whenever the route's vehicles have been polled this ride.
+      const ridingRoute =
+        getState().otp?.transitIndex?.routes?.[riding.routeId ?? ''] ?? null
+      const label =
+        riding.routeShortName ||
+        ridingRoute?.shortName ||
+        ridingRoute?.longName ||
+        riding.headsign ||
+        riding.routeId
       const vehicleId = riding.vehicleId || `route:${riding.routeId}`
       dispatch({
         payload: {
@@ -2651,6 +2664,29 @@ export function rediscoverOnboardVehicles() {
     dispatch(setOnboardStatus('discovering'))
     dispatch(clearVehicleMatch())
     dispatch(discoverNearbyVehicles())
+  }
+}
+
+/**
+ * "Not this one" / "Change bus" on the onboard screen (15.3).
+ *
+ * The onboard flow can adopt a vehicle WITHOUT asking: `riding` survives
+ * STOP_GO_MODE by design (reducers/go-mode.ts, 7/12), so the next "I'm on the
+ * bus" re-confirms the remembered trip silently. That is the right default —
+ * never re-ask what the app already knows — but it leaves the rider no way to
+ * say it is wrong. This is that way: the assumption is dropped through the
+ * same deny path as the trip sheet's chip (BOARDING_DENY — riding and the
+ * vehicle match both go, and the evidence-free board gate is held off so the
+ * next tick cannot simply re-declare it), then the picker reopens.
+ *
+ * rediscoverOnboardVehicles alone was not enough: it clears the match but not
+ * the riding fact, so the very next beginOnboardFlow would adopt the rejected
+ * vehicle again.
+ */
+export function denyOnboardVehicle() {
+  return function (dispatch: any) {
+    dispatch(denyBoardingByRider())
+    dispatch(rediscoverOnboardVehicles())
   }
 }
 
