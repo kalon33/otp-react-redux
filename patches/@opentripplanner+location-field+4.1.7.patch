@@ -1,5 +1,5 @@
 diff --git a/node_modules/@opentripplanner/location-field/esm/index.js b/node_modules/@opentripplanner/location-field/esm/index.js
-index 153c58e..4da0310 100644
+index 153c58e..8eb02d8 100644
 --- a/node_modules/@opentripplanner/location-field/esm/index.js
 +++ b/node_modules/@opentripplanner/location-field/esm/index.js
 @@ -229,6 +229,8 @@ var LocationField = function LocationField(_ref4) {
@@ -11,16 +11,18 @@ index 153c58e..4da0310 100644
      _ref4$nearbyStops = _ref4.nearbyStops,
      nearbyStops = _ref4$nearbyStops === void 0 ? [] : _ref4$nearbyStops,
      _ref4$onBlur = _ref4.onBlur,
-@@ -240,6 +242,8 @@ var LocationField = function LocationField(_ref4) {
+@@ -240,6 +242,10 @@ var LocationField = function LocationField(_ref4) {
      onTextInputClick = _ref4$onTextInputClic === void 0 ? null : _ref4$onTextInputClic,
      _ref4$operatorIconMap = _ref4.operatorIconMap,
      operatorIconMap = _ref4$operatorIconMap === void 0 ? {} : _ref4$operatorIconMap,
++    _ref4$outputMetricUnits = _ref4.outputMetricUnits,
++    outputMetricUnits = _ref4$outputMetricUnits === void 0 ? false : _ref4$outputMetricUnits,
 +    _ref4$pinCurrentLocFirst = _ref4.pinCurrentLocationFirst,
 +    pinCurrentLocationFirst = _ref4$pinCurrentLocFirst === void 0 ? false : _ref4$pinCurrentLocFirst,
      _ref4$preferredLayers = _ref4.preferredLayers,
      preferredLayers = _ref4$preferredLayers === void 0 ? [] : _ref4$preferredLayers,
      _ref4$sessionOptionIc = _ref4.sessionOptionIcon,
-@@ -640,6 +644,22 @@ var LocationField = function LocationField(_ref4) {
+@@ -640,6 +646,22 @@ var LocationField = function LocationField(_ref4) {
        locationSelected: locationSelected
      });
    };
@@ -43,7 +45,19 @@ index 153c58e..4da0310 100644
  
    /* 0) Include user saved locations if the typed text contains those locations name. */
    if (showUserSettings) {
-@@ -879,12 +899,17 @@ var LocationField = function LocationField(_ref4) {
+@@ -785,9 +807,11 @@ var LocationField = function LocationField(_ref4) {
+       // Create and return the option menu item
+       return /*#__PURE__*/React.createElement(TransitStopOption, {
+         id: stopId,
++        intl: intl,
+         isActive: ((_indexedOptionLookup$4 = indexedOptionLookup[activeIndex]) === null || _indexedOptionLookup$4 === void 0 ? void 0 : _indexedOptionLookup$4.id) === stopId,
+         key: stopId,
+         onClick: locationSelected,
++        outputMetricUnits: outputMetricUnits,
+         stop: stop,
+         stopOptionIcon: stopOptionIcon
+       });
+@@ -879,12 +903,17 @@ var LocationField = function LocationField(_ref4) {
    }
    var optionId = "current-position";
  
@@ -64,7 +78,7 @@ index 153c58e..4da0310 100644
        disabled: positionUnavailable,
        icon: optionIcon,
        id: optionId,
-@@ -894,6 +919,20 @@ var LocationField = function LocationField(_ref4) {
+@@ -894,6 +923,20 @@ var LocationField = function LocationField(_ref4) {
        title: optionTitle
      }));
    }
@@ -85,7 +99,7 @@ index 153c58e..4da0310 100644
    if (message && !message.includes("AbortError")) {
      if (geocodedFeatures.length === 0) {
        var icon = isFetching ? /*#__PURE__*/React.createElement(S.Spinner, {
-@@ -911,6 +950,12 @@ var LocationField = function LocationField(_ref4) {
+@@ -911,6 +954,12 @@ var LocationField = function LocationField(_ref4) {
      statusMessages.push(message);
    }
  
@@ -98,11 +112,72 @@ index 153c58e..4da0310 100644
    // Store the number of location-associated items for reference in the onKeyDown method
    var menuItemCount = indexedOptionLookup.length;
  
+diff --git a/node_modules/@opentripplanner/location-field/esm/options.js b/node_modules/@opentripplanner/location-field/esm/options.js
+index bb1b2ce..a759b6d 100644
+--- a/node_modules/@opentripplanner/location-field/esm/options.js
++++ b/node_modules/@opentripplanner/location-field/esm/options.js
+@@ -1,4 +1,3 @@
+-import { humanizeDistanceStringImperial } from "@opentripplanner/humanize-distance";
+ import React from "react";
+ import { Bus } from "@styled-icons/fa-solid/Bus";
+ import { Briefcase } from "@styled-icons/fa-solid/Briefcase";
+@@ -85,10 +84,42 @@ export function Option(_ref3) {
+     }, /*#__PURE__*/React.createElement(S.HiddenContent, null, ", "), label);
+   })))));
+ }
++function formatStopDistance(meters, outputMetricUnits, intl) {
++  if (meters == null || isNaN(meters)) return "";
++  var unit, value;
++  if (outputMetricUnits) {
++    var km = meters / 1000;
++    if (km >= 1) {
++      unit = "kilometer";
++      value = km >= 100 ? Math.round(km) : Math.round(km * 10) / 10;
++    } else {
++      unit = "meter";
++      value = Math.round(meters);
++    }
++  } else {
++    var yards = meters * 1.09361;
++    if (yards >= 1760) {
++      unit = "mile";
++      value = Math.round((yards / 1760) * 10) / 10;
++    } else {
++      unit = "yard";
++      value = Math.round(yards);
++    }
++  }
++  if (intl && typeof intl.formatNumber === "function") {
++    return intl.formatNumber(value, { style: "unit", unit: unit, unitDisplay: "short" });
++  }
++  var shortUnit = unit === "meter" ? "m" : unit === "kilometer" ? "km" : unit === "yard" ? "yd" : "mi";
++  return "".concat(value, " ").concat(shortUnit);
++}
+ export function TransitStopOption(_ref4) {
+   var id = _ref4.id,
+     _ref4$isActive = _ref4.isActive,
+     isActive = _ref4$isActive === void 0 ? false : _ref4$isActive,
++    _ref4$intl = _ref4.intl,
++    intl = _ref4$intl === void 0 ? null : _ref4$intl,
++    _ref4$outputMetricUnits = _ref4.outputMetricUnits,
++    outputMetricUnits = _ref4$outputMetricUnits === void 0 ? false : _ref4$outputMetricUnits,
+     onClick = _ref4.onClick,
+     stop = _ref4.stop,
+     stopOptionIcon = _ref4.stopOptionIcon;
+@@ -96,7 +127,7 @@ export function TransitStopOption(_ref4) {
+     active: isActive,
+     id: id,
+     onClick: onClick
+-  }, /*#__PURE__*/React.createElement(S.StopIconAndDistanceContainer, null, stopOptionIcon, /*#__PURE__*/React.createElement(S.StopDistance, null, humanizeDistanceStringImperial(stop.dist, true))), /*#__PURE__*/React.createElement(S.StopContentContainer, null, /*#__PURE__*/React.createElement(S.StopName, null, stop.name, " (", stop.code, ")"), /*#__PURE__*/React.createElement(S.StopRoutes, null, (stop.routes || []).map(function (route) {
++  }, /*#__PURE__*/React.createElement(S.StopIconAndDistanceContainer, null, stopOptionIcon, /*#__PURE__*/React.createElement(S.StopDistance, null, formatStopDistance(stop.dist, outputMetricUnits, intl))), /*#__PURE__*/React.createElement(S.StopContentContainer, null, /*#__PURE__*/React.createElement(S.StopName, null, stop.name, " (", stop.code, ")"), /*#__PURE__*/React.createElement(S.StopRoutes, null, (stop.routes || []).map(function (route) {
+     var name = route.shortName || route.longName;
+     return /*#__PURE__*/React.createElement(S.RouteName, {
+       key: "route-".concat(name)
 diff --git a/node_modules/@opentripplanner/location-field/lib/index.js b/node_modules/@opentripplanner/location-field/lib/index.js
-index 1b70e99..02b38b4 100644
+index 1b70e99..e0c6c9a 100644
 --- a/node_modules/@opentripplanner/location-field/lib/index.js
 +++ b/node_modules/@opentripplanner/location-field/lib/index.js
-@@ -216,12 +216,14 @@ const LocationField = ({
+@@ -216,12 +216,15 @@ const LocationField = ({
    location = null,
    LocationIconComponent = DefaultLocationIcon,
    locationType,
@@ -113,11 +188,12 @@ index 1b70e99..02b38b4 100644
    onLocationSelected,
    onTextInputClick = null,
    operatorIconMap = {},
++  outputMetricUnits = false,
 +  pinCurrentLocationFirst = false,
    preferredLayers = [],
    sessionOptionIcon = /*#__PURE__*/_react.default.createElement(_Search.Search, {
      size: _options.ICON_SIZE
-@@ -590,6 +592,22 @@ const LocationField = ({
+@@ -590,6 +593,22 @@ const LocationField = ({
        locationSelected
      });
    };
@@ -140,7 +216,19 @@ index 1b70e99..02b38b4 100644
  
    /* 0) Include user saved locations if the typed text contains those locations name. */
    if (showUserSettings) {
-@@ -825,12 +845,17 @@ const LocationField = ({
+@@ -733,9 +752,11 @@ const LocationField = ({
+       // Create and return the option menu item
+       return /*#__PURE__*/_react.default.createElement(_options.TransitStopOption, {
+         id: stopId,
++        intl: intl,
+         isActive: ((_indexedOptionLookup$4 = indexedOptionLookup[activeIndex]) === null || _indexedOptionLookup$4 === void 0 ? void 0 : _indexedOptionLookup$4.id) === stopId,
+         key: stopId,
+         onClick: locationSelected,
++        outputMetricUnits: outputMetricUnits,
+         stop: stop,
+         stopOptionIcon: stopOptionIcon
+       });
+@@ -825,12 +846,17 @@ const LocationField = ({
    }
    const optionId = `current-position`;
  
@@ -161,7 +249,7 @@ index 1b70e99..02b38b4 100644
        disabled: positionUnavailable,
        icon: optionIcon,
        id: optionId,
-@@ -840,6 +865,20 @@ const LocationField = ({
+@@ -840,6 +866,20 @@ const LocationField = ({
        title: optionTitle
      }));
    }
@@ -182,7 +270,7 @@ index 1b70e99..02b38b4 100644
    if (message && !message.includes("AbortError")) {
      if (geocodedFeatures.length === 0) {
        const icon = isFetching ? /*#__PURE__*/_react.default.createElement(S.Spinner, {
-@@ -857,6 +896,12 @@ const LocationField = ({
+@@ -857,6 +897,12 @@ const LocationField = ({
      statusMessages.push(message);
    }
  
@@ -195,11 +283,72 @@ index 1b70e99..02b38b4 100644
    // Store the number of location-associated items for reference in the onKeyDown method
    let menuItemCount = indexedOptionLookup.length;
  
+diff --git a/node_modules/@opentripplanner/location-field/lib/options.js b/node_modules/@opentripplanner/location-field/lib/options.js
+index 80348d8..70ec03e 100644
+--- a/node_modules/@opentripplanner/location-field/lib/options.js
++++ b/node_modules/@opentripplanner/location-field/lib/options.js
+@@ -11,7 +11,6 @@ exports.TransitStopOption = TransitStopOption;
+ exports.UserLocationIcon = UserLocationIcon;
+ exports.getRenderData = getRenderData;
+ exports.getStoredPlaceName = getStoredPlaceName;
+-var _humanizeDistance = require("@opentripplanner/humanize-distance");
+ var _react = _interopRequireDefault(require("react"));
+ var _Bus = require("@styled-icons/fa-solid/Bus");
+ var _Briefcase = require("@styled-icons/fa-solid/Briefcase");
+@@ -90,9 +89,39 @@ function Option({
+     key: idx
+   }, /*#__PURE__*/_react.default.createElement(S.HiddenContent, null, ", "), label))))));
+ }
++function formatStopDistance(meters, outputMetricUnits, intl) {
++  if (meters == null || isNaN(meters)) return "";
++  let unit, value;
++  if (outputMetricUnits) {
++    const km = meters / 1000;
++    if (km >= 1) {
++      unit = "kilometer";
++      value = km >= 100 ? Math.round(km) : Math.round(km * 10) / 10;
++    } else {
++      unit = "meter";
++      value = Math.round(meters);
++    }
++  } else {
++    const yards = meters * 1.09361;
++    if (yards >= 1760) {
++      unit = "mile";
++      value = Math.round((yards / 1760) * 10) / 10;
++    } else {
++      unit = "yard";
++      value = Math.round(yards);
++    }
++  }
++  if (intl && typeof intl.formatNumber === "function") {
++    return intl.formatNumber(value, { style: "unit", unit, unitDisplay: "short" });
++  }
++  const shortUnit = unit === "meter" ? "m" : unit === "kilometer" ? "km" : unit === "yard" ? "yd" : "mi";
++  return `${value} ${shortUnit}`;
++}
+ function TransitStopOption({
+   id,
+   isActive = false,
++  intl = null,
++  outputMetricUnits = false,
+   onClick,
+   stop,
+   stopOptionIcon
+@@ -101,7 +130,7 @@ function TransitStopOption({
+     active: isActive,
+     id: id,
+     onClick: onClick
+-  }, /*#__PURE__*/_react.default.createElement(S.StopIconAndDistanceContainer, null, stopOptionIcon, /*#__PURE__*/_react.default.createElement(S.StopDistance, null, (0, _humanizeDistance.humanizeDistanceStringImperial)(stop.dist, true))), /*#__PURE__*/_react.default.createElement(S.StopContentContainer, null, /*#__PURE__*/_react.default.createElement(S.StopName, null, stop.name, " (", stop.code, ")"), /*#__PURE__*/_react.default.createElement(S.StopRoutes, null, (stop.routes || []).map(route => {
++  }, /*#__PURE__*/_react.default.createElement(S.StopIconAndDistanceContainer, null, stopOptionIcon, /*#__PURE__*/_react.default.createElement(S.StopDistance, null, formatStopDistance(stop.dist, outputMetricUnits, intl))), /*#__PURE__*/_react.default.createElement(S.StopContentContainer, null, /*#__PURE__*/_react.default.createElement(S.StopName, null, stop.name, " (", stop.code, ")"), /*#__PURE__*/_react.default.createElement(S.StopRoutes, null, (stop.routes || []).map(route => {
+     const name = route.shortName || route.longName;
+     return /*#__PURE__*/_react.default.createElement(S.RouteName, {
+       key: `route-${name}`
 diff --git a/node_modules/@opentripplanner/location-field/lib/types.d.ts b/node_modules/@opentripplanner/location-field/lib/types.d.ts
-index f520750..e7d74da 100644
+index f520750..ee7ecdc 100644
 --- a/node_modules/@opentripplanner/location-field/lib/types.d.ts
 +++ b/node_modules/@opentripplanner/location-field/lib/types.d.ts
-@@ -273,6 +273,20 @@ export interface LocationFieldProps {
+@@ -273,6 +273,25 @@ export interface LocationFieldProps {
       * If true, do not show nearbyStops or current location as options
       */
      suppressNearby?: boolean;
@@ -217,6 +366,11 @@ index f520750..e7d74da 100644
 +     * top of the suggestion list instead of the bottom.
 +     */
 +    pinCurrentLocationFirst?: boolean;
++    /**
++     * TransitNav fork: render nearby-stop distances in metric units (true) or
++     * imperial units (false). Defaults to false (imperial).
++     */
++    outputMetricUnits?: boolean;
      /**
       * A custom component for rendering the icon for options that are either saved
       * user locations or recent places. The component will be sent a single prop

@@ -252,4 +252,44 @@ describe('components > form > location picker', () => {
       ).toHaveLength(0)
     })
   })
+  describe('nearby stop distance honors the configured unit system', () => {
+    it('renders short imperial distances in yards', () => {
+      const { wrapper } = renderField({}, (state) => {
+        state.otp.config.units = 'imperial'
+      })
+      // dist: 120 m -> 131 yd (< 1 mi uses yards, not the old feet/mi split).
+      expect(wrapper.find('li[id="1:100"]').text()).toContain('131 yd')
+    })
+    it('renders short metric distances in meters', () => {
+      const { wrapper } = renderField({}, (state) => {
+        state.otp.config.units = 'metric'
+      })
+      // dist: 120 m (< 1 km stays in meters).
+      expect(wrapper.find('li[id="1:100"]').text()).toContain('120 m')
+    })
+    it('renders sub-mile imperial distances in yards, not miles', () => {
+      const { wrapper } = renderField({}, (state) => {
+        state.otp.config.units = 'imperial'
+        state.otp.transitIndex.stops['1:100'].dist = 800
+      })
+      // 800 m -> 875 yd, still under a mile.
+      expect(wrapper.find('li[id="1:100"]').text()).toContain('875 yd')
+    })
+    it('renders distances of a mile or more in miles', () => {
+      const { wrapper } = renderField({}, (state) => {
+        state.otp.config.units = 'imperial'
+        state.otp.transitIndex.stops['1:100'].dist = 2000
+      })
+      // 2000 m -> ~1.2 mi.
+      expect(wrapper.find('li[id="1:100"]').text()).toContain('1.2 mi')
+    })
+    it('renders distances of a kilometer or more in kilometers', () => {
+      const { wrapper } = renderField({}, (state) => {
+        state.otp.config.units = 'metric'
+        state.otp.transitIndex.stops['1:100'].dist = 2500
+      })
+      // 2500 m -> 2.5 km.
+      expect(wrapper.find('li[id="1:100"]').text()).toContain('2.5 km')
+    })
+  })
 })
