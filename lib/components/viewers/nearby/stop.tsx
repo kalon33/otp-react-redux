@@ -110,6 +110,9 @@ const renderPatternRows = (
   homeTimezone: string,
   nearbyViewConfig?: NearbyViewConfig
 ) => {
+  const knownRouteIds = (stopData.nearbyRoutes || []).filter(
+    (id): id is string => typeof id === 'string' && id.length > 0
+  )
   return patternArray?.map((st: any, index: number) => {
     const sortedStopTimes = st.stoptimes.sort(
       (a: StopTime, b: StopTime) => fullTimestamp(a) - fullTimestamp(b)
@@ -117,8 +120,8 @@ const renderPatternRows = (
     if (
       // NearbyRoutes if present is populated with a list of routes that appear
       // in the current service period.
-      stopData.nearbyRoutes &&
-      !stopData.nearbyRoutes.includes(st?.pattern?.route?.gtfsId)
+      knownRouteIds.length > 0 &&
+      !knownRouteIds.includes(st?.pattern?.route?.gtfsId)
     ) {
       return <></>
     }

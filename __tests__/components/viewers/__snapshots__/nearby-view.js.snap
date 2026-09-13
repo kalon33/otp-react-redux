@@ -4781,9 +4781,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                               "lat": 47.6759,
                               "lon": -122.3158,
                               "name": "Default vehicle type",
-                              "nearbyRoutes": Array [
-                                undefined,
-                              ],
+                              "nearbyRoutes": Array [],
                               "network": "lime_seattle",
                               "operative": true,
                               "rentalUris": null,
@@ -4804,9 +4802,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                           "lat": 47.6759,
                           "lon": -122.3158,
                           "name": "Default vehicle type",
-                          "nearbyRoutes": Array [
-                            undefined,
-                          ],
+                          "nearbyRoutes": Array [],
                           "network": "lime_seattle",
                           "operative": true,
                           "rentalUris": null,
@@ -4829,9 +4825,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                 "lat": 47.6759,
                                 "lon": -122.3158,
                                 "name": "Default vehicle type",
-                                "nearbyRoutes": Array [
-                                  undefined,
-                                ],
+                                "nearbyRoutes": Array [],
                                 "network": "lime_seattle",
                                 "operative": true,
                                 "rentalUris": null,
@@ -4852,9 +4846,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                             "lat": 47.6759,
                             "lon": -122.3158,
                             "name": "Default vehicle type",
-                            "nearbyRoutes": Array [
-                              undefined,
-                            ],
+                            "nearbyRoutes": Array [],
                             "network": "lime_seattle",
                             "operative": true,
                             "rentalUris": null,
@@ -4966,9 +4958,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                       "lat": 47.6759,
                                       "lon": -122.3158,
                                       "name": "Default vehicle type",
-                                      "nearbyRoutes": Array [
-                                        undefined,
-                                      ],
+                                      "nearbyRoutes": Array [],
                                       "network": "lime_seattle",
                                       "operative": true,
                                       "rentalUris": null,
@@ -4989,9 +4979,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                         "lat": 47.6759,
                                         "lon": -122.3158,
                                         "name": "Default vehicle type",
-                                        "nearbyRoutes": Array [
-                                          undefined,
-                                        ],
+                                        "nearbyRoutes": Array [],
                                         "network": "lime_seattle",
                                         "operative": true,
                                         "rentalUris": null,
@@ -5215,9 +5203,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                               "lat": 47.6758,
                               "lon": -122.3157,
                               "name": "Default vehicle type",
-                              "nearbyRoutes": Array [
-                                undefined,
-                              ],
+                              "nearbyRoutes": Array [],
                               "network": "lime_seattle",
                               "operative": true,
                               "rentalUris": null,
@@ -5238,9 +5224,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                           "lat": 47.6758,
                           "lon": -122.3157,
                           "name": "Default vehicle type",
-                          "nearbyRoutes": Array [
-                            undefined,
-                          ],
+                          "nearbyRoutes": Array [],
                           "network": "lime_seattle",
                           "operative": true,
                           "rentalUris": null,
@@ -5263,9 +5247,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                 "lat": 47.6758,
                                 "lon": -122.3157,
                                 "name": "Default vehicle type",
-                                "nearbyRoutes": Array [
-                                  undefined,
-                                ],
+                                "nearbyRoutes": Array [],
                                 "network": "lime_seattle",
                                 "operative": true,
                                 "rentalUris": null,
@@ -5286,9 +5268,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                             "lat": 47.6758,
                             "lon": -122.3157,
                             "name": "Default vehicle type",
-                            "nearbyRoutes": Array [
-                              undefined,
-                            ],
+                            "nearbyRoutes": Array [],
                             "network": "lime_seattle",
                             "operative": true,
                             "rentalUris": null,
@@ -5400,9 +5380,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                       "lat": 47.6758,
                                       "lon": -122.3157,
                                       "name": "Default vehicle type",
-                                      "nearbyRoutes": Array [
-                                        undefined,
-                                      ],
+                                      "nearbyRoutes": Array [],
                                       "network": "lime_seattle",
                                       "operative": true,
                                       "rentalUris": null,
@@ -5423,9 +5401,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                         "lat": 47.6758,
                                         "lon": -122.3157,
                                         "name": "Default vehicle type",
-                                        "nearbyRoutes": Array [
-                                          undefined,
-                                        ],
+                                        "nearbyRoutes": Array [],
                                         "network": "lime_seattle",
                                         "operative": true,
                                         "rentalUris": null,
@@ -5649,9 +5625,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                               "lat": 47.6759,
                               "lon": -122.3159,
                               "name": "Default vehicle type",
-                              "nearbyRoutes": Array [
-                                undefined,
-                              ],
+                              "nearbyRoutes": Array [],
                               "network": "lime_seattle",
                               "operative": true,
                               "rentalUris": null,
@@ -5672,9 +5646,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                           "lat": 47.6759,
                           "lon": -122.3159,
                           "name": "Default vehicle type",
-                          "nearbyRoutes": Array [
-                            undefined,
-                          ],
+                          "nearbyRoutes": Array [],
                           "network": "lime_seattle",
                           "operative": true,
                           "rentalUris": null,
@@ -5697,9 +5669,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                 "lat": 47.6759,
                                 "lon": -122.3159,
                                 "name": "Default vehicle type",
-                                "nearbyRoutes": Array [
-                                  undefined,
-                                ],
+                                "nearbyRoutes": Array [],
                                 "network": "lime_seattle",
                                 "operative": true,
                                 "rentalUris": null,
@@ -5720,9 +5690,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                             "lat": 47.6759,
                             "lon": -122.3159,
                             "name": "Default vehicle type",
-                            "nearbyRoutes": Array [
-                              undefined,
-                            ],
+                            "nearbyRoutes": Array [],
                             "network": "lime_seattle",
                             "operative": true,
                             "rentalUris": null,
@@ -5834,9 +5802,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                       "lat": 47.6759,
                                       "lon": -122.3159,
                                       "name": "Default vehicle type",
-                                      "nearbyRoutes": Array [
-                                        undefined,
-                                      ],
+                                      "nearbyRoutes": Array [],
                                       "network": "lime_seattle",
                                       "operative": true,
                                       "rentalUris": null,
@@ -5857,9 +5823,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                         "lat": 47.6759,
                                         "lon": -122.3159,
                                         "name": "Default vehicle type",
-                                        "nearbyRoutes": Array [
-                                          undefined,
-                                        ],
+                                        "nearbyRoutes": Array [],
                                         "network": "lime_seattle",
                                         "operative": true,
                                         "rentalUris": null,
@@ -6084,9 +6048,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                               "lat": 47.6758881,
                               "lon": -122.315994,
                               "name": "Roosevelt Station - Bay 2",
-                              "nearbyRoutes": Array [
-                                undefined,
-                              ],
+                              "nearbyRoutes": Array [],
                               "stoptimesForPatterns": Array [
                                 Object {
                                   "pattern": Object {
@@ -6654,9 +6616,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                           "lat": 47.6758881,
                           "lon": -122.315994,
                           "name": "Roosevelt Station - Bay 2",
-                          "nearbyRoutes": Array [
-                            undefined,
-                          ],
+                          "nearbyRoutes": Array [],
                           "stoptimesForPatterns": Array [
                             Object {
                               "pattern": Object {
@@ -7226,9 +7186,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                 "lat": 47.6758881,
                                 "lon": -122.315994,
                                 "name": "Roosevelt Station - Bay 2",
-                                "nearbyRoutes": Array [
-                                  undefined,
-                                ],
+                                "nearbyRoutes": Array [],
                                 "stoptimesForPatterns": Array [
                                   Object {
                                     "pattern": Object {
@@ -7798,9 +7756,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                             "lat": 47.6758881,
                             "lon": -122.315994,
                             "name": "Roosevelt Station - Bay 2",
-                            "nearbyRoutes": Array [
-                              undefined,
-                            ],
+                            "nearbyRoutes": Array [],
                             "stoptimesForPatterns": Array [
                               Object {
                                 "pattern": Object {
@@ -8391,9 +8347,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                       "lat": 47.6758881,
                                       "lon": -122.315994,
                                       "name": "Roosevelt Station - Bay 2",
-                                      "nearbyRoutes": Array [
-                                        undefined,
-                                      ],
+                                      "nearbyRoutes": Array [],
                                       "stoptimesForPatterns": Array [
                                         Object {
                                           "pattern": Object {
@@ -8961,9 +8915,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                   "lat": 47.6758881,
                                   "lon": -122.315994,
                                   "name": "Roosevelt Station - Bay 2",
-                                  "nearbyRoutes": Array [
-                                    undefined,
-                                  ],
+                                  "nearbyRoutes": Array [],
                                   "stoptimesForPatterns": Array [
                                     Object {
                                       "pattern": Object {
@@ -9551,9 +9503,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                         "lat": 47.6758881,
                                         "lon": -122.315994,
                                         "name": "Roosevelt Station - Bay 2",
-                                        "nearbyRoutes": Array [
-                                          undefined,
-                                        ],
+                                        "nearbyRoutes": Array [],
                                         "stoptimesForPatterns": Array [
                                           Object {
                                             "pattern": Object {
@@ -10121,9 +10071,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                     "lat": 47.6758881,
                                     "lon": -122.315994,
                                     "name": "Roosevelt Station - Bay 2",
-                                    "nearbyRoutes": Array [
-                                      undefined,
-                                    ],
+                                    "nearbyRoutes": Array [],
                                     "stoptimesForPatterns": Array [
                                       Object {
                                         "pattern": Object {
@@ -10699,9 +10647,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                               "lat": 47.6758881,
                                               "lon": -122.315994,
                                               "name": "Roosevelt Station - Bay 2",
-                                              "nearbyRoutes": Array [
-                                                undefined,
-                                              ],
+                                              "nearbyRoutes": Array [],
                                               "stoptimesForPatterns": Array [
                                                 Object {
                                                   "pattern": Object {
@@ -11459,9 +11405,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                           "lat": 47.6758881,
                                           "lon": -122.315994,
                                           "name": "Roosevelt Station - Bay 2",
-                                          "nearbyRoutes": Array [
-                                            undefined,
-                                          ],
+                                          "nearbyRoutes": Array [],
                                           "stoptimesForPatterns": Array [
                                             Object {
                                               "pattern": Object {
@@ -12029,9 +11973,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                             "lat": 47.6758881,
                                             "lon": -122.315994,
                                             "name": "Roosevelt Station - Bay 2",
-                                            "nearbyRoutes": Array [
-                                              undefined,
-                                            ],
+                                            "nearbyRoutes": Array [],
                                             "stoptimesForPatterns": Array [
                                               Object {
                                                 "pattern": Object {
@@ -15249,9 +15191,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                               "lat": 47.676107,
                               "lon": -122.316041,
                               "name": "Roosevelt",
-                              "nearbyRoutes": Array [
-                                undefined,
-                              ],
+                              "nearbyRoutes": Array [],
                               "stoptimesForPatterns": Array [
                                 Object {
                                   "pattern": Object {
@@ -15618,9 +15558,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                           "lat": 47.676107,
                           "lon": -122.316041,
                           "name": "Roosevelt",
-                          "nearbyRoutes": Array [
-                            undefined,
-                          ],
+                          "nearbyRoutes": Array [],
                           "stoptimesForPatterns": Array [
                             Object {
                               "pattern": Object {
@@ -15989,9 +15927,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                 "lat": 47.676107,
                                 "lon": -122.316041,
                                 "name": "Roosevelt",
-                                "nearbyRoutes": Array [
-                                  undefined,
-                                ],
+                                "nearbyRoutes": Array [],
                                 "stoptimesForPatterns": Array [
                                   Object {
                                     "pattern": Object {
@@ -16360,9 +16296,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                             "lat": 47.676107,
                             "lon": -122.316041,
                             "name": "Roosevelt",
-                            "nearbyRoutes": Array [
-                              undefined,
-                            ],
+                            "nearbyRoutes": Array [],
                             "stoptimesForPatterns": Array [
                               Object {
                                 "pattern": Object {
@@ -16752,9 +16686,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                       "lat": 47.676107,
                                       "lon": -122.316041,
                                       "name": "Roosevelt",
-                                      "nearbyRoutes": Array [
-                                        undefined,
-                                      ],
+                                      "nearbyRoutes": Array [],
                                       "stoptimesForPatterns": Array [
                                         Object {
                                           "pattern": Object {
@@ -17121,9 +17053,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                   "lat": 47.676107,
                                   "lon": -122.316041,
                                   "name": "Roosevelt",
-                                  "nearbyRoutes": Array [
-                                    undefined,
-                                  ],
+                                  "nearbyRoutes": Array [],
                                   "stoptimesForPatterns": Array [
                                     Object {
                                       "pattern": Object {
@@ -17510,9 +17440,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                         "lat": 47.676107,
                                         "lon": -122.316041,
                                         "name": "Roosevelt",
-                                        "nearbyRoutes": Array [
-                                          undefined,
-                                        ],
+                                        "nearbyRoutes": Array [],
                                         "stoptimesForPatterns": Array [
                                           Object {
                                             "pattern": Object {
@@ -17879,9 +17807,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                     "lat": 47.676107,
                                     "lon": -122.316041,
                                     "name": "Roosevelt",
-                                    "nearbyRoutes": Array [
-                                      undefined,
-                                    ],
+                                    "nearbyRoutes": Array [],
                                     "stoptimesForPatterns": Array [
                                       Object {
                                         "pattern": Object {
@@ -18256,9 +18182,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                               "lat": 47.676107,
                                               "lon": -122.316041,
                                               "name": "Roosevelt",
-                                              "nearbyRoutes": Array [
-                                                undefined,
-                                              ],
+                                              "nearbyRoutes": Array [],
                                               "stoptimesForPatterns": Array [
                                                 Object {
                                                   "pattern": Object {
@@ -18796,9 +18720,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                           "lat": 47.676107,
                                           "lon": -122.316041,
                                           "name": "Roosevelt",
-                                          "nearbyRoutes": Array [
-                                            undefined,
-                                          ],
+                                          "nearbyRoutes": Array [],
                                           "stoptimesForPatterns": Array [
                                             Object {
                                               "pattern": Object {
@@ -19165,9 +19087,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                             "lat": 47.676107,
                                             "lon": -122.316041,
                                             "name": "Roosevelt",
-                                            "nearbyRoutes": Array [
-                                              undefined,
-                                            ],
+                                            "nearbyRoutes": Array [],
                                             "stoptimesForPatterns": Array [
                                               Object {
                                                 "pattern": Object {
@@ -21732,9 +21652,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                               "lat": 47.675873,
                               "lon": -122.316137,
                               "name": "Default vehicle type",
-                              "nearbyRoutes": Array [
-                                undefined,
-                              ],
+                              "nearbyRoutes": Array [],
                               "network": "bird-seattle-washington",
                               "operative": true,
                               "rentalUris": null,
@@ -21755,9 +21673,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                           "lat": 47.675873,
                           "lon": -122.316137,
                           "name": "Default vehicle type",
-                          "nearbyRoutes": Array [
-                            undefined,
-                          ],
+                          "nearbyRoutes": Array [],
                           "network": "bird-seattle-washington",
                           "operative": true,
                           "rentalUris": null,
@@ -21780,9 +21696,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                 "lat": 47.675873,
                                 "lon": -122.316137,
                                 "name": "Default vehicle type",
-                                "nearbyRoutes": Array [
-                                  undefined,
-                                ],
+                                "nearbyRoutes": Array [],
                                 "network": "bird-seattle-washington",
                                 "operative": true,
                                 "rentalUris": null,
@@ -21803,9 +21717,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                             "lat": 47.675873,
                             "lon": -122.316137,
                             "name": "Default vehicle type",
-                            "nearbyRoutes": Array [
-                              undefined,
-                            ],
+                            "nearbyRoutes": Array [],
                             "network": "bird-seattle-washington",
                             "operative": true,
                             "rentalUris": null,
@@ -21917,9 +21829,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                       "lat": 47.675873,
                                       "lon": -122.316137,
                                       "name": "Default vehicle type",
-                                      "nearbyRoutes": Array [
-                                        undefined,
-                                      ],
+                                      "nearbyRoutes": Array [],
                                       "network": "bird-seattle-washington",
                                       "operative": true,
                                       "rentalUris": null,
@@ -21940,9 +21850,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                         "lat": 47.675873,
                                         "lon": -122.316137,
                                         "name": "Default vehicle type",
-                                        "nearbyRoutes": Array [
-                                          undefined,
-                                        ],
+                                        "nearbyRoutes": Array [],
                                         "network": "bird-seattle-washington",
                                         "operative": true,
                                         "rentalUris": null,
@@ -22166,9 +22074,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                               "lat": 47.6759,
                               "lon": -122.3162,
                               "name": "Default vehicle type",
-                              "nearbyRoutes": Array [
-                                undefined,
-                              ],
+                              "nearbyRoutes": Array [],
                               "network": "lime_seattle",
                               "operative": true,
                               "rentalUris": null,
@@ -22189,9 +22095,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                           "lat": 47.6759,
                           "lon": -122.3162,
                           "name": "Default vehicle type",
-                          "nearbyRoutes": Array [
-                            undefined,
-                          ],
+                          "nearbyRoutes": Array [],
                           "network": "lime_seattle",
                           "operative": true,
                           "rentalUris": null,
@@ -22214,9 +22118,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                 "lat": 47.6759,
                                 "lon": -122.3162,
                                 "name": "Default vehicle type",
-                                "nearbyRoutes": Array [
-                                  undefined,
-                                ],
+                                "nearbyRoutes": Array [],
                                 "network": "lime_seattle",
                                 "operative": true,
                                 "rentalUris": null,
@@ -22237,9 +22139,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                             "lat": 47.6759,
                             "lon": -122.3162,
                             "name": "Default vehicle type",
-                            "nearbyRoutes": Array [
-                              undefined,
-                            ],
+                            "nearbyRoutes": Array [],
                             "network": "lime_seattle",
                             "operative": true,
                             "rentalUris": null,
@@ -22351,9 +22251,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                       "lat": 47.6759,
                                       "lon": -122.3162,
                                       "name": "Default vehicle type",
-                                      "nearbyRoutes": Array [
-                                        undefined,
-                                      ],
+                                      "nearbyRoutes": Array [],
                                       "network": "lime_seattle",
                                       "operative": true,
                                       "rentalUris": null,
@@ -22374,9 +22272,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                         "lat": 47.6759,
                                         "lon": -122.3162,
                                         "name": "Default vehicle type",
-                                        "nearbyRoutes": Array [
-                                          undefined,
-                                        ],
+                                        "nearbyRoutes": Array [],
                                         "network": "lime_seattle",
                                         "operative": true,
                                         "rentalUris": null,
@@ -22600,9 +22496,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                               "lat": 47.6759,
                               "lon": -122.3162,
                               "name": "Default vehicle type",
-                              "nearbyRoutes": Array [
-                                undefined,
-                              ],
+                              "nearbyRoutes": Array [],
                               "network": "lime_seattle",
                               "operative": true,
                               "rentalUris": null,
@@ -22623,9 +22517,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                           "lat": 47.6759,
                           "lon": -122.3162,
                           "name": "Default vehicle type",
-                          "nearbyRoutes": Array [
-                            undefined,
-                          ],
+                          "nearbyRoutes": Array [],
                           "network": "lime_seattle",
                           "operative": true,
                           "rentalUris": null,
@@ -22648,9 +22540,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                 "lat": 47.6759,
                                 "lon": -122.3162,
                                 "name": "Default vehicle type",
-                                "nearbyRoutes": Array [
-                                  undefined,
-                                ],
+                                "nearbyRoutes": Array [],
                                 "network": "lime_seattle",
                                 "operative": true,
                                 "rentalUris": null,
@@ -22671,9 +22561,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                             "lat": 47.6759,
                             "lon": -122.3162,
                             "name": "Default vehicle type",
-                            "nearbyRoutes": Array [
-                              undefined,
-                            ],
+                            "nearbyRoutes": Array [],
                             "network": "lime_seattle",
                             "operative": true,
                             "rentalUris": null,
@@ -22785,9 +22673,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                       "lat": 47.6759,
                                       "lon": -122.3162,
                                       "name": "Default vehicle type",
-                                      "nearbyRoutes": Array [
-                                        undefined,
-                                      ],
+                                      "nearbyRoutes": Array [],
                                       "network": "lime_seattle",
                                       "operative": true,
                                       "rentalUris": null,
@@ -22808,9 +22694,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                         "lat": 47.6759,
                                         "lon": -122.3162,
                                         "name": "Default vehicle type",
-                                        "nearbyRoutes": Array [
-                                          undefined,
-                                        ],
+                                        "nearbyRoutes": Array [],
                                         "network": "lime_seattle",
                                         "operative": true,
                                         "rentalUris": null,
@@ -23035,9 +22919,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                               "lat": 47.6757507,
                               "lon": -122.316673,
                               "name": "Roosevelt Station - Bay 1",
-                              "nearbyRoutes": Array [
-                                undefined,
-                              ],
+                              "nearbyRoutes": Array [],
                               "stoptimesForPatterns": Array [
                                 Object {
                                   "pattern": Object {
@@ -23682,9 +23564,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                           "lat": 47.6757507,
                           "lon": -122.316673,
                           "name": "Roosevelt Station - Bay 1",
-                          "nearbyRoutes": Array [
-                            undefined,
-                          ],
+                          "nearbyRoutes": Array [],
                           "stoptimesForPatterns": Array [
                             Object {
                               "pattern": Object {
@@ -24331,9 +24211,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                 "lat": 47.6757507,
                                 "lon": -122.316673,
                                 "name": "Roosevelt Station - Bay 1",
-                                "nearbyRoutes": Array [
-                                  undefined,
-                                ],
+                                "nearbyRoutes": Array [],
                                 "stoptimesForPatterns": Array [
                                   Object {
                                     "pattern": Object {
@@ -24980,9 +24858,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                             "lat": 47.6757507,
                             "lon": -122.316673,
                             "name": "Roosevelt Station - Bay 1",
-                            "nearbyRoutes": Array [
-                              undefined,
-                            ],
+                            "nearbyRoutes": Array [],
                             "stoptimesForPatterns": Array [
                               Object {
                                 "pattern": Object {
@@ -25650,9 +25526,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                       "lat": 47.6757507,
                                       "lon": -122.316673,
                                       "name": "Roosevelt Station - Bay 1",
-                                      "nearbyRoutes": Array [
-                                        undefined,
-                                      ],
+                                      "nearbyRoutes": Array [],
                                       "stoptimesForPatterns": Array [
                                         Object {
                                           "pattern": Object {
@@ -26297,9 +26171,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                   "lat": 47.6757507,
                                   "lon": -122.316673,
                                   "name": "Roosevelt Station - Bay 1",
-                                  "nearbyRoutes": Array [
-                                    undefined,
-                                  ],
+                                  "nearbyRoutes": Array [],
                                   "stoptimesForPatterns": Array [
                                     Object {
                                       "pattern": Object {
@@ -26964,9 +26836,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                         "lat": 47.6757507,
                                         "lon": -122.316673,
                                         "name": "Roosevelt Station - Bay 1",
-                                        "nearbyRoutes": Array [
-                                          undefined,
-                                        ],
+                                        "nearbyRoutes": Array [],
                                         "stoptimesForPatterns": Array [
                                           Object {
                                             "pattern": Object {
@@ -27611,9 +27481,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                     "lat": 47.6757507,
                                     "lon": -122.316673,
                                     "name": "Roosevelt Station - Bay 1",
-                                    "nearbyRoutes": Array [
-                                      undefined,
-                                    ],
+                                    "nearbyRoutes": Array [],
                                     "stoptimesForPatterns": Array [
                                       Object {
                                         "pattern": Object {
@@ -28266,9 +28134,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                               "lat": 47.6757507,
                                               "lon": -122.316673,
                                               "name": "Roosevelt Station - Bay 1",
-                                              "nearbyRoutes": Array [
-                                                undefined,
-                                              ],
+                                              "nearbyRoutes": Array [],
                                               "stoptimesForPatterns": Array [
                                                 Object {
                                                   "pattern": Object {
@@ -29103,9 +28969,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                           "lat": 47.6757507,
                                           "lon": -122.316673,
                                           "name": "Roosevelt Station - Bay 1",
-                                          "nearbyRoutes": Array [
-                                            undefined,
-                                          ],
+                                          "nearbyRoutes": Array [],
                                           "stoptimesForPatterns": Array [
                                             Object {
                                               "pattern": Object {
@@ -29750,9 +29614,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                             "lat": 47.6757507,
                                             "lon": -122.316673,
                                             "name": "Roosevelt Station - Bay 1",
-                                            "nearbyRoutes": Array [
-                                              undefined,
-                                            ],
+                                            "nearbyRoutes": Array [],
                                             "stoptimesForPatterns": Array [
                                               Object {
                                                 "pattern": Object {
@@ -33455,9 +33317,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                               "lat": 47.675,
                               "lon": -122.3157,
                               "name": "Default vehicle type",
-                              "nearbyRoutes": Array [
-                                undefined,
-                              ],
+                              "nearbyRoutes": Array [],
                               "network": "lime_seattle",
                               "operative": true,
                               "rentalUris": null,
@@ -33478,9 +33338,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                           "lat": 47.675,
                           "lon": -122.3157,
                           "name": "Default vehicle type",
-                          "nearbyRoutes": Array [
-                            undefined,
-                          ],
+                          "nearbyRoutes": Array [],
                           "network": "lime_seattle",
                           "operative": true,
                           "rentalUris": null,
@@ -33503,9 +33361,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                 "lat": 47.675,
                                 "lon": -122.3157,
                                 "name": "Default vehicle type",
-                                "nearbyRoutes": Array [
-                                  undefined,
-                                ],
+                                "nearbyRoutes": Array [],
                                 "network": "lime_seattle",
                                 "operative": true,
                                 "rentalUris": null,
@@ -33526,9 +33382,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                             "lat": 47.675,
                             "lon": -122.3157,
                             "name": "Default vehicle type",
-                            "nearbyRoutes": Array [
-                              undefined,
-                            ],
+                            "nearbyRoutes": Array [],
                             "network": "lime_seattle",
                             "operative": true,
                             "rentalUris": null,
@@ -33640,9 +33494,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                       "lat": 47.675,
                                       "lon": -122.3157,
                                       "name": "Default vehicle type",
-                                      "nearbyRoutes": Array [
-                                        undefined,
-                                      ],
+                                      "nearbyRoutes": Array [],
                                       "network": "lime_seattle",
                                       "operative": true,
                                       "rentalUris": null,
@@ -33663,9 +33515,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                         "lat": 47.675,
                                         "lon": -122.3157,
                                         "name": "Default vehicle type",
-                                        "nearbyRoutes": Array [
-                                          undefined,
-                                        ],
+                                        "nearbyRoutes": Array [],
                                         "network": "lime_seattle",
                                         "operative": true,
                                         "rentalUris": null,
@@ -33889,9 +33739,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                               "lat": 47.6757,
                               "lon": -122.3174,
                               "name": "Default vehicle type",
-                              "nearbyRoutes": Array [
-                                undefined,
-                              ],
+                              "nearbyRoutes": Array [],
                               "network": "lime_seattle",
                               "operative": true,
                               "rentalUris": null,
@@ -33912,9 +33760,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                           "lat": 47.6757,
                           "lon": -122.3174,
                           "name": "Default vehicle type",
-                          "nearbyRoutes": Array [
-                            undefined,
-                          ],
+                          "nearbyRoutes": Array [],
                           "network": "lime_seattle",
                           "operative": true,
                           "rentalUris": null,
@@ -33937,9 +33783,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                 "lat": 47.6757,
                                 "lon": -122.3174,
                                 "name": "Default vehicle type",
-                                "nearbyRoutes": Array [
-                                  undefined,
-                                ],
+                                "nearbyRoutes": Array [],
                                 "network": "lime_seattle",
                                 "operative": true,
                                 "rentalUris": null,
@@ -33960,9 +33804,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                             "lat": 47.6757,
                             "lon": -122.3174,
                             "name": "Default vehicle type",
-                            "nearbyRoutes": Array [
-                              undefined,
-                            ],
+                            "nearbyRoutes": Array [],
                             "network": "lime_seattle",
                             "operative": true,
                             "rentalUris": null,
@@ -34074,9 +33916,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                       "lat": 47.6757,
                                       "lon": -122.3174,
                                       "name": "Default vehicle type",
-                                      "nearbyRoutes": Array [
-                                        undefined,
-                                      ],
+                                      "nearbyRoutes": Array [],
                                       "network": "lime_seattle",
                                       "operative": true,
                                       "rentalUris": null,
@@ -34097,9 +33937,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                         "lat": 47.6757,
                                         "lon": -122.3174,
                                         "name": "Default vehicle type",
-                                        "nearbyRoutes": Array [
-                                          undefined,
-                                        ],
+                                        "nearbyRoutes": Array [],
                                         "network": "lime_seattle",
                                         "operative": true,
                                         "rentalUris": null,
@@ -34323,9 +34161,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                               "lat": 47.6764,
                               "lon": -122.3162,
                               "name": "Default vehicle type",
-                              "nearbyRoutes": Array [
-                                undefined,
-                              ],
+                              "nearbyRoutes": Array [],
                               "network": "lime_seattle",
                               "operative": true,
                               "rentalUris": null,
@@ -34346,9 +34182,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                           "lat": 47.6764,
                           "lon": -122.3162,
                           "name": "Default vehicle type",
-                          "nearbyRoutes": Array [
-                            undefined,
-                          ],
+                          "nearbyRoutes": Array [],
                           "network": "lime_seattle",
                           "operative": true,
                           "rentalUris": null,
@@ -34371,9 +34205,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                 "lat": 47.6764,
                                 "lon": -122.3162,
                                 "name": "Default vehicle type",
-                                "nearbyRoutes": Array [
-                                  undefined,
-                                ],
+                                "nearbyRoutes": Array [],
                                 "network": "lime_seattle",
                                 "operative": true,
                                 "rentalUris": null,
@@ -34394,9 +34226,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                             "lat": 47.6764,
                             "lon": -122.3162,
                             "name": "Default vehicle type",
-                            "nearbyRoutes": Array [
-                              undefined,
-                            ],
+                            "nearbyRoutes": Array [],
                             "network": "lime_seattle",
                             "operative": true,
                             "rentalUris": null,
@@ -34508,9 +34338,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                       "lat": 47.6764,
                                       "lon": -122.3162,
                                       "name": "Default vehicle type",
-                                      "nearbyRoutes": Array [
-                                        undefined,
-                                      ],
+                                      "nearbyRoutes": Array [],
                                       "network": "lime_seattle",
                                       "operative": true,
                                       "rentalUris": null,
@@ -34531,9 +34359,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                         "lat": 47.6764,
                                         "lon": -122.3162,
                                         "name": "Default vehicle type",
-                                        "nearbyRoutes": Array [
-                                          undefined,
-                                        ],
+                                        "nearbyRoutes": Array [],
                                         "network": "lime_seattle",
                                         "operative": true,
                                         "rentalUris": null,
@@ -34757,9 +34583,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                               "lat": 47.6754,
                               "lon": -122.3173,
                               "name": "Default vehicle type",
-                              "nearbyRoutes": Array [
-                                undefined,
-                              ],
+                              "nearbyRoutes": Array [],
                               "network": "lime_seattle",
                               "operative": true,
                               "rentalUris": null,
@@ -34780,9 +34604,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                           "lat": 47.6754,
                           "lon": -122.3173,
                           "name": "Default vehicle type",
-                          "nearbyRoutes": Array [
-                            undefined,
-                          ],
+                          "nearbyRoutes": Array [],
                           "network": "lime_seattle",
                           "operative": true,
                           "rentalUris": null,
@@ -34805,9 +34627,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                 "lat": 47.6754,
                                 "lon": -122.3173,
                                 "name": "Default vehicle type",
-                                "nearbyRoutes": Array [
-                                  undefined,
-                                ],
+                                "nearbyRoutes": Array [],
                                 "network": "lime_seattle",
                                 "operative": true,
                                 "rentalUris": null,
@@ -34828,9 +34648,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                             "lat": 47.6754,
                             "lon": -122.3173,
                             "name": "Default vehicle type",
-                            "nearbyRoutes": Array [
-                              undefined,
-                            ],
+                            "nearbyRoutes": Array [],
                             "network": "lime_seattle",
                             "operative": true,
                             "rentalUris": null,
@@ -34942,9 +34760,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                       "lat": 47.6754,
                                       "lon": -122.3173,
                                       "name": "Default vehicle type",
-                                      "nearbyRoutes": Array [
-                                        undefined,
-                                      ],
+                                      "nearbyRoutes": Array [],
                                       "network": "lime_seattle",
                                       "operative": true,
                                       "rentalUris": null,
@@ -34965,9 +34781,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                         "lat": 47.6754,
                                         "lon": -122.3173,
                                         "name": "Default vehicle type",
-                                        "nearbyRoutes": Array [
-                                          undefined,
-                                        ],
+                                        "nearbyRoutes": Array [],
                                         "network": "lime_seattle",
                                         "operative": true,
                                         "rentalUris": null,
@@ -35191,9 +35005,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                               "lat": 47.6754,
                               "lon": -122.3174,
                               "name": "Default vehicle type",
-                              "nearbyRoutes": Array [
-                                undefined,
-                              ],
+                              "nearbyRoutes": Array [],
                               "network": "lime_seattle",
                               "operative": true,
                               "rentalUris": null,
@@ -35214,9 +35026,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                           "lat": 47.6754,
                           "lon": -122.3174,
                           "name": "Default vehicle type",
-                          "nearbyRoutes": Array [
-                            undefined,
-                          ],
+                          "nearbyRoutes": Array [],
                           "network": "lime_seattle",
                           "operative": true,
                           "rentalUris": null,
@@ -35239,9 +35049,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                 "lat": 47.6754,
                                 "lon": -122.3174,
                                 "name": "Default vehicle type",
-                                "nearbyRoutes": Array [
-                                  undefined,
-                                ],
+                                "nearbyRoutes": Array [],
                                 "network": "lime_seattle",
                                 "operative": true,
                                 "rentalUris": null,
@@ -35262,9 +35070,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                             "lat": 47.6754,
                             "lon": -122.3174,
                             "name": "Default vehicle type",
-                            "nearbyRoutes": Array [
-                              undefined,
-                            ],
+                            "nearbyRoutes": Array [],
                             "network": "lime_seattle",
                             "operative": true,
                             "rentalUris": null,
@@ -35376,9 +35182,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                       "lat": 47.6754,
                                       "lon": -122.3174,
                                       "name": "Default vehicle type",
-                                      "nearbyRoutes": Array [
-                                        undefined,
-                                      ],
+                                      "nearbyRoutes": Array [],
                                       "network": "lime_seattle",
                                       "operative": true,
                                       "rentalUris": null,
@@ -35399,9 +35203,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                         "lat": 47.6754,
                                         "lon": -122.3174,
                                         "name": "Default vehicle type",
-                                        "nearbyRoutes": Array [
-                                          undefined,
-                                        ],
+                                        "nearbyRoutes": Array [],
                                         "network": "lime_seattle",
                                         "operative": true,
                                         "rentalUris": null,
@@ -35626,9 +35428,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                               "lat": 47.675457,
                               "lon": -122.317467,
                               "name": "Roosevelt Station Bay 5 - Bay 5",
-                              "nearbyRoutes": Array [
-                                undefined,
-                              ],
+                              "nearbyRoutes": Array [],
                               "stoptimesForPatterns": Array [
                                 Object {
                                   "pattern": Object {
@@ -35995,9 +35795,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                           "lat": 47.675457,
                           "lon": -122.317467,
                           "name": "Roosevelt Station Bay 5 - Bay 5",
-                          "nearbyRoutes": Array [
-                            undefined,
-                          ],
+                          "nearbyRoutes": Array [],
                           "stoptimesForPatterns": Array [
                             Object {
                               "pattern": Object {
@@ -36366,9 +36164,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                 "lat": 47.675457,
                                 "lon": -122.317467,
                                 "name": "Roosevelt Station Bay 5 - Bay 5",
-                                "nearbyRoutes": Array [
-                                  undefined,
-                                ],
+                                "nearbyRoutes": Array [],
                                 "stoptimesForPatterns": Array [
                                   Object {
                                     "pattern": Object {
@@ -36737,9 +36533,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                             "lat": 47.675457,
                             "lon": -122.317467,
                             "name": "Roosevelt Station Bay 5 - Bay 5",
-                            "nearbyRoutes": Array [
-                              undefined,
-                            ],
+                            "nearbyRoutes": Array [],
                             "stoptimesForPatterns": Array [
                               Object {
                                 "pattern": Object {
@@ -37129,9 +36923,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                       "lat": 47.675457,
                                       "lon": -122.317467,
                                       "name": "Roosevelt Station Bay 5 - Bay 5",
-                                      "nearbyRoutes": Array [
-                                        undefined,
-                                      ],
+                                      "nearbyRoutes": Array [],
                                       "stoptimesForPatterns": Array [
                                         Object {
                                           "pattern": Object {
@@ -37498,9 +37290,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                   "lat": 47.675457,
                                   "lon": -122.317467,
                                   "name": "Roosevelt Station Bay 5 - Bay 5",
-                                  "nearbyRoutes": Array [
-                                    undefined,
-                                  ],
+                                  "nearbyRoutes": Array [],
                                   "stoptimesForPatterns": Array [
                                     Object {
                                       "pattern": Object {
@@ -37887,9 +37677,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                         "lat": 47.675457,
                                         "lon": -122.317467,
                                         "name": "Roosevelt Station Bay 5 - Bay 5",
-                                        "nearbyRoutes": Array [
-                                          undefined,
-                                        ],
+                                        "nearbyRoutes": Array [],
                                         "stoptimesForPatterns": Array [
                                           Object {
                                             "pattern": Object {
@@ -38256,9 +38044,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                     "lat": 47.675457,
                                     "lon": -122.317467,
                                     "name": "Roosevelt Station Bay 5 - Bay 5",
-                                    "nearbyRoutes": Array [
-                                      undefined,
-                                    ],
+                                    "nearbyRoutes": Array [],
                                     "stoptimesForPatterns": Array [
                                       Object {
                                         "pattern": Object {
@@ -38633,9 +38419,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                               "lat": 47.675457,
                                               "lon": -122.317467,
                                               "name": "Roosevelt Station Bay 5 - Bay 5",
-                                              "nearbyRoutes": Array [
-                                                undefined,
-                                              ],
+                                              "nearbyRoutes": Array [],
                                               "stoptimesForPatterns": Array [
                                                 Object {
                                                   "pattern": Object {
@@ -39192,9 +38976,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                           "lat": 47.675457,
                                           "lon": -122.317467,
                                           "name": "Roosevelt Station Bay 5 - Bay 5",
-                                          "nearbyRoutes": Array [
-                                            undefined,
-                                          ],
+                                          "nearbyRoutes": Array [],
                                           "stoptimesForPatterns": Array [
                                             Object {
                                               "pattern": Object {
@@ -39561,9 +39343,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                             "lat": 47.675457,
                                             "lon": -122.317467,
                                             "name": "Roosevelt Station Bay 5 - Bay 5",
-                                            "nearbyRoutes": Array [
-                                              undefined,
-                                            ],
+                                            "nearbyRoutes": Array [],
                                             "stoptimesForPatterns": Array [
                                               Object {
                                                 "pattern": Object {
@@ -42133,9 +41913,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                               "lat": 47.675,
                               "lon": -122.3164,
                               "name": "Default vehicle type",
-                              "nearbyRoutes": Array [
-                                undefined,
-                              ],
+                              "nearbyRoutes": Array [],
                               "network": "lime_seattle",
                               "operative": true,
                               "rentalUris": null,
@@ -42156,9 +41934,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                           "lat": 47.675,
                           "lon": -122.3164,
                           "name": "Default vehicle type",
-                          "nearbyRoutes": Array [
-                            undefined,
-                          ],
+                          "nearbyRoutes": Array [],
                           "network": "lime_seattle",
                           "operative": true,
                           "rentalUris": null,
@@ -42181,9 +41957,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                 "lat": 47.675,
                                 "lon": -122.3164,
                                 "name": "Default vehicle type",
-                                "nearbyRoutes": Array [
-                                  undefined,
-                                ],
+                                "nearbyRoutes": Array [],
                                 "network": "lime_seattle",
                                 "operative": true,
                                 "rentalUris": null,
@@ -42204,9 +41978,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                             "lat": 47.675,
                             "lon": -122.3164,
                             "name": "Default vehicle type",
-                            "nearbyRoutes": Array [
-                              undefined,
-                            ],
+                            "nearbyRoutes": Array [],
                             "network": "lime_seattle",
                             "operative": true,
                             "rentalUris": null,
@@ -42318,9 +42090,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                       "lat": 47.675,
                                       "lon": -122.3164,
                                       "name": "Default vehicle type",
-                                      "nearbyRoutes": Array [
-                                        undefined,
-                                      ],
+                                      "nearbyRoutes": Array [],
                                       "network": "lime_seattle",
                                       "operative": true,
                                       "rentalUris": null,
@@ -42341,9 +42111,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                         "lat": 47.675,
                                         "lon": -122.3164,
                                         "name": "Default vehicle type",
-                                        "nearbyRoutes": Array [
-                                          undefined,
-                                        ],
+                                        "nearbyRoutes": Array [],
                                         "network": "lime_seattle",
                                         "operative": true,
                                         "rentalUris": null,
@@ -42568,9 +42336,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                               "lat": 47.677081,
                               "lon": -122.315928,
                               "name": "Roosevelt",
-                              "nearbyRoutes": Array [
-                                undefined,
-                              ],
+                              "nearbyRoutes": Array [],
                               "stoptimesForPatterns": Array [
                                 Object {
                                   "pattern": Object {
@@ -43112,9 +42878,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                           "lat": 47.677081,
                           "lon": -122.315928,
                           "name": "Roosevelt",
-                          "nearbyRoutes": Array [
-                            undefined,
-                          ],
+                          "nearbyRoutes": Array [],
                           "stoptimesForPatterns": Array [
                             Object {
                               "pattern": Object {
@@ -43658,9 +43422,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                 "lat": 47.677081,
                                 "lon": -122.315928,
                                 "name": "Roosevelt",
-                                "nearbyRoutes": Array [
-                                  undefined,
-                                ],
+                                "nearbyRoutes": Array [],
                                 "stoptimesForPatterns": Array [
                                   Object {
                                     "pattern": Object {
@@ -44204,9 +43966,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                             "lat": 47.677081,
                             "lon": -122.315928,
                             "name": "Roosevelt",
-                            "nearbyRoutes": Array [
-                              undefined,
-                            ],
+                            "nearbyRoutes": Array [],
                             "stoptimesForPatterns": Array [
                               Object {
                                 "pattern": Object {
@@ -44771,9 +44531,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                       "lat": 47.677081,
                                       "lon": -122.315928,
                                       "name": "Roosevelt",
-                                      "nearbyRoutes": Array [
-                                        undefined,
-                                      ],
+                                      "nearbyRoutes": Array [],
                                       "stoptimesForPatterns": Array [
                                         Object {
                                           "pattern": Object {
@@ -45315,9 +45073,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                   "lat": 47.677081,
                                   "lon": -122.315928,
                                   "name": "Roosevelt",
-                                  "nearbyRoutes": Array [
-                                    undefined,
-                                  ],
+                                  "nearbyRoutes": Array [],
                                   "stoptimesForPatterns": Array [
                                     Object {
                                       "pattern": Object {
@@ -45879,9 +45635,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                         "lat": 47.677081,
                                         "lon": -122.315928,
                                         "name": "Roosevelt",
-                                        "nearbyRoutes": Array [
-                                          undefined,
-                                        ],
+                                        "nearbyRoutes": Array [],
                                         "stoptimesForPatterns": Array [
                                           Object {
                                             "pattern": Object {
@@ -46423,9 +46177,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                     "lat": 47.677081,
                                     "lon": -122.315928,
                                     "name": "Roosevelt",
-                                    "nearbyRoutes": Array [
-                                      undefined,
-                                    ],
+                                    "nearbyRoutes": Array [],
                                     "stoptimesForPatterns": Array [
                                       Object {
                                         "pattern": Object {
@@ -46975,9 +46727,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                               "lat": 47.677081,
                                               "lon": -122.315928,
                                               "name": "Roosevelt",
-                                              "nearbyRoutes": Array [
-                                                undefined,
-                                              ],
+                                              "nearbyRoutes": Array [],
                                               "stoptimesForPatterns": Array [
                                                 Object {
                                                   "pattern": Object {
@@ -47690,9 +47440,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                           "lat": 47.677081,
                                           "lon": -122.315928,
                                           "name": "Roosevelt",
-                                          "nearbyRoutes": Array [
-                                            undefined,
-                                          ],
+                                          "nearbyRoutes": Array [],
                                           "stoptimesForPatterns": Array [
                                             Object {
                                               "pattern": Object {
@@ -48234,9 +47982,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                             "lat": 47.677081,
                                             "lon": -122.315928,
                                             "name": "Roosevelt",
-                                            "nearbyRoutes": Array [
-                                              undefined,
-                                            ],
+                                            "nearbyRoutes": Array [],
                                             "stoptimesForPatterns": Array [
                                               Object {
                                                 "pattern": Object {
@@ -49925,9 +49671,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                               "lat": 47.6771355,
                               "lon": -122.315582,
                               "name": "Roosevelt Station - Bay 3",
-                              "nearbyRoutes": Array [
-                                undefined,
-                              ],
+                              "nearbyRoutes": Array [],
                               "stoptimesForPatterns": Array [
                                 Object {
                                   "pattern": Object {
@@ -50572,9 +50316,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                           "lat": 47.6771355,
                           "lon": -122.315582,
                           "name": "Roosevelt Station - Bay 3",
-                          "nearbyRoutes": Array [
-                            undefined,
-                          ],
+                          "nearbyRoutes": Array [],
                           "stoptimesForPatterns": Array [
                             Object {
                               "pattern": Object {
@@ -51221,9 +50963,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                 "lat": 47.6771355,
                                 "lon": -122.315582,
                                 "name": "Roosevelt Station - Bay 3",
-                                "nearbyRoutes": Array [
-                                  undefined,
-                                ],
+                                "nearbyRoutes": Array [],
                                 "stoptimesForPatterns": Array [
                                   Object {
                                     "pattern": Object {
@@ -51870,9 +51610,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                             "lat": 47.6771355,
                             "lon": -122.315582,
                             "name": "Roosevelt Station - Bay 3",
-                            "nearbyRoutes": Array [
-                              undefined,
-                            ],
+                            "nearbyRoutes": Array [],
                             "stoptimesForPatterns": Array [
                               Object {
                                 "pattern": Object {
@@ -52540,9 +52278,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                       "lat": 47.6771355,
                                       "lon": -122.315582,
                                       "name": "Roosevelt Station - Bay 3",
-                                      "nearbyRoutes": Array [
-                                        undefined,
-                                      ],
+                                      "nearbyRoutes": Array [],
                                       "stoptimesForPatterns": Array [
                                         Object {
                                           "pattern": Object {
@@ -53187,9 +52923,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                   "lat": 47.6771355,
                                   "lon": -122.315582,
                                   "name": "Roosevelt Station - Bay 3",
-                                  "nearbyRoutes": Array [
-                                    undefined,
-                                  ],
+                                  "nearbyRoutes": Array [],
                                   "stoptimesForPatterns": Array [
                                     Object {
                                       "pattern": Object {
@@ -53854,9 +53588,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                         "lat": 47.6771355,
                                         "lon": -122.315582,
                                         "name": "Roosevelt Station - Bay 3",
-                                        "nearbyRoutes": Array [
-                                          undefined,
-                                        ],
+                                        "nearbyRoutes": Array [],
                                         "stoptimesForPatterns": Array [
                                           Object {
                                             "pattern": Object {
@@ -54501,9 +54233,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                     "lat": 47.6771355,
                                     "lon": -122.315582,
                                     "name": "Roosevelt Station - Bay 3",
-                                    "nearbyRoutes": Array [
-                                      undefined,
-                                    ],
+                                    "nearbyRoutes": Array [],
                                     "stoptimesForPatterns": Array [
                                       Object {
                                         "pattern": Object {
@@ -55156,9 +54886,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                               "lat": 47.6771355,
                                               "lon": -122.315582,
                                               "name": "Roosevelt Station - Bay 3",
-                                              "nearbyRoutes": Array [
-                                                undefined,
-                                              ],
+                                              "nearbyRoutes": Array [],
                                               "stoptimesForPatterns": Array [
                                                 Object {
                                                   "pattern": Object {
@@ -55993,9 +55721,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                           "lat": 47.6771355,
                                           "lon": -122.315582,
                                           "name": "Roosevelt Station - Bay 3",
-                                          "nearbyRoutes": Array [
-                                            undefined,
-                                          ],
+                                          "nearbyRoutes": Array [],
                                           "stoptimesForPatterns": Array [
                                             Object {
                                               "pattern": Object {
@@ -56640,9 +56366,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                             "lat": 47.6771355,
                                             "lon": -122.315582,
                                             "name": "Roosevelt Station - Bay 3",
-                                            "nearbyRoutes": Array [
-                                              undefined,
-                                            ],
+                                            "nearbyRoutes": Array [],
                                             "stoptimesForPatterns": Array [
                                               Object {
                                                 "pattern": Object {
@@ -62116,9 +61840,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                               "lat": 47.6772,
                               "lon": -122.3159,
                               "name": "Default vehicle type",
-                              "nearbyRoutes": Array [
-                                undefined,
-                              ],
+                              "nearbyRoutes": Array [],
                               "network": "lime_seattle",
                               "operative": true,
                               "rentalUris": null,
@@ -62139,9 +61861,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                           "lat": 47.6772,
                           "lon": -122.3159,
                           "name": "Default vehicle type",
-                          "nearbyRoutes": Array [
-                            undefined,
-                          ],
+                          "nearbyRoutes": Array [],
                           "network": "lime_seattle",
                           "operative": true,
                           "rentalUris": null,
@@ -62164,9 +61884,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                 "lat": 47.6772,
                                 "lon": -122.3159,
                                 "name": "Default vehicle type",
-                                "nearbyRoutes": Array [
-                                  undefined,
-                                ],
+                                "nearbyRoutes": Array [],
                                 "network": "lime_seattle",
                                 "operative": true,
                                 "rentalUris": null,
@@ -62187,9 +61905,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                             "lat": 47.6772,
                             "lon": -122.3159,
                             "name": "Default vehicle type",
-                            "nearbyRoutes": Array [
-                              undefined,
-                            ],
+                            "nearbyRoutes": Array [],
                             "network": "lime_seattle",
                             "operative": true,
                             "rentalUris": null,
@@ -62301,9 +62017,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                       "lat": 47.6772,
                                       "lon": -122.3159,
                                       "name": "Default vehicle type",
-                                      "nearbyRoutes": Array [
-                                        undefined,
-                                      ],
+                                      "nearbyRoutes": Array [],
                                       "network": "lime_seattle",
                                       "operative": true,
                                       "rentalUris": null,
@@ -62324,9 +62038,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                         "lat": 47.6772,
                                         "lon": -122.3159,
                                         "name": "Default vehicle type",
-                                        "nearbyRoutes": Array [
-                                          undefined,
-                                        ],
+                                        "nearbyRoutes": Array [],
                                         "network": "lime_seattle",
                                         "operative": true,
                                         "rentalUris": null,
@@ -62551,9 +62263,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                               "lat": 47.6758652,
                               "lon": -122.313545,
                               "name": "NE 65th St & 14th Ave NE",
-                              "nearbyRoutes": Array [
-                                undefined,
-                              ],
+                              "nearbyRoutes": Array [],
                               "stoptimesForPatterns": Array [
                                 Object {
                                   "pattern": Object {
@@ -63121,9 +62831,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                           "lat": 47.6758652,
                           "lon": -122.313545,
                           "name": "NE 65th St & 14th Ave NE",
-                          "nearbyRoutes": Array [
-                            undefined,
-                          ],
+                          "nearbyRoutes": Array [],
                           "stoptimesForPatterns": Array [
                             Object {
                               "pattern": Object {
@@ -63693,9 +63401,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                 "lat": 47.6758652,
                                 "lon": -122.313545,
                                 "name": "NE 65th St & 14th Ave NE",
-                                "nearbyRoutes": Array [
-                                  undefined,
-                                ],
+                                "nearbyRoutes": Array [],
                                 "stoptimesForPatterns": Array [
                                   Object {
                                     "pattern": Object {
@@ -64265,9 +63971,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                             "lat": 47.6758652,
                             "lon": -122.313545,
                             "name": "NE 65th St & 14th Ave NE",
-                            "nearbyRoutes": Array [
-                              undefined,
-                            ],
+                            "nearbyRoutes": Array [],
                             "stoptimesForPatterns": Array [
                               Object {
                                 "pattern": Object {
@@ -64858,9 +64562,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                       "lat": 47.6758652,
                                       "lon": -122.313545,
                                       "name": "NE 65th St & 14th Ave NE",
-                                      "nearbyRoutes": Array [
-                                        undefined,
-                                      ],
+                                      "nearbyRoutes": Array [],
                                       "stoptimesForPatterns": Array [
                                         Object {
                                           "pattern": Object {
@@ -65428,9 +65130,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                   "lat": 47.6758652,
                                   "lon": -122.313545,
                                   "name": "NE 65th St & 14th Ave NE",
-                                  "nearbyRoutes": Array [
-                                    undefined,
-                                  ],
+                                  "nearbyRoutes": Array [],
                                   "stoptimesForPatterns": Array [
                                     Object {
                                       "pattern": Object {
@@ -66018,9 +65718,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                         "lat": 47.6758652,
                                         "lon": -122.313545,
                                         "name": "NE 65th St & 14th Ave NE",
-                                        "nearbyRoutes": Array [
-                                          undefined,
-                                        ],
+                                        "nearbyRoutes": Array [],
                                         "stoptimesForPatterns": Array [
                                           Object {
                                             "pattern": Object {
@@ -66588,9 +66286,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                     "lat": 47.6758652,
                                     "lon": -122.313545,
                                     "name": "NE 65th St & 14th Ave NE",
-                                    "nearbyRoutes": Array [
-                                      undefined,
-                                    ],
+                                    "nearbyRoutes": Array [],
                                     "stoptimesForPatterns": Array [
                                       Object {
                                         "pattern": Object {
@@ -67166,9 +66862,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                               "lat": 47.6758652,
                                               "lon": -122.313545,
                                               "name": "NE 65th St & 14th Ave NE",
-                                              "nearbyRoutes": Array [
-                                                undefined,
-                                              ],
+                                              "nearbyRoutes": Array [],
                                               "stoptimesForPatterns": Array [
                                                 Object {
                                                   "pattern": Object {
@@ -67926,9 +67620,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                           "lat": 47.6758652,
                                           "lon": -122.313545,
                                           "name": "NE 65th St & 14th Ave NE",
-                                          "nearbyRoutes": Array [
-                                            undefined,
-                                          ],
+                                          "nearbyRoutes": Array [],
                                           "stoptimesForPatterns": Array [
                                             Object {
                                               "pattern": Object {
@@ -68496,9 +68188,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                             "lat": 47.6758652,
                                             "lon": -122.313545,
                                             "name": "NE 65th St & 14th Ave NE",
-                                            "nearbyRoutes": Array [
-                                              undefined,
-                                            ],
+                                            "nearbyRoutes": Array [],
                                             "stoptimesForPatterns": Array [
                                               Object {
                                                 "pattern": Object {
