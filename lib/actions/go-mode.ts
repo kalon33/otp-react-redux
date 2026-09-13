@@ -2657,6 +2657,47 @@ export function rediscoverOnboardVehicles() {
 /**
  * Fetch the confirmed vehicle's trip schedule, then optimize the alight stop.
  */
+/**
+ * How long the onboard flow will wait for something that says where on the run
+ * the rider is — a position fix, or a nextStopId on the vehicle — before it
+ * plans. Most of it is spent inside the findTrip round trip that has to happen
+ * anyway; the observed gap needing covering was 689 ms.
+ */
+export const ONBOARD_ANCHOR_WAIT_MS = 3000
+const ONBOARD_ANCHOR_POLL_MS = 100
+
+/** Is there anything to anchor the candidate stops to yet? */
+function hasOnboardAnchorEvidence(getState: any): boolean {
+  const goMode = getState().otp?.goMode
+  return !!(
+    goMode?.tracking?.lastPosition || goMode?.onboard?.vehicle?.nextStopId
+  )
+}
+
+/**
+ * Load the boarded trip's schedule, then plan the onward options from it.
+ *
+ * The wait is the whole point of the middle step. `STOP_GO_MODE` resets Go
+ * Mode to defaultState and keeps only the physical facts (riding, the
+ * confirmed match, the alight) — a GPS sample is not one of those, so
+ * `tracking.lastPosition` is gone; and `beginOnboardFlow` re-adopts a
+ * remembered vehicle with `nextStopId: null` deliberately, because a stale
+ * next stop is how 8/9 built a bus leg to a stop behind the rider. Tap Stop
+ * and then "I'm on the bus" and for a fraction of a second the optimizer has
+ * neither. On 2026-09-13 it had neither for 689 ms — `BEGIN_ONBOARD_FLOW`
+ * 11:38:38.013, candidates built 11:38:38.346, first `UPDATE_POSITION`
+ * 11:38:39.035 — and offered a rider at Lexington Pkwy the first six stops of
+ * the Green Line starting at Union Depot, 4.7 km behind them.
+ *
+ * Waiting here rather than carrying the last fix across the Stop: the reset is
+ * an explicit allowlist of facts that outlive leaving the screen, every
+ * stale-anchor bug in this file's history came from one of those living too
+ * long, and `startPositionTracking()` has already been dispatched by
+ * `beginOnboardFlow`, so the fix is seconds away by construction. If it never
+ * arrives, `getDownstreamStops` returns nothing and the rider sees that we do
+ * not know — which is recoverable, unlike a confident list from the wrong end
+ * of the line.
+ */
 export function loadOnboardScheduleAndOptimize(tripId: string) {
   return async function (dispatch: any, getState: any) {
     await dispatch(findTrip({ tripId }))
@@ -2666,6 +2707,15 @@ export function loadOnboardScheduleAndOptimize(tripId: string) {
       return
     }
     dispatch(setOnboardTrip(trip))
+    const waitMs =
+      getState().otp?.config?.itinerary?.onboardAnchorWaitMs ??
+      ONBOARD_ANCHOR_WAIT_MS
+    const deadline = Date.now() + waitMs
+    while (!hasOnboardAnchorEvidence(getState) && Date.now() < deadline) {
+      await new Promise((resolve) =>
+        setTimeout(resolve, ONBOARD_ANCHOR_POLL_MS)
+      )
+    }
     dispatch(planFromOnboardBus())
   }
 }
@@ -2928,6 +2978,13 @@ function optimizeAlightFromTrip(options: {
       at: number
     ) => {
       const ranked = rankAlightOptions(settledResults, {
+        // What the rider is physically aboard, so an onward plan that boards
+        // the SAME route on a LATER trip is folded into staying aboard rather
+        // than offered as a Green Line → Green Line transfer (backlog 15.4).
+        // `downstream` is the evidence for that: it holds only the stops the
+        // boarded trip still serves, so a genuine short-turn is left alone.
+        boarded: { routeId: boardedRouteId, tripId: trip?.id ?? null },
+        downstream,
         keepRouteId,
         limit,
         nowMs: at,
