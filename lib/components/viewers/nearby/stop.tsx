@@ -113,18 +113,16 @@ const renderPatternRows = (
   const knownRouteIds = (stopData.nearbyRoutes || []).filter(
     (id): id is string => typeof id === 'string' && id.length > 0
   )
-  return patternArray?.map((st: any, index: number) => {
+  const visiblePatterns =
+    knownRouteIds.length > 0
+      ? patternArray?.filter((st: any) =>
+          knownRouteIds.includes(st?.pattern?.route?.gtfsId)
+        )
+      : patternArray
+  return visiblePatterns?.map((st: any, index: number) => {
     const sortedStopTimes = st.stoptimes.sort(
       (a: StopTime, b: StopTime) => fullTimestamp(a) - fullTimestamp(b)
     )
-    if (
-      // NearbyRoutes if present is populated with a list of routes that appear
-      // in the current service period.
-      knownRouteIds.length > 0 &&
-      !knownRouteIds.includes(st?.pattern?.route?.gtfsId)
-    ) {
-      return <></>
-    }
     return (
       <PatternRow
         alwaysShowLongName={nearbyViewConfig?.alwaysShowLongName}
