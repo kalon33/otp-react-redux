@@ -2076,10 +2076,30 @@ export function quietReplanAccessLeg() {
       ...trimQuietReplanHistory(session.quietReplanHistory, nowMs),
       nowMs
     ]
-    session.destinationProgress = noteReplanAttempt(
-      session.destinationProgress,
-      accessMode
-    )
+    // What this attempt proves about the destination is settled by its ANSWER,
+    // not by its issue. The count used to happen right here, one line after the
+    // cooldown admitted the re-plan and before any request had gone out; on
+    // 2026-09-09 the third of three counted "re-plans" was a fetch that aborted
+    // 11.8 s later on the 12 s Go Mode timeout (api.js GO_MODE_FETCH_TIMEOUT_MS),
+    // and neither the empty-result path nor the rejection path below rolled it
+    // back. So: remember where the rider was when the question went out, and
+    // record the attempt once, when a fetch resolves.
+    const attemptPoint: [number, number] = [
+      lastPosition.coords.latitude,
+      lastPosition.coords.longitude
+    ]
+    let attemptRecorded = false
+    const recordReplanAttempt = (returned: boolean) => {
+      if (attemptRecorded) return
+      attemptRecorded = true
+      // Read fresh: ticks keep folding distances in while the request is out,
+      // and a gain that landed meanwhile has already cleared the count.
+      session.destinationProgress = noteReplanAttempt(
+        session.destinationProgress,
+        accessMode,
+        { point: attemptPoint, returned }
+      )
+    }
 
     const { homeTimezone } = state.otp.config
     const { modes, modeSettings, numItineraries } = getBasePlanParts(state)
@@ -2162,6 +2182,7 @@ export function quietReplanAccessLeg() {
         const { error, itineraries } = await dispatch(
           fetchOnboardCandidatePlan(scopedAt(target))
         )
+        recordReplanAttempt(!error)
         if (!stillReplannable()) return undefined
         return error || !itineraries?.length
           ? null
@@ -2222,6 +2243,7 @@ export function quietReplanAccessLeg() {
     const { error, itineraries } = await dispatch(
       fetchOnboardCandidatePlan(combo)
     )
+    recordReplanAttempt(!error)
 
     // Re-check state after the async plan: the rider may have exited Go Mode
     // or a reroute may have started while the request was in flight.
