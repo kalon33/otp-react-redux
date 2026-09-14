@@ -403,10 +403,32 @@ interface LatLon {
 }
 
 /**
+ * findAnchorIndex's answer when NOTHING said where the bus is — no usable
+ * nextStopId and no position fix.
+ */
+export const ANCHOR_UNKNOWN = -1
+
+/**
  * Find the index of the stop the bus is currently heading to (its anchor):
  * 1. Prefer the vehicle's reported nextStopId.
  * 2. Otherwise the stop nearest the rider's GPS position.
- * 3. Otherwise the first stop.
+ * 3. Otherwise ANCHOR_UNKNOWN — NOT index 0.
+ *
+ * Clause 3 used to be "otherwise the first stop", and index 0 is a lie that
+ * looks like an answer. 2026-09-13 11:38:38: the rider tapped Stop and then
+ * "I'm on the bus" 1.3 s later, `STOP_GO_MODE` had reset `tracking` (it keeps
+ * `riding` and the confirmed match, not a GPS sample), `beginOnboardFlow`
+ * re-adopts a remembered vehicle with `nextStopId: null` on purpose, and the
+ * first `UPDATE_POSITION` landed 689 ms AFTER the optimize built its
+ * candidates. Both inputs were absent for less than a second, and the rider —
+ * at Lexington Pkwy, westbound — was offered Union Depot, Capitol/Rice and
+ * Victoria: the start of the Green Line, 4.7 km BEHIND them.
+ *
+ * The trip's first stop is a defensible default only when the rider is at the
+ * start of the line, and in that case a fix says so. With no evidence at all,
+ * the honest output is none: getDownstreamStops returns an empty list, the
+ * caller shows the rider nothing rather than the wrong end of the line, and
+ * loadOnboardScheduleAndOptimize waits (bounded) for the fix before asking.
  */
 function findAnchorIndex(
   stopTimes: TripStopTime[],
@@ -434,7 +456,7 @@ function findAnchorIndex(
     })
     return bestIdx
   }
-  return 0
+  return ANCHOR_UNKNOWN
 }
 
 /**
@@ -472,6 +494,10 @@ export function getDownstreamStops(
   if (stopTimes.length === 0) return []
 
   const anchorIdx = findAnchorIndex(stopTimes, vehicle?.nextStopId, userPos)
+  // No nextStopId and no fix: we do not know where on this run the rider is,
+  // and every stop below would be measured from the terminus they started
+  // from. Empty, not "the whole line from stop 0" — see findAnchorIndex.
+  if (anchorIdx === ANCHOR_UNKNOWN) return []
   const anchorDeparture = stopTimes[anchorIdx].scheduledDeparture
 
   const downstream: DownstreamStop[] = []
@@ -746,16 +772,44 @@ function isReachableItinerary(
 }
 
 /**
+ * How far a street-only plan makes the rider travel, from its legs. Falls back
+ * to `itinerary.walkDistance` only when the legs carry no distance (synthetic
+ * fixtures); OTP legs always do. The fallback of last resort is Infinity, so a
+ * plan nothing can measure is not offered.
+ */
+function streetDistance(itin: Itinerary): number {
+  const measured = (itin.legs || []).reduce(
+    (sum, leg) => sum + (Number(leg.distance) || 0),
+    0
+  )
+  if (measured > 0) return measured
+  return typeof itin.walkDistance === 'number' ? itin.walkDistance : Infinity
+}
+
+/**
  * Whether an onward itinerary is worth offering. A plan with a transit leg
- * always is. A walk-only plan is kept only when the walk is short — OTP returns
- * a walk-the-whole-way itinerary as a fallback even from a far stop, which we
- * don't want to recommend; but a short final walk (alight stop ~at the
- * destination) is legitimate.
+ * always is. A street-only plan is judged by what it asks of the rider:
+ *
+ * - bike-only is always a real answer — "get off here and ride the rest of the
+ *   way" is exactly the option the rider asked for on 2026-09-13 (backlog
+ *   15.1), and the arrival sort decides where it lands against the bus
+ *   options; a slow bike ranks low, it does not vanish;
+ * - walk-only is kept only when the walk is short — OTP returns a
+ *   walk-the-whole-way itinerary as a fallback even from a far stop, which we
+ *   don't want to recommend; but a short final walk (alight stop ~at the
+ *   destination) is legitimate.
+ *
+ * The walk is measured from the legs, not from `itinerary.walkDistance`: the
+ * plan query never requests that field, so it was always undefined here and
+ * `undefined ?? Infinity` failed every street-only plan closed. That is how a
+ * 35-minute bike from Hamline Ave Station never made the list while three
+ * bus-plus-bike options did.
  */
 function isUsableItinerary(itin: Itinerary, walkOnlyMax: number): boolean {
-  const hasTransit = (itin.legs || []).some((leg) => leg.transitLeg)
-  if (hasTransit) return true
-  return (itin.walkDistance ?? Infinity) <= walkOnlyMax
+  const legs = itin.legs || []
+  if (legs.some((leg) => leg.transitLeg)) return true
+  if (legs.some((leg) => leg.mode === 'BICYCLE')) return true
+  return streetDistance(itin) <= walkOnlyMax
 }
 
 /**
@@ -781,8 +835,8 @@ export function onwardRouteOfItinerary(itinerary: Itinerary): string | null {
  * rankAlightOptions' job, not this comparator's.
  */
 function compareAlightOptions(
-  a: AlightOption & { arrival: number },
-  b: AlightOption & { arrival: number },
+  a: ScoredAlightOption,
+  b: ScoredAlightOption,
   keepRouteId: string | null = null
 ): number {
   if (Math.abs(a.arrival - b.arrival) <= TIE_MS) {
@@ -816,6 +870,145 @@ export function journeySignature(stopId: string, itinerary: Itinerary): string {
   return `${stopId}#${legs}`
 }
 
+/** An option carrying the total arrival it was scored on. */
+export type ScoredAlightOption = AlightOption & { arrival: number }
+
+/** The trip the rider is physically aboard, as the relay fold needs it. */
+export interface BoardedTrip {
+  routeId?: string | null
+  tripId?: string | null
+}
+
+/** Where a transit leg puts the rider back on the pavement, by stop id. */
+function legAlightStopId(leg: any): string | null {
+  const to = leg?.to
+  return to?.stop?.gtfsId || to?.stop?.id || to?.stopId || null
+}
+
+/**
+ * Fold away "get off this train and catch the NEXT one on the same route".
+ *
+ * An onward plan is fetched FROM a candidate stop, so OTP knows nothing about
+ * the rider still being aboard; biased toward the boarded route
+ * (`otherThanPreferredRoutesPenalty: 900`) it happily answers "board the Green
+ * Line here" — and when the boarded trip has already left that stop in OTP's
+ * model, the trip it boards is a LATER one. The two same-trip cases are
+ * already handled (`mergeAdjacentSameTripLegs` folds the rider's own train
+ * continuing into the synthesized bus leg); this is the different-`tripId`
+ * twin, and nothing recognised it.
+ *
+ * 2026-09-13 11:39:53: the rider was aboard Green Line trip `1:879781` at
+ * Lexington Pkwy. The Snelling candidate returned their own train continuing
+ * to Raymond (11:43→11:48, folded) and the Lexington candidate returned Green
+ * Line trip `1:905008` — the next train, 11:51→12:00 — then bike, arriving
+ * 12:23:56. The first was dropped by 15.1's walkDistance bug, the second
+ * survived, and the list offered METRO Green Line → METRO Green Line as a
+ * transfer with a 16-minute wait at Snelling. Staying aboard reaches the same
+ * Raymond Ave Station at 11:48 and the destination at 12:12:48 — eleven
+ * minutes earlier, with no transfer. It is not a worse option; it is the same
+ * option, described as a change of train.
+ *
+ * So: dominated, and folded into the stay-aboard journey it really is — the
+ * relay leg (and whatever access leg fed it) is stripped, the option is
+ * re-anchored to the stop that leg ended at with the boarded trip's OWN
+ * arrival there, and it is re-scored. `journeySignature` then collapses it
+ * into the genuine candidate for that stop when there is one, and when there
+ * is not (the stop never made `selectCandidateStops`' bounded set) the rider
+ * still gets the journey — which is why this folds rather than drops.
+ *
+ * THE CASE THIS MUST NOT EAT: a boarded trip that short-turns. If the run ends
+ * before the stop the later train reaches, changing trains is the only way
+ * there and the transfer is a real answer. `downstream` is exactly the test:
+ * `getDownstreamStops` lists only the stops the BOARDED trip still serves
+ * ahead of the rider, so a relay whose alight stop is not in it — or is not
+ * strictly beyond the stop the plan was fetched from — is left alone.
+ */
+export function foldSameRouteRelay(
+  option: ScoredAlightOption,
+  boarded: BoardedTrip,
+  downstream: DownstreamStop[]
+): ScoredAlightOption | null {
+  const { routeId, tripId } = boarded
+  if (!routeId || !tripId) return option
+  const legs: any[] = option.itinerary.legs || []
+  const relayIdx = legs.findIndex((l) => l.transitLeg)
+  if (relayIdx < 0) return option
+  const relay = legs[relayIdx]
+  if (getLegRouteId(relay) !== routeId) return option
+  // The rider's OWN trip continuing: not a relay at all. Left alone so
+  // mergeAdjacentSameTripLegs can splice it into one ride, which is what
+  // builtAlightStop then reads the true alight stop off.
+  if (legTripId(relay) === tripId) return option
+
+  const relayEndStopId = legAlightStopId(relay)
+  const stayAboard = relayEndStopId
+    ? downstream.find((d) => d.stop.id === relayEndStopId)
+    : undefined
+  const anchor = downstream.find((d) => d.stop.id === option.stopId)
+  if (
+    !stayAboard ||
+    !anchor ||
+    stayAboard.stopIndexInTrip <= anchor.stopIndexInTrip
+  ) {
+    // The boarded trip does not serve that stop after this one — a short-turn,
+    // or a later train running past this run's terminus. A real transfer.
+    return option
+  }
+
+  const rest = legs.slice(relayIdx + 1)
+  // The relay WAS the whole plan: "stay aboard to that stop" is the answer and
+  // the stop's own candidate already says it. A zero-leg itinerary is not an
+  // option, so drop rather than offer one.
+  if (rest.length === 0) return null
+
+  // The remainder was planned to start when the LATER train would have dropped
+  // the rider; staying aboard puts them there earlier, so its times have to
+  // move with them — otherwise the option renders a ride ending 11:48 above a
+  // bike leg that departs at 12:00 and an arrival twelve minutes late.
+  //
+  // Only a street remainder may be shifted. A scheduled connection after the
+  // alight does not move because the rider got there sooner — they wait — so
+  // those legs keep their own times and the wait lands in the duration below,
+  // which is what it costs.
+  const delta = stayAboard.busArrivalEpoch - Number(relay.endTime)
+  const shiftable = rest.every((l) => !l.transitLeg) && Number.isFinite(delta)
+  const shifted = shiftable
+    ? rest.map((l) => ({
+        ...l,
+        endTime: Number(l.endTime) + delta,
+        startTime: Number(l.startTime) + delta
+      }))
+    : rest
+
+  const lastEnd = Number(shifted[shifted.length - 1]?.endTime)
+  const endTime = Number.isFinite(lastEnd)
+    ? Math.max(lastEnd, stayAboard.busArrivalEpoch)
+    : Number(option.itinerary.endTime)
+  // Measured from the moment the rider is actually off the train, so the wait
+  // for anything scheduled after it is inside the number rather than beside
+  // it. scoreAlightOption then lands exactly on endTime.
+  const startTime = stayAboard.busArrivalEpoch
+  const itinerary = {
+    ...option.itinerary,
+    duration: Number.isFinite(endTime)
+      ? (endTime - startTime) / 1000
+      : option.itinerary.duration,
+    endTime,
+    legs: shifted,
+    startTime,
+    transfers: Math.max(0, shifted.filter((l) => l.transitLeg).length - 1)
+  } as Itinerary
+  return {
+    ...option,
+    arrival: scoreAlightOption(startTime, itinerary),
+    busArrivalEpoch: stayAboard.busArrivalEpoch,
+    itinerary,
+    realtime: stayAboard.realtime,
+    stopId: stayAboard.stop.id,
+    stopName: stayAboard.stop.name
+  }
+}
+
 /**
  * Across the candidate alight stops whose onward plans came back, return the
  * best overall onward options ranked by the metrics that matter — earliest
@@ -833,6 +1026,8 @@ export function journeySignature(stopId: string, itinerary: Itinerary): string {
 export function rankAlightOptions(
   results: AlightCandidateResult[],
   {
+    boarded = null,
+    downstream = null,
     keepRouteId = null,
     limit = 5,
     nowMs = null,
@@ -840,6 +1035,8 @@ export function rankAlightOptions(
     tokenHopToleranceMs,
     walkOnlyMax = 1200
   }: {
+    boarded?: BoardedTrip | null
+    downstream?: DownstreamStop[] | null
     keepRouteId?: string | null
     limit?: number
     nowMs?: number | null
@@ -848,20 +1045,29 @@ export function rankAlightOptions(
     walkOnlyMax?: number
   } = {}
 ): AlightOption[] {
-  const scored: Array<AlightOption & { arrival: number }> = []
+  const scored: ScoredAlightOption[] = []
   results.forEach((r) => {
     if (!r || r.error) return
     ;(r.itineraries || []).forEach((itin) => {
       if (!isUsableItinerary(itin, walkOnlyMax)) return
       if (!isReachableItinerary(itin, r.busArrivalEpoch, nowMs)) return
-      scored.push({
+      const option: ScoredAlightOption = {
         arrival: scoreAlightOption(r.busArrivalEpoch, itin),
         busArrivalEpoch: r.busArrivalEpoch,
         itinerary: itin,
         realtime: r.realtime,
         stopId: r.stopId,
         stopName: r.stopName
-      })
+      }
+      // Same route, different trip = the next train, not a transfer. Folded
+      // into the stay-aboard journey before it can be ranked as one; a
+      // no-op for every caller that cannot say what the rider is aboard.
+      const folded =
+        boarded && downstream
+          ? foldSameRouteRelay(option, boarded, downstream)
+          : option
+      if (!folded) return
+      scored.push(folded)
     })
   })
 
@@ -879,7 +1085,7 @@ export function rankAlightOptions(
     { maxHopMeters: tokenHopMaxMeters, toleranceMs: tokenHopToleranceMs }
   )
 
-  const strip = (option: AlightOption & { arrival: number }): AlightOption => ({
+  const strip = (option: ScoredAlightOption): AlightOption => ({
     busArrivalEpoch: option.busArrivalEpoch,
     itinerary: option.itinerary,
     realtime: option.realtime,
@@ -889,7 +1095,7 @@ export function rankAlightOptions(
 
   const seen = new Set<string>()
   const ranked: AlightOption[] = []
-  const deduped: Array<AlightOption & { arrival: number }> = []
+  const deduped: ScoredAlightOption[] = []
   for (const option of ordered) {
     const sig = journeySignature(option.stopId, option.itinerary)
     if (seen.has(sig)) continue

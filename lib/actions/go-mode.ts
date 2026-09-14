@@ -158,7 +158,10 @@ import {
 import { accessArriveByTarget } from '../util/go-mode/arrive-on-time'
 import { ridingSuppressedByRider } from '../util/go-mode/boarding-confirmation'
 import { isTripRecordingEnabled, recordSessionEvent } from '../util/debug-log'
-import { holdBundleWhileTripActive } from '../util/native-updates'
+import {
+  beginGoModeQuietPeriod,
+  noteGoModeActivity
+} from '../util/native-updates'
 import { fetchOnboardContext } from '../util/go-mode/onboard-discovery'
 import {
   hasNativeGps,
@@ -319,6 +322,15 @@ const REROUTE_SNAPSHOT_RIDING_INTERVAL_MS = 360000
 // tick fetches immediately.
 const LIVE_LEG_TIMES_INTERVAL_MS = 20000
 
+// Radius base for a picker the RIDER reads — the boarding prompt and the
+// onboard flow's discovery. Deliberately far wider than the matcher's 80/200 m:
+// a picker offers candidates for a person to recognise, so a bus listed in
+// error costs a glance, while one omitted is the failure the rider reported on
+// 2026-09-13 (train 76 m away, "No buses detected nearby"). GTFS-RT frames also
+// arrive well behind the vehicle — the 11:36 Green Line frames were stamped
+// 60-70 s old, beyond what speedAdjustedRadius's lag term covers.
+const PICKER_RADIUS_METERS = 750
+
 // Quiet access-leg replans that keep coming back empty (fetch failed, or the
 // never-force-a-route-change picker rejected everything) are counted but
 // settle silently: the ROUTE_DEVIATION notification already fired and the
@@ -463,6 +475,7 @@ export const SET_EARLY_ALIGHT = 'SET_EARLY_ALIGHT'
 export const SET_GO_MODE_ACTIVE_LEG = 'SET_GO_MODE_ACTIVE_LEG'
 export const SET_GO_MODE_BACKGROUNDED = 'SET_GO_MODE_BACKGROUNDED'
 export const SET_MAP_FOLLOW = 'SET_MAP_FOLLOW'
+export const SET_BOARDING_SEARCHING = 'SET_BOARDING_SEARCHING'
 export const SET_RIDING = 'SET_RIDING'
 export const SET_LIVE_LEG_TIMES = 'SET_LIVE_LEG_TIMES'
 export const SET_NOTIFICATION_CONFIG = 'SET_NOTIFICATION_CONFIG'
@@ -511,6 +524,9 @@ export type { LiveLegTime, RidingState } from '../util/go-mode/types'
 
 export const clearVehicleMatch = createAction(CLEAR_VEHICLE_MATCH)
 export const dismissBoardingPrompt = createAction(DISMISS_BOARDING_PROMPT)
+export const setBoardingSearching = createAction<boolean>(
+  SET_BOARDING_SEARCHING
+)
 export const showBoardingPromptAction = createAction(SHOW_BOARDING_PROMPT)
 export const startGoMode = createAction<{
   itinerary: Itinerary
@@ -907,8 +923,9 @@ export function beginGoMode(
     }
     // Stop the live-update plugin from installing a queued bundle the next
     // time the phone is pocketed: `installNext()` runs on every background and
-    // knows nothing about a trip. See util/native-updates.
-    holdBundleWhileTripActive({ onHoldChange: recordSessionEvent })
+    // knows nothing about a trip. Also cancels any quiet timer left over from
+    // the trip before this one. See util/native-updates.
+    noteGoModeActivity({ onHoldChange: recordSessionEvent })
     // While the trip is backgrounded (rider browsing the planner), an
     // auto-update swapping the itinerary through here must not yank the
     // screen back to Go Mode — explicit returns go through returnToGoMode.
@@ -1009,7 +1026,7 @@ export function startGoModeTracking(
     // replan, a reroute, and the resume from storage — so this is the one
     // place that guarantees the updater is held for the whole of it. A
     // redundant call writes nothing.
-    holdBundleWhileTripActive({ onHoldChange: recordSessionEvent })
+    noteGoModeActivity({ onHoldChange: recordSessionEvent })
 
     // The lock-screen card, for the same reason and in the same place: this is
     // the only door a resumed trip comes through as well as a started one, and
@@ -1307,10 +1324,14 @@ export function endGoMode() {
     }
     stopGpsWatchdog()
     stopRerouteSnapshotCapture()
-    // ...and the updater is allowed to install again. A bundle queued during
-    // the ride lands at the next background, or sooner through the apply gate.
-    holdBundleWhileTripActive({
-      active: false,
+    // ...and the updater's clock starts. NOT a release: "Stop" is routinely a
+    // step inside a ride — the rider taps it to re-run "I'm on the bus" — and
+    // releasing here installed a queued bundle 18 ms later on 2026-09-13,
+    // destroying the JS context five seconds before their next onboard flow
+    // (backlog 15.6). The hold comes off after a quiet period instead, and
+    // every further stop refreshes it. See util/native-updates.
+    beginGoModeQuietPeriod({
+      isTripActive: () => getState().otp?.goMode?.isActive === true,
       onHoldChange: recordSessionEvent
     })
     // Stop the native background-location stream (iOS shell) — ends the blue
@@ -2453,6 +2474,13 @@ export function beginOnboardFlow() {
       afterLegIndex: before.otp.goMode?.riding?.legIndex ?? -1,
       boardedRouteId: before.otp.goMode?.riding?.routeId ?? null
     })
+    // The onboard flow is a ride in progress even though no trip is running:
+    // BEGIN_ONBOARD_FLOW sets `isActive` without ever passing through
+    // startGoModeTracking, so until this call nothing armed the native hold
+    // during one (measured 2026-09-13: no `bundle_hold` across three flows
+    // between 11:38:18 and 11:39:31). It also cancels the quiet timer that the
+    // Stop the rider tapped a moment ago started.
+    noteGoModeActivity({ onHoldChange: recordSessionEvent })
     dispatch(beginOnboardFlowAction({ keepRouteId, originalFrom }))
     dispatch(setMobileScreen(MobileScreens.GO_MODE))
     dispatch(updateTrackingInterval({ interval: 5000 }))
@@ -2463,7 +2491,20 @@ export function beginOnboardFlow() {
     // instead of re-running discovery and re-asking which bus they're on.
     const riding: RidingState | null = getState().otp.goMode?.riding ?? null
     if (riding?.tripId) {
-      const label = riding.routeShortName || riding.headsign || riding.routeId
+      // The label is what the onboard screen NAMES the assumed vehicle with
+      // (15.3), so reach past the leg's own field for it: on 2026-09-13 the
+      // Green Line's `routeShortName` was null and this fell straight through
+      // to the headsign, so the only thing the rider could have been shown was
+      // "Mpls-Target Field". The route index has the rider-facing name
+      // whenever the route's vehicles have been polled this ride.
+      const ridingRoute =
+        getState().otp?.transitIndex?.routes?.[riding.routeId ?? ''] ?? null
+      const label =
+        riding.routeShortName ||
+        ridingRoute?.shortName ||
+        ridingRoute?.longName ||
+        riding.headsign ||
+        riding.routeId
       const vehicleId = riding.vehicleId || `route:${riding.routeId}`
       dispatch({
         payload: {
@@ -2579,7 +2620,7 @@ export function discoverNearbyVehicles(attempt = 0) {
     const context = await fetchOnboardContext(
       lat,
       lon,
-      speedAdjustedRadius(750, pos.coords.speed)
+      speedAdjustedRadius(PICKER_RADIUS_METERS, pos.coords.speed)
     )
     const candidates = context?.routes
     // vehicleId -> {direction, headsign}; empty when the sidecar is unreachable
@@ -2640,7 +2681,7 @@ export function discoverNearbyVehicles(attempt = 0) {
       lat,
       lon,
       allVehicles,
-      speedAdjustedRadius(750, pos.coords.speed)
+      speedAdjustedRadius(PICKER_RADIUS_METERS, pos.coords.speed)
     ).map((v) => ({ ...v, ...(vehicleDetails[v.vehicleId] || {}) }))
 
     dispatch({ payload: nearby, type: UPDATE_NEARBY_VEHICLES })
@@ -2662,7 +2703,71 @@ export function rediscoverOnboardVehicles() {
 }
 
 /**
+ * "Not this one" / "Change bus" on the onboard screen (15.3).
+ *
+ * The onboard flow can adopt a vehicle WITHOUT asking: `riding` survives
+ * STOP_GO_MODE by design (reducers/go-mode.ts, 7/12), so the next "I'm on the
+ * bus" re-confirms the remembered trip silently. That is the right default —
+ * never re-ask what the app already knows — but it leaves the rider no way to
+ * say it is wrong. This is that way: the assumption is dropped through the
+ * same deny path as the trip sheet's chip (BOARDING_DENY — riding and the
+ * vehicle match both go, and the evidence-free board gate is held off so the
+ * next tick cannot simply re-declare it), then the picker reopens.
+ *
+ * rediscoverOnboardVehicles alone was not enough: it clears the match but not
+ * the riding fact, so the very next beginOnboardFlow would adopt the rejected
+ * vehicle again.
+ */
+export function denyOnboardVehicle() {
+  return function (dispatch: any) {
+    dispatch(denyBoardingByRider())
+    dispatch(rediscoverOnboardVehicles())
+  }
+}
+
+/**
  * Fetch the confirmed vehicle's trip schedule, then optimize the alight stop.
+ */
+/**
+ * How long the onboard flow will wait for something that says where on the run
+ * the rider is — a position fix, or a nextStopId on the vehicle — before it
+ * plans. Most of it is spent inside the findTrip round trip that has to happen
+ * anyway; the observed gap needing covering was 689 ms.
+ */
+export const ONBOARD_ANCHOR_WAIT_MS = 3000
+const ONBOARD_ANCHOR_POLL_MS = 100
+
+/** Is there anything to anchor the candidate stops to yet? */
+function hasOnboardAnchorEvidence(getState: any): boolean {
+  const goMode = getState().otp?.goMode
+  return !!(
+    goMode?.tracking?.lastPosition || goMode?.onboard?.vehicle?.nextStopId
+  )
+}
+
+/**
+ * Load the boarded trip's schedule, then plan the onward options from it.
+ *
+ * The wait is the whole point of the middle step. `STOP_GO_MODE` resets Go
+ * Mode to defaultState and keeps only the physical facts (riding, the
+ * confirmed match, the alight) — a GPS sample is not one of those, so
+ * `tracking.lastPosition` is gone; and `beginOnboardFlow` re-adopts a
+ * remembered vehicle with `nextStopId: null` deliberately, because a stale
+ * next stop is how 8/9 built a bus leg to a stop behind the rider. Tap Stop
+ * and then "I'm on the bus" and for a fraction of a second the optimizer has
+ * neither. On 2026-09-13 it had neither for 689 ms — `BEGIN_ONBOARD_FLOW`
+ * 11:38:38.013, candidates built 11:38:38.346, first `UPDATE_POSITION`
+ * 11:38:39.035 — and offered a rider at Lexington Pkwy the first six stops of
+ * the Green Line starting at Union Depot, 4.7 km behind them.
+ *
+ * Waiting here rather than carrying the last fix across the Stop: the reset is
+ * an explicit allowlist of facts that outlive leaving the screen, every
+ * stale-anchor bug in this file's history came from one of those living too
+ * long, and `startPositionTracking()` has already been dispatched by
+ * `beginOnboardFlow`, so the fix is seconds away by construction. If it never
+ * arrives, `getDownstreamStops` returns nothing and the rider sees that we do
+ * not know — which is recoverable, unlike a confident list from the wrong end
+ * of the line.
  */
 export function loadOnboardScheduleAndOptimize(tripId: string) {
   return async function (dispatch: any, getState: any) {
@@ -2673,6 +2778,15 @@ export function loadOnboardScheduleAndOptimize(tripId: string) {
       return
     }
     dispatch(setOnboardTrip(trip))
+    const waitMs =
+      getState().otp?.config?.itinerary?.onboardAnchorWaitMs ??
+      ONBOARD_ANCHOR_WAIT_MS
+    const deadline = Date.now() + waitMs
+    while (!hasOnboardAnchorEvidence(getState) && Date.now() < deadline) {
+      await new Promise((resolve) =>
+        setTimeout(resolve, ONBOARD_ANCHOR_POLL_MS)
+      )
+    }
     dispatch(planFromOnboardBus())
   }
 }
@@ -2935,6 +3049,13 @@ function optimizeAlightFromTrip(options: {
       at: number
     ) => {
       const ranked = rankAlightOptions(settledResults, {
+        // What the rider is physically aboard, so an onward plan that boards
+        // the SAME route on a LATER trip is folded into staying aboard rather
+        // than offered as a Green Line → Green Line transfer (backlog 15.4).
+        // `downstream` is the evidence for that: it holds only the stops the
+        // boarded trip still serves, so a genuine short-turn is left alone.
+        boarded: { routeId: boardedRouteId, tripId: trip?.id ?? null },
+        downstream,
         keepRouteId,
         limit,
         nowMs: at,
@@ -6231,6 +6352,89 @@ export function performVehicleMatching(routeId: string) {
 }
 
 /**
+ * Search the rider's OWN boarding route for live vehicles around them, then
+ * open the boarding prompt on what that search found.
+ *
+ * The prompt renders `vehicleMatch.nearbyVehicles`, and until 2026-09-13 the
+ * only writer of that list was `performVehicleMatching`, which the 15 s
+ * `startVehicleTracking` interval runs and which is armed only when a TRANSIT
+ * leg becomes current. A rider who boards early — while Go Mode still has them
+ * on the bike/walk access leg — therefore tapped "I'm on the bus" into a list
+ * nothing had ever written: 11:36:24 and 11:36:37 that day, aboard Green Line
+ * train 1:32141, zero UPDATE_NEARBY_VEHICLES in the window, and the sheet said
+ * "No buses detected nearby" while the app's own 20 s poll of route 1:902 (the
+ * access-leg poll in handlePositionUpdate) held that train in every response.
+ *
+ * So the tap runs the search itself, against the route the rider already chose
+ * — the itinerary's next transit leg, never a wider set of routes or modes.
+ * The sheet opens immediately in its searching state; the empty-list copy is
+ * only reachable once a poll has actually been compared against a fix.
+ */
+export function searchBoardingVehicles() {
+  return async function (dispatch: any, getState: any) {
+    const goMode = getState().otp?.goMode
+    const legs: any[] = goMode?.activeItinerary?.legs ?? []
+    const matcherLegIndex = goMode?.routeMatch?.legIndex ?? 0
+    // After an early alight (8.11) the matcher still sits on the transit leg
+    // the rider stepped off, so the boarding to look for starts one leg on —
+    // the same rule the tick's access-leg poll and classifyMissedBus use.
+    const searchFromIndex =
+      goMode?.earlyAlight?.legIndex === matcherLegIndex
+        ? matcherLegIndex + 1
+        : matcherLegIndex
+    const boardLegIndex = findBoardLegIndex(legs, searchFromIndex)
+    const boardLeg: any = boardLegIndex >= 0 ? legs[boardLegIndex] : null
+    const routeId = boardLeg ? getLegRouteId(boardLeg) : null
+
+    // With no route to poll there is no search to announce, and the prompt
+    // keeps exactly the behaviour it had.
+    if (!routeId) {
+      dispatch(showBoardingPromptAction())
+      return
+    }
+    // Otherwise the sheet opens on the same tick as the tap, already saying it
+    // is looking — the poll below is a round trip away.
+    dispatch(setBoardingSearching(true))
+    dispatch(showBoardingPromptAction())
+
+    try {
+      // Refresh rather than trust the store: the access-leg poll runs at 20 s
+      // and the tap can land just before the next one.
+      await dispatch(getVehiclePositionsForRoute(routeId))
+      const state = getState()
+      const pos = state.otp?.goMode?.tracking?.lastPosition
+      // No fix means nothing to compare a frame against — leaving the list
+      // untouched keeps the sheet honest about what it does not know.
+      if (!pos) return
+      // Feed records carry no route name or colour; the leg the rider picked
+      // does, and every vehicle here is on that leg's route by construction.
+      const vehicles = (
+        state.otp?.transitIndex?.routes?.[routeId]?.vehicles || []
+      ).map((v: Record<string, unknown>) => ({
+        ...v,
+        routeColor: v.routeColor ?? boardLeg.routeColor ?? null,
+        routeName:
+          v.routeName ??
+          (boardLeg.routeShortName || boardLeg.routeLongName || null),
+        routeTextColor: v.routeTextColor ?? boardLeg.routeTextColor ?? null
+      }))
+      const nearby = findNearbyVehicles(
+        pos.coords.latitude,
+        pos.coords.longitude,
+        vehicles,
+        speedAdjustedRadius(PICKER_RADIUS_METERS, pos.coords.speed)
+      )
+      dispatch({ payload: nearby, type: UPDATE_NEARBY_VEHICLES })
+    } catch {
+      // Best-effort: a feed that will not answer is reported by the sheet
+      // ending its search, not by an unhandled rejection off a button tap.
+    } finally {
+      dispatch(setBoardingSearching(false))
+    }
+  }
+}
+
+/**
  * The rider says they ARE on the bus (trip-sheet button, 6.10c).
  *
  * Deliberately not a new way to write `riding`: it routes through
@@ -6241,8 +6445,9 @@ export function performVehicleMatching(routeId: string) {
  * the access re-plan's aboard check, the stop counter).
  *
  * With no vehicle matched yet there is nothing honest to name, so the existing
- * boarding prompt opens and the rider picks from the buses actually nearby.
- * No new surface, and no guessing.
+ * boarding prompt opens — over a search this tap starts itself, because on an
+ * access leg nothing else ever fills the list it shows (see
+ * {@link searchBoardingVehicles}). No new surface, and no guessing.
  */
 export function confirmBoardingByRider() {
   return function (dispatch: any, getState: any) {
@@ -6251,11 +6456,11 @@ export function confirmBoardingByRider() {
     // answer, and the hold exists to respect them, not to outlive them.
     session.riderDeniedBoardingAtMs = null
     const vehicleId = goMode?.vehicleMatch?.match?.vehicleId || null
-    if (vehicleId) {
-      dispatch(confirmVehicleSelection(vehicleId))
-    } else {
-      dispatch(showBoardingPromptAction())
-    }
+    // Returned, not swallowed: the search is asynchronous and a caller (a test,
+    // or any future sequencing) needs a handle on when it has settled.
+    return vehicleId
+      ? dispatch(confirmVehicleSelection(vehicleId))
+      : dispatch(searchBoardingVehicles())
   }
 }
 

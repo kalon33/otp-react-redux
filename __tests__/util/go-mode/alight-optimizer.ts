@@ -242,6 +242,46 @@ describe('pickBestAlightOption', () => {
     expect(best?.stopId).toBe('near')
   })
 
+  it('keeps "get off here and bike the rest" without a walkDistance (15.1)', () => {
+    // 2026-09-13 11:29: OTP offered a 35-min bike-only plan from Hamline Ave
+    // Station beside three bus-plus-bike plans; the app's plan query never
+    // requests walkDistance, so the old guard read undefined as Infinity and
+    // dropped the bike. The rider saw only the bus options.
+    const bikeOnly = {
+      duration: 2100,
+      legs: [{ distance: 8807, mode: 'BICYCLE', transitLeg: false }],
+      transfers: 0
+    } as any
+    const busThenBike = transitItin(1560, { walkDistance: undefined as any })
+    const ranked = rankAlightOptions([
+      candidate(T0, [bikeOnly, busThenBike], { stopId: 'hamline' })
+    ])
+    expect(ranked.map((o) => o.itinerary)).toEqual(
+      expect.arrayContaining([bikeOnly, busThenBike])
+    )
+    // Earlier arrival still wins: the bus option sorts first, the bike stays.
+    expect(ranked[0].itinerary).toBe(busThenBike)
+    expect(ranked[1].itinerary).toBe(bikeOnly)
+  })
+
+  it('measures a walk-only plan from its legs when walkDistance is absent', () => {
+    const farWalk = {
+      duration: 5000,
+      legs: [{ distance: 6000, mode: 'WALK', transitLeg: false }],
+      transfers: 0
+    } as any
+    const shortWalk = {
+      duration: 300,
+      legs: [{ distance: 250, mode: 'WALK', transitLeg: false }],
+      transfers: 0
+    } as any
+    const ranked = rankAlightOptions(
+      [candidate(T0, [farWalk, shortWalk], { stopId: 'near' })],
+      { walkOnlyMax: 1200 }
+    )
+    expect(ranked.map((o) => o.itinerary)).toEqual([shortWalk])
+  })
+
   it('chooses the quickest onward itinerary offered for a stop', () => {
     const best = pickBestAlightOption([
       candidate(T0, [transitItin(1800), transitItin(600)], { stopId: 'A' })

@@ -14,7 +14,8 @@ import {
   RerouteCardTitle,
   RerouteKeepButton,
   RerouteSummary,
-  RerouteSwitchButton
+  RerouteSwitchButton,
+  VehicleTrackingBadge
 } from './styled'
 import OnboardItineraryList from './OnboardItineraryList'
 
@@ -40,6 +41,40 @@ const AlightRecommendation = ({
   const { status } = onboard
 
   if (status === 'idle') return null
+
+  // 15.3. The flow reaches this screen with a vehicle it was never asked
+  // about: `riding` survives STOP_GO_MODE, so the next "I'm on the bus"
+  // re-confirms the remembered trip silently and the rider saw only "Finding
+  // the best stop to get off…" — nothing about WHICH bus, and no way to say it
+  // was wrong (2026-09-13 11:39, the assumption happened to be right both
+  // times, which is why silent is fine and invisible is not). State it; the
+  // button beside it corrects it.
+  const { vehicle } = onboard
+  // Fleet numbers are feed-prefixed internally ("1:32141"); the rider reads
+  // the number off the bus. A synthetic "route:<id>" is not a vehicle at all.
+  const fleetNumber =
+    vehicle?.vehicleId && !vehicle.vehicleId.startsWith('route:')
+      ? vehicle.vehicleId.split(':').pop() || null
+      : null
+  const routeName = vehicle?.label || vehicle?.routeId || fleetNumber
+  let assumedVehicle: string | null = null
+  if (routeName && fleetNumber && routeName !== fleetNumber) {
+    assumedVehicle = intl.formatMessage(
+      {
+        defaultMessage: 'On the {route} · {vehicle}',
+        id: 'components.GoMode.onboardAssumedVehicle'
+      },
+      { route: routeName, vehicle: fleetNumber }
+    )
+  } else if (routeName) {
+    assumedVehicle = intl.formatMessage(
+      {
+        defaultMessage: 'On the {route}',
+        id: 'components.GoMode.onboardAssumedRoute'
+      },
+      { route: routeName }
+    )
+  }
 
   if (
     status === 'discovering' ||
@@ -70,10 +105,34 @@ const AlightRecommendation = ({
       })
     }
 
+    // Only once a vehicle has actually been adopted — while discovering, or
+    // with the picker open, there is no assumption to state.
+    const stateTheAssumption =
+      !!assumedVehicle &&
+      (status === 'fetching-schedule' || status === 'optimizing')
+
     return (
       <RerouteBar>
         <RerouteCard>
+          {stateTheAssumption && (
+            <VehicleTrackingBadge
+              $confirmed
+              data-testid="onboard-assumed-vehicle"
+            >
+              {assumedVehicle}
+            </VehicleTrackingBadge>
+          )}
           <RerouteCardTitle>{message}</RerouteCardTitle>
+          {stateTheAssumption && (
+            <RerouteActions style={{ marginTop: 10 }}>
+              <RerouteKeepButton onClick={changeBus} type="button">
+                {intl.formatMessage({
+                  defaultMessage: 'Not this one',
+                  id: 'components.GoMode.onboardNotThisVehicle'
+                })}
+              </RerouteKeepButton>
+            </RerouteActions>
+          )}
         </RerouteCard>
       </RerouteBar>
     )
@@ -130,6 +189,15 @@ const AlightRecommendation = ({
           id: 'components.GoMode.liveBanner'
         })}
       </GoModeLiveBanner>
+      {assumedVehicle && (
+        <VehicleTrackingBadge
+          $confirmed
+          data-testid="onboard-assumed-vehicle"
+          style={{ margin: '8px 16px 0' }}
+        >
+          {assumedVehicle}
+        </VehicleTrackingBadge>
+      )}
       <RerouteCardTitle style={{ padding: '12px 16px 0' }}>
         {intl.formatMessage({
           defaultMessage: 'Where do you want to get off?',
@@ -172,7 +240,11 @@ const mapStateToProps = (state: any) => ({
 })
 
 const mapDispatchToProps = {
-  changeBus: goModeActions.rediscoverOnboardVehicles,
+  // "Not this one" / "Change bus" is the rider contradicting the app, so it
+  // goes through the deny path (15.3): rediscoverOnboardVehicles alone leaves
+  // the riding fact standing and the next onboard flow re-adopts the vehicle
+  // they just rejected.
+  changeBus: goModeActions.denyOnboardVehicle,
   confirmOnboardAlightStop: goModeActions.confirmOnboardAlightStop,
   endGoMode: goModeActions.endGoMode
 }

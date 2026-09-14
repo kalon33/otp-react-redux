@@ -6,7 +6,9 @@ on:
       - master
       - dev
       - mistral
+      - mistral2
       - working
+      - feature/go-mode
   pull_request:
 
 jobs:

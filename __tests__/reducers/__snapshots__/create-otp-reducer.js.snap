@@ -45,6 +45,7 @@ Object {
     "arrivedDelay": null,
     "boardingPrompt": Object {
       "lastDismissedAt": null,
+      "searching": false,
       "shown": false,
       "transitLegEnteredAt": null,
     },

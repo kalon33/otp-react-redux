@@ -5,6 +5,7 @@ on:
     branches:
       - master
       - dev
+      - feature/go-mode
       - merge_dev
       - mistral
       - mistral2

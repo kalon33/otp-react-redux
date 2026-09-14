@@ -14,6 +14,7 @@ import {
   REPAIR_LEG_GEOMETRY,
   RESUME_GPS_SIMULATION,
   SET_ARRIVED,
+  SET_BOARDING_SEARCHING,
   SET_DEPARTURE_OVERRIDE,
   SET_EARLY_ALIGHT,
   SET_GO_MODE_ACTIVE_LEG,
@@ -190,6 +191,14 @@ export interface GoModeState {
 
   boardingPrompt: {
     lastDismissedAt: number | null
+    /**
+     * A vehicle search is running for this prompt and no poll has been
+     * compared yet. The sheet says so instead of "No buses detected nearby":
+     * on 2026-09-13 11:36:24 the rider tapped "I'm on the bus" from a bike leg
+     * — where nothing had ever written `nearbyVehicles` — and read the empty
+     * list as an answer about the train they were sitting on.
+     */
+    searching: boolean
     shown: boolean
     transitLegEnteredAt: number | null
   }
@@ -311,8 +320,6 @@ export interface GoModeState {
    */
   turnCues: TurnCueSettings
 
-  units: 'imperial' | 'metric'
-
   ui: {
     /**
      * Index of the leg the rider tapped in the trip sheet, or null for none.
@@ -329,6 +336,8 @@ export interface GoModeState {
     backgrounded: boolean
     mapFollowUser: boolean
   }
+
+  units: 'imperial' | 'metric'
 
   vehicleMatch: {
     consecutiveMatches: number
@@ -357,6 +366,7 @@ const defaultState: GoModeState = {
 
   boardingPrompt: {
     lastDismissedAt: null,
+    searching: false,
     shown: false,
     transitLegEnteredAt: null
   },
@@ -425,8 +435,6 @@ const defaultState: GoModeState = {
 
   turnCues: { ...DEFAULT_TURN_CUE_SETTINGS },
 
-  units: 'imperial',
-
   ui: {
     activeLeg: null,
     backgrounded: false,
@@ -438,6 +446,8 @@ const defaultState: GoModeState = {
     // must not override an explicit disengage mid-trip.
     mapFollowUser: true
   },
+
+  units: 'imperial',
 
   vehicleMatch: {
     consecutiveMatches: 0,
@@ -587,6 +597,7 @@ const goMode = handleActions<GoModeState, any>(
       ...state,
       boardingPrompt: {
         ...state.boardingPrompt,
+        searching: false,
         shown: false,
         transitLegEnteredAt: null
       },
@@ -602,6 +613,7 @@ const goMode = handleActions<GoModeState, any>(
       alightedFrom: null,
       boardingPrompt: {
         ...state.boardingPrompt,
+        searching: false,
         shown: false
       },
       earlyAlight: null,
@@ -617,6 +629,7 @@ const goMode = handleActions<GoModeState, any>(
       boardingPrompt: {
         ...state.boardingPrompt,
         lastDismissedAt: Date.now(),
+        searching: false,
         shown: false
       }
     }),
@@ -661,6 +674,14 @@ const goMode = handleActions<GoModeState, any>(
       // The arrival tick dispatches UPDATE_PROGRESS before it dispatches this,
       // so `state.progress.delay` here IS the measurement taken at arrival.
       arrivedDelay: state.progress?.delay ?? null
+    }),
+
+    [SET_BOARDING_SEARCHING]: (state, action) => ({
+      ...state,
+      boardingPrompt: {
+        ...state.boardingPrompt,
+        searching: !!action.payload
+      }
     }),
 
     [SET_DEPARTURE_OVERRIDE]: (state, action) => ({
@@ -865,7 +886,12 @@ const goMode = handleActions<GoModeState, any>(
     }),
 
     [START_GO_MODE]: (state, action) => {
-      const { itinerary, originalFrom, roundTrip, units = 'imperial' } = action.payload
+      const {
+        itinerary,
+        originalFrom,
+        roundTrip,
+        units = 'imperial'
+      } = action.payload
 
       // `ui` is deliberately preserved: a background auto-update (missed bus,
       // quiet access replan) swaps the itinerary via this action while the
@@ -878,7 +904,6 @@ const goMode = handleActions<GoModeState, any>(
         arrivedDelay: null,
         isActive: true,
         liveLegTimes: {},
-        units,
         notifications: {
           ...state.notifications,
           recentNotifications: [],
@@ -957,6 +982,7 @@ const goMode = handleActions<GoModeState, any>(
           enabledByDefault: state.turnCues.enabledByDefault,
           legOverrides: {}
         },
+        units,
         // The vehicle match belongs to the itinerary that just went away. It
         // was carried across untouched, so the first tick after a swap
         // refreshed a CONFIRMED match against the previous trip's cached
@@ -1123,6 +1149,12 @@ const goMode = handleActions<GoModeState, any>(
 
     [UPDATE_NEARBY_VEHICLES]: (state: GoModeState, action: any) => ({
       ...state,
+      // A poll has been compared against the rider's position, so an empty
+      // list is now a finding rather than a state the sheet has not reached.
+      boardingPrompt: {
+        ...state.boardingPrompt,
+        searching: false
+      },
       vehicleMatch: {
         ...state.vehicleMatch,
         nearbyVehicles: action.payload

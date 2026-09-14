@@ -744,6 +744,29 @@ const GoModeDemo = (): JSX.Element => (
       </Frame>
 
       <Frame
+        note="15.3: after a Stop, 'I'm on the bus' re-adopts the remembered vehicle with no picker. The screen used to read only 'Finding the best stop to get off...'. It now states the assumption and offers the deny path."
+        title="Alight recommendation, assumed vehicle"
+      >
+        <Provider
+          store={mockStore({
+            bestAlightStop: null,
+            candidates: [],
+            status: 'optimizing',
+            trip: null,
+            vehicle: {
+              label: 'METRO Green Line',
+              nextStopId: null,
+              routeId: '1:902',
+              tripId: '1:879781',
+              vehicleId: '1:32141'
+            }
+          })}
+        >
+          <AlightRecommendation />
+        </Provider>
+      </Frame>
+
+      <Frame
         note="Discovery in progress."
         title="Alight recommendation, finding bus"
       >
