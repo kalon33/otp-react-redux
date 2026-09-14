@@ -63,7 +63,10 @@
       "nlPreferencesError",
       "nlPreferencesHeader",
       "nlPreferencesLoading",
-      "nlPreferencesPlaceholder"
+      "nlPreferencesPlaceholder",
+      "stopCapQuick",
+      "stopCapStandard",
+      "stopCapThorough"
     ]
   },
   "ignoredIds": [

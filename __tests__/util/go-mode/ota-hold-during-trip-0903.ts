@@ -3,6 +3,11 @@ import {
   resumeGoModeTrip,
   startGoModeTracking
 } from '../../../lib/actions/go-mode'
+import {
+  endGoModeQuietPeriodOnBackground,
+  GO_MODE_QUIET_PERIOD_MS,
+  goModeQuietPeriodPending
+} from '../../../lib/util/native-updates'
 import goMode from '../../../lib/reducers/go-mode'
 import type { Itinerary } from '@opentripplanner/types'
 
@@ -27,8 +32,13 @@ jest.mock('../../../lib/actions/apiV2', () => ({
  * consults before doing anything (java:5114-5118, swift:4524-4533).
  *
  * So Go Mode's lifecycle owns the hold: armed at every door into a live trip,
- * released when the trip is over. These cases fail against the unfixed source
+ * released when the rider is done. These cases fail against the unfixed source
  * because nothing called the plugin at all.
+ *
+ * "Done" stopped meaning "this trip ended" on 2026-09-13 (backlog 15.6): the
+ * rider taps Stop to re-run "I'm on the bus", and releasing on STOP_GO_MODE
+ * installed a queued bundle 18 ms later, mid-ride. The end of the trip now
+ * starts a quiet period instead — see util/native-updates.
  */
 describe('util > go-mode > the updater is held for the length of a trip', () => {
   const walkLeg = {
@@ -67,6 +77,9 @@ describe('util > go-mode > the updater is held for the length of a trip', () => 
   })
 
   afterEach(() => {
+    // The hold flag and the quiet timer are module state that outlives a
+    // single case. Wind them down through the bridge, before it is removed.
+    endGoModeQuietPeriodOnBackground()
     delete (window as any).Capacitor
   })
 
@@ -105,13 +118,29 @@ describe('util > go-mode > the updater is held for the length of a trip', () => 
     await store.dispatch(endGoMode())
   })
 
-  it('releases the hold when the trip ends', async () => {
+  it('does not release on STOP — it starts the quiet period', async () => {
+    // 2026-09-13, 11:40:47: `bundle_release {"conditions":[]}` t=1789317647611
+    // and `bundle_apply {"outcome":"applied"}` t=1789317647629, with the
+    // rider's next onboard flow five seconds later. Stop is a step inside a
+    // ride, not the end of one.
     const store = makeStore({ activeItinerary: itinerary, isActive: true })
     await store.dispatch(startGoModeTracking(itinerary, { replay: true }))
     expect(cancelDelay).not.toHaveBeenCalled()
 
-    store.dispatch(endGoMode())
-    expect(cancelDelay).toHaveBeenCalledTimes(1)
+    jest.useFakeTimers()
+    try {
+      store.dispatch(endGoMode())
+      expect(cancelDelay).not.toHaveBeenCalled()
+      expect(goModeQuietPeriodPending()).toBe(true)
+
+      // ...and a session that never starts another trip still gets its
+      // bundle: the timer is the only path that does not need a relaunch.
+      jest.advanceTimersByTime(GO_MODE_QUIET_PERIOD_MS)
+      expect(cancelDelay).toHaveBeenCalledTimes(1)
+      expect(goModeQuietPeriodPending()).toBe(false)
+    } finally {
+      jest.useRealTimers()
+    }
   })
 
   it('holds before a resumed trip re-arms any of its tracking', async () => {

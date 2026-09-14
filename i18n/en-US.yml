@@ -269,6 +269,14 @@ components:
     saveAndReturn: Save and return
     saved: Saved
     searchOptionsHeader: Options shown
+    stopCapHelp: >-
+      How far from your start and end to look for a stop to board or leave at. A
+      wider search finds more bike + transit options from outlying places and
+      takes a few seconds longer.
+    stopCapLabel: How far to look for a stop
+    stopCapQuick: Nearby stops only (fastest)
+    stopCapStandard: Standard
+    stopCapThorough: Every stop in range (slowest)
     submodeSelectorLabel: Select travel modes and submodes
     tripOptions: Trip Options
     viaStopHelp: Every trip shown will serve this stop, in either direction.
@@ -400,6 +408,7 @@ components:
     boardingConfirm: I'm on the bus
     boardingDeny: I'm not on this bus
     boardingQuestion: Are you on the bus?
+    boardingSearching: Looking…
     boardingSubtitle: Looking for {route} nearby
     busHeadsign: to {headsign}
     busLabel: Bus {label}
@@ -444,8 +453,11 @@ components:
     offAtStop: Off at {stop}
     onBus: "On Bus #{label}"
     onBusButton: I'm already on the bus
+    onboardAssumedRoute: On the {route}
+    onboardAssumedVehicle: On the {route} · {vehicle}
     onboardCancel: Cancel
     onboardError: Couldn't work out your bus. Try again?
+    onboardNotThisVehicle: Not this one
     onboardTitle: On the bus
     openTripSheet: Open trip overview
     pickYourBus: Which bus are you on? Pick it below.

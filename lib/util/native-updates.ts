@@ -415,6 +415,182 @@ async function defaultCancelDelay(): Promise<unknown> {
 
 /**
  * -------------------------------------------------------------------------
+ * The quiet period: a trip ENDING is not the same as the rider being done.
+ * -------------------------------------------------------------------------
+ *
+ * The hold above was armed per TRIP and released the instant one ended, and
+ * the gate below treats "no trip running" as a safe moment. Between those two
+ * facts is the window this section exists to close.
+ *
+ * Measured, 2026-09-13 (session mu01c0py-nrwza6, backlog 15.6). Bundle
+ * 2026.0913.2 was queued mid-ride at 11:39:31 and correctly deferred —
+ * `bundle_apply {"outcome":"deferred: trip-active"}`, t=1789317571388. The
+ * rider then tapped Stop at 11:40:47 to re-run "I'm on the bus" for the fourth
+ * time, and the two halves fired 18 ms apart:
+ *
+ *   `bundle_release {"conditions":[]}`            t=1789317647611  (endGoMode)
+ *   `bundle_apply   {"outcome":"applied"}`        t=1789317647629  (main.js)
+ *
+ * The install was NOT the plugin's next-background behaviour — the phone was
+ * in the rider's hand. It was our own apply-now gate, reached from the store
+ * subscription on the active→inactive transition, five seconds before the
+ * rider began their next onboard flow. The JS context died with the trip half
+ * rebuilt and they started over on a new session (mu01j186-ph7y0b).
+ *
+ * So a trip boundary is the WRONG unit. "Stop" in this app is routinely a step
+ * inside a ride: stop, re-run the onboard flow, start again. What makes a
+ * moment safe is not that a trip ended but that the rider has stopped riding,
+ * and the only honest evidence of that is the passage of quiet time.
+ *
+ * The rule implemented here:
+ *   * any Go Mode activity — a trip starting, replanning or resuming, the
+ *     onboard flow opening — arms the hold and cancels any quiet timer;
+ *   * a trip ENDING starts (or restarts) a quiet timer. It does not release.
+ *     A rider who stops four trips in three minutes refreshes the timer four
+ *     times and is never interrupted;
+ *   * when the timer elapses with nothing running, the hold is released and
+ *     the deferred bundle is applied — so a session that never starts another
+ *     trip still gets the update, without waiting for a relaunch;
+ *   * a genuine background ends the quiet period early (see
+ *     `endGoModeQuietPeriodOnBackground`): the rider has put the phone away,
+ *     which is the moment the plugin's own `installNext()` is for;
+ *   * a cold launch needs nothing: the plugin runs `checkCancelDelay(.killed)`
+ *     from `load()` (java:934, swift:460), so a new process starts with no
+ *     hold and no timer, and the boot-path apply behaves exactly as before.
+ */
+
+/**
+ * How long Go Mode must be quiet before a held bundle may install.
+ *
+ * Ten minutes, chosen for what it has to cover rather than for roundness: the
+ * gap between a Stop and the next start when the rider is working the app —
+ * the 2026-09-13 sequence was Stop 11:38:18 → start 11:38:20, Stop 11:38:36 →
+ * start 11:38:38, Stop 11:40:47 → start 11:40:52, i.e. seconds — plus the
+ * genuinely slow case, which is a rider who has just got off one bus and is
+ * waiting at a stop to plan the next leg by hand. Ten minutes covers a
+ * transfer wait; it does not cover a commute, so a rider who is actually done
+ * for the day gets the bundle inside the same session rather than at their
+ * next relaunch. Shorter and the transfer case starts losing its JS context;
+ * much longer and the hold outlives its own justification.
+ */
+export const GO_MODE_QUIET_PERIOD_MS = 600000
+
+/** The pending quiet timer, or null when Go Mode is running or long done. */
+let quietTimerId: ReturnType<typeof setTimeout> | null = null
+
+/**
+ * What to do at the far end of the quiet period.
+ *
+ * Module state, not a per-call argument, because TWO callers start the same
+ * quiet period on one STOP — `endGoMode` and main.js's store subscription —
+ * and only one of them knows how to apply a bundle. Remembering the last
+ * listener that was actually supplied means the refresh that carries none
+ * cannot disarm the apply, whichever of the two lands second.
+ */
+let quietApply: (() => void) | null = null
+
+/** True while Go Mode is inside its post-trip quiet period. */
+export function goModeQuietPeriodPending(): boolean {
+  return quietTimerId !== null
+}
+
+export type GoModeQuietDeps = Omit<BundleHoldDeps, 'active'> & {
+  /** Is a trip running, or an onboard flow open? Re-read when the timer fires. */
+  isTripActive?: () => boolean
+  /** The first-safe-moment action. Remembered across refreshes. */
+  onQuiet?: () => void
+  /** Override the quiet period. Tests only. */
+  quietMs?: number
+}
+
+function clearQuietTimer(): void {
+  if (quietTimerId !== null) {
+    clearTimeout(quietTimerId)
+    quietTimerId = null
+  }
+}
+
+/**
+ * Go Mode is doing something: hold the updater and cancel any quiet timer.
+ *
+ * Every door into a live trip calls this, plus the onboard flow — which sets
+ * `isActive` without ever reaching `startGoModeTracking`, so before this it
+ * ran with no native hold armed at all (measured 2026-09-13: no `bundle_hold`
+ * between 11:38:18 and 11:39:31 across three onboard flows).
+ */
+export function noteGoModeActivity(deps: GoModeQuietDeps = {}): void {
+  clearQuietTimer()
+  const { cancel, onHoldChange, setDelay } = deps
+  holdBundleWhileTripActive({ active: true, cancel, onHoldChange, setDelay })
+}
+
+/**
+ * A trip ended. Start the clock — do NOT release the hold.
+ *
+ * Called again on every subsequent stop, which restarts the timer: that is the
+ * whole point, since a rider who keeps stopping and starting is plainly still
+ * riding. When the timer finally elapses the hold comes off and the deferred
+ * bundle is applied through `quietApply`.
+ */
+export function beginGoModeQuietPeriod(deps: GoModeQuietDeps = {}): void {
+  const {
+    cancel,
+    isTripActive = () => false,
+    onHoldChange,
+    quietMs = GO_MODE_QUIET_PERIOD_MS,
+    setDelay
+  } = deps
+  if (deps.onQuiet) quietApply = deps.onQuiet
+  clearQuietTimer()
+  quietTimerId = setTimeout(() => {
+    quietTimerId = null
+    // Something started again without coming through noteGoModeActivity (a
+    // trip restored by a path we do not own, say). Quiet means quiet: wait
+    // another period rather than swapping the bundle under it.
+    if (isTripActive()) {
+      beginGoModeQuietPeriod(deps)
+      return
+    }
+    // Releasing sets the flag synchronously ahead of its await, so the apply
+    // below sees an unheld updater and a quiet period that is no longer
+    // pending — it does not need to wait for the preferences write to land.
+    holdBundleWhileTripActive({ active: false, cancel, onHoldChange, setDelay })
+    const apply = quietApply
+    quietApply = null
+    try {
+      apply?.()
+    } catch {
+      // An update that does not happen is the safe direction.
+    }
+  }, quietMs)
+}
+
+/**
+ * The rider put the phone away: end the quiet period now.
+ *
+ * A background is the moment the plugin installs a queued bundle of its own
+ * accord (`appMovedToBackground()` → `installNext()`), and a rider who is not
+ * in Go Mode and has left the app is exactly who that behaviour was written
+ * for. So this only gets out of the way — it deliberately does NOT apply a
+ * bundle itself, because `set()` reloads, and reloading a webview the OS is in
+ * the middle of suspending is how a boot gets half-finished. If the plugin's
+ * own install has already read the delay list by the time the cancel lands,
+ * the bundle waits for the next background or for the foreground gate, both
+ * of which are unchanged.
+ */
+export function endGoModeQuietPeriodOnBackground(
+  deps: GoModeQuietDeps = {}
+): void {
+  if (quietTimerId === null) return
+  const { cancel, isTripActive = () => false, onHoldChange, setDelay } = deps
+  if (isTripActive()) return
+  clearQuietTimer()
+  quietApply = null
+  holdBundleWhileTripActive({ active: false, cancel, onHoldChange, setDelay })
+}
+
+/**
+ * -------------------------------------------------------------------------
  * Applying a downloaded bundle without waiting for a second launch.
  * -------------------------------------------------------------------------
  *
@@ -461,6 +637,7 @@ async function defaultCancelDelay(): Promise<unknown> {
 /** Why a bundle-apply attempt ended the way it did. */
 export type BundleApplyOutcome =
   | 'applied'
+  | 'deferred: quiet-period'
   | 'deferred: trip-active'
   | 'deferred: unconfirmed'
   | 'failed'
@@ -662,10 +839,16 @@ export async function applyPendingBundleWhenSafe(
   // as from the trip lifecycle. `setNext` fires exactly here, which makes this
   // the earliest point at which the danger is known to exist at all.
   const tripActive = isTripActive()
-  if (tripActive) await holdBundle()
+  // ...and the same for the minutes AFTER a trip, which is what 15.6 was: no
+  // trip was running at 11:40:47 on 2026-09-13 and the rider was mid-ride all
+  // the same, five seconds from their next onboard flow. See the quiet-period
+  // section above.
+  const quiet = goModeQuietPeriodPending()
+  if (tripActive || quiet) await holdBundle()
 
   if (!isHealthConfirmed()) return report('deferred: unconfirmed', pending)
   if (tripActive) return report('deferred: trip-active', pending)
+  if (quiet) return report('deferred: quiet-period', pending)
 
   // The trip is over (or there never was one) and we are about to swap the
   // bundle ourselves. Release first: `set()` does not consult the delay list
@@ -709,7 +892,8 @@ async function defaultApplyBundle(id: string): Promise<unknown> {
  *     does not cover;
  *   * `visibilitychange` — the rider came back to the app. Covers a queue that
  *     was filled while we were not listening, and is where a trip that has
- *     since ENDED gets its deferred bundle;
+ *     since ENDED gets its deferred bundle. Its `hidden` half ends a quiet
+ *     period early, because a background is the plugin's own install moment;
  *   * the caller's own boot call, made once the health gate has confirmed.
  *
  * `updateAvailable` is deliberately not one of them: on Android it is emitted
@@ -723,6 +907,9 @@ export function watchForPendingBundle(deps: PendingBundleDeps = {}): void {
   }
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') run()
+    // The rider pocketed the phone between trips: stop holding a bundle back
+    // from the one install moment the plugin has always owned.
+    else endGoModeQuietPeriodOnBackground(deps)
   })
   const plugin = bridge()
   try {

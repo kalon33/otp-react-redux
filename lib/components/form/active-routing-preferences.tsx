@@ -6,13 +6,15 @@ import styled from 'styled-components'
 
 import * as routingProfileActions from '../../actions/routing-profiles'
 import { AppReduxState } from '../../util/state-types'
-import { getDefaultNumItineraries } from '../../util/api'
 import {
+  clampStopCap,
   PreferenceSummary,
   RoutingPreferences,
+  stopCapMessageId,
   summarizePreferences,
   ViaStop
 } from '../../util/routing-profiles'
+import { getDefaultNumItineraries } from '../../util/api'
 import { routeLockRoutes, routeLockScope } from '../../util/route-lock'
 import type { AnyRouteLock, RouteLockScope } from '../../util/route-lock'
 
@@ -65,6 +67,7 @@ const ClearButton = styled.button`
  */
 function anythingCustomized({
   customCount,
+  customStopCap,
   hideWalkTransitOptions,
   noTransfers,
   routeLock,
@@ -72,6 +75,7 @@ function anythingCustomized({
   viaStop
 }: {
   customCount?: number
+  customStopCap?: number
   hideWalkTransitOptions?: boolean
   noTransfers?: boolean
   routeLock?: AnyRouteLock | null
@@ -84,7 +88,8 @@ function anythingCustomized({
     !!hideWalkTransitOptions ||
     !!noTransfers ||
     !!viaStop ||
-    customCount !== undefined
+    customCount !== undefined ||
+    customStopCap !== undefined
   )
 }
 
@@ -119,7 +124,9 @@ function routeLockMessageIds(scope?: RouteLockScope): {
 const ActiveRoutingPreferences = ({
   clearPreferences,
   defaultNumItineraries,
+  defaultStopCap,
   hideWalkTransitOptions,
+  maxStopCount,
   noTransfers,
   numItineraries,
   preferences,
@@ -128,7 +135,9 @@ const ActiveRoutingPreferences = ({
 }: {
   clearPreferences: () => void
   defaultNumItineraries: number
+  defaultStopCap: number
   hideWalkTransitOptions?: boolean
+  maxStopCount?: number
   noTransfers?: boolean
   numItineraries?: number
   preferences?: RoutingPreferences
@@ -144,9 +153,17 @@ const ActiveRoutingPreferences = ({
     numItineraries !== defaultNumItineraries
       ? numItineraries
       : undefined
+  // Same rule for the stop cap (backlog 14.1): a chip only once the rider has
+  // moved it off what the config ships.
+  const customStopCap =
+    typeof maxStopCount === 'number' &&
+    clampStopCap(maxStopCount) !== defaultStopCap
+      ? clampStopCap(maxStopCount)
+      : undefined
   if (
     !anythingCustomized({
       customCount,
+      customStopCap,
       hideWalkTransitOptions,
       noTransfers,
       routeLock,
@@ -231,6 +248,15 @@ const ActiveRoutingPreferences = ({
           />
         </Chip>
       )}
+      {customStopCap !== undefined && (
+        <Chip
+          title={intl.formatMessage({
+            id: 'components.BatchSearchScreen.stopCapLabel'
+          })}
+        >
+          <FormattedMessage id={stopCapMessageId(customStopCap)} />
+        </Chip>
+      )}
       <ClearButton onClick={clearPreferences} type="button">
         <Times size={11} />
         <FormattedMessage id="components.ActiveRoutingPreferences.clear" />
@@ -241,7 +267,9 @@ const ActiveRoutingPreferences = ({
 
 const mapStateToProps = (state: AppReduxState) => ({
   defaultNumItineraries: getDefaultNumItineraries(state.otp.config),
+  defaultStopCap: clampStopCap(state.otp.config?.itinerary?.maxStopCount),
   hideWalkTransitOptions: state.otp.currentQuery?.hideWalkTransitOptions,
+  maxStopCount: state.otp.currentQuery?.maxStopCount,
   noTransfers: state.otp.currentQuery?.noTransfers,
   numItineraries: state.otp.currentQuery?.numItineraries,
   preferences: state.otp.currentQuery?.routingPreferences,

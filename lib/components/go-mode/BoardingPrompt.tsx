@@ -3,6 +3,7 @@ import { useIntl } from 'react-intl'
 import React from 'react'
 
 import * as goModeActions from '../../actions/go-mode'
+import { boardingPromptBody } from '../../util/go-mode/boarding-confirmation'
 import type { GoModeState } from '../../reducers/go-mode'
 
 import {
@@ -80,6 +81,11 @@ const BoardingPrompt = ({
   if (!goMode.boardingPrompt.shown) return null
 
   const nearbyVehicles = goMode.vehicleMatch.nearbyVehicles
+  const body = boardingPromptBody({
+    nearbyRouteCount: nearbyRoutes.length,
+    nearbyVehicleCount: nearbyVehicles.length,
+    searching: !!goMode.boardingPrompt.searching
+  })
   const routeLabel =
     routeName ||
     intl.formatMessage({
@@ -107,7 +113,7 @@ const BoardingPrompt = ({
           )}
         </BoardingSubtitle>
 
-        {nearbyVehicles.length > 0 ? (
+        {body === 'vehicles' ? (
           nearbyVehicles.map((vehicle) => (
             <VehicleOptionRow key={vehicle.vehicleId}>
               <VehicleInfo>
@@ -182,7 +188,14 @@ const BoardingPrompt = ({
               </VehicleSelectButton>
             </VehicleOptionRow>
           ))
-        ) : nearbyRoutes.length > 0 ? (
+        ) : body === 'searching' ? (
+          <VehicleDetail style={{ marginBottom: 12, textAlign: 'center' }}>
+            {intl.formatMessage({
+              defaultMessage: 'Looking…',
+              id: 'components.GoMode.boardingSearching'
+            })}
+          </VehicleDetail>
+        ) : body === 'routes' ? (
           <>
             <VehicleDetail style={{ marginBottom: 8, textAlign: 'center' }}>
               {intl.formatMessage({
@@ -236,9 +249,15 @@ const BoardingPrompt = ({
 const mapStateToProps = (state: any) => {
   const goMode = state.otp?.goMode
   const currentLegIndex = goMode?.routeMatch?.legIndex || 0
-  const currentLeg = goMode?.activeItinerary?.legs?.[currentLegIndex]
-  const routeName =
-    currentLeg?.routeShortName || currentLeg?.routeLongName || ''
+  const legs = goMode?.activeItinerary?.legs || []
+  // The route this sheet is about is the one being BOARDED, which on an access
+  // leg is still ahead of the rider. Reading the current leg named nothing
+  // while they walked or biked to the stop, so the subtitle fell back to "the
+  // bus" — on 2026-09-13 while the rider was aboard the Green Line.
+  const boardLeg =
+    legs.slice(currentLegIndex).find((l: any) => l?.transitLeg) ||
+    legs[currentLegIndex]
+  const routeName = boardLeg?.routeShortName || boardLeg?.routeLongName || ''
 
   return {
     goMode,

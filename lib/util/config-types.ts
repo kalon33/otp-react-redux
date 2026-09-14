@@ -334,6 +334,13 @@ export interface ItineraryConfig {
   groupByMode?: boolean
   groupTransitModes?: boolean
   hideSkeletons?: boolean
+  /**
+   * OTP `maxStopCount` for a rider-initiated plan (backlog 14.1): how many
+   * stops the access/egress street search may reach. Clamped to
+   * STOP_CAP_RANGE; omit to take DEFAULT_MAX_STOP_COUNT in
+   * util/routing-profiles. The rider can override it from the settings panel.
+   */
+  maxStopCount?: number
   mergeByRouteSignature?: boolean
   mergeItineraries?: boolean
   mutedErrors?: string[]

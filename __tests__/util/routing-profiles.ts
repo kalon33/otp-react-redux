@@ -7,8 +7,11 @@ import {
   bikeWillingnessToReluctance,
   clampPreferences,
   clampSearchWindow,
+  clampStopCap,
+  DEFAULT_MAX_STOP_COUNT,
   DEFAULT_PROFILE_ID,
   DEFAULT_SEARCH_WINDOW_SECONDS,
+  effectiveStopCap,
   extendPlanQueryWithLevers,
   getRoutingProfile,
   GO_MODE_SEARCH_WINDOW_SECONDS,
@@ -18,7 +21,11 @@ import {
   planConstraintVariables,
   ROUTING_PROFILES,
   SEARCH_WINDOW_RANGE,
-  SERVER_BIKE_RELUCTANCE
+  SERVER_BIKE_RELUCTANCE,
+  STOP_CAP_OPTIONS,
+  STOP_CAP_RANGE,
+  stopCapMessageId,
+  stopCapVariables
 } from '../../lib/util/routing-profiles'
 
 describe('routing-profiles', () => {
@@ -216,6 +223,14 @@ describe('routing-profiles', () => {
     // 5.2: the client never sent searchWindow, so OTP auto-sized it to 3000 s
     // on the rider's commute and returned five Orange Line departures and
     // nothing else. Declaring it is half the fix; the type is the other half.
+    it('declares maxStopCount as Int and passes it to plan()', () => {
+      // 14.1: the fork's plan(maxStopCount:) — an undeclared variable would be
+      // silently dropped and the rider's choice would never reach OTP.
+      const out = extendPlanQueryWithLevers(baseQuery)
+      expect(out).toContain('$maxStopCount: Int')
+      expect(out).toContain('maxStopCount: $maxStopCount')
+    })
+
     it('declares searchWindow as Long, not Int', () => {
       const out = extendPlanQueryWithLevers(baseQuery)
       expect(out).toContain('$searchWindow: Long')
@@ -346,6 +361,66 @@ describe('routing-profiles', () => {
         )
       ).toBe(false)
     })
+  })
+})
+
+describe('stop cap (backlog 14.1)', () => {
+  it('sends the default cap when the rider and config are silent', () => {
+    // Production OTP runs 2000 and returned 2 itineraries on the Lake Elmo ->
+    // Hiawatha Church plan where 10000 returned 8, so the planner asks for its
+    // own cap on every rider-initiated plan.
+    expect(stopCapVariables(undefined, undefined)).toEqual({
+      maxStopCount: DEFAULT_MAX_STOP_COUNT
+    })
+    expect(DEFAULT_MAX_STOP_COUNT).toBe(10000)
+  })
+
+  it('prefers the rider, then the config, then the default', () => {
+    expect(effectiveStopCap(20000, 2000)).toBe(20000)
+    expect(effectiveStopCap(undefined, 2000)).toBe(2000)
+    expect(effectiveStopCap(NaN, undefined)).toBe(DEFAULT_MAX_STOP_COUNT)
+  })
+
+  it('clamps to the allowed range rather than rejecting', () => {
+    const [min, max] = STOP_CAP_RANGE
+    expect(clampStopCap(1)).toBe(min)
+    expect(clampStopCap(999999)).toBe(max)
+    expect(clampStopCap(10000.4)).toBe(10000)
+    expect(STOP_CAP_OPTIONS.every((c) => c >= min && c <= max)).toBe(true)
+  })
+
+  it('sends nothing for a background plan so the server default applies', () => {
+    // Go Mode's reroute snapshots and the onboard optimizer fire several plans
+    // at once from a rider already near transit; they keep the cheap server
+    // value rather than the planner's wider search.
+    expect(stopCapVariables(20000, 20000, true)).toEqual({})
+  })
+
+  it('names the three steps and lands an off-step value on a neighbour', () => {
+    expect(stopCapMessageId(2000)).toBe(
+      'components.BatchSearchScreen.stopCapQuick'
+    )
+    expect(stopCapMessageId(10000)).toBe(
+      'components.BatchSearchScreen.stopCapStandard'
+    )
+    expect(stopCapMessageId(20000)).toBe(
+      'components.BatchSearchScreen.stopCapThorough'
+    )
+    expect(stopCapMessageId(5000)).toBe(
+      'components.BatchSearchScreen.stopCapStandard'
+    )
+  })
+
+  it('is not a routing-preference lever and not a bookkeeping key', () => {
+    // It is the name OTP takes, so applyRoutingPreferences must not strip it,
+    // and no profile may set it — it prices nothing.
+    expect(Object.keys(LEVER_RANGES)).not.toContain('maxStopCount')
+    expect(NON_OTP_QUERY_KEYS).not.toContain('maxStopCount')
+    expect(
+      ROUTING_PROFILES.some((p) =>
+        Object.keys(p.prefs).includes('maxStopCount')
+      )
+    ).toBe(false)
   })
 })
 
