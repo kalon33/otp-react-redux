@@ -547,8 +547,12 @@ components:
     timeBiking: "{time} biking"
     timeWalking: "{time} walking"
     variantBiking: "{distance} biking"
+    variantBoardAt: Board at {stop}
     variantShown: currently shown
     variantWalking: "{distance} walking"
+    variantsOtherStop: board at {stop}
+    variantsOtherStopsNamed: board at {stop} +{count} more
+    variantsOtherTimes: "{count, plural, one {# other time} other {# other times}}"
   MobilityProfile:
     DevicesPane:
       devices:
