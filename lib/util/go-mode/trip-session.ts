@@ -21,7 +21,7 @@ import type { DepartureBaselineState } from './departure-drift'
 import type { DestinationProgressState } from './destination-progress'
 import type { MissedBusAttempt } from './missed-bus-recovery'
 import type { PacingCardState } from './pacing-card'
-import type { RiderSpeedSample } from './rider-speed'
+import type { RiderSpeedAnchorBucket, RiderSpeedSample } from './rider-speed'
 import type { TimedSimulationPoint } from './geometry'
 
 export interface TripSession {
@@ -220,6 +220,14 @@ export interface TripSession {
   riderDeniedBoardingAtMs: number | null
 
   /**
+   * The sparse ride-level companion to riderSpeedSamples: one peak moving fix
+   * per minute of riding, fed from the same gate. It is what puts a floor under
+   * the short-window median so a downtown crawl cannot time a whole access leg
+   * — see rider-speed.ts (backlog 16.1).
+   */
+  riderSpeedAnchor: RiderSpeedAnchorBucket[]
+
+  /**
    * Recent ground speeds off the rider's own fixes while they are on a bike
    * leg, for the observed-bikeSpeed estimate a replan query carries. See
    * rider-speed.ts — this is a rolling estimate precisely because a single
@@ -278,6 +286,7 @@ export function createTripSession(): TripSession {
     rerouteSnapshotIntervalId: null,
     returnRefreshInFlight: false,
     riderDeniedBoardingAtMs: null,
+    riderSpeedAnchor: [],
     riderSpeedSamples: [],
     simulatedTimeMs: 0,
     simulationActive: false,

@@ -41,6 +41,7 @@ import {
 import type { EarlyAlightRecord } from '../util/go-mode/riding'
 import {
   estimateBikeSpeedMps,
+  recordRiderSpeedAnchorSample,
   recordRiderSpeedSample,
   withObservedBikeSpeed
 } from '../util/go-mode/rider-speed'
@@ -439,11 +440,17 @@ export function goModeNowMs(): number {
  * collected on the tick (handlePositionUpdate) and only while the rider is
  * actually on a bike leg — see rider-speed.ts for why this is a rolling median
  * of moving fixes and not `position.coords.speed`.
+ *
+ * Both series go in. The five-minute median leads; `riderSpeedAnchor` — the
+ * ride's own cruising pace — keeps it from falling below 0.7x of that when the
+ * rider is merely stuck, which on 2026-09-15 had every downtown re-plan timed
+ * for a 2 m/s cyclist (backlog 16.1).
  */
 function observedBikeSpeedMps(): number | null {
   return estimateBikeSpeedMps(
     session.riderSpeedSamples,
-    getCurrentTime().getTime()
+    getCurrentTime().getTime(),
+    session.riderSpeedAnchor
   )
 }
 
@@ -5162,9 +5169,20 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       !matchedLeg?.transitLeg &&
       !getState().otp?.goMode?.riding
     ) {
+      const speedFix = {
+        speedMps: position.coords.speed ?? null,
+        tMs: position.timestamp
+      }
       session.riderSpeedSamples = recordRiderSpeedSample(
         session.riderSpeedSamples,
-        { speedMps: position.coords.speed ?? null, tMs: position.timestamp }
+        speedFix
+      )
+      // ...and the sparse ride-level series the floor is taken from. Same gate,
+      // same fix, same timestamp: the anchor must never see a sample the short
+      // window did not, or a bus minute would anchor the rider to a bus.
+      session.riderSpeedAnchor = recordRiderSpeedAnchorSample(
+        session.riderSpeedAnchor,
+        speedFix
       )
     }
 
