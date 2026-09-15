@@ -803,6 +803,57 @@ function tokenHopToleranceMs(state: any): number | undefined {
 }
 
 /**
+ * Put a quiet access re-plan's request/response pair in the debug stream.
+ *
+ * The onboard alight optimizer has recorded its five candidate plans since
+ * 2026-08-10 (ONBOARD_CANDIDATE_SNAPSHOT); the quiet access re-plan, which
+ * uses the SAME isolated fetch, recorded nothing. `fetchOnboardCandidatePlan`
+ * resolves through a local promise instead of dispatching ROUTING_RESPONSE, so
+ * the recorder never sees one unless a caller hands it over — and neither call
+ * site here did. The cost of that was measured on 2026-09-15 (backlog 13.8,
+ * second sighting): the ride installed NINE itinerary swaps, every one of them
+ * from this thunk, and the fixture's `onboardCandidatePlans` held zero of
+ * their requests. What OTP offered just before the 09:43:37 backwards splice
+ * (16.2) is therefore unknowable, and the daemon's `replan-not-converging`
+ * rule counts an event nothing emits.
+ *
+ * Same action type as the optimizer's, so the recorder whitelist, the size
+ * ladder and the fixture builder all already handle it. The `reason` tag is
+ * what tells them apart: build-fixture routes a tagged record to
+ * `quietReplanPlans` and leaves `onboardCandidatePlans` to the optimizer,
+ * whose replay keys on `request.stopId` — a field a quiet re-plan has no
+ * meaning for.
+ *
+ * Gated on `isTripRecordingEnabled()` exactly like the optimizer's, because
+ * these are full-capture payloads (up to 1 MB each) uploaded from a phone on
+ * cellular, and a quiet re-plan is far more frequent than an optimize.
+ */
+function recordQuietReplanPlan(
+  dispatch: any,
+  reason: 'quiet-replan-full' | 'quiet-replan-scoped',
+  combo: any,
+  result: { query?: any; response?: any; variables?: any }
+): void {
+  if (!isTripRecordingEnabled() || !result?.response) return
+  dispatch({
+    payload: {
+      request: {
+        arriveBy: !!combo?.arriveBy,
+        from: combo?.from,
+        modes: combo?.modes,
+        query: result.query,
+        reason,
+        to: combo?.to,
+        variables: result.variables
+      },
+      response: result.response,
+      tMs: getCurrentTime().getTime()
+    },
+    type: ONBOARD_CANDIDATE_SNAPSHOT
+  })
+}
+
+/**
  * The one place an AUTOMATIC itinerary replacement is judged against the plan
  * it would replace — arrival, and whether it starts where the rider is. Every
  * auto-apply path funnels through here before its `beginGoMode`; the rules and
@@ -2186,9 +2237,14 @@ export function quietReplanAccessLeg() {
       // transit, and the picker still refuses to downgrade a biking rider to
       // walk-only.
       const runScoped = async (target: number | null) => {
-        const { error, itineraries } = await dispatch(
-          fetchOnboardCandidatePlan(scopedAt(target))
-        )
+        const scopedCombo = scopedAt(target)
+        const { error, itineraries, query, response, variables } =
+          await dispatch(fetchOnboardCandidatePlan(scopedCombo))
+        recordQuietReplanPlan(dispatch, 'quiet-replan-scoped', scopedCombo, {
+          query,
+          response,
+          variables
+        })
         recordReplanAttempt(!error)
         if (!stillReplannable()) return undefined
         return error || !itineraries?.length
@@ -2247,9 +2303,14 @@ export function quietReplanAccessLeg() {
       }
     }
 
-    const { error, itineraries } = await dispatch(
+    const { error, itineraries, query, response, variables } = await dispatch(
       fetchOnboardCandidatePlan(combo)
     )
+    recordQuietReplanPlan(dispatch, 'quiet-replan-full', combo, {
+      query,
+      response,
+      variables
+    })
     recordReplanAttempt(!error)
 
     // Re-check state after the async plan: the rider may have exited Go Mode

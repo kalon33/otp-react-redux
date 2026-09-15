@@ -10,11 +10,23 @@ import type { Itinerary, Leg } from '@opentripplanner/types'
  * invent a later bus or move the boarding (7/29 ride: "only reroute the bike
  * leg, don't switch my bus routes"). Only container fields are recomputed.
  *
- * The access end time is deliberately NOT clamped to the board time: if the
- * rider now arrives after departure the itinerary shows the truth, and the
- * missed-bus machinery (which measures the BUS against the stop, and can fire
- * here because the rider is not riding on an access leg) resolves it under
- * its own same-route rules.
+ * The access end time is still deliberately NOT clamped to the board time: a
+ * spliced itinerary states what OTP actually said, and inventing an arrival
+ * that fits the departure would hide the defect rather than fix it.
+ *
+ * What is NOT true — and was asserted here until 2026-09-15 (backlog 16.2) —
+ * is that the missed-bus machinery resolves such a splice on its own.
+ * `checkMissedBus` measures the BUS against the stop, so it cannot say
+ * anything until the bus has actually left; on the 09-15 ride two splices
+ * whose bike leg ended 3m05s and 49 s after a 09:54:02 Orange Line departure
+ * were auto-applied at 09:43:37 and 09:49:39 and stood in front of the rider
+ * as "you will miss the bus" for ten minutes, while the rider reached the stop
+ * at 09:52:20 and boarded. No MISSED_BUS ever fired.
+ *
+ * So an infeasible splice is now refused BEFORE it is applied, by
+ * `acceptAutoReplan`'s `access-misses-board` check (util/go-mode/
+ * replan-acceptance) — which every automatic path already funnels through.
+ * This function's contract is unchanged: it reports, it does not judge.
  */
 export function spliceAccessOntoItinerary(
   current: Itinerary,
