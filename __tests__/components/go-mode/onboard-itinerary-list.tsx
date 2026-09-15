@@ -127,7 +127,12 @@ describe('components > go-mode > OnboardItineraryList', () => {
       const { wrapper } = renderList(sameChain)
       const toggle = wrapper.find('button.same-shape-variants-toggle')
       expect(toggle).toHaveLength(1)
-      expect(toggle.text()).toBe('3 options')
+      // These three ride the same bus from the same stop and differ only in
+      // where they put the rider down, so there is no departure or boarding
+      // stop to name and the control falls back to the plain count. `toContain`
+      // rather than `toBe` because the control now carries a disclosure
+      // chevron alongside the label (backlog 16.6).
+      expect(toggle.text()).toContain('3 options')
     })
 
     it('names the alight stop on each variant — that is the choice', () => {
