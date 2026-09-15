@@ -45,6 +45,7 @@ import {
   withObservedBikeSpeed
 } from '../util/go-mode/rider-speed'
 import {
+  destinationReachMeasure,
   destinationStalled,
   noteDestinationDistance,
   noteReplanAttempt
@@ -2028,7 +2029,11 @@ export function quietReplanAccessLeg() {
       const sent = goMode.notifications?.sentNotifications || []
       const stalledNote = checkDestinationUnreachable(
         sent,
-        session.destinationProgress?.bestDistanceM,
+        // The straight line to the door, not the path measure: since 09-15 the
+        // stall arithmetic can be running on distance-to-the-boarding-stop plus
+        // the tail, and "23,433m from 2345 Old Shakopee Road West" would be a
+        // sentence about the itinerary's length, not about the destination.
+        session.destinationProgress?.bestDestinationM,
         destLeg.to?.name
       )
       if (stalledNote) {
@@ -5315,7 +5320,17 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     // inside 454 m. See util/go-mode/destination-progress.ts.
     session.destinationProgress = noteDestinationDistance(
       session.destinationProgress,
-      progress.distanceToDestination
+      progress.distanceToDestination,
+      // ...and since 2026-09-15, what "closer" is measured along. An access leg
+      // to a boarding stop can only increase the straight line to a destination
+      // the bus runs back past: that morning it rose 18,340 m -> 18,653 m while
+      // the gap to the stop fell 1,920 m -> 1,270 m, and the mode was retired
+      // mid-trip on the strength of it.
+      destinationReachMeasure(
+        itinerary.legs,
+        routeMatch?.legIndex ?? 0,
+        currentPosition
+      )
     )
 
     // Arrival: mark it once and let this tick's notification pass emit
