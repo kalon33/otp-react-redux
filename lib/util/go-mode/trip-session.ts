@@ -212,6 +212,15 @@ export interface TripSession {
   returnRefreshInFlight: boolean
 
   /**
+   * The last tick's classifyMissedBus verdict for the upcoming boarding, so
+   * the NEXT tick can put it on TripProgress for the current-leg card's hold
+   * (departure-anchor.resolveCardDeparture). The classifier runs well after
+   * progress is dispatched within a tick, and a one-tick lag on a release
+   * decision that already waits minutes of grace costs nothing.
+   */
+  riderBoardingMiss: { definitive: boolean; effectiveBoardMs: number } | null
+
+  /**
    * When the rider last tapped "Not on the bus" on the trip sheet. Holds the
    * automatic, evidence-free half of the board gate off for a few minutes so
    * the matcher cannot immediately put them back aboard — see
@@ -277,6 +286,7 @@ export function createTripSession(): TripSession {
     quietReplanMissStreak: 0,
     rerouteSnapshotIntervalId: null,
     returnRefreshInFlight: false,
+    riderBoardingMiss: null,
     riderDeniedBoardingAtMs: null,
     riderSpeedSamples: [],
     simulatedTimeMs: 0,

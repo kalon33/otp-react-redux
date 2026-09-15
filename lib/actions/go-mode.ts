@@ -451,6 +451,10 @@ const { randId, storeItem } = coreUtils.storage
 
 // Action types
 export const ADD_NOTIFICATION = 'ADD_NOTIFICATION'
+// Recording only, like REROUTE_SNAPSHOT below: no reducer consumes it. It
+// exists so the daemon can see the current-leg card and the tick pipeline
+// disagreeing about which departure the rider is travelling to — see 16.3.
+export const CARD_DEPARTURE_MISMATCH = 'CARD_DEPARTURE_MISMATCH'
 export const CLEAR_RIDING = 'CLEAR_RIDING'
 export const CLEAR_VEHICLE_MATCH = 'CLEAR_VEHICLE_MATCH'
 export const CONFIRM_VEHICLE = 'CONFIRM_VEHICLE'
@@ -557,6 +561,27 @@ export const updateRouteMatch = createAction<RouteMatchResult | null>(
   UPDATE_ROUTE_MATCH
 )
 export const updateProgress = createAction<TripProgress>(UPDATE_PROGRESS)
+
+/**
+ * The card's headline departure is not the one the tick's wait math is using.
+ *
+ * Recording only. Both numbers are defensible — the card resolves the soonest
+ * departure the rider can catch at the boarding stop and then HOLDS it
+ * (resolveCardDeparture), while the tick takes the override, else the planned
+ * trip's live board epoch, else the plan — and on 2026-09-15 they parted
+ * company for nine minutes with nothing to show for it: the card read 10:09
+ * while UPDATE_PROGRESS carried effectiveDepartureMs 09:54:02 and
+ * timeUntilNextDeparture 534.9 s. Silently picking one would have hidden that.
+ */
+export const recordCardDepartureMismatch = (info: {
+  cardDepartureMs: number | null
+  heldTripId: string | null
+  reason: string
+  tickDepartureMs: number | null
+}) => ({
+  payload: { ...info, tMs: getCurrentTime().getTime() },
+  type: CARD_DEPARTURE_MISMATCH
+})
 export const transitionLeg = createAction<{ legIndex: number }>(TRANSITION_LEG)
 
 export const setLiveLegTimes =
@@ -5260,6 +5285,17 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       currentPosition
     )
 
+    // The rider's MEASURED pace, and the missed-bus classifier's last verdict.
+    // Both are applied here rather than inside calculateTripProgress for the
+    // same reason the stops latch below is: they are held across ticks and the
+    // calculator is pure. The card uses them to stop a projection moving the
+    // departure it has already shown (16.3 — see resolveCardDeparture); the
+    // verdict is the previous tick's, because classifyMissedBus runs several
+    // hundred lines below this dispatch and every release condition it feeds
+    // already waits minutes of grace.
+    progress.riderPaceMps = observedBikeSpeedMps()
+    progress.boardingMiss = session.riderBoardingMiss
+
     // A stop the rider has passed stays passed. calculateTripProgress is pure
     // and re-derives the count from this tick's position alone, so the latch is
     // applied here rather than inside it.
@@ -5730,6 +5766,15 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       riding: goMode.riding,
       vehicleConfidence: goMode.vehicleMatch?.match?.confidence
     })
+    // Carried to the next tick's progress for the current-leg card's hold.
+    // The card may only give up a departure it is already showing on evidence,
+    // and this is the app's one definition of "gone" — reused, not re-derived.
+    session.riderBoardingMiss = missedCtx
+      ? {
+          definitive: missedCtx.definitive,
+          effectiveBoardMs: missedCtx.effectiveBoardMs
+        }
+      : null
     const missedEvent =
       missedCtx &&
       checkMissedBus(
