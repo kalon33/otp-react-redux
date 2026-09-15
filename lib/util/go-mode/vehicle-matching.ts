@@ -139,6 +139,269 @@ export function speedAdjustedRadius(
 }
 
 /**
+ * Top speed a transit vehicle is assumed capable of. Orange Line runs on
+ * I-35W touch 28-29 m/s in this feed; 30 is the ceiling used to bound how far
+ * a vehicle can have travelled since its last frame.
+ */
+export const MAX_TRANSIT_SPEED_MPS = 30
+
+/**
+ * Feed frames older than this are not projected at all. Beyond a couple of
+ * minutes a constant-heading extrapolation is fiction — the bus has had time to
+ * turn, terminate, or finish its trip — and the honest answer is the frame
+ * where it lies plus the old rider-speed allowance.
+ */
+export const MAX_CORRECTABLE_FRAME_AGE_SECONDS = 120
+
+/**
+ * Lateral allowance, as a fraction of the corridor's length, for the frame's
+ * heading being wrong. Measured on the 2026-09-15 recording, `heading` sits a
+ * median 2° off the actual bearing between consecutive frames while the
+ * vehicle moves (p90 30°, the tail being turns). 0.2 — about 11.5° — is where
+ * the tracked share on that ride stops improving: 0.10 gives 92.8 %, 0.15
+ * 93.4 %, 0.20 and 0.25 both 93.9 %. Taking the knee rather than the widest
+ * value keeps a long corridor from smearing into a disc, which is the one
+ * thing this shape exists to avoid.
+ */
+const CORRIDOR_LATERAL_SLACK = 0.2
+
+export interface AgedVehiclePosition {
+  /** Seconds of feed age actually applied; 0 when the frame was not aged. */
+  ageSeconds: number
+  /** End of the corridor the vehicle may have travelled along; = lat/lon when
+   * the frame could not be aged. */
+  corridorLat: number
+  corridorLon: number
+  /** Length of that corridor in metres; 0 when the frame could not be aged. */
+  corridorMeters: number
+  /** Best estimate of where the vehicle is NOW. */
+  lat: number
+  lon: number
+  /** Metres the best-estimate point was moved along the frame's heading. */
+  projectedMeters: number
+}
+
+/** Destination point `meters` along `bearingDeg` from (lat, lon). */
+function destinationPoint(
+  lat: number,
+  lon: number,
+  bearingDeg: number,
+  meters: number
+): { lat: number; lon: number } {
+  const R = 6371000
+  const angular = meters / R
+  const bearing = (bearingDeg * Math.PI) / 180
+  const lat1 = (lat * Math.PI) / 180
+  const lon1 = (lon * Math.PI) / 180
+  const lat2 = Math.asin(
+    Math.sin(lat1) * Math.cos(angular) +
+      Math.cos(lat1) * Math.sin(angular) * Math.cos(bearing)
+  )
+  const lon2 =
+    lon1 +
+    Math.atan2(
+      Math.sin(bearing) * Math.sin(angular) * Math.cos(lat1),
+      Math.cos(angular) - Math.sin(lat1) * Math.sin(lat2)
+    )
+  return {
+    lat: (lat2 * 180) / Math.PI,
+    lon: (((lon2 * 180) / Math.PI + 540) % 360) - 180
+  }
+}
+
+/**
+ * Shortest distance from a point to the segment AB, in metres. Equirectangular
+ * about A — these segments are at most a couple of kilometres, where the error
+ * is centimetres.
+ */
+function distanceToSegment(
+  lat: number,
+  lon: number,
+  aLat: number,
+  aLon: number,
+  bLat: number,
+  bLon: number
+): number {
+  const mPerDegLat = 110540
+  const mPerDegLon = 111320 * Math.cos((aLat * Math.PI) / 180)
+  const px = (lon - aLon) * mPerDegLon
+  const py = (lat - aLat) * mPerDegLat
+  const bx = (bLon - aLon) * mPerDegLon
+  const by = (bLat - aLat) * mPerDegLat
+  const lenSq = bx * bx + by * by
+  if (lenSq === 0) return Math.sqrt(px * px + py * py)
+  const t = Math.max(0, Math.min(1, (px * bx + py * by) / lenSq))
+  const dx = px - t * bx
+  const dy = py - t * by
+  return Math.sqrt(dx * dx + dy * dy)
+}
+
+/**
+ * Age-correct a GTFS-RT frame.
+ *
+ * A frame states where the vehicle WAS, at `vehicle.seconds` — never where it
+ * is now. On I-35W a 61 s-old frame describes a point 1.3 km behind a bus doing
+ * 22 m/s, and measuring the rider's fresh fix against that stale point drops
+ * the correct vehicle out of every proximity gate below. Measured on the
+ * 2026-09-15 Orange Line ride (session mu2rh9og-fw6prf, bus 8220 on trip
+ * 1:1348203): across the 28-minute leg the match fell to `none` 27 times and
+ * read high/confirmed on only 55.8 % of 1,643 ticks, against a mean frame age
+ * of 46 s.
+ *
+ * The frame carries what is needed to correct itself, and both fields were
+ * checked against that recording rather than assumed: `speed` is metres per
+ * second (median observed-displacement / reported-speed ratio 1.04 over 64
+ * moving frame pairs for 8220), and `heading` is trustworthy while the vehicle
+ * moves (median 2° from the actual bearing between consecutive frames).
+ *
+ * Two things come back, because they answer different questions:
+ *
+ *  - **lat/lon** — the best estimate of where the bus is now, `speed × age`
+ *    along `heading`. This is what a rider is shown and what candidates are
+ *    ranked by.
+ *  - **the corridor** — frame point → `MAX_TRANSIT_SPEED_MPS × age` along
+ *    `heading`. A frame's speed says nothing about the 45 s that followed it:
+ *    the largest residuals on that ride were frames stamped at 1-6 m/s for a
+ *    bus pulling out of a station that then reached 25 m/s, and frames stamped
+ *    at freeway speed for a bus that then braked into one. Everywhere the bus
+ *    could now be lies on this segment, so proximity is judged against the
+ *    SEGMENT rather than against a disc inflated to the same radius. That
+ *    distinction is the whole point: it is permissive along the direction of
+ *    travel, where the uncertainty actually is, and stays tight sideways and
+ *    backwards, where a disc would happily match a bus a kilometre off route.
+ *
+ * A frame stamped below MIN_SPEED_FOR_HEADING_MPS gets no corridor beyond its
+ * own small projection — its heading is junk (it wanders 100°+ at a standstill),
+ * and extrapolating a kilometre along a junk bearing is worse than not trying.
+ */
+export function ageCorrectVehicle(
+  vehicle: {
+    heading?: number | null
+    lat: number
+    lon: number
+    seconds?: number | null
+    speed?: number | null
+  },
+  nowMs: number
+): AgedVehiclePosition {
+  const { lat, lon } = vehicle
+  const uncorrected: AgedVehiclePosition = {
+    ageSeconds: 0,
+    corridorLat: lat,
+    corridorLon: lon,
+    corridorMeters: 0,
+    lat,
+    lon,
+    projectedMeters: 0
+  }
+  if (
+    !Number.isFinite(nowMs) ||
+    !Number.isFinite(lat) ||
+    !Number.isFinite(lon)
+  ) {
+    return uncorrected
+  }
+  const { heading, seconds, speed } = vehicle
+  if (
+    typeof seconds !== 'number' ||
+    !Number.isFinite(seconds) ||
+    seconds <= 0
+  ) {
+    return uncorrected
+  }
+  const ageSeconds = nowMs / 1000 - seconds
+  if (!(ageSeconds > 0) || ageSeconds > MAX_CORRECTABLE_FRAME_AGE_SECONDS) {
+    return uncorrected
+  }
+  // No bearing to project ALONG. Inventing one would be worse than leaving the
+  // frame alone and letting the rider-speed fallback carry it.
+  if (typeof heading !== 'number' || !Number.isFinite(heading)) {
+    return uncorrected
+  }
+
+  // The corridor is granted on the strength of the HEADING, not the speed. A
+  // frame stamped at 0-1 m/s is a bus dwelling at a stop, and 40 s later it is
+  // most likely gone — that is the 2026-09-09 sighting exactly (rider standing
+  // at a station, the poll still carrying a 22 s-old frame 90-100 m back up the
+  // busway, match dropped). Tying the corridor to the frame's own speed denies
+  // it precisely there. Measured on the 2026-09-15 recording the heading is
+  // steady through those dwells (208-212° across the whole station approach);
+  // it is at a true standstill that it turns to noise, and there this feed
+  // publishes `heading: null`, which is handled above.
+  const usableSpeed =
+    typeof speed === 'number' && Number.isFinite(speed) && speed > 0 ? speed : 0
+  const projectedMeters = ageSeconds * usableSpeed
+  const best = destinationPoint(lat, lon, heading, projectedMeters)
+  const corridorMeters = ageSeconds * MAX_TRANSIT_SPEED_MPS
+  const end = destinationPoint(lat, lon, heading, corridorMeters)
+
+  return {
+    ageSeconds,
+    corridorLat: end.lat,
+    corridorLon: end.lon,
+    corridorMeters,
+    lat: best.lat,
+    lon: best.lon,
+    projectedMeters
+  }
+}
+
+/**
+ * How far the rider is from this vehicle, how far away it is allowed to be,
+ * and whether it is in range — the single place any of that is decided.
+ *
+ * `baseMeters` is the BASE radius, not a pre-widened one: whether the feed lag
+ * is paid for by moving the vehicle or by widening the gate is settled here,
+ * per frame, because only here is it known whether the frame could be aged. A
+ * frame that could be corrected is judged against its corridor and keeps the
+ * tight base radius (plus a lateral allowance for heading error); one that
+ * could not falls back to `speedAdjustedRadius`, which makes the RIDER's speed
+ * pay for the feed's age — the old behaviour, and the reason a rider standing
+ * at a station (speed 0, radius collapsed to the base) lost a bus whose frame
+ * was 90 m back up the busway on 2026-09-09.
+ *
+ * The radius is never tighter than the pre-correction one: moving the point
+ * sharpens the measurement, and taking width away at the same time would trade
+ * one class of missed match for another.
+ */
+export function measureVehicle(
+  userLat: number,
+  userLon: number,
+  vehicle: VehiclePosition,
+  baseMeters: number,
+  userSpeedMps: number | null | undefined,
+  nowMs: number
+): { aged: AgedVehiclePosition; distance: number; inRange: boolean } {
+  const aged = ageCorrectVehicle(vehicle, nowMs)
+  // What the rider is told, and what candidates are ranked by.
+  const distance = calculateDistance(userLat, userLon, aged.lat, aged.lon)
+  const fallbackRadius = speedAdjustedRadius(baseMeters, userSpeedMps)
+  if (aged.corridorMeters <= 0) {
+    return { aged, distance, inRange: distance <= fallbackRadius }
+  }
+  // An explicitly unbounded base means "rank them all, reject none"
+  // (confirmOnboardRoute passes Infinity to pick the nearest vehicle on a route
+  // the rider just named), so never turn that ranking call into a filter.
+  if (!Number.isFinite(baseMeters)) return { aged, distance, inRange: true }
+  const corridorDistance = distanceToSegment(
+    userLat,
+    userLon,
+    vehicle.lat,
+    vehicle.lon,
+    aged.corridorLat,
+    aged.corridorLon
+  )
+  const radius = Math.min(
+    Math.max(
+      baseMeters + aged.corridorMeters * CORRIDOR_LATERAL_SLACK,
+      fallbackRadius
+    ),
+    MAX_ADJUSTED_RADIUS_METERS
+  )
+  return { aged, distance, inRange: corridorDistance <= radius }
+}
+
+/**
  * A rider-facing vehicle label. Fallback paths use the GTFS vehicle id, which
  * is feed-scoped ("1:8148") — the "1:" means nothing to a rider, so drop it.
  */
@@ -148,17 +411,37 @@ export function displayVehicleLabel(label: string | null | undefined): string {
 
 /**
  * Find vehicles within a given radius of the user, sorted by distance.
+ *
+ * `maxDistanceMeters` is the BASE radius: every frame is age-corrected first
+ * and pays for its own feed lag (see measureVehicle), so callers pass the base
+ * rather than pre-widening it by rider speed.
  */
 export function findNearbyVehicles(
   userLat: number,
   userLon: number,
   vehicles: VehiclePosition[],
-  maxDistanceMeters = 200
+  maxDistanceMeters = 200,
+  {
+    nowMs = Date.now(),
+    userSpeedMps = null
+  }: { nowMs?: number; userSpeedMps?: number | null } = {}
 ): NearbyVehicleOption[] {
   return vehicles
     .map((v) => ({
+      measured: measureVehicle(
+        userLat,
+        userLon,
+        v,
+        maxDistanceMeters,
+        userSpeedMps,
+        nowMs
+      ),
+      vehicle: v
+    }))
+    .filter((m) => m.measured.inRange)
+    .map(({ measured, vehicle: v }) => ({
       direction: v.direction,
-      distanceMeters: calculateDistance(userLat, userLon, v.lat, v.lon),
+      distanceMeters: measured.distance,
       heading: v.heading,
       label: v.label,
       nextStopId: v.nextStopId,
@@ -172,7 +455,6 @@ export function findNearbyVehicles(
       tripId: v.tripId,
       vehicleId: v.vehicleId
     }))
-    .filter((v) => v.distanceMeters <= maxDistanceMeters)
     .sort((a, b) => a.distanceMeters - b.distanceMeters)
 }
 
@@ -188,8 +470,9 @@ function headingDifference(h1: number, h2: number): number {
  * Attempt to match the user to a specific vehicle.
  *
  * Algorithm:
- * 1. Filter vehicles within `proximityMeters` (default 80m; callers widen it
- *    via speedAdjustedRadius when the rider is moving — see feed-lag note)
+ * 1. Age-correct each frame to `nowMs` and filter on `proximityMeters` (the
+ *    BASE radius, default 80m — measureVehicle settles per frame whether the
+ *    feed lag is paid by moving the vehicle or by widening the gate)
  * 2. Drop clearly opposite-direction vehicles (both parties moving)
  * 3. Prefer vehicles on the expected route (patternId contains routeId)
  * 4. Use heading correlation as tiebreaker
@@ -206,7 +489,8 @@ export function matchUserToVehicle(
   proximityMeters = 80,
   userSpeedMps: number | null = null,
   /** GTFS direction_id of the leg the rider is trying to ride, when known. */
-  expectedDirectionId: number | string | null = null
+  expectedDirectionId: number | string | null = null,
+  { nowMs = Date.now() }: { nowMs?: number } = {}
 ): VehicleMatchResult {
   const noMatch: VehicleMatchResult = {
     confidence: 'none',
@@ -218,13 +502,27 @@ export function matchUserToVehicle(
 
   if (!vehicles || vehicles.length === 0) return noMatch
 
-  // Phase 1: Proximity filter
+  // Phase 1: Proximity filter, against each frame AGE-CORRECTED to now. The
+  // distance carried forward from here — into the incumbent margin, the
+  // confidence ladder and the rider-facing `distanceMeters` — is the corrected
+  // one, because that is the honest answer to "how far away is that bus".
   let nearby = vehicles
-    .map((v) => ({
-      distance: calculateDistance(userLat, userLon, v.lat, v.lon),
-      vehicle: v
-    }))
-    .filter((v) => v.distance <= proximityMeters)
+    .map((v) => {
+      const measured = measureVehicle(
+        userLat,
+        userLon,
+        v,
+        proximityMeters,
+        userSpeedMps,
+        nowMs
+      )
+      return {
+        distance: measured.distance,
+        inRange: measured.inRange,
+        vehicle: v
+      }
+    })
+    .filter((v) => v.inRange)
     .sort((a, b) => a.distance - b.distance)
 
   if (nearby.length === 0) return noMatch

@@ -2789,7 +2789,8 @@ export function discoverNearbyVehicles(attempt = 0) {
       lat,
       lon,
       allVehicles,
-      speedAdjustedRadius(PICKER_RADIUS_METERS, pos.coords.speed)
+      PICKER_RADIUS_METERS,
+      { userSpeedMps: pos.coords.speed }
     ).map((v) => ({ ...v, ...(vehicleDetails[v.vehicleId] || {}) }))
 
     dispatch({ payload: nearby, type: UPDATE_NEARBY_VEHICLES })
@@ -6398,7 +6399,14 @@ export function performVehicleMatching(routeId: string) {
       vehicles,
       routeId,
       previousMatch,
-      speedAdjustedRadius(80, riderSpeed),
+      // The BASE radius. Each frame now pays for its own feed lag inside the
+      // matcher (measureVehicle age-corrects it to now), and the rider-speed
+      // widening survives only as the fallback for a frame that carries no
+      // usable `seconds`/`speed` — which is what 12.11 asked for: on
+      // 2026-09-15 a 61 s-old frame for bus 8220 sat ~1,340 m back while
+      // speedAdjustedRadius(80, 22) allowed 1,070 m, and the correct vehicle
+      // was rejected 27 times in 28 minutes.
+      80,
       riderSpeed,
       expectedDirectionId
     )
@@ -6426,7 +6434,8 @@ export function performVehicleMatching(routeId: string) {
       userPos.coords.latitude,
       userPos.coords.longitude,
       vehicles,
-      speedAdjustedRadius(200, riderSpeed)
+      200,
+      { userSpeedMps: riderSpeed }
     )
     dispatch({ payload: nearby, type: UPDATE_NEARBY_VEHICLES })
 
@@ -6551,7 +6560,8 @@ export function searchBoardingVehicles() {
         pos.coords.latitude,
         pos.coords.longitude,
         vehicles,
-        speedAdjustedRadius(PICKER_RADIUS_METERS, pos.coords.speed)
+        PICKER_RADIUS_METERS,
+        { userSpeedMps: pos.coords.speed }
       )
       dispatch({ payload: nearby, type: UPDATE_NEARBY_VEHICLES })
     } catch {
@@ -6844,7 +6854,8 @@ export function confirmOnboardRoute(routeId: string) {
         pos.coords.latitude,
         pos.coords.longitude,
         vehicles,
-        Infinity
+        Infinity,
+        { userSpeedMps: pos.coords.speed }
       )[0]
     } else if (vehicles.length) {
       chosen = vehicles[0]
