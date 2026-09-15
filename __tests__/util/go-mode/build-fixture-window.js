@@ -114,6 +114,22 @@ const writeLogDir = () => {
       itinerary: itinerary('2026-08-28T15:40:00Z', '2026-08-28T15:50:00Z')
     }),
     fix('2026-08-28T15:45:00Z', 44.96),
+    // Two ONBOARD_CANDIDATE_SNAPSHOTs of DIFFERENT kinds. Since 2026-09-15 the
+    // quiet access re-plan emits this type too (backlog 13.8), and it carries
+    // no candidate alight stop — so the builder has to keep them apart or the
+    // optimizer replay, which reads every entry of onboardCandidatePlans as a
+    // plan it ranked and keys them on request.stopId, is fed plans nobody
+    // ranked.
+    entry('ONBOARD_CANDIDATE_SNAPSHOT', '2026-08-28T15:41:00Z', {
+      request: { stopId: '1:56034' },
+      response: { data: { plan: { itineraries: [] } } },
+      tMs: T('2026-08-28T15:41:00Z')
+    }),
+    entry('ONBOARD_CANDIDATE_SNAPSHOT', '2026-08-28T15:42:00Z', {
+      request: { reason: 'quiet-replan-scoped' },
+      response: { data: { plan: { itineraries: [] } } },
+      tMs: T('2026-08-28T15:42:00Z')
+    }),
     entry('STOP_GO_MODE', '2026-08-28T15:50:00Z', null)
   ]
   fs.writeFileSync(
@@ -251,6 +267,19 @@ describe('util > go-mode > build-fixture windowing', () => {
       expect(
         fixture.gpsTrack.every((g) => g.tMs >= T('2026-08-28T15:30:00Z'))
       ).toBe(true)
+    })
+
+    it('keeps the quiet re-plan snapshots out of the optimizer series (13.8)', () => {
+      const fixture = JSON.parse(fs.readFileSync(out, 'utf8'))
+      // The optimizer's own plan, still where the optimizer replay looks for
+      // it, still keyed on the stop it departs from.
+      expect(fixture.onboardCandidatePlans).toHaveLength(1)
+      expect(fixture.onboardCandidatePlans[0].stopId).toBe('1:56034')
+      // The quiet re-plan's, in its own series, tagged with which call site
+      // issued it.
+      expect(fixture.quietReplanPlans).toHaveLength(1)
+      expect(fixture.quietReplanPlans[0].reason).toBe('quiet-replan-scoped')
+      expect(fixture.quietReplanPlans[0].tMs).toBe(T('2026-08-28T15:42:00Z'))
     })
 
     it('records the itinerary swapped in mid-ride', () => {

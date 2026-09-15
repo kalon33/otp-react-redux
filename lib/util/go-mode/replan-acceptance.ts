@@ -21,7 +21,7 @@ import { calculateDistance } from './position-matching'
  * compared the replacement with the plan it was replacing, so a plan that was
  * worse than the one in hand was accepted as readily as one that was better.
  *
- * Two things are checked here, and both come from ride 3 of 2026-09-01
+ * The first two checks come from ride 3 of 2026-09-01
  * (`ride-1048-orange-bike.json`), whose closing bike leg took three
  * replacements in 83 seconds:
  *
@@ -42,6 +42,10 @@ import { calculateDistance } from './position-matching'
  *    stale cache (the reducer nulls `routeMatch` on `START_GO_MODE`, and leg
  *    polylines are decoded fresh on every tick) — it is a plan that begins
  *    somewhere the rider has already left.
+ *
+ * A third came from 2026-08-31 (the 602 m token hop) and a fourth from
+ * 2026-09-15 (an access leg that ends after the bus it feeds has gone) — each
+ * is documented at the predicate that implements it.
  *
  * A rider who explicitly asked for a different trip is never gated: this runs
  * on the automatic paths only.
@@ -70,7 +74,27 @@ export const AUTO_REPLAN_ARRIVAL_SLACK_MS = 60000
  */
 export const AUTO_REPLAN_ORIGIN_MAX_M = 75
 
+/**
+ * How far past its boarding an automatic replacement's access leg may end.
+ *
+ * Not zero: the two times being compared come from different clocks — the
+ * access arrival is OTP's own estimate for a walk or ride it just planned, the
+ * board time is the feed's departure — and a plan whose halves meet within a
+ * few seconds is a tight connection, which is the rider's business and not
+ * this gate's.
+ *
+ * Bounded from above by the ride that produced the rule. On 2026-09-15 the two
+ * bad splices overran by 3m05s (09:57:07 access onto a 09:54:02 departure) and
+ * by 49 s (09:54:51 onto the same departure). The smaller of those is the one
+ * the tolerance has to refuse, so it sits well under 49 s; 15 s is about the
+ * dwell a bus gives at a stop, which is the most a rider could actually
+ * recover.
+ */
+export const AUTO_REPLAN_ACCESS_BOARD_SLACK_MS = 15000
+
 export interface AutoReplanContext {
+  /** Override for AUTO_REPLAN_ACCESS_BOARD_SLACK_MS. */
+  accessBoardSlackMs?: number
   /**
    * Set when the current plan is already unachievable, so there is no arrival
    * to defend: the rider missed the bus it was built around. Origin is still
@@ -96,7 +120,11 @@ export type AutoReplanVerdict =
   | { accept: true }
   | {
       accept: false
-      reason: 'arrives-later' | 'origin-behind-rider' | 'token-transit-hop'
+      reason:
+        | 'access-misses-board'
+        | 'arrives-later'
+        | 'origin-behind-rider'
+        | 'token-transit-hop'
     }
 
 function arrivalMs(itinerary: Itinerary | null | undefined): number | null {
@@ -245,6 +273,75 @@ function addsATokenHopTo(
 }
 
 /**
+ * By how long does this itinerary's access chain overrun the boarding it feeds?
+ *
+ * Positive means the plan has the rider reaching the stop after the vehicle
+ * has left. Null means the question does not arise: no transit leg (an
+ * all-bike plan has nothing to miss), no non-transit leg before the first
+ * transit one (the plan starts at a stop, so it starts where it means to), or
+ * times that are not numbers.
+ *
+ * "Last non-transit leg before the first transit leg" is exactly what
+ * `spliceAccessOntoItinerary` writes: OTP returns an access plan as
+ * walk -> bike -> walk as often as a single leg, and it is the END of that
+ * chain that has to meet the bus.
+ */
+export function accessBoardOverrunMs(
+  itinerary: Itinerary | null | undefined
+): number | null {
+  const legs = (itinerary?.legs || []) as Leg[]
+  const boardIndex = legs.findIndex((leg) => leg.transitLeg)
+  if (boardIndex <= 0) return null
+  const access = legs[boardIndex - 1]
+  if (!access || access.transitLeg) return null
+  const accessEnd = Number(access.endTime)
+  const boardStart = Number(legs[boardIndex].startTime)
+  if (!Number.isFinite(accessEnd) || !Number.isFinite(boardStart)) return null
+  if (accessEnd <= 0 || boardStart <= 0) return null
+  return accessEnd - boardStart
+}
+
+/**
+ * Does this candidate hand the rider a trip they cannot physically start?
+ *
+ * 2026-09-15, backlog 16.2. Two spliced plans were auto-applied whose opening
+ * bike leg ended after the bus it fed had gone — 09:43:37 installed a leg
+ * ending 09:57:07 onto a 09:54:02 METRO Orange Line departure (3m05s), and
+ * 09:49:39 repeated it at 49 s. The rider, ~345 m from that stop and walking,
+ * was shown "you will miss the bus" for ten minutes and then boarded it at
+ * 09:52:20.
+ *
+ * Nothing upstream could catch it. `spliceAccessOntoItinerary` deliberately
+ * does not clamp the access end to the board time, so that the itinerary
+ * states the truth rather than a fiction, and defers to the missed-bus
+ * machinery — which measures the BUS against the stop and therefore cannot
+ * speak until the bus has actually left. The three checks that ran here looked
+ * at the unchanged suffix's `endTime` (so arrival was identical), at the first
+ * leg's origin (75 m, fine), and at token hops. None of them looks INSIDE the
+ * itinerary, which is where this defect lives.
+ *
+ * Two escapes, both meaning "refusing this is not an improvement":
+ *
+ * - `currentPlanIsDead` — the rider has already missed their bus and needs A
+ *   plan; the same reasoning as `addsATokenHopTo`.
+ * - The plan in hand already overruns its own boarding by more than the
+ *   tolerance. Then the candidate is not a regression, and refusing it would
+ *   pin the rider to the older infeasible plan forever.
+ */
+function accessMissesBoard(
+  candidate: Itinerary,
+  current: Itinerary | null | undefined,
+  context: AutoReplanContext
+): boolean {
+  if (context.currentPlanIsDead) return false
+  const slack = context.accessBoardSlackMs ?? AUTO_REPLAN_ACCESS_BOARD_SLACK_MS
+  const overrun = accessBoardOverrunMs(candidate)
+  if (overrun == null || overrun <= slack) return false
+  const currentOverrun = accessBoardOverrunMs(current)
+  return !(currentOverrun != null && currentOverrun > slack)
+}
+
+/**
  * May this automatic replacement be applied?
  *
  * Deliberately fails OPEN on missing data — no arrival on either side, no
@@ -285,6 +382,11 @@ export function acceptAutoReplan(
   // pointless closing bus leg.
   if (addsATokenHopTo(candidate, current, context)) {
     return { accept: false, reason: 'token-transit-hop' }
+  }
+
+  // 4. Feasibility: the access chain has to end before the bus it feeds leaves.
+  if (accessMissesBoard(candidate, current, context)) {
+    return { accept: false, reason: 'access-misses-board' }
   }
 
   return { accept: true }
