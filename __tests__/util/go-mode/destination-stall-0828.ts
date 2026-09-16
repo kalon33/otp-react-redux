@@ -58,14 +58,17 @@ const trip = () => ({
   startTime: 0
 })
 
-const fixAt = (lon: number, timestamp: number): GeolocationPosition =>
+const fixAt = (
+  [lat, lon]: [number, number],
+  timestamp: number
+): GeolocationPosition =>
   ({
     coords: {
       accuracy: 8,
       altitude: null,
       altitudeAccuracy: null,
       heading: null,
-      latitude: START[0],
+      latitude: lat,
       longitude: lon,
       speed: 5.5
     },
@@ -79,7 +82,7 @@ const makeStore = () => {
     activeItinerary: trip(),
     isActive: true,
     routeMatch: { legIndex: 0, progressAlongLeg: 0 },
-    tracking: { ...initial.tracking, lastPosition: fixAt(-93.18, 0) }
+    tracking: { ...initial.tracking, lastPosition: fixAt(START, 0) }
   }
   const actions: any[] = []
   const getState = () => ({
@@ -134,17 +137,30 @@ describe('re-planning that never converges (2026-08-28)', () => {
   })
 
   /** One tick at `lon`, then a re-plan, `atMs` on the clock. */
-  const tickAndReplan = async (lon: number, atMs: number) => {
+  const tickAndReplan = async (at: [number, number], atMs: number) => {
     dateFaker?.setSystemTime(atMs)
     store?.setRunThunks(false)
-    store?.run(handlePositionUpdate(fixAt(lon, atMs)))
+    store?.run(handlePositionUpdate(fixAt(at, atMs)))
     store?.setRunThunks(true)
     await store?.run(quietReplanAccessLeg())
   }
 
-  // The rider wanders inside a ~450 m shell around a destination the graph does
-  // not reach. Cooldown-clear spacing, so only the stall can stop a re-plan.
-  const CIRCLING = [-93.1743, -93.1744, -93.1742, -93.1745, -93.1743]
+  // The rider wanders inside a ~340 m shell around a destination the graph does
+  // not reach, riding 130-270 m of fence line between re-plans while the
+  // crow-flies distance to the pin stays pinned in the high 330s — the real
+  // ride's shape, where consecutive re-plans came back with 8889 m, 8106 m,
+  // 670 m and 772 m of bike leg. A rider who is going somewhere and getting
+  // nowhere is the whole of what this suite is about; since 2026-09-09 a
+  // re-plan over a rider who has NOT moved is not counted at all
+  // (DESTINATION_REPLAN_MOTION_MIN_M), which is unreachable-guard-0909.
+  // Cooldown-clear spacing, so only the stall can stop a re-plan.
+  const CIRCLING: Array<[number, number]> = [
+    [44.98, -93.1743],
+    [44.9812, -93.1743],
+    [44.9788, -93.1743],
+    [44.9812, -93.1744],
+    [44.9788, -93.1742]
+  ]
 
   it('re-plans while there is any reason to think it is helping', async () => {
     await tickAndReplan(CIRCLING[0], clock + 60_000)
@@ -195,7 +211,7 @@ describe('re-planning that never converges (2026-08-28)', () => {
     expect(mockedFetch).toHaveBeenCalledTimes(3)
     // A gate opens, a path appears: 200 m of real progress toward the
     // destination. Re-planning is working again, so it is allowed again.
-    await tickAndReplan(-93.172, clock + 60_000 + 3 * 120_000)
+    await tickAndReplan([44.98, -93.172], clock + 60_000 + 3 * 120_000)
     expect(mockedFetch).toHaveBeenCalledTimes(4)
   })
 })
