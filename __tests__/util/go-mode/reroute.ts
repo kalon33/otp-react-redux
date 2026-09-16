@@ -528,9 +528,17 @@ describe('quietReplanAccessLeg (leg-scoped with full-trip fallback)', () => {
 
   it('applies the splice: suffix legs are the ORIGINAL objects', async () => {
     const trip = makeTrip()
+    // Ends at T+640000, 20 s BEFORE the T+660000 bus. It used to end at
+    // T+700000 — 40 s after the bus had gone — which as of 2026-09-15 is a
+    // plan acceptAutoReplan refuses outright (`access-misses-board`, backlog
+    // 16.2: two such splices were auto-applied on that ride and shown to the
+    // rider as "you will miss the bus" for ten minutes). This case is about
+    // suffix identity, not feasibility, so it gets an access leg that can
+    // actually make its connection; the infeasible one is asserted on in
+    // __tests__/util/go-mode/access-feasibility-0915.ts.
     const newBike = {
       distance: 2400,
-      endTime: T + 700000,
+      endTime: T + 640000,
       mode: 'BICYCLE',
       startTime: T + 160000,
       transitLeg: false
@@ -540,8 +548,8 @@ describe('quietReplanAccessLeg (leg-scoped with full-trip fallback)', () => {
         error: false,
         itineraries: [
           {
-            duration: 540,
-            endTime: T + 700000,
+            duration: 480,
+            endTime: T + 640000,
             legs: [newBike],
             startTime: T + 160000
           }

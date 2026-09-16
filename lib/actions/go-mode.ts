@@ -42,10 +42,12 @@ import {
 import type { EarlyAlightRecord } from '../util/go-mode/riding'
 import {
   estimateBikeSpeedMps,
+  recordRiderSpeedAnchorSample,
   recordRiderSpeedSample,
   withObservedBikeSpeed
 } from '../util/go-mode/rider-speed'
 import {
+  destinationReachMeasure,
   destinationStalled,
   noteDestinationDistance,
   noteReplanAttempt
@@ -445,11 +447,17 @@ export function goModeNowMs(): number {
  * collected on the tick (handlePositionUpdate) and only while the rider is
  * actually on a bike leg — see rider-speed.ts for why this is a rolling median
  * of moving fixes and not `position.coords.speed`.
+ *
+ * Both series go in. The five-minute median leads; `riderSpeedAnchor` — the
+ * ride's own cruising pace — keeps it from falling below 0.7x of that when the
+ * rider is merely stuck, which on 2026-09-15 had every downtown re-plan timed
+ * for a 2 m/s cyclist (backlog 16.1).
  */
 function observedBikeSpeedMps(): number | null {
   return estimateBikeSpeedMps(
     session.riderSpeedSamples,
-    getCurrentTime().getTime()
+    getCurrentTime().getTime(),
+    session.riderSpeedAnchor
   )
 }
 
@@ -457,6 +465,10 @@ const { randId, storeItem } = coreUtils.storage
 
 // Action types
 export const ADD_NOTIFICATION = 'ADD_NOTIFICATION'
+// Recording only, like REROUTE_SNAPSHOT below: no reducer consumes it. It
+// exists so the daemon can see the current-leg card and the tick pipeline
+// disagreeing about which departure the rider is travelling to — see 16.3.
+export const CARD_DEPARTURE_MISMATCH = 'CARD_DEPARTURE_MISMATCH'
 export const CLEAR_RIDING = 'CLEAR_RIDING'
 export const CLEAR_VEHICLE_MATCH = 'CLEAR_VEHICLE_MATCH'
 export const CONFIRM_VEHICLE = 'CONFIRM_VEHICLE'
@@ -564,6 +576,27 @@ export const updateRouteMatch = createAction<RouteMatchResult | null>(
   UPDATE_ROUTE_MATCH
 )
 export const updateProgress = createAction<TripProgress>(UPDATE_PROGRESS)
+
+/**
+ * The card's headline departure is not the one the tick's wait math is using.
+ *
+ * Recording only. Both numbers are defensible — the card resolves the soonest
+ * departure the rider can catch at the boarding stop and then HOLDS it
+ * (resolveCardDeparture), while the tick takes the override, else the planned
+ * trip's live board epoch, else the plan — and on 2026-09-15 they parted
+ * company for nine minutes with nothing to show for it: the card read 10:09
+ * while UPDATE_PROGRESS carried effectiveDepartureMs 09:54:02 and
+ * timeUntilNextDeparture 534.9 s. Silently picking one would have hidden that.
+ */
+export const recordCardDepartureMismatch = (info: {
+  cardDepartureMs: number | null
+  heldTripId: string | null
+  reason: string
+  tickDepartureMs: number | null
+}) => ({
+  payload: { ...info, tMs: getCurrentTime().getTime() },
+  type: CARD_DEPARTURE_MISMATCH
+})
 export const transitionLeg = createAction<{ legIndex: number }>(TRANSITION_LEG)
 
 export const setLiveLegTimes =
@@ -800,6 +833,57 @@ function tokenHopMeters(state: any): number | undefined {
 function tokenHopToleranceMs(state: any): number | undefined {
   const minutes = state?.otp?.config?.itinerary?.tokenTransitHopToleranceMinutes
   return minutes != null ? minutes * 60000 : undefined
+}
+
+/**
+ * Put a quiet access re-plan's request/response pair in the debug stream.
+ *
+ * The onboard alight optimizer has recorded its five candidate plans since
+ * 2026-08-10 (ONBOARD_CANDIDATE_SNAPSHOT); the quiet access re-plan, which
+ * uses the SAME isolated fetch, recorded nothing. `fetchOnboardCandidatePlan`
+ * resolves through a local promise instead of dispatching ROUTING_RESPONSE, so
+ * the recorder never sees one unless a caller hands it over — and neither call
+ * site here did. The cost of that was measured on 2026-09-15 (backlog 13.8,
+ * second sighting): the ride installed NINE itinerary swaps, every one of them
+ * from this thunk, and the fixture's `onboardCandidatePlans` held zero of
+ * their requests. What OTP offered just before the 09:43:37 backwards splice
+ * (16.2) is therefore unknowable, and the daemon's `replan-not-converging`
+ * rule counts an event nothing emits.
+ *
+ * Same action type as the optimizer's, so the recorder whitelist, the size
+ * ladder and the fixture builder all already handle it. The `reason` tag is
+ * what tells them apart: build-fixture routes a tagged record to
+ * `quietReplanPlans` and leaves `onboardCandidatePlans` to the optimizer,
+ * whose replay keys on `request.stopId` — a field a quiet re-plan has no
+ * meaning for.
+ *
+ * Gated on `isTripRecordingEnabled()` exactly like the optimizer's, because
+ * these are full-capture payloads (up to 1 MB each) uploaded from a phone on
+ * cellular, and a quiet re-plan is far more frequent than an optimize.
+ */
+function recordQuietReplanPlan(
+  dispatch: any,
+  reason: 'quiet-replan-full' | 'quiet-replan-scoped',
+  combo: any,
+  result: { query?: any; response?: any; variables?: any }
+): void {
+  if (!isTripRecordingEnabled() || !result?.response) return
+  dispatch({
+    payload: {
+      request: {
+        arriveBy: !!combo?.arriveBy,
+        from: combo?.from,
+        modes: combo?.modes,
+        query: result.query,
+        reason,
+        to: combo?.to,
+        variables: result.variables
+      },
+      response: result.response,
+      tMs: getCurrentTime().getTime()
+    },
+    type: ONBOARD_CANDIDATE_SNAPSHOT
+  })
 }
 
 /**
@@ -2036,7 +2120,11 @@ export function quietReplanAccessLeg() {
       const sent = goMode.notifications?.sentNotifications || []
       const stalledNote = checkDestinationUnreachable(
         sent,
-        session.destinationProgress?.bestDistanceM,
+        // The straight line to the door, not the path measure: since 09-15 the
+        // stall arithmetic can be running on distance-to-the-boarding-stop plus
+        // the tail, and "23,433m from 2345 Old Shakopee Road West" would be a
+        // sentence about the itinerary's length, not about the destination.
+        session.destinationProgress?.bestDestinationM,
         destLeg.to?.name
       )
       if (stalledNote) {
@@ -2084,10 +2172,30 @@ export function quietReplanAccessLeg() {
       ...trimQuietReplanHistory(session.quietReplanHistory, nowMs),
       nowMs
     ]
-    session.destinationProgress = noteReplanAttempt(
-      session.destinationProgress,
-      accessMode
-    )
+    // What this attempt proves about the destination is settled by its ANSWER,
+    // not by its issue. The count used to happen right here, one line after the
+    // cooldown admitted the re-plan and before any request had gone out; on
+    // 2026-09-09 the third of three counted "re-plans" was a fetch that aborted
+    // 11.8 s later on the 12 s Go Mode timeout (api.js GO_MODE_FETCH_TIMEOUT_MS),
+    // and neither the empty-result path nor the rejection path below rolled it
+    // back. So: remember where the rider was when the question went out, and
+    // record the attempt once, when a fetch resolves.
+    const attemptPoint: [number, number] = [
+      lastPosition.coords.latitude,
+      lastPosition.coords.longitude
+    ]
+    let attemptRecorded = false
+    const recordReplanAttempt = (returned: boolean) => {
+      if (attemptRecorded) return
+      attemptRecorded = true
+      // Read fresh: ticks keep folding distances in while the request is out,
+      // and a gain that landed meanwhile has already cleared the count.
+      session.destinationProgress = noteReplanAttempt(
+        session.destinationProgress,
+        accessMode,
+        { point: attemptPoint, returned }
+      )
+    }
 
     const { homeTimezone } = state.otp.config
     const { modes, modeSettings, numItineraries } = getBasePlanParts(state)
@@ -2166,9 +2274,15 @@ export function quietReplanAccessLeg() {
       // transit, and the picker still refuses to downgrade a biking rider to
       // walk-only.
       const runScoped = async (target: number | null) => {
-        const { error, itineraries } = await dispatch(
-          fetchOnboardCandidatePlan(scopedAt(target))
-        )
+        const scopedCombo = scopedAt(target)
+        const { error, itineraries, query, response, variables } =
+          await dispatch(fetchOnboardCandidatePlan(scopedCombo))
+        recordQuietReplanPlan(dispatch, 'quiet-replan-scoped', scopedCombo, {
+          query,
+          response,
+          variables
+        })
+        recordReplanAttempt(!error)
         if (!stillReplannable()) return undefined
         return error || !itineraries?.length
           ? null
@@ -2226,9 +2340,15 @@ export function quietReplanAccessLeg() {
       }
     }
 
-    const { error, itineraries } = await dispatch(
+    const { error, itineraries, query, response, variables } = await dispatch(
       fetchOnboardCandidatePlan(combo)
     )
+    recordQuietReplanPlan(dispatch, 'quiet-replan-full', combo, {
+      query,
+      response,
+      variables
+    })
+    recordReplanAttempt(!error)
 
     // Re-check state after the async plan: the rider may have exited Go Mode
     // or a reroute may have started while the request was in flight.
@@ -2681,7 +2801,8 @@ export function discoverNearbyVehicles(attempt = 0) {
       lat,
       lon,
       allVehicles,
-      speedAdjustedRadius(PICKER_RADIUS_METERS, pos.coords.speed)
+      PICKER_RADIUS_METERS,
+      { userSpeedMps: pos.coords.speed }
     ).map((v) => ({ ...v, ...(vehicleDetails[v.vehicleId] || {}) }))
 
     dispatch({ payload: nearby, type: UPDATE_NEARBY_VEHICLES })
@@ -5155,9 +5276,20 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       !matchedLeg?.transitLeg &&
       !getState().otp?.goMode?.riding
     ) {
+      const speedFix = {
+        speedMps: position.coords.speed ?? null,
+        tMs: position.timestamp
+      }
       session.riderSpeedSamples = recordRiderSpeedSample(
         session.riderSpeedSamples,
-        { speedMps: position.coords.speed ?? null, tMs: position.timestamp }
+        speedFix
+      )
+      // ...and the sparse ride-level series the floor is taken from. Same gate,
+      // same fix, same timestamp: the anchor must never see a sample the short
+      // window did not, or a bus minute would anchor the rider to a bus.
+      session.riderSpeedAnchor = recordRiderSpeedAnchorSample(
+        session.riderSpeedAnchor,
+        speedFix
       )
     }
 
@@ -5254,6 +5386,17 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       intl
     )
 
+    // The rider's MEASURED pace, and the missed-bus classifier's last verdict.
+    // Both are applied here rather than inside calculateTripProgress for the
+    // same reason the stops latch below is: they are held across ticks and the
+    // calculator is pure. The card uses them to stop a projection moving the
+    // departure it has already shown (16.3 — see resolveCardDeparture); the
+    // verdict is the previous tick's, because classifyMissedBus runs several
+    // hundred lines below this dispatch and every release condition it feeds
+    // already waits minutes of grace.
+    progress.riderPaceMps = observedBikeSpeedMps()
+    progress.boardingMiss = session.riderBoardingMiss
+
     // A stop the rider has passed stays passed. calculateTripProgress is pure
     // and re-derives the count from this tick's position alone, so the latch is
     // applied here rather than inside it.
@@ -5309,7 +5452,17 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     // inside 454 m. See util/go-mode/destination-progress.ts.
     session.destinationProgress = noteDestinationDistance(
       session.destinationProgress,
-      progress.distanceToDestination
+      progress.distanceToDestination,
+      // ...and since 2026-09-15, what "closer" is measured along. An access leg
+      // to a boarding stop can only increase the straight line to a destination
+      // the bus runs back past: that morning it rose 18,340 m -> 18,653 m while
+      // the gap to the stop fell 1,920 m -> 1,270 m, and the mode was retired
+      // mid-trip on the strength of it.
+      destinationReachMeasure(
+        itinerary.legs,
+        routeMatch?.legIndex ?? 0,
+        currentPosition
+      )
     )
 
     // Arrival: mark it once and let this tick's notification pass emit
@@ -5725,6 +5878,15 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       riding: goMode.riding,
       vehicleConfidence: goMode.vehicleMatch?.match?.confidence
     })
+    // Carried to the next tick's progress for the current-leg card's hold.
+    // The card may only give up a departure it is already showing on evidence,
+    // and this is the app's one definition of "gone" — reused, not re-derived.
+    session.riderBoardingMiss = missedCtx
+      ? {
+          definitive: missedCtx.definitive,
+          effectiveBoardMs: missedCtx.effectiveBoardMs
+        }
+      : null
     const missedEvent =
       missedCtx &&
       checkMissedBus(
@@ -6269,7 +6431,14 @@ export function performVehicleMatching(routeId: string) {
       vehicles,
       routeId,
       previousMatch,
-      speedAdjustedRadius(80, riderSpeed),
+      // The BASE radius. Each frame now pays for its own feed lag inside the
+      // matcher (measureVehicle age-corrects it to now), and the rider-speed
+      // widening survives only as the fallback for a frame that carries no
+      // usable `seconds`/`speed` — which is what 12.11 asked for: on
+      // 2026-09-15 a 61 s-old frame for bus 8220 sat ~1,340 m back while
+      // speedAdjustedRadius(80, 22) allowed 1,070 m, and the correct vehicle
+      // was rejected 27 times in 28 minutes.
+      80,
       riderSpeed,
       expectedDirectionId
     )
@@ -6297,7 +6466,8 @@ export function performVehicleMatching(routeId: string) {
       userPos.coords.latitude,
       userPos.coords.longitude,
       vehicles,
-      speedAdjustedRadius(200, riderSpeed)
+      200,
+      { userSpeedMps: riderSpeed }
     )
     dispatch({ payload: nearby, type: UPDATE_NEARBY_VEHICLES })
 
@@ -6422,7 +6592,8 @@ export function searchBoardingVehicles() {
         pos.coords.latitude,
         pos.coords.longitude,
         vehicles,
-        speedAdjustedRadius(PICKER_RADIUS_METERS, pos.coords.speed)
+        PICKER_RADIUS_METERS,
+        { userSpeedMps: pos.coords.speed }
       )
       dispatch({ payload: nearby, type: UPDATE_NEARBY_VEHICLES })
     } catch {
@@ -6715,7 +6886,8 @@ export function confirmOnboardRoute(routeId: string) {
         pos.coords.latitude,
         pos.coords.longitude,
         vehicles,
-        Infinity
+        Infinity,
+        { userSpeedMps: pos.coords.speed }
       )[0]
     } else if (vehicles.length) {
       chosen = vehicles[0]

@@ -574,6 +574,12 @@ const GoModeDemo = (): JSX.Element => (
       'components.GoMode.returnStart': 'Start return trip',
       'components.MetroUI.sameShapeVariants':
         '{count, plural, one {# option} other {# options}}',
+      'components.MetroUI.variantBoardAt': 'Board at {stop}',
+      'components.MetroUI.variantsOtherStop': 'board at {stop}',
+      'components.MetroUI.variantsOtherStopsNamed':
+        'board at {stop} +{count} more',
+      'components.MetroUI.variantsOtherTimes':
+        '{count, plural, one {# other time} other {# other times}}',
       'components.StopTimeCell.realtime': 'Realtime',
       'components.StopTimeCell.scheduled': 'Scheduled'
     }}

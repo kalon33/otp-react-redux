@@ -593,7 +593,12 @@ components:
     timeBiking: "{time} de vélo"
     timeWalking: "{time} de marche"
     variantBiking: "{distance} à vélo"
+    variantBoardAt: Montez à {stop}
     variantShown: actuellement affiché
+    variantsOtherStop: montez à {stop}
+    variantsOtherStopsNamed: montez à {stop} +{count} autres
+    variantsOtherTimes: >-
+      {count, plural, one {# autre horaire} other {# autres horaires}}
     variantWalking: "{distance} à pied"
   MobilityProfile:
     DevicesPane:

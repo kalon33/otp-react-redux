@@ -15,6 +15,17 @@ export type TripStatus =
   | 'completed'
 
 export interface TripProgress {
+  /**
+   * The missed-bus classifier's verdict on the boarding the rider is heading
+   * for, carried so the card can reuse the app's one definition of "gone"
+   * instead of inventing a second one (see resolveCardDeparture). Written by
+   * the tick from the PREVIOUS tick's classifyMissedBus — the classifier runs
+   * after progress is dispatched, and a ~1 s lag is nothing against the
+   * minutes of grace every release condition already requires. Null when the
+   * classifier had nothing to say (rider aboard, departure still ahead, no
+   * upcoming transit leg).
+   */
+  boardingMiss?: { definitive: boolean; effectiveBoardMs: number } | null
   // 0-100%
   currentLegIndex: number
   currentLegProgress: number
@@ -48,6 +59,13 @@ export interface TripProgress {
   overallProgress: number
   // Epoch ms — the originally planned departure time from itinerary
   plannedDepartureTime?: number
+  /**
+   * The rider's MEASURED rolling pace in m/s (rider-speed.ts, rolling median
+   * of moving fixes on a bike leg), not this fix's instantaneous speed. Null
+   * until there is real evidence. Distinct from `riderSpeedMps` on purpose:
+   * that one is a single sample and reads 0 at every red light.
+   */
+  riderPaceMps?: number | null
   // The rider's own GPS ground speed in m/s, when the fix carries one. Lets
   // announcement leads scale with how fast the rider actually moves.
   riderSpeedMps?: number

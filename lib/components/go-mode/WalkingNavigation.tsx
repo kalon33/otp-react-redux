@@ -1,7 +1,11 @@
 import { useIntl } from 'react-intl'
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import type { Leg } from '@opentripplanner/types'
 
+import {
+  accessSecondsToBoardStop,
+  TripProgress
+} from '../../util/go-mode/progress-calculator'
 import {
   asContinuationWithIntl,
   formatCueDistance
@@ -9,9 +13,10 @@ import {
 import {
   getLegRouteId,
   getRouteDepartures,
-  getSoonestCatchableMs
+  getSoonestCatchableMs,
+  HeldDeparture,
+  resolveCardDeparture
 } from '../../util/go-mode/departure-anchor'
-import type { TripProgress } from '../../util/go-mode/progress-calculator'
 
 import {
   AlternativeDeparture,
@@ -48,6 +53,18 @@ interface Props {
   departureOverride?: number | null
   leg: Leg
   nextLeg?: Leg
+  /**
+   * Told when the departure this card headlines is NOT the one the tick
+   * pipeline is running its wait math on. Recording only — see 16.3: on
+   * 2026-09-15 the card said 10:09 while UPDATE_PROGRESS counted down to
+   * 09:54:02 and nothing anywhere noticed the two had parted company.
+   */
+  onDepartureMismatch?: (info: {
+    cardDepartureMs: number | null
+    heldTripId: string | null
+    reason: string
+    tickDepartureMs: number | null
+  }) => void
   onExit?: () => void
   onSelectDeparture?: (epochMs: number | null) => void
   progress: TripProgress
@@ -71,6 +88,7 @@ const WalkingNavigation = ({
   departureOverride,
   leg,
   nextLeg,
+  onDepartureMismatch,
   onExit,
   onSelectDeparture,
   progress,
@@ -133,9 +151,31 @@ const WalkingNavigation = ({
       : null
 
   const nowMs = progress.currentTime.getTime()
+
+  /**
+   * How long the rider still needs to reach the boarding stop.
+   *
+   * Distance still in front of them over the pace they are actually keeping —
+   * `accessSecondsToBoardStop` on this one leg, which takes the rider's
+   * measured rolling pace on a BICYCLE leg, else the leg's own planned pace
+   * (distance/duration), else the mode's figure. `leg.duration x (1 -
+   * progress)` is the fallback, for a leg that carries no distance.
+   *
+   * The plan's duration was the whole input before 16.3, and it is the worst
+   * of the three: it is OTP's estimate for somebody else's bike speed, and it
+   * is scaled by a progress figure that can freeze. On 2026-09-15 an 847 s leg
+   * sat at 0 % progress the whole way to the stop, so this counted the full
+   * 847 s of a ride the rider was most of the way through — and five seconds
+   * of the resulting threshold is what moved the card off the bus they caught.
+   */
   const rideSecondsRemaining = Math.max(
     0,
-    (leg.duration || 0) * (1 - progress.currentLegProgress / 100)
+    accessSecondsToBoardStop(
+      [leg],
+      0,
+      progress.currentLegProgress,
+      progress.riderPaceMps ?? null
+    ) ?? (leg.duration || 0) * (1 - progress.currentLegProgress / 100)
   )
 
   const route = nextLeg?.routeShortName || nextLeg?.routeLongName || ''
@@ -186,10 +226,70 @@ const WalkingNavigation = ({
     [routeDepartures, nowMs, rideSecondsRemaining]
   )
 
-  // Manual override wins; otherwise show the soonest reachable bus; fall back to
-  // OTP's planned departure only when we have no schedule data.
+  /**
+   * The departure the card commits to, with hysteresis (16.3).
+   *
+   * `soonestCatchableMs` above is a PROJECTION. It may seed this anchor and it
+   * may make the card read tight, but it may not move the anchor forward once
+   * the rider is counting down to a bus: that takes physical evidence, which
+   * `resolveCardDeparture` gets from the missed-bus classifier's verdict
+   * (`progress.boardingMiss`) and from the run leaving the feed. A
+   * realtime->schedule flip moves the number and keeps the bus.
+   *
+   * The hold is a ref, not state: this card re-renders on every GPS tick and
+   * the decision has to be available in the same render that produced it (a
+   * setState would show the projection's answer for one tick, which is the
+   * whole bug). It is re-keyed on the boarding — a different route or stop is
+   * a different anchor, and a re-mount mid-leg starts over, which is the same
+   * position the card was in before any of this.
+   */
+  const holdKey = `${nextLegRouteId ?? ''}|${
+    (nextLeg as any)?.from?.stop?.gtfsId ?? ''
+  }`
+  const holdRef = useRef<{ held: HeldDeparture | null; key: string }>({
+    held: null,
+    key: holdKey
+  })
+  if (holdRef.current.key !== holdKey) {
+    holdRef.current = { held: null, key: holdKey }
+  }
+
+  const decision = resolveCardDeparture({
+    boardingMiss: progress.boardingMiss ?? null,
+    candidateMs: soonestCatchableMs,
+    departureOverride: departureOverride ?? null,
+    departures: routeDepartures,
+    held: isNextLegTransit ? holdRef.current.held : null,
+    nowMs,
+    plannedDepartureMs: progress.plannedDepartureTime ?? null
+  })
+  if (isNextLegTransit) holdRef.current.held = decision.held
+
   const effectiveDepartureMs =
-    departureOverride || soonestCatchableMs || progress.plannedDepartureTime
+    decision.departureMs || progress.plannedDepartureTime
+
+  // The tick pipeline runs its wait math on its own departure
+  // (progress.effectiveDepartureMs = override || live board || plan). When the
+  // two disagree the rider is reading one number while every notification is
+  // timed off another — 16.3's entire failure mode — so it goes in the debug
+  // stream rather than being quietly resolved in favour of either.
+  const tickDepartureMs = progress.effectiveDepartureMs ?? null
+  const mismatch =
+    isNextLegTransit &&
+    !!effectiveDepartureMs &&
+    tickDepartureMs != null &&
+    effectiveDepartureMs !== tickDepartureMs
+  useEffect(() => {
+    if (!mismatch) return
+    onDepartureMismatch?.({
+      cardDepartureMs: effectiveDepartureMs ?? null,
+      heldTripId: decision.held?.tripId ?? null,
+      reason: decision.reason,
+      tickDepartureMs
+    })
+    // The pair is the event: re-log when either side moves, not every tick.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mismatch, effectiveDepartureMs, tickDepartureMs])
 
   // Whether the departure time we're showing came from live (realtime) data.
   // Override / soonest-catchable times originate from routeDepartures, so we

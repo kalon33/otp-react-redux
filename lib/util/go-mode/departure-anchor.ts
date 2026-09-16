@@ -41,6 +41,14 @@ export interface RouteDeparture {
   depMs: number
   realtime: boolean
   routeId?: string
+  /**
+   * The RUN this departure belongs to, when the feed names one. Load-bearing
+   * for the card's hold (see resolveCardDeparture): a realtime->schedule flip
+   * republishes the same trip at a different epoch, so a hold matched on
+   * `depMs` alone would lose its bus the moment the feed went quiet and slide
+   * onto the next run — the 2026-09-15 defect in miniature.
+   */
+  tripId?: string | null
 }
 
 /**
@@ -100,7 +108,8 @@ export function getRouteDepartures(
         return {
           depMs: (st.serviceDay + secs) * 1000,
           realtime: live,
-          routeId: st.route?.gtfsId || st.trip?.route?.gtfsId
+          routeId: st.route?.gtfsId || st.trip?.route?.gtfsId,
+          tripId: st.trip?.gtfsId ?? st.trip?.id ?? null
         }
       })
       .sort((a: RouteDeparture, b: RouteDeparture) => a.depMs - b.depMs)
@@ -304,4 +313,187 @@ export function evaluateDepartureAnchor(
   if (soonest === departureOverride) return { anchorMs: null, next: prev }
 
   return { anchorMs: soonest, next: soonest }
+}
+
+/**
+ * How long a held departure stays on the card after its own time has passed
+ * before "the feed no longer lists this run" is allowed to count as evidence
+ * the bus has gone.
+ *
+ * Longer than DEPARTURE_OVERDUE_GRACE_MS on purpose. That one decides whether
+ * a departure is still worth OFFERING; this one decides whether to take a
+ * departure the rider is already counting down to AWAY from them, which is the
+ * move the rider asked to be slow about ("it has been way too quick to drop
+ * the timed pickup to the next"). A stop-times poll drops a run shortly after
+ * its predicted time whether or not the bus has actually called, so the two
+ * minutes are there to outlast a poll that rolled forward early.
+ */
+export const CARD_HOLD_RELEASE_GRACE_MS = 120000
+
+/** The departure the card has committed to, carried between renders. */
+export interface HeldDeparture {
+  /** Last known epoch for the run — refreshed from the feed while it lasts. */
+  departureMs: number
+  /** The run itself. Null when the feed named no trip; then depMs matches. */
+  tripId: string | null
+}
+
+export type CardDepartureReason =
+  /** The rider picked this departure (or the anchor set an override). */
+  | 'override'
+  /** Nothing held yet — the projection chose the first anchor. */
+  | 'seeded'
+  /** Held through this tick; the projection was not allowed to move it. */
+  | 'held'
+  /** A meaningfully EARLIER run of the same route showed up. */
+  | 'adopted-earlier'
+  /** Released: the missed-bus classifier called the boarding definitively gone. */
+  | 'released-missed'
+  /** Released: the run left the feed and its time is more than grace past. */
+  | 'released-gone'
+  /** No departure could be resolved at all. */
+  | 'none'
+
+export interface CardDepartureDecision {
+  departureMs: number | null
+  held: HeldDeparture | null
+  reason: CardDepartureReason
+}
+
+/** The feed's current entry for a held run: by trip id, else by exact epoch. */
+function findHeld(
+  departures: RouteDeparture[],
+  held: HeldDeparture
+): RouteDeparture | null {
+  if (held.tripId) {
+    return departures.find((d) => d.tripId === held.tripId) ?? null
+  }
+  return departures.find((d) => d.depMs === held.departureMs) ?? null
+}
+
+function holdFor(
+  departureMs: number,
+  departures: RouteDeparture[]
+): HeldDeparture {
+  const match = departures.find((d) => d.depMs === departureMs)
+  return { departureMs, tripId: match?.tripId ?? null }
+}
+
+/**
+ * The departure the current-leg card should headline, with HYSTERESIS: once a
+ * departure has been shown, only physical evidence moves it on.
+ *
+ * 2026-09-15, 09:44:45. The card headlined the 10:09 Orange Line while the
+ * tick pipeline was still counting down to the 09:54:02 the rider went on to
+ * board. Nothing had happened to the bus. `getSoonestCatchableMs` keeps a
+ * departure while `depMs - now >= rideSecondsRemaining - min(180 s, 25 %)`,
+ * and `rideSecondsRemaining` was `leg.duration x (1 - progress/100)` on an
+ * 847 s leg whose progress was frozen at 0 % — so the threshold came out at
+ * 09:54:07 against a departure of 09:54:02. Five seconds of a projection, and
+ * the anchor slid to the next trip; the rider read the new headline as "you
+ * missed your bus". No MISSED_BUS notification fired all ride, because none
+ * was warranted: realtime for the leg had simply dropped between 09:43:29 and
+ * 09:50:19 and the board had fallen back to the scheduled time.
+ *
+ * So a projection may pick the FIRST anchor and may make the card read tight —
+ * it may never move the anchor forward. Moving forward needs one of:
+ *
+ *  - `boardingMiss.definitive` — the missed-bus classifier's own verdict,
+ *    reused rather than re-derived. It is already the app's definition of
+ *    "gone": realtime says the bus left, or the departure is past its grace
+ *    and the rider is provably not at the stop. Its AMBIGUOUS verdict (past
+ *    its time, schedule-only data, rider standing at the stop) deliberately
+ *    does NOT release — that is a late bus, not a gone one.
+ *  - the run leaving `routeDepartures` altogether, more than
+ *    CARD_HOLD_RELEASE_GRACE_MS after its own time. A stop-times poll stops
+ *    listing a run once it has called; before the grace, it is a poll that
+ *    rolled forward.
+ *
+ * A realtime->schedule flip is neither. The run is still in the feed, so the
+ * hold follows it to whatever epoch the feed now publishes for THAT trip —
+ * a new prediction for the same bus is not a different bus.
+ *
+ * Moving EARLIER is not "abandoning the timed pickup" and stays allowed, on
+ * the same >= AUTO_ANCHOR_MIN_GAIN_MS terms shouldAdoptAnchor applies
+ * everywhere else.
+ */
+export function resolveCardDeparture(input: {
+  /**
+   * The previous tick's classifyMissedBus verdict for the upcoming boarding,
+   * as carried on TripProgress. Null when the classifier had nothing to say.
+   */
+  boardingMiss?: { definitive: boolean } | null
+  /** What the projection would pick on its own (getSoonestCatchableMs). */
+  candidateMs: number | null
+  /** goMode.departureOverride — the rider's own pick outranks everything. */
+  departureOverride?: number | null
+  /** Departures of the boarding route at the boarding stop, sorted. */
+  departures: RouteDeparture[]
+  graceMs?: number
+  /** What the card showed last render, or null on the first one. */
+  held: HeldDeparture | null
+  nowMs: number
+  /** OTP's planned board time, the last resort when there is no feed. */
+  plannedDepartureMs?: number | null
+}): CardDepartureDecision {
+  const {
+    boardingMiss,
+    candidateMs,
+    departureOverride,
+    departures,
+    graceMs = CARD_HOLD_RELEASE_GRACE_MS,
+    held,
+    nowMs,
+    plannedDepartureMs
+  } = input
+
+  // The rider's own choice is not a projection and is never held against.
+  if (departureOverride != null && Number.isFinite(departureOverride)) {
+    return {
+      departureMs: departureOverride,
+      held: holdFor(departureOverride, departures),
+      reason: 'override'
+    }
+  }
+
+  if (held != null && Number.isFinite(held.departureMs)) {
+    const current = findHeld(departures, held)
+    // The same run at whatever time the feed publishes for it now. This is the
+    // realtime<->schedule flip: it moves the NUMBER, never the bus.
+    const heldMs = current?.depMs ?? held.departureMs
+
+    const missed = boardingMiss?.definitive === true
+    const leftTheFeed = !current && nowMs > held.departureMs + graceMs
+
+    if (!missed && !leftTheFeed) {
+      if (shouldAdoptAnchor(candidateMs, heldMs)) {
+        return {
+          departureMs: candidateMs,
+          held: holdFor(candidateMs as number, departures),
+          reason: 'adopted-earlier'
+        }
+      }
+      return {
+        departureMs: heldMs,
+        held: { departureMs: heldMs, tripId: held.tripId },
+        reason: 'held'
+      }
+    }
+
+    // Released. Fall through to re-seed on whatever the rider can still catch.
+    const next = candidateMs ?? plannedDepartureMs ?? null
+    return {
+      departureMs: next,
+      held: next == null ? null : holdFor(next, departures),
+      reason: missed ? 'released-missed' : 'released-gone'
+    }
+  }
+
+  const seeded = candidateMs ?? plannedDepartureMs ?? null
+  if (seeded == null) return { departureMs: null, held: null, reason: 'none' }
+  return {
+    departureMs: seeded,
+    held: holdFor(seeded, departures),
+    reason: 'seeded'
+  }
 }

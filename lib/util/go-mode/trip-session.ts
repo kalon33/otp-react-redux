@@ -21,7 +21,7 @@ import type { DepartureBaselineState } from './departure-drift'
 import type { DestinationProgressState } from './destination-progress'
 import type { MissedBusAttempt } from './missed-bus-recovery'
 import type { PacingCardState } from './pacing-card'
-import type { RiderSpeedSample } from './rider-speed'
+import type { RiderSpeedAnchorBucket, RiderSpeedSample } from './rider-speed'
 import type { TimedSimulationPoint } from './geometry'
 
 export interface TripSession {
@@ -212,12 +212,29 @@ export interface TripSession {
   returnRefreshInFlight: boolean
 
   /**
+   * The last tick's classifyMissedBus verdict for the upcoming boarding, so
+   * the NEXT tick can put it on TripProgress for the current-leg card's hold
+   * (departure-anchor.resolveCardDeparture). The classifier runs well after
+   * progress is dispatched within a tick, and a one-tick lag on a release
+   * decision that already waits minutes of grace costs nothing.
+   */
+  riderBoardingMiss: { definitive: boolean; effectiveBoardMs: number } | null
+
+  /**
    * When the rider last tapped "Not on the bus" on the trip sheet. Holds the
    * automatic, evidence-free half of the board gate off for a few minutes so
    * the matcher cannot immediately put them back aboard — see
    * boarding-confirmation.ts. Trip state, never trip-crossing.
    */
   riderDeniedBoardingAtMs: number | null
+
+  /**
+   * The sparse ride-level companion to riderSpeedSamples: one peak moving fix
+   * per minute of riding, fed from the same gate. It is what puts a floor under
+   * the short-window median so a downtown crawl cannot time a whole access leg
+   * — see rider-speed.ts (backlog 16.1).
+   */
+  riderSpeedAnchor: RiderSpeedAnchorBucket[]
 
   /**
    * Recent ground speeds off the rider's own fixes while they are on a bike
@@ -277,7 +294,9 @@ export function createTripSession(): TripSession {
     quietReplanMissStreak: 0,
     rerouteSnapshotIntervalId: null,
     returnRefreshInFlight: false,
+    riderBoardingMiss: null,
     riderDeniedBoardingAtMs: null,
+    riderSpeedAnchor: [],
     riderSpeedSamples: [],
     simulatedTimeMs: 0,
     simulationActive: false,

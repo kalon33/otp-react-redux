@@ -48,6 +48,12 @@ interface Props {
   endGoMode: () => void
   finishArrivedTrip: () => void
   goMode: GoModeState
+  onDepartureMismatch: (info: {
+    cardDepartureMs: number | null
+    heldTripId: string | null
+    reason: string
+    tickDepartureMs: number | null
+  }) => void
   pauseGpsSimulation: () => void
   resumeGpsSimulation: () => void
   setDepartureOverride: (epochMs: number | null) => void
@@ -67,6 +73,7 @@ const GoModeScreen = ({
   endGoMode,
   finishArrivedTrip,
   goMode,
+  onDepartureMismatch,
   pauseGpsSimulation,
   resumeGpsSimulation,
   setDepartureOverride,
@@ -292,6 +299,7 @@ const GoModeScreen = ({
               ? goMode.activeItinerary.legs[goMode.progress.currentLegIndex + 1]
               : undefined
           }
+          onDepartureMismatch={onDepartureMismatch}
           onExit={handleExit}
           onSelectDeparture={setDepartureOverride}
           progress={goMode.progress}
@@ -523,6 +531,7 @@ const mapDispatchToProps = {
   clearOnboard: goModeActions.clearOnboard,
   endGoMode: goModeActions.endGoMode,
   finishArrivedTrip: goModeActions.finishArrivedTrip,
+  onDepartureMismatch: goModeActions.recordCardDepartureMismatch,
   pauseGpsSimulation: goModeActions.pauseGpsSimulation,
   resumeGpsSimulation: goModeActions.resumeGpsSimulation,
   setDepartureOverride: goModeActions.selectDeparture,

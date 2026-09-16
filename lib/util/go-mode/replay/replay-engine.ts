@@ -58,6 +58,16 @@ interface ReplayFixture {
     stopId?: string
     tMs: number
   }>
+  // The quiet access re-plan's own request/response pairs (2026-09-15, backlog
+  // 13.8). Recorded through the same action as the plans above but kept apart:
+  // these have no candidate alight stop, so anything that keys on `stopId`
+  // must not see them.
+  quietReplanPlans?: Array<{
+    reason?: string
+    request?: any
+    response: any
+    tMs: number
+  }>
   // Periodic "alternatives to finish the trip" captured during recording, served
   // by nearest sim-time so a reroute at moment T yields the alternatives real at T.
   rerouteSnapshots?: Array<{ request?: any; response: any; tMs: number }>

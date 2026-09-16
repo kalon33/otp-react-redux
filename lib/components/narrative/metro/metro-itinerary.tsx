@@ -183,6 +183,17 @@ const ItineraryGridSmall = styled.button`
   }
 `
 
+/**
+ * ItineraryGrid is `repeat(auto-fit, minmax(50%, 1fr))`, so a plain child would
+ * take half the card. `1 / -1` puts the variants control on its own full-width
+ * row beneath the summary, clear of ItineraryDetails (which holds the right
+ * column across rows 1-2). SameShapeVariants renders nothing when the row has
+ * no variants, so no empty row or grid gap is left behind.
+ */
+const VariantsRow = styled(SameShapeVariants)`
+  grid-column: 1 / -1;
+`
+
 const BLUR_AMOUNT = 3
 const blurAnimation = keyframes`
  0% { filter: blur(${BLUR_AMOUNT}px); }
@@ -617,10 +628,6 @@ class MetroItinerary extends NarrativeItinerary {
                       </>
                     )}
                   </span>
-                  <SameShapeVariants
-                    itinerary={itinerary}
-                    setActiveItinerary={setActiveItinerary}
-                  />
                   {showInlineItinerarySummary && (
                     <>
                       {' '}
@@ -643,6 +650,18 @@ class MetroItinerary extends NarrativeItinerary {
                     </div>
                   )}
                 </DepartureTimes>
+                {/*
+                  The variants control spans the whole grid rather than riding
+                  along inside DepartureTimes: at ~400 px the row's right-hand
+                  column is duration + fare, so anything inline lands mid-
+                  sentence after "(arrives 8:41 AM)" and reads as punctuation.
+                  Its own full-width row under the summary is the only place on
+                  this card a thumb finds without hunting (backlog 16.6).
+                */}
+                <VariantsRow
+                  itinerary={itinerary}
+                  setActiveItinerary={setActiveItinerary}
+                />
               </ItineraryGrid>
             )}
             {mini && (

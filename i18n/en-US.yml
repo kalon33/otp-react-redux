@@ -428,10 +428,10 @@ components:
     boardingDeny: I'm not on this bus
     boardingQuestion: Are you on the bus?
     boardingSearching: Looking…
-    boardingSubtitle: 'Looking for {route} nearby'
-    busHeadsign: 'to {headsign}'
-    busLabel: 'Bus {label}'
-    busNotBroadcasting: 'Bus not broadcasting yet — scheduled {time}'
+    boardingSubtitle: Looking for {route} nearby
+    busHeadsign: to {headsign}
+    busLabel: Bus {label}
+    busNotBroadcasting: Bus not broadcasting yet — scheduled {time}
     changeBus: Choose bus
     chooseBus: Choose bus
     confirmExit: Are you sure you want to stop tracking this trip?
@@ -478,8 +478,8 @@ components:
     offAtStop: 'Off at {stop}'
     onBus: 'On Bus #{label}'
     onBusButton: I'm already on the bus
-    onboardAssumedRoute: 'On the {route}'
-    onboardAssumedVehicle: 'On the {route} · {vehicle}'
+    onboardAssumedRoute: On the {route}
+    onboardAssumedVehicle: On the {route} · {vehicle}
     onboardCancel: Cancel
     onboardError: Couldn't work out your bus. Try again?
     onboardNotThisVehicle: Not this one
@@ -591,11 +591,15 @@ components:
     singleModeItineraryDescription: '{time} {mode} itinerary'
     startTrip: Start Trip
     switchTrip: Switch to this trip
-    timeBiking: '{time} biking'
-    timeWalking: '{time} walking'
-    variantBiking: '{distance} biking'
+    timeBiking: "{time} biking"
+    timeWalking: "{time} walking"
+    variantBiking: "{distance} biking"
+    variantBoardAt: Board at {stop}
     variantShown: currently shown
-    variantWalking: '{distance} walking'
+    variantWalking: "{distance} walking"
+    variantsOtherStop: board at {stop}
+    variantsOtherStopsNamed: board at {stop} +{count} more
+    variantsOtherTimes: "{count, plural, one {# other time} other {# other times}}"
   MobilityProfile:
     DevicesPane:
       devices:

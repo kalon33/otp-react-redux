@@ -19,6 +19,13 @@ interface Props {
   departureOverride?: number | null
   leg: Leg
   nextLeg?: Leg
+  /** Recording hook — see WalkingNavigation. */
+  onDepartureMismatch?: (info: {
+    cardDepartureMs: number | null
+    heldTripId: string | null
+    reason: string
+    tickDepartureMs: number | null
+  }) => void
   onExit?: () => void
   onSelectDeparture?: (epochMs: number | null) => void
   progress: TripProgress
@@ -33,6 +40,7 @@ const CurrentLegPanel = ({
   departureOverride,
   leg,
   nextLeg,
+  onDepartureMismatch,
   onExit,
   onSelectDeparture,
   progress,
@@ -53,6 +61,7 @@ const CurrentLegPanel = ({
           departureOverride={departureOverride}
           leg={leg}
           nextLeg={nextLeg}
+          onDepartureMismatch={onDepartureMismatch}
           onExit={onExit}
           onSelectDeparture={onSelectDeparture}
           progress={progress}
@@ -67,6 +76,7 @@ const CurrentLegPanel = ({
           departureOverride={departureOverride}
           leg={leg}
           nextLeg={nextLeg}
+          onDepartureMismatch={onDepartureMismatch}
           onExit={onExit}
           onSelectDeparture={onSelectDeparture}
           progress={progress}
