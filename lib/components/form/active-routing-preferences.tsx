@@ -125,6 +125,7 @@ const ActiveRoutingPreferences = ({
   clearPreferences,
   defaultNumItineraries,
   defaultStopCap,
+  enableMaxStopCount,
   hideWalkTransitOptions,
   maxStopCount,
   noTransfers,
@@ -136,6 +137,7 @@ const ActiveRoutingPreferences = ({
   clearPreferences: () => void
   defaultNumItineraries: number
   defaultStopCap: number
+  enableMaxStopCount: boolean
   hideWalkTransitOptions?: boolean
   maxStopCount?: number
   noTransfers?: boolean
@@ -154,8 +156,11 @@ const ActiveRoutingPreferences = ({
       ? numItineraries
       : undefined
   // Same rule for the stop cap (backlog 14.1): a chip only once the rider has
-  // moved it off what the config ships.
+  // moved it off what the config ships. The lever is fork-only, so on a
+  // standard OTP backend it is disabled and the chip never shows (the rider
+  // cannot set the value from the settings panel either).
   const customStopCap =
+    enableMaxStopCount &&
     typeof maxStopCount === 'number' &&
     clampStopCap(maxStopCount) !== defaultStopCap
       ? clampStopCap(maxStopCount)
@@ -268,6 +273,7 @@ const ActiveRoutingPreferences = ({
 const mapStateToProps = (state: AppReduxState) => ({
   defaultNumItineraries: getDefaultNumItineraries(state.otp.config),
   defaultStopCap: clampStopCap(state.otp.config?.itinerary?.maxStopCount),
+  enableMaxStopCount: !!state.otp.config?.itinerary?.enableMaxStopCount,
   hideWalkTransitOptions: state.otp.currentQuery?.hideWalkTransitOptions,
   maxStopCount: state.otp.currentQuery?.maxStopCount,
   noTransfers: state.otp.currentQuery?.noTransfers,

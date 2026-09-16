@@ -303,6 +303,7 @@ const AdvancedSettingsPanel = ({
   configuredStopCap,
   currentQuery,
   defaultNumItineraries,
+  enableMaxStopCount,
   enabledModeButtons,
   findRoutesIfNeeded,
   getDependentUserInfo,
@@ -330,6 +331,7 @@ const AdvancedSettingsPanel = ({
   configuredStopCap: number
   currentQuery: any
   defaultNumItineraries: number
+  enableMaxStopCount: boolean
   enabledModeButtons: string[]
   findRoutesIfNeeded: () => void
   getDependentUserInfo: (userIds: string[], intl: IntlShape) => void
@@ -853,20 +855,22 @@ const AdvancedSettingsPanel = ({
           options={numItineraryOptions}
           value={String(numItineraries)}
         />
-        <SearchOptionBlock>
-          <RoutingProfileDropdown
-            label={intl.formatMessage({
-              id: 'components.BatchSearchScreen.stopCapLabel'
-            })}
-            name="maxStopCount"
-            onChange={onStopCapChange}
-            options={stopCapOptions}
-            value={String(stopCap)}
-          />
-          <HelperText>
-            <FormattedMessage id="components.BatchSearchScreen.stopCapHelp" />
-          </HelperText>
-        </SearchOptionBlock>
+        {enableMaxStopCount && (
+          <SearchOptionBlock>
+            <RoutingProfileDropdown
+              label={intl.formatMessage({
+                id: 'components.BatchSearchScreen.stopCapLabel'
+              })}
+              name="maxStopCount"
+              onChange={onStopCapChange}
+              options={stopCapOptions}
+              value={String(stopCap)}
+            />
+            <HelperText>
+              <FormattedMessage id="components.BatchSearchScreen.stopCapHelp" />
+            </HelperText>
+          </SearchOptionBlock>
+        )}
         <SearchOptionBlock>
           <GlobalSettingsContainer>
             <SettingCheckbox
@@ -1109,6 +1113,8 @@ const mapStateToProps = (state: AppReduxState) => {
       })?.modeButtons?.filter((mb): mb is string => mb !== null) ||
       modes?.initialState?.enabledModeButtons ||
       [],
+
+    enableMaxStopCount: !!state.otp.config?.itinerary?.enableMaxStopCount,
     loggedInUser: state.user.loggedInUser,
     mobilityProfile: state.otp.config?.mobilityProfile || false,
     modeButtonOptions: modes?.modeButtons || [],
