@@ -1,5 +1,6 @@
 import '../test-utils/mock-window-url'
 import {
+  convertPlanResponseItineraries,
   formatRecentSearch,
   shouldRememberPlace
 } from '../../lib/actions/apiV2'
@@ -98,5 +99,37 @@ describe('actions > apiV2 > formatRecentSearch', () => {
     expect(query.from.name).toBe('Origin')
     expect(query.to.name).toBe('Destination')
     expect(query.queryParamData.modeButtons).toBe('transit_bike_bicycle')
+  })
+})
+
+const convertCtx = {
+  combo: { modes: [] },
+  config: { transitOperators: [] },
+  query: { variables: {} },
+  strictModes: false,
+  validModeCombinations: []
+}
+
+describe('actions > apiV2 > convertPlanResponseItineraries', () => {
+  // Regression: the OTP plan endpoint can answer a body with no data.plan
+  // (network error, error response, or a search fired while parsing the URL
+  // on first load). rewritePayload used to crash on
+  // `withCollapsedShortNames.length` because this helper returned undefined.
+  it('returns undefined (never throws) when response.data is undefined', () => {
+    expect(
+      convertPlanResponseItineraries({ data: undefined }, convertCtx)
+    ).toBeUndefined()
+  })
+
+  it('returns undefined when response.data.plan is undefined', () => {
+    expect(
+      convertPlanResponseItineraries({ data: { plan: undefined } }, convertCtx)
+    ).toBeUndefined()
+  })
+
+  it('returns undefined when the plan has no itineraries', () => {
+    expect(
+      convertPlanResponseItineraries({ data: { plan: {} } }, convertCtx)
+    ).toBeUndefined()
   })
 })
