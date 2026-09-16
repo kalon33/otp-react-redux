@@ -219,10 +219,19 @@ describe('routing-profiles', () => {
     // 5.2: the client never sent searchWindow, so OTP auto-sized it to 3000 s
     // on the rider's commute and returned five Orange Line departures and
     // nothing else. Declaring it is half the fix; the type is the other half.
-    it('declares maxStopCount as Int and passes it to plan()', () => {
-      // 14.1: the fork's plan(maxStopCount:) — an undeclared variable would be
-      // silently dropped and the rider's choice would never reach OTP.
+    it('omits the fork-only maxStopCount by default (standard OTP rejects it)', () => {
+      // 14.1: maxStopCount is the fork's plan(maxStopCount:) argument, NOT in the
+      // standard OTP schema. Declaring it on a standard OTP instance rejects the
+      // whole query, so it must be absent unless the fork is opted in.
       const out = extendPlanQueryWithLevers(baseQuery)
+      expect(out).not.toContain('$maxStopCount')
+      expect(out).not.toContain('maxStopCount:')
+    })
+
+    it('declares maxStopCount only when the fork is opted in', () => {
+      const out = extendPlanQueryWithLevers(baseQuery, {
+        enableMaxStopCount: true
+      })
       expect(out).toContain('$maxStopCount: Int')
       expect(out).toContain('maxStopCount: $maxStopCount')
     })
@@ -361,11 +370,17 @@ describe('routing-profiles', () => {
 })
 
 describe('stop cap (backlog 14.1)', () => {
-  it('sends the default cap when the rider and config are silent', () => {
+  it('sends nothing by default (standard OTP rejects maxStopCount)', () => {
+    // maxStopCount is a fork-only plan() argument. On a standard OTP instance
+    // the lever is opted out of by default, so the planner sends nothing and
+    // the server's own default applies.
+    expect(stopCapVariables(undefined, undefined)).toEqual({})
+  })
+  it('sends the default cap when the fork is opted in', () => {
     // Production OTP runs 2000 and returned 2 itineraries on the Lake Elmo ->
     // Hiawatha Church plan where 10000 returned 8, so the planner asks for its
     // own cap on every rider-initiated plan.
-    expect(stopCapVariables(undefined, undefined)).toEqual({
+    expect(stopCapVariables(undefined, undefined, false, true)).toEqual({
       maxStopCount: DEFAULT_MAX_STOP_COUNT
     })
     expect(DEFAULT_MAX_STOP_COUNT).toBe(10000)

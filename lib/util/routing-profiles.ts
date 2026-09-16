@@ -379,14 +379,18 @@ export function effectiveStopCap(
 
 /**
  * The `maxStopCount` plan() variable for a query, or nothing at all for a
- * background plan so OTP keeps its server default there.
+ * background plan so OTP keeps its server default there. `enableMaxStopCount`
+ * is false on a standard OTP instance (maxStopCount is a fork-only plan()
+ * argument; sending it to standard OTP rejects the whole query), so nothing
+ * is sent unless the fork is explicitly opted in via config.
  */
 export function stopCapVariables(
   requested?: number | null,
   configured?: number | null,
-  background = false
+  background = false,
+  enableMaxStopCount = false
 ): { maxStopCount?: number } {
-  if (background) return {}
+  if (background || !enableMaxStopCount) return {}
   return { maxStopCount: effectiveStopCap(requested, configured) }
 }
 
@@ -619,10 +623,18 @@ export function applyRoutingPreferences(
 // (deprecated but functional) plan field: bikeSpeed/waitReluctance are Float,
 // transferPenalty/minTransferTime/walkBoardCost are Int, and searchWindow is
 // Long (Int is rejected with VariableTypeMismatch).
+//
+// `maxStopCount` is the OTP *fork's* plan(maxStopCount:) argument (backlog
+// 14.1) and is NOT part of the standard OTP schema: declaring it on a
+// standard OTP instance rejects the whole query with a validation error, so
+// it is injected only when the fork is in use (see extendPlanQueryWithLevers
+// and the `enableMaxStopCount` config flag). searchWindow, maxTransfers and
+// via ARE standard OTP 2.x plan() arguments and are always safe to declare.
+const FORK_MAX_STOP_COUNT_DECL = '  $maxStopCount: Int\n'
+const FORK_MAX_STOP_COUNT_ARG = '    maxStopCount: $maxStopCount\n'
 const EXTRA_VAR_DECLS =
   '$walkSpeed: Float\n' +
   '  $searchWindow: Long\n' +
-  '  $maxStopCount: Int\n' +
   '  $bikeSpeed: Float\n' +
   '  $waitReluctance: Float\n' +
   '  $transferPenalty: Int\n' +
@@ -633,7 +645,6 @@ const EXTRA_VAR_DECLS =
 const EXTRA_PLAN_ARGS =
   'walkSpeed: $walkSpeed\n' +
   '    searchWindow: $searchWindow\n' +
-  '    maxStopCount: $maxStopCount\n' +
   '    bikeSpeed: $bikeSpeed\n' +
   '    waitReluctance: $waitReluctance\n' +
   '    transferPenalty: $transferPenalty\n' +
@@ -650,16 +661,31 @@ const EXTRA_PLAN_ARGS =
  * missing (unexpected query shape) the query is returned unchanged, and unset
  * levers are simply passed as null (OTP falls back to its defaults).
  */
-export function extendPlanQueryWithLevers(query: string): string {
+export function extendPlanQueryWithLevers(
+  query: string,
+  { enableMaxStopCount = false }: { enableMaxStopCount?: boolean } = {}
+): string {
   if (
     !query.includes('$walkSpeed: Float') ||
     !query.includes('walkSpeed: $walkSpeed')
   ) {
     return query
   }
+  const varDecls = enableMaxStopCount
+    ? EXTRA_VAR_DECLS.replace(
+        '$walkSpeed: Float\n',
+        `$walkSpeed: Float\n${FORK_MAX_STOP_COUNT_DECL}`
+      )
+    : EXTRA_VAR_DECLS
+  const planArgs = enableMaxStopCount
+    ? EXTRA_PLAN_ARGS.replace(
+        'walkSpeed: $walkSpeed\n',
+        `walkSpeed: $walkSpeed\n${FORK_MAX_STOP_COUNT_ARG}`
+      )
+    : EXTRA_PLAN_ARGS
   return query
-    .replace('$walkSpeed: Float', () => EXTRA_VAR_DECLS)
-    .replace('walkSpeed: $walkSpeed', () => EXTRA_PLAN_ARGS)
+    .replace('$walkSpeed: Float', () => varDecls)
+    .replace('walkSpeed: $walkSpeed', () => planArgs)
 }
 
 /** Path of the login-gated preferences endpoint (same origin, proxied by nginx). */

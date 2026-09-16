@@ -327,6 +327,15 @@ export interface ItineraryConfig {
   defaultFareType?: FareProductSelector
   defaultSort?: ItinerarySortOption
   disableMetroSeperatorDot?: true
+  /**
+   * Set true only when the backend is the OTP *fork* that implements
+   * `plan(maxStopCount:)` (backlog 14.1). `maxStopCount` is not part of the
+   * standard OTP schema, so sending it to a standard OTP instance rejects the
+   * whole query. Defaults to false, which omits the lever entirely (a rider's
+   * stop-cap choice is then ignored, but the search still runs). When true,
+   * `itinerary.maxStopCount` (or the default) is sent on rider-initiated plans.
+   */
+  enableMaxStopCount?: boolean
   exclusiveErrors?: string[]
   fillModeIcons?: boolean
   /**
@@ -343,6 +352,7 @@ export interface ItineraryConfig {
    * stops the access/egress street search may reach. Clamped to
    * STOP_CAP_RANGE; omit to take DEFAULT_MAX_STOP_COUNT in
    * util/routing-profiles. The rider can override it from the settings panel.
+   * Only sent when `enableMaxStopCount` is true (the fork is in use).
    */
   maxStopCount?: number
   mergeByRouteSignature?: boolean
