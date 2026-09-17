@@ -85,7 +85,7 @@ actions:
       réessayez.
     tripDeleted: Votre trajet a été supprimé
 common:
-  closedStop: Closed Stop
+  closedStop: Arrêt fermé
   coordinates: "{lat}; {lon}"
   currentlySelected: " (actuellement sélectionné)"
   dateExpressions:
@@ -136,7 +136,7 @@ common:
     containsCanceledTrip: Cet itinéraire contient un trajet annulé.
     fareUnknown: Tarif inconnu
     reservationRequired: Réservation requise.
-    noDefaultFareTypeConfigured: Multiple fares apply
+    noDefaultFareTypeConfigured: Plusieurs tarifs s'appliquent
     noItineraryToDisplay: Aucun trajet à afficher.
     relativeCo2: |
       {co2} de CO₂ en {isMore, select, true {plus} other {moins} } qu'en voiture
@@ -684,7 +684,7 @@ components:
     nearbyListIntro: Liste de {count} entités à proximité.
     nothingNearby: Aucun lieu à proximité.
     nothingNearbyHeader: Hors de portée
-    searchNearby: Search nearby...
+    searchNearby: Rechercher à proximité…
     spacesAvailable: "{spacesAvailable} emplacements libres disponibles"
   NewAccountWizard:
     createNewAccount: Créez un nouveau compte
@@ -978,12 +978,12 @@ components:
       recherches afin d'améliorer les transports publics dans ma region.
       <termsOfStorageLink>Plus d'informations...</termsOfStorageLink>
   Timetable:
-    errorLoadingStopClosures: Error loading stop closures
-    errorLoadingTimetable: Error loading timetable
-    showAllStops: Show All Stops
-    showTimepointsOnly: Show Timepoints Only
-    switchDirection: Switch Direction
-    timetable: Timetable
+    errorLoadingStopClosures: Erreur lors du chargement des arrêts fermés
+    errorLoadingTimetable: Erreur lors du chargement des horaires
+    showAllStops: Afficher tous les arrêts
+    showTimepointsOnly: Afficher uniquement les points d'arrêt
+    switchDirection: Changer de direction
+    timetable: Horaires
   TransitVehicleOverlay:
     travelingAt: "Vitesse : {milesPerHour}"
     vehicleName: Véhicule {vehicleNumber}
@@ -1125,7 +1125,7 @@ components:
 
       *** DÉTAILS TECHNIQUES ***
     reportIssue: Un problème ?
-    copyItineraryText: Copy Trip Text
+    copyItineraryText: Copier le texte du trajet
   TripViewer:
     accessible: Accessible
     bicyclesAllowed: Autorisés
