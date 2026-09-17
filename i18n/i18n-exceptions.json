@@ -102,6 +102,7 @@
   "ignoredIds": [
     "components.AppMenu.openRideConsole",
     "components.GoMode.accessible",
+    "components.GoMode.currentLocation",
     "components.GoMode.avoidBiking",
     "components.GoMode.avoidbiking",
     "components.GoMode.bikeforward",
