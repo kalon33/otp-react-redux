@@ -1202,3 +1202,19 @@ util:
       rayon spécifié ou aux heures indiquées, ou ne sont pas accessibles en
       toute sécurité.
     noTripFoundWithReason: "{noTripFound} {reason}"
+otpUi:
+  AccessLegBody:
+    RentedVehicleSubheader:
+      dropoffRental: Déposez {company} {vehicleType} {vehicleName} à {dropoffLocation}
+  ItineraryBody:
+    canceledMessage: Le trajet suivant a été annulé
+  TextOnlyItinerary:
+    arriveAt: 'Arrivée à {place} à {timeMillis, time, short}.'
+    departFrom: 'Départ de {place} à {timeMillis, time, short}.'
+    transitArriveAt: >-
+      Arrivée à {place} {hasStopId, select, true {(Arrêt : {stopId})} other {}}
+      à {timeMillis, time, short}.
+    transitDepartFrom: >-
+      Départ de {place} {hasStopId, select, true {(Arrêt : {stopId})} other
+      {}} à {timeMillis, time, short} via {routeName}{hasHeadsign, select, true
+      { direction {headsign}} other {}}.

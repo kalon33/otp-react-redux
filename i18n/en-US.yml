@@ -1181,3 +1181,19 @@ util:
       at the specified time, or your start or end point might not be safely
       accessible.
     noTripFoundWithReason: '{noTripFound} {reason}'
+otpUi:
+  AccessLegBody:
+    RentedVehicleSubheader:
+      dropoffRental: Drop off {company} {vehicleType} {vehicleName} at {dropoffLocation}
+  ItineraryBody:
+    canceledMessage: The following trip has been canceled
+  TextOnlyItinerary:
+    arriveAt: 'Arrive at {place} at {timeMillis, time, short}.'
+    departFrom: 'Depart from {place} at {timeMillis, time, short}.'
+    transitArriveAt: >-
+      Arrive at {place} {hasStopId, select, true {(Stop Id: {stopId})} other {}}
+      at {timeMillis, time, short}.
+    transitDepartFrom: >-
+      Depart from {place} {hasStopId, select, true {(Stop Id: {stopId})} other
+      {}} at {timeMillis, time, short} on {routeName}{hasHeadsign, select, true
+      { towards {headsign}} other {}}.

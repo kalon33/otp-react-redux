@@ -125,6 +125,12 @@
     "components.DiagnosticsNotice.dismiss",
     "components.ServerUnreachable.forMinutes",
     "components.ServerUnreachable.now",
-    "otpUi.TripDetails.title"
+    "otpUi.TripDetails.title",
+    "otpUi.AccessLegBody.RentedVehicleSubheader.dropoffRental",
+    "otpUi.ItineraryBody.canceledMessage",
+    "otpUi.TextOnlyItinerary.arriveAt",
+    "otpUi.TextOnlyItinerary.departFrom",
+    "otpUi.TextOnlyItinerary.transitArriveAt",
+    "otpUi.TextOnlyItinerary.transitDepartFrom"
   ]
 }
