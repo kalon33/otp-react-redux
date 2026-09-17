@@ -431,6 +431,7 @@ components:
     busNotBroadcasting: "Bus pas encore localisé — prévu à {time}"
     changeBus: "Choisir le bus"
     confirmExit: "Voulez-vous vraiment arrêter le suivi de ce trajet ?"
+    currentLocation: (Emplacement actuel)
     directionEB: "Direction est"
     directionNB: "Direction nord"
     directionSB: "Direction sud"

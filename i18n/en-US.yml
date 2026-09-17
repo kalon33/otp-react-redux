@@ -436,6 +436,7 @@ components:
     changeBus: Choose bus
     chooseBus: Choose bus
     confirmExit: Are you sure you want to stop tracking this trip?
+    currentLocation: (Current Location)
     deviationWarning: '{distance} m off route'
     directionEB: Eastbound
     directionNB: Northbound
