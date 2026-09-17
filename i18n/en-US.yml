@@ -581,7 +581,9 @@ components:
     title: Imagery of the street
   MetroUI:
     arriveAt: You arrive
+    arrivesAtTime: arrives {time}
     confirmSwitchTrip: Switch your active trip to this route? Your current guidance will update.
+    departsAtTime: departs {time}
     fare: '{fare}'
     itineraryDescription: '{time} itinerary using {routes}'
     itinerarySummary: 'from {stopName} | {cost}'

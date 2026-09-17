@@ -618,13 +618,17 @@ class MetroItinerary extends NarrativeItinerary {
                   >
                     {arrivesAt ? (
                       <>
-                        ({'departs '}
-                        <FormattedTime value={itinerary.startTime} />)
+                        (<FormattedMessage
+                          id="components.MetroUI.departsAtTime"
+                          values={{ time: <FormattedTime value={itinerary.startTime} /> }}
+                        />)
                       </>
                     ) : (
                       <>
-                        ({'arrives '}
-                        <FormattedTime value={itinerary.endTime} />)
+                        (<FormattedMessage
+                          id="components.MetroUI.arrivesAtTime"
+                          values={{ time: <FormattedTime value={itinerary.endTime} /> }}
+                        />)
                       </>
                     )}
                   </span>
