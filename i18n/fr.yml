@@ -506,6 +506,7 @@ components:
     onBusButton: "Je suis déjà dans le bus"
     onboardAssumedRoute: "À bord du {route}"
     onboardAssumedVehicle: "À bord du {route} · {vehicle}"
+    onboardBackToTrip: "Retour au trajet"
     onboardCancel: "Annuler"
     onboardError: "Impossible d'identifier votre bus. Réessayer ?"
     onboardNotThisVehicle: "Ce n'est pas celui-ci"
