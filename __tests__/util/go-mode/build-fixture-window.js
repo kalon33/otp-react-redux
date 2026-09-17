@@ -1,4 +1,4 @@
-import { execFileSync } from 'child_process'
+import { execFileSync, spawnSync } from 'child_process'
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
@@ -463,6 +463,244 @@ describe('util > go-mode > build-fixture windowing', () => {
     it('refuses a ride number the session does not have', () => {
       const out = path.join(dir, 'nope.json')
       expect(() => build(out, ['--ride', '9'])).toThrow()
+    })
+  })
+})
+
+/**
+ * REPLAY FIDELITY (backlog 17.10, 2026-09-17).
+ *
+ * The 2026-09-15 15:34 ride was written up as unreplayable on two banner lines
+ * that were both wrong, and the row that came out of it asked for two size caps
+ * to be raised that nothing had hit. Measured from
+ * ~/otp-debug-logs/debug-2026-09-15.jsonl, session mu346i5y-ng2uqc:
+ *
+ *   - its three real SET_ONBOARD_RESULTs are 124,321 / 127,210 / 128,613 chars,
+ *     each with all five options intact, against a 1,000,000 ceiling; the
+ *     fixture on disk carried them the whole time
+ *   - the fourth is `setOnboardResult(null)` — the deliberate "clear the list"
+ *     dispatch — and the builder counted its absent payload as a capture loss
+ *   - the banner keyed "is this an onboard trip" on a BEGIN_ONBOARD_FLOW BEFORE
+ *     START_GO_MODE, so a mid-trip flow read as "(not an onboard trip)"
+ *   - every __summary in the whole 44 MB day file was UNDER the ceiling
+ *     (largest 326,260) — no cap was involved in any of them
+ *
+ * And on ride B (mu35fwv5-8lyyq1) the flow began 2m17s before START_GO_MODE, so
+ * the 60 s --since every caller passes excluded the entire evidence base; it
+ * had to be rebuilt by hand with a 3-minute lead-in.
+ */
+describe('util > go-mode > build-fixture replay fidelity', () => {
+  const ONBOARD_SESSION = 'onboard-before-start'
+  const oEntry = (type, tIso, payload) => ({
+    device: 'dev-test',
+    payload,
+    recv: T(tIso) / 1000,
+    session: ONBOARD_SESSION,
+    t: T(tIso),
+    type
+  })
+
+  /** A GPS fix in the onboard session. */
+  const fixAt = (tIso) =>
+    oEntry('UPDATE_POSITION', tIso, {
+      coords: { accuracy: 8, latitude: 44.9, longitude: -93.27, speed: 6.2 },
+      timestamp: T(tIso)
+    })
+
+  const option = (stopId) => ({
+    busArrivalEpoch: T('2026-09-15T20:58:00Z'),
+    itinerary: itinerary('2026-09-15T20:58:00Z', '2026-09-15T21:20:00Z'),
+    stopId,
+    stopName: `stop ${stopId}`
+  })
+
+  /**
+   * One ride whose onboard flow starts 2m17s before START_GO_MODE — ride B's
+   * shape — plus a null-payload SET_ONBOARD_RESULT and a mid-trip flow, which
+   * is ride A's.
+   */
+  const writeOnboardLogDir = (extra = []) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'build-fixture-onboard-'))
+    const lines = [
+      // A whole earlier ride inside the lead-in the builder now reads. It must
+      // stay OUT of the ride split: the lead-in is lead-in, not scope.
+      oEntry('START_GO_MODE', '2026-09-15T20:53:00Z', {
+        itinerary: itinerary('2026-09-15T20:53:00Z', '2026-09-15T20:53:30Z')
+      }),
+      oEntry('STOP_GO_MODE', '2026-09-15T20:53:30Z', null),
+      // ...the flow, before any trip exists...
+      oEntry('BEGIN_ONBOARD_FLOW', '2026-09-15T20:53:56Z', {
+        keepRouteId: '1:904'
+      }),
+      oEntry('SET_ONBOARD_TRIP', '2026-09-15T20:54:07Z', { id: '1:trip-a' }),
+      oEntry('ONBOARD_CANDIDATE_SNAPSHOT', '2026-09-15T20:54:15Z', {
+        request: { stopId: '1:53314' },
+        response: { data: { plan: { itineraries: [] } } }
+      }),
+      oEntry('SET_ONBOARD_RESULT', '2026-09-15T20:54:19Z', {
+        answeredCandidates: 2,
+        options: [option('1:53314')],
+        pendingCandidates: 0
+      }),
+      // ...2m17s later, the trip the flow produced...
+      oEntry('START_GO_MODE', '2026-09-15T20:56:13Z', {
+        itinerary: itinerary('2026-09-15T20:56:13Z', '2026-09-15T21:20:00Z')
+      }),
+      fixAt('2026-09-15T20:56:20Z'),
+      // ...and a second, MID-TRIP flow: the rider taps "I'm on the bus" again.
+      oEntry('SET_ONBOARD_TRIP', '2026-09-15T20:57:07Z', { id: '1:trip-b' }),
+      oEntry('SET_ONBOARD_RESULT', '2026-09-15T20:57:19Z', {
+        answeredCandidates: 5,
+        options: [option('1:53313'), option('1:48084')],
+        pendingCandidates: 0
+      }),
+      // The deliberate clear. `setOnboardResult(null)` is dispatched from three
+      // places in lib/actions/go-mode.ts; null is its NORMAL shape.
+      oEntry('SET_ONBOARD_RESULT', '2026-09-15T20:57:25Z', null),
+      ...extra.map((e) => oEntry(e.type, e.tIso, e.payload)),
+      oEntry('STOP_GO_MODE', '2026-09-15T20:57:33Z', null)
+    ]
+    fs.writeFileSync(
+      path.join(dir, 'debug-2026-09-15.jsonl'),
+      lines.map((l) => JSON.stringify(l)).join('\n') + '\n'
+    )
+    return dir
+  }
+
+  /**
+   * Build with the 60 s lead-in every caller actually passes, and return stdout
+   * AND stderr: the loud stub block is a console.warn, and a warning nobody can
+   * see in the output is the whole defect being fixed here.
+   */
+  const buildWith60s = (dir, out) => {
+    const res = spawnSync(
+      process.execPath,
+      [
+        BUILDER,
+        '--session',
+        ONBOARD_SESSION,
+        '--label',
+        'onboard',
+        '--logs-dir',
+        dir,
+        '--out',
+        out,
+        '--since',
+        String(T('2026-09-15T20:56:13Z') - 60000),
+        '--until',
+        '2026-09-15T20:57:33Z'
+      ],
+      { encoding: 'utf8' }
+    )
+    if (res.status !== 0) {
+      throw new Error(`builder exited ${res.status}: ${res.stderr}`)
+    }
+    return res.stdout + res.stderr
+  }
+
+  describe('a 60 s lead-in no longer excludes the onboard flow', () => {
+    let banner, dir, out
+    beforeAll(() => {
+      dir = writeOnboardLogDir()
+      out = path.join(dir, 'onboard.json')
+      banner = buildWith60s(dir, out)
+    })
+    afterAll(() => fs.rmSync(dir, { force: true, recursive: true }))
+
+    it('reaches back past --since to the flow that set the trip up', () => {
+      // --since is 20:55:13; the flow opened at 20:53:56, a minute and a half
+      // EARLIER. Before 2026-09-17 --since was a hard read floor and this was
+      // simply unreachable.
+      expect(banner).toMatch(/flow began 137s BEFORE the trip/)
+      expect(banner).toContain('reached back to 2026-09-15T20:53:56.000Z')
+    })
+
+    it('keeps the candidate plan the flow ranked before the trip started', () => {
+      const fixture = JSON.parse(fs.readFileSync(out, 'utf8'))
+      // 20:54:15, i.e. before --since. This is the plan the ranking bugs of
+      // 15.9 / 17.2 / 17.3 are read out of.
+      expect(fixture.onboardCandidatePlans.map((p) => p.stopId)).toContain(
+        '1:53314'
+      )
+    })
+
+    it('still lets --since scope which RIDES exist', () => {
+      // The lead-in is lead-in only: a START_GO_MODE inside it must not become
+      // a ride of its own, or --since would stop meaning anything.
+      expect(banner).toMatch(/ride:\s+1 of 1/)
+      const fixture = JSON.parse(fs.readFileSync(out, 'utf8'))
+      expect(fixture.meta.startMs).toBe(T('2026-09-15T20:56:13Z'))
+    })
+  })
+
+  describe('a null payload is a shape, not a capture loss', () => {
+    let banner, dir, out
+    beforeAll(() => {
+      dir = writeOnboardLogDir()
+      out = path.join(dir, 'onboard.json')
+      banner = buildWith60s(dir, out)
+    })
+    afterAll(() => fs.rmSync(dir, { force: true, recursive: true }))
+
+    it('does not report SET_ONBOARD_RESULT as stubbed for a deliberate clear', () => {
+      expect(banner).toMatch(/stubbed payloads:\s+none/)
+      expect(banner).not.toContain('REPLACED BY A STUB')
+      const fixture = JSON.parse(fs.readFileSync(out, 'utf8'))
+      expect(fixture.meta.stubbed).toEqual({})
+    })
+
+    it('reports the onboard flow from what the fixture HOLDS', () => {
+      // Ride A's banner said "(not an onboard trip)" for a ride that ran the
+      // flow twice, because the line keyed on a pre-START BEGIN_ONBOARD_FLOW.
+      // The fixture had the options all along.
+      expect(banner).toContain('onboard flow:     trip + options')
+      const fixture = JSON.parse(fs.readFileSync(out, 'utf8'))
+      expect(fixture.onboard.result.payload.options).toHaveLength(2)
+      expect(fixture.onboard.trip.payload.id).toBe('1:trip-b')
+    })
+  })
+
+  describe('when a payload really was replaced, the report says which cap', () => {
+    const buildWithStub = (payload) => {
+      const dir = writeOnboardLogDir([
+        { payload, tIso: '2026-09-15T20:57:28Z', type: 'ROUTING_RESPONSE' }
+      ])
+      const out = path.join(dir, 'onboard.json')
+      const banner = buildWith60s(dir, out)
+      const fixture = JSON.parse(fs.readFileSync(out, 'utf8'))
+      fs.rmSync(dir, { force: true, recursive: true })
+      return { banner, fixture }
+    }
+
+    it('records the loss in the fixture, not only on the console', () => {
+      const { fixture } = buildWithStub({ __summary: true, chars: 326260 })
+      expect(fixture.meta.stubbed.ROUTING_RESPONSE).toEqual({
+        count: 1,
+        markers: ['__summary'],
+        maxChars: 326260
+      })
+    })
+
+    it('says NO CAP was involved for a summary under the ceiling', () => {
+      // The whole 2026-09-15 day file was this case. Raising
+      // MAX_FULL_PAYLOAD_CHARS would have changed nothing, and the row asked
+      // for exactly that.
+      const { banner } = buildWithStub({ __summary: true, chars: 326260 })
+      expect(banner).toContain('NO SIZE CAP IS INVOLVED')
+      expect(banner).not.toContain('Raise all four rungs')
+    })
+
+    it('names MAX_FULL_PAYLOAD_CHARS when the payload really was over it', () => {
+      const { banner } = buildWithStub({ __summary: true, chars: 1200000 })
+      expect(banner).toContain('MAX_FULL_PAYLOAD_CHARS')
+      expect(banner).toContain('Raise all four rungs')
+      expect(banner).not.toContain('NO SIZE CAP IS INVOLVED')
+    })
+
+    it('names the sidecar cap, and its DEPLOY, for a truncated line', () => {
+      const { banner } = buildWithStub({ __truncated_chars: 1300000 })
+      expect(banner).toContain('DEBUG_LOG_MAX_LINE_CHARS')
+      expect(banner).toMatch(/DEPLOY, not an OTA/)
     })
   })
 })
