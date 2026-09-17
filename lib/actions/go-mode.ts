@@ -5947,12 +5947,16 @@ export function handlePositionUpdate(position: GeolocationPosition) {
 
     // A stop the rider has passed stays passed. calculateTripProgress is pure
     // and re-derives the count from this tick's position alone, so the latch is
-    // applied here rather than inside it.
+    // applied here rather than inside it. The leg goes with the reading: the
+    // floor belongs to the stop list it measured, so a re-plan that installs a
+    // different leg at the same index starts a new floor instead of pinning
+    // the new leg's honest count to the old one's (2026-09-15 15:44:06.753).
     if (progress.stopsRemaining != null) {
       const latched = latchStopsRemaining(session.stopCountLatch, {
+        leg: itinerary.legs?.[progress.currentLegIndex],
         legIndex: progress.currentLegIndex,
-        source: progress.stopsSource ?? 'unknown',
-        stopsRemaining: progress.stopsRemaining
+        stopsRemaining: progress.stopsRemaining,
+        trusted: progress.stopsTrusted !== false
       })
       session.stopCountLatch = latched.next
       progress.stopsRemaining = latched.stopsRemaining

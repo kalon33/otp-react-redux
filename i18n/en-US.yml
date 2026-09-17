@@ -418,6 +418,7 @@ components:
     busNotBroadcasting: Bus not broadcasting yet — scheduled {time}
     changeBus: Choose bus
     confirmExit: Are you sure you want to stop tracking this trip?
+    departureGone: departed
     directionEB: Eastbound
     directionNB: Northbound
     directionSB: Southbound
@@ -509,6 +510,8 @@ components:
     useThisDeparture: Use this
     vehicleDetail: "Next stop: {stop} - {distance}m away · #{label}"
     vehicleDistance: "{distance}m away · #{label}"
+    waitingAtStop: Waiting at {stop}
+    waitingAtStopTime: Waiting at {stop} · {time}
     waitingGPS: Acquiring GPS signal...
     walkToStop: "{emoji} {time} walk to {stop}"
     whereToAlight: Where do you want to get off?
