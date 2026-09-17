@@ -164,9 +164,12 @@ describe('onboard partial answers (6.37, 2026-09-02)', () => {
     )
   })
 
-  it('does not count a REJECTED candidate as still being checked', async () => {
-    // A rejected request is over. Saying "still checking" about it would be a
-    // promise the app cannot keep.
+  it('re-asks a REJECTED candidate rather than leaving its stop out', async () => {
+    // Was: "does not count a REJECTED candidate as still being checked" — a
+    // rejection was over, so it could not be pending and the answer stayed
+    // three of five for good. Since 17.3 it is asked once more, which is why
+    // both candidates end up answered here; what must never happen is a
+    // candidate sitting in `pendingCandidates` after its retry has settled.
     let call = 0
     mockedFetch.mockImplementation(() => () => {
       call += 1
@@ -175,9 +178,12 @@ describe('onboard partial answers (6.37, 2026-09-02)', () => {
     })
     const store = makeStore()
     await store.dispatch(planFromOnboardBus())
+    await flush()
 
     expect(store.getOnboard().pendingCandidates).toBe(0)
-    expect(store.getOnboard().answeredCandidates).toBe(3)
+    expect(store.getOnboard().failedCandidates).toBe(0)
+    expect(store.getOnboard().answeredCandidates).toBe(5)
+    expect(mockedFetch).toHaveBeenCalledTimes(7)
   })
 
   it('folds in a straggler that lands after the deadline', async () => {

@@ -2906,6 +2906,188 @@ export function loadOnboardScheduleAndOptimize(tripId: string) {
 }
 
 /**
+ * How many onboard options the rider-facing picker may hold before
+ * groupAlightOptionsByRoute folds them into rows. Twenty, not five: five is a
+ * row count borrowed from the results list, and the results list stacks
+ * everything past its rows behind each row's drill-down rather than throwing it
+ * away (17.2). Overridable as `itinerary.onboardOptionPool`.
+ */
+const ONBOARD_OPTION_POOL = 20
+
+/**
+ * The routing preferences one onboard candidate plan is fetched with.
+ *
+ * The rider's own, whenever they have any — and when they have none, NOTHING
+ * from the rider-facing picker, which is the whole of backlog 17.2's fetch
+ * half. Until 2026-09-17 this substituted the `stay-seated` profile
+ * (transferPenalty 600 + waitReluctance 4, util/routing-profiles.ts:194) on
+ * every onboard path, and that is a thing a plain "search from here" never
+ * sends: priced inside OTP's own search it does not re-order the answer, it
+ * changes which itineraries come back at all, so the alternatives the rider
+ * asked to see (15:48:32, 15:58:21) were never fetched. Every other Go Mode
+ * background plan already reads currentQuery.routingPreferences with no profile
+ * substitution — the aboard access re-plan, the reroute snapshot, both
+ * round-trip plans — and the picker now matches them.
+ *
+ * Where the stay-seated INTENT lives instead, all of it ranking, none of it
+ * fetch: compareAlightOptions breaks a tie (TIE_MS, 3 min) on the rider's own
+ * route and then on fewer transfers; foldSameRouteRelay folds the same route on
+ * a later trip into staying aboard rather than offering it as a transfer
+ * (15.4); keepRouteId holds the chosen route a slot the cap cannot cut. And the
+ * `preferred` route bias stays at the fetch on both paths — routingQuery sends
+ * that same 900 whenever goMode.riding holds a route, so it is parity, and it
+ * is the half of the 2026-07-13 MVTA-460 protection that is about ROUTES.
+ *
+ * `riderFacing: false` — the automatic aboard re-plan, which applies its result
+ * without the rider ever seeing the list — keeps the old fetch bias exactly as
+ * it was. That is the path the 07-13 note was written about ("hijack the
+ * RECOMMENDATION"), and it is guarded harder still by keepRouteId: automatic
+ * means same route, full stop.
+ */
+export function onboardCandidateRoutingPreferences(
+  state: any,
+  { prefsOverride, riderFacing }: { prefsOverride?: any; riderFacing: boolean }
+): any {
+  const staySeated = riderFacing
+    ? undefined
+    : getRoutingProfile('stay-seated')?.prefs
+  return withObservedBikeSpeed(
+    // The onward plans from each candidate alight stop are mostly bike egress,
+    // so they get the observed pace too. It is null unless the rider was
+    // cycling within rider-speed.ts's window, so a long bus ride simply falls
+    // back to the profile / engine default.
+    prefsOverride ?? state.otp?.currentQuery?.routingPreferences ?? staySeated,
+    observedBikeSpeedMps()
+  )
+}
+
+/**
+ * The previous onboard optimize's per-stop answers, so the next one can fill a
+ * hole instead of leaving one (17.3).
+ *
+ * Module scoped on purpose, NOT on the trip session: on 2026-09-15 run 1 was
+ * the pre-trip onboard flow (15:54:19) and run 2 was re-entered from inside the
+ * live trip three minutes later (15:57:15), with a START_GO_MODE in between —
+ * a session-scoped cache would be wiped at exactly the moment it is needed.
+ * Identity (trip + vehicle + stop), an age limit and a bus-arrival drift limit
+ * are what keep it honest; `results` is never read across a different bus.
+ */
+let lastCandidateResults: {
+  /** Per stop, with the moment that plan was fetched — never re-stamped, so a
+   * carried-forward answer cannot keep renewing its own freshness. */
+  byStopId: Map<string, { atMs: number; result: AlightCandidateResult }>
+  tripId: string | null
+  vehicleId: string | null
+} | null = null
+
+/** Older than this and the previous run is not evidence about this one. */
+const CANDIDATE_CACHE_MAX_AGE_MS = 10 * 60 * 1000
+/**
+ * How far the bus's predicted arrival at a stop may have moved and the cached
+ * plan from that stop still be the same plan. Five minutes: past that the
+ * onward departures it was built around are a different set, and
+ * isReachableItinerary would be left to notice.
+ */
+const CANDIDATE_CACHE_MAX_DRIFT_MS = 5 * 60 * 1000
+
+type CandidateRunKey = {
+  nowMs: number
+  tripId: string | null
+  vehicleId: string | null
+}
+
+/**
+ * Replace each hole in this run's results with the previous run's answer for
+ * the same stop, when that answer is still about the same bus and still ahead
+ * of the rider.
+ *
+ * The 2026-09-15 shape it exists for: run 2 re-planned all five stops and three
+ * came back empty from their own 12 s deadline, while run 1's answers for two
+ * of those very stops — 16:25 and 16:28 arrivals — were sitting in memory,
+ * discarded. A hole is not a neutral outcome: rankAlightOptions skips an
+ * errored result, so a stop that failed silently drops out of the list and the
+ * rider is shown a shorter answer with nothing saying it is shorter.
+ */
+function mergeCachedCandidateResults(
+  results: AlightCandidateResult[],
+  key: CandidateRunKey
+): AlightCandidateResult[] {
+  const cache = lastCandidateResults
+  if (!cache) return results
+  if (cache.tripId !== key.tripId || cache.vehicleId !== key.vehicleId) {
+    return results
+  }
+  // Holes in a partial answer only. A run where NOTHING answered is not a
+  // partial answer, it is a failure, and the rider is owed the error card that
+  // offers Choose bus / Cancel (the 2026-08-31 settle) rather than a list
+  // rebuilt entirely out of minutes-old plans and indistinguishable from a
+  // fresh one.
+  if (!results.some((result) => result && !result.error)) return results
+  return results.map((result) => {
+    if (!result?.error) return result
+    const entry = cache.byStopId.get(result.stopId)
+    const cached = entry?.result
+    if (!entry || !cached?.itineraries?.length) return result
+    if (key.nowMs - entry.atMs > CANDIDATE_CACHE_MAX_AGE_MS) return result
+    // The bus has to still be coming: a plan that leaves a stop the rider has
+    // already passed is a plan for someone else.
+    if (!(result.busArrivalEpoch > key.nowMs)) return result
+    if (
+      Math.abs(cached.busArrivalEpoch - result.busArrivalEpoch) >
+      CANDIDATE_CACHE_MAX_DRIFT_MS
+    ) {
+      return result
+    }
+    // The itineraries are the cached ones; everything about the BUS is this
+    // run's, including `realtime`. isReachableItinerary still judges each
+    // itinerary against the fresh arrival, so a carried-forward plan the rider
+    // can no longer catch is dropped by the ranker rather than offered.
+    return {
+      busArrivalEpoch: result.busArrivalEpoch,
+      itineraries: cached.itineraries,
+      realtime: result.realtime,
+      stopId: result.stopId,
+      stopName: result.stopName
+    }
+  })
+}
+
+/**
+ * Keep this run's FRESH answers for the next run's holes, alongside the ones
+ * already held for stops this run did not answer. Carried-forward results are
+ * deliberately not re-remembered: a plan is remembered once, with the moment it
+ * was actually fetched, so it ages out on schedule however many runs reuse it.
+ */
+function rememberCandidateResults(
+  results: AlightCandidateResult[],
+  key: CandidateRunKey
+): void {
+  const sameBus =
+    lastCandidateResults &&
+    lastCandidateResults.tripId === key.tripId &&
+    lastCandidateResults.vehicleId === key.vehicleId
+  const byStopId = new Map(sameBus ? lastCandidateResults!.byStopId : [])
+  let added = 0
+  results.forEach((result) => {
+    if (result?.error || !result?.itineraries?.length) return
+    byStopId.set(result.stopId, { atMs: key.nowMs, result })
+    added += 1
+  })
+  if (!added) return
+  // Drop what has aged out rather than letting the map grow over a long ride.
+  byStopId.forEach((entry, stopId) => {
+    if (key.nowMs - entry.atMs > CANDIDATE_CACHE_MAX_AGE_MS) {
+      byStopId.delete(stopId)
+    }
+  })
+  lastCandidateResults = {
+    byStopId,
+    tripId: key.tripId,
+    vehicleId: key.vehicleId
+  }
+}
+
+/**
  * Plan the onward trip from one candidate alight stop to the destination,
  * anchored to the bus's expected arrival at that stop. Issues an ISOLATED
  * background plan (see fetchOnboardCandidatePlan) — no shared currentQuery, no
@@ -2921,10 +3103,15 @@ function fetchCandidatePlan(
     homeTimezone: string
     modeSettings: any
     modes: any
+    /** The rider's "no transfers" constraint, as planConstraintVariables takes
+     * it. Undefined on the paths that have no rider behind them. */
+    noTransfers?: boolean
     numItineraries: number
     preferred: any
     routingPreferences: any
     to: { lat: number; lon: number; name?: string }
+    /** The rider's "must pass through" stop, same story as noTransfers. */
+    viaStop?: any
   }
 ) {
   return async function (dispatch: any): Promise<AlightCandidateResult> {
@@ -2936,11 +3123,17 @@ function fetchCandidatePlan(
       from: { lat: stop.lat, lon: stop.lon, name: stop.name },
       modes: ctx.modes,
       modeSettings: ctx.modeSettings,
+      // Both become real plan() arguments through planConstraintVariables in
+      // fetchOnboardCandidatePlan; carried here so the question asked from the
+      // bus honors the same hard constraints as the question asked from the
+      // planner (17.2).
+      noTransfers: ctx.noTransfers,
       numItineraries: ctx.numItineraries,
       preferred: ctx.preferred,
       routingPreferences: ctx.routingPreferences,
       time: format(zoned, coreUtils.time.OTP_API_TIME_FORMAT),
-      to: { lat: ctx.to.lat, lon: ctx.to.lon, name: ctx.to.name }
+      to: { lat: ctx.to.lat, lon: ctx.to.lon, name: ctx.to.name },
+      viaStop: ctx.viaStop
     }
     const { error, itineraries, query, response, variables } = await dispatch(
       fetchOnboardCandidatePlan(combo)
@@ -3014,8 +3207,9 @@ export function planFromOnboardBus() {
 
 /**
  * The shared "where do I get off THIS bus" optimizer: downstream stops →
- * bounded candidate set → parallel isolated onward plans (hard bias toward the
- * boarded route + stay-seated prefs) → ranked, display-decorated options.
+ * bounded candidate set → parallel isolated onward plans (biased toward the
+ * boarded route, with the rider's own routing preferences —
+ * onboardCandidateRoutingPreferences) → ranked, display-decorated options.
  * Extracted from planFromOnboardBus so the pre-trip onboard flow and the
  * mid-ride aboard replan (replanFromAboard) can never drift apart.
  *
@@ -3032,9 +3226,15 @@ function optimizeAlightFromTrip(options: {
    * to the id captured when the onboard flow opened.
    */
   keepRouteId?: string | null
-  /** How many options to rank. Defaults to the five the results list shows. */
+  /**
+   * How many options to rank. Defaults to ONBOARD_OPTION_POOL on the
+   * rider-facing path (the rows are folded out of the pool by
+   * groupAlightOptionsByRoute, 17.2) and to rankAlightOptions' own five
+   * elsewhere.
+   */
   limit?: number
-  /** Rider-supplied routing prefs; falls back to currentQuery / stay-seated. */
+  /** Rider-supplied routing prefs; falls back to currentQuery — see
+   * onboardCandidateRoutingPreferences. */
   prefsOverride?: any
   to: { lat: number; lon: number; name?: string }
   trip: any
@@ -3092,35 +3292,65 @@ function optimizeAlightFromTrip(options: {
       dispatch(startOnboardOptimize({ candidates: candidatePayload }))
     }
 
-    const { modes, modeSettings, numItineraries } = getBasePlanParts(state)
+    const {
+      modes,
+      modeSettings,
+      noTransfers,
+      numItineraries: configuredNumItineraries,
+      viaStop
+    } = getBasePlanParts(state)
+    // Backlog 17.2, rider 2026-09-15 15:58:21: "I'm already on the bus should
+    // just do same flow for search from here. They are returning different
+    // results. No reason for that." The rider-facing picker now asks the plain
+    // search's question. getBasePlanParts hands back the CONFIG option count
+    // (util/api.ts getDefaultNumItineraries), which is right for a plan nobody
+    // asked for; routingQuery prefers the rider's own (apiV2.js:1743), and the
+    // picker is a search the rider ran, so it does too.
+    const numItineraries =
+      state.otp.currentQuery?.numItineraries ?? configuredNumItineraries
     const walkOnlyMax = state.otp.config?.itinerary?.maxWalkDistance ?? 1200
     // The question being answered is "where do I get off THIS bus" — bias the
-    // onward plans like a mid-ride re-plan (stay-seated profile + prefer the
-    // boarded route) so a parallel express can't hijack the recommendation
-    // into "get off in two stops and switch buses". Observed 2026-07-13:
-    // MVTA 460 outran the Orange Line on I-35W and became the top option.
+    // onward plans toward the boarded route so a parallel express can't hijack
+    // the recommendation into "get off in two stops and switch buses".
+    // Observed 2026-07-13: MVTA 460 outran the Orange Line on I-35W and became
+    // the top option.
+    //
+    // NOT a divergence from "search from here": routingQuery sends this exact
+    // bias, from the same 900, whenever goMode.riding holds a route
+    // (apiV2.js:1752-1765). It is the half of the 07-13 protection that is a
+    // statement about ROUTES, and it stays at the fetch on both paths.
     const boardedRouteId =
       vehicle?.routeId || goMode?.riding?.routeId || trip.route?.id || null
+    const riderFacing = !!updateOnboardState
     const ctx = {
       homeTimezone,
       modes,
       modeSettings,
+      // A constraint the rider SET outlives the search it was set in — the
+      // reason getBasePlanParts carries these at all. The onboard ctx used to
+      // drop both on the floor, so "no transfers" and a via stop applied to
+      // the search from here and not to the search from the bus.
+      noTransfers,
       numItineraries,
       preferred: boardedRouteId
         ? { otherThanPreferredRoutesPenalty: 900, routes: boardedRouteId }
         : undefined,
-      // The onward plans from each candidate alight stop are mostly bike
-      // egress, so they get the observed pace too. It is null unless the rider
-      // was cycling within rider-speed.ts's window, so a long bus ride simply
-      // falls back to the profile / engine default.
-      routingPreferences: withObservedBikeSpeed(
-        prefsOverride ??
-          state.otp.currentQuery?.routingPreferences ??
-          getRoutingProfile('stay-seated')?.prefs,
-        observedBikeSpeedMps()
-      ),
-      to: { lat: to.lat, lon: to.lon, name: to.name }
+      // Parity with "search from here" (17.2) — see the helper.
+      routingPreferences: onboardCandidateRoutingPreferences(state, {
+        prefsOverride,
+        riderFacing
+      }),
+      to: { lat: to.lat, lon: to.lon, name: to.name },
+      viaStop
     }
+    // NOT brought into parity, deliberately: searchWindow. Every Go Mode
+    // background plan gets GO_MODE_SEARCH_WINDOW_SECONDS (3600) where a
+    // foreground search gets 7200 (apiV2.js:1452-1464) — an economy that is
+    // shared by all of them, not an onboard bias, and the picker fires five
+    // plans at once. On 2026-09-15 that shape was already timing out at the
+    // 12 s per-request deadline three times out of five (17.8), which is what
+    // left the holes 17.3 is about; doubling each plan's window is the one
+    // parity item that makes that worse. Revisit with 17.8, not before.
 
     // Bounded, NOT Promise.all. Each candidate plan already carries its own
     // request deadline (actions/api), and this is the backstop over the set:
@@ -3132,9 +3362,11 @@ function optimizeAlightFromTrip(options: {
     const settleMs =
       state.otp.config?.itinerary?.onboardSettleMs ??
       ONBOARD_CANDIDATE_SETTLE_MS
-    // Candidates whose request was still in flight at the deadline. A REJECTED
-    // candidate is not in here: that one is over, so telling the rider we are
-    // still checking it would be a lie.
+    // Candidates the app is still waiting on: in flight at the settle
+    // deadline, or put back in flight by retryFailedCandidates. A candidate
+    // that is over and not being re-asked is never in here — telling the rider
+    // we are still checking it would be a lie — which is what `failed` in
+    // counts() below is for.
     const stillInFlight = new Set<number>()
     // Declared ahead of foldInLateResult, which reads it. A straggler's
     // callback can only run after settleCandidatePlans has returned (it sets
@@ -3158,6 +3390,25 @@ function optimizeAlightFromTrip(options: {
       stopName: candidates[index].stop.name
     })
 
+    // How many options the rider-facing list may hold. rankAlightOptions
+    // defaults to 5 — "the five the results list shows" — but the results list
+    // does not show five ITINERARIES, it shows five ROWS and stacks the rest
+    // behind each row's "N options" drill-down. On 2026-09-15 15:48:53 the main
+    // search emitted ITINERARY_VARIANT_ROWS {rows: 4, variantCounts: [11,0,0,0]}
+    // — eleven alternatives under one row — while the picker, fed exactly five
+    // options, could stack nothing (groupAlightOptionsByRoute needs two members
+    // of a route chain to make a drill-down) and the other 195 itineraries it
+    // had already paid for were dropped. Rider 15:48:32: "Please show me all
+    // alternatives when I'm 'searching from here' also. Same sub menu as main
+    // search." So the rider-facing pool is the ROW cap times the options a row
+    // can hold; the rows themselves are still produced by
+    // groupAlightOptionsByRoute, which is what 16.6 shipped.
+    const optionLimit =
+      limit ??
+      (riderFacing
+        ? state.otp.config?.itinerary?.onboardOptionPool ?? ONBOARD_OPTION_POOL
+        : undefined)
+
     const rankAndDecorate = (
       settledResults: AlightCandidateResult[],
       at: number
@@ -3171,7 +3422,7 @@ function optimizeAlightFromTrip(options: {
         boarded: { routeId: boardedRouteId, tripId: trip?.id ?? null },
         downstream,
         keepRouteId,
-        limit,
+        limit: optionLimit,
         nowMs: at,
         tokenHopMaxMeters: tokenHopMeters(state),
         tokenHopToleranceMs: tokenHopToleranceMs(state),
@@ -3179,6 +3430,29 @@ function optimizeAlightFromTrip(options: {
       })
       return decorateAlightOptions(ranked, trip, vehicle, lastPosition)
     }
+
+    /**
+     * The three counts the panel is allowed to say, always derived together so
+     * they cannot drift: answered (a candidate with a plan), still in flight
+     * (a straggler that may yet land), and failed — settled with no plan and
+     * nothing more coming.
+     *
+     * Backlog 17.3: `failed` had no home at all. On 2026-09-15 15:54:19
+     * SET_ONBOARD_RESULT carried `answeredCandidates: 2, pendingCandidates: 0`
+     * over five candidate stops, and the three missing ones were not the
+     * settle deadline's business — each had already RESOLVED from its own 12 s
+     * request deadline as `{error: true, itineraries: []}` (apiV2.js:1543-1563
+     * resolves rather than rejects), so `stillInFlight` never saw them and
+     * neither count moved. Two of five stops were presented as the answer and
+     * nothing on screen said so.
+     */
+    const counts = (rs: AlightCandidateResult[]) => ({
+      answeredCandidates: rs.filter((r) => r && !r.error).length,
+      failedCandidates: rs.filter((r, i) => r?.error && !stillInFlight.has(i))
+        .length,
+      pendingCandidates: stillInFlight.size,
+      totalCandidates: candidates.length
+    })
 
     /**
      * A candidate plan that landed after the deadline. Folding it in is only
@@ -3191,7 +3465,14 @@ function optimizeAlightFromTrip(options: {
      * did unconditionally before.
      */
     const foldInLateResult = (index: number, value: AlightCandidateResult) => {
-      results[index] = value
+      // A late ANSWER replaces what is there; a late FAILURE never does. The
+      // entry it would overwrite can be a real answer — a plan carried forward
+      // from the previous run (mergeCachedCandidateResults) — and replacing a
+      // stop's answer with the news that re-asking about it failed is the
+      // "worse result wins" shape 17.3 is about.
+      if (!(value?.error && results[index] && !results[index].error)) {
+        results[index] = value
+      }
       stillInFlight.delete(index)
       const now = getState()
       const onboard = now.otp?.goMode?.onboard
@@ -3214,11 +3495,38 @@ function optimizeAlightFromTrip(options: {
       if (!improved.length) return
       dispatch(
         setOnboardResult({
-          answeredCandidates: results.filter((r) => !r?.error).length,
-          options: improved,
-          pendingCandidates: stillInFlight.size
+          ...counts(results),
+          options: improved
         })
       )
+    }
+
+    /**
+     * Ask the failures again, once. A candidate that resolved `error` is a hole
+     * in the answer, not an answer — and on 2026-09-15 the holes were 12 s
+     * timeouts against a server that was answering other requests in the same
+     * minute (17.8: good responses at 15:48:34, 15:48:53, 15:49:09), so the
+     * single cheapest thing that fills them is asking again.
+     *
+     * They go back into `stillInFlight` before the first dispatch, so the panel
+     * says "still checking" rather than flashing "2 of 5" and then correcting
+     * itself; foldInLateResult takes them out again whichever way the retry
+     * lands, and re-derives every count from `results`, so a retry that fails
+     * too ends up reported as failed rather than as pending forever.
+     *
+     * Rider-facing only: the automatic path has already returned its answer to
+     * its caller by then and has no list to improve.
+     */
+    const retryFailedCandidates = (failed: number[]) => {
+      if (!failed.length) return
+      failed.forEach((index) => stillInFlight.add(index))
+      failed.forEach((index) => {
+        Promise.resolve(dispatch(fetchCandidatePlan(candidates[index], ctx)))
+          .then((value: AlightCandidateResult) =>
+            foldInLateResult(index, value || substitute(index))
+          )
+          .catch(() => foldInLateResult(index, substitute(index)))
+      })
     }
 
     results = await settleCandidatePlans<AlightCandidateResult>(
@@ -3233,14 +3541,34 @@ function optimizeAlightFromTrip(options: {
       updateOnboardState ? foldInLateResult : undefined
     )
 
+    // What this run actually failed to answer, decided before the carry-forward
+    // below hides it: a stop whose hole was filled from the previous run is
+    // still re-asked, because the rider is owed the current answer and not a
+    // three-minute-old one.
+    const failedIndexes = results
+      .map((r, i) => (r?.error && !stillInFlight.has(i) ? i : -1))
+      .filter((i) => i >= 0)
+
+    const runKey = {
+      nowMs,
+      tripId: trip?.id ?? null,
+      vehicleId: vehicle?.vehicleId ?? null
+    }
+    // Remember this run's own answers first, then fill this run's holes from
+    // what is held — in that order, so a carry-forward can never be written
+    // back as if it had just been fetched.
+    rememberCandidateResults(results, runKey)
+    results = mergeCachedCandidateResults(results, runKey)
+
+    if (updateOnboardState) retryFailedCandidates(failedIndexes)
+
     const decorated = rankAndDecorate(results, nowMs)
     if (updateOnboardState) {
       dispatch(
         decorated.length
           ? setOnboardResult({
-              answeredCandidates: results.filter((r) => !r?.error).length,
-              options: decorated,
-              pendingCandidates: stillInFlight.size
+              ...counts(results),
+              options: decorated
             })
           : setOnboardResult(null)
       )

@@ -479,6 +479,7 @@ components:
     sheetHandleLabel: "Voir le trajet et les autres options"
     stillCheckingStops: "Vérification de {count, plural, one {1 arrêt supplémentaire} other {# arrêts supplémentaires}} en cours…"
     stopDeparturesTitle: "Départs"
+    stopsAnswered: "{answered} arrêts sur {total} ont répondu"
     stopsRemainingCompact: "Encore {count, plural, one {1 arrêt} other {# arrêts}}"
     theBus: "le bus"
     thenTurn: "puis {turn}"
