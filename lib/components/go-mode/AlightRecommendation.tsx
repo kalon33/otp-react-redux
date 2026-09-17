@@ -180,6 +180,15 @@ const AlightRecommendation = ({
   // of five candidate stops as the whole answer — a straggler that lands is
   // folded in behind this line (optimizeAlightFromTrip's foldInLateResult).
   const stillChecking = onboard.pendingCandidates || 0
+  // 17.3: "still checking" was the only thing this panel could say, and a
+  // candidate that FAILED is not pending — on 2026-09-15 three of five failed,
+  // pendingCandidates was 0, and two stops were shown as the whole answer in
+  // silence. A failure is its own sentence, and only after the retries have
+  // settled: while they are in flight the line above is the true one.
+  const answered = onboard.answeredCandidates || 0
+  const total = onboard.totalCandidates || 0
+  const failed = onboard.failedCandidates || 0
+  const showAnsweredCount = stillChecking === 0 && failed > 0 && total > 0
 
   return (
     <OnboardResultsScroll>
@@ -216,6 +225,20 @@ const AlightRecommendation = ({
               id: 'components.GoMode.stillCheckingStops'
             },
             { count: stillChecking }
+          )}
+        </RerouteSummary>
+      )}
+      {showAnsweredCount && (
+        <RerouteSummary
+          data-testid="onboard-answered-count"
+          style={{ marginBottom: 0, padding: '0 16px' }}
+        >
+          {intl.formatMessage(
+            {
+              defaultMessage: '{answered} of {total} stops answered',
+              id: 'components.GoMode.stopsAnswered'
+            },
+            { answered, total }
           )}
         </RerouteSummary>
       )}

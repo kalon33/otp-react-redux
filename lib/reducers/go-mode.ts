@@ -133,6 +133,17 @@ export interface OnboardState {
   answeredCandidates: number | null
   bestAlightStop: OnboardAlightOption | null
   candidates: OnboardCandidate[]
+  /**
+   * Candidates that settled with no plan at all and have nothing more coming —
+   * the request errored or timed out and its retry did too. Null when unknown.
+   *
+   * Counted apart from `pendingCandidates` because the two mean opposite things
+   * to the rider ("wait" versus "this stop has no answer") and because on
+   * 2026-09-15 15:54:19 three of five candidates failed, `pendingCandidates`
+   * was 0, and the panel — which only ever read that number — presented two of
+   * five stops as the answer with nothing saying so (backlog 17.3).
+   */
+  failedCandidates: number | null
   /** The route the rider already chose for the leg after this bus, captured
    * when the flow opened (BEGIN_ONBOARD_FLOW nulls activeItinerary, so it
    * cannot be re-derived later). Ranks its options up, never filters. */
@@ -151,6 +162,13 @@ export interface OnboardState {
     | 'optimizing'
     | 'ready'
     | 'error'
+  /**
+   * How many candidate stops this optimize asked about — the denominator for
+   * the three counts above. `candidates.length` is the same number while the
+   * run that produced the options is the current one; this is what it was when
+   * the options were ranked.
+   */
+  totalCandidates: number | null
   trip: any | null
   vehicle: OnboardVehicle | null
 }
@@ -388,9 +406,11 @@ const defaultState: GoModeState = {
     answeredCandidates: null,
     bestAlightStop: null,
     candidates: [],
+    failedCandidates: null,
     keepRouteId: null,
     pendingCandidates: null,
     status: 'idle',
+    totalCandidates: null,
     trip: null,
     vehicle: null
   },
@@ -764,8 +784,15 @@ const goMode = handleActions<GoModeState, any>(
             ? payload.answeredCandidates ?? null
             : state.onboard.candidates.length || null,
           bestAlightStop: options[0] || null,
+          // A bare array still means "this is the whole answer", so it has no
+          // failures by definition.
+          failedCandidates: isCounted ? payload.failedCandidates ?? 0 : 0,
           pendingCandidates: isCounted ? payload.pendingCandidates ?? 0 : 0,
-          status: options.length ? ('ready' as const) : ('error' as const)
+          status: options.length ? ('ready' as const) : ('error' as const),
+          totalCandidates: isCounted
+            ? payload.totalCandidates ??
+              (state.onboard.candidates.length || null)
+            : state.onboard.candidates.length || null
         }
       }
     },
@@ -1008,8 +1035,10 @@ const goMode = handleActions<GoModeState, any>(
         answeredCandidates: 0,
         bestAlightStop: null,
         candidates: action.payload.candidates,
+        failedCandidates: 0,
         pendingCandidates: action.payload.candidates?.length ?? 0,
-        status: 'optimizing' as const
+        status: 'optimizing' as const,
+        totalCandidates: action.payload.candidates?.length ?? 0
       }
     }),
 
