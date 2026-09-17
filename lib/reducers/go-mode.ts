@@ -59,8 +59,12 @@ import {
   TurnCueSettings
 } from '../util/go-mode/turn-cue-settings'
 import { ridingFactIsEvidenced } from '../util/go-mode/riding'
+import type {
+  DepartureOverrideSource,
+  LiveLegTime,
+  RidingState
+} from '../util/go-mode/types'
 import type { EarlyAlightRecord } from '../util/go-mode/riding'
-import type { LiveLegTime, RidingState } from '../util/go-mode/types'
 import type {
   NearbyVehicleOption,
   VehicleMatchResult
@@ -266,6 +270,13 @@ export interface GoModeState {
   departureOverride: number | null
 
   /**
+   * Who chose `departureOverride` — see DepartureOverrideSource (12.15).
+   * Always written with the value and cleared with it, so the pair is never
+   * half-set; null exactly when there is no override.
+   */
+  departureOverrideSource: DepartureOverrideSource | null
+
+  /**
    * The rider got off a bus EARLY, at a stop that is still on the ridden leg's
    * route (8.11). Held because nothing else in the trip's shape says so: the
    * matcher stays on the transit leg (they are standing on its geometry), so
@@ -431,6 +442,8 @@ const defaultState: GoModeState = {
   },
 
   departureOverride: null,
+
+  departureOverrideSource: null,
 
   earlyAlight: null,
 
@@ -794,10 +807,24 @@ const goMode = handleActions<GoModeState, any>(
       }
     }),
 
-    [SET_DEPARTURE_OVERRIDE]: (state, action) => ({
-      ...state,
-      departureOverride: action.payload
-    }),
+    // The payload is either a bare epoch (or null), which is the auto-anchor's
+    // own voice and the shape every caller used before 12.15, or
+    // `{ ms, source }` when the writer knows whose pick it is. Normalized here
+    // rather than at the call sites so the two fields can never disagree.
+    [SET_DEPARTURE_OVERRIDE]: (state, action) => {
+      const { payload } = action
+      const ms =
+        payload != null && typeof payload === 'object' ? payload.ms : payload
+      const source =
+        payload != null && typeof payload === 'object'
+          ? payload.source ?? 'anchor'
+          : 'anchor'
+      return {
+        ...state,
+        departureOverride: ms ?? null,
+        departureOverrideSource: ms == null ? null : source
+      }
+    },
 
     [SET_EARLY_ALIGHT]: (state, action) => ({
       ...state,
@@ -812,6 +839,7 @@ const goMode = handleActions<GoModeState, any>(
         : state.alightedFrom,
       // The plan's own departure pick belonged to the bus they just left.
       departureOverride: null,
+      departureOverrideSource: null,
       earlyAlight: action.payload,
       riding: null
     }),
@@ -1020,6 +1048,22 @@ const goMode = handleActions<GoModeState, any>(
         activeItinerary: itinerary,
         arrivedAt: null,
         arrivedDelay: null,
+        // The departure pick belonged to the plan that has just been replaced
+        // (12.14). A mid-trip auto-update IS a START_GO_MODE, so an override
+        // chosen against the pre-swap itinerary used to survive onto one that
+        // may board a different run entirely — the card would headline a bus
+        // the new plan does not contain. `TRANSITION_LEG` and
+        // `SET_EARLY_ALIGHT` have always nulled it for the same reason; this
+        // path never did.
+        //
+        // Clearing is the whole fix, and it does not fight the anchor's own
+        // re-target: with the override gone, `evaluateDepartureAnchor` falls
+        // back to the new plan's `plannedBoardMs` and re-acquires the soonest
+        // catchable departure on the route the rider chose, which is the
+        // rider's standing rule. The session flags that would otherwise keep a
+        // dead boarding's lock alive are reset alongside it, in beginGoMode.
+        departureOverride: null,
+        departureOverrideSource: null,
         isActive: true,
         liveLegTimes: {},
         notifications: {
@@ -1235,6 +1279,7 @@ const goMode = handleActions<GoModeState, any>(
             }
           : state.alightedFrom,
         departureOverride: null,
+        departureOverrideSource: null,
         // The early-alight re-anchoring exists only while the matcher is still
         // stuck on the leg the rider stepped off; once the trip has actually
         // moved past it, the ordinary boarding path is back in charge.

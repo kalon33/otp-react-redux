@@ -51,6 +51,7 @@ Object {
       "transitLegEnteredAt": null,
     },
     "departureOverride": null,
+    "departureOverrideSource": null,
     "earlyAlight": null,
     "isActive": false,
     "liveLegTimes": Object {},

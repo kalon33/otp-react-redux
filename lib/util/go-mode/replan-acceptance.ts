@@ -47,8 +47,11 @@ import { calculateDistance } from './position-matching'
  * 2026-09-15 (an access leg that ends after the bus it feeds has gone) — each
  * is documented at the predicate that implements it.
  *
- * A rider who explicitly asked for a different trip is never gated: this runs
- * on the automatic paths only.
+ * A rider who explicitly asked for a different trip is never gated: `accept`
+ * runs on the automatic paths only. The one thing this file says about the
+ * rider's own tap is `startOriginIsStale`, which refuses nothing — it reports
+ * that a plan begins somewhere the rider is not, so the caller can re-plan
+ * from where they are (backlog 12.13).
  */
 
 /**
@@ -73,6 +76,33 @@ export const AUTO_REPLAN_ARRIVAL_SLACK_MS = 60000
  * statements about where the rider was; the one that was not measured 91 m.
  */
 export const AUTO_REPLAN_ORIGIN_MAX_M = 75
+
+/**
+ * How far from the rider a plan the RIDER THEMSELVES just tapped may start
+ * before the trip re-plans from where they actually are.
+ *
+ * 2026-09-08 10:40:15, session `mtssjvee-mtc2dx` (backlog 12.13). The rider
+ * had ridden the 10:25 Orange Line to I-35W & Lake St Station and, standing
+ * there at 44.94830, -93.27424, tapped an itinerary out of the result list
+ * they had left open since 10:25 at 66th St. `START_GO_MODE` installed it
+ * whole: `legs[0].from` 44.8833656, -93.2953209 — **7,409 m behind them** —
+ * `startTime` 10:25:00, a 9,199 m bike leg. The one progress tick it produced
+ * read `currentLegProgress 100 / overallProgress 100 /
+ * distanceToDestination 1022.6 m / status deviated`, all of it honest: the
+ * rider genuinely was 7.4 km along a 9.2 km route they had never been on.
+ * `AUTO_REPLAN_ORIGIN_MAX_M` guards the four auto-apply sites and the start
+ * path had nothing — the four auto-applied starts that day measured 37 / 55 /
+ * 42 / 0 m, so the gate works where it exists.
+ *
+ * Much larger than the automatic gate, for three reasons. It is not measuring
+ * fetch latency but a plan the rider chose minutes ago, so the honest gaps it
+ * must tolerate are wider. It has to clear GPS noise: the fix current at that
+ * very tap was 113.5 m accurate (the next, a second later, 14 m). And the
+ * onboard-flow origins this must never disturb are all sub-100 m. 500 m is
+ * about a six-minute walk — far enough that no plan is wrongly called stale,
+ * near enough that nothing like 7.4 km survives.
+ */
+export const START_ORIGIN_MAX_M = 500
 
 /**
  * How far past its boarding an automatic replacement's access leg may end.
@@ -143,18 +173,78 @@ function originIsBehindRider(
   candidate: Itinerary,
   position: [number, number]
 ): boolean {
-  const leg = (candidate.legs || [])[0] as Leg | undefined
-  if (!leg || leg.transitLeg) return false
+  const gap = originGapMeters(candidate, position)
+  return gap != null && gap > AUTO_REPLAN_ORIGIN_MAX_M
+}
+
+/**
+ * How far the rider is from the point an itinerary means to start at, in
+ * metres — or null when the question does not arise.
+ *
+ * Null for a plan whose FIRST leg is transit: that plan starts at a stop,
+ * which is where it means to start and not where the rider is standing. Null
+ * too when the leg carries no coordinates. Both are "no answer", never "zero":
+ * a caller must not read a missing measurement as a plan that starts underfoot.
+ */
+export function originGapMeters(
+  itinerary: Itinerary | null | undefined,
+  position: [number, number] | null | undefined
+): number | null {
+  if (!itinerary || !position) return null
+  const leg = (itinerary.legs || [])[0] as Leg | undefined
+  if (!leg || leg.transitLeg) return null
   const from = leg.from
-  if (from?.lat == null || from?.lon == null) return false
-  return (
-    calculateDistance(
-      position[0],
-      position[1],
-      Number(from.lat),
-      Number(from.lon)
-    ) > AUTO_REPLAN_ORIGIN_MAX_M
+  if (from?.lat == null || from?.lon == null) return null
+  return calculateDistance(
+    position[0],
+    position[1],
+    Number(from.lat),
+    Number(from.lon)
   )
+}
+
+/**
+ * Does the plan just installed begin somewhere the rider is not — far enough
+ * that the trip should be re-planned from their actual position?
+ *
+ * Asked on the START path, where nothing else asks (12.13). It is deliberately
+ * NOT the automatic gate: the answer here is to recover, never to refuse the
+ * rider's tap, so the threshold is `START_ORIGIN_MAX_M` and a true answer is
+ * an instruction to re-plan rather than a veto.
+ *
+ * `accuracyM` widens the threshold when the fix itself is worse than it: a
+ * plan cannot be called stale by a fix that cannot locate the rider to within
+ * the distance being measured. Doubling is the usual reading of a 68 %
+ * accuracy radius as a bound; at the 113.5 m fix of the 09-08 tap it yields
+ * 227 m, so the 500 m floor still governs and only a genuinely broken fix
+ * moves the line.
+ *
+ * `riding` is the same escape the automatic gate keeps: aboard a vehicle, leg 0
+ * is the bus the rider is sitting on and its `from` is the stop they boarded
+ * at, which can be kilometres behind them by design.
+ */
+export function startOriginIsStale({
+  accuracyM,
+  itinerary,
+  position,
+  riding
+}: {
+  /** The fix's own accuracy radius in metres, when known. */
+  accuracyM?: number | null
+  itinerary: Itinerary | null | undefined
+  /** The rider's last fix, as [lat, lon]. Null answers false. */
+  position: [number, number] | null | undefined
+  /** True when the rider is verifiably aboard a vehicle. */
+  riding?: boolean
+}): boolean {
+  if (riding) return false
+  const gap = originGapMeters(itinerary, position)
+  if (gap == null) return false
+  const floor =
+    accuracyM != null && Number.isFinite(accuracyM) && accuracyM > 0
+      ? Math.max(START_ORIGIN_MAX_M, accuracyM * 2)
+      : START_ORIGIN_MAX_M
+  return gap > floor
 }
 
 /**
