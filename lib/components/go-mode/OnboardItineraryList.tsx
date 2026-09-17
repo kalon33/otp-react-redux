@@ -28,13 +28,16 @@ const OffAtLabel = styled.div`
 `
 
 // The drill-down sits OUTSIDE the tap target below, so opening it cannot be
-// read as choosing the row. Same padding as the caption so the two line up.
+// read as previewing the row. Same padding as the caption so the two line up.
 const VariantsRow = styled.div`
   padding: 0 4px 8px;
 `
 
 interface Props {
-  onSelect: (option: OnboardAlightOption) => void
+  /** Open the preview screen for this option. NOT a commit — see the header. */
+  onPreview: (option: OnboardAlightOption) => void
+  /** Same, for a pick made inside the same-shape drill-down. */
+  onPreviewVariant: (option: OnboardAlightOption) => void
   options: OnboardAlightOption[]
   sort: any
   timeFormat: string
@@ -62,11 +65,21 @@ const noop = (): void => undefined
  *
  * Taps are intercepted in the CAPTURE phase: the row is purely visual and the
  * itinerary component's own click machinery (active-search selection,
- * itinerary-view URL params) must never run here — there is no active search,
- * and selection means "start guidance to this stop".
+ * itinerary-view URL params) must never run here — there is no active search.
+ *
+ * A tap OPENS A PREVIEW and commits nothing (17.1). It used to run
+ * `confirmOnboardAlightStop` directly, so looking at an option started the
+ * trip and `clearOnboard()` destroyed the list on the way out — the rider
+ * asked for this twice, the second time on 2026-09-15 ("Again: I just want to
+ * view alternatives ... but just viewing switched and then other options are
+ * gone"). The drill-down was the same trap and worse: `SameShapeVariants`'
+ * `setActiveItinerary` means "show me this variant instead" everywhere else in
+ * the app (same-shape-variants.tsx), and here it started the trip. Both go to
+ * the preview now.
  */
 const OnboardItineraryList = ({
-  onSelect,
+  onPreview,
+  onPreviewVariant,
   options,
   sort,
   timeFormat,
@@ -115,7 +128,7 @@ const OnboardItineraryList = ({
               onClickCapture={(e) => {
                 e.preventDefault()
                 e.stopPropagation()
-                onSelect(option)
+                onPreview(option)
               }}
             >
               <OffAtLabel>
@@ -157,7 +170,7 @@ const OnboardItineraryList = ({
                   })}
                   setActiveItinerary={({ index }) => {
                     const chosen = variants[index]
-                    if (chosen) onSelect(chosen)
+                    if (chosen) onPreviewVariant(chosen)
                   }}
                 />
               </VariantsRow>

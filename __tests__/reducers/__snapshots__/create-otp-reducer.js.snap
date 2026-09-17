@@ -67,6 +67,7 @@ Object {
       "candidates": Array [],
       "keepRouteId": null,
       "pendingCandidates": null,
+      "preview": null,
       "status": "idle",
       "trip": null,
       "vehicle": null,

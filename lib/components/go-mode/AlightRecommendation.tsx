@@ -17,13 +17,17 @@ import {
   RerouteSwitchButton,
   VehicleTrackingBadge
 } from './styled'
+import OnboardAlightPreview from './OnboardAlightPreview'
 import OnboardItineraryList from './OnboardItineraryList'
 
 interface Props {
   changeBus: () => void
-  confirmOnboardAlightStop: (option?: unknown) => void
   endGoMode: () => void
   goMode: GoModeState
+  openOnboardAlightPreview: (
+    option: unknown,
+    control?: 'row' | 'variant'
+  ) => void
 }
 
 /**
@@ -32,9 +36,9 @@ interface Props {
  */
 const AlightRecommendation = ({
   changeBus,
-  confirmOnboardAlightStop,
   endGoMode,
-  goMode
+  goMode,
+  openOnboardAlightPreview
 }: Props) => {
   const intl = useIntl()
   const { onboard } = goMode
@@ -171,9 +175,23 @@ const AlightRecommendation = ({
   // one per candidate alight stop, rendered through the app's NORMAL
   // itinerary-results list so each row carries the familiar full detail
   // (times, transfers, bike/walk legs with distances). A "Go Mode is live"
-  // banner keeps the context clear; tapping a row starts guidance.
+  // banner keeps the context clear; tapping a row opens its preview.
   const options = onboard.alightOptions || []
   if (options.length === 0) return null
+
+  // The preview is its own screen over the list (17.1). The list is NOT
+  // unmounted from state — `onboard.alightOptions` stands untouched underneath
+  // — so "Back to options" is a pure state change and costs no re-plan and no
+  // refetch. Before this, a row tap committed the trip and `clearOnboard()`
+  // threw the list away; recovering it on 2026-09-15 cost five OTP plan
+  // requests over 12 s.
+  if (onboard.preview) return <OnboardAlightPreview />
+
+  // Both open the preview; which control it came from is recorded (17.11).
+  const previewFromRow = (option: unknown) =>
+    openOnboardAlightPreview(option, 'row')
+  const previewFromVariant = (option: unknown) =>
+    openOnboardAlightPreview(option, 'variant')
 
   // The list is ranked from whatever answered by the optimizer's deadline
   // (4.1), so it can legitimately be short. Say so rather than presenting two
@@ -220,7 +238,8 @@ const AlightRecommendation = ({
         </RerouteSummary>
       )}
       <OnboardItineraryList
-        onSelect={(option) => confirmOnboardAlightStop(option)}
+        onPreview={previewFromRow}
+        onPreviewVariant={previewFromVariant}
         options={options}
       />
       <RerouteActions style={{ padding: '0 16px 16px' }}>
@@ -245,8 +264,11 @@ const mapDispatchToProps = {
   // the riding fact standing and the next onboard flow re-adopts the vehicle
   // they just rejected.
   changeBus: goModeActions.denyOnboardVehicle,
-  confirmOnboardAlightStop: goModeActions.confirmOnboardAlightStop,
-  endGoMode: goModeActions.endGoMode
+  endGoMode: goModeActions.endGoMode,
+  // A row tap PREVIEWS. confirmOnboardAlightStop is reachable from the preview
+  // screen's own Confirm control now (OnboardAlightPreview) and nowhere else
+  // in this flow.
+  openOnboardAlightPreview: goModeActions.openOnboardAlightPreview
 }
 
 export default connect(
