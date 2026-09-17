@@ -111,10 +111,17 @@ import {
   legGeometryUsable
 } from '../util/go-mode/geometry-trust'
 import type { TimedSimulationPoint } from '../util/go-mode/geometry'
-import { resumedTransitionedLegIndex } from '../util/go-mode/session-persistence'
+import {
+  resumedDepartureOverride,
+  resumedTransitionedLegIndex
+} from '../util/go-mode/session-persistence'
 import { createTripSession } from '../util/go-mode/trip-session'
 import type { TripSession } from '../util/go-mode/trip-session'
-import type { LiveLegTime, RidingState } from '../util/go-mode/types'
+import type {
+  DepartureOverrideSource,
+  LiveLegTime,
+  RidingState
+} from '../util/go-mode/types'
 import { spliceAccessOntoItinerary } from '../util/go-mode/access-splice'
 import { legAlight } from '../util/go-mode/live-itinerary'
 import {
@@ -155,7 +162,9 @@ import {
 } from '../util/go-mode/replay/replay-engine'
 import {
   acceptAutoReplan,
-  pickHopFreeSibling
+  originGapMeters,
+  pickHopFreeSibling,
+  startOriginIsStale
 } from '../util/go-mode/replan-acceptance'
 import { accessArriveByTarget } from '../util/go-mode/arrive-on-time'
 import {
@@ -553,7 +562,11 @@ export const START_ONBOARD_OPTIMIZE = 'START_ONBOARD_OPTIMIZE'
 // Simple action creators
 // Types moved to util/go-mode/types.ts; re-exported so existing imports of
 // `LiveLegTime` / `RidingState` from this module keep working.
-export type { LiveLegTime, RidingState } from '../util/go-mode/types'
+export type {
+  DepartureOverrideSource,
+  LiveLegTime,
+  RidingState
+} from '../util/go-mode/types'
 
 export const clearVehicleMatch = createAction(CLEAR_VEHICLE_MATCH)
 export const dismissBoardingPrompt = createAction(DISMISS_BOARDING_PROMPT)
@@ -790,19 +803,34 @@ export const setLegTurnCues = createAction<{
 export const updateTrackingInterval = createAction<{ interval: number }>(
   UPDATE_TRACKING_INTERVAL
 )
-export const setDepartureOverride = createAction<number | null>(
-  SET_DEPARTURE_OVERRIDE
-)
+/**
+ * A bare epoch (or null) is the AUTO-ANCHOR's voice — the shape every caller
+ * used before 12.15, and the reducer still reads it that way. `{ ms, source }`
+ * says whose pick it is, which is the half that could not be reconstructed
+ * after a resume.
+ */
+export const setDepartureOverride = createAction<
+  number | null | { ms: number | null; source: DepartureOverrideSource }
+>(SET_DEPARTURE_OVERRIDE)
 
 /**
  * The rider explicitly picked a departure (or reset to planned). Routes
  * through the same SET_DEPARTURE_OVERRIDE, but locks the auto-anchor off for
  * this boarding so it never fights the rider's choice.
+ *
+ * The lock is trip-session state and dies with the page, so the pick is also
+ * stamped `source: 'rider'` in the store, where the session save can see it —
+ * that stamp is what lets `resumeGoModeTrip` put this very lock back (12.15).
  */
 export function selectDeparture(epochMs: number | null) {
   return function (dispatch: any) {
     session.manualDepartureLock = true
-    dispatch(setDepartureOverride(epochMs))
+    dispatch(
+      setDepartureOverride({
+        ms: epochMs,
+        source: 'rider'
+      })
+    )
   }
 }
 export const setNotificationConfig = createAction<{
@@ -1100,6 +1128,21 @@ export function beginGoMode(
         ? options.roundTrip
         : (priorGoMode?.isActive && priorGoMode?.roundTrip) || null
     dispatch(startGoMode({ itinerary, originalFrom, roundTrip }))
+    // A plan has been installed, so its origin is owed a look (12.13). Armed
+    // here rather than asked on every tick because "the plan starts somewhere
+    // the rider is not" is only a defect at INSTALLATION: a rider three
+    // quarters of the way along their own access leg is a long way from that
+    // leg's start by the ordinary operation of walking.
+    session.staleStartOriginPending = itinerarySignature(itinerary)
+    // START_GO_MODE nulls `departureOverride` (12.14), and the two session
+    // facts that describe one have to go with it or the anchor is left holding
+    // a lock for a boarding that no longer exists: `manualDepartureLock` would
+    // keep auto-anchoring switched off for the whole of the new plan's first
+    // boarding, and `lastAutoAnchorMs` would let a coincidentally equal
+    // departure on the new plan read as the anchor's own. `advanceToLeg`
+    // already does exactly this at a leg change, for exactly this reason.
+    session.manualDepartureLock = false
+    session.lastAutoAnchorMs = null
     if (roundTrip) {
       // eslint-disable-next-line no-console
       console.log(
@@ -1144,7 +1187,119 @@ export function beginGoMode(
         type: CONFIRM_VEHICLE
       })
     }
+
+    // Last: does the plan now installed even start where the rider is? Every
+    // AUTOMATIC path answered that before it got here (acceptAutoReplan's
+    // 75 m origin gate); the rider's own tap answered nothing at all — 12.13.
+    //
+    // Awaited, and last for that reason: nothing below it waits, and in the
+    // ordinary case (a plan that starts underfoot) it returns without doing
+    // anything at all. Only a plan that needs recovering makes the caller's
+    // own await outlive a plan fetch, which is the honest reading — the trip
+    // is not started until its plan has been checked.
+    await dispatch(recoverStaleStartOrigin())
   }
+}
+
+/**
+ * Re-plan a trip whose installed plan begins somewhere the rider is not.
+ *
+ * 2026-09-08 10:40:15 (backlog 12.13): the rider, standing at I-35W & Lake St
+ * Station, tapped an itinerary out of the result list they had left open since
+ * 10:25 at 66th St, and `START_GO_MODE` took it whole — `legs[0].from` 7,409 m
+ * behind them, `startTime` 10:25:00, a 9.2 km bike leg. The measurements were
+ * all honest (100 % progress, 1,022 m to go, `status: deviated`); the plan was
+ * not. See `START_ORIGIN_MAX_M` for the numbers and why the threshold is what
+ * it is.
+ *
+ * It RECOVERS rather than asks. Two of the rider's standing rules decide the
+ * shape: do not ask them to confirm what the app already knows (their position
+ * and the plan's origin are both in hand, so there is nothing to put to them),
+ * and an automatic update keeps the route they chose. So this re-plans from
+ * where they are to the same destination with `keepRouteId` pinned to the
+ * tapped plan's own first transit route — the missed-bus machinery, reused
+ * whole: `reRouteFromCurrentPosition` reads the destination off the installed
+ * plan's last leg and `applyAutoReroute` takes only a candidate that boards
+ * that same route. When nothing does, it settles and the rider keeps the trip
+ * they asked for; no other route and no other mode is ever substituted.
+ *
+ * `currentPlanIsDead` is what applyAutoReroute already passes, and it is the
+ * truth here: a plan whose origin is kilometres behind the rider cannot be
+ * flown, so its arrival time is not an arrival to defend. Without it the
+ * replacement would be refused for arriving later than a plan that was never
+ * going to happen.
+ *
+ * No loop is possible: the replacement is planned from the rider's own fix and
+ * has to pass the 75 m origin gate to be applied at all, so it cannot itself
+ * be stale. The per-plan latch below is belt-and-braces, and is keyed on the
+ * plan so a SECOND stale tap is still recovered.
+ *
+ * Called from `beginGoMode`, where the plan is installed, AND from the position
+ * tick — beginGoMode may arrive before any fix exists, and the arming is spent
+ * only once a fix has actually answered the question, so exactly one of the two
+ * answers it and later ticks return on the first line.
+ */
+export function recoverStaleStartOrigin() {
+  return async function (dispatch: any, getState: any) {
+    const goMode = getState().otp?.goMode
+    const itinerary: Itinerary | null = goMode?.activeItinerary ?? null
+    if (!goMode?.isActive || !itinerary) return
+
+    // Only a plan `beginGoMode` has just installed is owed this question, and
+    // only once. Anything else — an ordinary tick, a trip already underway — is
+    // a rider who has legitimately travelled away from their own plan's start.
+    if (session.staleStartOriginPending !== itinerarySignature(itinerary))
+      return
+
+    // Only the tracking fix will do, because it is the one
+    // `reRouteFromCurrentPosition` itself reads: recovering off a fix it cannot
+    // see would announce a re-plan it then declines to make. On a brand-new
+    // trip it can still be null when beginGoMode reaches here (the first fix
+    // landed 69 ms after START_GO_MODE on the 09-08 ride, but nothing awaits
+    // it), so the question is left UNANSWERED — no latch — and the first
+    // position tick, which calls this too, answers it.
+    const fix: GeolocationPosition | null =
+      goMode?.tracking?.lastPosition ?? null
+    const coords: any = fix?.coords
+    if (coords?.latitude == null || coords?.longitude == null) return
+    const position: [number, number] = [coords.latitude, coords.longitude]
+
+    session.staleStartOriginPending = null
+
+    if (
+      !startOriginIsStale({
+        accuracyM: coords.accuracy ?? null,
+        itinerary,
+        position,
+        riding: !!goMode.riding
+      })
+    ) {
+      return
+    }
+
+    const gap = originGapMeters(itinerary, position)
+    // eslint-disable-next-line no-console
+    console.log(
+      `[go-mode] plan origin ${Math.round(
+        gap ?? 0
+      )}m from the rider — re-planning from here (12.13)`
+    )
+    if (isReplayActive()) return
+
+    await dispatch(
+      reRouteFromCurrentPosition({
+        autoApply: true,
+        keepRouteId: firstTransitLegRouteId(itinerary),
+        reason: 'stale-plan-origin'
+      })
+    )
+  }
+}
+
+/** The route id of an itinerary's first transit leg, or null when it has none. */
+function firstTransitLegRouteId(itinerary: Itinerary): string | null {
+  const leg = (itinerary.legs || []).find((l: any) => l.transitLeg)
+  return leg ? getLegRouteId(leg) : null
 }
 
 /**
@@ -1443,6 +1598,26 @@ export function resumeGoModeTrip() {
       })
     )
     await dispatch(startGoModeTracking(goMode.activeItinerary))
+
+    // Put the departure pick's OWNER back (12.15). create-otp-reducer has
+    // restored the value; whose it is lives in two module-level trip-session
+    // flags that a page load rebuilds empty, and without them a restored
+    // override belonged to nobody: `evaluateDepartureAnchor` refuses to
+    // overwrite an override that does not equal `lastAutoAnchorMs` (so not the
+    // anchor's), and `manualLock` was false (so not the rider's). A REACHABLE
+    // restored pick was therefore held as though the anchor owned it, and the
+    // rider's real one was equally unprotected. On 2026-09-08 the restored pick
+    // happened to be unreachable, so the failure showed as 12.3 instead.
+    const resumedOverride = resumedDepartureOverride()
+    if (resumedOverride?.source === 'rider') {
+      // Their choice, and it outranks the anchor for this boarding — exactly
+      // what selectDeparture set before the page went away.
+      session.manualDepartureLock = true
+    } else if (resumedOverride) {
+      // The anchor's own, so let it go on chasing an earlier same-route
+      // departure rather than treating its own pick as untouchable.
+      session.lastAutoAnchorMs = resumedOverride.ms
+    }
 
     // Put the transition guard back — AFTER startGoModeTracking, which clears
     // it (it is the itinerary-swap reset, and a resume comes through the same
@@ -2072,12 +2247,31 @@ export function applyAutoReroute(
     // rider's route is the rule, keeping a 602 m ride between two bike legs is
     // not (2026-08-31, util/go-mode/replan-acceptance#pickHopFreeSibling).
     const rerouteCandidates = collectRerouteCandidates(allItineraries, 50)
+    const keepRouteId = goMode.reRoute?.keepRouteId ?? null
+    // With no route to keep, "keep the rider's route" has nothing to say and
+    // `pickSameRouteReroute` answers null by contract. That is the right answer
+    // for a MISSED BUS, whose keepRouteId is always the boarding leg's own
+    // route — and the wrong one for the only other auto-apply caller, the
+    // stale-start-origin recovery (12.13), whose 09-08 case was an all-bike
+    // plan with no transit leg at all. There the analogue of the route rule is
+    // the MODE rule, and `pickAccessReplanCandidate` is the picker that states
+    // it: fastest access-only itinerary, and never a silent downgrade from
+    // cycling to a long walk.
     const best = pickHopFreeSibling(
-      pickSameRouteReroute(rerouteCandidates, goMode.reRoute?.keepRouteId),
+      keepRouteId
+        ? pickSameRouteReroute(rerouteCandidates, keepRouteId)
+        : pickAccessReplanCandidate(rerouteCandidates, {
+            accessMode: (goMode.activeItinerary?.legs || []).some(
+              (l: any) => l.mode === 'BICYCLE'
+            )
+              ? 'BICYCLE'
+              : 'WALK',
+            nextTransitRouteId: null
+          }),
       rerouteCandidates,
       {
         maxHopMeters: tokenHopMeters(state),
-        requireRouteId: goMode.reRoute?.keepRouteId ?? null,
+        requireRouteId: keepRouteId,
         toleranceMs: tokenHopToleranceMs(state)
       }
     )
@@ -2120,7 +2314,14 @@ export function applyAutoReroute(
     // Confirm what changed — the new boarding is the fact the rider needs.
     // Copy is the rider's standing notification rule: middot-separated facts,
     // and the wait in MINUTES rather than the clock time this used to quote.
+    //
+    // An all-access replacement has no boarding to name, so there is no such
+    // fact and no card: the only caller that can produce one is the
+    // stale-origin recovery (12.13), where the swap corrects the plan's own
+    // starting point and the rider's guidance simply becomes true. Buzzing
+    // them with "your bus · in 0 min · the stop" would be worse than silence.
     const firstTransitLeg = (best.legs || []).find((l: any) => l.transitLeg)
+    if (!firstTransitLeg) return
     const departsInMin = Math.max(
       0,
       Math.round(
@@ -5474,6 +5675,13 @@ export function handlePositionUpdate(position: GeolocationPosition) {
 
     dispatch(updatePosition(position))
 
+    // The first fix of a trip is also the first chance to ask whether the plan
+    // just installed even starts where the rider is (12.13): beginGoMode asks
+    // too, but on a fresh start it can get there before any fix exists. Returns
+    // on its first line unless a plan installation is actually waiting on an
+    // answer, which on all but one tick of a trip it is not.
+    dispatch(recoverStaleStartOrigin())
+
     const currentPosition: LatLngArray = [
       position.coords.latitude,
       position.coords.longitude
@@ -6253,10 +6461,12 @@ export function handlePositionUpdate(position: GeolocationPosition) {
           // pacing math all read `departureOverride ||` first, so only an
           // explicit null hands them back to the soonest catchable departure.
           if (departureOverride != null) {
-            dispatch(setDepartureOverride(null))
+            dispatch(setDepartureOverride({ ms: null, source: 'anchor' }))
           }
         } else if (anchor.anchorMs != null) {
-          dispatch(setDepartureOverride(anchor.anchorMs))
+          dispatch(
+            setDepartureOverride({ ms: anchor.anchorMs, source: 'anchor' })
+          )
         }
       }
     } else if (!isReplayActive()) {

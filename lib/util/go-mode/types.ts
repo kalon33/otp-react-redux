@@ -100,3 +100,21 @@ export interface RidingState {
   tripId: string | null
   vehicleId: string | null
 }
+
+/**
+ * Who chose the departure currently in force (`goMode.departureOverride`).
+ *
+ * The value alone cannot say: an anchor pick and a rider pick are both
+ * timestamps out of the same departure list. Nothing recorded it, and the gap
+ * showed on a resume — `manualDepartureLock` and `session.lastAutoAnchorMs`
+ * are both trip-session state, rebuilt as `false`/null by a page load, so a
+ * restored override was simultaneously "not the anchor's" (it does not equal
+ * `lastAutoAnchorMs`, so `evaluateDepartureAnchor` leaves it alone) and "not
+ * the rider's" (no lock). A REACHABLE restored pick was therefore held as
+ * though the anchor owned it, with nothing to say whether it had ever been
+ * chosen (backlog 12.15; the unreachable half of the same hole is 12.3).
+ *
+ * Stored beside the value, saved with the session, and read back by
+ * `resumeGoModeTrip` to rebuild the right one of those two facts.
+ */
+export type DepartureOverrideSource = 'anchor' | 'rider'
