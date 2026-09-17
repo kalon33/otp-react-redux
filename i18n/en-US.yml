@@ -458,6 +458,10 @@ components:
     onboardCancel: Cancel
     onboardError: Couldn't work out your bus. Try again?
     onboardNotThisVehicle: Not this one
+    onboardPreviewArrive: Arrive {time}
+    onboardPreviewBack: Back to options
+    onboardPreviewConfirm: Confirm this stop
+    onboardPreviewWait: "{mins} min wait"
     onboardTitle: On the bus
     openTripSheet: Open trip overview
     pickYourBus: Which bus are you on? Pick it below.

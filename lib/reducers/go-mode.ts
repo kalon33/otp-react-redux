@@ -8,8 +8,10 @@ import {
   CLEAR_REROUTE,
   CLEAR_RIDING,
   CLEAR_VEHICLE_MATCH,
+  CLOSE_ONBOARD_PREVIEW,
   CONFIRM_VEHICLE,
   DISMISS_BOARDING_PROMPT,
+  OPEN_ONBOARD_PREVIEW,
   PAUSE_GPS_SIMULATION,
   REPAIR_LEG_GEOMETRY,
   RESUME_GPS_SIMULATION,
@@ -114,6 +116,30 @@ export interface OnboardAlightOption {
 }
 
 /**
+ * The option the rider is LOOKING AT — a separate preview screen over the
+ * options list, which stays alive underneath it (17.1).
+ *
+ * Before this existed, every tap on a row WAS the commit: the row's
+ * `onClickCapture` went straight to `confirmOnboardAlightStop`, whose first
+ * act was `clearOnboard()` — and `alightOptions` is the only copy of the list,
+ * so there was no back. On 2026-09-15 15:56:13 the rider tapped a row to look
+ * at it, the trip started, the list was gone, and recovering it cost five
+ * fresh OTP plan requests at 15:57:15-19. Their note: *"Again: I just want to
+ * view alternatives ... but just viewing switched and then other options are
+ * gone"* — the second time they had asked.
+ *
+ * So: opening this changes nothing but this field, and closing it clears
+ * nothing but this field. Commit happens only from the preview's own Confirm.
+ */
+export interface OnboardAlightPreview {
+  /** Which control opened it — the row itself, or the same-shape drill-down.
+   * Recorded so the debug stream says what the rider touched (17.11). */
+  control: 'row' | 'variant'
+  openedAtMs: number
+  option: OnboardAlightOption
+}
+
+/**
  * "I'm already on the bus" flow: discover the live vehicle the rider is on,
  * fetch its schedule, and find the best stop to alight to finish the trip.
  * Distinct from reRoute (a mid-trip swap of an already-active itinerary).
@@ -154,6 +180,10 @@ export interface OnboardState {
    * counted here — those are over. Null when unknown.
    */
   pendingCandidates: number | null
+  /** Set while the rider is previewing one option; null on the list itself.
+   * Never cleared by a result landing — a straggler folding into the list
+   * behind the preview must not close it. */
+  preview: OnboardAlightPreview | null
   status:
     | 'idle'
     | 'discovering'
@@ -409,6 +439,7 @@ const defaultState: GoModeState = {
     failedCandidates: null,
     keepRouteId: null,
     pendingCandidates: null,
+    preview: null,
     status: 'idle',
     totalCandidates: null,
     trip: null,
@@ -616,6 +647,18 @@ const goMode = handleActions<GoModeState, any>(
       }
     }),
 
+    // "Back to options". Clears the preview and NOTHING else: the list, the
+    // trip, the vehicle and the candidate answers all stand, so returning
+    // costs no re-plan and no refetch (17.1 — recovering the list used to cost
+    // five OTP plan requests).
+    [CLOSE_ONBOARD_PREVIEW]: (state) => ({
+      ...state,
+      onboard: {
+        ...state.onboard,
+        preview: null
+      }
+    }),
+
     [CONFIRM_VEHICLE]: (state, action) => ({
       ...state,
       // Confirming a vehicle is the rider (or a trusted match) asserting they
@@ -643,6 +686,42 @@ const goMode = handleActions<GoModeState, any>(
         shown: false
       }
     }),
+
+    /**
+     * A tap on an option — the row, or one of its same-shape variants — opens
+     * the preview for it. The payload names the option rather than carrying
+     * it, so the debug-stream entry for the tap stays small (17.11); the
+     * option is resolved out of the live list here.
+     *
+     * Resolution is by index with the stop id as the check, falling back to
+     * the stop id alone: a straggler can have re-ranked the list between
+     * render and tap, in which case the index is stale but the identity is
+     * not. An option that is no longer in the list at all leaves state alone
+     * (the tap is stale) rather than previewing something the rider did not
+     * choose.
+     */
+    [OPEN_ONBOARD_PREVIEW]: (state, action) => {
+      const list = state.onboard.alightOptions || []
+      const { control, index, stopId } = action.payload || {}
+      const atIndex = typeof index === 'number' ? list[index] : undefined
+      const option =
+        atIndex && (!stopId || atIndex.stopId === stopId)
+          ? atIndex
+          : list.find((o: OnboardAlightOption) => o.stopId === stopId)
+      if (!option) return state
+      return {
+        ...state,
+        onboard: {
+          ...state.onboard,
+          preview: {
+            control:
+              control === 'variant' ? ('variant' as const) : ('row' as const),
+            openedAtMs: action.payload?.tMs ?? Date.now(),
+            option
+          }
+        }
+      }
+    },
 
     [PAUSE_GPS_SIMULATION]: (state) => ({
       ...state,
@@ -1037,6 +1116,8 @@ const goMode = handleActions<GoModeState, any>(
         candidates: action.payload.candidates,
         failedCandidates: 0,
         pendingCandidates: action.payload.candidates?.length ?? 0,
+        // A fresh search invalidates a preview of the old list's option.
+        preview: null,
         status: 'optimizing' as const,
         totalCandidates: action.payload.candidates?.length ?? 0
       }

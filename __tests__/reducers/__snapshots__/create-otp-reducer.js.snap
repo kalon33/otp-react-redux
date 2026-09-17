@@ -68,6 +68,7 @@ Object {
       "failedCandidates": null,
       "keepRouteId": null,
       "pendingCandidates": null,
+      "preview": null,
       "status": "idle",
       "totalCandidates": null,
       "trip": null,

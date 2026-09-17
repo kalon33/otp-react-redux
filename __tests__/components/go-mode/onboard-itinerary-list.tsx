@@ -84,7 +84,11 @@ const option = (
   stopName
 })
 
-function renderList(options: any[], onSelect = jest.fn()) {
+function renderList(
+  options: any[],
+  onPreview = jest.fn(),
+  onPreviewVariant = jest.fn()
+) {
   const state = getMockInitialState()
   // The component is rendered through ComponentContext's ItineraryBody, the
   // same way the real narrative list is.
@@ -97,11 +101,11 @@ function renderList(options: any[], onSelect = jest.fn()) {
   )
   const { wrapper } = mockWithProvider(
     Wrapped,
-    { onSelect, options },
+    { onPreview, onPreviewVariant, options },
     state,
     messages
   )
-  return { onSelect, wrapper }
+  return { onPreview, onPreviewVariant, wrapper }
 }
 
 /**
@@ -143,25 +147,28 @@ describe('components > go-mode > OnboardItineraryList', () => {
       expect(text).toContain('Burnsville')
     })
 
-    it('starts guidance to the variant the rider picks, not the row', () => {
-      const { onSelect, wrapper } = renderList(sameChain)
+    it('previews the variant the rider picks, not the row', () => {
+      const { onPreview, onPreviewVariant, wrapper } = renderList(sameChain)
       wrapper.find('button.same-shape-variants-toggle').simulate('click')
       wrapper.find('button[data-index=2]').simulate('click')
-      expect(onSelect).toHaveBeenCalledTimes(1)
-      expect(onSelect.mock.calls[0][0].stopName).toBe('Burnsville')
+      expect(onPreviewVariant).toHaveBeenCalledTimes(1)
+      expect(onPreviewVariant.mock.calls[0][0].stopName).toBe('Burnsville')
+      // The drill-down pick is a VIEW, never the commit it used to be (17.1).
+      expect(onPreview).not.toHaveBeenCalled()
     })
 
     it('opening the drill-down does not choose the row', () => {
-      const { onSelect, wrapper } = renderList(sameChain)
+      const { onPreview, onPreviewVariant, wrapper } = renderList(sameChain)
       wrapper.find('button.same-shape-variants-toggle').simulate('click')
-      expect(onSelect).not.toHaveBeenCalled()
+      expect(onPreview).not.toHaveBeenCalled()
+      expect(onPreviewVariant).not.toHaveBeenCalled()
     })
 
-    it('still starts guidance when the row itself is tapped', () => {
-      const { onSelect, wrapper } = renderList(sameChain)
+    it('previews the row when the row itself is tapped', () => {
+      const { onPreview, wrapper } = renderList(sameChain)
       wrapper.find('div.stub-itin').simulate('click')
-      expect(onSelect).toHaveBeenCalledTimes(1)
-      expect(onSelect.mock.calls[0][0].stopName).toBe('98th St')
+      expect(onPreview).toHaveBeenCalledTimes(1)
+      expect(onPreview.mock.calls[0][0].stopName).toBe('98th St')
     })
 
     it('leaves genuinely different journeys as separate rows', () => {
@@ -208,12 +215,12 @@ describe('components > go-mode > OnboardItineraryList', () => {
       expect(rows.at(1).text()).not.toContain('I-35W & Lake St Station')
     })
 
-    it('starts guidance to the stop the tapped row names', () => {
-      const { onSelect, wrapper } = renderList(liveShape)
+    it('previews the stop the tapped row names', () => {
+      const { onPreview, wrapper } = renderList(liveShape)
       const rows = wrapper.find('li.result')
       rows.at(1).find('div.stub-itin').simulate('click')
-      expect(onSelect).toHaveBeenCalledTimes(1)
-      const chosen = onSelect.mock.calls[0][0]
+      expect(onPreview).toHaveBeenCalledTimes(1)
+      const chosen = onPreview.mock.calls[0][0]
       expect(chosen.alightStopName).toBe('Burnsville Heart of the City Station')
       expect(rows.at(1).text()).toContain(`Off at ${chosen.alightStopName}`)
     })

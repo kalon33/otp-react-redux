@@ -467,6 +467,21 @@ export const CLEAR_RIDING = 'CLEAR_RIDING'
 export const CLEAR_VEHICLE_MATCH = 'CLEAR_VEHICLE_MATCH'
 export const CONFIRM_VEHICLE = 'CONFIRM_VEHICLE'
 export const DISMISS_BOARDING_PROMPT = 'DISMISS_BOARDING_PROMPT'
+/**
+ * Recording only — no reducer consumes it, and it is deliberately absent from
+ * create-otp-reducer's goMode delegation list (the trap where a new goMode
+ * type is silently dropped does not apply to a type no reducer handles; same
+ * as RESUME_GO_MODE and CARD_DEPARTURE_MISMATCH).
+ *
+ * It exists because "clicking does nothing" was unfalsifiable (17.11). On
+ * 2026-09-15 15:53:50 the rider reported exactly that and the stream held
+ * nothing between a LOCATION_CHANGE at 15:53:41 and a SET_MOBILE_SCREEN at
+ * 15:53:54 — no record that a tap had happened at all, so the most likely
+ * explanation (a 20 s FIND_FEEDS timeout in flight across that window) stayed
+ * inference. One entry per tap on a control Go Mode owns, carrying the
+ * control's name; every payload here is a handful of scalars.
+ */
+export const GO_MODE_CONTROL_TAP = 'GO_MODE_CONTROL_TAP'
 // Recording only, like REROUTE_SNAPSHOT: no reducer consumes either, they
 // exist to put a request/response pair in the debug stream for build-fixture.
 export const ONBOARD_CANDIDATE_SNAPSHOT = 'ONBOARD_CANDIDATE_SNAPSHOT'
@@ -514,9 +529,13 @@ export const SET_RETURN_COUNTDOWN = 'SET_RETURN_COUNTDOWN'
 export const SET_ROUND_TRIP = 'SET_ROUND_TRIP'
 export const START_REROUTE = 'START_REROUTE'
 
-// "I'm already on the bus" onboard-flow action types
+// "I'm already on the bus" onboard-flow action types. Both preview types MUST
+// also appear in create-otp-reducer's explicit goMode case list or they are
+// silently dropped (the reducer's `default` leaves state untouched).
 export const BEGIN_ONBOARD_FLOW = 'BEGIN_ONBOARD_FLOW'
 export const CLEAR_ONBOARD = 'CLEAR_ONBOARD'
+export const CLOSE_ONBOARD_PREVIEW = 'CLOSE_ONBOARD_PREVIEW'
+export const OPEN_ONBOARD_PREVIEW = 'OPEN_ONBOARD_PREVIEW'
 export const SET_ONBOARD_RESULT = 'SET_ONBOARD_RESULT'
 export const SET_ONBOARD_STATUS = 'SET_ONBOARD_STATUS'
 export const SET_ONBOARD_TRIP = 'SET_ONBOARD_TRIP'
@@ -590,6 +609,87 @@ export const recordCardDepartureMismatch = (info: {
   payload: { ...info, tMs: getCurrentTime().getTime() },
   type: CARD_DEPARTURE_MISMATCH
 })
+/**
+ * The controls Go Mode owns, as a closed set: the stream (and the daemon rule
+ * behind 17.11) matches on these names, so they must not be free-form.
+ */
+export type GoModeControl =
+  | 'onboard-option-row'
+  | 'onboard-preview-back'
+  | 'onboard-preview-confirm'
+  | 'onboard-variant-open'
+
+/**
+ * "The rider touched this." Recording only (GO_MODE_CONTROL_TAP); the payload
+ * is scalars, one entry per tap, so it is cheap enough to sit on every control
+ * without thickening the stream.
+ */
+export const recordGoModeControlTap = (
+  control: GoModeControl,
+  fields: Record<string, boolean | number | string | null> = {}
+) => ({
+  payload: { ...fields, control, tMs: getCurrentTime().getTime() },
+  type: GO_MODE_CONTROL_TAP
+})
+
+/**
+ * Open the preview screen for one onboard alight option — the rider LOOKING at
+ * it, which is what a tap on a row has always meant and never did (17.1).
+ *
+ * Changes nothing but `onboard.preview`: the list, the trip, the vehicle and
+ * the candidate answers all stand, so `closeOnboardAlightPreview` returns to
+ * the same options with no re-plan and no refetch.
+ *
+ * The dispatched payload names the option (index + stop id) instead of
+ * carrying it — the reducer resolves it out of the live list — so the tap's
+ * debug-stream entry is a handful of scalars rather than an itinerary.
+ */
+export function openOnboardAlightPreview(
+  option: any,
+  control: 'row' | 'variant' = 'row'
+) {
+  return function (dispatch: any, getState: any) {
+    if (!option) return
+    const options = getState().otp?.goMode?.onboard?.alightOptions || []
+    const index = options.indexOf(option)
+    const stopId = option.stopId ?? null
+    dispatch(
+      recordGoModeControlTap(
+        control === 'variant' ? 'onboard-variant-open' : 'onboard-option-row',
+        {
+          index,
+          optionCount: options.length,
+          stopId,
+          stopName: option.alightStopName || option.stopName || null
+        }
+      )
+    )
+    dispatch({
+      payload: {
+        control,
+        index,
+        stopId,
+        tMs: getCurrentTime().getTime()
+      },
+      type: OPEN_ONBOARD_PREVIEW
+    })
+  }
+}
+
+/** "Back to options": drop the preview and nothing else. */
+export function closeOnboardAlightPreview() {
+  return function (dispatch: any, getState: any) {
+    const onboard = getState().otp?.goMode?.onboard
+    dispatch(
+      recordGoModeControlTap('onboard-preview-back', {
+        optionCount: (onboard?.alightOptions || []).length,
+        stopId: onboard?.preview?.option?.stopId ?? null
+      })
+    )
+    dispatch({ type: CLOSE_ONBOARD_PREVIEW })
+  }
+}
+
 export const transitionLeg = createAction<{ legIndex: number }>(TRANSITION_LEG)
 
 export const setLiveLegTimes =
@@ -3946,11 +4046,21 @@ function reconfirmBoardedVehicle(dispatch: any, vehicle: any) {
 /**
  * Commit to the recommended alight stop: synthesize the full itinerary and hand
  * off into live Go Mode tracking, keeping the same bus confirmed as the vehicle.
+ *
+ * THE COMMIT, and the only one. Until 17.1 this also WAS the row tap: the
+ * options list put `onSelect` on the whole row, so looking at an option
+ * started the trip and `clearOnboard()` — the first thing here — destroyed the
+ * only copy of the list on the way out. Reaching this now takes the preview
+ * screen's explicit Confirm (or the pre-existing programmatic callers, which
+ * pass their own option and never went through a row).
  */
 export function confirmOnboardAlightStop(option?: any) {
   return function (dispatch: any, getState: any) {
     const goMode = getState().otp?.goMode
-    const best = option || goMode?.onboard?.bestAlightStop
+    const preview = goMode?.onboard?.preview
+    // Preview before bestAlightStop: while a preview is open, the stop the
+    // rider is looking at is the one they mean — never the ranker's favourite.
+    const best = option || preview?.option || goMode?.onboard?.bestAlightStop
     const trip = goMode?.onboard?.trip
     const vehicle = goMode?.onboard?.vehicle
     if (!best || !trip) return
@@ -3960,6 +4070,18 @@ export function confirmOnboardAlightStop(option?: any) {
       vehicle,
       best,
       goMode.tracking?.lastPosition || null
+    )
+
+    // Recorded BEFORE clearOnboard, so the stream says which stop the rider
+    // confirmed and whether they had previewed it (17.11). `fromPreview:
+    // false` on a commit that reached here without a preview is the signal
+    // that 17.1 has regressed.
+    dispatch(
+      recordGoModeControlTap('onboard-preview-confirm', {
+        fromPreview: !!preview,
+        stopId: best.stopId ?? null,
+        stopName: best.alightStopName || best.stopName || null
+      })
     )
 
     dispatch(clearOnboard())
