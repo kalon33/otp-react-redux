@@ -4686,6 +4686,7 @@ export function refreshLiveLegTimes() {
         prev?.alightEpoch != null
           ? {
               epoch: prev.alightEpoch,
+              isFloor: prev.alightIsFloor,
               realtime: prev.alightRealtime ?? prev.realtime
             }
           : null,
@@ -4696,6 +4697,7 @@ export function refreshLiveLegTimes() {
         prev?.boardEpoch != null
           ? {
               epoch: prev.boardEpoch,
+              isFloor: prev.boardIsFloor,
               realtime: prev.boardRealtime ?? prev.realtime
             }
           : null,
@@ -4710,9 +4712,14 @@ export function refreshLiveLegTimes() {
       if (alight || board) {
         liveTimes[i] = {
           alightEpoch: alight?.epoch ?? null,
+          // mergeLiveTimePoint says when it RAISED a stale value to `now`.
+          // That is a bound, not a prediction, and carrying it here is what
+          // keeps it out of the trip sheet's wait arithmetic (backlog 17.6).
+          alightIsFloor: !!alight?.isFloor,
           alightProjected: !!alight?.projected,
           alightRealtime: !!alight?.realtime,
           boardEpoch: board?.epoch ?? null,
+          boardIsFloor: !!board?.isFloor,
           boardProjected: !!board?.projected,
           boardRealtime: !!board?.realtime,
           realtime: !!(alight?.realtime || board?.realtime)

@@ -441,13 +441,20 @@ describe('mergeLiveTimePoint', () => {
     const prev = { epoch: 1783883247000, realtime: true }
     const next = { epoch: 1783882860000, realtime: false }
     const merged = mergeLiveTimePoint(prev, next, NOW)
-    expect(merged).toEqual({ epoch: 1783883247000, realtime: false })
+    expect(merged).toEqual({
+      epoch: 1783883247000,
+      isFloor: false,
+      realtime: false
+    })
   })
 
   it('clamps a schedule-only value to now (a bus cannot arrive in the past)', () => {
     const next = { epoch: NOW - 120000, realtime: false }
     expect(mergeLiveTimePoint(null, next, NOW)).toEqual({
       epoch: NOW,
+      // The raise happened, so the value is a floor and says so — nothing may
+      // compute a wait from it (backlog 17.6).
+      isFloor: true,
       realtime: false
     })
   })
@@ -457,7 +464,12 @@ describe('mergeLiveTimePoint', () => {
     const scheduled = { epoch: NOW - 140000, realtime: false }
     const tick1 = mergeLiveTimePoint(live, scheduled, NOW)
     const tick2 = mergeLiveTimePoint(tick1, scheduled, NOW + 20000)
-    expect(tick2).toEqual({ epoch: NOW + 250000, realtime: false })
+    // Still ahead of the clock, so no raise happened and it is not a floor.
+    expect(tick2).toEqual({
+      epoch: NOW + 250000,
+      isFloor: false,
+      realtime: false
+    })
   })
 
   it('recovers to live when the prediction comes back', () => {
@@ -470,6 +482,7 @@ describe('mergeLiveTimePoint', () => {
     const prev = { epoch: NOW + 250000, realtime: true }
     expect(mergeLiveTimePoint(prev, null, NOW)).toEqual({
       epoch: NOW + 250000,
+      isFloor: false,
       realtime: false
     })
   })
@@ -500,7 +513,7 @@ describe('clampNonLiveLegTimes', () => {
     // the alight time stale between 20 s refresh polls.
     const times = { 1: entry({ alightEpoch: NOW - 26000 }) }
     expect(clampNonLiveLegTimes(times, NOW)).toEqual({
-      1: entry({ alightEpoch: FLOOR })
+      1: entry({ alightEpoch: FLOOR, alightIsFloor: true })
     })
   })
 
@@ -521,8 +534,10 @@ describe('clampNonLiveLegTimes', () => {
     expect(clampNonLiveLegTimes(times, NOW)).toEqual({
       1: entry({
         alightEpoch: FLOOR,
+        alightIsFloor: true,
         boardClamped: true,
-        boardEpoch: FLOOR
+        boardEpoch: FLOOR,
+        boardIsFloor: true
       })
     })
   })
