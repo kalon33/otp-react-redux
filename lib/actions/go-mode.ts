@@ -157,7 +157,10 @@ import {
   pickHopFreeSibling
 } from '../util/go-mode/replan-acceptance'
 import { accessArriveByTarget } from '../util/go-mode/arrive-on-time'
-import { ridingSuppressedByRider } from '../util/go-mode/boarding-confirmation'
+import {
+  knownAboardVehicle,
+  ridingSuppressedByRider
+} from '../util/go-mode/boarding-confirmation'
 import { isTripRecordingEnabled, recordSessionEvent } from '../util/debug-log'
 import {
   beginGoModeQuietPeriod,
@@ -482,6 +485,10 @@ export const SET_GO_MODE_ACTIVE_LEG = 'SET_GO_MODE_ACTIVE_LEG'
 export const SET_GO_MODE_BACKGROUNDED = 'SET_GO_MODE_BACKGROUNDED'
 export const SET_MAP_FOLLOW = 'SET_MAP_FOLLOW'
 export const SET_BOARDING_SEARCHING = 'SET_BOARDING_SEARCHING'
+// Whether the last vehicle search for the picker FAILED, as opposed to
+// honestly finding nothing. Must also appear in create-otp-reducer's explicit
+// goMode case list or it is silently dropped.
+export const SET_BOARDING_SEARCH_FAILED = 'SET_BOARDING_SEARCH_FAILED'
 export const SET_RIDING = 'SET_RIDING'
 export const SET_LIVE_LEG_TIMES = 'SET_LIVE_LEG_TIMES'
 export const SET_NOTIFICATION_CONFIG = 'SET_NOTIFICATION_CONFIG'
@@ -532,6 +539,9 @@ export const clearVehicleMatch = createAction(CLEAR_VEHICLE_MATCH)
 export const dismissBoardingPrompt = createAction(DISMISS_BOARDING_PROMPT)
 export const setBoardingSearching = createAction<boolean>(
   SET_BOARDING_SEARCHING
+)
+export const setBoardingSearchFailed = createAction<boolean>(
+  SET_BOARDING_SEARCH_FAILED
 )
 export const showBoardingPromptAction = createAction(SHOW_BOARDING_PROMPT)
 export const startGoMode = createAction<{
@@ -729,7 +739,7 @@ export const setOnboardVehicle = createAction<{
   routeId: string | null
   tripId: string | null
   vehicleId: string
-}>(SET_ONBOARD_VEHICLE)
+} | null>(SET_ONBOARD_VEHICLE)
 export const setOnboardTrip = createAction<any>(SET_ONBOARD_TRIP)
 export const startOnboardOptimize = createAction<{
   candidates: Array<{
@@ -2692,6 +2702,25 @@ export function beginOnboardFlow() {
 }
 
 /**
+ * Did this OTP read FAIL, as opposed to answering "nothing"?
+ *
+ * `createQueryAction` never rejects: on a timeout or a 5xx it dispatches the
+ * caller's error action and RESOLVES with it (api.js, "Downstream this is an
+ * ordinary failed request"), so an `await` on the poll looks identical whether
+ * the feed said "no vehicles" or the server never answered. That is exactly
+ * how the picker came to present a failed search as an empty list (17.5, and
+ * the 2026-08-31 sighting alight-optimizer.ts:618 documents: "no state
+ * anywhere said the search had failed").
+ *
+ * A throttled call resolves `undefined` (handleThrottlingUrl suppressed it) —
+ * not a failure: the store already holds a fresh answer for that URL.
+ */
+function queryActionFailed(result: any): boolean {
+  if (!result || typeof result !== 'object') return false
+  return result.error === true || /_ERROR$/.test(String(result.type ?? ''))
+}
+
+/**
  * Discover the live transit vehicles near the rider so they can pick the one
  * they are on. Scans every route serving a nearby stop for vehicle positions,
  * then surfaces those within 200m via the boarding prompt. Retries while the
@@ -2701,6 +2730,10 @@ export function discoverNearbyVehicles(attempt = 0) {
   return async function (dispatch: any, getState: any) {
     const goMode = getState().otp?.goMode
     if (!goMode?.isActive || goMode.onboard?.status === 'idle') return
+
+    // This run owns the verdict: a retry that succeeds must clear the last
+    // one's failure, or the sheet keeps apologising for a search that worked.
+    dispatch(setBoardingSearchFailed(false))
 
     const pos = goMode.tracking?.lastPosition
     if (!pos) {
@@ -2767,11 +2800,19 @@ export function discoverNearbyVehicles(attempt = 0) {
     }
 
     // 2. Live vehicles for each nearby route.
-    await Promise.all(
+    const polls = await Promise.all(
       routes.map((r: { id: string }) =>
         dispatch(getVehiclePositionsForRoute(r.id))
       )
     )
+    // 17.5. Whether the feed ANSWERED is a separate fact from what it said,
+    // and the sheet has to be able to tell the rider which one it is. On
+    // 2026-09-15 five REALTIME_VEHICLE_POSITIONS_ERRORs landed between
+    // 15:46:41 and 15:46:56, every one "Request timed out after 20000 ms".
+    //
+    // Only a failed READ counts. No routes at all is an honest answer ("No
+    // buses detected nearby") and must not be dressed up as an outage.
+    dispatch(setBoardingSearchFailed(polls.some(queryActionFailed)))
 
     // 3. Vehicles within range of the rider, across all those routes. The radius
     // is generous (750m): the rider is on a moving bus and GTFS-RT positions lag
@@ -2807,11 +2848,25 @@ export function discoverNearbyVehicles(attempt = 0) {
 /**
  * Reset the onboard flow back to vehicle discovery (e.g. the rider picked the
  * wrong bus, or no good alight stop was found).
+ *
+ * `denied: false` re-opens the picker WITHOUT throwing the confirmed vehicle
+ * match away — for a re-search the rider asked for after the search failed
+ * (17.4), where the match is still the best evidence there is and is what the
+ * sheet's fallback row names. The default drops it, because the caller has
+ * just been told the vehicle is wrong.
  */
-export function rediscoverOnboardVehicles() {
+export function rediscoverOnboardVehicles(options: { denied?: boolean } = {}) {
   return function (dispatch: any) {
     dispatch(setOnboardStatus('discovering'))
-    dispatch(clearVehicleMatch())
+    if (options.denied !== false) {
+      dispatch(clearVehicleMatch())
+      // And the vehicle THIS flow adopted, which is the one the rider has
+      // just rejected. It used to survive a rediscover, harmlessly while
+      // nothing read it after the fact — but the picker's fallback row does
+      // (17.5), and offering a rider the bus they have just said they are not
+      // on would undo 15.3 from the other side.
+      dispatch(setOnboardVehicle(null))
+    }
     dispatch(discoverNearbyVehicles())
   }
 }
@@ -2833,7 +2888,39 @@ export function rediscoverOnboardVehicles() {
  * vehicle again.
  */
 export function denyOnboardVehicle() {
-  return function (dispatch: any) {
+  return function (dispatch: any, getState: any) {
+    // 17.4. Except after a FAILED search, where the same button means
+    // something else entirely.
+    //
+    // 2026-09-15, ride A. The rider tapped their own reroute at 15:46:02
+    // (`START_REROUTE {autoApply: false, reason: "rider-reroute"}`) on Orange
+    // Line trip 1:1346665, vehicle 1:8140 — a confirmed match 16 m away, on
+    // route, riding set. Production OTP was timing out (17.8), so all five
+    // candidate plans failed and `optimizeAlightFromTrip` settled
+    // `setOnboardResult(null)` at 15:46:14, which the reducer turns into
+    // `status: 'error'`. That put up AlightRecommendation's error card —
+    // "Couldn't work out your bus. Try again?" — whose "Choose bus" is wired
+    // to this thunk. Eight seconds later the rider tapped it, and the deny
+    // path ran on a bus they had never contradicted: CLEAR_RIDING 15:46:22.706,
+    // CLEAR_VEHICLE_MATCH .707, DISMISS_BOARDING_PROMPT .708,
+    // SET_ONBOARD_STATUS "discovering" .709. Twenty seconds after that they
+    // typed "Why'd you lose my bus??".
+    //
+    // A failed search is not evidence about which bus the rider is on. Re-open
+    // the picker — but keep the riding fact, keep the confirmed match, and set
+    // no denial hold, because the rider said nothing to deny. If they do pick
+    // a different vehicle, confirmVehicleSelection overwrites riding with it;
+    // if they pick the same one, nothing was ever lost.
+    //
+    // Every other status still denies, which is the whole point of the button
+    // there: 'fetching-schedule'/'optimizing' is 15.3's "Not this one" beside
+    // the assumed-vehicle badge, and 'ready' is "Change bus" under the
+    // options. The trip sheet's own chip calls denyBoardingByRider directly
+    // (6.10c), so it is untouched either way.
+    if (getState().otp?.goMode?.onboard?.status === 'error') {
+      dispatch(rediscoverOnboardVehicles({ denied: false }))
+      return
+    }
     dispatch(denyBoardingByRider())
     dispatch(rediscoverOnboardVehicles())
   }
@@ -3691,9 +3778,28 @@ export function replanFromAboard(
     const itinerary: Itinerary | null = goMode?.activeItinerary
     const legs = itinerary?.legs || []
     const destLeg = legs[legs.length - 1]
+    /**
+     * 17.5. When this path is reached from the bus picker the rider is LOOKING
+     * at the onboard panel, and `onboard.status` is the only thing that decides
+     * what it shows. A bail that settles reRoute only is invisible there — the
+     * panel keeps whatever it last said, forever. Settle it too, but only for
+     * the explicit rider-facing path and only when the panel is already open:
+     * the autoApply recovery must never put the onboard UI over a live trip
+     * (optimizeAlightFromTrip's `updateOnboardState` note).
+     */
+    const settleOpenPanel = () => {
+      const status = getState().otp?.goMode?.onboard?.status
+      if (!options.autoApply && status && status !== 'idle') {
+        dispatch(setOnboardStatus('error'))
+      }
+    }
+
     // Gate on the verified fact: no tripId, no aboard replan — callers fall
     // back to their existing behavior (point-plan / planner search).
-    if (!goMode?.isActive || !riding?.tripId || !itinerary || !destLeg) return
+    if (!goMode?.isActive || !riding?.tripId || !itinerary || !destLeg) {
+      settleOpenPanel()
+      return
+    }
 
     // Destination from the ACTIVE ITINERARY, not currentQuery.to — a mid-trip
     // browse (browseFromCurrentPosition) rewrites the query, and an automatic
@@ -3768,6 +3874,7 @@ export function replanFromAboard(
     const trip = getState().otp?.transitIndex?.trips?.[tripId]
     if (!trip || !(trip.stopTimes?.length > 0)) {
       dispatch(setRerouteResult(null))
+      settleOpenPanel()
       return
     }
 
@@ -6548,12 +6655,16 @@ export function searchBoardingVehicles() {
     // Otherwise the sheet opens on the same tick as the tap, already saying it
     // is looking — the poll below is a round trip away.
     dispatch(setBoardingSearching(true))
+    dispatch(setBoardingSearchFailed(false))
     dispatch(showBoardingPromptAction())
 
     try {
       // Refresh rather than trust the store: the access-leg poll runs at 20 s
       // and the tap can land just before the next one.
-      await dispatch(getVehiclePositionsForRoute(routeId))
+      const poll = await dispatch(getVehiclePositionsForRoute(routeId))
+      // A feed that would not answer is a different thing from a feed with
+      // nothing on it (17.5) — say which, and offer the retry.
+      if (queryActionFailed(poll)) dispatch(setBoardingSearchFailed(true))
       const state = getState()
       const pos = state.otp?.goMode?.tracking?.lastPosition
       // No fix means nothing to compare a frame against — leaving the list
@@ -6582,6 +6693,7 @@ export function searchBoardingVehicles() {
     } catch {
       // Best-effort: a feed that will not answer is reported by the sheet
       // ending its search, not by an unhandled rejection off a button tap.
+      dispatch(setBoardingSearchFailed(true))
     } finally {
       dispatch(setBoardingSearching(false))
     }
@@ -6615,6 +6727,53 @@ export function confirmBoardingByRider() {
     return vehicleId
       ? dispatch(confirmVehicleSelection(vehicleId))
       : dispatch(searchBoardingVehicles())
+  }
+}
+
+/**
+ * "Try again" on the bus picker (17.5).
+ *
+ * The sheet had no retry at all: when every backing request timed out the
+ * rider was left with a list that could not refill itself, and the only
+ * controls on screen were "Not yet" and — on the error card behind it —
+ * a "Choose bus" that threw the riding fact away (17.4). Re-running the same
+ * search the sheet was opened by is the whole fix; which search that is
+ * depends on which entry point opened it.
+ */
+export function retryBoardingSearch() {
+  return function (dispatch: any, getState: any) {
+    const onboardStatus = getState().otp?.goMode?.onboard?.status
+    // Inside the onboard flow, discovery is what fills the list — and never
+    // as a denial: the rider asked for a re-search, not to be taken off the
+    // bus the app has already confirmed.
+    if (onboardStatus && onboardStatus !== 'idle') {
+      return dispatch(rediscoverOnboardVehicles({ denied: false }))
+    }
+    // Pre-boarding (access leg, 15.2): the route's own feed.
+    return dispatch(searchBoardingVehicles())
+  }
+}
+
+/**
+ * "Not yet" / the overlay tap on the bus picker.
+ *
+ * Mid-ride the onboard flow renders OVER the live trip, and `status` alone
+ * decides that (GoModeScreen). Dismissing the sheet without resolving the
+ * status left the rider on a screen with the prompt "Which bus are you on?
+ * Pick it below." and nothing below it and no way back — the 15:47:25
+ * screenshot in 17.5. Mid-ride, closing the picker means going back to the
+ * trip that is still running, which is exactly what the header's Back button
+ * does. Pre-trip there is no trip to go back to, so the status stands and Back
+ * still exits the flow.
+ */
+export function dismissOnboardPicker() {
+  return function (dispatch: any, getState: any) {
+    const goMode = getState().otp?.goMode
+    const dismissible =
+      goMode?.onboard?.status === 'awaiting-selection' ||
+      goMode?.onboard?.status === 'discovering'
+    dispatch(dismissBoardingPrompt())
+    if (dismissible && goMode?.activeItinerary) dispatch(clearOnboard())
   }
 }
 
@@ -6663,6 +6822,22 @@ export function confirmVehicleSelection(vehicleId: string) {
         }
       }
     }
+    // 17.5. Both lookups above read the FEED, and the feed is exactly what is
+    // missing when the picker's fallback row is the row the rider taps: that
+    // row names the vehicle Go Mode itself has already confirmed, from state,
+    // and during the 2026-09-15 outage neither `nearbyVehicles` nor
+    // `transitIndex.routes` held a record for it. Falling through here
+    // confirmed a bus with a null tripId, which the onboard branch below can
+    // only turn into 'error' — the dead end the row exists to avoid.
+    if (!selected?.tripId) {
+      const known = knownAboardVehicle({
+        alightedFrom: goMode?.alightedFrom ?? null,
+        match: goMode?.vehicleMatch?.match ?? null,
+        onboardVehicle: goMode?.onboard?.vehicle ?? null,
+        riding: goMode?.riding ?? null
+      })
+      if (known?.vehicleId === vehicleId) selected = { ...selected, ...known }
+    }
 
     dispatch({
       payload: {
@@ -6704,11 +6879,37 @@ export function confirmVehicleSelection(vehicleId: string) {
       )
     }
 
-    // In the "I'm on the bus" onboard flow (no itinerary yet), use the selected
-    // vehicle's trip to fetch the schedule and optimize the alight stop.
+    // In the "I'm on the bus" onboard flow, use the selected vehicle's trip to
+    // fetch the schedule and optimize the alight stop.
     const onboardStatus = goMode?.onboard?.status
-    if (onboardStatus && onboardStatus !== 'idle' && !goMode.activeItinerary) {
-      if (selected?.tripId) {
+    if (onboardStatus && onboardStatus !== 'idle') {
+      if (!selected?.tripId) {
+        // No trip id on the realtime feed — can't anchor to this vehicle.
+        dispatch(setOnboardStatus('error'))
+        return
+      }
+      // 17.5. MID-RIDE the flow keeps its itinerary by design — replanFromAboard's
+      // explicit path renders the onboard UI over a trip that is still running
+      // and never goes through BEGIN_ONBOARD_FLOW, precisely so the live trip
+      // survives. This branch used to be gated on `!goMode.activeItinerary`,
+      // so mid-ride a tap on "This one" did NOTHING: CONFIRM_VEHICLE hid the
+      // sheet (reducers/go-mode.ts, `shown: false`) and nothing advanced the
+      // status, leaving "Which bus are you on? Pick it below." over an empty
+      // body. 2026-09-15 15:46:49.885: the rider picked bus 1:8140 out of the
+      // list and sat on that dead end for 36 s — 19 UPDATE_PROGRESS ticks, so
+      // the itinerary was live throughout — until the app relaunched itself at
+      // 15:47:11.
+      //
+      // Mid-ride the onward plan has to come from the ACTIVE ITINERARY's
+      // destination, not `currentQuery.to` (a mid-trip browse rewrites the
+      // query — replanFromAboard's own warning), so the continuation is
+      // replanFromAboard, not loadOnboardScheduleAndOptimize. `riding` was
+      // just stamped with the selected trip above, which is what it anchors to.
+      if (goMode.activeItinerary) {
+        // setOnboardVehicle moves the panel to 'fetching-schedule', which is
+        // the point of doing it here: without it the picker's own prompt sits
+        // over an empty body for the length of a findTrip round trip (20 s at
+        // the deadline).
         dispatch(
           setOnboardVehicle({
             label: selected.label || vehicleId,
@@ -6718,11 +6919,19 @@ export function confirmVehicleSelection(vehicleId: string) {
             vehicleId
           })
         )
-        dispatch(loadOnboardScheduleAndOptimize(selected.tripId))
-      } else {
-        // No trip id on the realtime feed — can't anchor to this vehicle.
-        dispatch(setOnboardStatus('error'))
+        dispatch(replanFromAboard({ reason: 'rider-picked-bus' }))
+        return
       }
+      dispatch(
+        setOnboardVehicle({
+          label: selected.label || vehicleId,
+          nextStopId: selected.nextStopId || null,
+          routeId: selected.routeId || null,
+          tripId: selected.tripId,
+          vehicleId
+        })
+      )
+      dispatch(loadOnboardScheduleAndOptimize(selected.tripId))
     }
   }
 }

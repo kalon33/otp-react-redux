@@ -3,7 +3,10 @@ import { useIntl } from 'react-intl'
 import React from 'react'
 
 import * as goModeActions from '../../actions/go-mode'
-import { boardingPromptBody } from '../../util/go-mode/boarding-confirmation'
+import {
+  boardingPromptBody,
+  knownAboardVehicle
+} from '../../util/go-mode/boarding-confirmation'
 import type { GoModeState } from '../../reducers/go-mode'
 
 import {
@@ -34,12 +37,18 @@ interface NearbyRoute {
 const DEFAULT_ROUTE_COLOR = '#771473'
 const DEFAULT_ROUTE_TEXT_COLOR = '#ffffff'
 
+/** Fleet numbers are feed-prefixed internally ("1:8140"); the rider reads the
+ * number off the bus. Same rule AlightRecommendation applies to its badge. */
+const fleetNumber = (vehicleId: string): string =>
+  vehicleId.split(':').pop() || vehicleId
+
 interface Props {
   confirmOnboardRoute: (routeId: string) => void
   confirmVehicleSelection: (vehicleId: string) => void
   dismissBoardingPrompt: () => void
   goMode: GoModeState
   nearbyRoutes: NearbyRoute[]
+  retryBoardingSearch: () => void
   routeName: string
 }
 
@@ -49,6 +58,7 @@ const BoardingPrompt = ({
   dismissBoardingPrompt,
   goMode,
   nearbyRoutes,
+  retryBoardingSearch,
   routeName
 }: Props) => {
   const intl = useIntl()
@@ -81,11 +91,33 @@ const BoardingPrompt = ({
   if (!goMode.boardingPrompt.shown) return null
 
   const nearbyVehicles = goMode.vehicleMatch.nearbyVehicles
+  const searchFailed = !!goMode.boardingPrompt.searchFailed
   const body = boardingPromptBody({
     nearbyRouteCount: nearbyRoutes.length,
     nearbyVehicleCount: nearbyVehicles.length,
+    searchFailed,
     searching: !!goMode.boardingPrompt.searching
   })
+  // 17.5. The bus the app has already confirmed, offered as a row of its own
+  // whenever the search has not produced it — during the 2026-09-15 outage
+  // that was the only answer anywhere in the app, and the picker did not show
+  // it. Suppressed once it IS in the list: the same bus twice is the redundant
+  // prompt the rider's standing rule forbids.
+  const known = knownAboardVehicle({
+    alightedFrom: goMode.alightedFrom,
+    match: goMode.vehicleMatch.match,
+    onboardVehicle: goMode.onboard?.vehicle,
+    riding: goMode.riding
+  })
+  const knownRow =
+    known &&
+    !nearbyVehicles.some((v) => v.vehicleId === known.vehicleId) &&
+    !goMode.boardingPrompt.searching
+      ? known
+      : null
+  // A search that failed can be re-run; one that is still running, or that
+  // answered with something real, has nothing to retry.
+  const offerRetry = searchFailed && !goMode.boardingPrompt.searching
   const routeLabel =
     routeName ||
     intl.formatMessage({
@@ -226,6 +258,20 @@ const BoardingPrompt = ({
               </VehicleOptionRow>
             ))}
           </>
+        ) : body === 'failed' ? (
+          /* 17.5. The request did not come back. Saying so is the whole fix:
+             an empty list read as an answer about the street, and the rider
+             read it as the app losing their bus. Copy carries the one fact
+             they can act on (minimal-notification-text rule). */
+          <VehicleDetail
+            data-testid="boarding-search-failed"
+            style={{ marginBottom: 12, textAlign: 'center' }}
+          >
+            {intl.formatMessage({
+              defaultMessage: "Couldn't reach the bus feed.",
+              id: 'components.GoMode.boardingSearchFailed'
+            })}
+          </VehicleDetail>
         ) : (
           <VehicleDetail style={{ marginBottom: 12, textAlign: 'center' }}>
             {intl.formatMessage({
@@ -233,6 +279,57 @@ const BoardingPrompt = ({
               id: 'components.GoMode.noBusesNearby'
             })}
           </VehicleDetail>
+        )}
+
+        {knownRow && (
+          <VehicleOptionRow data-testid="boarding-known-vehicle">
+            <VehicleInfo>
+              <VehicleLabel>
+                <RouteBadge
+                  $bg={DEFAULT_ROUTE_COLOR}
+                  $fg={DEFAULT_ROUTE_TEXT_COLOR}
+                >
+                  {knownRow.label ||
+                    intl.formatMessage(
+                      {
+                        defaultMessage: 'Bus {label}',
+                        id: 'components.GoMode.busLabel'
+                      },
+                      { label: fleetNumber(knownRow.vehicleId) }
+                    )}
+                </RouteBadge>
+              </VehicleLabel>
+              <VehicleDetail>
+                {intl.formatMessage(
+                  {
+                    defaultMessage: 'Already tracking · #{label}',
+                    id: 'components.GoMode.boardingKnownVehicle'
+                  },
+                  { label: fleetNumber(knownRow.vehicleId) }
+                )}
+              </VehicleDetail>
+            </VehicleInfo>
+            <VehicleSelectButton
+              onClick={() => confirmVehicleSelection(knownRow.vehicleId)}
+            >
+              {intl.formatMessage({
+                defaultMessage: 'This one',
+                id: 'components.GoMode.selectVehicle'
+              })}
+            </VehicleSelectButton>
+          </VehicleOptionRow>
+        )}
+
+        {offerRetry && (
+          <BoardingDismissButton
+            data-testid="boarding-retry"
+            onClick={retryBoardingSearch}
+          >
+            {intl.formatMessage({
+              defaultMessage: 'Try again',
+              id: 'components.GoMode.boardingRetry'
+            })}
+          </BoardingDismissButton>
         )}
 
         <BoardingDismissButton onClick={dismissBoardingPrompt}>
@@ -269,7 +366,10 @@ const mapStateToProps = (state: any) => {
 const mapDispatchToProps = {
   confirmOnboardRoute: goModeActions.confirmOnboardRoute,
   confirmVehicleSelection: goModeActions.confirmVehicleSelection,
-  dismissBoardingPrompt: goModeActions.dismissBoardingPrompt
+  // Mid-ride, closing the picker has to resolve onboard.status too or the
+  // rider is left on a panel with nothing in it and no way back (17.5).
+  dismissBoardingPrompt: goModeActions.dismissOnboardPicker,
+  retryBoardingSearch: goModeActions.retryBoardingSearch
 }
 
 export default connect(mapStateToProps, mapDispatchToProps)(BoardingPrompt)
