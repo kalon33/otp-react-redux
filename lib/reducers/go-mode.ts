@@ -16,6 +16,7 @@ import {
   REPAIR_LEG_GEOMETRY,
   RESUME_GPS_SIMULATION,
   SET_ARRIVED,
+  SET_BOARDING_SEARCH_FAILED,
   SET_BOARDING_SEARCHING,
   SET_DEPARTURE_OVERRIDE,
   SET_EARLY_ALIGHT,
@@ -240,6 +241,17 @@ export interface GoModeState {
   boardingPrompt: {
     lastDismissedAt: number | null
     /**
+     * The last vehicle search for this prompt FAILED — the feed reads did not
+     * answer — as opposed to honestly finding nothing nearby. Without this the
+     * two were indistinguishable on screen, and on 2026-09-15 the rider read a
+     * four-minute OTP outage (17.8: five REALTIME_VEHICLE_POSITIONS_ERRORs,
+     * every one a 20 s timeout) as the app losing their bus. Drives the
+     * sheet's error line and its retry (17.5); the 2026-08-31 sighting is
+     * written up at util/go-mode/alight-optimizer.ts:618 — "no state anywhere
+     * said the search had failed".
+     */
+    searchFailed: boolean
+    /**
      * A vehicle search is running for this prompt and no poll has been
      * compared yet. The sheet says so instead of "No buses detected nearby":
      * on 2026-09-13 11:36:24 the rider tapped "I'm on the bus" from a bike leg
@@ -412,6 +424,7 @@ const defaultState: GoModeState = {
 
   boardingPrompt: {
     lastDismissedAt: null,
+    searchFailed: false,
     searching: false,
     shown: false,
     transitLegEnteredAt: null
@@ -765,6 +778,14 @@ const goMode = handleActions<GoModeState, any>(
       arrivedDelay: state.progress?.delay ?? null
     }),
 
+    [SET_BOARDING_SEARCH_FAILED]: (state, action) => ({
+      ...state,
+      boardingPrompt: {
+        ...state.boardingPrompt,
+        searchFailed: !!action.payload
+      }
+    }),
+
     [SET_BOARDING_SEARCHING]: (state, action) => ({
       ...state,
       boardingPrompt: {
@@ -896,7 +917,13 @@ const goMode = handleActions<GoModeState, any>(
       ...state,
       onboard: {
         ...state.onboard,
-        status: 'fetching-schedule' as const,
+        // Adopting a vehicle IS the start of its schedule fetch. DROPPING one
+        // is not: a denial reopening the picker clears the vehicle the rider
+        // just rejected (so the sheet's fallback row cannot hand it back —
+        // 15.3, 17.5) and owns the status itself.
+        status: action.payload
+          ? ('fetching-schedule' as const)
+          : state.onboard.status,
         vehicle: action.payload
       }
     }),

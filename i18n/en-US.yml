@@ -407,7 +407,10 @@ components:
     boardingAboard: On the {route}
     boardingConfirm: I'm on the bus
     boardingDeny: I'm not on this bus
+    boardingKnownVehicle: "Already tracking · #{label}"
     boardingQuestion: Are you on the bus?
+    boardingRetry: Try again
+    boardingSearchFailed: Couldn't reach the bus feed.
     boardingSearching: Looking…
     boardingSubtitle: Looking for {route} nearby
     busHeadsign: to {headsign}
