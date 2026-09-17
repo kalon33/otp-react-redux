@@ -128,7 +128,11 @@ const ReturnToTripBanner = ({
   // the stop for the 546 (boarded 11:51:20) had vanished. buildLiveItinerary
   // anchors instead of summing (72c5296fc), so it keeps the gaps and lands on
   // the sheet's figure. Falls back to estimatedArrival when there is no
-  // itinerary to fold live times into.
+  // itinerary to fold live times into — and since 2026-09-17 that fallback is
+  // sound too: `liveTripEndMs` walks the tail instead of summing it, so the
+  // same ride now yields 11:58:26 (backlog 12.22, progress-calculator.ts's
+  // `projectTripEndMs`). This still reads the sheet's own figure first,
+  // because two ways of saying the same thing must not be allowed to drift.
   const liveArrival =
     (activeItinerary
       ? liveArrivalMs(activeItinerary, liveLegTimes || {})

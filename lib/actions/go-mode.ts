@@ -124,6 +124,7 @@ import {
   withRouteLockPrefs
 } from '../util/route-lock'
 import {
+  anchorGraftedTail,
   mergeAdjacentSameTripLegs,
   normalizeGoModeItinerary,
   polylineLength,
@@ -3774,6 +3775,12 @@ export function buildOnboardItinerary(
   trip: any,
   vehicle: any,
   best: {
+    /**
+     * `busArrivalEpoch` is a clamp floor rather than an estimate — see
+     * AlightOption.arrivalIsFloor (backlog 17.6). Optional: a caller that
+     * cannot say leaves the epoch treated as the estimate it usually is.
+     */
+    arrivalIsFloor?: boolean
     busArrivalEpoch: number
     itinerary: Itinerary
     stopId: string
@@ -3911,9 +3918,23 @@ export function buildOnboardItinerary(
   // kind of truth realtime exists to tell. Flooring against the schedule
   // there would quietly make the app 30s pessimistic on every early bus
   // (caught by verify-rest-of-trip-times).
+  //
+  // A FLOORED arrival is refused for the same reason (backlog 12.18, the gap
+  // 540b5373b named and left): `getDownstreamStops` seeds its schedule chain at
+  // `nowMs`, so the anchor stop's own arrival comes back as "now" and every
+  // stop floored onto it carries `now + scheduled offset`. That is a lower
+  // bound on when the bus gets there, not a prediction of it, and putting it on
+  // the leg makes the card say the ride ends earlier than any timetable claims
+  // — `live-itinerary.ts` already refuses to publish one onto a leg
+  // (`legBoard`/`buildLiveItinerary`, :162 and :190) and this is the same leg
+  // seen a step earlier. Measured on the 2026-09-15 15:34 ride's own fixture:
+  // I-35W & 66th St came back with `busArrivalEpoch` 15:47:30.813, the moment
+  // the trip was read, for a stop the bus reached ~15:49:45.
   const arrivalEpoch = Number(best.busArrivalEpoch)
   const busLegEnd =
-    Number.isFinite(arrivalEpoch) && arrivalEpoch > busLegStart
+    Number.isFinite(arrivalEpoch) &&
+    arrivalEpoch > busLegStart &&
+    !best.arrivalIsFloor
       ? arrivalEpoch
       : busLegStart +
         Math.max(0, (stopTimes[alightIdx].scheduledDeparture - anchorSd) * 1000)
@@ -4018,12 +4039,29 @@ export function buildOnboardItinerary(
   // correct behavior, not a bug. Prepending was the bug: on 8/2 it rendered
   // one continuous Orange Line ride as two legs with a fake 5-minute transfer
   // at 66th St and the fare charged twice.
-  const legs = mergeAdjacentSameTripLegs([busLeg, ...(onward.legs || [])])
+  //
+  // ...and then hang what follows off the ride's real end. The onward plan was
+  // fetched against the candidate's bus arrival, which is not the same moment
+  // as this leg's, so the graft meets it with a hole in between: 5m41s of it on
+  // 2026-09-08 (backlog 12.18 — leg 0 ending 11:41:09 against a walk still
+  // starting 11:46:50). `anchorGraftedTail` pulls the access legs back onto the
+  // alight and leaves every timetable alone, so the slack reappears as the wait
+  // at the stop that it always was.
+  const legs =
+    anchorGraftedTail(
+      mergeAdjacentSameTripLegs([busLeg, ...(onward.legs || [])])
+    ) || []
   const transitLegCount = legs.filter((l: any) => l.transitLeg).length
 
   // Same clamp at the container: the onward plan was fetched against the
-  // pre-clamp arrival, so its endTime can also sit behind the bus leg's.
-  const itineraryEnd = Math.max(Number(onward.endTime), busLegEnd)
+  // pre-clamp arrival, so its endTime can also sit behind the bus leg's. The
+  // legs are the source of truth for the end now that the tail can move —
+  // `onward.endTime` describes the plan before it was re-anchored.
+  const tailEnd = Number(legs[legs.length - 1]?.endTime)
+  const itineraryEnd = Math.max(
+    Number.isFinite(tailEnd) ? tailEnd : Number(onward.endTime),
+    busLegEnd
+  )
 
   // Repair here too, not only at beginGoMode. This return feeds the option
   // cards' displayItinerary, so without it the 8/9 card read "7:31 PM" above

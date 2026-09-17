@@ -258,6 +258,62 @@ function paceRemainingSeconds(pace?: PaceContext | null): number | null {
 }
 
 /**
+ * Where the trip really ends, given a live alight for the leg the rider is on
+ * and nothing but the plan for everything after it.
+ *
+ * NOT `liveAlightMs + Σ(later leg durations)`, which is what this was until
+ * 2026-09-17 (backlog 12.22). A duration is moving time; the gap between one
+ * leg's end and the next one's start is a WAIT, and a sum of durations drops
+ * every one of them. Measured on the 2026-09-08 11:22 Orange Line ride
+ * (session `mtsvo7ss-4nzccy`): live alight 11:41:09, tail WALK 60 s + BUS 546
+ * 366 s + WALK 80 s = 506 s, so the anchor read 11:49:35 — the first
+ * `estimatedArrival` the stream carries after the 11:23:42 re-plan, to the
+ * second — and it stayed between 11:49:35 and 11:50:50 for the whole ride,
+ * while the 546 did not leave Gate D until 11:51:00 and `SET_ARRIVED` fired
+ * 11:58:08. Eight minutes of a 35-minute trip, missing.
+ *
+ * So the tail is WALKED rather than summed, and the two kinds of leg are
+ * treated as what they are:
+ *
+ * - an access leg (walk, bike) starts when the rider is free to start it, so
+ *   it hangs off wherever the trip has got to — its own duration, nothing else;
+ * - a transit leg departs when it departs. Its planned start is a schedule the
+ *   rider cannot bring forward, so the projection waits for it, and that wait
+ *   is the quantity the old sum threw away. A rider who arrives at the stop
+ *   late enough to be past that departure keeps the ride's span from where
+ *   they are — whether they actually catch it is `classifyMissedBus`'s
+ *   question, not this one.
+ *
+ * On the ride above that yields 11:41:09 + 60 s = 11:42:09, then the 546's own
+ * 11:51:00 → 11:57:06, then 80 s of walking = **11:58:26**, 18 s from the
+ * recorded arrival.
+ */
+function projectTripEndMs(
+  legs: Leg[],
+  currentLegIndex: number,
+  liveAlightMs: number
+): number {
+  let end = liveAlightMs
+  for (let i = currentLegIndex + 1; i < legs.length; i++) {
+    const leg: any = legs[i]
+    const start = Number(leg.startTime)
+    const stop = Number(leg.endTime)
+    const spanMs =
+      Number.isFinite(start) && Number.isFinite(stop) && stop > start
+        ? stop - start
+        : Math.max(0, (leg.duration || 0) * 1000)
+    // `transitLeg` is OTP's own flag, and the same one `accessSecondsToBoardStop`
+    // above keys on — one definition of "this leg has a timetable", not a
+    // second mode list.
+    end =
+      leg.transitLeg && Number.isFinite(start)
+        ? Math.max(end, start) + spanMs
+        : end + spanMs
+  }
+  return end
+}
+
+/**
  * Calculate time remaining based on current progress and scheduled times
  */
 export function calculateTimeRemaining(
@@ -857,13 +913,14 @@ export function calculateTripProgress(
   )
 
   // The live end of the trip: the live/projected alight of the current transit
-  // leg plus whatever legs follow it. Anything downstream of a live figure is
-  // still plan-time, which is the honest best guess for legs not yet started.
+  // leg, then the legs that follow it walked forward from there — their own
+  // durations, and their own departures where they have one. Anything
+  // downstream of a live figure is still plan-time, which is the honest best
+  // guess for legs not yet started. See projectTripEndMs for why this is not
+  // a sum of durations (backlog 12.22).
   const liveTripEndMs =
     liveAlightMs != null
-      ? legs
-          .slice(currentLegIndex + 1)
-          .reduce((acc, l) => acc + (l.duration || 0) * 1000, liveAlightMs)
+      ? projectTripEndMs(legs, currentLegIndex, liveAlightMs)
       : null
 
   const timeRemaining = calculateTimeRemaining(

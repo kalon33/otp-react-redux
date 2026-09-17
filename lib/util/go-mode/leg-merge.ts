@@ -224,6 +224,70 @@ export function mergeAdjacentSameTripLegs(
 }
 
 /**
+ * Hang a grafted tail off the leg it really follows, pulling access legs EARLIER
+ * — the mirror of `repairLegTimeInversions`, and deliberately a separate
+ * function rather than a branch inside it.
+ *
+ * `buildOnboardItinerary` synthesizes leg 0 from live data and grafts the
+ * onward plan's legs on untouched, so the two halves meet at whatever time the
+ * onward plan was fetched against. On the 2026-09-08 11:22 Orange Line ride
+ * (session `mtsvo7ss-4nzccy`, the 11:23:42 `START_GO_MODE`) leg 0 ended at the
+ * live **11:41:09** and leg 1 — a 60 s walk — still started at the plan's
+ * **11:46:50**: a 5m41s hole in the stored itinerary where nothing happens
+ * (backlog 12.18). `buildLiveItinerary` re-anchors it for the trip sheet
+ * (12.2), but every other consumer reads the raw legs.
+ *
+ * Two rules, because the two kinds of leg answer to different things:
+ *
+ * - an access leg (walk, bike) begins when the rider is free to begin it, so
+ *   it is pulled back onto the anchor, its own duration preserved;
+ * - a transit leg departs when its timetable says. It is never moved, and the
+ *   slack the pull-back frees reappears in front of it — as a wait at the
+ *   stop, which is what it was. On that ride the walk becomes 11:41:09 →
+ *   11:42:09 and the 546 keeps 11:51:00 → 11:57:06, so the 8m51s the rider
+ *   really spent at Gate D is finally in the data (they boarded at 11:51:20).
+ *
+ * Pulling only. A leg that would have to move LATER is left exactly where it
+ * is for `repairLegTimeInversions` — which runs after this and is the one place
+ * allowed to push — so the two passes can never fight over the same leg.
+ */
+export function anchorGraftedTail(
+  legs: Leg[] | null | undefined
+): Leg[] | null | undefined {
+  if (!legs?.length) return legs
+  let anchor = Number(legs[0]?.endTime)
+  if (!Number.isFinite(anchor)) return legs
+  let pulled = false
+  const next: Leg[] = [legs[0]]
+
+  for (let i = 1; i < legs.length; i++) {
+    const leg: any = legs[i]
+    const start = Number(leg.startTime)
+    const end = Number(leg.endTime)
+    if (!Number.isFinite(start) || !Number.isFinite(end)) {
+      // An unplaceable leg breaks the chain: there is no anchor left to hang
+      // what follows off, and inventing one would be worse than leaving the
+      // plan's own times in place. Keep the rest exactly as given.
+      next.push(...legs.slice(i))
+      break
+    }
+    if (leg.transitLeg || start <= anchor) {
+      // A timetable, or a leg already at (or behind) the anchor: nothing to
+      // pull. Either way the trip has now got as far as this leg's end.
+      next.push(leg)
+      anchor = Math.max(anchor, end)
+      continue
+    }
+    const duration = end - start
+    next.push({ ...leg, endTime: anchor + duration, startTime: anchor })
+    anchor += duration
+    pulled = true
+  }
+
+  return pulled ? next : legs
+}
+
+/**
  * Shift any leg that starts before the previous one ends forward until it
  * doesn't, carrying the rest of the itinerary with it and preserving each leg's
  * own duration. Returns the input reference untouched when the itinerary is
