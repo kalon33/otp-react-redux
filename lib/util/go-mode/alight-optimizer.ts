@@ -957,17 +957,47 @@ function compareAlightOptions(
 }
 
 /** A lightweight signature of an onward journey (mode + route + endpoints per
- * leg), used to drop duplicate options the multi-stop search surfaces more than
- * once. Mirrors collectRerouteCandidates' dedup idiom in
- * lib/util/go-mode/reroute-candidates.ts. */
+ * leg, plus WHICH VEHICLE for each transit leg), used to drop duplicate options
+ * the multi-stop search surfaces more than once. Mirrors
+ * collectRerouteCandidates' dedup idiom in
+ * lib/util/go-mode/reroute-candidates.ts.
+ *
+ * The vehicle half is backlog 17.20, and it is the difference between "the same
+ * journey found twice" and "the next train". Without it the signature carried
+ * no time of any kind, so every departure on a route chain collapsed into one
+ * — and the survivor was whichever the score happened to rank first.
+ *
+ * Measured off `orange-onboard-1556.json` (2026-09-15 15:57:15, session
+ * mu35fwv5-8lyyq1, Orange Line northbound): three Green Line plans out of
+ * 2nd Ave S & 5th St ran `BICYCLE|TRAM 1:902 Nicollet Mall>Stadium Village
+ * |BICYCLE` and reached the door at **16:25:39, 16:49:39 and 17:01:39** — 36
+ * minutes apart, on trips `1:890194`, `1:900502` and `1:891229`. One signature.
+ * Under the score that shipped that day the 16:49:39 ranked first of the three,
+ * so the honest 16:25:39 — the earliest real arrival in the whole set, folded
+ * in from the I-35W & Lake St candidate by foldSameRouteRelay — was deleted
+ * here and never reached the screen. 15.9's score fix (`540b5373b`) reverses
+ * which one survives; it does not stop one of them being deleted.
+ *
+ * A genuine duplicate still collapses: the same physical journey surfaced from
+ * two anchor stops rides the same trip ids, and the relay fold shifts only
+ * street legs, so the transit half is untouched by it. Street legs contribute
+ * nothing new. The `startTime` fallback is for a transit leg with no trip id at
+ * all (synthetic fixtures, a feed without trips) — absent both, the signature
+ * is exactly what it was before, so this can only ever separate options, never
+ * merge two that used to be distinct.
+ */
 export function journeySignature(stopId: string, itinerary: Itinerary): string {
   const legs = (itinerary.legs || [])
-    .map(
-      (l: any) =>
-        `${l.mode}:${l.routeId || l.route?.id || ''}:${l.from?.name || ''}>${
-          l.to?.name || ''
-        }`
-    )
+    .map((l: any) => {
+      const shape = `${l.mode}:${l.routeId || l.route?.id || ''}:${
+        l.from?.name || ''
+      }>${l.to?.name || ''}`
+      if (!l.transitLeg) return shape
+      const tripId = legTripId(l)
+      if (tripId) return `${shape}@${tripId}`
+      const start = Number(l.startTime)
+      return Number.isFinite(start) ? `${shape}@t${start}` : shape
+    })
     .join('|')
   return `${stopId}#${legs}`
 }

@@ -22,6 +22,7 @@ import OnboardItineraryList from './OnboardItineraryList'
 
 interface Props {
   changeBus: () => void
+  clearOnboard: () => void
   endGoMode: () => void
   goMode: GoModeState
   openOnboardAlightPreview: (
@@ -36,6 +37,7 @@ interface Props {
  */
 const AlightRecommendation = ({
   changeBus,
+  clearOnboard,
   endGoMode,
   goMode,
   openOnboardAlightPreview
@@ -143,6 +145,26 @@ const AlightRecommendation = ({
   }
 
   if (status === 'error') {
+    // 17.17. The second button is the rider's only way off this card that is
+    // not "Choose bus", and it used to be `endGoMode` UNCONDITIONALLY — over a
+    // trip that is still running. `replanFromAboard` opens this flow mid-ride
+    // (the panel renders OVER the live trip; onboard.status !== 'idle' is what
+    // puts it there), so on a failed bus search aboard the bus the rider's
+    // only exit killed the whole trip: tracking, the itinerary, the vehicle
+    // lock, everything, from a card that is only about the search that failed.
+    // The asymmetry is already settled for the header Back button one level up
+    // — `GoModeScreen.tsx:183-188` sends back to `clearOnboard` when
+    // `goMode.activeItinerary` exists and to `handleOnboardExit` (confirm,
+    // then end) when it does not, and 17.1's preview added a third level above
+    // both. This card gets the same rule.
+    //
+    // PRE-TRIP IS UNCHANGED, deliberately: `BEGIN_ONBOARD_FLOW` has already
+    // nulled `activeItinerary` there, so there is no trip to go back to and
+    // Cancel really does mean "never mind" — ending Go Mode is the only honest
+    // thing it can do. No confirm is added on that path either: unlike the
+    // header's back button (hit twice by accident on 8/9) this is a button the
+    // rider chose that says Cancel.
+    const midRide = !!goMode.activeItinerary
     return (
       <RerouteBar>
         <RerouteCard>
@@ -159,11 +181,25 @@ const AlightRecommendation = ({
                 id: 'components.GoMode.changeBus'
               })}
             </RerouteSwitchButton>
-            <RerouteKeepButton onClick={endGoMode} type="button">
-              {intl.formatMessage({
-                defaultMessage: 'Cancel',
-                id: 'components.GoMode.onboardCancel'
-              })}
+            <RerouteKeepButton
+              data-testid={
+                midRide ? 'onboard-error-back-to-trip' : 'onboard-error-cancel'
+              }
+              onClick={midRide ? clearOnboard : endGoMode}
+              type="button"
+            >
+              {midRide
+                ? // Mid-ride the button no longer cancels anything, so it must
+                  // not say Cancel — it dismisses this panel and leaves the
+                  // rider on the trip they are on.
+                  intl.formatMessage({
+                    defaultMessage: 'Back to trip',
+                    id: 'components.GoMode.onboardBackToTrip'
+                  })
+                : intl.formatMessage({
+                    defaultMessage: 'Cancel',
+                    id: 'components.GoMode.onboardCancel'
+                  })}
             </RerouteKeepButton>
           </RerouteActions>
         </RerouteCard>
@@ -287,6 +323,9 @@ const mapDispatchToProps = {
   // the riding fact standing and the next onboard flow re-adopts the vehicle
   // they just rejected.
   changeBus: goModeActions.denyOnboardVehicle,
+  // Mid-ride exit from the error card: dismiss the onboard panel and leave the
+  // live trip running (17.17). Never endGoMode while activeItinerary stands.
+  clearOnboard: goModeActions.clearOnboard,
   endGoMode: goModeActions.endGoMode,
   // A row tap PREVIEWS. confirmOnboardAlightStop is reachable from the preview
   // screen's own Confirm control now (OnboardAlightPreview) and nowhere else

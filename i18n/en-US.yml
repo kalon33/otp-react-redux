@@ -458,6 +458,7 @@ components:
     onBusButton: I'm already on the bus
     onboardAssumedRoute: On the {route}
     onboardAssumedVehicle: On the {route} · {vehicle}
+    onboardBackToTrip: Back to trip
     onboardCancel: Cancel
     onboardError: Couldn't work out your bus. Try again?
     onboardNotThisVehicle: Not this one
