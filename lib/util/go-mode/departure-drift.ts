@@ -1,3 +1,4 @@
+import { notifyIntl } from './notify-i18n'
 import type { NotificationEvent } from './notification-service'
 
 /**
@@ -75,7 +76,22 @@ function slackPhrase(waitSeconds: number | null | undefined): string {
     waitSeconds < 0
       ? Math.floor(waitSeconds / 60)
       : Math.round(waitSeconds / 60)
-  return mins < 0 ? `${-mins} min short` : `${mins} min slack`
+  const intl = notifyIntl()
+  return mins < 0
+    ? intl.formatMessage(
+        {
+          defaultMessage: '{minutes} min short',
+          id: 'components.GoMode.notify.slackShort'
+        },
+        { minutes: -mins }
+      )
+    : intl.formatMessage(
+        {
+          defaultMessage: '{minutes} min slack',
+          id: 'components.GoMode.notify.slackLeft'
+        },
+        { minutes: mins }
+      )
 }
 
 /**
@@ -96,11 +112,32 @@ function composeAlert(
   departureMs: number
 ): NotificationEvent {
   const { boardingKey, nowMs, routeName, waitSeconds } = input
+  const intl = notifyIntl()
   const driftMin = Math.round(driftMs / 60000)
+  // "later" / "earlier" are not a word slotted into one sentence: a language
+  // that inflects either way needs the whole phrase, so each is its own
+  // message (backlog 12.23).
   const change =
     driftMin === 0
-      ? 'back on time'
-      : `${Math.abs(driftMin)} min ${driftMin > 0 ? 'later' : 'earlier'}`
+      ? intl.formatMessage({
+          defaultMessage: 'back on time',
+          id: 'components.GoMode.notify.backOnTime'
+        })
+      : driftMin > 0
+      ? intl.formatMessage(
+          {
+            defaultMessage: '{minutes} min later',
+            id: 'components.GoMode.notify.driftLater'
+          },
+          { minutes: Math.abs(driftMin) }
+        )
+      : intl.formatMessage(
+          {
+            defaultMessage: '{minutes} min earlier',
+            id: 'components.GoMode.notify.driftEarlier'
+          },
+          { minutes: Math.abs(driftMin) }
+        )
 
   const slack = slackPhrase(waitSeconds)
   // Minutes until the departure, never its clock time.
@@ -115,10 +152,24 @@ function composeAlert(
     id: `DEPARTURE_CHANGED_${boardingKey}_${nowMs}`,
     // The toast renders the message alone, so it repeats the drift rather
     // than leaning on the title for it.
-    message: slack ? `${change} · ${slack}` : change,
+    message: slack
+      ? intl.formatMessage(
+          {
+            defaultMessage: '{change} · {slack}',
+            id: 'components.GoMode.notify.changeWithSlack'
+          },
+          { change, slack }
+        )
+      : change,
     priority: losingSlack ? 'high' : 'medium',
     timestamp: new Date(nowMs),
-    title: `${routeName} · ${awayMin} min`,
+    title: intl.formatMessage(
+      {
+        defaultMessage: '{routeName} · {minutes} min',
+        id: 'components.GoMode.notify.routeMinutes'
+      },
+      { minutes: awayMin, routeName }
+    ),
     type: 'DEPARTURE_CHANGED'
   }
 }
