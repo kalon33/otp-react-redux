@@ -193,6 +193,11 @@ Object {
         "search": "",
       },
     },
+    "stopClosures": {
+      "closedStops": undefined,
+      "error": undefined,
+    },
+    "timetable": {},
   },
 }
 `;

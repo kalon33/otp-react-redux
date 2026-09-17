@@ -49,6 +49,7 @@ const ChildStopHeader = styled.div`
 `
 
 type Props = {
+  closed?: boolean
   fromToSlot: JSX.Element
   homeTimezone: string
   nearbyViewConfig?: NearbyViewConfig
@@ -137,6 +138,7 @@ const renderPatternRows = (
 }
 
 const Stop = ({
+  closed,
   fromToSlot,
   homeTimezone,
   nearbyViewConfig,
@@ -172,6 +174,7 @@ const Stop = ({
             <FormattedMessage id="components.StopViewer.viewSchedule" />
           ) : undefined
         }
+        closed={closed}
         fromToSlot={fromToSlot}
         stopData={stopData}
       />

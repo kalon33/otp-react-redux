@@ -27,9 +27,11 @@ import {
   carRentalQuery,
   findFeeds,
   findStopTimesForStop,
+  getStopClosures,
   rentalVehicleQuery
 } from '../../actions/api'
 import { ComponentContext } from '../../util/contexts'
+import { flattenStopClosures } from '../../util/itinerary'
 import { getActiveItinerary, getActiveSearch } from '../../util/state'
 import {
   getCurrentPosition,
@@ -180,6 +182,7 @@ interface DefaultMapProps {
   carRentalQuery: () => void
   carRentalStations: VehicleRentalStation[]
   children?: React.ReactNode
+  closedStops?: Map<string, Set<string>>
   config: AppConfig
   getCurrentPosition: GetCurrentPositionFunction
   intl: IntlShape
@@ -359,6 +362,8 @@ class DefaultMap extends Component<DefaultMapProps> {
 
     // Fetch feeds in the background
     this.props.findFeeds()
+    // Load closed stops into state for usage throughout UI (map popup, timetable, itinerary, etc.)
+    this.props.getStopClosures()
   }
 
   componentDidUpdate(prevProps) {
@@ -380,6 +385,7 @@ class DefaultMap extends Component<DefaultMapProps> {
       carRentalQuery,
       carRentalStations,
       children,
+      closedStops,
       config,
       feeds,
       getCurrentPosition,
@@ -419,6 +425,12 @@ class DefaultMap extends Component<DefaultMapProps> {
         (station) => station.vehicleType?.formFactor === 'BICYCLE'
       )
     ]
+
+    // Closed stops are stored as a map with route ID as the key; we just want a set
+    // of all the stop values
+    const closedStopIds = closedStops
+      ? flattenStopClosures(closedStops)
+      : new Set()
 
     const scooters = rentalVehicles.filter(
       (vehicle) => vehicle.vehicleType?.formFactor === 'SCOOTER'
@@ -588,7 +600,8 @@ class DefaultMap extends Component<DefaultMapProps> {
                   viewedRouteStops,
                   config.companies,
                   this.getEntityPrefix,
-                  feeds
+                  feeds,
+                  closedStopIds
                 ).map((layer: JSX.Element) => (
                   <MapLayerErrorBoundary
                     alwaysShow={layer.props?.alwaysShow}
@@ -659,6 +672,7 @@ const mapStateToProps = (state) => {
     activeNearbyFilters,
     bikeRentalStations: state.otp.overlay.bikeRental.stations,
     carRentalStations: state.otp.overlay.carRental.stations,
+    closedStops: state.otp.ui.stopClosures.closedStops,
     config: state.otp.config,
     currentPositionError,
     feeds: state.otp.transitIndex.feeds,
@@ -681,6 +695,7 @@ const mapDispatchToProps = {
   findFeeds,
   findStopTimesForStop,
   getCurrentPosition,
+  getStopClosures,
   rentalVehicleQuery,
   setLocation,
   setMapPopupLocationAndGeocode,
