@@ -193,11 +193,11 @@ Object {
         "search": "",
       },
     },
-    "stopClosures": {
+    "stopClosures": Object {
       "closedStops": undefined,
       "error": undefined,
     },
-    "timetable": {},
+    "timetable": Object {},
   },
 }
 `;

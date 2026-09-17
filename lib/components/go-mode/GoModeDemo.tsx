@@ -126,7 +126,11 @@ const mockStore = (onboard: any) =>
           itinerary: { hideViewTripButton: true },
           transitOperators: []
         },
-        goMode: { onboard }
+        goMode: { onboard },
+        ui: {
+          diagramLeg: null,
+          stopClosures: { closedStops: undefined, error: undefined }
+        }
       }
     }),
     subscribe: () => () => undefined
@@ -446,7 +450,10 @@ const demoSheetStore = {
         },
         ui: { activeLeg: null, backgrounded: false, mapFollowUser: true }
       },
-      ui: { diagramLeg: null }
+      ui: {
+        diagramLeg: null,
+        stopClosures: { closedStops: undefined, error: undefined }
+      }
     }
   }),
   subscribe: () => () => undefined
