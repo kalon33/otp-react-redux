@@ -168,6 +168,17 @@ export interface RouteMatchResult {
   progressAlongLeg: number
   // 0-1
   progressAlongSegment: number
+  /**
+   * True when this projection was ESTABLISHED on a fix too coarse to place the
+   * rider — see `fixAccuracyTrusted`. It is a guess, not a measurement, and the
+   * continuity gate would otherwise defend it exactly as hard as a good one:
+   * the opening match of a leg is ungated (`exceedsJumpBudget` returns false
+   * with no previous match), so nothing stops a bad fix from seeding the very
+   * projection every later fix is then measured against. Cleared by the first
+   * trusted fix, which is re-seeded rather than gated. Set only when a caller
+   * supplies a gate carrying `accuracyM`.
+   */
+  provisionalSeed?: boolean
   segmentIndex: number
   /**
    * Ground metres the RIDER has covered that this projection never accounted
@@ -323,6 +334,27 @@ export type ContinuityGate = {
    * threading their previous match need not track it.
    */
   previousMatchMs?: number | null
+}
+
+/**
+ * Is this fix good enough to ESTABLISH a projection, as opposed to merely to
+ * move one?
+ *
+ * `jumpCeilingMps` already consults the same number, but only to lower the
+ * ceiling a fix is allowed to move the projection BY. Nothing consulted it on
+ * the way in, and that is the hole: on 2026-09-17 (`mu69yw00-bo98a0`, backlog
+ * 12.17's ninth sighting) the trip's opening tick ran on a cached fix with
+ * accuracy 207.7 m and no speed, the same stale fix was replayed as the opening
+ * tick of the post-swap itinerary, and the projection it seeded — progress
+ * 0.0034, 38.6 m from the route — was then defended for 23 ticks while the
+ * phone delivered real 3.5–9 m fixes from 165 m away.
+ *
+ * Unknown accuracy reads as trusted: a caller that supplies no `accuracyM` gets
+ * the behaviour it had before this existed.
+ */
+function fixAccuracyTrusted(accuracyM?: number | null): boolean {
+  if (accuracyM == null || !Number.isFinite(accuracyM)) return true
+  return accuracyM <= MATCH_FIX_ACCURACY_TRUSTED_M
 }
 
 function jumpCeilingMps(leg: Leg | undefined, accuracyM?: number | null) {
@@ -598,12 +630,41 @@ export function matchPositionToRoute(
     ? (previousMatch?.unaccountedPathM ?? 0) + (stepM as number)
     : null
 
+  const fixTrusted = fixAccuracyTrusted(gate.accuracyM)
+
+  // RE-SEED, do not release.
+  //
+  // The gate's release logic is right and is deliberately untouched: a jump it
+  // defers is a jump that has to earn its ground. What was wrong is what the
+  // gate was HANDED. A leg's opening match is ungated by design — there is no
+  // previous projection to be continuous with — so a fix that cannot place the
+  // rider inside a city block establishes the projection, and every honest fix
+  // afterwards is then measured against that guess at 25 m + 2 x the rider's
+  // own step per tick (~23 ticks on 2026-09-17; backlog 12.17, nine sightings).
+  //
+  // So the first trusted fix after an untrusted seed is treated the way the
+  // opening fix would have been if it had been trustworthy: ungated, accepted,
+  // and the flag drops with it. This can widen nothing else — the flag is set
+  // only where `previousMatch == null`, i.e. exactly where the gate already
+  // declines to act — and it fires at most once per seed. A run of untrusted
+  // fixes keeps the flag and keeps the ordinary gate; it never opens the gate
+  // to a jump measured from a good projection.
+  const reseeding = previousMatch?.provisionalSeed === true && fixTrusted
+
+  // Provisional while the projection in hand was born of a fix we do not
+  // believe, and only until a fix we do believe arrives.
+  const provisionalSeed =
+    previousMatch == null
+      ? !fixTrusted
+      : previousMatch.provisionalSeed === true && !fixTrusted
+
   // Held verbatim, stamp included: the previous projection is still the best
   // statement about where the rider is, and re-stamping it would reset the
   // budget and pin the rider for good. The path accumulator is the one thing
   // that does advance — it is the evidence that will eventually release the
   // hold, not part of the projection.
   if (
+    !reseeding &&
     exceedsJumpBudget(
       winner,
       winnerLegDistance,
@@ -632,9 +693,12 @@ export function matchPositionToRoute(
           unaccountedM -
             continuityGapM(previousMatch, winner, winnerLegDistance)
         )
-  const accepted = hasStep
+  const withPath = hasStep
     ? { ...winner, unaccountedPathM: accountedM }
     : winner
+  const accepted = provisionalSeed
+    ? { ...withPath, provisionalSeed: true }
+    : withPath
   return gate.nowMs == null
     ? accepted
     : { ...accepted, matchedAtMs: gate.nowMs }

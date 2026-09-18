@@ -190,6 +190,12 @@ import {
   syncLiveActivity
 } from '../util/go-mode/live-activity'
 import {
+  POSITION_SOURCE_REPLAY,
+  POSITION_SOURCE_SIM,
+  TaggedPosition,
+  tagBrowserPosition
+} from '../util/go-mode/position-source'
+import {
   nativeGpsDistanceFilterFor,
   shouldRestartNativeWatcher,
   shouldSeedProgressFromLastFix
@@ -5054,7 +5060,7 @@ export function startPositionTracking() {
         (position) => {
           // Double-check: simulation may have started while getCurrentPosition was pending
           if (session.simulationActive) return
-          dispatch(handlePositionUpdate(position))
+          dispatch(handlePositionUpdate(tagBrowserPosition(position)))
         },
         (error) => {
           if (session.simulationActive) return
@@ -5086,7 +5092,7 @@ export function startPositionTracking() {
         clearTimeout(initialTimeout)
         // Skip if simulation started while waiting for initial GPS fix
         if (session.simulationActive) return
-        dispatch(handlePositionUpdate(position))
+        dispatch(handlePositionUpdate(tagBrowserPosition(position)))
       },
       (error) => {
         initialResolved = true
@@ -7978,7 +7984,7 @@ function createMockPosition(
   lat: number,
   lng: number,
   fix?: Pick<TimedSimulationPoint, 'accuracy' | 'heading' | 'speed'>
-): GeolocationPosition {
+): TaggedPosition {
   return {
     coords: {
       accuracy: fix?.accuracy ?? 10,
@@ -7989,11 +7995,15 @@ function createMockPosition(
       longitude: lng,
       speed: fix?.speed ?? null
     },
+    // Additive, and the reason a replayed day file can be told apart from the
+    // ride it reproduces: the coords contract itself is untouched, which is
+    // what the fixture builder and every consumer read.
+    source: isReplayActive() ? POSITION_SOURCE_REPLAY : POSITION_SOURCE_SIM,
     timestamp:
       session.simulationActive && session.simulatedTimeMs > 0
         ? session.simulatedTimeMs
         : Date.now()
-  } as GeolocationPosition
+  } as TaggedPosition
 }
 
 /**
