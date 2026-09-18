@@ -407,7 +407,10 @@ components:
     boardingAboard: On the {route}
     boardingConfirm: I'm on the bus
     boardingDeny: I'm not on this bus
+    boardingKnownVehicle: "Already tracking · #{label}"
     boardingQuestion: Are you on the bus?
+    boardingRetry: Try again
+    boardingSearchFailed: Couldn't reach the bus feed.
     boardingSearching: Looking…
     boardingSubtitle: Looking for {route} nearby
     busHeadsign: to {headsign}
@@ -415,6 +418,7 @@ components:
     busNotBroadcasting: Bus not broadcasting yet — scheduled {time}
     changeBus: Choose bus
     confirmExit: Are you sure you want to stop tracking this trip?
+    departureGone: departed
     directionEB: Eastbound
     directionNB: Northbound
     directionSB: Southbound
@@ -450,14 +454,74 @@ components:
     noBusesNearby: No buses detected nearby
     noLiveVehicleData: No live bus data — tracking by GPS
     notYet: Not yet
+    notify:
+      arrivedMessage: Arrived
+      backOnTime: back on time
+      busComingTitle: Bus coming
+      busHereTitle: Bus here
+      changeWithSlack: "{change} · {slack}"
+      connectionAtRiskTitle: Connection at risk
+      connectionLateAtStop: "{routeName} · {minutes} min late · {stopName}"
+      connectionSlack: "{routeName} · {seconds}s"
+      connectionSlackAtStop: "{routeName} · {seconds}s · {stopName}"
+      driftEarlier: "{minutes} min earlier"
+      driftLater: "{minutes} min later"
+      leaveInTitle: Leave in {minutes} min
+      leaveNowTitle: Leave now
+      metresAway: "{metres}m"
+      missedBestIn: "{routeName} likely missed · {bestRouteName} in {minutes} min"
+      missedBusTitle: Missed bus
+      missedNextDeparture: "{routeName} missed · next departure"
+      missedNextIn: "{routeName} likely missed · next in {minutes} min"
+      missedNoAlternatives: "{routeName} likely missed · no alternatives"
+      missedOptions: "{routeName} likely missed · {count} options"
+      modeDrive: Drive
+      modeGo: Go
+      modeScooter: Scooter
+      nextStepTitle: Next Step
+      nextStopTitle: Next stop
+      offRouteDistance: "{metres}m from the route"
+      offRouteTitle: Off route
+      routeAtStop: "{routeName} · {stopName}"
+      routeMinutes: "{routeName} · {minutes} min"
+      routeMinutesLate: "{routeName} · {minutes} min late"
+      routeMinutesStop: "{routeName} · {minutes} min · {stopName}"
+      routingStopsHereTitle: Routing stops here
+      runningLateTitle: Running late
+      slackLeft: "{minutes} min slack"
+      slackShort: "{minutes} min short"
+      someWay: some way
+      stepBoard: Board {routeName} to {destination}
+      stepContinue: Continue to {destination}
+      stepWalk: Walk to {destination}
+      stopInMinutes: "{stopName} · {minutes} min"
+      theStop: the stop
+      tightConnectionTitle: Tight connection
+      tripCompleteTitle: Trip complete
+      turnIn: In {distance}{then}
+      turnThen: ", then {instruction}"
+      unreachable: "{howFar} · not getting closer"
+      unreachableFromNamed: "{howFar} from {destination} · not getting closer"
+      yourBus: your bus
+      yourBusLead: Your bus
+      yourConnection: your connection
+      yourDestination: your destination
+      yourRideLead: Your ride
+      yourStop: your stop
+      yourStopTitle: Your stop
     offAtStop: Off at {stop}
     onBus: "On Bus #{label}"
     onBusButton: I'm already on the bus
     onboardAssumedRoute: On the {route}
     onboardAssumedVehicle: On the {route} · {vehicle}
+    onboardBackToTrip: Back to trip
     onboardCancel: Cancel
     onboardError: Couldn't work out your bus. Try again?
     onboardNotThisVehicle: Not this one
+    onboardPreviewArrive: Arrive {time}
+    onboardPreviewBack: Back to options
+    onboardPreviewConfirm: Confirm this stop
+    onboardPreviewWait: "{mins} min wait"
     onboardTitle: On the bus
     openTripSheet: Open trip overview
     pickYourBus: Which bus are you on? Pick it below.
@@ -486,6 +550,7 @@ components:
     showLaterDepartures: More
     stillCheckingStops: Still checking {count, plural, one {1 more stop} other {# more stops}}…
     stopDeparturesTitle: Departures
+    stopsAnswered: "{answered} of {total} stops answered"
     stopsRemainingCompact: "{count, plural, one {1 stop} other {# stops}} remaining"
     theBus: the bus
     thenTurn: then {turn}
@@ -501,6 +566,8 @@ components:
     useThisDeparture: Use this
     vehicleDetail: "Next stop: {stop} - {distance}m away · #{label}"
     vehicleDistance: "{distance}m away · #{label}"
+    waitingAtStop: Waiting at {stop}
+    waitingAtStopTime: Waiting at {stop} · {time}
     waitingGPS: Acquiring GPS signal...
     walkToStop: "{emoji} {time} walk to {stop}"
     whereToAlight: Where do you want to get off?

@@ -57,6 +57,30 @@ describe('util > debug-log size ladder', () => {
     expect(constant('MAX_FULL_PAYLOAD_CHARS')).toBeGreaterThan(LARGEST_OBSERVED)
   })
 
+  it('clears a five-candidate SET_ONBOARD_RESULT with room to spare', () => {
+    // Measured 2026-09-17 out of ~/otp-debug-logs/debug-2026-09-15.jsonl for
+    // backlog 17.10, which asked for this ceiling to be RAISED so that action
+    // would survive. It already does, by a factor of 7.8, and nothing in that
+    // 44 MB day file was truncated at any rung:
+    //
+    //   mu346i5y-ng2uqc (15:34 ride)  SET_ONBOARD_RESULT 124,321 / 127,210 /
+    //                                 128,613 chars, five options each, intact
+    //   mu35fwv5-8lyyq1 (15:56 ride)   99,519 / 117,750 / 125,835 chars, ditto
+    //   whole day file                 0 rows carrying __truncated_chars;
+    //                                  largest __summary 326,260
+    //                                  (ROUTING_RESPONSE, dispatched OUTSIDE a
+    //                                  recorded trip, so cut to
+    //                                  MAX_PAYLOAD_CHARS — not this ceiling)
+    //
+    // The ride report blamed the caps because build-fixture.js said so; it was
+    // counting a deliberate null payload as a loss. This assertion is here so
+    // the next session does not re-derive that from 44 MB of JSONL.
+    const LARGEST_ONBOARD_RESULT = 128613
+    expect(constant('MAX_FULL_PAYLOAD_CHARS')).toBeGreaterThan(
+      LARGEST_ONBOARD_RESULT * 5
+    )
+  })
+
   it('leaves the beacon cap out of the ladder', () => {
     // BEACON_MAX_BODY_BYTES is not a rung. It is the browser's own ~64KB
     // sendBeacon quota: a larger beacon is dropped silently and the tail of the

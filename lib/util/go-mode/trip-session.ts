@@ -253,6 +253,22 @@ export interface TripSession {
 
   simulationPointIndex: number
 
+  /**
+   * Signature of a plan that has just been INSTALLED and whose origin has not
+   * yet been checked against the rider's position (backlog 12.13).
+   *
+   * Armed by `beginGoMode`, cleared by the first look that had a fix to look
+   * with — `recoverStaleStartOrigin` may be reached before any fix exists, so
+   * "armed" and "answered" have to be separate states. Keyed on the plan rather
+   * than latched with a boolean so a SECOND stale tap arms the question again.
+   *
+   * Arming is what scopes the question to an installation. A rider halfway
+   * along their access leg is legitimately far from their own plan's origin —
+   * they walked away from it — so the same check asked on an ordinary tick
+   * would re-plan a trip that is going perfectly well.
+   */
+  staleStartOriginPending: string | null
+
   /** Monotonic floor for stopsRemaining — see latchStopsRemaining. */
   stopCountLatch: StopCountLatch | null
 
@@ -302,6 +318,7 @@ export function createTripSession(): TripSession {
     simulationActive: false,
     simulationCoords: [],
     simulationPointIndex: 0,
+    staleStartOriginPending: null,
     stopCountLatch: null,
     vehiclePositionIntervalId: null,
     visibilityChangeHandler: null

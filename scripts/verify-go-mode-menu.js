@@ -25,6 +25,11 @@ const CHROME =
 const FROM = { lat: 44.9205, lon: -93.276, name: 'Test origin' }
 const TO = { lat: 44.9778, lon: -93.2707, name: 'Downtown Minneapolis' }
 
+// Exit code for "the thing under test could not be exercised, and that is not
+// a defect". nightly-verify.sh maps it to SKIP; anything else is a failure.
+// Same convention as verify-onboard-options.js.
+const EXIT_SKIP = 75
+
 const GO_MODE = 10
 const BANNER = '.return-to-trip-banner'
 const MENU_ICON = '.app-menu-icon'
@@ -81,7 +86,16 @@ async function main() {
   page.on('pageerror', (e) => console.log('[pageerror]', e.message))
   page.on('dialog', (d) => d.accept())
   await page.goto(APP, { timeout: 60000, waitUntil: 'domcontentloaded' })
-  await page.waitForFunction(() => !!window.store, { timeout: 30000 })
+  // 60s, not 30s: this is the FIRST wait in every script and it is a Vite dev
+  // server transforming the module graph, not the product. Two runs on
+  // 2026-09-17 died here -- 30s after a `docker restart otp-frontend-dev`, with
+  // a cold transform cache -- and reported it as the script's failure. A red
+  // row that means "the dev server was still warming up" is the kind that
+  // taught everyone to stop reading this suite (backlog 13.6). If this wait is
+  // what times out, the app at :9967 never booted: `docker restart
+  // otp-frontend-dev` (a full `yarn jest` or `ship_web.sh` clobbers its
+  // tmp/config.yml).
+  await page.waitForFunction(() => !!window.store, { timeout: 60000 })
 
   // ---- plan a trip and start tracking it ----
   await page.evaluate(
@@ -98,25 +112,64 @@ async function main() {
     FROM,
     TO
   )
-  await page.waitForFunction(
-    () => {
+  // Wait for a settled search that holds a TRANSIT itinerary, not merely one
+  // that holds any itinerary. The weaker wait is what made this script red on
+  // 2026-09-17 (backlog 13.6): the plan settled with walk/bike cards only, the
+  // transit filter below returned undefined, and `__beginGoMode(undefined)`
+  // threw "Cannot read properties of undefined (reading 'legs')" from inside
+  // the app — an app-shaped stack trace for a harness precondition that was
+  // never met. Whether the graph returns a transit card for this pair is a fact
+  // about Metro Transit's timetable at the moment of the run, so a plan with
+  // none is a SKIP, not a failure.
+  const planned = await page
+    .waitForFunction(
+      () => {
+        const searches = window.store.getState().otp.searches || {}
+        return Object.values(searches).some(
+          (s) =>
+            s.pending === 0 &&
+            (s.response || []).some((r) =>
+              (r?.plan?.itineraries || []).some((it) =>
+                (it.legs || []).some((l) => l.transitLeg)
+              )
+            )
+        )
+      },
+      { polling: 500, timeout: 60000 }
+    )
+    .then(() => true)
+    .catch(() => false)
+  if (!planned) {
+    const settled = await page.evaluate(() => {
       const searches = window.store.getState().otp.searches || {}
-      return Object.values(searches).some(
-        (s) =>
-          s.pending === 0 &&
-          (s.response || []).some((r) => r?.plan?.itineraries?.length > 0)
-      )
-    },
-    { polling: 500, timeout: 60000 }
-  )
-  await page.evaluate(() => {
+      return Object.values(searches).map((s) => ({
+        itineraries: (s.response || []).flatMap(
+          (r) => r?.plan?.itineraries || []
+        ).length,
+        pending: s.pending
+      }))
+    })
+    console.log(
+      `SKIP: no transit itinerary for ${FROM.name} -> ${TO.name} within 60s ` +
+        `(searches: ${JSON.stringify(settled)}). The menu assertions all run ` +
+        'on a live tracked transit trip, so there is nothing to verify.'
+    )
+    await browser.close()
+    process.exit(EXIT_SKIP)
+  }
+  const picked = await page.evaluate(() => {
     const otp = window.store.getState().otp
     window.__menuItinerary = Object.values(otp.searches)
       .flatMap((s) => s.response || [])
       .flatMap((r) => r?.plan?.itineraries || [])
       .filter((it) => (it.legs || []).some((l) => l.transitLeg))
       .sort((a, b) => a.startTime - b.startTime)[0]
+    return window.__menuItinerary
+      ? (window.__menuItinerary.legs || []).map((l) => l.mode).join(',')
+      : null
   })
+  if (!picked) throw new Error('no transit itinerary survived the wait')
+  console.log(`[setup] tracking a ${picked} itinerary`)
   await page.evaluate(() => window.__beginGoMode(window.__menuItinerary))
   await page.waitForFunction(
     () =>
@@ -302,6 +355,11 @@ async function main() {
 }
 
 main().catch((e) => {
-  console.error('FAIL:', e.message)
+  // e.stack, not e.message: a puppeteer waitForFunction timeout says only
+  // "waiting for function failed: timeout 60000ms exceeded" and names neither
+  // the wait that failed nor its line. Six of the eleven red rows on
+  // 2026-09-17 were that one line and nothing else, which is much of why this
+  // suite's output stopped being read (backlog 13.6). The stack names the wait.
+  console.error('FAIL:', e.stack || e.message)
   process.exit(1)
 })

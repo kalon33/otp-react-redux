@@ -43,6 +43,7 @@ interface Props {
   beginGoMode: (itinerary: any) => void
   boardingStopData: any
   clearOnboard: () => void
+  closeOnboardAlightPreview: () => void
   departureOverride: number | null
   endGoMode: () => void
   finishArrivedTrip: () => void
@@ -67,6 +68,7 @@ const GoModeScreen = ({
   beginGoMode,
   boardingStopData,
   clearOnboard,
+  closeOnboardAlightPreview,
   departureOverride,
   endGoMode,
   finishArrivedTrip,
@@ -175,7 +177,15 @@ const GoModeScreen = ({
             id: 'components.GoMode.onboardTitle'
           })}
           onBackClicked={
-            goMode.activeItinerary ? () => clearOnboard() : handleOnboardExit
+            // While the option preview is open, back means "back to options"
+            // — the options list is still in state underneath it and must not
+            // be destroyed on the way out (17.1). Only the list itself is a
+            // level the flow can be left from.
+            goMode.onboard.preview
+              ? closeOnboardAlightPreview
+              : goMode.activeItinerary
+              ? () => clearOnboard()
+              : handleOnboardExit
           }
           showAppMenu
           showBackButton
@@ -513,6 +523,7 @@ const mapStateToProps = (state: any) => {
 const mapDispatchToProps = {
   beginGoMode: goModeActions.beginGoMode,
   clearOnboard: goModeActions.clearOnboard,
+  closeOnboardAlightPreview: goModeActions.closeOnboardAlightPreview,
   endGoMode: goModeActions.endGoMode,
   finishArrivedTrip: goModeActions.finishArrivedTrip,
   onDepartureMismatch: goModeActions.recordCardDepartureMismatch,

@@ -173,6 +173,15 @@ export function liveStopArrival(
   }
 }
 
+/** A board/alight epoch with its provenance. Mirrors live-itinerary's TimePoint. */
+export interface LiveTimePoint {
+  epoch: number
+  /** The epoch is a clamp floor ("no earlier than this"), not an estimate. */
+  isFloor?: boolean
+  projected?: boolean
+  realtime: boolean
+}
+
 /**
  * Merge one board/alight time against its previous value so the display never
  * regresses. As a vehicle nears (or passes) a stop, OTP commonly stops
@@ -184,10 +193,10 @@ export function liveStopArrival(
  * arrive in the past) and honestly flagged non-live.
  */
 export function mergeLiveTimePoint(
-  prev: { epoch: number; projected?: boolean; realtime: boolean } | null,
-  next: { epoch: number; projected?: boolean; realtime: boolean } | null,
+  prev: LiveTimePoint | null,
+  next: LiveTimePoint | null,
   nowMs: number
-): { epoch: number; projected?: boolean; realtime: boolean } | null {
+): LiveTimePoint | null {
   if (next?.realtime) return next
   // A fresh projection is anchored to where the bus is NOW, so it supersedes a
   // stale one rather than being held back by "never walk backwards" — that rule
@@ -198,6 +207,11 @@ export function mergeLiveTimePoint(
   if (!kept) return null
   return {
     epoch: Math.max(kept.epoch, nowMs),
+    // The raise happened: the value is now "no earlier than now", which is a
+    // bound and not a prediction. Said out loud so a wait is never computed
+    // from it (backlog 17.6) — the clamp protects the DISPLAY from walking
+    // backwards and was never evidence about when the bus leaves.
+    isFloor: kept.epoch < nowMs || !!kept.isFloor,
     projected: kept.projected,
     realtime: false
   }
@@ -245,9 +259,11 @@ export const LIVE_TIME_CLAMP_GRANULARITY_MS = 60000
 export function clampNonLiveLegTimes<
   T extends {
     alightEpoch: number | null
+    alightIsFloor?: boolean
     alightRealtime?: boolean
     boardClamped?: boolean
     boardEpoch: number | null
+    boardIsFloor?: boolean
     boardRealtime?: boolean
     realtime: boolean
   }
@@ -270,7 +286,9 @@ export function clampNonLiveLegTimes<
       t.alightEpoch != null &&
       t.alightEpoch < floorMs
     ) {
-      next = { ...next, alightEpoch: floorMs }
+      // Raised to the displayed minute: a bound, not a prediction. See
+      // LiveLegTime.alightIsFloor (backlog 17.6).
+      next = { ...next, alightEpoch: floorMs, alightIsFloor: true }
     }
     let boardRaised = false
     if (
@@ -279,7 +297,12 @@ export function clampNonLiveLegTimes<
       t.boardEpoch != null &&
       t.boardEpoch < floorMs
     ) {
-      next = { ...next, boardClamped: true, boardEpoch: floorMs }
+      next = {
+        ...next,
+        boardClamped: true,
+        boardEpoch: floorMs,
+        boardIsFloor: true
+      }
       boardRaised = true
     }
     // Raising the board time past a still-past alight time inverts the leg —
@@ -311,8 +334,15 @@ export function clampNonLiveLegTimes<
     ) {
       next =
         next.alightRealtime ?? next.realtime
-          ? { ...next, boardEpoch: next.alightEpoch }
-          : { ...next, alightEpoch: next.boardEpoch }
+          ? // Capped onto a live alight: still a bound, so boardIsFloor stays.
+            { ...next, boardEpoch: next.alightEpoch }
+          : // The alight now carries the floored board's value and inherits
+            // its provenance with it.
+            {
+              ...next,
+              alightEpoch: next.boardEpoch,
+              alightIsFloor: true
+            }
     }
     // Changed means the times MOVED, not that a raise was attempted. The
     // inversion branch above routinely hands a raised board straight back to
@@ -385,6 +415,27 @@ export interface TripSchedule {
 }
 
 export interface DownstreamStop {
+  /**
+   * busArrivalEpoch is a FLOOR — "no earlier than this" — rather than an
+   * estimate of when the bus gets here.
+   *
+   * The schedule chain below is seeded at `nowMs`, and the ANCHOR stop's own
+   * projection lands exactly there, because the anchor is the bus's next stop
+   * and its offset from itself is zero. "The bus is at its next stop right
+   * now" is a bound, not a prediction: it is still travelling to it. Measured
+   * 2026-09-15 (backlog 17.6) at two moments on the same ride: the 15:46:02
+   * candidate for I-35W & 66th St carried busArrivalEpoch = now for a stop the
+   * bus did not reach until ~15:49:45 (3m43s early), and the 15:47:42 option
+   * set in `orange-alight-rank-0915-1534.json` carries
+   * `busArrivalEpoch: 1789505250813` — 15:47:30.813, `realtime: false`, the
+   * millisecond the trip was read — for the same stop, 2m14s early. Both
+   * reached scoreAlightOption directly.
+   *
+   * A stop floored onto a previous stop that was itself a floor inherits the
+   * flag; a stop floored onto a LIVE neighbour does not, because there the
+   * floor is the inversion guard doing its job against real data.
+   */
+  arrivalIsFloor: boolean
   /** Absolute epoch (ms) the bus is expected to reach this stop. */
   busArrivalEpoch: number
   /** Straight-line meters from this stop to the rider's destination. */
@@ -504,6 +555,10 @@ export function getDownstreamStops(
   // The last arrival we accepted, so a stop cannot be reached before the stop
   // before it. Seeded to nowMs: nothing ahead of the bus is already behind us.
   let prevEpoch = nowMs
+  // ...and that seed is a FLOOR, not a prediction — see DownstreamStop
+  // .arrivalIsFloor. Carried forward so a stop floored onto it inherits the
+  // provenance instead of laundering it.
+  let prevIsFloor = true
   for (let i = anchorIdx; i < stopTimes.length; i++) {
     const st = stopTimes[i]
     if (!st.stop || st.stop.lat == null || st.stop.lon == null) continue
@@ -525,8 +580,15 @@ export function getDownstreamStops(
     const busArrivalEpoch = useLive
       ? liveEpoch
       : Math.max(scheduleEpoch, prevEpoch)
+    // The floor won, and the thing it floored onto was itself a floor. Note
+    // `<=`: at the anchor stop scheduleEpoch IS prevEpoch (offset zero from
+    // itself), which is exactly the 17.6 case.
+    const arrivalIsFloor: boolean =
+      !useLive && scheduleEpoch <= prevEpoch && prevIsFloor
     prevEpoch = busArrivalEpoch
+    prevIsFloor = arrivalIsFloor
     downstream.push({
+      arrivalIsFloor,
       busArrivalEpoch,
       distanceToDest: calculateDistance(
         st.stop.lat,
@@ -584,15 +646,49 @@ export function selectCandidateStops(
 }
 
 /**
- * Total time to arrive at the destination via this alight stop: the bus reaches
- * the stop at busArrivalEpoch, then the onward plan takes itinerary.duration.
- * Lower is better. Returns the arrival epoch (ms).
+ * When the rider actually gets to the destination via this alight stop. Lower
+ * is better; the return value is an arrival epoch (ms).
+ *
+ * The obvious arithmetic — `busArrivalEpoch + duration` — is wrong, and was
+ * the ranking for months (backlog 15.9). OTP returns JUST-IN-TIME itineraries:
+ * the access leg is shifted late so the rider waits at the origin rather than
+ * on the platform, and `itinerary.duration` measures `startTime → endTime`.
+ * It therefore EXCLUDES the dead gap between getting off the bus and the plan
+ * starting, and the sum is the arrival time of a journey nobody takes. The
+ * longer the wait, the better the option scored.
+ *
+ * Measured 2026-09-15 15:47:42 on the Orange Line (session mu346i5y-ng2uqc):
+ * the list ranked the 16:49:39 arrival FIRST and the 16:25:39 arrival second —
+ * a 24-minute inversion — and the rider picked what the list had put fifth.
+ * At 15:43:06 the dead gaps in the same list ran 932–1957 s.
+ *
+ * So: the plan's own `endTime`, which is what the rider experiences. The
+ * `Math.max` keeps the sum as a lower bound for the opposite failure — a bus
+ * running later than the plan was built for pushes the whole onward journey
+ * back, and `endTime` alone would not notice.
+ *
+ * `arrivalIsFloor` is why that bound is conditional. A floored bus arrival
+ * (DownstreamStop.arrivalIsFloor, backlog 17.6 — "the bus is at its next stop
+ * right now") makes the sum a lower bound of a lower bound, up to 3m43s early
+ * on the same ride. A bound built on a bound is not evidence, so it is
+ * dropped and `endTime` stands alone.
+ *
+ * Nothing downstream compensates for either: compareAlightOptions sorts on
+ * this number and decorateAlightOptions only re-renders.
  */
 export function scoreAlightOption(
   busArrivalEpoch: number,
-  itinerary: Itinerary
+  itinerary: Itinerary,
+  { arrivalIsFloor = false }: { arrivalIsFloor?: boolean } = {}
 ): number {
-  return busArrivalEpoch + (itinerary.duration || 0) * 1000
+  const viaDuration = busArrivalEpoch + (itinerary.duration || 0) * 1000
+  const end = Number(itinerary.endTime)
+  // Fails OPEN on a non-finite endTime, the same posture as
+  // isReachableItinerary: synthetic data must not silently delete every
+  // option, and the sum is the only figure left.
+  if (!Number.isFinite(end)) return viaDuration
+  if (arrivalIsFloor) return end
+  return Math.max(end, viaDuration)
 }
 
 /** Result of planning the onward trip from one candidate alight stop. */
@@ -703,6 +799,12 @@ export async function settleCandidatePlans<T>(
 
 /** The chosen best stop to get off, with its remaining-journey itinerary. */
 export interface AlightOption {
+  /**
+   * busArrivalEpoch is a clamp floor rather than an estimate — see
+   * DownstreamStop.arrivalIsFloor. Carried this far because scoreAlightOption
+   * needs it, and because a card must not quote a wait against it (17.6).
+   */
+  arrivalIsFloor?: boolean
   busArrivalEpoch: number
   itinerary: Itinerary
   realtime: boolean
@@ -855,17 +957,47 @@ function compareAlightOptions(
 }
 
 /** A lightweight signature of an onward journey (mode + route + endpoints per
- * leg), used to drop duplicate options the multi-stop search surfaces more than
- * once. Mirrors collectRerouteCandidates' dedup idiom in
- * lib/util/go-mode/reroute-candidates.ts. */
+ * leg, plus WHICH VEHICLE for each transit leg), used to drop duplicate options
+ * the multi-stop search surfaces more than once. Mirrors
+ * collectRerouteCandidates' dedup idiom in
+ * lib/util/go-mode/reroute-candidates.ts.
+ *
+ * The vehicle half is backlog 17.20, and it is the difference between "the same
+ * journey found twice" and "the next train". Without it the signature carried
+ * no time of any kind, so every departure on a route chain collapsed into one
+ * — and the survivor was whichever the score happened to rank first.
+ *
+ * Measured off `orange-onboard-1556.json` (2026-09-15 15:57:15, session
+ * mu35fwv5-8lyyq1, Orange Line northbound): three Green Line plans out of
+ * 2nd Ave S & 5th St ran `BICYCLE|TRAM 1:902 Nicollet Mall>Stadium Village
+ * |BICYCLE` and reached the door at **16:25:39, 16:49:39 and 17:01:39** — 36
+ * minutes apart, on trips `1:890194`, `1:900502` and `1:891229`. One signature.
+ * Under the score that shipped that day the 16:49:39 ranked first of the three,
+ * so the honest 16:25:39 — the earliest real arrival in the whole set, folded
+ * in from the I-35W & Lake St candidate by foldSameRouteRelay — was deleted
+ * here and never reached the screen. 15.9's score fix (`540b5373b`) reverses
+ * which one survives; it does not stop one of them being deleted.
+ *
+ * A genuine duplicate still collapses: the same physical journey surfaced from
+ * two anchor stops rides the same trip ids, and the relay fold shifts only
+ * street legs, so the transit half is untouched by it. Street legs contribute
+ * nothing new. The `startTime` fallback is for a transit leg with no trip id at
+ * all (synthetic fixtures, a feed without trips) — absent both, the signature
+ * is exactly what it was before, so this can only ever separate options, never
+ * merge two that used to be distinct.
+ */
 export function journeySignature(stopId: string, itinerary: Itinerary): string {
   const legs = (itinerary.legs || [])
-    .map(
-      (l: any) =>
-        `${l.mode}:${l.routeId || l.route?.id || ''}:${l.from?.name || ''}>${
-          l.to?.name || ''
-        }`
-    )
+    .map((l: any) => {
+      const shape = `${l.mode}:${l.routeId || l.route?.id || ''}:${
+        l.from?.name || ''
+      }>${l.to?.name || ''}`
+      if (!l.transitLeg) return shape
+      const tripId = legTripId(l)
+      if (tripId) return `${shape}@${tripId}`
+      const start = Number(l.startTime)
+      return Number.isFinite(start) ? `${shape}@t${start}` : shape
+    })
     .join('|')
   return `${stopId}#${legs}`
 }
@@ -1000,7 +1132,11 @@ export function foldSameRouteRelay(
   } as Itinerary
   return {
     ...option,
-    arrival: scoreAlightOption(startTime, itinerary),
+    // Re-anchored onto stayAboard, so the floor question is stayAboard's now.
+    arrival: scoreAlightOption(startTime, itinerary, {
+      arrivalIsFloor: stayAboard.arrivalIsFloor
+    }),
+    arrivalIsFloor: stayAboard.arrivalIsFloor,
     busArrivalEpoch: stayAboard.busArrivalEpoch,
     itinerary,
     realtime: stayAboard.realtime,
@@ -1046,13 +1182,24 @@ export function rankAlightOptions(
   } = {}
 ): AlightOption[] {
   const scored: ScoredAlightOption[] = []
+  // AlightCandidateResult does not carry the provenance of its own
+  // busArrivalEpoch — the candidate fetch copies the epoch and nothing else —
+  // so it is read back off the downstream list the epochs came from. Absent
+  // `downstream` (every caller that cannot say what the rider is aboard), the
+  // flag is simply unknown and the score keeps its lower bound.
+  const floorByStopId = new Map<string, boolean>()
+  ;(downstream || []).forEach((d) => {
+    if (d.stop?.id) floorByStopId.set(d.stop.id, d.arrivalIsFloor)
+  })
   results.forEach((r) => {
     if (!r || r.error) return
+    const arrivalIsFloor = floorByStopId.get(r.stopId) ?? false
     ;(r.itineraries || []).forEach((itin) => {
       if (!isUsableItinerary(itin, walkOnlyMax)) return
       if (!isReachableItinerary(itin, r.busArrivalEpoch, nowMs)) return
       const option: ScoredAlightOption = {
-        arrival: scoreAlightOption(r.busArrivalEpoch, itin),
+        arrival: scoreAlightOption(r.busArrivalEpoch, itin, { arrivalIsFloor }),
+        arrivalIsFloor,
         busArrivalEpoch: r.busArrivalEpoch,
         itinerary: itin,
         realtime: r.realtime,
@@ -1086,6 +1233,7 @@ export function rankAlightOptions(
   )
 
   const strip = (option: ScoredAlightOption): AlightOption => ({
+    arrivalIsFloor: option.arrivalIsFloor,
     busArrivalEpoch: option.busArrivalEpoch,
     itinerary: option.itinerary,
     realtime: option.realtime,

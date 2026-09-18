@@ -1,7 +1,8 @@
 import {
   foldSameRouteRelay,
   getDownstreamStops,
-  rankAlightOptions
+  rankAlightOptions,
+  scoreAlightOption
 } from '../../../lib/util/go-mode/alight-optimizer'
 import fixture from '../../../lib/util/go-mode/replay/fixtures/green-line-onboard-1137-flows.json'
 
@@ -85,6 +86,16 @@ const lexingtonRelay = () => {
 const firstTransitLeg = (itin: any) =>
   (itin.legs || []).find((l: any) => l.transitLeg)
 
+/** An option whose first transit leg is the boarded ROUTE on another trip. */
+const isRelay = (o: any) => {
+  const leg = firstTransitLeg(o.itinerary)
+  return (
+    !!leg &&
+    leg.route?.gtfsId === BOARDED.routeId &&
+    leg.trip?.gtfsId !== BOARDED.tripId
+  )
+}
+
 const rank = (extra: any = {}) =>
   rankAlightOptions(results() as any, {
     limit: 5,
@@ -125,16 +136,18 @@ describe('util > go-mode > Green Line offered as a transfer to itself (9/13)', (
   // The gate. Without the boarded trip to compare against, the ranker cannot
   // see it, and this is the list the rider was shown.
   it('un-guarded, it ranks the same-route relay as a two-vehicle option', () => {
-    const relays = rank().filter((o: any) => {
-      const leg = firstTransitLeg(o.itinerary)
-      return (
-        leg &&
-        leg.route?.gtfsId === BOARDED.routeId &&
-        leg.trip?.gtfsId !== BOARDED.tripId
-      )
-    })
-    expect(relays.length).toBeGreaterThan(0)
+    const relays = rank({ limit: 50 }).filter(isRelay)
+    expect(relays).toHaveLength(2)
     expect(relays.map((o: any) => o.stopId)).toContain('1:56034')
+    // Re-measured 2026-09-17 after 15.9 landed, which this row asked for.
+    // With the wait no longer free the two relays score 12:23:56 — what they
+    // really reach — and fall to ranks 10 and 11 of 17, so the five-row list
+    // the rider taps no longer shows them at all. That is the SCORE doing it,
+    // not the fold: on 09-13 the Lexington relay scored 12:11:56 and sat near
+    // the top. The fold is still what makes the offer impossible rather than
+    // merely unlikely — a shorter candidate spread, or a genuinely quick
+    // later train, and the cap stops saving anyone.
+    expect(rank({ limit: 5 }).filter(isRelay)).toHaveLength(0)
   })
 
   it('never offers the boarded route on another trip as a transfer', () => {
@@ -176,15 +189,23 @@ describe('util > go-mode > Green Line offered as a transfer to itself (9/13)', (
   })
 
   it('scored the relay as if the wait were free — which is why it ranked', () => {
-    // Not incidental to 15.4: scoreAlightOption is busArrivalEpoch + the
-    // onward plan's DURATION, and the twelve minutes between the boarded
-    // train reaching Lexington (11:39) and the later one leaving (11:51) sit
-    // outside that duration. So the transfer scored 12:11:56 — exactly what
-    // staying aboard really achieves — while actually arriving 12:23:56.
+    // Not incidental to 15.4: the shipped scoreAlightOption WAS
+    // busArrivalEpoch + the onward plan's DURATION, and the twelve minutes
+    // between the boarded train reaching Lexington (11:39) and the later one
+    // leaving (11:51) sit outside that duration. So the transfer scored
+    // 12:11:56 — exactly what staying aboard really achieves — while actually
+    // arriving 12:23:56. `lexingtonRelay` reproduces that old arithmetic by
+    // hand, which is what makes it the record of the defect; 15.9 has since
+    // replaced the expression (see alight-wait-rank-0915.ts), and the
+    // 720 000 ms below is the error it removes.
     const relay = lexingtonRelay()
     expect(relay.itinerary.duration).toBe(1976)
     expect(relay.arrival).toBe(RAYMOND_ABOARD_MS + 1436000)
     expect(RELAY_ENDS_MS - relay.arrival).toBe(720000)
+    // And what the ranker says now: the plan's own end, to the second.
+    expect(scoreAlightOption(relay.busArrivalEpoch, relay.itinerary)).toBe(
+      RELAY_ENDS_MS
+    )
   })
 
   it('folds the second sighting of the same relay to the same journey', () => {
@@ -205,9 +226,21 @@ describe('util > go-mode > Green Line offered as a transfer to itself (9/13)', (
     expect(folded.stopId).toBe(RAYMOND)
     expect(folded.busArrivalEpoch).toBe(RAYMOND_ABOARD_MS)
 
-    const ranked = rank({ boarded: BOARDED, downstream: downstream() })
-    const atRaymond = ranked.filter((o: any) => o.stopId === RAYMOND)
-    expect(atRaymond.length).toBe(1)
+    // Unbounded, so this measures the fold and not the five-row cap: since
+    // 15.9 both relays rank tenth or later, and a `limit: 5` list would say
+    // nothing about whether they were folded.
+    const ranked = rank({
+      boarded: BOARDED,
+      downstream: downstream(),
+      limit: 50
+    })
+    expect(ranked.filter(isRelay)).toHaveLength(0)
+    const stayAboard = ranked.filter(
+      (o: any) =>
+        o.stopId === RAYMOND &&
+        Number(o.itinerary.endTime) === RAYMOND_ABOARD_MS + 1436000
+    )
+    expect(stayAboard).toHaveLength(1)
   })
 
   it('leaves the rider’s OWN train continuing alone (it is not a relay)', () => {
@@ -252,7 +285,10 @@ describe('util > go-mode > Green Line offered as a transfer to itself (9/13)', (
     const ranked = rankAlightOptions(results() as any, {
       boarded: BOARDED,
       downstream: stops,
-      limit: 5,
+      // Unbounded for the same reason as above: 15.9's honest score puts the
+      // relay tenth, and the question here is whether the fold ATE it, not
+      // where the cap fell.
+      limit: 50,
       nowMs: TRIP_READ_MS
     })
     const kept = ranked.some((o: any) => {

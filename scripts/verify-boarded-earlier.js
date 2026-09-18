@@ -81,6 +81,16 @@ const stEpoch = (st, dep) =>
       : st.scheduledArrival)) *
   1000
 
+// Exit code for "the thing under test could not be exercised, and that is not a
+// defect". nightly-verify.sh maps it to SKIP; anything else is still a failure.
+// Same convention as verify-onboard-options.js.
+const EXIT_SKIP = 75
+
+function skip(reason) {
+  console.log(`SKIP: ${reason}`)
+  process.exit(EXIT_SKIP)
+}
+
 async function main() {
   const browser = await puppeteer.launch({
     args: ['--no-sandbox'],
@@ -99,7 +109,16 @@ async function main() {
   })
   page.on('pageerror', (e) => console.log('[pageerror]', e.message))
   await page.goto(APP, { timeout: 60000, waitUntil: 'networkidle2' })
-  await page.waitForFunction(() => !!window.store, { timeout: 30000 })
+  // 60s, not 30s: this is the FIRST wait in every script and it is a Vite dev
+  // server transforming the module graph, not the product. Two runs on
+  // 2026-09-17 died here -- 30s after a `docker restart otp-frontend-dev`, with
+  // a cold transform cache -- and reported it as the script's failure. A red
+  // row that means "the dev server was still warming up" is the kind that
+  // taught everyone to stop reading this suite (backlog 13.6). If this wait is
+  // what times out, the app at :9967 never booted: `docker restart
+  // otp-frontend-dev` (a full `yarn jest` or `ship_web.sh` clobbers its
+  // tmp/config.yml).
+  await page.waitForFunction(() => !!window.store, { timeout: 60000 })
 
   // ---- plan a walk→bus trip through the app's own pipeline ----
   await page.evaluate(
@@ -192,12 +211,23 @@ async function main() {
       itineraries: ok.length,
       plannedBoard: Number(bus.startTime),
       plannedEnd: Number(bus.endTime),
+      // The ITINERARY's end, which is plannedEnd plus whatever the rider still
+      // has to walk or ride after the bus. `acceptAutoReplan` compares
+      // itinerary endTimes (replan-acceptance.ts:130-133 `arrivalMs`), so the
+      // refusal check below has to build its candidate on this basis and not
+      // on the bus alight. (backlog 13.6)
+      plannedItinEnd: Number(picked.endTime),
       plannedTripId: bus.trip?.gtfsId || bus.tripId,
       routeId: anchor.getLegRouteId(bus),
       routeShortName: bus.routeShortName || bus.routeLongName
     }
   })
-  if (!plan) throw new Error('no walk→bus itinerary found')
+  if (!plan) {
+    skip(
+      'the live graph returned no walk\u2192bus itinerary for this pair, so the ' +
+        'shape this script drives does not exist right now'
+    )
+  }
   console.log(
     `[setup] planned: ${plan.routeShortName} (route ${plan.routeId}) ` +
       `trip ${plan.plannedTripId} board ${fmt(plan.plannedBoard)} at ` +
@@ -600,14 +630,30 @@ async function main() {
   // the real gate with this run's own numbers: the same planned itinerary,
   // once with the alight of a genuinely later same-route trip, once with an
   // earlier one. ----
-  const laterEnd = laterAlight ?? plan.plannedEnd + ARRIVAL_SLACK_MS + 60000
+  // The gate compares ITINERARY arrivals, so the candidate has to carry the
+  // same closing tail the plan does: a later bus whose ALIGHT is 3.9 min late
+  // is not a later ARRIVAL when the plan then walks for four minutes, and
+  // `{accept: true}` is the right answer. Measured 2026-09-17: the script
+  // passed when the bus gap was 9.9 min and failed on the same unchanged gate
+  // when it was 3.9 min, because it set the candidate's `endTime` to the bus
+  // alight and compared it against the plan's post-walk end. That is a
+  // mismatched baseline in the harness, not a hole in the rule. Shifting both
+  // the bus alight AND the tail is what a genuinely later bus does.
+  const closingTailMs = Math.max(0, plan.plannedItinEnd - plan.plannedEnd)
+  const laterAlightEnd =
+    laterAlight ?? plan.plannedEnd + ARRIVAL_SLACK_MS + 60000
+  const laterEnd = laterAlightEnd + closingTailMs
   console.log(
     `[refusal] later bus ${
       laterBus ? `trip ${laterBus.tripId}` : '(synthetic)'
-    } alights ${fmt(laterEnd)} — ${(
-      (laterEnd - plan.plannedEnd) /
+    } alights ${fmt(laterAlightEnd)} (${(
+      (laterAlightEnd - plan.plannedEnd) /
       60000
-    ).toFixed(1)} min after the plan (slack ${ARRIVAL_SLACK_MS / 1000}s)`
+    ).toFixed(1)} min after the planned alight); with the plan's own ` +
+      `${(closingTailMs / 60000).toFixed(1)} min closing tail it ARRIVES ` +
+      `${fmt(laterEnd)}, ${((laterEnd - plan.plannedItinEnd) / 60000).toFixed(
+        1
+      )} min after the plan (slack ${ARRIVAL_SLACK_MS / 1000}s)`
   )
   const verdicts = await page.evaluate(async (laterEnd) => {
     // eslint-disable-next-line import/no-absolute-path
@@ -635,9 +681,10 @@ async function main() {
   ) {
     throw new Error(
       'FAIL: an automatic replan arriving ' +
-        `${((laterEnd - plan.plannedEnd) / 60000).toFixed(1)} min after the ` +
-        `plan was ${JSON.stringify(verdicts.later)} — expected ` +
-        "{ accept: false, reason: 'arrives-later' }"
+        `${((laterEnd - plan.plannedItinEnd) / 60000).toFixed(
+          1
+        )} min after the plan was ${JSON.stringify(verdicts.later)} — ` +
+        "expected { accept: false, reason: 'arrives-later' }"
     )
   }
   if (verdicts.earlier.accept !== true) {
@@ -662,6 +709,11 @@ async function main() {
 }
 
 main().catch((e) => {
-  console.error('FAIL:', e.message)
+  // e.stack, not e.message: a puppeteer waitForFunction timeout says only
+  // "waiting for function failed: timeout 60000ms exceeded" and names neither
+  // the wait that failed nor its line. Six of the eleven red rows on
+  // 2026-09-17 were that one line and nothing else, which is much of why this
+  // suite's output stopped being read (backlog 13.6). The stack names the wait.
+  console.error('FAIL:', e.stack || e.message)
   process.exit(1)
 })
