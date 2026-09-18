@@ -524,7 +524,7 @@ components:
     rerouteNlPlaceholder: "ex. éviter les escaliers aujourd'hui"
     rerouteNlSend: "Envoyer"
     rerouteSearchHere: "Chercher depuis ici"
-    resetToPlanned: "Revenir au trajet prévu"
+    resetToPlanned: "Revenir à {time} (prévu)"
     restOfTrip: "Suite de votre trajet"
     retry: "Réessayer"
     returnBannerArrived: "Vous êtes arrivé — touchez pour terminer"
