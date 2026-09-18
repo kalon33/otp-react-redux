@@ -26,6 +26,20 @@ import type { TimedSimulationPoint } from './geometry'
 
 export interface TripSession {
   /**
+   * The one-way arrival dwell, armed from the WALL CLOCK rather than from the
+   * position tick. `AUTO_END_AFTER_ARRIVAL_MS` used to be checked in the
+   * arrived branch of handlePositionUpdate, which meant a phone that stopped
+   * producing fixes after arrival never evaluated it: on 2026-09-17 the rider
+   * went indoors, `POSITION_FETCHING` stopped being answered at 21:42:43, and
+   * the finished trip was still open 7m24s later (backlog 13.5). A dwell is a
+   * statement about time passing, so it is measured by a timer.
+   *
+   * Never armed during GPS simulation or replay — those run on the simulated
+   * clock (`getCurrentTime`), which a wall-clock timeout knows nothing about.
+   */
+  autoEndTimeoutId: ReturnType<typeof setTimeout> | null
+
+  /**
    * How long the rider has waited, continuously, at the boarding stop of the
    * leg the matcher is on. The board gate's one non-instantaneous input — see
    * BOARD_STOP_DWELL_MIN_MS in riding.ts.
@@ -282,6 +296,7 @@ export interface TripSession {
 /** A trip's state at its first GPS fix. */
 export function createTripSession(): TripSession {
   return {
+    autoEndTimeoutId: null,
     boardStopDwell: null,
     destinationProgress: null,
     deviationHandledAtMs: null,
