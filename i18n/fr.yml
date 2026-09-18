@@ -1,93 +1,80 @@
 _id: fr
-_name: Exemple de traduction pour OTP-react-redux en français
+_name: "Exemple de traduction pour OTP-react-redux en fran\xE7ais"
 actions:
   callTaker:
-    callQuerySaveError: "Erreur lors de l'enregistrement des requêtes pour l'appel
-      : {err}"
-    callSaveError: "Impossible d'enregistrer l'appel : {err}"
-    checkSessionError: "Erreur durant la session d'authentification : {err}"
-    couldNotFindCallError: >-
-      Impossible de trouver l'appel. Tentative de sauvegarde des requêtes
-      annulée.
-    fetchCallsError: "Erreur lors du chargement des appels : {err}"
-    queryFetchError: "Erreur lors du chargement des requêtes : {err}"
+    callQuerySaveError: "Erreur lors de l'enregistrement des requ\xEAtes pour l'appel\
+      \ : {err}"
+    callSaveError: 'Impossible d''enregistrer l''appel : {err}'
+    checkSessionError: 'Erreur durant la session d''authentification : {err}'
+    couldNotFindCallError: "Impossible de trouver l'appel. Tentative de sauvegarde\
+      \ des requ\xEAtes annul\xE9e."
+    fetchCallsError: 'Erreur lors du chargement des appels : {err}'
+    queryFetchError: "Erreur lors du chargement des requ\xEAtes : {err}"
   fieldTrip:
-    addNoteError: "Erreur lors de l'ajout d'une note sur le groupe :"
-    confirmOverwriteItineraries: |
-      Cette action replacera un trajet {outbound, select,
-        true {aller}
-        other {retour}
-      } planifié préalablement pour cette demande. Voulez-vous continuer ?
-    deleteItinerariesError: "Erreur lors de la suppression du trajet pour le groupe
-      :"
-    deleteNoteError: "Erreur lors de la suppression d'une note sur le groupe :"
-    editSubmitterNotesError: "Erreur lors de la modification des notes du demandeur
-      :"
-    fetchFieldTripError: "Erreur de chargement du groupe scolaire : {err}"
-    fetchFieldTripsError: "Erreur lors du chargement des groupes scolaires : {err}"
-    fetchTripsForDateError: >-
-      Erreur lors du chargement des trajets du groupe pour les dates de sorties
-      : {err}
-    incompatibleTripDateError: >-
-      La date du trajet planifié ({tripDate}) ne correspond pas à la date
-      demandée ({requestDate}).
-    itineraryCapacityError: >-
-      Impossible d'enregistrer les trajets : Capacité insuffisante dans un ou
-      plusieurs véhicules. Veuillez réorganiser votre trajet.
-    maxTripRequestsExceeded: Le nombre de requêtes sans résultats valables a été
-      dépassé.
-    saveItinerariesError: "Erreur lors de l'enregistrement des trajets : {err}"
-    setDateError: "Erreur sur la date :"
-    setGroupSizeError: "Erreur sur la taille du groupe :"
-    setPaymentError: "Erreur sur les coordonnées de paiement :"
-    setRequestStatusError: "Erreur sur l'état de la requête :"
+    addNoteError: 'Erreur lors de l''ajout d''une note sur le groupe :'
+    confirmOverwriteItineraries: "Cette action replacera un trajet {outbound, select,\n\
+      \  true {aller}\n  other {retour}\n} planifi\xE9 pr\xE9alablement pour cette\
+      \ demande. Voulez-vous continuer ?\n"
+    deleteItinerariesError: 'Erreur lors de la suppression du trajet pour le groupe
+      :'
+    deleteNoteError: 'Erreur lors de la suppression d''une note sur le groupe :'
+    editSubmitterNotesError: 'Erreur lors de la modification des notes du demandeur
+      :'
+    fetchFieldTripError: 'Erreur de chargement du groupe scolaire : {err}'
+    fetchFieldTripsError: 'Erreur lors du chargement des groupes scolaires : {err}'
+    fetchTripsForDateError: 'Erreur lors du chargement des trajets du groupe pour
+      les dates de sorties : {err}'
+    incompatibleTripDateError: "La date du trajet planifi\xE9 ({tripDate}) ne correspond\
+      \ pas \xE0 la date demand\xE9e ({requestDate})."
+    itineraryCapacityError: "Impossible d'enregistrer les trajets : Capacit\xE9 insuffisante\
+      \ dans un ou plusieurs v\xE9hicules. Veuillez r\xE9organiser votre trajet."
+    maxTripRequestsExceeded: "Le nombre de requ\xEAtes sans r\xE9sultats valables\
+      \ a \xE9t\xE9 d\xE9pass\xE9."
+    saveItinerariesError: 'Erreur lors de l''enregistrement des trajets : {err}'
+    setDateError: 'Erreur sur la date :'
+    setGroupSizeError: 'Erreur sur la taille du groupe :'
+    setPaymentError: "Erreur sur les coordonn\xE9es de paiement :"
+    setRequestStatusError: "Erreur sur l'\xE9tat de la requ\xEAte :"
   location:
-    deniedAccessAlert: >
-      L'accès à votre position est refusé.
-
-      Pour utiliser votre emplacement actuel, permettez-en l'accès depuis votre
-      navigateur, et ouvrez de nouveau cette page.
-    geolocationNotSupportedError: La géolocalisation n'est pas prise en charge 
-      par votre navigateur.
-    unknownPositionError: Erreur inconnue lors de la détection de votre 
-      emplacement.
-    userDeniedPermission: Refusé par l'utilisateur
+    deniedAccessAlert: "L'acc\xE8s \xE0 votre position est refus\xE9.\nPour utiliser\
+      \ votre emplacement actuel, permettez-en l'acc\xE8s depuis votre navigateur,\
+      \ et ouvrez de nouveau cette page.\n"
+    geolocationNotSupportedError: "La g\xE9olocalisation n'est pas prise en charge\
+      \ par votre navigateur."
+    unknownPositionError: "Erreur inconnue lors de la d\xE9tection de votre emplacement."
+    userDeniedPermission: "Refus\xE9 par l'utilisateur"
   map:
     currentLocation: (Emplacement actuel)
   user:
-    accountDeleted: Votre compte utilisateur ({email}) a été supprimé.
+    accountDeleted: "Votre compte utilisateur ({email}) a \xE9t\xE9 supprim\xE9."
     authTokenError: Erreur lors de l'obtention d'un jeton d'authentification.
     confirmDeleteMonitoredTrip: Voulez-vous supprimer ce trajet ?
     confirmDeletePlace: Voulez-vous supprimer ce lieu ?
-    emailVerificationResent: >-
-      Le message de vérification de votre adresse e-mail a été envoyé de
-      nouveau.
-    genericError: "Une erreur s'est produite : {err}"
-    getDependentUserInfoFailed: Erreur lors de l'obtention des profils de 
-      mobilité.
-    itineraryExistenceCheckFailed: Erreur lors de la vérification de la validité
-      du trajet choisi.
-    mustAcceptTermsToSavePlace: >-
-      Veuillez accepter les conditions d'utilisation (dans Mon compte) pour
-      enregistrer des lieux.
-    mustBeLoggedInToSavePlace: Veuillez vous connecter pour enregistrer des 
-      lieux.
-    placeDeleted: Votre lieu a été supprimé
-    placeRemembered: Les informations pour ce lieu ont été enregistrées.
-    preferencesSaved: Vos préférences ont été enregistrées.
-    smsInvalidCode: Le code saisi est incorrect. Veuillez réessayer.
-    smsResendThrottled: >-
-      Un SMS de vérification a été envoyé au numéro de téléphone indiqué il y a
-      moins d'une minute. Patientez quelques moments avant de réessayer.
-    smsVerificationFailed: >-
-      Votre numéro de téléphone n'a pas pu être vérifié. Le code que vous avez
-      entré a peut-être expiré. Veuillez demander un nouveau code, puis
-      réessayez.
-    tripDeleted: Votre trajet a été supprimé
+    emailVerificationResent: "Le message de v\xE9rification de votre adresse e-mail\
+      \ a \xE9t\xE9 envoy\xE9 de nouveau."
+    genericError: 'Une erreur s''est produite : {err}'
+    getDependentUserInfoFailed: "Erreur lors de l'obtention des profils de mobilit\xE9\
+      ."
+    itineraryExistenceCheckFailed: "Erreur lors de la v\xE9rification de la validit\xE9\
+      \ du trajet choisi."
+    mustAcceptTermsToSavePlace: Veuillez accepter les conditions d'utilisation (dans
+      Mon compte) pour enregistrer des lieux.
+    mustBeLoggedInToSavePlace: Veuillez vous connecter pour enregistrer des lieux.
+    placeDeleted: "Votre lieu a \xE9t\xE9 supprim\xE9"
+    placeRemembered: "Les informations pour ce lieu ont \xE9t\xE9 enregistr\xE9es."
+    preferencesSaved: "Vos pr\xE9f\xE9rences ont \xE9t\xE9 enregistr\xE9es."
+    smsInvalidCode: "Le code saisi est incorrect. Veuillez r\xE9essayer."
+    smsResendThrottled: "Un SMS de v\xE9rification a \xE9t\xE9 envoy\xE9 au num\xE9\
+      ro de t\xE9l\xE9phone indiqu\xE9 il y a moins d'une minute. Patientez quelques\
+      \ moments avant de r\xE9essayer."
+    smsVerificationFailed: "Votre num\xE9ro de t\xE9l\xE9phone n'a pas pu \xEAtre\
+      \ v\xE9rifi\xE9. Le code que vous avez entr\xE9 a peut-\xEAtre expir\xE9. Veuillez\
+      \ demander un nouveau code, puis r\xE9essayez."
+    tripDeleted: "Votre trajet a \xE9t\xE9 supprim\xE9"
 common:
-  closedStop: Arrêt fermé
-  coordinates: "{lat}; {lon}"
-  currentlySelected: " (actuellement sélectionné)"
+  closedStop: "Arr\xEAt ferm\xE9"
+  coordinates: '{lat}; {lon}'
+  currentlySelected: " (actuellement s\xE9lectionn\xE9)"
   dateExpressions:
     today: Aujourd'hui
     tomorrow: Demain
@@ -120,48 +107,48 @@ common:
     back: Retour
     cancel: Annuler
     close: Fermer
-    defaultValue: "{value} (défaut)"
+    defaultValue: "{value} (d\xE9faut)"
     edit: Modifier
     error: erreur !
     finish: Terminer
     loading: Chargement
     next: Suivant
-    "no": Non
+    'no': Non
     print: Imprimer
     save: Enregistrer
     startOver: Recommencer
-    submitting: Envoi en cours…
-    "yes": Oui
+    submitting: "Envoi en cours\u2026"
+    'yes': Oui
   itineraryDescriptions:
-    containsCanceledTrip: Cet itinéraire contient un trajet annulé.
+    containsCanceledTrip: "Cet itin\xE9raire contient un trajet annul\xE9."
     fareUnknown: Tarif inconnu
-    reservationRequired: Réservation requise.
+    reservationRequired: "R\xE9servation requise."
     noDefaultFareTypeConfigured: Plusieurs tarifs s'appliquent
-    noItineraryToDisplay: Aucun trajet à afficher.
-    relativeCo2: |
-      {co2} de CO₂ en {isMore, select, true {plus} other {moins} } qu'en voiture
-    timeStartEnd: "{start} – {end}"
-  linkOpensNewWindow: (Ouvre une nouvelle fenêtre)
+    noItineraryToDisplay: "Aucun trajet \xE0 afficher."
+    relativeCo2: "{co2} de CO\u2082 en {isMore, select, true {plus} other {moins}\
+      \ } qu'en voiture\n"
+    timeStartEnd: "{start} \u2013 {end}"
+  linkOpensNewWindow: "(Ouvre une nouvelle fen\xEAtre)"
   modes:
-    bicycle_rent: En vélo en libre-service
-    bike: Vélo
+    bicycle_rent: "En v\xE9lo en libre-service"
+    bike: "V\xE9lo"
     bus: Bus
-    cable_car: Tram tiré par câble
+    cable_car: "Tram tir\xE9 par c\xE2ble"
     car: Voiture
     car_park: Parc relais
     drive: Voiture
     ferry: Ferry
     flex: Service Flex
     funicular: Funiculaire
-    gondola: Téléphérique
-    micromobility: En trottinette électrique
+    gondola: "T\xE9l\xE9ph\xE9rique"
+    micromobility: "En trottinette \xE9lectrique"
     micromobility_rent: En trottinette
     rail: Train
-    rent: Location de véhicules
-    subway: Métro
+    rent: "Location de v\xE9hicules"
+    subway: "M\xE9tro"
     tram: Tram
     transit: En transports
-    walk: À pied
+    walk: "\xC0 pied"
   notifications:
     email: e-mail
     push: notifications push
@@ -175,188 +162,193 @@ common:
     routeAndNumber: Ligne {routeId}
   searchForms:
     click: cliquez
-    enterDestination: Entrez votre destination ou {mapAction} sur la carte…
-    enterStartLocation: Entrez votre point de départ ou {mapAction} sur la 
-      carte…
+    enterDestination: "Entrez votre destination ou {mapAction} sur la carte\u2026"
+    enterStartLocation: "Entrez votre point de d\xE9part ou {mapAction} sur la carte\u2026"
     tap: appuyez
   time:
     duration:
       aFewSeconds: quelques secondes
-      nDays: "{days, plural, =1 {un jour} other {# jours}}"
-      nHours: "{hours, plural, =1 {une heure} other {# heures}}"
-      nMinutes: "{minutes, plural, =1 {une minute} other {# minutes}}"
+      nDays: '{days, plural, =1 {un jour} other {# jours}}'
+      nHours: '{hours, plural, =1 {une heure} other {# heures}}'
+      nMinutes: '{minutes, plural, =1 {une minute} other {# minutes}}'
     durationAgo: il y a {duration}
-    tripDurationFormat: >-
-      {hours, plural, =0 {} other {# h }}{minutes} min { seconds, plural, =0 {}
-      other {# s}}
+    tripDurationFormat: '{hours, plural, =0 {} other {# h }}{minutes} min { seconds,
+      plural, =0 {} other {# s}}'
 components:
   A11yPrefs:
-    accessibilityRoutingByDefault: Privilégier par défaut les trajets 
-      accessibles
+    accessibilityRoutingByDefault: "Privil\xE9gier par d\xE9faut les trajets accessibles"
   AccountSetupFinishPane:
-    message: >-
-      Vos changements ont été enregistrés. Vous pouvez maintenant planifier vos
-      trajets. Cliquez sur Terminer pour retourner au planificateur.
+    message: "Vos changements ont \xE9t\xE9 enregistr\xE9s. Vous pouvez maintenant\
+      \ planifier vos trajets. Cliquez sur Terminer pour retourner au planificateur."
   AddPlaceButton:
-    addPlace: Ajouter un point intermédiaire
-    needOriginDestination: >-
-      Choisissez le départ et l'arrivée avant d'ajouter les points
-      intermédiaires
-    tooManyPlaces: Nombre max. de points intermédiaires atteint
+    addPlace: "Ajouter un point interm\xE9diaire"
+    needOriginDestination: "Choisissez le d\xE9part et l'arriv\xE9e avant d'ajouter\
+      \ les points interm\xE9diaires"
+    tooManyPlaces: "Nombre max. de points interm\xE9diaires atteint"
   AdvancedOptions:
-    bannedRoutes: Choisissez les lignes à éviter…
-    preferredRoutes: Choisissez les lignes préferées
+    bannedRoutes: "Choisissez les lignes \xE0 \xE9viter\u2026"
+    preferredRoutes: "Choisissez les lignes pr\xE9fer\xE9es"
   AfterSignInScreen:
     mainTitle: Redirection...
-    message: >-
-      Si la page ne s'affiche pas après quelques secondes, <redirectLink>cliquez
-      ici</redirectLink>.
+    message: "Si la page ne s'affiche pas apr\xE8s quelques secondes, <redirectLink>cliquez\
+      \ ici</redirectLink>."
   AppMenu:
     callHistory: Historique des appels
     closeMenu: Fermer le menu
     fieldTrip: Groupes scolaires
-    mailables: Prêt-à-poster
+    mailables: "Pr\xEAt-\xE0-poster"
     myPlaces: Mes lieux
-    networkConnectionLost: Erreur de connexion réseau
-    networkConnectionRestored: Connexion réseau restaurée
+    networkConnectionLost: "Erreur de connexion r\xE9seau"
+    networkConnectionRestored: "Connexion r\xE9seau restaur\xE9e"
     openMenu: Ouvrir le menu
-    settings: "Paramètres"
-    shareFeedback: "Envoyer un commentaire"
-    shareDiagnosticsOff: "Partage des diagnostics : désactivé"
-    shareDiagnosticsOn: "Partage des diagnostics : activé"
+    settings: "Param\xE8tres"
+    shareFeedback: Envoyer un commentaire
+    shareDiagnosticsOff: "Partage des diagnostics : d\xE9sactiv\xE9"
+    shareDiagnosticsOn: "Partage des diagnostics : activ\xE9"
     skipNavigation: Sauter la navigation
   ActiveRoutingPreferences:
-    avoidingBiking: "éviter le vélo"
-    briskerWalking: "marche plus rapide"
+    avoidingBiking: "\xE9viter le v\xE9lo"
+    briskerWalking: marche plus rapide
     clear: Effacer
-    fasterBiking: "vélo plus rapide"
-    fewerTransfers: "moins de correspondances"
-    gentlerWalking: "marche plus douce"
-    label: "Préférences :"
-    lessWaiting: "moins d'attente"
-    lessWalking: "moins de marche"
-    longerTransferBuffer: "marge de correspondance plus longue"
-    moreBiking: "plus de vélo"
-    moreTransfers: "plus de correspondances"
-    moreWalking: "plus de marche"
-    noTransfers: "Sans correspondance"
-    noWalkTransit: "Sans marche + transports"
-    okayWaiting: "attente acceptable"
-    optionCount: "{count} options"
-    shorterTransferBuffer: "marge de correspondance plus courte"
-    slowerBiking: "vélo plus lent"
-    viaStop: "Via {stop}"
+    fasterBiking: "v\xE9lo plus rapide"
+    fewerTransfers: moins de correspondances
+    gentlerWalking: marche plus douce
+    label: "Pr\xE9f\xE9rences :"
+    lessWaiting: moins d'attente
+    lessWalking: moins de marche
+    longerTransferBuffer: marge de correspondance plus longue
+    moreBiking: "plus de v\xE9lo"
+    moreTransfers: plus de correspondances
+    moreWalking: plus de marche
+    noTransfers: Sans correspondance
+    noWalkTransit: Sans marche + transports
+    okayWaiting: attente acceptable
+    optionCount: '{count} options'
+    shorterTransferBuffer: marge de correspondance plus courte
+    slowerBiking: "v\xE9lo plus lent"
+    viaStop: Via {stop}
   BackToTripPlanner:
     backToTripPlanner: Retour au planificateur de trajets
   BatchResultsScreen:
     expandMap: Agrandir la carte
-    showResults: Voir les résultats
+    showResults: "Voir les r\xE9sultats"
   BatchRoutingPanel:
     shortTitle: Planifier un trajet
   BatchSearchScreen:
-    advancedHeader: Préférences avancées
-    arriveOnTimeHeader: "Rejoindre le bus"
-    arriveOnTimeHelp: "Lorsque votre trajet jusqu'à l'arrêt est recalculé en cours de route, il vise à vous y amener {minutes} minutes avant le bus plutôt que le plus vite possible."
-    arriveOnTimeLabel: "Arriver juste avant le bus"
-    bikeCeilingHelp: "Un trajet peut contenir jusqu'à {minutes} minutes de vélo — environ {miles} mi à votre vitesse actuelle de {speed} mph. Cette limite est fixée sur le serveur ; ce curseur règle la propension du planificateur à utiliser le vélo à l'intérieur de cette limite."
-    bikeWillingnessHeader: "Vélo"
-    bikeWillingnessHigh: "Plus"
-    bikeWillingnessLabel: "Distance que vous acceptez de faire à vélo"
-    bikeWillingnessLow: "Moins"
+    advancedHeader: "Pr\xE9f\xE9rences avanc\xE9es"
+    arriveOnTimeHeader: Rejoindre le bus
+    arriveOnTimeHelp: "Lorsque votre trajet jusqu'\xE0 l'arr\xEAt est recalcul\xE9\
+      \ en cours de route, il vise \xE0 vous y amener {minutes} minutes avant le bus\
+      \ plut\xF4t que le plus vite possible."
+    arriveOnTimeLabel: Arriver juste avant le bus
+    bikeCeilingHelp: "Un trajet peut contenir jusqu'\xE0 {minutes} minutes de v\xE9\
+      lo \u2014 environ {miles} mi \xE0 votre vitesse actuelle de {speed} mph. Cette\
+      \ limite est fix\xE9e sur le serveur ; ce curseur r\xE8gle la propension du\
+      \ planificateur \xE0 utiliser le v\xE9lo \xE0 l'int\xE9rieur de cette limite."
+    bikeWillingnessHeader: "V\xE9lo"
+    bikeWillingnessHigh: Plus
+    bikeWillingnessLabel: "Distance que vous acceptez de faire \xE0 v\xE9lo"
+    bikeWillingnessLow: Moins
     header: Votre trajet
-    hideWalkTransitHelp: "N'affiche que les options utilisant votre vélo pour rejoindre les transports. Ignoré lorsque la marche est le seul moyen d'y arriver."
-    hideWalkTransitLabel: "Masquer les options marche + transports"
-    modeSelectorLabel: Sélectionnez un mode de déplacement
+    hideWalkTransitHelp: "N'affiche que les options utilisant votre v\xE9lo pour rejoindre\
+      \ les transports. Ignor\xE9 lorsque la marche est le seul moyen d'y arriver."
+    hideWalkTransitLabel: Masquer les options marche + transports
+    modeSelectorLabel: "S\xE9lectionnez un mode de d\xE9placement"
     moreOptions: Plus d'options
-    nlPreferencesApplied: "Appliqué : {summary}"
-    nlPreferencesApply: "Appliquer"
-    nlPreferencesError: "Impossible d'interpréter — reformulez."
-    nlPreferencesHeader: "Décrivez vos besoins"
-    nlPreferencesLoading: "Réflexion…"
-    nlPreferencesPlaceholder: "ex. genou douloureux aujourd'hui, éviter les correspondances"
-    noTransfersHelp: "Uniquement les trajets réalisables sans changer de véhicule. Certains couples de lieux n'en ont aucun ; il ne reste alors que les options à pied ou à vélo."
-    noTransfersLabel: "Sans correspondance"
-    numItinerariesLabel: "Nombre d'options à rechercher"
-    numItinerariesOption: "{count} options"
-    routeLockAdd: "Ajouter une ligne…"
-    routeLockChip: "Uniquement {route}"
-    routeLockDetail: "Uniquement les trajets sur {route}, vélo jusqu'à et depuis"
-    routeLockHeader: "Lignes"
-    routeLockNotFound: "Aucune ligne appelée « {route} » — rien n'a été verrouillé."
-    routeLockNotStarted: "Ne commence pas par {route}"
-    routeLockNotUsed: "N'utilise pas {route}"
-    routeLockLabel: "Nommer une ligne"
-    routeLockRemove: "Retirer {route}"
-    routeLockScopeLabel: "Comment utiliser ces lignes"
-    routeLockScopeOnly: "N'emprunter que ces lignes"
-    routeLockScopeStarting: "Utiliser comme ligne de départ"
-    routeLockStartChip: "Départ sur {route}"
-    routeLockStartDetail: "Trajets dont le premier bus ou train est {route} ; le reste du trajet est laissé au planificateur."
-    routingProfileHeader: "Profil d'itinéraire"
-    routingProfileLabel: "Optimiser l'itinéraire pour"
+    nlPreferencesApplied: "Appliqu\xE9 : {summary}"
+    nlPreferencesApply: Appliquer
+    nlPreferencesError: "Impossible d'interpr\xE9ter \u2014 reformulez."
+    nlPreferencesHeader: "D\xE9crivez vos besoins"
+    nlPreferencesLoading: "R\xE9flexion\u2026"
+    nlPreferencesPlaceholder: "ex. genou douloureux aujourd'hui, \xE9viter les correspondances"
+    noTransfersHelp: "Uniquement les trajets r\xE9alisables sans changer de v\xE9\
+      hicule. Certains couples de lieux n'en ont aucun ; il ne reste alors que les\
+      \ options \xE0 pied ou \xE0 v\xE9lo."
+    noTransfersLabel: Sans correspondance
+    numItinerariesLabel: "Nombre d'options \xE0 rechercher"
+    numItinerariesOption: '{count} options'
+    routeLockAdd: "Ajouter une ligne\u2026"
+    routeLockChip: Uniquement {route}
+    routeLockDetail: "Uniquement les trajets sur {route}, v\xE9lo jusqu'\xE0 et depuis"
+    routeLockHeader: Lignes
+    routeLockNotFound: "Aucune ligne appel\xE9e \xAB {route} \xBB \u2014 rien n'a\
+      \ \xE9t\xE9 verrouill\xE9."
+    routeLockNotStarted: Ne commence pas par {route}
+    routeLockNotUsed: N'utilise pas {route}
+    routeLockLabel: Nommer une ligne
+    routeLockRemove: Retirer {route}
+    routeLockScopeLabel: Comment utiliser ces lignes
+    routeLockScopeOnly: N'emprunter que ces lignes
+    routeLockScopeStarting: "Utiliser comme ligne de d\xE9part"
+    routeLockStartChip: "D\xE9part sur {route}"
+    routeLockStartDetail: "Trajets dont le premier bus ou train est {route} ; le reste\
+      \ du trajet est laiss\xE9 au planificateur."
+    routingProfileHeader: "Profil d'itin\xE9raire"
+    routingProfileLabel: "Optimiser l'itin\xE9raire pour"
     saveAndReturn: Enregistrer et fermer
-    saved: Enregistré
-    searchOptionsHeader: "Options affichées"
-    stopCapHelp: "Jusqu'où chercher, autour du départ et de l'arrivée, un arrêt où monter ou descendre. Une recherche plus large trouve plus d'options vélo + transports depuis les zones éloignées et prend quelques secondes de plus."
-    stopCapLabel: "Jusqu'où chercher un arrêt"
-    stopCapQuick: "Arrêts proches seulement (le plus rapide)"
-    stopCapStandard: "Standard"
-    stopCapThorough: "Tous les arrêts accessibles (le plus lent)"
-    submodeSelectorLabel: Sélectionnez vos modes et sous-modes de déplacement
+    saved: "Enregistr\xE9"
+    searchOptionsHeader: "Options affich\xE9es"
+    stopCapHelp: "Jusqu'o\xF9 chercher, autour du d\xE9part et de l'arriv\xE9e, un\
+      \ arr\xEAt o\xF9 monter ou descendre. Une recherche plus large trouve plus d'options\
+      \ v\xE9lo + transports depuis les zones \xE9loign\xE9es et prend quelques secondes\
+      \ de plus."
+    stopCapLabel: "Jusqu'o\xF9 chercher un arr\xEAt"
+    stopCapQuick: "Arr\xEAts proches seulement (le plus rapide)"
+    stopCapStandard: Standard
+    stopCapThorough: "Tous les arr\xEAts accessibles (le plus lent)"
+    submodeSelectorLabel: "S\xE9lectionnez vos modes et sous-modes de d\xE9placement"
     tripOptions: Options concernant le trajet
-    viaStopHelp: "Tous les trajets affichés desserviront cet arrêt, dans un sens comme dans l'autre."
-    viaStopLabel: "Doit passer par un arrêt"
-    viaStopNone: "Aucun arrêt ne correspond à « {name} »."
-    viaStopPlaceholder: "Saisissez une partie du nom d'un arrêt"
-    viaStopRemove: "Retirer {stop}"
-    viaStopSearching: "Recherche…"
+    viaStopHelp: "Tous les trajets affich\xE9s desserviront cet arr\xEAt, dans un\
+      \ sens comme dans l'autre."
+    viaStopLabel: "Doit passer par un arr\xEAt"
+    viaStopNone: "Aucun arr\xEAt ne correspond \xE0 \xAB {name} \xBB."
+    viaStopPlaceholder: "Saisissez une partie du nom d'un arr\xEAt"
+    viaStopRemove: Retirer {stop}
+    viaStopSearching: "Recherche\u2026"
   BatchSettings:
     destination: destination
-    invalidModeSelection: >-
-      Impossible de planifier un trajet avec les modes sélectionnés. Réessayez
-      en ajoutant les transports publics.
-    origin: point de départ
+    invalidModeSelection: "Impossible de planifier un trajet avec les modes s\xE9\
+      lectionn\xE9s. R\xE9essayez en ajoutant les transports publics."
+    origin: "point de d\xE9part"
     planTripTooltip: Planifier le trajet
-    validationMessage: >-
-      Veuillez définir les champs suivants afin de planifier votre trajet :
-      {issues}
+    validationMessage: "Veuillez d\xE9finir les champs suivants afin de planifier\
+      \ votre trajet : {issues}"
   BeforeSignInScreen:
     mainTitle: Connexion en cours
-    message: >
-      Pour accéder à cette page, vous devez vous connecter. Veuillez patienter
-      pendant que nous vous redirigeons vers la page de connexion...
+    message: "Pour acc\xE9der \xE0 cette page, vous devez vous connecter. Veuillez\
+      \ patienter pendant que nous vous redirigeons vers la page de connexion...\n"
   CallTakerPanel:
-    advancedOptions: Options avancées
-    intermediateDestination: Entrez la destination intermédiaire
+    advancedOptions: "Options avanc\xE9es"
+    intermediateDestination: "Entrez la destination interm\xE9diaire"
   CompanionsPane:
     addNewCompanion: Ajouter un accompagnateur
-    companionAlreadyAdded: Vous avez déjà un accompagnateur utilisant {email}.
-    companionExplanation: >
-      Invitez un utilisateur G-MAP existant à être votre accompagnateur en
-      entrant leur adresse email. Leur statut passera à "vérifié" dès leur
-      acceptation, et vous pourrez alors partager vos trajets et planifier des
-      trajets qui conviennent à leur profil de mobilité.
+    companionAlreadyAdded: "Vous avez d\xE9j\xE0 un accompagnateur utilisant {email}."
+    companionExplanation: "Invitez un utilisateur G-MAP existant \xE0 \xEAtre votre\
+      \ accompagnateur en entrant leur adresse email. Leur statut passera \xE0 \"\
+      v\xE9rifi\xE9\" d\xE8s leur acceptation, et vous pourrez alors partager vos\
+      \ trajets et planifier des trajets qui conviennent \xE0 leur profil de mobilit\xE9\
+      .\n"
     confirmDeleteCompanion: Voulez-vous supprimer l'accompagnateur {email} ?
-    currentCompanionsLabel: "Mes accompagnateurs :"
+    currentCompanionsLabel: 'Mes accompagnateurs :'
     deleteCompanion: Supprimer {email}
     noCompanions: Vous n'avez aucun accompagnateur.
     submitNewCompanion: Envoyer l'invitation
     title: Accompagnateurs
   DateTimeOptions:
-    arriveBy: Arriver à
-    departAt: Partir à
+    arriveBy: "Arriver \xE0"
+    departAt: "Partir \xE0"
     now: Tout de suite
   DateTimePreview:
-    arriveAt: Arrivée {arriveTime, time, short}
-    dayLastWeek: "{formattedDayOfWeek} dernier"
-    departAt: Départ {departTime, time, short}
-    editDepartOrArrival: Modifier l'heure de départ ou d'arrivée
+    arriveAt: "Arriv\xE9e {arriveTime, time, short}"
+    dayLastWeek: '{formattedDayOfWeek} dernier'
+    departAt: "D\xE9part {departTime, time, short}"
+    editDepartOrArrival: "Modifier l'heure de d\xE9part ou d'arriv\xE9e"
     leaveNow: Tout de suite
   DateTimeScreen:
     header: Jour et heure du trajet
   DefaultItinerary:
-    clickDetails: Cliquez pour afficher les détails
-    multiModeSummary: "{accessMode} + {transitMode}"
+    clickDetails: "Cliquez pour afficher les d\xE9tails"
+    multiModeSummary: '{accessMode} + {transitMode}'
     nonTransit: Alternatives
   DeleteUser:
     deleteMyAccount: Supprimer mon compte
@@ -364,431 +356,501 @@ components:
     header: Impossible de planifier le trajet
     warning: Attention
   ExistingAccountDisplay:
-    a11y: Accessibilité
-    mainTitle: Mes préférences
+    a11y: "Accessibilit\xE9"
+    mainTitle: "Mes pr\xE9f\xE9rences"
     notifications: Notifications
     places: Lieux favoris
     terms: Conditions d'utilisation
   FavoritePlaceList:
     addAnotherPlace: Ajouter un autre lieu
-    description: >-
-      Ajoutez les lieux que vous fréquentez souvent pour faciliter vos
-      recherches de trajets :
+    description: "Ajoutez les lieux que vous fr\xE9quentez souvent pour faciliter\
+      \ vos recherches de trajets :"
     editThisPlace: Modifier ce lieu
     setAddressForPlaceType: Entrez l'adresse de votre {placeType}
   FavoritePlaceScreen:
     addNewPlace: Ajouter un nouveau lieu
-    charactersOverLimit: "{chars, plural, one {# caractère en trop} other {# caractères
-      en trop}}"
-    charactersRemaining: "{chars, plural, one {# caractère restant} other {# caractères
-      restant}}"
+    charactersOverLimit: "{chars, plural, one {# caract\xE8re en trop} other {# caract\xE8\
+      res en trop}}"
+    charactersRemaining: "{chars, plural, one {# caract\xE8re restant} other {# caract\xE8\
+      res restant}}"
     editPlace: Modifier le {placeName}
     editPlaceGeneric: Modifier le lieu
     invalidAddress: Veuillez entrer l'adresse du lieu.
     invalidName: Veuillez saisir le nom du lieu.
-    nameAlreadyUsed: >-
-      Ce nom est déjà utilisé avec un autre lieu. Veuillez saisir un nom
-      différent.
-    nameTooLong: Le nom doit comporter {char} caractères maximum.
+    nameAlreadyUsed: "Ce nom est d\xE9j\xE0 utilis\xE9 avec un autre lieu. Veuillez\
+      \ saisir un nom diff\xE9rent."
+    nameTooLong: "Le nom doit comporter {char} caract\xE8res maximum."
     placeNotFound: Lieu introuvable
-    placeNotFoundDescription: Le lieu recherché est introuvable.
+    placeNotFoundDescription: "Le lieu recherch\xE9 est introuvable."
   FeedbackScreen:
-    attachLabel: "Ajouter une capture d'écran"
-    commentLabel: "Votre commentaire"
-    commentPlaceholder: "Que s'est-il passé ?"
-    failed: "Envoi impossible, et cet appareil n'a pas de place pour l'enregistrer. Réessayez."
-    failedNotAllowed: "Le serveur a refusé ce rapport ({status}). Il est enregistré, mais il ne partira pas depuis ce réseau — reconnectez-vous à Tailscale et rouvrez cet écran."
-    failedTooLarge: "Le serveur n'a pas accepté un rapport de cette taille, même sans l'image. Enregistré — réessayez plus tard."
-    heading: "Envoyer un commentaire"
-    heldOffline: "Aucune connexion. Enregistré — l'envoi se fera à votre prochaine visite sur cet écran."
-    heldSent: "{count, plural, one {Un commentaire précédent a} other {# commentaires précédents ont}} été envoyé."
-    heldServer: "Le serveur n'a pas pu le prendre ({status}). Enregistré — l'envoi se fera à votre prochaine visite sur cet écran."
-    imageRejected: "Ce fichier n'a pas pu être joint."
-    intro: "Dites-nous ce qui n'a pas marché. Une capture d'écran en dit plus qu'une phrase."
-    oneImageOnly: "Une seule capture d'écran par rapport."
-    removeImage: "Retirer la capture d'écran"
-    replaceImage: "Remplacer la capture d'écran"
-    send: "Envoyer"
-    sendingHeld: "Envoi d'un commentaire précédent resté en attente…"
-    sent: "Envoyé. Merci."
-    sentOthersWaiting: "Envoyé. {count, plural, one {Un commentaire précédent est} other {# commentaires précédents sont}} toujours en attente — {reason}"
-    sentWithoutImage: "Envoyé, mais l'image n'a pas pu être jointe."
-    thumbnailAlt: "L'image que vous avez jointe"
+    attachLabel: "Ajouter une capture d'\xE9cran"
+    commentLabel: Votre commentaire
+    commentPlaceholder: "Que s'est-il pass\xE9 ?"
+    failed: "Envoi impossible, et cet appareil n'a pas de place pour l'enregistrer.\
+      \ R\xE9essayez."
+    failedNotAllowed: "Le serveur a refus\xE9 ce rapport ({status}). Il est enregistr\xE9\
+      , mais il ne partira pas depuis ce r\xE9seau \u2014 reconnectez-vous \xE0 Tailscale\
+      \ et rouvrez cet \xE9cran."
+    failedTooLarge: "Le serveur n'a pas accept\xE9 un rapport de cette taille, m\xEA\
+      me sans l'image. Enregistr\xE9 \u2014 r\xE9essayez plus tard."
+    heading: Envoyer un commentaire
+    heldOffline: "Aucune connexion. Enregistr\xE9 \u2014 l'envoi se fera \xE0 votre\
+      \ prochaine visite sur cet \xE9cran."
+    heldSent: "{count, plural, one {Un commentaire pr\xE9c\xE9dent a} other {# commentaires\
+      \ pr\xE9c\xE9dents ont}} \xE9t\xE9 envoy\xE9."
+    heldServer: "Le serveur n'a pas pu le prendre ({status}). Enregistr\xE9 \u2014\
+      \ l'envoi se fera \xE0 votre prochaine visite sur cet \xE9cran."
+    imageRejected: "Ce fichier n'a pas pu \xEAtre joint."
+    intro: "Dites-nous ce qui n'a pas march\xE9. Une capture d'\xE9cran en dit plus\
+      \ qu'une phrase."
+    oneImageOnly: "Une seule capture d'\xE9cran par rapport."
+    removeImage: "Retirer la capture d'\xE9cran"
+    replaceImage: "Remplacer la capture d'\xE9cran"
+    send: Envoyer
+    sendingHeld: "Envoi d'un commentaire pr\xE9c\xE9dent rest\xE9 en attente\u2026"
+    sent: "Envoy\xE9. Merci."
+    sentOthersWaiting: "Envoy\xE9. {count, plural, one {Un commentaire pr\xE9c\xE9\
+      dent est} other {# commentaires pr\xE9c\xE9dents sont}} toujours en attente\
+      \ \u2014 {reason}"
+    sentWithoutImage: "Envoy\xE9, mais l'image n'a pas pu \xEAtre jointe."
+    thumbnailAlt: L'image que vous avez jointe
   FormNavigationButtons:
     ariaLabel: Navigation du formulaire
   GoMode:
-    arrivedDone: "Terminé"
-    arrivedTitle: "🎉 Vous êtes arrivé !"
-    arrivesIn: "arrive dans {time}"
-    boardingAboard: "À bord du {route}"
-    boardingConfirm: "Je suis dans le bus"
-    boardingDeny: "Je ne suis pas dans ce bus"
-    boardingQuestion: "Êtes-vous dans le bus ?"
-    boardingSearching: "Recherche…"
-    boardingSubtitle: "Recherche du {route} à proximité"
-    busHeadsign: "vers {headsign}"
-    busLabel: "Bus {label}"
-    busNotBroadcasting: "Bus pas encore localisé — prévu à {time}"
-    changeBus: "Choisir le bus"
-    confirmExit: "Voulez-vous vraiment arrêter le suivi de ce trajet ?"
+    arrivedDone: "Termin\xE9"
+    arrivedTitle: "\U0001F389 Vous \xEAtes arriv\xE9 !"
+    arrivesIn: arrive dans {time}
+    boardingAboard: "\xC0 bord du {route}"
+    boardingConfirm: Je suis dans le bus
+    boardingDeny: Je ne suis pas dans ce bus
+    boardingKnownVehicle: "D\xE9j\xE0 suivi \xB7 n\xB0{label}"
+    boardingQuestion: "\xCAtes-vous dans le bus ?"
+    boardingRetry: "R\xE9essayer"
+    boardingSearchFailed: Flux des bus injoignable.
+    boardingSearching: "Recherche\u2026"
+    boardingSubtitle: "Recherche du {route} \xE0 proximit\xE9"
+    busHeadsign: vers {headsign}
+    busLabel: Bus {label}
+    busNotBroadcasting: "Bus pas encore localis\xE9 \u2014 pr\xE9vu \xE0 {time}"
+    changeBus: Choisir le bus
+    confirmExit: "Voulez-vous vraiment arr\xEAter le suivi de ce trajet ?"
     currentLocation: (Emplacement actuel)
-    directionEB: "Direction est"
-    directionNB: "Direction nord"
-    directionSB: "Direction sud"
-    directionWB: "Direction ouest"
-    errorPermissionDenied: "Accès à la position refusé. Autorisez la localisation dans les réglages de votre navigateur."
-    errorTimeout: "Signal GPS expiré. Vérifiez que vous êtes dans une zone couverte par le GPS."
-    errorUnavailable: "Impossible de déterminer votre position. Vérifiez les réglages de votre appareil."
-    findAnotherWay: "Trouver un autre chemin"
-    findingBestStop: "Recherche du meilleur arrêt pour descendre…"
-    findingYourBus: "Recherche de votre bus…"
-    followToggle: "Suivre ma position"
-    getReady: "⚠️ Préparez-vous - 2 arrêts"
-    getReadyNow: "🔔 PRÉPAREZ-VOUS ! C'est le prochain arrêt !"
-    gotOffHere: "Je suis descendu ici"
-    gpsError: "Signal GPS perdu. Nouvelle tentative de connexion..."
-    gpsErrorTitle: "Erreur GPS"
-    headerDestination: "Vers {destination}"
-    legBike: "Vélo"
-    hideLaterDepartures: "Moins"
-    laterDepartures: "Départs suivants"
-    legStopsTo: "{count, plural, one {# arrêt} other {# arrêts}} jusqu'à {dest}"
-    legTo: "vers {dest}"
-    legWait: "🕒 {mins} min d'attente"
-    legWalk: "Marche"
-    avoidBiking: "Éviter le vélo"
-    fewerTransfers: "Moins de correspondances"
-    lessWalking: "Moins de marche"
-    fastest: "Le plus rapide"
-    minimizewalking: "Moins de marche"
-    stayseated: "Moins de correspondances"
-    bikeforward: "Privilégier le vélo"
-    avoidbiking: "Éviter le vélo"
-    stayaboard: "Rester à bord"
-    reliabletransfers: "Correspondances fiables"
-    accessible: "Accessible"
-    chooseBus: "Choisir le bus"
-    deviationWarning: "{distance} m de la ligne"
-    noBusesOrRoutesNearby: "Aucun bus ou ligne détecté à proximité. Essayez de vous rapprocher d'un arrêt de bus."
-    liveBanner: "Mode Go actif — suivi de votre bus"
-    loading: "Démarrage du trajet..."
-    loadingSchedule: "Chargement des horaires de votre bus…"
-    locatingBus: "Localisation de votre bus..."
-    nextBusesAtStop: "Prochains bus à {stop}"
-    nextDeparture: "Prochain : {time} (dans {mins} min)"
-    noLiveVehicleData: "Pas de données en temps réel — suivi par GPS"
-    notYet: "Pas encore"
-    offAtStop: "Descente à {stop}"
-    onBus: "Dans le bus n° {label}"
-    onBusButton: "Je suis déjà dans le bus"
-    onboardAssumedRoute: "À bord du {route}"
-    onboardAssumedVehicle: "À bord du {route} · {vehicle}"
-    onboardCancel: "Annuler"
-    onboardError: "Impossible d'identifier votre bus. Réessayer ?"
-    onboardNotThisVehicle: "Ce n'est pas celui-ci"
-    onboardTitle: "Dans le bus"
-    openTripSheet: "Ouvrir l'aperçu du trajet"
-    pickYourBus: "Dans quel bus êtes-vous ? Choisissez-le ci-dessous."
-    pickYourRoute: "Aucun bus détecté en temps réel — choisissez votre ligne :"
-    rerouteNlError: "Impossible de comprendre — réessayez."
-    rerouteNlLabel: "Décrivez ce dont vous avez besoin"
-    rerouteNlPlaceholder: "ex. éviter les escaliers aujourd'hui"
-    rerouteNlSend: "Envoyer"
-    rerouteSearchHere: "Chercher depuis ici"
-    resetToPlanned: "Revenir au trajet prévu"
-    restOfTrip: "Suite de votre trajet"
-    retry: "Réessayer"
-    returnBannerArrived: "Vous êtes arrivé — touchez pour terminer"
-    returnBannerLive: "En trajet · Prochain arrêt {stop} · Arrivée {eta} — touchez pour revenir"
-    returnBannerNoProgress: "Trajet en cours — touchez pour revenir"
-    returnCountdownLabel: "Départ du retour dans"
-    returnLeaveBy: "Partir à {time}"
-    returnLeaveNow: "Partez maintenant"
-    returnMissed: "Départ du retour dépassé"
-    returnPlanNow: "Planifier le retour"
-    returnRouteDeparts: "{route} part à {time}"
-    returnStart: "Commencer le retour"
-    rideToStop: "{emoji} {time} de trajet jusqu'à {stop}"
-    selectVehicle: "Celui-ci"
-    showLaterDepartures: "Plus"
-    sheetHandleLabel: "Voir le trajet et les autres options"
-    stillCheckingStops: "Vérification de {count, plural, one {1 arrêt supplémentaire} other {# arrêts supplémentaires}} en cours…"
-    stopDeparturesTitle: "Départs"
-    stopsRemainingCompact: "Encore {count, plural, one {1 arrêt} other {# arrêts}}"
-    theBus: "le bus"
-    thenTurn: "puis {turn}"
-    toStop: "{emoji} Vers {stop}"
-    trackingBus: "Suivi du bus n° {label}"
-    turnCuesLegLabel: "Navigation détaillée pour l'étape {leg}"
-    turnCuesLegOff: "Navigation détaillée ({leg}) : désactivée"
-    turnCuesLegOn: "Navigation détaillée ({leg}) : activée"
-    turnCuesOff: "Navigation détaillée : désactivée"
-    turnCuesOn: "Navigation détaillée : activée"
-    tripSheetHeading: "Votre trajet"
-    tripSheetTitle: "Aperçu du trajet"
-    useThisDeparture: "Utiliser celui-ci"
-    vehicleDetail: "Prochain arrêt : {stop} - à {distance} m · n° {label}"
-    vehicleDistance: "à {distance} m · n° {label}"
-    waitingGPS: "Acquisition du signal GPS..."
-    walkToStop: "{emoji} {time} de marche jusqu'à {stop}"
-    whereToAlight: "Où voulez-vous descendre ?"
+    directionEB: Direction est
+    directionNB: Direction nord
+    directionSB: Direction sud
+    directionWB: Direction ouest
+    errorPermissionDenied: "Acc\xE8s \xE0 la position refus\xE9. Autorisez la localisation\
+      \ dans les r\xE9glages de votre navigateur."
+    errorTimeout: "Signal GPS expir\xE9. V\xE9rifiez que vous \xEAtes dans une zone\
+      \ couverte par le GPS."
+    errorUnavailable: "Impossible de d\xE9terminer votre position. V\xE9rifiez les\
+      \ r\xE9glages de votre appareil."
+    findAnotherWay: Trouver un autre chemin
+    findingBestStop: "Recherche du meilleur arr\xEAt pour descendre\u2026"
+    findingYourBus: "Recherche de votre bus\u2026"
+    followToggle: Suivre ma position
+    getReady: "\u26A0\uFE0F Pr\xE9parez-vous - 2 arr\xEAts"
+    getReadyNow: "\U0001F514 PR\xC9PAREZ-VOUS ! C'est le prochain arr\xEAt !"
+    gotOffHere: Je suis descendu ici
+    gpsError: Signal GPS perdu. Nouvelle tentative de connexion...
+    gpsErrorTitle: Erreur GPS
+    headerDestination: Vers {destination}
+    legBike: "V\xE9lo"
+    hideLaterDepartures: Moins
+    laterDepartures: "D\xE9parts suivants"
+    legStopsTo: "{count, plural, one {# arr\xEAt} other {# arr\xEAts}} jusqu'\xE0\
+      \ {dest}"
+    legTo: vers {dest}
+    legWait: "\U0001F552 {mins} min d'attente"
+    legWalk: Marche
+    avoidBiking: "\xC9viter le v\xE9lo"
+    fewerTransfers: Moins de correspondances
+    lessWalking: Moins de marche
+    fastest: Le plus rapide
+    minimizewalking: Moins de marche
+    stayseated: Moins de correspondances
+    bikeforward: "Privil\xE9gier le v\xE9lo"
+    avoidbiking: "\xC9viter le v\xE9lo"
+    stayaboard: "Rester \xE0 bord"
+    reliabletransfers: Correspondances fiables
+    accessible: Accessible
+    chooseBus: Choisir le bus
+    deviationWarning: '{distance} m de la ligne'
+    noBusesOrRoutesNearby: "Aucun bus ou ligne d\xE9tect\xE9 \xE0 proximit\xE9. Essayez\
+      \ de vous rapprocher d'un arr\xEAt de bus."
+    liveBanner: "Mode Go actif \u2014 suivi de votre bus"
+    loading: "D\xE9marrage du trajet..."
+    loadingSchedule: "Chargement des horaires de votre bus\u2026"
+    locatingBus: Localisation de votre bus...
+    nextBusesAtStop: "Prochains bus \xE0 {stop}"
+    nextDeparture: 'Prochain : {time} (dans {mins} min)'
+    noLiveVehicleData: "Pas de donn\xE9es en temps r\xE9el \u2014 suivi par GPS"
+    notYet: Pas encore
+    notify:
+      arrivedMessage: "Arriv\xE9"
+      backOnTime: sans retard
+      busComingTitle: Bus en approche
+      busHereTitle: Bus ici
+      changeWithSlack: "{change} \xB7 {slack}"
+      connectionAtRiskTitle: Correspondance en danger
+      connectionLateAtStop: "{routeName} \xB7 {minutes} min de retard \xB7 {stopName}"
+      connectionSlack: "{routeName} \xB7 {seconds} s"
+      connectionSlackAtStop: "{routeName} \xB7 {seconds} s \xB7 {stopName}"
+      driftEarlier: "{minutes} min plus t\xF4t"
+      driftLater: '{minutes} min plus tard'
+      leaveInTitle: Partir dans {minutes} min
+      leaveNowTitle: Partir maintenant
+      metresAway: '{metres} m'
+      missedBestIn: "{routeName} probablement manqu\xE9 \xB7 {bestRouteName} dans\
+        \ {minutes} min"
+      missedBusTitle: "Bus manqu\xE9"
+      missedNextDeparture: "{routeName} manqu\xE9 \xB7 prochain d\xE9part"
+      missedNextIn: "{routeName} probablement manqu\xE9 \xB7 prochain dans {minutes}\
+        \ min"
+      missedNoAlternatives: "{routeName} probablement manqu\xE9 \xB7 aucune solution"
+      missedOptions: "{routeName} probablement manqu\xE9 \xB7 {count} options"
+      modeDrive: Voiture
+      modeGo: En route
+      modeScooter: Trottinette
+      nextStepTitle: "\xC9tape suivante"
+      nextStopTitle: "Prochain arr\xEAt"
+      offRouteDistance: "{metres} m hors itin\xE9raire"
+      offRouteTitle: "Hors itin\xE9raire"
+      routeAtStop: "{routeName} \xB7 {stopName}"
+      routeMinutes: "{routeName} \xB7 {minutes} min"
+      routeMinutesLate: "{routeName} \xB7 {minutes} min de retard"
+      routeMinutesStop: "{routeName} \xB7 {minutes} min \xB7 {stopName}"
+      routingStopsHereTitle: "Itin\xE9raire interrompu"
+      runningLateTitle: En retard
+      slackLeft: '{minutes} min de marge'
+      slackShort: '{minutes} min manquantes'
+      someWay: assez loin
+      stepBoard: Monter dans {routeName} vers {destination}
+      stepContinue: Continuer vers {destination}
+      stepWalk: Marcher vers {destination}
+      stopInMinutes: "{stopName} \xB7 {minutes} min"
+      theStop: "l\u2019arr\xEAt"
+      tightConnectionTitle: "Correspondance serr\xE9e"
+      tripCompleteTitle: "Trajet termin\xE9"
+      turnIn: Dans {distance}{then}
+      turnThen: ', puis {instruction}'
+      unreachable: "{howFar} \xB7 sans se rapprocher"
+      unreachableFromNamed: "{howFar} de {destination} \xB7 sans se rapprocher"
+      yourBus: votre bus
+      yourBusLead: Votre bus
+      yourConnection: votre correspondance
+      yourDestination: votre destination
+      yourRideLead: Votre trajet
+      yourStop: "votre arr\xEAt"
+      yourStopTitle: "Votre arr\xEAt"
+    offAtStop: "Descente \xE0 {stop}"
+    onBus: "Dans le bus n\xB0 {label}"
+    onBusButton: "Je suis d\xE9j\xE0 dans le bus"
+    onboardAssumedRoute: "\xC0 bord du {route}"
+    onboardAssumedVehicle: "\xC0 bord du {route} \xB7 {vehicle}"
+    onboardBackToTrip: Retour au trajet
+    onboardCancel: Annuler
+    onboardError: "Impossible d'identifier votre bus. R\xE9essayer ?"
+    onboardNotThisVehicle: Ce n'est pas celui-ci
+    onboardPreviewArrive: "Arriv\xE9e {time}"
+    onboardPreviewBack: Retour aux options
+    onboardPreviewConfirm: "Confirmer cet arr\xEAt"
+    onboardPreviewWait: '{mins} min d''attente'
+    onboardTitle: Dans le bus
+    openTripSheet: "Ouvrir l'aper\xE7u du trajet"
+    pickYourBus: "Dans quel bus \xEAtes-vous ? Choisissez-le ci-dessous."
+    pickYourRoute: "Aucun bus d\xE9tect\xE9 en temps r\xE9el \u2014 choisissez votre\
+      \ ligne :"
+    rerouteNlError: "Impossible de comprendre \u2014 r\xE9essayez."
+    rerouteNlLabel: "D\xE9crivez ce dont vous avez besoin"
+    rerouteNlPlaceholder: "ex. \xE9viter les escaliers aujourd'hui"
+    rerouteNlSend: Envoyer
+    rerouteSearchHere: Chercher depuis ici
+    resetToPlanned: "Revenir au trajet pr\xE9vu"
+    restOfTrip: Suite de votre trajet
+    retry: "R\xE9essayer"
+    returnBannerArrived: "Vous \xEAtes arriv\xE9 \u2014 touchez pour terminer"
+    returnBannerLive: "En trajet \xB7 Prochain arr\xEAt {stop} \xB7 Arriv\xE9e {eta}\
+      \ \u2014 touchez pour revenir"
+    returnBannerNoProgress: "Trajet en cours \u2014 touchez pour revenir"
+    returnCountdownLabel: "D\xE9part du retour dans"
+    returnLeaveBy: "Partir \xE0 {time}"
+    returnLeaveNow: Partez maintenant
+    returnMissed: "D\xE9part du retour d\xE9pass\xE9"
+    returnPlanNow: Planifier le retour
+    returnRouteDeparts: "{route} part \xE0 {time}"
+    returnStart: Commencer le retour
+    rideToStop: "{emoji} {time} de trajet jusqu'\xE0 {stop}"
+    selectVehicle: Celui-ci
+    showLaterDepartures: Plus
+    sheetHandleLabel: Voir le trajet et les autres options
+    stillCheckingStops: "V\xE9rification de {count, plural, one {1 arr\xEAt suppl\xE9\
+      mentaire} other {# arr\xEAts suppl\xE9mentaires}} en cours\u2026"
+    stopDeparturesTitle: "D\xE9parts"
+    stopsAnswered: "{answered} arr\xEAts sur {total} ont r\xE9pondu"
+    stopsRemainingCompact: "Encore {count, plural, one {1 arr\xEAt} other {# arr\xEA\
+      ts}}"
+    theBus: le bus
+    thenTurn: puis {turn}
+    toStop: '{emoji} Vers {stop}'
+    trackingBus: "Suivi du bus n\xB0 {label}"
+    turnCuesLegLabel: "Navigation d\xE9taill\xE9e pour l'\xE9tape {leg}"
+    turnCuesLegOff: "Navigation d\xE9taill\xE9e ({leg}) : d\xE9sactiv\xE9e"
+    turnCuesLegOn: "Navigation d\xE9taill\xE9e ({leg}) : activ\xE9e"
+    turnCuesOff: "Navigation d\xE9taill\xE9e : d\xE9sactiv\xE9e"
+    turnCuesOn: "Navigation d\xE9taill\xE9e : activ\xE9e"
+    tripSheetHeading: Votre trajet
+    tripSheetTitle: "Aper\xE7u du trajet"
+    useThisDeparture: Utiliser celui-ci
+    vehicleDetail: "Prochain arr\xEAt : {stop} - \xE0 {distance} m \xB7 n\xB0 {label}"
+    vehicleDistance: "\xE0 {distance} m \xB7 n\xB0 {label}"
+    waitingAtStop: "En attente \xE0 {stop}"
+    waitingAtStopTime: "En attente \xE0 {stop} \xB7 {time}"
+    waitingGPS: Acquisition du signal GPS...
+    walkToStop: "{emoji} {time} de marche jusqu'\xE0 {stop}"
+    whereToAlight: "O\xF9 voulez-vous descendre ?"
     turnInstructions:
-      arrivingAt: "Arrivée à {destination}"
-      bearLeft: "Légèrement à gauche"
-      bearRight: "Légèrement à droite"
-      continue: "Continuer"
-      continueOn: "Continuer sur {name}"
-      continueTo: "Continuer vers {destination}"
-      enterStation: "Entrer dans la station"
-      exitStation: "Sortir de la station"
-      followSigns: "Suivre les panneaux"
-      sharpLeft: "Tourner fortement à gauche"
-      sharpRight: "Tourner fortement à droite"
-      takeElevator: "Prendre l'ascenseur"
-      takeRoundabout: "Prendre le rond-point"
-      turnLeft: "Tourner à gauche"
-      turnRight: "Tourner à droite"
-      uTurn: "Faire demi-tour"
+      arrivingAt: "Arriv\xE9e \xE0 {destination}"
+      bearLeft: "L\xE9g\xE8rement \xE0 gauche"
+      bearRight: "L\xE9g\xE8rement \xE0 droite"
+      continue: Continuer
+      continueOn: Continuer sur {name}
+      continueTo: Continuer vers {destination}
+      enterStation: Entrer dans la station
+      exitStation: Sortir de la station
+      followSigns: Suivre les panneaux
+      sharpLeft: "Tourner fortement \xE0 gauche"
+      sharpRight: "Tourner fortement \xE0 droite"
+      takeElevator: Prendre l'ascenseur
+      takeRoundabout: Prendre le rond-point
+      turnLeft: "Tourner \xE0 gauche"
+      turnRight: "Tourner \xE0 droite"
+      uTurn: Faire demi-tour
+    departureGone: departed
+    noBusesNearby: No buses detected nearby
   ItinerarySummary:
-    itineraryDetails: Détails du trajet
+    itineraryDetails: "D\xE9tails du trajet"
   LocationSearch:
     chooseOnMap: Choisir sur la carte
     enterLocation: Entrez le lieu
     setDestination: Destination
-    setOrigin: Point de départ
+    setOrigin: "Point de d\xE9part"
   MapLayers:
-    bike-rental: Vélos partagés {companies}
+    bike-rental: "V\xE9los partag\xE9s {companies}"
     car-rental: Voitures en location
-    OTP-UI-stopsAndStations: Arrêts et stations
+    OTP-UI-stopsAndStations: "Arr\xEAts et stations"
     micromobility-rental: Trottinettes {companies}
     park-and-ride: Parcs relais
-    realtimeStops: Arrêts en temps réel
+    realtimeStops: "Arr\xEAts en temps r\xE9el"
     satellite: Satellite
-    shared-vehicles: Véhicules en partage
-    stations: Arrêts et stations
-    stops: Arrêts et stations
+    shared-vehicles: "V\xE9hicules en partage"
+    stations: "Arr\xEAts et stations"
+    stops: "Arr\xEAts et stations"
     streets: Plan des rues
   MapillaryFrame:
     title: Vue panoramique
   MapPointPicker:
     cancel: Annuler
-    instructions: Déplacez la carte pour positionner le repère
-    setAsDestination: Définir comme destination
-    setAsStart: Définir comme point de départ
-    titleFrom: Choisissez votre point de départ
+    instructions: "D\xE9placez la carte pour positionner le rep\xE8re"
+    setAsDestination: "D\xE9finir comme destination"
+    setAsStart: "D\xE9finir comme point de d\xE9part"
+    titleFrom: "Choisissez votre point de d\xE9part"
     titleTo: Choisissez votre destination
   MetroUI:
-    arriveAt: Vous arrivez à
-    arrivesAtTime: arrivée {time}
-    confirmSwitchTrip: "Basculer votre trajet actif sur cette ligne ? Vos indications seront mises à jour."
-    departsAtTime: départ {time}
-    fare: "{fare}"
+    arriveAt: "Vous arrivez \xE0"
+    arrivesAtTime: "arriv\xE9e {time}"
+    confirmSwitchTrip: "Basculer votre trajet actif sur cette ligne ? Vos indications\
+      \ seront mises \xE0 jour."
+    departsAtTime: "d\xE9part {time}"
+    fare: '{fare}'
     itineraryDescription: Trajet de {time} par les lignes {routes}
-    itinerarySummary: Partez à {stopName} | {cost}
-    leaveAt: Partez à
+    itinerarySummary: "Partez \xE0 {stopName} | {cost}"
+    leaveAt: "Partez \xE0"
     multipleOptions: Plusieurs options
-    orAlternatives: ou autres lignes dans la même direction
+    orAlternatives: "ou autres lignes dans la m\xEAme direction"
     originallyScheduledTime: (initialement {originalTime})
-    sameShapeVariants: >-
-      {count, plural, one {# option} other {# options}}
+    sameShapeVariants: '{count, plural, one {# option} other {# options}}'
     singleModeItineraryDescription: Trajet de {time} {mode}
-    startTrip: "Démarrer le trajet"
-    switchTrip: "Basculer sur ce trajet"
-    timeBiking: "{time} de vélo"
-    timeWalking: "{time} de marche"
-    variantBiking: "{distance} à vélo"
-    variantBoardAt: Montez à {stop}
-    variantShown: actuellement affiché
-    variantsOtherStop: montez à {stop}
-    variantsOtherStopsNamed: montez à {stop} +{count} autres
-    variantsOtherTimes: >-
-      {count, plural, one {# autre horaire} other {# autres horaires}}
-    variantWalking: "{distance} à pied"
+    startTrip: "D\xE9marrer le trajet"
+    switchTrip: Basculer sur ce trajet
+    timeBiking: "{time} de v\xE9lo"
+    timeWalking: '{time} de marche'
+    variantBiking: "{distance} \xE0 v\xE9lo"
+    variantBoardAt: "Montez \xE0 {stop}"
+    variantShown: "actuellement affich\xE9"
+    variantsOtherStop: "montez \xE0 {stop}"
+    variantsOtherStopsNamed: "montez \xE0 {stop} +{count} autres"
+    variantsOtherTimes: '{count, plural, one {# autre horaire} other {# autres horaires}}'
+    variantWalking: "{distance} \xE0 pied"
   MobilityProfile:
     DevicesPane:
       devices:
         cane: Canne
-        crutches: Béquilles
-        electric wheelchair: Fauteuil roulant électrique
-        manual walker: Déambulateur manuel
+        crutches: "B\xE9quilles"
+        electric wheelchair: "Fauteuil roulant \xE9lectrique"
+        manual walker: "D\xE9ambulateur manuel"
         manual wheelchair: Fauteuil roulant manuel
-        mobility scooter: Scooter électrique
+        mobility scooter: "Scooter \xE9lectrique"
         none: Aucun
         service animal: Animal de service
         stroller: Poussette
-        wheeled walker: Déambulateur à roues
+        wheeled walker: "D\xE9ambulateur \xE0 roues"
         white cane: Canne blanche
-      prompt: >-
-        Utilisez-vous habituellement l'aide d'un appareil pour vous déplacer ?
-        (Cochez tous les cas qui vous concernent)
+      prompt: "Utilisez-vous habituellement l'aide d'un appareil pour vous d\xE9placer\
+        \ ? (Cochez tous les cas qui vous concernent)"
     LimitationsPane:
-      mobilityPrompt: >-
-        Avez-vous des handicaps moteurs qui vous font marcher plus lentement ou
-        plus prudemment que d'autres personnes ?
+      mobilityPrompt: Avez-vous des handicaps moteurs qui vous font marcher plus lentement
+        ou plus prudemment que d'autres personnes ?
       visionLimitations:
         legally-blind: Non-voyant
         low-vision: Vision basse
         none: Aucun
       visionPrompt: Avez-vous des handicaps visuels ?
     MobilityPane:
-      button: Modifier votre profil mobilité
-      header: Profil mobilité
-      mobilityDevices: "Appareils d'aide : "
-      mobilityLimitations: "Handicaps moteurs : "
-      planTripDescription: >-
-        Vous pouvez rechercher des trajets adaptés au profil mobilité des
-        personnes que vous accompagnez.
-      visionLimitations: "Handicaps visuels : "
-    dropdownLabel: "Profil à utiliser :"
-    intro: >-
-      Veuillez répondre a quelques questions pour personaliser vos recherches de
-      trajets selon vos besoins et préférences.
-    myself: Moi-même
-    title: Spécifiez votre profil de mobilité
+      button: "Modifier votre profil mobilit\xE9"
+      header: "Profil mobilit\xE9"
+      mobilityDevices: 'Appareils d''aide : '
+      mobilityLimitations: 'Handicaps moteurs : '
+      planTripDescription: "Vous pouvez rechercher des trajets adapt\xE9s au profil\
+        \ mobilit\xE9 des personnes que vous accompagnez."
+      visionLimitations: 'Handicaps visuels : '
+    dropdownLabel: "Profil \xE0 utiliser :"
+    intro: "Veuillez r\xE9pondre a quelques questions pour personaliser vos recherches\
+      \ de trajets selon vos besoins et pr\xE9f\xE9rences."
+    myself: "Moi-m\xEAme"
+    title: "Sp\xE9cifiez votre profil de mobilit\xE9"
   NarrativeItinerariesHeader:
     changeSortDir: Changer l'ordre de tri
-    howToFindResults: Pour afficher les résultats, utilisez l'en-tête Trajets 
-      trouvés plus bas.
-    itinerariesFound: "{itineraryNum, plural, one {# trajet trouvé} other {# trajets
-      trouvés} }"
-    resultsSortedBy: >-
-      Résultats triés par {sortSelected}. Pour modifier l'ordre, utilisez le
-      bouton "Trier les résultats" plus bas.
+    howToFindResults: "Pour afficher les r\xE9sultats, utilisez l'en-t\xEAte Trajets\
+      \ trouv\xE9s plus bas."
+    itinerariesFound: "{itineraryNum, plural, one {# trajet trouv\xE9} other {# trajets\
+      \ trouv\xE9s} }"
+    resultsSortedBy: "R\xE9sultats tri\xE9s par {sortSelected}. Pour modifier l'ordre,\
+      \ utilisez le bouton \"Trier les r\xE9sultats\" plus bas."
     searching: Recherche...
-    selectArrivalTime: Heure d'arrivée
+    selectArrivalTime: "Heure d'arriv\xE9e"
     selectBest: Meilleure option
     selectCost: Prix
-    selectDepartureTime: Heure de départ
-    selectDuration: Durée
+    selectDepartureTime: "Heure de d\xE9part"
+    selectDuration: "Dur\xE9e"
     selectFare: Prix du trajet
     selectWalkTime: Temps de marche
-    selectEmissions: Émissions de CO₂
-    sortResults: Trier les résultats
+    selectEmissions: "\xC9missions de CO\u2082"
+    sortResults: "Trier les r\xE9sultats"
     viewAll: Toutes les options
   NavLoginButton:
     help: Aide
     myAccount: Mon compte
     signIn: Se connecter
-    signOut: Déconnexion
+    signOut: "D\xE9connexion"
   NearbyView:
-    bikeRentalStation: Borne de location de vélos
-    bikesAvailable: >-
-      {bikesAvailable, plural, one {# vélo disponible} other {# vélos
-      disponibles}}
-    companyBicycle: Vélo {company}
+    bikeRentalStation: "Borne de location de v\xE9los"
+    bikesAvailable: "{bikesAvailable, plural, one {# v\xE9lo disponible} other {#\
+      \ v\xE9los disponibles}}"
+    companyBicycle: "V\xE9lo {company}"
     companyScooter: Trottinette {company}
-    distanceAway: à {localizedDistanceString}
-    error: Erreur lors du chargement des services à proximité.
+    distanceAway: "\xE0 {localizedDistanceString}"
+    error: "Erreur lors du chargement des services \xE0 proximit\xE9."
     errorHeader: Erreur
-    filterNearby: Filtrer les entités à proximité
-    header: À proximité
-    headsign: "{destination}"
-    nearbyListIntro: Liste de {count} entités à proximité.
-    nothingNearby: Aucun lieu à proximité.
-    nothingNearbyHeader: Hors de portée
-    searchNearby: Rechercher à proximité…
-    spacesAvailable: "{spacesAvailable} emplacements libres disponibles"
+    filterNearby: "Filtrer les entit\xE9s \xE0 proximit\xE9"
+    header: "\xC0 proximit\xE9"
+    headsign: '{destination}'
+    nearbyListIntro: "Liste de {count} entit\xE9s \xE0 proximit\xE9."
+    nothingNearby: "Aucun lieu \xE0 proximit\xE9."
+    nothingNearbyHeader: "Hors de port\xE9e"
+    searchNearby: "Rechercher \xE0 proximit\xE9\u2026"
+    spacesAvailable: '{spacesAvailable} emplacements libres disponibles'
   NewAccountWizard:
-    createNewAccount: Créez un nouveau compte
-    finish: Votre nouveau compte est prêt !
-    notifications: Préférences pour les notifications
+    createNewAccount: "Cr\xE9ez un nouveau compte"
+    finish: "Votre nouveau compte est pr\xEAt !"
+    notifications: "Pr\xE9f\xE9rences pour les notifications"
     places: Ajoutez vos lieux
-    verify: Vérifiez votre adresse e-mail
+    verify: "V\xE9rifiez votre adresse e-mail"
   NotFound:
-    description: Le contenu que vous avez demandé n'est pas disponible.
+    description: "Le contenu que vous avez demand\xE9 n'est pas disponible."
     header: Contenu introuvable
   NotificationPrefsPane:
-    devicesRegistered: >-
-      {count, plural, one {# appareil enregistré} other {# appareils
-      enregistrés}}
-    noDeviceForPush: Inscrivez-vous avec l'application mobile pour accéder à ce 
-      paramètre.
-    notificationChannelPrompt: "Recevoir des notifications sur vos trajets par :"
+    devicesRegistered: "{count, plural, one {# appareil enregistr\xE9} other {# appareils\
+      \ enregistr\xE9s}}"
+    noDeviceForPush: "Inscrivez-vous avec l'application mobile pour acc\xE9der \xE0\
+      \ ce param\xE8tre."
+    notificationChannelPrompt: 'Recevoir des notifications sur vos trajets par :'
   OTP2ErrorRenderer:
     LOCATION_NOT_FOUND:
-      body: >-
-        {inputFieldsCount, plural, =0 {} one {Votre {inputFields} est trop loin}
-        other {Vos {inputFields} sont trop loins}} du réseau routier.
+      body: "{inputFieldsCount, plural, =0 {} one {Votre {inputFields} est trop loin}\
+        \ other {Vos {inputFields} sont trop loins}} du r\xE9seau routier."
       header: Lieu inaccessible
     NO_STOPS_IN_RANGE:
-      body: >-
-        {inputFieldsCount, plural, =0 {} one {Votre {inputFields} est trop loin}
-        other {Vos {inputFields} sont trop loins}} des transports.
-      header: Aucun arrêt a proximité
+      body: '{inputFieldsCount, plural, =0 {} one {Votre {inputFields} est trop loin}
+        other {Vos {inputFields} sont trop loins}} des transports.'
+      header: "Aucun arr\xEAt a proximit\xE9"
     NO_TRANSIT_CONNECTION:
-      body: >-
-        Aucune desserte en transports n'a été trouvée entre vos points de départ
-        et d'arrivée pour la date indiquée.
+      body: "Aucune desserte en transports n'a \xE9t\xE9 trouv\xE9e entre vos points\
+        \ de d\xE9part et d'arriv\xE9e pour la date indiqu\xE9e."
       header: Aucune desserte
     NO_TRANSIT_CONNECTION_IN_SEARCH_WINDOW:
-      body: >-
-        Une desserte en transports a été trouvée mais ne correspond pas à vos
-        critères. Veuillez ajuster votre recherche.
-      header: Aucune desserte selon vos critères
+      body: "Une desserte en transports a \xE9t\xE9 trouv\xE9e mais ne correspond\
+        \ pas \xE0 vos crit\xE8res. Veuillez ajuster votre recherche."
+      header: "Aucune desserte selon vos crit\xE8res"
     OTP_RR_TRIP_IN_PAST:
-      body: L'heure d'arrivée d'un ou de plusieurs itinéraires est déjà passée.
-      header: Trajet déjà terminé
+      body: "L'heure d'arriv\xE9e d'un ou de plusieurs itin\xE9raires est d\xE9j\xE0\
+        \ pass\xE9e."
+      header: "Trajet d\xE9j\xE0 termin\xE9"
     OUTSIDE_BOUNDS:
-      body: >-
-        {inputFieldsCount, plural, =0 {} one {Votre {inputFields} n'est} other
-        {Vos {inputFields} ne sont}} pas dans la zone de recherche.
+      body: '{inputFieldsCount, plural, =0 {} one {Votre {inputFields} n''est} other
+        {Vos {inputFields} ne sont}} pas dans la zone de recherche.'
       header: Lieu hors zone de recherche
     OUTSIDE_SERVICE_PERIOD:
-      body: >-
-        La date indiquée est en dehors de la plage de données disponibles pour
-        la recherche de trajets.
-      header: Date sans données
+      body: "La date indiqu\xE9e est en dehors de la plage de donn\xE9es disponibles\
+        \ pour la recherche de trajets."
+      header: "Date sans donn\xE9es"
     SYSTEM_ERROR:
       body: Une erreur inconnue s'est produite pendant la recherche.
-      header: Échec de la recherche
+      header: "\xC9chec de la recherche"
     WALKING_BETTER_THAN_TRANSIT:
       advisory: La marche est plus rapide que les transports pour ce trajet.
-      advisoryWithTime: >-
-        La marche est {minutes} min plus rapide que la meilleure option en
-        transports.
-      body: >-
-        Vous pouvez effectuer ce trajet plus rapidement sans prendre les
-        transports.
+      advisoryWithTime: La marche est {minutes} min plus rapide que la meilleure option
+        en transports.
+      body: Vous pouvez effectuer ce trajet plus rapidement sans prendre les transports.
       header: Moins rapide en transports
     inputFields:
-      FROM: point de départ
+      FROM: "point de d\xE9part"
       TO: destination
   PhoneNumberEditor:
-    changeNumber: Changer de numéro
-    invalidCode: Le code de vérification doit comporter 6 chiffres.
-    invalidPhone: Veuillez entrer un numéro de téléphone valable.
-    phoneNumberSubmitted: Le numéro {phoneNumber} a bien été envoyé.
-    phoneNumberVerified: Le numéro {phoneNumber} a bien été vérifié.
-    placeholder: Entrez votre numéro
-    prompt: "Entrez votre numéro de téléphone pour les SMS de notification :"
+    changeNumber: "Changer de num\xE9ro"
+    invalidCode: "Le code de v\xE9rification doit comporter 6 chiffres."
+    invalidPhone: "Veuillez entrer un num\xE9ro de t\xE9l\xE9phone valable."
+    phoneNumberSubmitted: "Le num\xE9ro {phoneNumber} a bien \xE9t\xE9 envoy\xE9."
+    phoneNumberVerified: "Le num\xE9ro {phoneNumber} a bien \xE9t\xE9 v\xE9rifi\xE9\
+      ."
+    placeholder: "Entrez votre num\xE9ro"
+    prompt: "Entrez votre num\xE9ro de t\xE9l\xE9phone pour les SMS de notification\
+      \ :"
     requestNewCode: Envoyer un nouveau code
-    sendVerificationText: Envoyer le SMS de vérification
-    smsConsent: >
-      En donnant votre numéro de téléphone, vous acceptez de recevoir des SMS de
-      vérification et de suivi de vos trajets. Frais applicables selon votre
-      opérateur téléphonique.
-    verificationCode: "Code de vérification :"
-    verificationInstructions: >
-      Un SMS vous a été envoyé avec un code de vérification. Veuillez taper ce
-      code ci-dessous (le code expire après 10 minutes).
-    verify: Vérifier
-    verifySms: >-
-      Veuillez effectuer la vérification de votre numéro de téléphone afin de
-      recevoir des notifications par SMS.
+    sendVerificationText: "Envoyer le SMS de v\xE9rification"
+    smsConsent: "En donnant votre num\xE9ro de t\xE9l\xE9phone, vous acceptez de recevoir\
+      \ des SMS de v\xE9rification et de suivi de vos trajets. Frais applicables selon\
+      \ votre op\xE9rateur t\xE9l\xE9phonique.\n"
+    verificationCode: "Code de v\xE9rification :"
+    verificationInstructions: "Un SMS vous a \xE9t\xE9 envoy\xE9 avec un code de v\xE9\
+      rification. Veuillez taper ce code ci-dessous (le code expire apr\xE8s 10 minutes).\n"
+    verify: "V\xE9rifier"
+    verifySms: "Veuillez effectuer la v\xE9rification de votre num\xE9ro de t\xE9\
+      l\xE9phone afin de recevoir des notifications par SMS."
   Place:
     deleteThisPlace: Supprimer ce lieu
   PlaceEditor:
-    addressPrompt: "Adresse :"
+    addressPrompt: 'Adresse :'
     genericLocationPlaceholder: Adresse du lieu
     locationPlaceholder: Adresse de votre {placeName}
-    locationTypePrompt: "Type de lieu :"
-    nameExample: Mon café du coin
-    namePrompt: "Nom du lieu :"
+    locationTypePrompt: 'Type de lieu :'
+    nameExample: "Mon caf\xE9 du coin"
+    namePrompt: 'Nom du lieu :'
   PlanFirstLastButtons:
     first: Premier
     last: Dernier
     next: Suivant
-    previous: Précédent
+    previous: "Pr\xE9c\xE9dent"
   PlanTripButton:
     planTrip: Planifier le trajet
   PointPopup:
@@ -797,426 +859,392 @@ components:
     itinerary: Votre trajet
     toggleMap: Afficher/masquer la carte
   RealtimeAnnotation:
-    delaysShownInResults: >
-      Vos trajets recherchés ont été mis à jour avec les conditions en temps
-      réel. En temps normal, ce trajet prendrait {normalDuration} en empruntant
-      les lignes : {routes}.
+    delaysShownInResults: "Vos trajets recherch\xE9s ont \xE9t\xE9 mis \xE0 jour avec\
+      \ les conditions en temps r\xE9el. En temps normal, ce trajet prendrait {normalDuration}\
+      \ en empruntant les lignes\u202F: {routes}.\n"
     serviceUpdate: Information sur le service
   RealtimeStatusLabel:
     early: avance de {minutes}
     late: retard {minutes}
-    onTime: à l'heure
+    onTime: "\xE0 l'heure"
     scheduled: horaire
   ResultsError:
-    backToSearch: Retour à la recherche
+    backToSearch: "Retour \xE0 la recherche"
   RoundTrip:
-    customStayLabel: Durée personnalisée, en minutes
+    customStayLabel: "Dur\xE9e personnalis\xE9e, en minutes"
     customStayPlaceholder: Perso
     customStayUnit: min
     header: Trajet retour
-    leaveLine: "Partir de {destination} à partir de {time} · {stay}+ sur place"
-    noOptions: Aucun trajet retour trouvé
+    leaveLine: "Partir de {destination} \xE0 partir de {time} \xB7 {stay}+ sur place"
+    noOptions: "Aucun trajet retour trouv\xE9"
     optionsGroupLabel: Trajets retour
     planError: Impossible de planifier le retour
-    retry: Réessayer
+    retry: "R\xE9essayer"
     stayGroupLabel: Temps minimum sur place
-    stayOption: "{hours, plural, =0 {} other {# h }}{minutes, plural, =0 {} other
-      {# min}}"
-    stayingFor: "{stay}+ sur place"
-    timeThere: "{duration} sur place"
+    stayOption: '{hours, plural, =0 {} other {# h }}{minutes, plural, =0 {} other
+      {# min}}'
+    stayingFor: '{stay}+ sur place'
+    timeThere: '{duration} sur place'
     toggleLabel: Aller-retour
   RouteDetails:
-    headsignFrom: "{headsign} (depuis {firstStop})"
-    headsignTo: "{headsign} ({lastStop})"
+    headsignFrom: '{headsign} (depuis {firstStop})'
+    headsignTo: '{headsign} ({lastStop})'
     moreDetails: Plus d'infos
-    operatedBy: Exploité par {agencyName}
+    operatedBy: "Exploit\xE9 par {agencyName}"
     selectADirection: Choisissez une direction...
     stopsTo: Direction
   RouteViewer:
     agencyFilter: Filtrer les transporteurs
     allAgencies: Tous transporteurs
     allModes: Tous modes
-    details: " "
+    details: ' '
     findARoute: Chercher une ligne
     header: Index des lignes
     modeFilter: Filtre pour les modes
-    noFilteredRoutesFound: Aucune ligne ne correspond à vos critères
-    noRouteFilter: Aucun filtre n'est appliqué à la liste de lignes.
+    noFilteredRoutesFound: "Aucune ligne ne correspond \xE0 vos crit\xE8res"
+    noRouteFilter: "Aucun filtre n'est appliqu\xE9 \xE0 la liste de lignes."
     openPatternViewer: Voir les dessertes
-    routesFilteredBy: "Les filtres suivants sont appliqués à la liste de lignes :
-      {list}."
+    routesFilteredBy: "Les filtres suivants sont appliqu\xE9s \xE0 la liste de lignes\
+      \ : {list}."
     shortTitle: Index des lignes
-    stopsInDirectionOfTravel: "Arrêts dans cette direction :"
+    stopsInDirectionOfTravel: "Arr\xEAts dans cette direction :"
     title: Index des lignes
   SaveTripButton:
     cantSaveText: Impossible d'enregistrer
-    cantSaveTooltip: >-
-      Seuls les trajets en transports publics sans location de véhicules et sans
-      course en voiture peuvent être suivis.
+    cantSaveTooltip: "Seuls les trajets en transports publics sans location de v\xE9\
+      hicules et sans course en voiture peuvent \xEAtre suivis."
     saveTripText: Enregistrer
     signInText: Connectez-vous pour enregistrer
     signInTooltip: Veuillez vous connecter pour enregistrer ce trajet.
   SavedPlacesScreen:
-    heading: Lieux enregistrés
+    heading: "Lieux enregistr\xE9s"
     saveThisPlace: Enregistrer ce lieu
   SavedTripEditor:
     deleteSavedTrip: Supprimer ce trajet
-    editSavedTrip: Modifier un trajet enregistré
-    readOnlyBanner: >-
-      {creator} a créé et vous a ajouté sur ce trajet. Vous ne pouvez donc pas
-      faire de modifications.
+    editSavedTrip: "Modifier un trajet enregistr\xE9"
+    readOnlyBanner: "{creator} a cr\xE9\xE9 et vous a ajout\xE9 sur ce trajet. Vous\
+      \ ne pouvez donc pas faire de modifications."
     saveNewTrip: Enregistrer un nouveau trajet
     travelCompanions: Accompagnateurs
     tripInformation: Informations sur le trajet
     tripNotFound: Trajet introuvable
-    tripNotFoundDescription: Le trajet recherché est introuvable.
+    tripNotFoundDescription: "Le trajet recherch\xE9 est introuvable."
     tripNotifications: Notifications du trajet
   SavedTripList:
-    alertTag: "{alert, plural, one {Afficher une alerte} other {Afficher # alertes}}"
-    fromTo: De {from} à {to}
+    alertTag: '{alert, plural, one {Afficher une alerte} other {Afficher # alertes}}'
+    fromTo: "De {from} \xE0 {to}"
     myTrips: Mes trajets
-    noSavedTrips: Vous n'avez aucun trajet enregistré
-    noSavedTripsInstructions: >-
-      Effectuez une recherche depuis la carte avant de pouvoir enregistrer un
-      nouveau trajet.
-    pause: Arrêter
+    noSavedTrips: "Vous n'avez aucun trajet enregistr\xE9"
+    noSavedTripsInstructions: Effectuez une recherche depuis la carte avant de pouvoir
+      enregistrer un nouveau trajet.
+    pause: "Arr\xEAter"
     resume: Reprendre
     unsnooze: Reprendre
   SavedTripScreen:
-    itineraryLoaded: Trajet chargé
+    itineraryLoaded: "Trajet charg\xE9"
     itineraryLoading: Chargement du trajet
     selectAtLeastOneDay: Veuillez choisir au moins un jour pour le suivi.
-    tooManyTrips: >
-      Vous avez déjà atteint le nombre maximum de 5 trajets enregistrés.
-      Veuillez supprimer les trajets enregistrés qui sont inutilisés, puis
-      réessayez.
-    tripNameAlreadyUsed: >-
-      Ce nom est déjà utilisé avec un autre trajet. Veuillez choisir un nom
-      différent.
+    tooManyTrips: "Vous avez d\xE9j\xE0 atteint le nombre maximum de 5 trajets enregistr\xE9\
+      s. Veuillez supprimer les trajets enregistr\xE9s qui sont inutilis\xE9s, puis\
+      \ r\xE9essayez.\n"
+    tripNameAlreadyUsed: "Ce nom est d\xE9j\xE0 utilis\xE9 avec un autre trajet. Veuillez\
+      \ choisir un nom diff\xE9rent."
     tripNameRequired: Veuillez entrer un nom pour ce trajet.
   SequentialPaneDisplay:
-    stepNumber: Étape {step} sur {total}
+    stepNumber: "\xC9tape {step} sur {total}"
   SettingsScreen:
-    bikeSpeedHelp: "Le temps que l'application attribue à vos étapes à vélo. Une fois réglée, cette vitesse est utilisée par tous les itinéraires, y compris avant que vous ayez roulé assez longtemps pour que l'application mesure votre allure."
-    bikeSpeedLabel: "Votre vitesse à vélo : {speed} mph"
-    bikeSpeedSlider: "Vitesse à vélo"
-    gettingAroundHeader: "Vos déplacements"
-    heading: "Paramètres"
-    routingHelp: "Ces réglages s'appliquent à tous les itinéraires que vous planifiez, ainsi qu'à tout trajet recalculé en cours de route."
-    speedHigh: "Plus vite"
-    speedLow: "Moins vite"
-    turnByTurnHeader: "Navigation détaillée"
-    turnByTurnHelp: "Désactivée par défaut. Même désactivée, vous pouvez l'activer pour une seule étape à pied ou à vélo depuis l'aperçu du trajet, une fois le trajet commencé."
-    turnByTurnLabel: "Navigation détaillée"
-    walkSpeedHelp: "Le temps que l'application attribue à vos étapes à pied, y compris la marche jusqu'à votre arrêt."
-    walkSpeedLabel: "Votre vitesse de marche : {speed} mph"
-    walkSpeedSlider: "Vitesse de marche"
+    bikeSpeedHelp: "Le temps que l'application attribue \xE0 vos \xE9tapes \xE0 v\xE9\
+      lo. Une fois r\xE9gl\xE9e, cette vitesse est utilis\xE9e par tous les itin\xE9\
+      raires, y compris avant que vous ayez roul\xE9 assez longtemps pour que l'application\
+      \ mesure votre allure."
+    bikeSpeedLabel: "Votre vitesse \xE0 v\xE9lo : {speed} mph"
+    bikeSpeedSlider: "Vitesse \xE0 v\xE9lo"
+    gettingAroundHeader: "Vos d\xE9placements"
+    heading: "Param\xE8tres"
+    routingHelp: "Ces r\xE9glages s'appliquent \xE0 tous les itin\xE9raires que vous\
+      \ planifiez, ainsi qu'\xE0 tout trajet recalcul\xE9 en cours de route."
+    speedHigh: Plus vite
+    speedLow: Moins vite
+    turnByTurnHeader: "Navigation d\xE9taill\xE9e"
+    turnByTurnHelp: "D\xE9sactiv\xE9e par d\xE9faut. M\xEAme d\xE9sactiv\xE9e, vous\
+      \ pouvez l'activer pour une seule \xE9tape \xE0 pied ou \xE0 v\xE9lo depuis\
+      \ l'aper\xE7u du trajet, une fois le trajet commenc\xE9."
+    turnByTurnLabel: "Navigation d\xE9taill\xE9e"
+    walkSpeedHelp: "Le temps que l'application attribue \xE0 vos \xE9tapes \xE0 pied,\
+      \ y compris la marche jusqu'\xE0 votre arr\xEAt."
+    walkSpeedLabel: 'Votre vitesse de marche : {speed} mph'
+    walkSpeedSlider: Vitesse de marche
   SessionTimeout:
-    body: >-
-      Votre session va expirer d'ici une minute. Appuyez sur 'Prolonger ma
-      session' pour conserver votre recherche.
+    body: Votre session va expirer d'ici une minute. Appuyez sur 'Prolonger ma session'
+      pour conserver votre recherche.
     header: Votre session va expirer
     keepSession: Prolonger ma session
   SimpleRealtimeAnnotation:
-    usingRealtimeInfo: >-
-      Ce trajet utilise les informations en temps réel sur le trafic et les
-      retards
+    usingRealtimeInfo: "Ce trajet utilise les informations en temps r\xE9el sur le\
+      \ trafic et les retards"
   StackedPaneDisplay:
-    savePreferences: Enregistrer mes préférences
+    savePreferences: "Enregistrer mes pr\xE9f\xE9rences"
   StatusBadge:
     invalid: Non valable
-    pending: Non vérifié
-    verified: Vérifié
+    pending: "Non v\xE9rifi\xE9"
+    verified: "V\xE9rifi\xE9"
   StopScheduleTable:
     block: Bloc
-    departure: Départ
+    departure: "D\xE9part"
     destination: Direction
     route: Ligne
   StopTimeCell:
     imminentArrival: Imminent
-    realtime: Données en temps réel
+    realtime: "Donn\xE9es en temps r\xE9el"
     scheduled: Selon l'horaire
   StopViewer:
-    displayStopId: <strong>Arrêt n°</strong>{stopId}
+    displayStopId: "<strong>Arr\xEAt n\xB0</strong>{stopId}"
     findSchedule: Rechercher les horaires par date
-    flexStop: >-
-      Cet arrêt fait partie d'une zone 'Flex' et est desservi à la demande. Une
-      réservation préalable peut être exigée pour obtenir la desserte.    
+    flexStop: "Cet arr\xEAt fait partie d'une zone 'Flex' et est desservi \xE0 la\
+      \ demande. Une r\xE9servation pr\xE9alable peut \xEAtre exig\xE9e pour obtenir\
+      \ la desserte.    "
     forStop: pour {stopName}
-    header: Info arrêt
-    loadingText: Chargement de l'arrêt...
+    header: "Info arr\xEAt"
+    loadingText: "Chargement de l'arr\xEAt..."
     noStopsFound: Aucun horaire pour la date choisie.
-    operatorLogoAriaLabel: "Arrêt {operatorName} :"
+    operatorLogoAriaLabel: "Arr\xEAt {operatorName} :"
     schedule: Horaires
-    timezoneWarning: Les horaires sont affichés dans le fuseau {timezoneCode}.
-    titleBarStopId: Arrêt {stopId}
-    viewNearby: À proximité
+    timezoneWarning: "Les horaires sont affich\xE9s dans le fuseau {timezoneCode}."
+    titleBarStopId: "Arr\xEAt {stopId}"
+    viewNearby: "\xC0 proximit\xE9"
     viewSchedule: Horaires
-    zoomToStop: Zoomer sur l'arrêt
+    zoomToStop: "Zoomer sur l'arr\xEAt"
   SubNav:
     languageSelector: Langue
     languages: Langues
     myAccount: Mon compte
-    selectALanguage: Sélectionner une langue
-    settings: Préférences
+    selectALanguage: "S\xE9lectionner une langue"
+    settings: "Pr\xE9f\xE9rences"
     trips: Trajets
     userMenu: Options de profil
   SwitchButton:
     defaultContent: Permuter
     switchLocations: Permuter les lieux
   TermsOfUsePane:
-    confirmDeletionPrompt: >
-      En révoquant votre accord sur l'enregistrement de vos recherches de
-      trajets, tout l'historique de vos de trajets sera supprimé. Voulez-vous
-      continuer ?
-    mustAgreeToTerms: Vous devez accepter les conditions d'utilisation avant de 
-      continuer.
-    termsOfServiceStatement: >
-      J'atteste avoir au moins 18 ans et j'ai lu et consens aux
-      <termsOfUseLink>Conditions de service</termsOfUseLink> pour utiliser the
+    confirmDeletionPrompt: "En r\xE9voquant votre accord sur l'enregistrement de vos\
+      \ recherches de trajets, tout l'historique de vos de trajets sera supprim\xE9\
+      . Voulez-vous continuer ?\n"
+    mustAgreeToTerms: Vous devez accepter les conditions d'utilisation avant de continuer.
+    termsOfServiceStatement: 'J''atteste avoir au moins 18 ans et j''ai lu et consens
+      aux <termsOfUseLink>Conditions de service</termsOfUseLink> pour utiliser the
       Planificateur de trajets.
-    termsOfStorageStatement: >
-      Facultatif: Je consens à ce que le Planificateur de trajets sauvegarde mes
-      recherches afin d'améliorer les transports publics dans ma region.
-      <termsOfStorageLink>Plus d'informations...</termsOfStorageLink>
+
+      '
+    termsOfStorageStatement: "Facultatif: Je consens \xE0 ce que le Planificateur\
+      \ de trajets sauvegarde mes recherches afin d'am\xE9liorer les transports publics\
+      \ dans ma region. <termsOfStorageLink>Plus d'informations...</termsOfStorageLink>\n"
   Timetable:
-    errorLoadingStopClosures: Erreur lors du chargement des arrêts fermés
+    errorLoadingStopClosures: "Erreur lors du chargement des arr\xEAts ferm\xE9s"
     errorLoadingTimetable: Erreur lors du chargement des horaires
-    showAllStops: Afficher tous les arrêts
-    showTimepointsOnly: Afficher uniquement les points d'arrêt
+    showAllStops: "Afficher tous les arr\xEAts"
+    showTimepointsOnly: "Afficher uniquement les points d'arr\xEAt"
     switchDirection: Changer de direction
     timetable: Horaires
   TransitVehicleOverlay:
-    travelingAt: "Vitesse : {milesPerHour}"
-    vehicleName: Véhicule {vehicleNumber}
+    travelingAt: 'Vitesse : {milesPerHour}'
+    vehicleName: "V\xE9hicule {vehicleNumber}"
   TripBasicsPane:
-    checkAgain: Revérifier
-    checkingItineraryExistence: Vérification du trajet pour chaque jour de la 
-    indicatesRequiredFields: Indique les champs obligatoires
-      semaine...
-    onlyOnDate: "{date, date, ::eeeee yyyyMMdd} uniquement"
+    checkAgain: "Rev\xE9rifier"
+    checkingItineraryExistence: "V\xE9rification du trajet pour chaque jour de la"
+    indicatesRequiredFields: Indique les champs obligatoires semaine...
+    onlyOnDate: '{date, date, ::eeeee yyyyMMdd} uniquement'
     recurringEachWeek: Certains jours chaque semaine
     tripDaysPrompt: Quels jours effectuez-vous ce trajet ?
-    tripIsAvailableOnDaysIndicated: Votre trajet est possible les jours indiqués
-      ci-dessus.
-    tripNamePrompt: "Saisissez un nom pour ce trajet :"
+    tripIsAvailableOnDaysIndicated: "Votre trajet est possible les jours indiqu\xE9\
+      s ci-dessus."
+    tripNamePrompt: 'Saisissez un nom pour ce trajet :'
     tripNotAvailableOnDay: Ce trajet n'est pas possible les {repeatedDay}.
-    unsavedChangesExistingTrip: >-
-      Vous n'avez pas encore enregistré votre trajet. Si vous annulez, les
-      changements seront perdus.
-    unsavedChangesNewTrip: >-
-      Vous n'avez pas encore enregistré votre nouveau trajet. Si vous annulez,
-      ce trajet sera perdu.
+    unsavedChangesExistingTrip: "Vous n'avez pas encore enregistr\xE9 votre trajet.\
+      \ Si vous annulez, les changements seront perdus."
+    unsavedChangesNewTrip: "Vous n'avez pas encore enregistr\xE9 votre nouveau trajet.\
+      \ Si vous annulez, ce trajet sera perdu."
   TripCompanionsPane:
-    companionLabel: "Accompagnateurs sur ce trajet :"
-    observersLabel: "Observateurs suivant ce trajet :"
-    primaryLabel: "Voyageur principal : "
+    companionLabel: 'Accompagnateurs sur ce trajet :'
+    observersLabel: 'Observateurs suivant ce trajet :'
+    primaryLabel: 'Voyageur principal : '
   TripNotificationsPane:
-    advancedSettings: Paramètres avancés
-    altRouteRecommended: Un·e autre trajet ou correspondance est conseillé·e
+    advancedSettings: "Param\xE8tres avanc\xE9s"
+    altRouteRecommended: "Un\xB7e autre trajet ou correspondance est conseill\xE9\xB7\
+      e"
     delaysAboveThreshold: Il y a des perturbations ou des retards de plus de
-    howToReceiveAlerts: >
-      Pour recevoir les alertes pour vos trajets suivis, activez les
-      notifications dans la section Préférences de votre compte, et essayez
-      d'enregistrer un trajet à nouveau.
-    monitorThisTrip: "Faire le suivi du trajet avant le départ :"
-    notificationsTurnedOff: Les notifications sont désactivées pour votre 
-      compte.
-    notifyViaChannelWhen: "Recevoir des notifications par {channel} lorsque :"
+    howToReceiveAlerts: "Pour recevoir les alertes pour vos trajets suivis, activez\
+      \ les notifications dans la section Pr\xE9f\xE9rences de votre compte, et essayez\
+      \ d'enregistrer un trajet \xE0 nouveau.\n"
+    monitorThisTrip: "Faire le suivi du trajet avant le d\xE9part :"
+    notificationsTurnedOff: "Les notifications sont d\xE9sactiv\xE9es pour votre compte."
+    notifyViaChannelWhen: 'Recevoir des notifications par {channel} lorsque :'
     oneHour: 1 heure
-    realtimeAlertFlagged: Une alerte en temps réel affecte mon trajet
-    timeBefore: "{time} avant"
+    realtimeAlertFlagged: "Une alerte en temps r\xE9el affecte mon trajet"
+    timeBefore: '{time} avant'
   TripPreviewLayout:
-    previewTrip: Aperçu du trajet
+    previewTrip: "Aper\xE7u du trajet"
   TripStatus:
-    alerts: "{alerts, plural, =0 {# alerte !} one {# alerte !} other {# alertes !}}"
+    alerts: '{alerts, plural, =0 {# alerte !} one {# alerte !} other {# alertes !}}'
     deleteTrip: Supprimer le trajet
     planNewTrip: Planifier un nouveau trajet
   TripStatusRenderers:
     active:
-      delayedHeading: Trajet en cours, retardé de {formattedDuration}.
-      description: Arrivée à destination prévue à {arrivalTime, time, short}.
+      delayedHeading: "Trajet en cours, retard\xE9 de {formattedDuration}."
+      description: "Arriv\xE9e \xE0 destination pr\xE9vue \xE0 {arrivalTime, time,\
+        \ short}."
       earlyHeading: Trajet en cours, en avance de {formattedDuration}.
-      noDataHeading: Trajet en cours (données en temps réel non disponibles).
-      onTimeHeading: Trajet en cours et prévu à l'heure.
+      noDataHeading: "Trajet en cours (donn\xE9es en temps r\xE9el non disponibles)."
+      onTimeHeading: "Trajet en cours et pr\xE9vu \xE0 l'heure."
     base:
-      lastCheckedDefaultText: Dernière vérification inconnue
-      lastCheckedText: Dernière vérification effectuée il y a 
-        {formattedDuration}
+      lastCheckedDefaultText: "Derni\xE8re v\xE9rification inconnue"
+      lastCheckedText: "Derni\xE8re v\xE9rification effectu\xE9e il y a {formattedDuration}"
       togglePause: Suspendre le suivi
-      tripIsNotSnoozed: Suspendre jusqu'à demain
+      tripIsNotSnoozed: "Suspendre jusqu'\xE0 demain"
       tripIsSnoozed: Reprendre
-      unknownState: État du trajet inconnu
+      unknownState: "\xC9tat du trajet inconnu"
       untogglePause: Reprendre
     inactive:
       description: Reprendre et recevoir les notifications.
       heading: Suivi suspendu
     nextTripNotPossible:
-      description: >
-        Votre trajet étant introuvable après plusieurs tentatives, le suivi a
-        été suspendu jusqu'à demain, votre itinéraire ayant probablement changé.
-        Pour relancer le suivi, cliquez sur Reprendre. Si le suivi n'est
-        toujours pas disponible, cliquez sur Planifier un trajet pour
-        enregistrer un trajet valable.
+      description: "Votre trajet \xE9tant introuvable apr\xE8s plusieurs tentatives,\
+        \ le suivi a \xE9t\xE9 suspendu jusqu'\xE0 demain, votre itin\xE9raire ayant\
+        \ probablement chang\xE9. Pour relancer le suivi, cliquez sur Reprendre. Si\
+        \ le suivi n'est toujours pas disponible, cliquez sur Planifier un trajet\
+        \ pour enregistrer un trajet valable.\n"
       heading: Suivi impossible
     noLongerPossible:
-      description: >
-        Le planificateur n'a pas pu trouver votre trajet pour aucun des jours
-        choisis. Veuillez replanifier votre trajet pour trouver une alternative.
+      description: 'Le planificateur n''a pas pu trouver votre trajet pour aucun des
+        jours choisis. Veuillez replanifier votre trajet pour trouver une alternative.
+
+        '
       heading: Le trajet n'est plus possible
     notCalculated:
       awaiting: Calcul des conditions du trajet en cours...
-      description: >-
-        Veuillez patienter pendant que les conditions du trajet sont
-        déterminées.
-      heading: Conditions du trajet indéterminées
+      description: "Veuillez patienter pendant que les conditions du trajet sont d\xE9\
+        termin\xE9es."
+      heading: "Conditions du trajet ind\xE9termin\xE9es"
     past:
-      description: Le jour de ce trajet non-répété est passé.
-      heading: Trajet dans le passé
+      description: "Le jour de ce trajet non-r\xE9p\xE9t\xE9 est pass\xE9."
+      heading: "Trajet dans le pass\xE9"
     snoozed:
-      description: >-
-        Les notifications reprendront automatiquement le prochain jour
-        selectionné pour ce trajet. Cliquez sur Reprendre pour recevoir les
-        notifications aujourd'hui.
-      heading: Notifications suspendues pour le restant de la journée.
+      description: "Les notifications reprendront automatiquement le prochain jour\
+        \ selectionn\xE9 pour ce trajet. Cliquez sur Reprendre pour recevoir les notifications\
+        \ aujourd'hui."
+      heading: "Notifications suspendues pour le restant de la journ\xE9e."
     upcoming:
-      nextTripBegins: >-
-        Prochain départ : {tripDatetime, date, ::eeeee yyyyMMdd} à
-        {tripDatetime, time, short}.
-      tripBegins: >-
-        Départ prévu à {tripStart, time, short}. (Le suivi en temps réel
-        débutera à {monitoringStart, time, short}.)
-      tripStartIsDelayed: Départ retardé de {duration}.
-      tripStartIsEarly: Départ avancé de {duration} !
-      tripStartsSoonNoUpdates: Départ proche (pas de données en temps réel).
-      tripStartsSoonOnTime: Départ proche et prévu à l'heure.
+      nextTripBegins: "Prochain d\xE9part : {tripDatetime, date, ::eeeee yyyyMMdd}\
+        \ \xE0 {tripDatetime, time, short}."
+      tripBegins: "D\xE9part pr\xE9vu \xE0 {tripStart, time, short}. (Le suivi en\
+        \ temps r\xE9el d\xE9butera \xE0 {monitoringStart, time, short}.)"
+      tripStartIsDelayed: "D\xE9part retard\xE9 de {duration}."
+      tripStartIsEarly: "D\xE9part avanc\xE9 de {duration} !"
+      tripStartsSoonNoUpdates: "D\xE9part proche (pas de donn\xE9es en temps r\xE9\
+        el)."
+      tripStartsSoonOnTime: "D\xE9part proche et pr\xE9vu \xE0 l'heure."
   TripSummary:
-    arriveAt: "Arrivée à "
-    leaveAt: "Partez à "
+    arriveAt: "Arriv\xE9e \xE0 "
+    leaveAt: "Partez \xE0 "
   TripSummaryPane:
-    happensOnDays: "Effectué : {days}"
+    happensOnDays: "Effectu\xE9 : {days}"
     monitoredTripDays: Jours de suivi de ce trajet
-    notifications: "{leadTimeInMinutes} mn avant l'heure de départ prévue"
+    notifications: "{leadTimeInMinutes} mn avant l'heure de d\xE9part pr\xE9vue"
     notificationsPaused: Notifications suspendues.
-    notificationsSnoozed: Notifications suspendues pour le restant de la 
-      journée.
-    timeAndDuration: Heure et durée du trajet
+    notificationsSnoozed: "Notifications suspendues pour le restant de la journ\xE9\
+      e."
+    timeAndDuration: "Heure et dur\xE9e du trajet"
   TripTools:
     copyLink: Copier le lien
     header: Outils
-    linkCopied: Copié
-    reportEmailSubject: Signaler un problème avec OpenTripPlanner
-    reportEmailTemplate: >
-      *** CONSIGNES POUR L'UTILISATEUR ***
-
-      Cet email signalera votre problème aux administrateurs de ce site.
-
-      Veuillez remplir les détails ci-dessous, puis envoyez depuis votre
-      logiciel de messagerie habituel.
-
-
-      *** VEUILLEZ REMPLIR CI-DESSOUS ***
-
-
-      Problème rencontré :
-
-
-      Type de trajet recherché (ex. à pied + transports, vélo + transports,
-      voiture + transports) :
-
-
-      *** DÉTAILS TECHNIQUES ***
-    reportIssue: Un problème ?
+    linkCopied: "Copi\xE9"
+    reportEmailSubject: "Signaler un probl\xE8me avec OpenTripPlanner"
+    reportEmailTemplate: "*** CONSIGNES POUR L'UTILISATEUR ***\nCet email signalera\
+      \ votre probl\xE8me aux administrateurs de ce site.\nVeuillez remplir les d\xE9\
+      tails ci-dessous, puis envoyez depuis votre logiciel de messagerie habituel.\n\
+      \n*** VEUILLEZ REMPLIR CI-DESSOUS ***\n\nProbl\xE8me rencontr\xE9 :\n\nType\
+      \ de trajet recherch\xE9 (ex. \xE0 pied + transports, v\xE9lo + transports,\
+      \ voiture + transports) :\n\n*** D\xC9TAILS TECHNIQUES ***\n"
+    reportIssue: "Un probl\xE8me ?"
     copyItineraryText: Copier le texte du trajet
   TripViewer:
     accessible: Accessible
-    bicyclesAllowed: Autorisés
+    bicyclesAllowed: "Autoris\xE9s"
     endOfTrip: Fin du trajet
     header: Info trajet
-    listOfRouteStops: Liste des arrêts sur cette ligne
-    startOfTrip: Début du trajet
-    tripDescription: Montez à {boardAtStop} et descendez à {disembarkAtStop}
+    listOfRouteStops: "Liste des arr\xEAts sur cette ligne"
+    startOfTrip: "D\xE9but du trajet"
+    tripDescription: "Montez \xE0 {boardAtStop} et descendez \xE0 {disembarkAtStop}"
   UserAccountScreen:
-    confirmDelete: >-
-      Voulez-vous vraiment supprimer votre compte ? Cette action est
-      irréversible.
-    errorUpdatingProfile: Erreur dans la mise à jour de votre profil.
-    fieldUpdated: Ce paramètre a été mis à jour.
+    confirmDelete: "Voulez-vous vraiment supprimer votre compte ? Cette action est\
+      \ irr\xE9versible."
+    errorUpdatingProfile: "Erreur dans la mise \xE0 jour de votre profil."
+    fieldUpdated: "Ce param\xE8tre a \xE9t\xE9 mis \xE0 jour."
     fields:
       add-companion-form: Accompagnateurs
       storeTripHistory: Enregistrement des recherches
   UserSettings:
-    confirmDeletion: >-
-      Vous avez des recherches et/ou lieux récemment enregistrés qui vont être
-      supprimés. Voulez-vous continuer ?
-    favoriteStops: Arrêts favoris
-    myPreferences: Mes préférences
+    confirmDeletion: "Vous avez des recherches et/ou lieux r\xE9cemment enregistr\xE9\
+      s qui vont \xEAtre supprim\xE9s. Voulez-vous continuer ?"
+    favoriteStops: "Arr\xEAts favoris"
+    myPreferences: "Mes pr\xE9f\xE9rences"
     mySavedPlaces: Mes lieux favoris (<manageLink>modifier</manageLink>)
-    noFavoriteStops: Aucun arrêt favori
-    recentPlaces: Lieux récents
-    recentSearchSummary: "{mode} de {from} à {to}"
-    recentSearches: Recherches récentes
-    rememberSearches: Enregistrer les recherches/lieux récents ?
-    stopId: Arrêt n° {stopId}
-    storageDisclaimer: >
-      En activant cette option, tous vos lieux, préférences et paramètres seront
-      enregistrés dans le cache de votre navigateur. TriMet n'aura pas accès aux
-      données concernant votre domicile, lieu de travail, ou autre endroit. Vous
-      pouvez à tout moment désactiver la collecte de vos recherches/lieux
-      récents et effacer vos domicile, lieu de travail, et arrêts favoris.
+    noFavoriteStops: "Aucun arr\xEAt favori"
+    recentPlaces: "Lieux r\xE9cents"
+    recentSearchSummary: "{mode} de {from} \xE0 {to}"
+    recentSearches: "Recherches r\xE9centes"
+    rememberSearches: "Enregistrer les recherches/lieux r\xE9cents ?"
+    stopId: "Arr\xEAt n\xB0 {stopId}"
+    storageDisclaimer: "En activant cette option, tous vos lieux, pr\xE9f\xE9rences\
+      \ et param\xE8tres seront enregistr\xE9s dans le cache de votre navigateur.\
+      \ TriMet n'aura pas acc\xE8s aux donn\xE9es concernant votre domicile, lieu\
+      \ de travail, ou autre endroit. Vous pouvez \xE0 tout moment d\xE9sactiver la\
+      \ collecte de vos recherches/lieux r\xE9cents et effacer vos domicile, lieu\
+      \ de travail, et arr\xEAts favoris.\n"
   VerifyEmailPane:
-    emailIsVerified: Mon email est vérifié
-    instructions1: >
-      Vous devriez recevoir un message par e-mail. Cliquez le lien dans le
-      message pour verifier votre adresse e-mail. Vous pourrez ensuite finir de
-      créer votre compte.
-    instructions2: >-
-      Une fois votre adresse vérifiée, cliquez sur le bouton ci-dessous pour
-      continuer.
-    instructions3: >-
-      Vous pouvez planifier des trajets et revenir à cet écran à tout moment
-      pour poursuivre la creation de votre compte.
-    resendVerification: Envoyer un nouveau message de vérification
+    emailIsVerified: "Mon email est v\xE9rifi\xE9"
+    instructions1: "Vous devriez recevoir un message par e-mail. Cliquez le lien dans\
+      \ le message pour verifier votre adresse e-mail. Vous pourrez ensuite finir\
+      \ de cr\xE9er votre compte.\n"
+    instructions2: "Une fois votre adresse v\xE9rifi\xE9e, cliquez sur le bouton ci-dessous\
+      \ pour continuer."
+    instructions3: "Vous pouvez planifier des trajets et revenir \xE0 cet \xE9cran\
+      \ \xE0 tout moment pour poursuivre la creation de votre compte."
+    resendVerification: "Envoyer un nouveau message de v\xE9rification"
   ViewSwitcher:
-    nearby: À proximité
-    switcher: Sélecteur de vues
+    nearby: "\xC0 proximit\xE9"
+    switcher: "S\xE9lecteur de vues"
   WelcomeScreen:
-    prompt: Où désirez-vous aller ?
+    prompt: "O\xF9 d\xE9sirez-vous aller ?"
 config:
   accessModes:
     car_hail: Course en voiture
   flex:
-    both: Plus de détails au bas de l'itinéraire
-    call-ahead: Appelez pour réserver
-    continuous-dropoff: Demandez l'arrêt au conducteur
+    both: "Plus de d\xE9tails au bas de l'itin\xE9raire"
+    call-ahead: "Appelez pour r\xE9server"
+    continuous-dropoff: "Demandez l'arr\xEAt au conducteur"
     flex-service: Service Flex
-    flex-service-colon: "Service Flex :"
+    flex-service-colon: "Service Flex\u202F:"
 util:
   state:
-    errorPlanningTrip: Une erreur s'est produite lors de la planification du 
-      trajet.
-    networkUnavailable: Le système {network} n'est pas disponible pour le 
-      moment.
-    noTripFound: Aucun trajet trouvé.
-    noTripFoundForMode: Aucun trajet {modes} n'a été trouvé.
-    noTripFoundReason: >-
-      Vos points de départ et d'arrivée ne sont peut-être pas desservis dans le
-      rayon spécifié ou aux heures indiquées, ou ne sont pas accessibles en
-      toute sécurité.
-    noTripFoundWithReason: "{noTripFound} {reason}"
+    errorPlanningTrip: Une erreur s'est produite lors de la planification du trajet.
+    networkUnavailable: "Le syst\xE8me {network} n'est pas disponible pour le moment."
+    noTripFound: "Aucun trajet trouv\xE9."
+    noTripFoundForMode: "Aucun trajet {modes} n'a \xE9t\xE9 trouv\xE9."
+    noTripFoundReason: "Vos points de d\xE9part et d'arriv\xE9e ne sont peut-\xEA\
+      tre pas desservis dans le rayon sp\xE9cifi\xE9 ou aux heures indiqu\xE9es, ou\
+      \ ne sont pas accessibles en toute s\xE9curit\xE9."
+    noTripFoundWithReason: '{noTripFound} {reason}'
 otpUi:
   AccessLegBody:
     RentedVehicleSubheader:
-      dropoffRental: Déposez {company} {vehicleType} {vehicleName} à {dropoffLocation}
+      dropoffRental: "D\xE9posez {company} {vehicleType} {vehicleName} \xE0 {dropoffLocation}"
   ItineraryBody:
-    canceledMessage: Le trajet suivant a été annulé
+    canceledMessage: "Le trajet suivant a \xE9t\xE9 annul\xE9"
   TextOnlyItinerary:
-    arriveAt: 'Arrivée à {place} à {timeMillis, time, short}.'
-    departFrom: 'Départ de {place} à {timeMillis, time, short}.'
-    transitArriveAt: >-
-      Arrivée à {place} {hasStopId, select, true {(Arrêt : {stopId})} other {}}
-      à {timeMillis, time, short}.
-    transitDepartFrom: >-
-      Départ de {place} {hasStopId, select, true {(Arrêt : {stopId})} other
-      {}} à {timeMillis, time, short} via {routeName}{hasHeadsign, select, true
-      { direction {headsign}} other {}}.
+    arriveAt: "Arriv\xE9e \xE0 {place} \xE0 {timeMillis, time, short}."
+    departFrom: "D\xE9part de {place} \xE0 {timeMillis, time, short}."
+    transitArriveAt: "Arriv\xE9e \xE0 {place} {hasStopId, select, true {(Arr\xEAt\
+      \ : {stopId})} other {}} \xE0 {timeMillis, time, short}."
+    transitDepartFrom: "D\xE9part de {place} {hasStopId, select, true {(Arr\xEAt :\
+      \ {stopId})} other {}} \xE0 {timeMillis, time, short} via {routeName}{hasHeadsign,\
+      \ select, true { direction {headsign}} other {}}."

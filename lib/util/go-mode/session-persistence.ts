@@ -6,6 +6,7 @@ import {
   captureNotificationLatches,
   NotificationLatches
 } from './notification-service'
+import type { DepartureOverrideSource } from './types'
 import type { ReturnCountdownState, RoundTripPlan } from './round-trip'
 
 const { getItem, removeItem, storeItem } = coreUtils.storage
@@ -90,6 +91,14 @@ export interface GoModeSession {
   // continuing the first's ride — which is the one case where they should.
   debugSessionId?: string | null
   departureOverride: number | null
+  // WHOSE pick that override is. Saved because the two facts that used to
+  // carry it — `manualDepartureLock` and `session.lastAutoAnchorMs` — are both
+  // trip-session state and so are rebuilt empty by a page load, leaving a
+  // restored override belonging to nobody: not the anchor's (it does not equal
+  // `lastAutoAnchorMs`, so the anchor leaves it alone) and not the rider's (no
+  // lock). `resumeGoModeTrip` reads this back and rebuilds the right one.
+  // Backlog 12.15.
+  departureOverrideSource?: DepartureOverrideSource | null
   // The leg the trip has actually TRANSITIONED onto — `advanceToLeg`'s guard,
   // which lives on the module-level trip session and so is rebuilt as null by
   // a page load. Without it a re-mount reads `previousLegIndex` as 0
@@ -208,6 +217,7 @@ export function saveGoModeSession(
     backgrounded: !!goMode.ui?.backgrounded,
     debugSessionId: savedDebugSessionId,
     departureOverride: goMode.departureOverride ?? null,
+    departureOverrideSource: goMode.departureOverrideSource ?? null,
     lastTransitionedLegIndex: savedTransitionedLegIndex,
     notificationLatches: captureNotificationLatches(
       goMode.activeItinerary?.legs
@@ -315,6 +325,20 @@ export function resumedDebugSessionId(): string | null {
  * side effect, so a second read cannot tell "nothing saved" from "already
  * consumed".
  */
+export function resumedDepartureOverride(): {
+  ms: number
+  source: DepartureOverrideSource
+} | null {
+  const ms = lastLoaded?.departureOverride
+  if (typeof ms !== 'number' || !Number.isFinite(ms)) return null
+  // A session saved before 12.15 carries a value and no source. Treated as the
+  // ANCHOR's, which is the reading that changes least: the anchor may go on
+  // chasing an earlier same-route departure, where calling it the rider's would
+  // lock auto-anchoring off for a boarding nobody ever chose by hand.
+  const source = lastLoaded?.departureOverrideSource
+  return { ms, source: source === 'rider' ? 'rider' : 'anchor' }
+}
+
 export function resumedTransitionedLegIndex(): number | null {
   const index = lastLoaded?.lastTransitionedLegIndex
   return typeof index === 'number' && Number.isInteger(index) && index >= 0

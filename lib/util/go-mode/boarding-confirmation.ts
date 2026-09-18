@@ -1,5 +1,6 @@
 import type { Leg } from '@opentripplanner/types'
 
+import { matchProvesAboard } from './transit-trust'
 import type { RidingState } from './types'
 
 /**
@@ -96,7 +97,12 @@ export function ridingSuppressedByRider(input: {
 }
 
 /** What the boarding sheet shows under its title. */
-export type BoardingPromptBody = 'none' | 'routes' | 'searching' | 'vehicles'
+export type BoardingPromptBody =
+  | 'failed'
+  | 'none'
+  | 'routes'
+  | 'searching'
+  | 'vehicles'
 
 /**
  * Which body the boarding prompt shows.
@@ -109,17 +115,112 @@ export type BoardingPromptBody = 'none' | 'routes' | 'searching' | 'vehicles'
  * once a poll has been compared against the rider's position; while the search
  * is running the sheet says it is looking, and the manual route picker waits
  * too rather than pre-empting an answer that is seconds away.
+ *
+ * `failed` is the third member of that family and the same distinction one
+ * step further out (17.5): a read that never came back is not a finding about
+ * the world either. It ranks BELOW anything real — a vehicle the app did get,
+ * or a route list to pick from, is worth more to the rider than an apology —
+ * and above "none", which would otherwise report an outage as an empty street.
  */
 export function boardingPromptBody(input: {
   nearbyRouteCount: number
   nearbyVehicleCount: number
+  /** The last search's reads did not answer (timeout / unreachable). */
+  searchFailed?: boolean
   searching: boolean
 }): BoardingPromptBody {
-  const { nearbyRouteCount, nearbyVehicleCount, searching } = input
+  const { nearbyRouteCount, nearbyVehicleCount, searchFailed, searching } =
+    input
   if (nearbyVehicleCount > 0) return 'vehicles'
   if (searching) return 'searching'
   if (nearbyRouteCount > 0) return 'routes'
+  if (searchFailed) return 'failed'
   return 'none'
+}
+
+/**
+ * A vehicle the app has ALREADY established the rider is on, if it holds one.
+ *
+ * The bus picker's fallback row (17.5). On 2026-09-15 at 15:47:25 the picker
+ * showed the rider a blank body and "Which bus are you on? Pick it below."
+ * while Go Mode was holding Orange Line trip 1:1346665 / vehicle 1:8140
+ * underneath the whole time — every backing request was timing out (17.8), so
+ * nothing could refill the list, and the one answer the app was sure of was
+ * the one thing it did not offer.
+ *
+ * This is not a prompt and must not read as one (`feedback_no_redundant_prompts`
+ * — the app never asks what it already knows). The picker is already open
+ * because a search failed; the row is a shortcut through it, so the rider can
+ * take the answer the app has instead of re-running a search that is timing
+ * out.
+ *
+ * `tripId` is required: without one the onboard flow cannot anchor a schedule
+ * or plan anything from it, so a row promising otherwise would be a dead end —
+ * which is the bug, not the fix. A synthetic `route:<id>` vehicle (what
+ * beginOnboardFlow builds when riding has no vehicle) is not a vehicle the
+ * rider can be asked to accept either.
+ */
+export function knownAboardVehicle(input: {
+  /** `goMode.alightedFrom` — the trip the rider last got OFF. */
+  alightedFrom?: { tripId?: string | null; vehicleId?: string | null } | null
+  /** `goMode.vehicleMatch.match`. */
+  match?: {
+    confidence?: string | null
+    label?: string | null
+    nextStopId?: string | null
+    routeId?: string | null
+    tripId?: string | null
+    vehicleId?: string | null
+  } | null
+  /** `goMode.onboard.vehicle` — the flow's own adopted vehicle. */
+  onboardVehicle?: {
+    label?: string | null
+    nextStopId?: string | null
+    routeId?: string | null
+    tripId?: string | null
+    vehicleId?: string | null
+  } | null
+  riding?: RidingState | null
+}): {
+  label: string | null
+  nextStopId: string | null
+  routeId: string | null
+  tripId: string
+  vehicleId: string
+} | null {
+  const { alightedFrom, match, onboardVehicle, riding } = input
+  // Order of trust: the vehicle THIS flow adopted, then a confirmed match
+  // (the rider's own assertion, or the matcher's), then the riding fact. The
+  // match is the only one that can outlive an alight, so it is the only one
+  // asked to prove it still does.
+  const candidates = [
+    onboardVehicle,
+    match?.confidence === 'confirmed' &&
+    matchProvesAboard(match, alightedFrom ?? null)
+      ? match
+      : null,
+    riding
+      ? {
+          label: riding.routeShortName ?? riding.headsign ?? riding.routeId,
+          nextStopId: null,
+          routeId: riding.routeId,
+          tripId: riding.tripId,
+          vehicleId: riding.vehicleId
+        }
+      : null
+  ]
+  for (const c of candidates) {
+    const vehicleId = c?.vehicleId
+    if (!c?.tripId || !vehicleId || vehicleId.startsWith('route:')) continue
+    return {
+      label: c.label ?? c.routeId ?? null,
+      nextStopId: c.nextStopId ?? null,
+      routeId: c.routeId ?? null,
+      tripId: c.tripId,
+      vehicleId
+    }
+  }
+  return null
 }
 
 /**

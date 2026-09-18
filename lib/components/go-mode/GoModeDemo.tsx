@@ -368,6 +368,23 @@ const readyOnboard = (realtime: boolean) => {
   }
 }
 
+/**
+ * The same ready list, with the rider LOOKING at its second option — the
+ * preview screen 17.1 added. Second option on purpose: it is the one with a
+ * transfer, so the frame shows the leg rows and the wait between them.
+ */
+const previewOnboard = () => {
+  const onboard = readyOnboard(true)
+  return {
+    ...onboard,
+    preview: {
+      control: 'row' as const,
+      openedAtMs: NOW,
+      option: onboard.alightOptions[1]
+    }
+  }
+}
+
 const demoSheetItinerary = {
   endTime: NOW + 28 * 60000,
   legs: [
@@ -750,6 +767,18 @@ const GoModeDemo = (): JSX.Element => (
         title="Alight recommendation, SCHEDULED"
       >
         <Provider store={mockStore(readyOnboard(false))}>
+          <ComponentContext.Provider value={demoComponentContext}>
+            <AlightRecommendation />
+          </ComponentContext.Provider>
+        </Provider>
+      </Frame>
+
+      <Frame
+        minHeight={420}
+        note="17.1: a tap on a row opens THIS instead of committing the trip. Its own screen for one option — legs, arrival, and the wait the row cannot show (15.9 scores that wait as free) — with Confirm this stop / Back to options. The options list stays in state underneath, so Back costs no re-plan."
+        title="Alight preview (one option, not a commit)"
+      >
+        <Provider store={mockStore(previewOnboard())}>
           <ComponentContext.Provider value={demoComponentContext}>
             <AlightRecommendation />
           </ComponentContext.Provider>

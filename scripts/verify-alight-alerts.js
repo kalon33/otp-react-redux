@@ -47,6 +47,26 @@ const TO = { lat: 44.9778, lon: -93.2707, name: 'Downtown Minneapolis' }
 
 const ALIGHT_TYPES = ['APPROACH_STOP', 'ARRIVING_STOP']
 
+// Exit code for "the thing under test could not be exercised, and that is not a
+// defect". nightly-verify.sh maps it to SKIP; anything else is still a failure.
+// Same convention as verify-onboard-options.js.
+//
+// The two checks below marked "test setup" are preconditions, and the comment
+// above them has always said so: teleporting onto a bus that has not departed
+// reads as boarding a trip that cannot exist, so Go Mode may auto-update the
+// itinerary underneath the test and the match may never reach a transit leg.
+// When it does not, the three real assertions are vacuous -- "no alight alert
+// while standing at the stop" is trivially true of a rider the app does not
+// think is going anywhere. Measured 2026-09-17: PASS in 23s, then this same
+// precondition 90 minutes later on the same tree. It is a fact about which
+// departure the live graph returned, so it reports as a SKIP. (backlog 13.6)
+const EXIT_SKIP = 75
+
+function skip(reason) {
+  console.log(`SKIP: ${reason}`)
+  process.exit(EXIT_SKIP)
+}
+
 async function main() {
   const browser = await puppeteer.launch({
     args: ['--no-sandbox'],
@@ -65,7 +85,16 @@ async function main() {
   })
   page.on('pageerror', (e) => console.log('[pageerror]', e.message))
   await page.goto(APP, { timeout: 60000, waitUntil: 'networkidle2' })
-  await page.waitForFunction(() => !!window.store, { timeout: 30000 })
+  // 60s, not 30s: this is the FIRST wait in every script and it is a Vite dev
+  // server transforming the module graph, not the product. Two runs on
+  // 2026-09-17 died here -- 30s after a `docker restart otp-frontend-dev`, with
+  // a cold transform cache -- and reported it as the script's failure. A red
+  // row that means "the dev server was still warming up" is the kind that
+  // taught everyone to stop reading this suite (backlog 13.6). If this wait is
+  // what times out, the app at :9967 never booted: `docker restart
+  // otp-frontend-dev` (a full `yarn jest` or `ship_web.sh` clobbers its
+  // tmp/config.yml).
+  await page.waitForFunction(() => !!window.store, { timeout: 60000 })
 
   await page.evaluate(
     async (from, to) => {
@@ -299,13 +328,16 @@ async function main() {
   // the test — the leg INDEX is therefore not stable. What must hold is that
   // the rider is on a transit leg heading for the same exit stop.
   if (!exit.onTransitLeg) {
-    throw new Error(
-      `test setup is not exercising the bug: matched leg ${exit.legIndex} is not a transit leg`
+    skip(
+      `the match never reached a transit leg (matched leg ${exit.legIndex}), ` +
+        'so the rider was never aboard and the alight assertions below would ' +
+        'be vacuous'
     )
   }
   if (exit.exitStop !== chosen.alightStop) {
-    throw new Error(
-      `test setup drifted: heading for "${exit.exitStop}", expected "${chosen.alightStop}"`
+    skip(
+      `the itinerary drifted under the test: heading for "${exit.exitStop}", ` +
+        `expected "${chosen.alightStop}"`
     )
   }
   if (waiting.alightAlerts.length > 0) {
@@ -342,6 +374,11 @@ async function main() {
 }
 
 main().catch((e) => {
-  console.error(e.message)
+  // e.stack, not e.message: a puppeteer waitForFunction timeout says only
+  // "waiting for function failed: timeout 60000ms exceeded" and names neither
+  // the wait that failed nor its line. Six of the eleven red rows on
+  // 2026-09-17 were that one line and nothing else, which is much of why this
+  // suite's output stopped being read (backlog 13.6). The stack names the wait.
+  console.error(e.stack || e.message)
   process.exit(1)
 })

@@ -10,23 +10,19 @@ actions:
     queryFetchError: 'Error fetching queries: {err}'
   fieldTrip:
     addNoteError: 'Error adding field trip note:'
-    confirmOverwriteItineraries: |
-      This action will overwrite a previously planned {outbound, select,
-          true {outbound}
-          other {inbound}
-        } itinerary for this request. Do you wish to continue?
+    confirmOverwriteItineraries: "This action will overwrite a previously planned\
+      \ {outbound, select,\n    true {outbound}\n    other {inbound}\n  } itinerary\
+      \ for this request. Do you wish to continue?\n"
     deleteItinerariesError: 'Error deleting field trip plan:'
     deleteNoteError: 'Error deleting field trip note:'
     editSubmitterNotesError: 'Error editing submitter notes:'
     fetchFieldTripError: 'Error fetching field trip: {err}'
     fetchFieldTripsError: 'Error fetching field trips: {err}'
     fetchTripsForDateError: 'Error fetching trips for field trip travel date: {err}'
-    incompatibleTripDateError: >-
-      Planned trip date ({tripDate}) is not the requested day of travel
-      ({requestDate})
-    itineraryCapacityError: >-
-      Cannot Save Plan: This plan could not be saved due to a lack of capacity
-      on one or more vehicles. Please re-plan your trip.
+    incompatibleTripDateError: Planned trip date ({tripDate}) is not the requested
+      day of travel ({requestDate})
+    itineraryCapacityError: 'Cannot Save Plan: This plan could not be saved due to
+      a lack of capacity on one or more vehicles. Please re-plan your trip.'
     maxTripRequestsExceeded: Number of trip requests exceeded without valid results
     saveItinerariesError: 'Failed to save itineraries: {err}'
     setDateError: 'Error setting date:'
@@ -34,18 +30,15 @@ actions:
     setPaymentError: 'Error setting payment info:'
     setRequestStatusError: 'Error setting request status:'
   location:
-    deniedAccessAlert: >
-      Access to your location is blocked.
-
-      To use your current location, enable location permissions from your
-      browser, and reload the page. 
+    deniedAccessAlert: "Access to your location is blocked.\nTo use your current location,\
+      \ enable location permissions from your browser, and reload the page. \n"
     geolocationNotSupportedError: Geolocation not supported by your browser
     unknownPositionError: Unknown error getting position
     userDeniedPermission: User denied permission
   map:
     currentLocation: (Current Location)
   user:
-    accountDeleted: 'Your user account ({email}) has been deleted.'
+    accountDeleted: Your user account ({email}) has been deleted.
     authTokenError: Error obtaining an authorization token.
     confirmDeleteMonitoredTrip: Would you like to remove this trip?
     confirmDeletePlace: Would you like to remove this place?
@@ -53,18 +46,17 @@ actions:
     genericError: 'An error was encountered: {err}'
     getDependentUserInfoFailed: Error getting mobility profile information.
     itineraryExistenceCheckFailed: Error checking whether your selected trip is possible.
-    mustAcceptTermsToSavePlace: Please accept the Terms of Use (under My Account) to save locations.
+    mustAcceptTermsToSavePlace: Please accept the Terms of Use (under My Account)
+      to save locations.
     mustBeLoggedInToSavePlace: Please log in to save locations.
     placeDeleted: Your place has been deleted.
     placeRemembered: The settings for this place have been saved.
     preferencesSaved: Your preferences have been saved.
     smsInvalidCode: The code you entered is invalid. Please try again.
-    smsResendThrottled: >-
-      A verification SMS was sent to the indicated phone number less than a
-      minute ago. Please try again in a few moments.
-    smsVerificationFailed: >-
-      Your phone could not be verified. Perhaps the code you entered has
-      expired. Please request a new code and try again.
+    smsResendThrottled: A verification SMS was sent to the indicated phone number
+      less than a minute ago. Please try again in a few moments.
+    smsVerificationFailed: Your phone could not be verified. Perhaps the code you
+      entered has expired. Please request a new code and try again.
     tripDeleted: Your trip has been deleted.
 common:
   closedStop: Closed Stop
@@ -112,17 +104,17 @@ common:
     print: Print
     save: Save
     startOver: Start Over
-    submitting: Submitting…
+    submitting: "Submitting\u2026"
     'yes': 'Yes'
   itineraryDescriptions:
     containsCanceledTrip: This itinerary contains a canceled trip.
     fareUnknown: No fare information
     noDefaultFareTypeConfigured: Multiple fares apply
     noItineraryToDisplay: No itinerary to display.
-    relativeCo2: |
-      {co2} {isMore, select, true {more} other {less} } CO₂ than driving alone
+    relativeCo2: "{co2} {isMore, select, true {more} other {less} } CO\u2082 than\
+      \ driving alone\n"
     reservationRequired: Reservation required.
-    timeStartEnd: '{start} – {end}'
+    timeStartEnd: "{start} \u2013 {end}"
   linkOpensNewWindow: (Opens new window)
   modes:
     bicycle_rent: Bikeshare
@@ -154,11 +146,11 @@ common:
     home: home
     work: work
   routing:
-    routeAndNumber: 'Route {routeId}'
+    routeAndNumber: Route {routeId}
   searchForms:
     click: click
-    enterDestination: 'Enter destination or {mapAction} on map…'
-    enterStartLocation: 'Enter start location or {mapAction} on map…'
+    enterDestination: "Enter destination or {mapAction} on map\u2026"
+    enterStartLocation: "Enter start location or {mapAction} on map\u2026"
     tap: tap
   time:
     duration:
@@ -167,16 +159,14 @@ common:
       nHours: '{hours, plural, =1 {an hour} other {# hours}}'
       nMinutes: '{minutes, plural, =1 {one minute} other {# minutes}}'
     durationAgo: '{duration} ago'
-    tripDurationFormat: >-
-      {hours, plural, =0 {} other {# hr }}{minutes} min { seconds, plural, =0 {}
-      other {# sec}}
+    tripDurationFormat: '{hours, plural, =0 {} other {# hr }}{minutes} min { seconds,
+      plural, =0 {} other {# sec}}'
 components:
   A11yPrefs:
     accessibilityRoutingByDefault: Prefer accessible trips by default
   AccountSetupFinishPane:
-    message: >-
-      Your changes have been saved. You are ready to start planning trips. Click
-      the "Finish" button to return to trip planner.
+    message: Your changes have been saved. You are ready to start planning trips.
+      Click the "Finish" button to return to trip planner.
   ActiveRoutingPreferences:
     avoidingBiking: avoiding biking
     briskerWalking: brisker walking
@@ -197,19 +187,17 @@ components:
     optionCount: '{count} options'
     shorterTransferBuffer: shorter transfer buffer
     slowerBiking: slower biking
-    viaStop: 'Via {stop}'
+    viaStop: Via {stop}
   AddPlaceButton:
     addPlace: Add place
     needOriginDestination: Define origin/destination to add intermediate places
     tooManyPlaces: Maximum intermediate places reached
   AdvancedOptions:
-    bannedRoutes: Select banned routes…
+    bannedRoutes: "Select banned routes\u2026"
     preferredRoutes: Select preferred routes...
   AfterSignInScreen:
     mainTitle: Redirecting...
-    message: >-
-      If the page doesn't load after a few seconds, <redirectLink>click
-      here</redirectLink>.
+    message: If the page doesn't load after a few seconds, <redirectLink>click here</redirectLink>.
   AppMenu:
     callHistory: Call History
     closeMenu: Close Menu
@@ -234,61 +222,56 @@ components:
   BatchSearchScreen:
     advancedHeader: Advanced Preferences
     arriveOnTimeHeader: Getting to the bus
-    arriveOnTimeHelp: >-
-      When your ride to the stop is re-planned mid-trip, it aims to get you
-      there {minutes} minutes before the bus instead of as fast as possible.
+    arriveOnTimeHelp: When your ride to the stop is re-planned mid-trip, it aims to
+      get you there {minutes} minutes before the bus instead of as fast as possible.
     arriveOnTimeLabel: Arrive just before the bus
-    bikeCeilingHelp: >-
-      One trip can hold up to {minutes} minutes of biking — about {miles} mi at
-      your current speed of {speed} mph. That limit is set on the server; this
-      slider changes how readily the planner reaches for the bike inside it.
+    bikeCeilingHelp: "One trip can hold up to {minutes} minutes of biking \u2014 about\
+      \ {miles} mi at your current speed of {speed} mph. That limit is set on the\
+      \ server; this slider changes how readily the planner reaches for the bike inside\
+      \ it."
     bikeWillingnessHeader: Biking
     bikeWillingnessHigh: More
     bikeWillingnessLabel: How far you're willing to bike
     bikeWillingnessLow: Less
     header: Plan Your Trip
-    hideWalkTransitHelp: >-
-      Only shows options that use your bike to reach transit. Ignored when
-      walking is the only way you can get there.
+    hideWalkTransitHelp: Only shows options that use your bike to reach transit. Ignored
+      when walking is the only way you can get there.
     hideWalkTransitLabel: Hide walk + transit options
     modeSelectorLabel: Select a travel mode
     moreOptions: More options
     nlPreferencesApplied: 'Applied: {summary}'
     nlPreferencesApply: Apply
-    nlPreferencesError: Couldn't interpret that — try rephrasing.
+    nlPreferencesError: "Couldn't interpret that \u2014 try rephrasing."
     nlPreferencesHeader: Describe your needs
-    nlPreferencesLoading: Thinking…
-    nlPreferencesPlaceholder: 'e.g. bad knee today, avoid transfers'
-    noTransfersHelp: >-
-      Only trips you can make without changing vehicles. Some pairs of places
-      have none, and then only the walk or bike options are left.
+    nlPreferencesLoading: "Thinking\u2026"
+    nlPreferencesPlaceholder: e.g. bad knee today, avoid transfers
+    noTransfersHelp: Only trips you can make without changing vehicles. Some pairs
+      of places have none, and then only the walk or bike options are left.
     noTransfersLabel: No transfers
     numItinerariesLabel: How many options to look for
     numItinerariesOption: '{count} options'
-    routeLockAdd: Add a route…
-    routeLockChip: 'Only {route}'
-    routeLockDetail: 'Only trips on {route}, biking to and from it'
+    routeLockAdd: "Add a route\u2026"
+    routeLockChip: Only {route}
+    routeLockDetail: Only trips on {route}, biking to and from it
     routeLockHeader: Routes
     routeLockLabel: Name a route
-    routeLockNotFound: 'No route called “{route}” — nothing was locked.'
-    routeLockNotStarted: 'Doesn’t start on {route}'
-    routeLockNotUsed: 'Doesn’t use {route}'
-    routeLockRemove: 'Remove {route}'
+    routeLockNotFound: "No route called \u201C{route}\u201D \u2014 nothing was locked."
+    routeLockNotStarted: "Doesn\u2019t start on {route}"
+    routeLockNotUsed: "Doesn\u2019t use {route}"
+    routeLockRemove: Remove {route}
     routeLockScopeLabel: How to use these routes
     routeLockScopeOnly: Ride only these routes
     routeLockScopeStarting: Use as my starting route
-    routeLockStartChip: 'Start on {route}'
-    routeLockStartDetail: >-
-      Trips whose first bus or train is {route}; the rest of the trip is up to
-      the planner.
+    routeLockStartChip: Start on {route}
+    routeLockStartDetail: Trips whose first bus or train is {route}; the rest of the
+      trip is up to the planner.
     routingProfileHeader: Routing profile
     routingProfileLabel: Optimize routing for
     saveAndReturn: Save and return
     saved: Saved
     searchOptionsHeader: Options shown
-    stopCapHelp: >-
-      How far from your start and end to look for a stop to board or leave at. A
-      wider search finds more bike + transit options from outlying places and
+    stopCapHelp: How far from your start and end to look for a stop to board or leave
+      at. A wider search finds more bike + transit options from outlying places and
       takes a few seconds longer.
     stopCapLabel: How far to look for a stop
     stopCapQuick: Nearby stops only (fastest)
@@ -296,39 +279,40 @@ components:
     stopCapThorough: Every stop in range (slowest)
     submodeSelectorLabel: Select travel modes and submodes
     tripOptions: Trip Options
-    viaStopHelp: 'Every trip shown will serve this stop, in either direction.'
+    viaStopHelp: Every trip shown will serve this stop, in either direction.
     viaStopLabel: Must pass through a stop
-    viaStopNone: 'No stops match “{name}”.'
+    viaStopNone: "No stops match \u201C{name}\u201D."
     viaStopPlaceholder: Type part of a stop name
-    viaStopRemove: 'Remove {stop}'
-    viaStopSearching: Searching…
+    viaStopRemove: Remove {stop}
+    viaStopSearching: "Searching\u2026"
   BatchSettings:
     destination: destination
-    invalidModeSelection: >-
-      Cannot plan a trip using the selected modes. Try including transit in your
-      mode selection.
+    invalidModeSelection: Cannot plan a trip using the selected modes. Try including
+      transit in your mode selection.
     origin: origin
     planTripTooltip: Plan trip
     validationMessage: 'Please define the following fields to plan a trip: {issues}'
   BeforeSignInScreen:
     mainTitle: Signing you in
-    message: >
-      In order to access this page you will need to log in. Please wait while we
-      redirect you to the login page...
+    message: 'In order to access this page you will need to log in. Please wait while
+      we redirect you to the login page...
+
+      '
   CallTakerPanel:
     advancedOptions: Advanced options
     intermediateDestination: Enter intermediate destination
   CompanionsPane:
     addNewCompanion: Add a new travel companion
-    companionAlreadyAdded: 'You already have a companion with email {email}'
-    companionExplanation: >
-      Invite an existing G-MAP user to be a travel companion by entering their
-      email. When they accept, their status will change to "verified", and you
-      can share your trip status and plan trips based on one another's mobility
+    companionAlreadyAdded: You already have a companion with email {email}
+    companionExplanation: 'Invite an existing G-MAP user to be a travel companion
+      by entering their email. When they accept, their status will change to "verified",
+      and you can share your trip status and plan trips based on one another''s mobility
       profile.
-    confirmDeleteCompanion: 'Do you want to delete companion {email}?'
+
+      '
+    confirmDeleteCompanion: Do you want to delete companion {email}?
     currentCompanionsLabel: 'Current travel companions:'
-    deleteCompanion: 'Delete {email}'
+    deleteCompanion: Delete {email}
     noCompanions: You do not have any existing travel companions.
     submitNewCompanion: Send invitation
     title: Travel companions
@@ -337,9 +321,9 @@ components:
     departAt: Depart at
     now: Now
   DateTimePreview:
-    arriveAt: 'Arrive {arriveTime, time, short}'
-    dayLastWeek: 'Last {formattedDayOfWeek}'
-    departAt: 'Depart {departTime, time, short}'
+    arriveAt: Arrive {arriveTime, time, short}
+    dayLastWeek: Last {formattedDayOfWeek}
+    departAt: Depart {departTime, time, short}
     editDepartOrArrival: Edit departure or arrival time
     leaveNow: Leave now
   DateTimeScreen:
@@ -363,56 +347,50 @@ components:
     addAnotherPlace: Add another place
     description: 'Add the places you frequent often to save time planning trips:'
     editThisPlace: Edit this place
-    setAddressForPlaceType: 'Set your {placeType} address'
+    setAddressForPlaceType: Set your {placeType} address
   FavoritePlaceScreen:
     addNewPlace: Add new place
-    charactersOverLimit: >-
-      {chars, plural, one {# character over limit} other {# characters over
-      limit} }
-    charactersRemaining: >-
-      {chars, plural, one {# character remaining} other {# characters remaining}
-      }
-    editPlace: 'Edit {placeName}'
+    charactersOverLimit: '{chars, plural, one {# character over limit} other {# characters
+      over limit} }'
+    charactersRemaining: '{chars, plural, one {# character remaining} other {# characters
+      remaining} }'
+    editPlace: Edit {placeName}
     editPlaceGeneric: Edit place
     invalidAddress: Please set a location for this place.
     invalidName: Please enter a name for this place.
-    nameAlreadyUsed: >-
-      You are already using this name for another place. Please enter a
-      different name.
-    nameTooLong: 'Name must be fewer than {char} characters.'
+    nameAlreadyUsed: You are already using this name for another place. Please enter
+      a different name.
+    nameTooLong: Name must be fewer than {char} characters.
     placeNotFound: Place not found
-    placeNotFoundDescription: 'Sorry, the requested place was not found.'
+    placeNotFoundDescription: Sorry, the requested place was not found.
   FeedbackScreen:
     attachLabel: Add a screenshot
     commentLabel: Your comment
     commentPlaceholder: What happened?
-    failed: 'Could not send, and this device has no room to save it. Try again.'
-    failedNotAllowed: >-
-      The server refused this report ({status}). It is saved, but it will not go
-      out from this network — reconnect to Tailscale and open this screen again.
-    failedTooLarge: >-
-      The server would not accept a report this large, even without the picture.
-      Saved — try again later.
+    failed: Could not send, and this device has no room to save it. Try again.
+    failedNotAllowed: "The server refused this report ({status}). It is saved, but\
+      \ it will not go out from this network \u2014 reconnect to Tailscale and open\
+      \ this screen again."
+    failedTooLarge: "The server would not accept a report this large, even without\
+      \ the picture. Saved \u2014 try again later."
     heading: Share feedback
-    heldOffline: No connection. Saved — it will go out next time you open this screen.
-    heldSent: >-
-      {count, plural, one {An earlier report has} other {# earlier reports
-      have}} now been sent.
-    heldServer: >-
-      The server could not take it ({status}). Saved — it will go out next time
-      you open this screen.
+    heldOffline: "No connection. Saved \u2014 it will go out next time you open this\
+      \ screen."
+    heldSent: '{count, plural, one {An earlier report has} other {# earlier reports
+      have}} now been sent.'
+    heldServer: "The server could not take it ({status}). Saved \u2014 it will go\
+      \ out next time you open this screen."
     imageRejected: That file could not be attached.
     intro: Tell us what went wrong. A screenshot says more than a sentence.
     oneImageOnly: One screenshot per report.
     removeImage: Remove the screenshot
     replaceImage: Replace screenshot
     send: Send
-    sendingHeld: Sending an earlier report that could not go out…
+    sendingHeld: "Sending an earlier report that could not go out\u2026"
     sent: Sent. Thank you.
-    sentOthersWaiting: >-
-      Sent. {count, plural, one {An earlier report is} other {# earlier reports
-      are}} still waiting — {reason}
-    sentWithoutImage: 'Sent, but the picture could not be attached.'
+    sentOthersWaiting: "Sent. {count, plural, one {An earlier report is} other {#\
+      \ earlier reports are}} still waiting \u2014 {reason}"
+    sentWithoutImage: Sent, but the picture could not be attached.
     thumbnailAlt: The picture you attached
   FormNavigationButtons:
     ariaLabel: Form navigation
@@ -420,19 +398,22 @@ components:
     accessible: Accessible
     arrivedDone: Done
     arrivedTitle: "\U0001F389 You've arrived!"
-    arrivesIn: 'arrives in {time}'
+    arrivesIn: arrives in {time}
     avoidBiking: Avoid Biking
     avoidbiking: Avoid Biking
     bikeforward: Bike Forward
-    boardingAboard: 'On the {route}'
+    boardingAboard: On the {route}
     boardingConfirm: I'm on the bus
     boardingDeny: I'm not on this bus
+    boardingKnownVehicle: "Already tracking \xB7 #{label}"
     boardingQuestion: Are you on the bus?
-    boardingSearching: Looking…
+    boardingRetry: Try again
+    boardingSearchFailed: Couldn't reach the bus feed.
+    boardingSearching: "Looking\u2026"
     boardingSubtitle: Looking for {route} nearby
     busHeadsign: to {headsign}
     busLabel: Bus {label}
-    busNotBroadcasting: Bus not broadcasting yet — scheduled {time}
+    busNotBroadcasting: "Bus not broadcasting yet \u2014 scheduled {time}"
     changeBus: Choose bus
     chooseBus: Choose bus
     confirmExit: Are you sure you want to stop tracking this trip?
@@ -442,55 +423,62 @@ components:
     directionNB: Northbound
     directionSB: Southbound
     directionWB: Westbound
-    errorPermissionDenied: >-
-      Location permission denied. Please enable location access in your browser
+    errorPermissionDenied: Location permission denied. Please enable location access
+      in your browser settings.
+    errorTimeout: GPS signal timed out. Please ensure you are in an area with GPS
+      coverage.
+    errorUnavailable: Unable to determine your location. Please check your device
       settings.
-    errorTimeout: GPS signal timed out. Please ensure you are in an area with GPS coverage.
-    errorUnavailable: Unable to determine your location. Please check your device settings.
     fastest: Fastest
     fewerTransfers: Fewer Transfers
     findAnotherWay: Find another way
-    findingBestStop: Finding the best stop to get off…
-    findingYourBus: Finding your bus…
+    findingBestStop: "Finding the best stop to get off\u2026"
+    findingYourBus: "Finding your bus\u2026"
     followToggle: Follow my location
-    getReady: ⚠️ Get Ready - 2 stops away
+    getReady: "\u26A0\uFE0F Get Ready - 2 stops away"
     getReadyNow: "\U0001F514 GET READY! Next stop is yours!"
     gotOffHere: I got off here
     gpsError: GPS signal lost. Trying to reconnect...
     gpsErrorTitle: GPS Error
-    headerDestination: 'To {destination}'
+    headerDestination: To {destination}
     hideLaterDepartures: Less
     laterDepartures: Later departures
     legBike: Bike
     legStopsTo: '{count, plural, one {# stop} other {# stops}} to {dest}'
-    legTo: 'to {dest}'
+    legTo: to {dest}
     legWait: "\U0001F552 {mins} min wait"
     legWalk: Walk
     lessWalking: Less Walking
-    liveBanner: Go Mode is live — tracking your bus
+    liveBanner: "Go Mode is live \u2014 tracking your bus"
     loading: Starting Trip...
-    loadingSchedule: Loading the schedule for your bus…
+    loadingSchedule: "Loading the schedule for your bus\u2026"
     locatingBus: Locating your bus...
     minimizewalking: Less Walking
-    nextBusesAtStop: 'Next buses at {stop}'
+    nextBusesAtStop: Next buses at {stop}
     nextDeparture: 'Next: {time} ({mins} min away)'
-    noBusesOrRoutesNearby: No bus or route detected nearby. Try moving closer to a bus stop.
-    noLiveVehicleData: No live bus data — tracking by GPS
+    noBusesOrRoutesNearby: No bus or route detected nearby. Try moving closer to a
+      bus stop.
+    noLiveVehicleData: "No live bus data \u2014 tracking by GPS"
     notYet: Not yet
-    offAtStop: 'Off at {stop}'
+    offAtStop: Off at {stop}
     onBus: 'On Bus #{label}'
     onBusButton: I'm already on the bus
     onboardAssumedRoute: On the {route}
-    onboardAssumedVehicle: On the {route} · {vehicle}
+    onboardAssumedVehicle: "On the {route} \xB7 {vehicle}"
+    onboardBackToTrip: Back to trip
     onboardCancel: Cancel
     onboardError: Couldn't work out your bus. Try again?
     onboardNotThisVehicle: Not this one
+    onboardPreviewArrive: Arrive {time}
+    onboardPreviewBack: Back to options
+    onboardPreviewConfirm: Confirm this stop
+    onboardPreviewWait: '{mins} min wait'
     onboardTitle: On the bus
     openTripSheet: Open trip overview
     pickYourBus: Which bus are you on? Pick it below.
-    pickYourRoute: 'No live bus detected — pick your route:'
+    pickYourRoute: "No live bus detected \u2014 pick your route:"
     reliabletransfers: Reliable Transfers
-    rerouteNlError: Couldn't read that — try again.
+    rerouteNlError: "Couldn't read that \u2014 try again."
     rerouteNlLabel: Describe what you need
     rerouteNlPlaceholder: e.g. avoid stairs today
     rerouteNlSend: Go
@@ -498,11 +486,12 @@ components:
     resetToPlanned: Reset to planned
     restOfTrip: Rest of your trip
     retry: Retry
-    returnBannerArrived: You've arrived — tap to finish
-    returnBannerLive: 'On trip · Next stop {stop} · Arrive {eta} — tap to return'
-    returnBannerNoProgress: Trip in progress — tap to return
+    returnBannerArrived: "You've arrived \u2014 tap to finish"
+    returnBannerLive: "On trip \xB7 Next stop {stop} \xB7 Arrive {eta} \u2014 tap\
+      \ to return"
+    returnBannerNoProgress: "Trip in progress \u2014 tap to return"
     returnCountdownLabel: Leave for return in
-    returnLeaveBy: 'Leave by {time}'
+    returnLeaveBy: Leave by {time}
     returnLeaveNow: Leave now
     returnMissed: Return departure passed
     returnPlanNow: Plan return now
@@ -514,27 +503,28 @@ components:
     showLaterDepartures: More
     stayaboard: Stay on board
     stayseated: Fewer Transfers
-    stillCheckingStops: 'Still checking {count, plural, one {1 more stop} other {# more stops}}…'
+    stillCheckingStops: "Still checking {count, plural, one {1 more stop} other {#\
+      \ more stops}}\u2026"
     stopDeparturesTitle: Departures
     stopsRemainingCompact: '{count, plural, one {1 stop} other {# stops}} remaining'
     theBus: the bus
-    thenTurn: 'then {turn}'
+    thenTurn: then {turn}
     toStop: '{emoji} To {stop}'
     trackingBus: 'Tracking Bus #{label}'
     tripSheetHeading: Your trip
     tripSheetTitle: Trip overview
-    turnCuesLegLabel: 'Turn-by-turn directions for the {leg} leg'
+    turnCuesLegLabel: Turn-by-turn directions for the {leg} leg
     turnCuesLegOff: '{leg} turn-by-turn: Off'
     turnCuesLegOn: '{leg} turn-by-turn: On'
     turnCuesOff: 'Turn-by-turn: Off'
     turnCuesOn: 'Turn-by-turn: On'
     turnInstructions:
-      arrivingAt: 'Arriving at {destination}'
+      arrivingAt: Arriving at {destination}
       bearLeft: Bear left
       bearRight: Bear right
       continue: Continue
-      continueOn: 'Continue on {name}'
-      continueTo: 'Continue to {destination}'
+      continueOn: Continue on {name}
+      continueTo: Continue to {destination}
       enterStation: Enter the station
       exitStation: Exit the station
       followSigns: Follow the signs
@@ -546,11 +536,71 @@ components:
       turnRight: Turn right
       uTurn: Make a U-turn
     useThisDeparture: Use this
-    vehicleDetail: 'Next stop: {stop} - {distance}m away · #{label}'
-    vehicleDistance: '{distance}m away · #{label}'
+    vehicleDetail: "Next stop: {stop} - {distance}m away \xB7 #{label}"
+    vehicleDistance: "{distance}m away \xB7 #{label}"
     waitingGPS: Acquiring GPS signal...
     walkToStop: '{emoji} {time} walk to {stop}'
     whereToAlight: Where do you want to get off?
+    notify:
+      arrivedMessage: Arrived
+      backOnTime: back on time
+      busComingTitle: Bus coming
+      busHereTitle: Bus here
+      changeWithSlack: "{change} \xB7 {slack}"
+      connectionAtRiskTitle: Connection at risk
+      connectionLateAtStop: "{routeName} \xB7 {minutes} min late \xB7 {stopName}"
+      connectionSlack: "{routeName} \xB7 {seconds}s"
+      connectionSlackAtStop: "{routeName} \xB7 {seconds}s \xB7 {stopName}"
+      driftEarlier: '{minutes} min earlier'
+      driftLater: '{minutes} min later'
+      leaveInTitle: Leave in {minutes} min
+      leaveNowTitle: Leave now
+      metresAway: '{metres}m'
+      missedBestIn: "{routeName} likely missed \xB7 {bestRouteName} in {minutes} min"
+      missedBusTitle: Missed bus
+      missedNextDeparture: "{routeName} missed \xB7 next departure"
+      missedNextIn: "{routeName} likely missed \xB7 next in {minutes} min"
+      missedNoAlternatives: "{routeName} likely missed \xB7 no alternatives"
+      missedOptions: "{routeName} likely missed \xB7 {count} options"
+      modeDrive: Drive
+      modeGo: Go
+      modeScooter: Scooter
+      nextStepTitle: Next Step
+      nextStopTitle: Next stop
+      offRouteDistance: '{metres}m from the route'
+      offRouteTitle: Off route
+      routeAtStop: "{routeName} \xB7 {stopName}"
+      routeMinutes: "{routeName} \xB7 {minutes} min"
+      routeMinutesLate: "{routeName} \xB7 {minutes} min late"
+      routeMinutesStop: "{routeName} \xB7 {minutes} min \xB7 {stopName}"
+      routingStopsHereTitle: Routing stops here
+      runningLateTitle: Running late
+      slackLeft: '{minutes} min slack'
+      slackShort: '{minutes} min short'
+      someWay: some way
+      stepBoard: Board {routeName} to {destination}
+      stepContinue: Continue to {destination}
+      stepWalk: Walk to {destination}
+      stopInMinutes: "{stopName} \xB7 {minutes} min"
+      theStop: the stop
+      tightConnectionTitle: Tight connection
+      tripCompleteTitle: Trip complete
+      turnIn: In {distance}{then}
+      turnThen: ', then {instruction}'
+      unreachable: "{howFar} \xB7 not getting closer"
+      unreachableFromNamed: "{howFar} from {destination} \xB7 not getting closer"
+      yourBus: your bus
+      yourBusLead: Your bus
+      yourConnection: your connection
+      yourDestination: your destination
+      yourRideLead: Your ride
+      yourStop: your stop
+      yourStopTitle: Your stop
+    departureGone: departed
+    noBusesNearby: No buses detected nearby
+    stopsAnswered: '{answered} of {total} stops answered'
+    waitingAtStop: Waiting at {stop}
+    waitingAtStopTime: "Waiting at {stop} \xB7 {time}"
   ItinerarySummary:
     itineraryDetails: Itinerary details
   LocationSearch:
@@ -582,28 +632,29 @@ components:
   MetroUI:
     arriveAt: You arrive
     arrivesAtTime: arrives {time}
-    confirmSwitchTrip: Switch your active trip to this route? Your current guidance will update.
+    confirmSwitchTrip: Switch your active trip to this route? Your current guidance
+      will update.
     departsAtTime: departs {time}
     fare: '{fare}'
     itineraryDescription: '{time} itinerary using {routes}'
-    itinerarySummary: 'from {stopName} | {cost}'
+    itinerarySummary: from {stopName} | {cost}
     leaveAt: You leave
     multipleOptions: Multiple Options
     orAlternatives: or other routes in the same direction
-    originallyScheduledTime: '(originally {originalTime})'
+    originallyScheduledTime: (originally {originalTime})
     sameShapeVariants: '{count, plural, one {# option} other {# options}}'
     singleModeItineraryDescription: '{time} {mode} itinerary'
     startTrip: Start Trip
     switchTrip: Switch to this trip
-    timeBiking: "{time} biking"
-    timeWalking: "{time} walking"
-    variantBiking: "{distance} biking"
+    timeBiking: '{time} biking'
+    timeWalking: '{time} walking'
+    variantBiking: '{distance} biking'
     variantBoardAt: Board at {stop}
     variantShown: currently shown
-    variantWalking: "{distance} walking"
+    variantWalking: '{distance} walking'
     variantsOtherStop: board at {stop}
     variantsOtherStopsNamed: board at {stop} +{count} more
-    variantsOtherTimes: "{count, plural, one {# other time} other {# other times}}"
+    variantsOtherTimes: '{count, plural, one {# other time} other {# other times}}'
   MobilityProfile:
     DevicesPane:
       devices:
@@ -620,9 +671,8 @@ components:
         white cane: White cane
       prompt: Do you regularly use a mobility assistive device? (Check all that apply)
     LimitationsPane:
-      mobilityPrompt: >-
-        Do you have any mobility limitations that cause you to walk more slowly
-        or more carefully than other people?
+      mobilityPrompt: Do you have any mobility limitations that cause you to walk
+        more slowly or more carefully than other people?
       visionLimitations:
         legally-blind: Legally blind
         low-vision: Low-vision
@@ -633,34 +683,29 @@ components:
       header: Mobility Profile
       mobilityDevices: 'Mobility devices: '
       mobilityLimitations: 'Mobility limitations: '
-      planTripDescription: >-
-        If you have a travel companion, you can choose to plan this trip
-        according to their mobility profile.
+      planTripDescription: If you have a travel companion, you can choose to plan
+        this trip according to their mobility profile.
       visionLimitations: 'Vision limitations: '
     dropdownLabel: 'User mobility profile:'
-    intro: >-
-      Please answer a few questions to customize the trip planning experience to
-      your needs and preferences.
+    intro: Please answer a few questions to customize the trip planning experience
+      to your needs and preferences.
     myself: Myself
     title: Define Your Mobility Profile
   NarrativeItinerariesHeader:
     changeSortDir: Change sort direction
-    howToFindResults: >-
-      To view results, see the Itineraries Found heading below. To see itinerary
-      details, select a time button.
-    itinerariesFound: >-
-      {itineraryNum, plural, one {# itinerary found} other {# itineraries found}
-      }
-    resultsSortedBy: >-
-      Trip results currently sorted by {sortSelected}. To change the way results
-      are sorted, use the "Sort Results" button below.
+    howToFindResults: To view results, see the Itineraries Found heading below. To
+      see itinerary details, select a time button.
+    itinerariesFound: '{itineraryNum, plural, one {# itinerary found} other {# itineraries
+      found} }'
+    resultsSortedBy: Trip results currently sorted by {sortSelected}. To change the
+      way results are sorted, use the "Sort Results" button below.
     searching: Finding your options...
     selectArrivalTime: Arrival time
     selectBest: Best option
     selectCost: Cost
     selectDepartureTime: Departure time
     selectDuration: Duration
-    selectEmissions: CO₂ emissions
+    selectEmissions: "CO\u2082 emissions"
     selectFare: Transit fare
     selectWalkTime: Walk time
     sortResults: Sort results
@@ -681,7 +726,7 @@ components:
     filterNearby: Filter nearby results
     header: Nearby View
     headsign: '{destination}'
-    nearbyListIntro: 'List of {count} nearby entities.'
+    nearbyListIntro: List of {count} nearby entities.
     nothingNearby: There are no places nearby.
     nothingNearbyHeader: Out of Range
     searchNearby: Search nearby...
@@ -701,38 +746,32 @@ components:
     notificationChannelPrompt: 'Receive notifications about your saved trips via:'
   OTP2ErrorRenderer:
     LOCATION_NOT_FOUND:
-      body: >-
-        {inputFields} {inputFieldsCount, plural, =0 {} one {location is} other
-        {locations are}} outside the area we have street data for, which covers
-        the Twin Cities metro. If you are inside the metro your device may have
-        given a poor location fix — try setting the point by address instead.
+      body: "{inputFields} {inputFieldsCount, plural, =0 {} one {location is} other\
+        \ {locations are}} outside the area we have street data for, which covers\
+        \ the Twin Cities metro. If you are inside the metro your device may have\
+        \ given a poor location fix \u2014 try setting the point by address instead."
       header: Outside the routable area
     NO_STOPS_IN_RANGE:
-      body: >-
-        {inputFields} {inputFieldsCount, plural, =0 {} one {location is} other
-        {locations are}} not near any transit stops.
+      body: '{inputFields} {inputFieldsCount, plural, =0 {} one {location is} other
+        {locations are}} not near any transit stops.'
       header: No stops in range
     NO_TRANSIT_CONNECTION:
-      body: >-
-        No transit connection was found between your origin and destination on
+      body: No transit connection was found between your origin and destination on
         the selected day of service, using the vehicle types you selected.
       header: No itineraries found
     NO_TRANSIT_CONNECTION_IN_SEARCH_WINDOW:
-      body: >-
-        A transit connection was found, but it was outside the search window,
+      body: A transit connection was found, but it was outside the search window,
         try adjusting your search window, using the vehicle types you selected.
       header: No transit connection in search window
     OTP_RR_TRIP_IN_PAST:
       body: One or more of these itineraries ends in the past.
       header: Trip has already occurred
     OUTSIDE_BOUNDS:
-      body: >-
-        {inputFields} {inputFieldsCount, plural, =0 {} one {location is} other
-        {locations are}} not in the bounds of the trip planner.
+      body: '{inputFields} {inputFieldsCount, plural, =0 {} one {location is} other
+        {locations are}} not in the bounds of the trip planner.'
       header: Location outside bounds
     OUTSIDE_SERVICE_PERIOD:
-      body: >-
-        The date specified is outside the range of data currently loaded into
+      body: The date specified is outside the range of data currently loaded into
         the trip planner.
       header: Outside service period
     SYSTEM_ERROR:
@@ -740,7 +779,7 @@ components:
       header: Trip Planner Failure
     WALKING_BETTER_THAN_TRANSIT:
       advisory: Walking is faster than transit for this trip.
-      advisoryWithTime: 'Walking is {minutes} min faster than the best transit option.'
+      advisoryWithTime: Walking is {minutes} min faster than the best transit option.
       body: Avoiding transit on your trip will be faster than taking transit.
       header: Transit isn't the fastest way to make this trip
     inputFields:
@@ -750,31 +789,31 @@ components:
     changeNumber: Change number
     invalidCode: Please enter 6 digits for the validation code.
     invalidPhone: Please enter a valid phone number.
-    phoneNumberSubmitted: 'Phone number {phoneNumber} was successfully submitted.'
-    phoneNumberVerified: 'Phone number {phoneNumber} was successfully verified.'
+    phoneNumberSubmitted: Phone number {phoneNumber} was successfully submitted.
+    phoneNumberVerified: Phone number {phoneNumber} was successfully verified.
     placeholder: Enter your phone number
     prompt: 'Enter your phone number for SMS notifications:'
     requestNewCode: Request a new code
     sendVerificationText: Send verification text
-    smsConsent: >
-      By providing your phone number, you agree to receive verification and trip
-      monitoring SMS messages. Additional costs from your phone carrier may
+    smsConsent: 'By providing your phone number, you agree to receive verification
+      and trip monitoring SMS messages. Additional costs from your phone carrier may
       apply.
+
+      '
     verificationCode: 'Verification code:'
-    verificationInstructions: >
-      Please check the SMS messaging app on your mobile phone for a text message
-      with a verification code, and enter the code below (code expires after 10
-      minutes).
+    verificationInstructions: 'Please check the SMS messaging app on your mobile phone
+      for a text message with a verification code, and enter the code below (code
+      expires after 10 minutes).
+
+      '
     verify: Verify
-    verifySms: >-
-      Please complete the verification process in order to set up SMS
-      notifications.
+    verifySms: Please complete the verification process in order to set up SMS notifications.
   Place:
     deleteThisPlace: Delete this place
   PlaceEditor:
     addressPrompt: 'Address:'
     genericLocationPlaceholder: Search for location
-    locationPlaceholder: 'Search for {placeName} location'
+    locationPlaceholder: Search for {placeName} location
     locationTypePrompt: 'Location type:'
     nameExample: My coffee shop
     namePrompt: 'Place name:'
@@ -791,10 +830,11 @@ components:
     itinerary: Itinerary
     toggleMap: Toggle Map
   RealtimeAnnotation:
-    delaysShownInResults: >
-      Your trip results have been adjusted based on real-time information. Under
-      normal conditions, this trip would take {normalDuration} using the
-      following routes: {routes}.
+    delaysShownInResults: 'Your trip results have been adjusted based on real-time
+      information. Under normal conditions, this trip would take {normalDuration}
+      using the following routes: {routes}.
+
+      '
     serviceUpdate: Service update
   RealtimeStatusLabel:
     early: '{minutes} early'
@@ -804,17 +844,18 @@ components:
   ResultsError:
     backToSearch: Back to Search
   RoundTrip:
-    customStayLabel: 'Custom stay, in minutes'
+    customStayLabel: Custom stay, in minutes
     customStayPlaceholder: Custom
     customStayUnit: min
     header: Return trip
-    leaveLine: 'Leave {destination} from {time} · {stay}+ there'
+    leaveLine: "Leave {destination} from {time} \xB7 {stay}+ there"
     noOptions: No return options found
     optionsGroupLabel: Ways back
-    planError: Couldn’t plan the return
+    planError: "Couldn\u2019t plan the return"
     retry: Retry
     stayGroupLabel: Minimum time at the destination
-    stayOption: '{hours, plural, =0 {} other {# h }}{minutes, plural, =0 {} other {# min}}'
+    stayOption: '{hours, plural, =0 {} other {# h }}{minutes, plural, =0 {} other
+      {# min}}'
     stayingFor: '{stay}+ there'
     timeThere: '{duration} there'
     toggleLabel: Round trip
@@ -822,7 +863,7 @@ components:
     headsignFrom: '{headsign} (from {firstStop})'
     headsignTo: '{headsign} ({lastStop})'
     moreDetails: More Details
-    operatedBy: 'Operated by {agencyName}'
+    operatedBy: Operated by {agencyName}
     selectADirection: Select a direction...
     stopsTo: Toward
   RouteViewer:
@@ -836,15 +877,15 @@ components:
     noFilteredRoutesFound: No routes match your filter!
     noRouteFilter: No filters are currently applied to the route list.
     openPatternViewer: View route details
-    routesFilteredBy: 'The following filters are currently applied to the route list: {list}.'
+    routesFilteredBy: 'The following filters are currently applied to the route list:
+      {list}.'
     shortTitle: Routes
     stopsInDirectionOfTravel: 'Stops in this direction of travel:'
     title: Route Viewer
   SaveTripButton:
     cantSaveText: Cannot save
-    cantSaveTooltip: >-
-      Only itineraries that include transit and no rentals or ride hailing can
-      be monitored.
+    cantSaveTooltip: Only itineraries that include transit and no rentals or ride
+      hailing can be monitored.
     saveTripText: Save trip
     signInText: Log in to save trip
     signInTooltip: Please log in to save trip.
@@ -854,18 +895,17 @@ components:
   SavedTripEditor:
     deleteSavedTrip: Delete
     editSavedTrip: Edit saved trip
-    readOnlyBanner: >-
-      {creator} created and added you to this trip. Therefore, you cannot make
-      changes.
+    readOnlyBanner: '{creator} created and added you to this trip. Therefore, you
+      cannot make changes.'
     saveNewTrip: Save new trip
     travelCompanions: Travel companions
     tripInformation: Trip information
     tripNotFound: Trip not found
-    tripNotFoundDescription: 'Sorry, the requested trip was not found.'
+    tripNotFoundDescription: Sorry, the requested trip was not found.
     tripNotifications: Trip notifications
   SavedTripList:
     alertTag: '{alert, plural, one {View one alert} other {View # alerts}}'
-    fromTo: 'From {from} to {to}'
+    fromTo: From {from} to {to}
     myTrips: My trips
     noSavedTrips: You have no saved trips
     noSavedTripsInstructions: Perform a trip search from the map first.
@@ -876,41 +916,38 @@ components:
     itineraryLoaded: Itinerary loaded
     itineraryLoading: Loading itinerary
     selectAtLeastOneDay: Please select at least one day to monitor.
-    tooManyTrips: >
-      You already have reached the maximum of five saved trips. Please remove
-      unused trips from your saved trips, and try again.
-    tripNameAlreadyUsed: Another saved trip already uses this name. Please choose a different name.
+    tooManyTrips: 'You already have reached the maximum of five saved trips. Please
+      remove unused trips from your saved trips, and try again.
+
+      '
+    tripNameAlreadyUsed: Another saved trip already uses this name. Please choose
+      a different name.
     tripNameRequired: Please enter a trip name.
   SequentialPaneDisplay:
-    stepNumber: 'Step {step} of {total}'
+    stepNumber: Step {step} of {total}
   SessionTimeout:
-    body: >-
-      Your session will expire within a minute. Press 'Continue Session' to keep
+    body: Your session will expire within a minute. Press 'Continue Session' to keep
       your search.
     header: Session about to timeout!
     keepSession: Continue Session
   SettingsScreen:
-    bikeSpeedHelp: >-
-      How long the app thinks your bike legs take. Set it and every plan uses
-      it, including before you have ridden far enough for the app to measure
+    bikeSpeedHelp: How long the app thinks your bike legs take. Set it and every plan
+      uses it, including before you have ridden far enough for the app to measure
       your pace.
     bikeSpeedLabel: 'Your biking speed: {speed} mph'
     bikeSpeedSlider: Biking speed
     gettingAroundHeader: Getting around
     heading: Settings
-    routingHelp: >-
-      These apply to every trip you plan, and to any route the app rebuilds
+    routingHelp: These apply to every trip you plan, and to any route the app rebuilds
       while you ride.
     speedHigh: Faster
     speedLow: Slower
     turnByTurnHeader: Turn-by-turn
-    turnByTurnHelp: >-
-      Off by default. With this off you can still switch turn-by-turn on for one
-      walking or biking leg from the trip overview once a trip has started.
+    turnByTurnHelp: Off by default. With this off you can still switch turn-by-turn
+      on for one walking or biking leg from the trip overview once a trip has started.
     turnByTurnLabel: Turn-by-turn directions
-    walkSpeedHelp: >-
-      How long the app thinks your walking legs take, including the walk to your
-      bus stop.
+    walkSpeedHelp: How long the app thinks your walking legs take, including the walk
+      to your bus stop.
     walkSpeedLabel: 'Your walking speed: {speed} mph'
     walkSpeedSlider: Walking speed
   SimpleRealtimeAnnotation:
@@ -933,18 +970,17 @@ components:
   StopViewer:
     displayStopId: '<strong>Stop ID</strong>: {stopId}'
     findSchedule: Find schedule by date
-    flexStop: >-
-      This is a flex stop. Vehicles will drop off and pick up passengers in this
-      flexible zone by request. You may have to call ahead for service in this
+    flexStop: This is a flex stop. Vehicles will drop off and pick up passengers in
+      this flexible zone by request. You may have to call ahead for service in this
       area.
-    forStop: 'for {stopName}'
+    forStop: for {stopName}
     header: Stop Viewer
     loadingText: Loading Stop...
     noStopsFound: No stop times found for date.
     operatorLogoAriaLabel: '{operatorName} stop:'
     schedule: Schedule
-    timezoneWarning: 'Departure times are shown in {timezoneCode}.'
-    titleBarStopId: 'Stop {stopId}'
+    timezoneWarning: Departure times are shown in {timezoneCode}.
+    titleBarStopId: Stop {stopId}
     viewNearby: View Nearby
     viewSchedule: View schedule
     zoomToStop: Zoom to stop
@@ -960,18 +996,21 @@ components:
     defaultContent: Switch
     switchLocations: Switch locations
   TermsOfUsePane:
-    confirmDeletionPrompt: >
-      Removing your consent to storage of historical trips will cause your trip
-      history to be deleted.  Are you sure you want to continue?
+    confirmDeletionPrompt: 'Removing your consent to storage of historical trips will
+      cause your trip history to be deleted.  Are you sure you want to continue?
+
+      '
     mustAgreeToTerms: You must agree to the terms of service to continue.
-    termsOfServiceStatement: >
-      I confirm that I am at least 18 years old, and I have read and consent to
-      the <termsOfUseLink>Terms of service</termsOfUseLink > for using the Trip
-      Planner.
-    termsOfStorageStatement: >
-      Optional: I consent to the Trip Planner storing my historical planned
-      trips in order to improve transit services in my area.
-      <termsOfStorageLink>More info...</termsOfStorageLink>
+    termsOfServiceStatement: 'I confirm that I am at least 18 years old, and I have
+      read and consent to the <termsOfUseLink>Terms of service</termsOfUseLink > for
+      using the Trip Planner.
+
+      '
+    termsOfStorageStatement: 'Optional: I consent to the Trip Planner storing my historical
+      planned trips in order to improve transit services in my area. <termsOfStorageLink>More
+      info...</termsOfStorageLink>
+
+      '
   Timetable:
     errorLoadingStopClosures: Error loading stop closures
     errorLoadingTimetable: Error loading timetable
@@ -980,20 +1019,23 @@ components:
     switchDirection: Switch Direction
     timetable: Timetable
   TransitVehicleOverlay:
-    travelingAt: 'Traveling at {milesPerHour}'
-    vehicleName: 'Vehicle {vehicleNumber}'
+    travelingAt: Traveling at {milesPerHour}
+    vehicleName: Vehicle {vehicleNumber}
   TripBasicsPane:
     checkAgain: Check again
     checkingItineraryExistence: Checking itinerary existence for each day of the week...
     indicatesRequiredFields: Indicates required fields
-    onlyOnDate: 'Only on {date, date, ::eeeee yyyyMMdd}'
+    onlyOnDate: Only on {date, date, ::eeeee yyyyMMdd}
     recurringEachWeek: On certain days each week
     tripDaysPrompt: What days do you take this trip?
-    tripIsAvailableOnDaysIndicated: Your trip is available on the days of the week as indicated above.
+    tripIsAvailableOnDaysIndicated: Your trip is available on the days of the week
+      as indicated above.
     tripNamePrompt: 'Please provide a name for this trip:'
-    tripNotAvailableOnDay: 'Trip not available on {repeatedDay}'
-    unsavedChangesExistingTrip: 'You haven''t saved your trip yet. If you leave, changes will be lost.'
-    unsavedChangesNewTrip: 'You haven''t saved your new trip yet. If you leave, it will be lost.'
+    tripNotAvailableOnDay: Trip not available on {repeatedDay}
+    unsavedChangesExistingTrip: You haven't saved your trip yet. If you leave, changes
+      will be lost.
+    unsavedChangesNewTrip: You haven't saved your new trip yet. If you leave, it will
+      be lost.
   TripCompanionsPane:
     companionLabel: 'Companion on this trip:'
     observersLabel: 'Observers watching this trip:'
@@ -1002,9 +1044,10 @@ components:
     advancedSettings: Advanced settings
     altRouteRecommended: An alternative route or transfer point is recommended
     delaysAboveThreshold: There are delays or disruptions of more than
-    howToReceiveAlerts: >
-      To receive alerts for your saved trips, enable notifications in your
-      account settings, and try saving a trip again.
+    howToReceiveAlerts: 'To receive alerts for your saved trips, enable notifications
+      in your account settings, and try saving a trip again.
+
+      '
     monitorThisTrip: 'Monitor this trip before it begins:'
     notificationsTurnedOff: Notifications are turned off for your account.
     notifyViaChannelWhen: 'Notify me via {channel} when:'
@@ -1019,11 +1062,11 @@ components:
     planNewTrip: Plan New Trip
   TripStatusRenderers:
     active:
-      delayedHeading: 'Trip is in progress and is delayed {formattedDuration}!'
-      description: 'Trip is due to arrive at the destination at {arrivalTime, time, short}.'
-      earlyHeading: >-
-        Trip is in progress and is arriving {formattedDuration} earlier than
-        expected!
+      delayedHeading: Trip is in progress and is delayed {formattedDuration}!
+      description: Trip is due to arrive at the destination at {arrivalTime, time,
+        short}.
+      earlyHeading: Trip is in progress and is arriving {formattedDuration} earlier
+        than expected!
       noDataHeading: Trip is in progress (no realtime updates available).
       onTimeHeading: Trip is in progress and is about on time.
     base:
@@ -1038,18 +1081,19 @@ components:
       description: Resume to receive notifications.
       heading: Notifications are paused.
     nextTripNotPossible:
-      description: >
-        After multiple failed attempts to locate your itinerary, monitoring has
-        been snoozed for today as one or more changes to the itinerary may have
-        occurred.  To resume trip monitoring, click Unsnooze. If monitoring is
-        still not available, click Plan New Trip to save an up to date itinerary
-        to monitor.
+      description: 'After multiple failed attempts to locate your itinerary, monitoring
+        has been snoozed for today as one or more changes to the itinerary may have
+        occurred.  To resume trip monitoring, click Unsnooze. If monitoring is still
+        not available, click Plan New Trip to save an up to date itinerary to monitor.
+
+        '
       heading: Unable to monitor trip
     noLongerPossible:
-      description: >
-        The trip planner was unable to find your trip on any selected days of
-        the week. Please try re-planning your itinerary to find an alternative
+      description: 'The trip planner was unable to find your trip on any selected
+        days of the week. Please try re-planning your itinerary to find an alternative
         route.
+
+        '
       heading: Trip is no longer possible
     notCalculated:
       awaiting: Awaiting calculation...
@@ -1059,19 +1103,16 @@ components:
       description: This is a one-time trip that occurred in the past.
       heading: Trip is in the past
     snoozed:
-      description: >-
-        Notifications for this trip will automatically begin on the next
+      description: Notifications for this trip will automatically begin on the next
         selected available day. Unsnooze to receive notifications today.
       heading: Notifications are snoozed for today.
     upcoming:
-      nextTripBegins: >-
-        Next trip starts on {tripDatetime, date, ::eeeee yyyyMMdd} at
+      nextTripBegins: Next trip starts on {tripDatetime, date, ::eeeee yyyyMMdd} at
         {tripDatetime, time, short}.
-      tripBegins: >-
-        Trip is due to begin at {tripStart, time, short}. (Realtime monitoring
+      tripBegins: Trip is due to begin at {tripStart, time, short}. (Realtime monitoring
         will begin at {monitoringStart, time, short}.)
-      tripStartIsDelayed: 'Trip start time is delayed {duration}!'
-      tripStartIsEarly: 'Trip start time is happening {duration} earlier than expected!'
+      tripStartIsDelayed: Trip start time is delayed {duration}!
+      tripStartIsEarly: Trip start time is happening {duration} earlier than expected!
       tripStartsSoonNoUpdates: Trip is starting soon (no realtime updates available).
       tripStartsSoonOnTime: Trip is starting soon and is about on time.
   TripSummary:
@@ -1089,14 +1130,11 @@ components:
     header: Trip Tools
     linkCopied: Copied
     reportEmailSubject: Reporting an Issue with OpenTripPlanner
-    reportEmailTemplate: >
-      *** INSTRUCTIONS TO USER ***
+    reportEmailTemplate: '*** INSTRUCTIONS TO USER ***
 
-      This feature allows you to email a report to site administrators for
-      review.
+      This feature allows you to email a report to site administrators for review.
 
-      Please fill out the prompts below and send using your regular email
-      program.
+      Please fill out the prompts below and send using your regular email program.
 
 
       *** PLEASE COMPLETE THE FOLLOWING ***
@@ -1105,11 +1143,12 @@ components:
       Issue encountered:
 
 
-      Type of trip you wanted to take (ex. walk + transit, bike + transit, car +
-      transit):
+      Type of trip you wanted to take (ex. walk + transit, bike + transit, car + transit):
 
 
       *** TECHNICAL DETAILS ***
+
+      '
     reportIssue: Report Issue
     copyItineraryText: Copy Trip Text
   TripViewer:
@@ -1119,20 +1158,18 @@ components:
     header: Trip Viewer
     listOfRouteStops: List of stops on this route
     startOfTrip: Trip begins here
-    tripDescription: 'Board at {boardAtStop} and disembark at {disembarkAtStop}'
+    tripDescription: Board at {boardAtStop} and disembark at {disembarkAtStop}
   UserAccountScreen:
-    confirmDelete: >-
-      Are you sure you would like to delete your user account? Once you do so,
-      it cannot be recovered.
+    confirmDelete: Are you sure you would like to delete your user account? Once you
+      do so, it cannot be recovered.
     errorUpdatingProfile: Error updating profile.
     fieldUpdated: This setting has been updated.
     fields:
       add-companion-form: Travel Companions
       storeTripHistory: Store trip history
   UserSettings:
-    confirmDeletion: >-
-      You have recent searches and/or places stored. Disabling storage of recent
-      places/searches will remove these items. Continue?
+    confirmDeletion: You have recent searches and/or places stored. Disabling storage
+      of recent places/searches will remove these items. Continue?
     favoriteStops: Favorite stops
     myPreferences: My preferences
     mySavedPlaces: My saved places (<manageLink>manage</manageLink>)
@@ -1142,21 +1179,22 @@ components:
     recentSearches: Recent searches
     rememberSearches: Remember recent searches/places?
     stopId: 'Stop ID: {stopId}'
-    storageDisclaimer: >
-      Any preferences, places, or settings you opt  to save will be stored in
-      the local storage of your browser.  TriMet will not have access to
-      knowledge about your home, work,  or any other location. At any point you
-      can opt to turn off  remembering recent places/searches and clear your
-      saved home/work locations and favorite stops.
+    storageDisclaimer: 'Any preferences, places, or settings you opt  to save will
+      be stored in the local storage of your browser.  TriMet will not have access
+      to knowledge about your home, work,  or any other location. At any point you
+      can opt to turn off  remembering recent places/searches and clear your saved
+      home/work locations and favorite stops.
+
+      '
   VerifyEmailPane:
     emailIsVerified: My email is verified!
-    instructions1: >
-      Please check your email inbox and follow the link in the message to verify
-      your email address before finishing your account setup.
-    instructions2: 'Once you''re verified, click the button below to continue.'
-    instructions3: >-
-      You can plan trips and return to this page anytime to continue setting up
-      your account.
+    instructions1: 'Please check your email inbox and follow the link in the message
+      to verify your email address before finishing your account setup.
+
+      '
+    instructions2: Once you're verified, click the button below to continue.
+    instructions3: You can plan trips and return to this page anytime to continue
+      setting up your account.
     resendVerification: Resend verification email
   ViewSwitcher:
     nearby: Nearby
@@ -1175,12 +1213,11 @@ config:
 util:
   state:
     errorPlanningTrip: An error occurred while planning a trip.
-    networkUnavailable: 'The {network} network is unavailable at this moment.'
+    networkUnavailable: The {network} network is unavailable at this moment.
     noTripFound: No trip found.
-    noTripFoundForMode: 'No trip found for {modes}.'
-    noTripFoundReason: >-
-      There may be no transit service within the maximum specified distance or
-      at the specified time, or your start or end point might not be safely
+    noTripFoundForMode: No trip found for {modes}.
+    noTripFoundReason: There may be no transit service within the maximum specified
+      distance or at the specified time, or your start or end point might not be safely
       accessible.
     noTripFoundWithReason: '{noTripFound} {reason}'
 otpUi:
@@ -1190,12 +1227,10 @@ otpUi:
   ItineraryBody:
     canceledMessage: The following trip has been canceled
   TextOnlyItinerary:
-    arriveAt: 'Arrive at {place} at {timeMillis, time, short}.'
-    departFrom: 'Depart from {place} at {timeMillis, time, short}.'
-    transitArriveAt: >-
-      Arrive at {place} {hasStopId, select, true {(Stop Id: {stopId})} other {}}
-      at {timeMillis, time, short}.
-    transitDepartFrom: >-
-      Depart from {place} {hasStopId, select, true {(Stop Id: {stopId})} other
-      {}} at {timeMillis, time, short} on {routeName}{hasHeadsign, select, true
-      { towards {headsign}} other {}}.
+    arriveAt: Arrive at {place} at {timeMillis, time, short}.
+    departFrom: Depart from {place} at {timeMillis, time, short}.
+    transitArriveAt: 'Arrive at {place} {hasStopId, select, true {(Stop Id: {stopId})}
+      other {}} at {timeMillis, time, short}.'
+    transitDepartFrom: 'Depart from {place} {hasStopId, select, true {(Stop Id: {stopId})}
+      other {}} at {timeMillis, time, short} on {routeName}{hasHeadsign, select, true
+      { towards {headsign}} other {}}.'

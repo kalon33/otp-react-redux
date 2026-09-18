@@ -243,6 +243,24 @@ export function getNextStopOnRide(
 }
 
 /**
+ * The identity of the stop list a floor belongs to.
+ *
+ * "Stops remaining" is a statement about ONE leg of ONE itinerary. A re-plan
+ * installs a different leg at the same index, and if the floor follows it
+ * across, the new leg's honest count is pinned to the old leg's. On 2026-09-15
+ * START_GO_MODE at 15:44:06.753 replaced leg 0 (Knox Ave & American Blvd ->
+ * 2nd Ave S & 11th, 5 stops) with a longer one (Knox Ave & 76th -> 2nd Ave S &
+ * 5th, 6 stops) and the floor held the count at 4 for 3m5s, until the mid-ride
+ * relaunch at 15:47:11.810 wiped the in-memory latch and the truthful 6
+ * appeared as a rise. The signature keys the floor to the list it measured:
+ * the leg index, the alight stop and how many stops the list holds.
+ */
+export function stopListSignature(legIndex: number, leg: any): string {
+  const alight = leg?.to?.stop?.gtfsId ?? leg?.to?.stopId ?? leg?.to?.name ?? ''
+  return `${legIndex}|${alight}|${orderedStopsOnLeg(leg).length}`
+}
+
+/**
  * A stop the rider has passed stays passed.
  *
  * countStopsAhead is stateless and re-decides "passed" from scratch every tick
@@ -254,33 +272,57 @@ export function getNextStopOnRide(
  * count alone went 7 -> 8 -> 7. Fixing the snapper cannot fix the second one;
  * the counter needs its own latch.
  *
- * The latch is per leg AND per source: stopsSource switches between gps,
- * vehicle, vehicle-stop and schedule (see getTransitProgress), and those counts
- * are not measuring the same thing — a vehicle-derived count is not comparable
- * with a GPS-derived one, so a source change starts over rather than pinning
- * the new source to the old source's floor.
+ * The floor is per STOP LIST, not per source. It used to restart whenever
+ * stopsSource changed, on the argument that a vehicle-derived count and a
+ * GPS-derived one are not comparable — but they are two measurements of the
+ * same rider-visible quantity, and the restart is what un-passed a stop on
+ * 2026-09-08: at 11:25:54 the source flipped gps -> vehicle for seven seconds
+ * and the count went 4 -> 5 (next stop back from I-35W & 66th to I-35W & 46th)
+ * with currentLegProgress flat at 19.27, then back to 4 at 11:26:01 when the
+ * source flipped back. Nothing but a different stop list may raise the count.
+ *
+ * Degraded data may not publish a short count either. An untrusted reading —
+ * a stop list that collapsed to the alight stop (hasDegenerateStopList) or the
+ * even-spacing schedule guess — holds the last good count instead of replacing
+ * it, so a leg whose data thins out mid-ride keeps the last number that was
+ * measured rather than announcing stops the rider has not passed.
  */
 export interface StopCountLatch {
-  legIndex: number
-  source: string
+  /** The stop list this floor measured — see stopListSignature. */
+  legKey: string
+  /** The floor itself: the lowest trusted count seen for that list. */
   stopsRemaining: number
 }
 
 export function latchStopsRemaining(
   prev: StopCountLatch | null,
-  next: { legIndex: number; source: string; stopsRemaining: number }
+  next: {
+    leg?: any
+    legIndex: number
+    stopsRemaining: number
+    /** False for an assessed-untrusted reading (progress.stopsTrusted). */
+    trusted?: boolean
+  }
 ): { next: StopCountLatch; stopsRemaining: number } {
-  const comparable =
-    prev != null &&
-    prev.legIndex === next.legIndex &&
-    prev.source === next.source
+  const legKey = stopListSignature(next.legIndex, next.leg)
+  const held = prev != null && prev.legKey === legKey ? prev : null
+
+  // A different stop list is a different measurement: start over rather than
+  // pinning it to a floor taken from the list it replaced.
+  if (!held) {
+    return {
+      next: { legKey, stopsRemaining: next.stopsRemaining },
+      stopsRemaining: next.stopsRemaining
+    }
+  }
+
+  // Degraded reading: hold the last good count, floor unchanged.
+  if (next.trusted === false) {
+    return { next: held, stopsRemaining: held.stopsRemaining }
+  }
+
   // Never let the count grow back. It may only fall (stops being passed) or
   // hold.
-  const stopsRemaining = comparable
-    ? Math.min(prev.stopsRemaining, next.stopsRemaining)
-    : next.stopsRemaining
-  return {
-    next: { legIndex: next.legIndex, source: next.source, stopsRemaining },
-    stopsRemaining
-  }
+  const stopsRemaining = Math.min(held.stopsRemaining, next.stopsRemaining)
+  return { next: { legKey, stopsRemaining }, stopsRemaining }
 }

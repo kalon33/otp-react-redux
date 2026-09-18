@@ -44,6 +44,26 @@ const TO = { lat: 44.9778, lon: -93.2707, name: 'Downtown Minneapolis' }
 
 const TICKS = 15
 
+// Exit code for "the thing under test could not be exercised, and that is not a
+// defect". nightly-verify.sh maps it to SKIP; anything else is still a failure.
+// Same convention as verify-onboard-options.js.
+//
+// This script needs the live graph to hand it a very particular shape -- a
+// walk->bus itinerary whose bus is inside the five-minute board window and
+// whose transit geometry the route matcher agrees with -- and none of that is
+// a property of the code under test. Three consecutive runs on 2026-09-17
+// produced three different outcomes on ONE unchanged tree (PASS; isOnRoute
+// false at 1703 m; no walk->bus itinerary at all), so every one of those
+// preconditions was reporting a red row for a fact about Metro Transit's
+// timetable. The two real assertions -- waiting advances nothing, boarding
+// advances exactly once -- still FAIL loudly. (backlog 13.6)
+const EXIT_SKIP = 75
+
+function skip(reason) {
+  console.log(`SKIP: ${reason}`)
+  process.exit(EXIT_SKIP)
+}
+
 async function main() {
   const browser = await puppeteer.launch({
     args: ['--no-sandbox'],
@@ -62,7 +82,16 @@ async function main() {
   })
   page.on('pageerror', (e) => console.log('[pageerror]', e.message))
   await page.goto(APP, { timeout: 60000, waitUntil: 'networkidle2' })
-  await page.waitForFunction(() => !!window.store, { timeout: 30000 })
+  // 60s, not 30s: this is the FIRST wait in every script and it is a Vite dev
+  // server transforming the module graph, not the product. Two runs on
+  // 2026-09-17 died here -- 30s after a `docker restart otp-frontend-dev`, with
+  // a cold transform cache -- and reported it as the script's failure. A red
+  // row that means "the dev server was still warming up" is the kind that
+  // taught everyone to stop reading this suite (backlog 13.6). If this wait is
+  // what times out, the app at :9967 never booted: `docker restart
+  // otp-frontend-dev` (a full `yarn jest` or `ship_web.sh` clobbers its
+  // tmp/config.yml).
+  await page.waitForFunction(() => !!window.store, { timeout: 60000 })
 
   await page.evaluate(
     async (from, to) => {
@@ -79,17 +108,52 @@ async function main() {
     TO
   )
 
-  await page.waitForFunction(
-    () => {
-      const searches = window.store.getState().otp.searches || {}
-      return Object.values(searches).some(
-        (s) =>
-          s.pending === 0 &&
-          (s.response || []).some((r) => r?.plan?.itineraries?.length > 0)
+  // Five of the eleven red rows on the 2026-09-17 nightly were this one wait
+  // expiring, reported as the bare line "waiting for function failed: timeout
+  // 60000ms exceeded" (backlog 13.6). A plan that never comes back is the
+  // backend, not this script: 17.8 measured the Linode behind
+  // api.transit-nav.com going intermittently unresponsive under the
+  // cap-10000 searches the app now sends, and the nightly's 05:00 CDT slot is
+  // the same hour as the OTP log's `AStar Search timeout` bursts. So tell the
+  // two apart rather than calling both a failure -- still PENDING after 60s
+  // means nothing answered (SKIP); SETTLED with no itineraries is an answer
+  // from the planner, and that is a real red row.
+  const planned = await page
+    .waitForFunction(
+      () => {
+        const searches = window.store.getState().otp.searches || {}
+        return Object.values(searches).some(
+          (s) =>
+            s.pending === 0 &&
+            (s.response || []).some((r) => r?.plan?.itineraries?.length > 0)
+        )
+      },
+      { polling: 500, timeout: 60000 }
+    )
+    .then(() => true)
+    .catch(() => false)
+  if (!planned) {
+    const searches = await page.evaluate(() =>
+      Object.values(window.store.getState().otp.searches || {}).map((s) => ({
+        itineraries: (s.response || []).flatMap(
+          (r) => r?.plan?.itineraries || []
+        ).length,
+        pending: s.pending
+      }))
+    )
+    const stillPending = searches.some((s) => s.pending !== 0)
+    if (stillPending || searches.length === 0) {
+      skip(
+        'no plan came back within 60s and the search is still in flight ' +
+          `(${JSON.stringify(searches)}) — the OTP behind ` +
+          'api.transit-nav.com did not answer, so nothing was verified'
       )
-    },
-    { polling: 500, timeout: 60000 }
-  )
+    }
+    throw new Error(
+      'the planner settled with no itineraries for this pair: ' +
+        JSON.stringify(searches)
+    )
+  }
 
   // A walk→bus itinerary: leg 0 is the access walk the rider finishes early.
   const chosen = await page.evaluate(async () => {
@@ -174,7 +238,12 @@ async function main() {
       waitAt: { lat, lon }
     }
   })
-  if (!chosen) throw new Error('no walk→bus itinerary found')
+  if (!chosen) {
+    skip(
+      'the live graph returned no walk→bus itinerary for this pair, so there ' +
+        'is no access→transit leg change to drive'
+    )
+  }
   console.log(
     `[setup] walk to ${chosen.stop}, board ${chosen.busRoute}; rider will wait at the stop`
   )
@@ -322,10 +391,11 @@ async function main() {
   await browser.close()
 
   if (waiting.progressAlongLeg < 0.98) {
-    throw new Error(
-      `test setup is not exercising the bug: rider is only ${(
-        waiting.progressAlongLeg * 100
-      ).toFixed(1)}% along the access leg, needs >=98%`
+    skip(
+      `the rider is only ${(waiting.progressAlongLeg * 100).toFixed(
+        1
+      )}% along the access leg (needs >=98%), so "waiting at the stop" was ` +
+        'never set up — a fact about the leg geometry, not about leg advance'
     )
   }
   if (waiting.legTransitions > 0) {
@@ -351,23 +421,27 @@ async function main() {
   )
   if (!gate.isRiding) {
     if (!gate.isOnRoute) {
-      throw new Error(
-        'PRECONDITION: the ride position did not match the bus leg ' +
-          '(isOnRoute false) — the transition gate refuses on position, not ' +
-          'on leg order'
+      skip(
+        'the ride position did not match the bus leg (isOnRoute false, ' +
+          `${
+            gate.distanceFromRoute == null
+              ? 'n/a'
+              : `${gate.distanceFromRoute.toFixed(0)}m from the shape`
+          }) — the transition gate refuses on position, not on leg order, so ` +
+          'leg advance was never reached'
       )
     }
     if (gate.distanceFromRoute > chosen.boardMaxDistanceM) {
-      throw new Error(
-        `PRECONDITION: ride position is ${gate.distanceFromRoute.toFixed(
+      skip(
+        `ride position is ${gate.distanceFromRoute.toFixed(
           0
         )} m from the bus shape, over TRANSIT_BOARD_MAX_DISTANCE_M ` +
           `(${chosen.boardMaxDistanceM} m)`
       )
     }
     if (boardLead >= chosen.boardEarlyMs) {
-      throw new Error(
-        `PRECONDITION: the bus boards in ${(boardLead / 60000).toFixed(
+      skip(
+        `the bus boards in ${(boardLead / 60000).toFixed(
           1
         )} min, outside the ${(chosen.boardEarlyMs / 60000).toFixed(
           0
@@ -388,6 +462,11 @@ async function main() {
 }
 
 main().catch((e) => {
-  console.error(e.message)
+  // e.stack, not e.message: a puppeteer waitForFunction timeout says only
+  // "waiting for function failed: timeout 60000ms exceeded" and names neither
+  // the wait that failed nor its line. Six of the eleven red rows on
+  // 2026-09-17 were that one line and nothing else, which is much of why this
+  // suite's output stopped being read (backlog 13.6). The stack names the wait.
+  console.error(e.stack || e.message)
   process.exit(1)
 })

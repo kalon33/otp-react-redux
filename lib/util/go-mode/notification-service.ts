@@ -6,6 +6,7 @@ import {
 } from './position-matching'
 import { hasArrivedAtDestination } from './progress-calculator'
 import { MISSED_BUS_NOTICE_ID } from './native-notify'
+import { notifyIntl } from './notify-i18n'
 import {
   stopsAheadFromNextStopId,
   VEHICLE_AT_BOARD_STOP_M,
@@ -212,7 +213,13 @@ export function checkAlightAlerts(
   if (!nearly && !soon) return null
   const stage = nearly ? 'act' : 'prepare'
 
-  const stopName = currentLeg.to?.name || 'your stop'
+  const intl = notifyIntl()
+  const stopName =
+    currentLeg.to?.name ||
+    intl.formatMessage({
+      defaultMessage: 'your stop',
+      id: 'components.GoMode.notify.yourStop'
+    })
   // Keyed on the EXIT STOP, not the leg: an auto-update mid-ride (a missed-bus
   // swap, a reroute) hands back a new itinerary whose legs have new identities,
   // and keying on those let the same stop alert all over again. What the rider
@@ -234,17 +241,29 @@ export function checkAlightAlerts(
         message: stopName,
         priority: 'high',
         timestamp: new Date(),
-        title: 'Next stop',
+        title: intl.formatMessage({
+          defaultMessage: 'Next stop',
+          id: 'components.GoMode.notify.nextStopTitle'
+        }),
         type: 'ARRIVING_STOP'
       }
     : {
         id,
         // The lead is ALIGHT_PREPARE_SECONDS, so the number is derived rather
         // than the hard-coded "about 2 minutes" the sentence used to carry.
-        message: `${stopName} · ${Math.round(ALIGHT_PREPARE_SECONDS / 60)} min`,
+        message: intl.formatMessage(
+          {
+            defaultMessage: '{stopName} · {minutes} min',
+            id: 'components.GoMode.notify.stopInMinutes'
+          },
+          { minutes: Math.round(ALIGHT_PREPARE_SECONDS / 60), stopName }
+        ),
         priority: 'high',
         timestamp: new Date(),
-        title: 'Your stop',
+        title: intl.formatMessage({
+          defaultMessage: 'Your stop',
+          id: 'components.GoMode.notify.yourStopTitle'
+        }),
         type: 'APPROACH_STOP'
       }
 }
@@ -427,11 +446,20 @@ export function checkBoardVehicleApproach(
   }
 
   const stage = atStop ? 'arriving' : 'approaching'
+  const intl = notifyIntl()
   const routeName =
     (boardLeg as any).routeShortName ||
     (boardLeg as any).routeLongName ||
-    'Your bus'
-  const stopName = boardLeg.from?.name || 'your stop'
+    intl.formatMessage({
+      defaultMessage: 'Your bus',
+      id: 'components.GoMode.notify.yourBusLead'
+    })
+  const stopName =
+    boardLeg.from?.name ||
+    intl.formatMessage({
+      defaultMessage: 'your stop',
+      id: 'components.GoMode.notify.yourStop'
+    })
   // Keyed on stop AND trip: a re-plan onto a later run is a different bus and
   // must re-arm, while an itinerary swap that keeps the trip stays deduped —
   // the reducer's swap-exemption list preserves these ids for that reason.
@@ -454,21 +482,45 @@ export function checkBoardVehicleApproach(
   return stage === 'arriving'
     ? {
         id,
-        message: `${routeName} · ${stopName}`,
+        message: intl.formatMessage(
+          {
+            defaultMessage: '{routeName} · {stopName}',
+            id: 'components.GoMode.notify.routeAtStop'
+          },
+          { routeName, stopName }
+        ),
         priority: 'high',
         timestamp: new Date(),
-        title: 'Bus here',
+        title: intl.formatMessage({
+          defaultMessage: 'Bus here',
+          id: 'components.GoMode.notify.busHereTitle'
+        }),
         type: 'BOARD_BUS_ARRIVING'
       }
     : {
         id,
         message:
           busAwayMin != null
-            ? `${routeName} · ${busAwayMin} min · ${stopName}`
-            : `${routeName} · ${stopName}`,
+            ? intl.formatMessage(
+                {
+                  defaultMessage: '{routeName} · {minutes} min · {stopName}',
+                  id: 'components.GoMode.notify.routeMinutesStop'
+                },
+                { minutes: busAwayMin, routeName, stopName }
+              )
+            : intl.formatMessage(
+                {
+                  defaultMessage: '{routeName} · {stopName}',
+                  id: 'components.GoMode.notify.routeAtStop'
+                },
+                { routeName, stopName }
+              ),
         priority: 'high',
         timestamp: new Date(),
-        title: 'Bus coming',
+        title: intl.formatMessage({
+          defaultMessage: 'Bus coming',
+          id: 'components.GoMode.notify.busComingTitle'
+        }),
         type: 'BOARD_BUS_APPROACHING'
       }
 }
@@ -672,13 +724,30 @@ export function checkUpcomingTurn(
   // Instruction leads the title: Garmin shows the title prominently and
   // truncates the body, so "Turn left on Bryant Ave S" must not land there.
   const title = cue.instruction
+  // The instruction itself is OTP's own text, not ours to translate; the words
+  // this module puts AROUND it are.
+  const intl = notifyIntl()
   const then = progress.followingTurnCue
-    ? `, then ${asContinuation(progress.followingTurnCue.instruction)}`
+    ? intl.formatMessage(
+        {
+          defaultMessage: ', then {instruction}',
+          id: 'components.GoMode.notify.turnThen'
+        },
+        {
+          instruction: asContinuation(progress.followingTurnCue.instruction)
+        }
+      )
     : ''
   const message =
     stage === 'act'
       ? formatCueDistance(distance, units)
-      : `In ${formatCueDistance(distance, units)}${then}`
+      : intl.formatMessage(
+          {
+            defaultMessage: 'In {distance}{then}',
+            id: 'components.GoMode.notify.turnIn'
+          },
+          { distance: formatCueDistance(distance, units), then }
+        )
 
   return {
     id,
@@ -729,9 +798,21 @@ export function checkLeaveSoon(
     return null
   }
 
+  const intl = notifyIntl()
   const routeName =
-    nextLeg.routeShortName || nextLeg.routeLongName || 'your bus'
-  const stopName = nextLeg.from?.name || currentLeg.to?.name || 'the stop'
+    nextLeg.routeShortName ||
+    nextLeg.routeLongName ||
+    intl.formatMessage({
+      defaultMessage: 'your bus',
+      id: 'components.GoMode.notify.yourBus'
+    })
+  const stopName =
+    nextLeg.from?.name ||
+    currentLeg.to?.name ||
+    intl.formatMessage({
+      defaultMessage: 'the stop',
+      id: 'components.GoMode.notify.theStop'
+    })
   const busAwayMin = Math.max(
     1,
     Math.round((progress.timeUntilNextDeparture ?? 0) / 60)
@@ -748,12 +829,27 @@ export function checkLeaveSoon(
   // coaching moves carrying no fact the middot list does not.
   const title =
     leaveInSeconds <= 0
-      ? 'Leave now'
-      : `Leave in ${Math.max(1, Math.round(leaveInSeconds / 60))} min`
+      ? intl.formatMessage({
+          defaultMessage: 'Leave now',
+          id: 'components.GoMode.notify.leaveNowTitle'
+        })
+      : intl.formatMessage(
+          {
+            defaultMessage: 'Leave in {minutes} min',
+            id: 'components.GoMode.notify.leaveInTitle'
+          },
+          { minutes: Math.max(1, Math.round(leaveInSeconds / 60)) }
+        )
 
   return {
     id,
-    message: `${routeName} · ${busAwayMin} min · ${stopName}`,
+    message: intl.formatMessage(
+      {
+        defaultMessage: '{routeName} · {minutes} min · {stopName}',
+        id: 'components.GoMode.notify.routeMinutesStop'
+      },
+      { minutes: busAwayMin, routeName, stopName }
+    ),
     priority: 'high',
     timestamp: new Date(),
     title,
@@ -992,7 +1088,14 @@ export function classifyMissedBus(
 
 /** The route as the rider would name it. */
 function legRouteName(leg: Leg | undefined): string {
-  return leg?.routeShortName || leg?.routeLongName || 'your bus'
+  return (
+    leg?.routeShortName ||
+    leg?.routeLongName ||
+    notifyIntl().formatMessage({
+      defaultMessage: 'your bus',
+      id: 'components.GoMode.notify.yourBus'
+    })
+  )
 }
 
 /**
@@ -1020,16 +1123,29 @@ export function checkMissedBus(
 
   const id = generateNotificationId(
     'MISSED_BUS',
+    // Dedup key, not copy: this fallback is never shown, so it stays an
+    // English literal on purpose — localizing it would make the key change
+    // with the locale.
     `${routeName}_${boardLeg.from?.name || 'the stop'}_${ctx.effectiveBoardMs}`
   )
   if (wasRecentlySent(id, sentNotifications, 30 * 60 * 1000)) return null
 
+  const intl = notifyIntl()
   return {
     id,
-    message: `${routeName} missed · next departure`,
+    message: intl.formatMessage(
+      {
+        defaultMessage: '{routeName} missed · next departure',
+        id: 'components.GoMode.notify.missedNextDeparture'
+      },
+      { routeName }
+    ),
     priority: 'high',
     timestamp: new Date(),
-    title: 'Missed bus',
+    title: intl.formatMessage({
+      defaultMessage: 'Missed bus',
+      id: 'components.GoMode.notify.missedBusTitle'
+    }),
     type: 'MISSED_BUS'
   }
 }
@@ -1067,15 +1183,41 @@ export function buildMissedBusOutcomeNotice(input: {
     ? Math.max(0, Math.round((boardMs - nowMs) / 60000))
     : null
 
+  const intl = notifyIntl()
   let message: string
   if (!best) {
-    message = `${missedRouteName} likely missed · no alternatives`
+    message = intl.formatMessage(
+      {
+        defaultMessage: '{routeName} likely missed · no alternatives',
+        id: 'components.GoMode.notify.missedNoAlternatives'
+      },
+      { routeName: missedRouteName }
+    )
   } else if (minutes == null) {
-    message = `${missedRouteName} likely missed · ${candidates.length} options`
+    message = intl.formatMessage(
+      {
+        defaultMessage: '{routeName} likely missed · {count} options',
+        id: 'components.GoMode.notify.missedOptions'
+      },
+      { count: candidates.length, routeName: missedRouteName }
+    )
   } else if (bestName && bestName !== missedRouteName) {
-    message = `${missedRouteName} likely missed · ${bestName} in ${minutes} min`
+    message = intl.formatMessage(
+      {
+        defaultMessage:
+          '{routeName} likely missed · {bestRouteName} in {minutes} min',
+        id: 'components.GoMode.notify.missedBestIn'
+      },
+      { bestRouteName: bestName, minutes, routeName: missedRouteName }
+    )
   } else {
-    message = `${missedRouteName} likely missed · next in ${minutes} min`
+    message = intl.formatMessage(
+      {
+        defaultMessage: '{routeName} likely missed · next in {minutes} min',
+        id: 'components.GoMode.notify.missedNextIn'
+      },
+      { minutes, routeName: missedRouteName }
+    )
   }
 
   return {
@@ -1091,7 +1233,10 @@ export function buildMissedBusOutcomeNotice(input: {
     // happened can be taken off the rider's lock screen and their wrist.
     pushId: MISSED_BUS_NOTICE_ID,
     timestamp: new Date(nowMs),
-    title: 'Missed bus',
+    title: intl.formatMessage({
+      defaultMessage: 'Missed bus',
+      id: 'components.GoMode.notify.missedBusTitle'
+    }),
     type: 'MISSED_BUS'
   }
 }
@@ -1160,16 +1305,38 @@ export function checkLegTransition(
       !wasRecentlySent(id, sentNotifications, 30000)
     ) {
       announcedLegEntries.add(enteredLeg)
+      const intl = notifyIntl()
+      const destination = enteredLeg.to.name
       let message = ''
 
       if (enteredLeg.mode === 'BUS' || enteredLeg.mode === 'RAIL') {
-        message = `Board ${
-          enteredLeg.routeShortName || enteredLeg.routeLongName
-        } to ${enteredLeg.to.name}`
+        message = intl.formatMessage(
+          {
+            defaultMessage: 'Board {routeName} to {destination}',
+            id: 'components.GoMode.notify.stepBoard'
+          },
+          {
+            destination,
+            routeName:
+              enteredLeg.routeShortName || enteredLeg.routeLongName || ''
+          }
+        )
       } else if (enteredLeg.mode === 'WALK') {
-        message = `Walk to ${enteredLeg.to.name}`
+        message = intl.formatMessage(
+          {
+            defaultMessage: 'Walk to {destination}',
+            id: 'components.GoMode.notify.stepWalk'
+          },
+          { destination }
+        )
       } else {
-        message = `Continue to ${enteredLeg.to.name}`
+        message = intl.formatMessage(
+          {
+            defaultMessage: 'Continue to {destination}',
+            id: 'components.GoMode.notify.stepContinue'
+          },
+          { destination }
+        )
       }
 
       return {
@@ -1177,7 +1344,10 @@ export function checkLegTransition(
         message,
         priority: 'high',
         timestamp: new Date(),
-        title: 'Next Step',
+        title: intl.formatMessage({
+          defaultMessage: 'Next Step',
+          id: 'components.GoMode.notify.nextStepTitle'
+        }),
         type: 'LEG_TRANSITION'
       }
     }
@@ -1329,12 +1499,22 @@ export function checkRouteDeviation(
     return null
   }
 
+  const intl = notifyIntl()
   return {
     id,
-    message: `${Math.round(distanceFromRoute)}m from the route`,
+    message: intl.formatMessage(
+      {
+        defaultMessage: '{metres}m from the route',
+        id: 'components.GoMode.notify.offRouteDistance'
+      },
+      { metres: Math.round(distanceFromRoute) }
+    ),
     priority: 'high',
     timestamp: new Date(),
-    title: 'Off route',
+    title: intl.formatMessage({
+      defaultMessage: 'Off route',
+      id: 'components.GoMode.notify.offRouteTitle'
+    }),
     type: 'ROUTE_DEVIATION'
   }
 }
@@ -1445,20 +1625,51 @@ export function checkDestinationUnreachable(
 ): NotificationEvent | null {
   const id = generateNotificationId('DESTINATION_UNREACHABLE', 'destination')
   if (wasRecentlySent(id, sentNotifications, 3600000)) return null
-  const where = destinationName ? ` from ${destinationName}` : ''
+  const intl = notifyIntl()
   const howFar =
     distanceM != null && Number.isFinite(distanceM)
-      ? `${Math.round(distanceM)}m`
-      : 'some way'
+      ? intl.formatMessage(
+          {
+            defaultMessage: '{metres}m',
+            id: 'components.GoMode.notify.metresAway'
+          },
+          { metres: Math.round(distanceM) }
+        )
+      : intl.formatMessage({
+          defaultMessage: 'some way',
+          id: 'components.GoMode.notify.someWay'
+        })
   return {
     id,
     // Two facts and no advice. "Finish from here your own way" was the app
     // telling the rider what to do with their own legs; the distance and
     // "not getting closer" are the whole of what it actually knows.
-    message: `${howFar}${where} · not getting closer`,
+    //
+    // Named and unnamed destinations are two whole messages rather than one
+    // message plus a glued-on " from X": a fragment with its own leading space
+    // is not something a translator can place, and French wants the distance
+    // and the place in the other order.
+    message: destinationName
+      ? intl.formatMessage(
+          {
+            defaultMessage: '{howFar} from {destination} · not getting closer',
+            id: 'components.GoMode.notify.unreachableFromNamed'
+          },
+          { destination: destinationName, howFar }
+        )
+      : intl.formatMessage(
+          {
+            defaultMessage: '{howFar} · not getting closer',
+            id: 'components.GoMode.notify.unreachable'
+          },
+          { howFar }
+        ),
     priority: 'high',
     timestamp: new Date(),
-    title: 'Routing stops here',
+    title: intl.formatMessage({
+      defaultMessage: 'Routing stops here',
+      id: 'components.GoMode.notify.routingStopsHereTitle'
+    }),
     type: 'DESTINATION_UNREACHABLE'
   }
 }
@@ -1501,17 +1712,55 @@ function connectionWarningCopy(
   delaySeconds: number,
   slackSeconds: number
 ): { message: string; title: string } {
-  const atStop = stopName ? ` · ${stopName}` : ''
+  // Four whole messages rather than two plus a " · X" fragment, for the same
+  // reason the unreachable copy is two: a middot-prefixed tail is not a
+  // translatable unit.
+  const intl = notifyIntl()
   if (slackSeconds < 0) {
-    const lateMin = Math.max(1, Math.round(delaySeconds / 60))
+    const minutes = Math.max(1, Math.round(delaySeconds / 60))
     return {
-      message: `${routeName} · ${lateMin} min late${atStop}`,
-      title: 'Connection at risk'
+      message: stopName
+        ? intl.formatMessage(
+            {
+              defaultMessage: '{routeName} · {minutes} min late · {stopName}',
+              id: 'components.GoMode.notify.connectionLateAtStop'
+            },
+            { minutes, routeName, stopName }
+          )
+        : intl.formatMessage(
+            {
+              defaultMessage: '{routeName} · {minutes} min late',
+              id: 'components.GoMode.notify.routeMinutesLate'
+            },
+            { minutes, routeName }
+          ),
+      title: intl.formatMessage({
+        defaultMessage: 'Connection at risk',
+        id: 'components.GoMode.notify.connectionAtRiskTitle'
+      })
     }
   }
+  const seconds = Math.round(slackSeconds)
   return {
-    message: `${routeName} · ${Math.round(slackSeconds)}s${atStop}`,
-    title: 'Tight connection'
+    message: stopName
+      ? intl.formatMessage(
+          {
+            defaultMessage: '{routeName} · {seconds}s · {stopName}',
+            id: 'components.GoMode.notify.connectionSlackAtStop'
+          },
+          { routeName, seconds, stopName }
+        )
+      : intl.formatMessage(
+          {
+            defaultMessage: '{routeName} · {seconds}s',
+            id: 'components.GoMode.notify.connectionSlack'
+          },
+          { routeName, seconds }
+        ),
+    title: intl.formatMessage({
+      defaultMessage: 'Tight connection',
+      id: 'components.GoMode.notify.tightConnectionTitle'
+    })
   }
 }
 
@@ -1571,7 +1820,10 @@ export function checkConnectionWarning(
   const routeName =
     nextTransitLeg.routeShortName ||
     nextTransitLeg.routeLongName ||
-    'your connection'
+    notifyIntl().formatMessage({
+      defaultMessage: 'your connection',
+      id: 'components.GoMode.notify.yourConnection'
+    })
   const stopName = nextTransitLeg.from?.name || currentLeg.to?.name || ''
   const id = generateNotificationId(
     'CONNECTION_WARNING',
@@ -1713,8 +1965,14 @@ export function checkDelayAlert(
   const delaySeconds = progress.delay ?? 0
   if (delaySeconds < DELAY_ALERT_THRESHOLD_SECONDS) return null
 
+  const intl = notifyIntl()
   const routeName =
-    currentLeg.routeShortName || currentLeg.routeLongName || 'Your ride'
+    currentLeg.routeShortName ||
+    currentLeg.routeLongName ||
+    intl.formatMessage({
+      defaultMessage: 'Your ride',
+      id: 'components.GoMode.notify.yourRideLead'
+    })
   const lateMin = Math.max(1, Math.round(delaySeconds / 60))
 
   // The key is the fact — the minutes the rider is about to be read — not the
@@ -1738,10 +1996,19 @@ export function checkDelayAlert(
 
   return {
     id,
-    message: `${routeName} · ${lateMin} min late`,
+    message: intl.formatMessage(
+      {
+        defaultMessage: '{routeName} · {minutes} min late',
+        id: 'components.GoMode.notify.routeMinutesLate'
+      },
+      { minutes: lateMin, routeName }
+    ),
     priority: 'medium',
     timestamp: new Date(),
-    title: 'Running late',
+    title: intl.formatMessage({
+      defaultMessage: 'Running late',
+      id: 'components.GoMode.notify.runningLateTitle'
+    }),
     type: 'DELAY_ALERT'
   }
 }
@@ -1767,12 +2034,19 @@ export function checkTripComplete(
     const id = generateNotificationId('TRIP_COMPLETE', 'trip_end')
 
     if (!wasRecentlySent(id, sentNotifications)) {
+      const intl = notifyIntl()
       return {
         id,
-        message: 'Arrived',
+        message: intl.formatMessage({
+          defaultMessage: 'Arrived',
+          id: 'components.GoMode.notify.arrivedMessage'
+        }),
         priority: 'medium',
         timestamp: new Date(),
-        title: 'Trip complete',
+        title: intl.formatMessage({
+          defaultMessage: 'Trip complete',
+          id: 'components.GoMode.notify.tripCompleteTitle'
+        }),
         type: 'TRIP_COMPLETE'
       }
     }

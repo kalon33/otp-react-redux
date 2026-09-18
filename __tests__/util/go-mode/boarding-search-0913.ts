@@ -257,6 +257,9 @@ describe('the sheet says it is looking, not that there is nothing', () => {
     expect(store.getGoMode().boardingPrompt.searching).toBe(false)
     expect(store.types()).toEqual([
       'SET_BOARDING_SEARCHING',
+      // The verdict this run owns: the last search's failure, cleared before
+      // this one can be blamed for it (17.5).
+      'SET_BOARDING_SEARCH_FAILED',
       'SHOW_BOARDING_PROMPT',
       'UPDATE_NEARBY_VEHICLES',
       'SET_BOARDING_SEARCHING'
@@ -275,6 +278,9 @@ describe('the sheet says it is looking, not that there is nothing', () => {
     expect(store.getGoMode().boardingPrompt.searching).toBe(false)
     // Nothing was compared, so nothing was asserted about what is nearby.
     expect(store.types()).not.toContain('UPDATE_NEARBY_VEHICLES')
+    // And the sheet can now say WHY it has nothing, instead of reporting an
+    // empty street (17.5).
+    expect(store.getGoMode().boardingPrompt.searchFailed).toBe(true)
   })
 
   it('asserts nothing about nearby buses with no position fix', async () => {
