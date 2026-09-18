@@ -942,10 +942,14 @@ const ARRIVED_TRACKING_INTERVAL_MS = 30000
  *
  * Three minutes: long enough that the arrival card is read rather than
  * snatched away (the 09-09 rider took six), short enough that a pocketed phone
- * is not still running a trip a quarter of an hour later. Checked on the
- * arrived tick, which runs at ARRIVED_TRACKING_INTERVAL_MS above, so the real
- * end lands within 30 s of the threshold — which is the resolution the ask
- * wanted anyway.
+ * is not still running a trip a quarter of an hour later.
+ *
+ * Measured by a WALL-CLOCK timer armed at `SET_ARRIVED` (armAutoEndTimer), not
+ * by the arrived tick. The 2026-09-11 build checked it in the tick and it did
+ * not fire on 2026-09-17: the rider went indoors, the phone stopped answering
+ * `POSITION_FETCHING` at 21:42:43, and a trip that arrived at 21:41:31 was
+ * still open when the session ended 7m24s later. A dwell is a statement about
+ * time passing, and time passes whether or not a fix arrives.
  *
  * A ROUND TRIP never auto-ends: its arrival is a pause with the return
  * countdown still to run (see the tick's arrived branch and runReturnCountdown).
@@ -1143,6 +1147,10 @@ export function beginGoMode(
     // already does exactly this at a leg change, for exactly this reason.
     session.manualDepartureLock = false
     session.lastAutoAnchorMs = null
+    // START_GO_MODE does NOT rebuild the session, so an arrival dwell armed on
+    // the trip before this one would fire over the new trip — startReturnTrip
+    // enters here straight off a round trip's arrival (backlog 13.5).
+    clearAutoEndTimer()
     if (roundTrip) {
       // eslint-disable-next-line no-console
       console.log(
@@ -1599,6 +1607,13 @@ export function resumeGoModeTrip() {
     )
     await dispatch(startGoModeTracking(goMode.activeItinerary))
 
+    // A trip that came back ALREADY ARRIVED still owes the rider an ending, and
+    // the position stream is exactly what cannot be relied on to deliver it —
+    // that is the whole of 13.5. Arm the dwell off the store's restored
+    // `arrivedAt`, not off a fix; already spent means it ends on the next
+    // macrotask. No-op for a round trip and in replay.
+    armAutoEndTimer(dispatch, getState)
+
     // Put the departure pick's OWNER back (12.15). create-otp-reducer has
     // restored the value; whose it is lives in two module-level trip-session
     // flags that a page load rebuilds empty, and without them a restored
@@ -1678,6 +1693,10 @@ export function endGoMode() {
     if (session.gpsSimulationTimeoutId) {
       clearTimeout(session.gpsSimulationTimeoutId)
     }
+    // The arrival dwell (13.5). Reached by the rider's Stop, by their Done tap
+    // (handleArrivedDone -> finishArrivedTrip -> endGoMode) and by the auto-end
+    // itself, so a trip cannot be ended twice and no timer outlives it.
+    clearAutoEndTimer()
     if (session.visibilityChangeHandler) {
       document.removeEventListener(
         'visibilitychange',
@@ -1770,7 +1789,8 @@ export function endGoMode() {
  *
  * The one place that happens, because there are now two callers and they must
  * not drift: the rider's own "Done" on the arrival card (GoModeScreen's
- * handleArrivedDone) and the tick's auto-end after AUTO_END_AFTER_ARRIVAL_MS.
+ * handleArrivedDone) and the dwell timer's auto-end after
+ * AUTO_END_AFTER_ARRIVAL_MS (armAutoEndTimer).
  * Both dispatches go out together, so the screen swaps before GoModeScreen's
  * inactive-redirect effect can route to RESULTS_SUMMARY.
  */
@@ -1779,6 +1799,82 @@ export function finishArrivedTrip() {
     dispatch(endGoMode())
     dispatch(setMobileScreen(MobileScreens.SEARCH_FORM))
   }
+}
+
+/**
+ * Disarm the arrival dwell. Called from every exit a trip has — endGoMode (so
+ * the rider's Stop, the Done tap through finishArrivedTrip, and the auto-end
+ * itself), and beginGoMode, which installs a new itinerary WITHOUT rebuilding
+ * the session, so a timer armed on the previous arrival would otherwise be
+ * left running over the next trip. `session = createTripSession()` nulls the
+ * field but does not stop the timer, which is the whole reason this exists.
+ */
+function clearAutoEndTimer(): void {
+  if (session.autoEndTimeoutId) {
+    clearTimeout(session.autoEndTimeoutId)
+    session.autoEndTimeoutId = null
+  }
+}
+
+/**
+ * Arm the one-way arrival dwell on the WALL CLOCK.
+ *
+ * The 2026-09-11 build put the AUTO_END_AFTER_ARRIVAL_MS check in the arrived
+ * branch of handlePositionUpdate, so it was only ever evaluated when a fix
+ * arrived. On 2026-09-17 (`mu69yw00-bo98a0`) `SET_ARRIVED` fired at 21:41:31,
+ * two stale `POSITION_RESPONSE`s followed, and then thirteen `POSITION_FETCHING`
+ * with no response at all from 21:42:43 to 21:48:55 — the rider had gone
+ * indoors. No tick, no check, no end: 7m24s of a finished trip and counting
+ * (backlog 13.5). A dwell needs a clock, not a tick.
+ *
+ * Idempotent, so the tick may call it as a safety net for a trip that came back
+ * from persistence already arrived without a fresh `SET_ARRIVED`.
+ *
+ * NOT armed when:
+ *  - a ROUND TRIP is live. Its arrival is a pause with the return countdown
+ *    still to run; runReturnCountdown owns that case and keeps running.
+ *  - GPS simulation or replay is driving the trip. Both run on the simulated
+ *    clock (getCurrentTime / session.simulatedTimeMs), which advances in jumps
+ *    of whatever the fixture says and is scaled by simulationSpeedMultiplier;
+ *    a wall-clock timeout would fire at a moment that has no meaning in the
+ *    reproduced ride. A replayed trip is not put away on a real-time timer.
+ */
+function armAutoEndTimer(dispatch: any, getState: any): void {
+  if (session.autoEndTimeoutId) return
+  if (session.simulationActive || isReplayActive()) return
+  const goMode = getState().otp?.goMode
+  if (!goMode?.isActive || goMode.arrivedAt == null) return
+  if (goMode.roundTrip) return
+
+  const arrivedAt: number = goMode.arrivedAt
+  // A trip resumed inside the dwell window (session-persistence refuses a
+  // resume more than ARRIVED_RESUME_GRACE_MS old, so 3-5 min) is already past
+  // the threshold and ends on the next macrotask. Capped at the dwell itself:
+  // `arrivedAt` and `Date.now()` can disagree by more than the dwell — a device
+  // clock correction, or a test that spies `Date.now` while the tick stamped
+  // the arrival off the real one — and an uncapped delay is either days of a
+  // trip left open or, past 2^31 ms, a setTimeout that fires immediately.
+  const delay = Math.min(
+    AUTO_END_AFTER_ARRIVAL_MS,
+    Math.max(0, arrivedAt + AUTO_END_AFTER_ARRIVAL_MS - Date.now())
+  )
+  session.autoEndTimeoutId = setTimeout(() => {
+    session.autoEndTimeoutId = null
+    // Everything that could have changed in three minutes: the rider tapped
+    // Done, tapped Stop, started another trip, or a round trip was installed.
+    const current = getState().otp?.goMode
+    if (!current?.isActive || current.arrivedAt == null) return
+    if (current.roundTrip) return
+    // eslint-disable-next-line no-console
+    console.log(
+      '[go-mode] auto-end: arrived ' +
+        `${Math.round((Date.now() - current.arrivedAt) / 1000)}s ago, ` +
+        'ending the trip'
+    )
+    // The rider's Done tap ends through this same action, so the two cannot
+    // drift.
+    dispatch(finishArrivedTrip())
+  }, delay)
 }
 
 /**
@@ -6291,6 +6387,10 @@ export function handlePositionUpdate(position: GeolocationPosition) {
           }`
       )
       dispatch(setArrived(currentTime.getTime()))
+      // ...and the dwell starts ticking on the wall clock from here, whether or
+      // not another fix ever arrives (backlog 13.5). A round trip is refused
+      // inside armAutoEndTimer — its arrival is a pause.
+      armAutoEndTimer(dispatch, getState)
       // Take the card down with the arrival on it. Every later tick returns at
       // the `hasArrived` guard below, so this is the only chance to say so.
       pushLiveActivity(getState, currentTime.getTime())
@@ -6347,21 +6447,13 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         return
       }
       // A ONE-WAY trip has nothing left at all, so after the dwell it puts
-      // itself away — exactly what the rider's Done tap does, through the same
-      // action, so the two cannot drift (AUTO_END_AFTER_ARRIVAL_MS above).
-      if (
-        goMode.arrivedAt != null &&
-        currentTime.getTime() - goMode.arrivedAt >= AUTO_END_AFTER_ARRIVAL_MS
-      ) {
-        // eslint-disable-next-line no-console
-        console.log(
-          '[go-mode] auto-end: arrived ' +
-            `${Math.round(
-              (currentTime.getTime() - goMode.arrivedAt) / 1000
-            )}s ago, ending the trip`
-        )
-        dispatch(finishArrivedTrip())
-      }
+      // itself away. The tick does not DECIDE that any more — it only makes
+      // sure the clock is running. Deciding here is what failed on 2026-09-17:
+      // the check was evaluated only when a fix arrived, and the phone stopped
+      // producing fixes the moment the rider went indoors. Idempotent, and a
+      // no-op once armAutoEndTimer has already armed at SET_ARRIVED; this call
+      // exists for the trip that came back from persistence already arrived.
+      armAutoEndTimer(dispatch, getState)
       return
     }
 
