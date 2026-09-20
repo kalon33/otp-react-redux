@@ -59,23 +59,35 @@ describe('util > debug-log entry ids', () => {
 })
 
 describe('util > debug-log idempotency wiring', () => {
-  it('stamps the id in push(), not at flush time', () => {
+  it('stamps the id where the entry is created, not at flush time', () => {
     // The whole fix. flush() only splices on a RESOLVED fetch and flushBeacon
     // never splices at all, so an entry legitimately reaches the sink more than
     // once; measured at 1.8-4.8% of records a day across 2026-08-27..08-31. An
     // id minted per POST would be a different id on the retry and would dedupe
     // nothing, so it must be minted where the entry is created.
+    //
+    // 2026-09-20 (backlog 20.2): creation moved from push() into bufferEntry(),
+    // which push() now delegates to, so that the sink's own breadcrumbs about a
+    // failing flush can be buffered without re-entering the urgency check. The
+    // invariant is unchanged and is still asserted here — only the name of the
+    // function that creates an entry has moved.
+    const bufferEntry = source.slice(
+      source.indexOf('function bufferEntry(entry)'),
+      source.indexOf('function push(entry)')
+    )
+    // The minter itself lives in debug-log-boot.js, so that a boot crash beacon
+    // sent before this module has even evaluated draws from the SAME dense
+    // counter under the SAME session id. Where it is CALLED is the invariant.
+    expect(bufferEntry).toMatch(/entry\.id = mintBootEntryId\(\)/)
+    // ...and nowhere else: not in flush, buildBatch or flushBeacon.
+    expect(source.match(/mintBootEntryId\(\)/g)).toHaveLength(1)
+    // ...and push() must still route through it, or entries minted by the
+    // middleware would reach the buffer with no id at all.
     const push = source.slice(
       source.indexOf('function push(entry)'),
       source.indexOf('export function recordSessionEvent')
     )
-    // The minter itself now lives in debug-log-boot.js, so that a boot crash
-    // beacon sent before this module has even evaluated draws from the SAME
-    // dense counter under the SAME session id. Where it is CALLED is the
-    // invariant, and it is unchanged.
-    expect(push).toMatch(/entry\.id = mintBootEntryId\(\)/)
-    // ...and nowhere else: not in flush, buildBatch or flushBeacon.
-    expect(source.match(/mintBootEntryId\(\)/g)).toHaveLength(1)
+    expect(push).toMatch(/bufferEntry\(entry\)/)
   })
 
   it('bounds the buffer by bytes as well as by entry count', () => {
