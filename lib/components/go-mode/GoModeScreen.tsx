@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from 'react'
 
 import * as goModeActions from '../../actions/go-mode'
 import * as uiActions from '../../actions/ui'
+import { aboardBeforeLegStart } from '../../util/go-mode/riding'
 import { MobileScreens } from '../../actions/ui-constants'
 import MobileNavigationBar from '../mobile/navigation-bar'
 import type { GoModeState } from '../../reducers/go-mode'
@@ -313,6 +314,22 @@ const GoModeScreen = ({
         />
 
         <GoModeMap
+          /* Aboard the bus this leg belongs to, short of the stop the leg
+             starts at (backlog 22.1). The same answer the status and the
+             deviation card use — recomputed rather than stored, because it is
+             a pure read of state the screen already holds. It suppresses the
+             "Xm from route" banner (the rider's 09:24:56 screenshot read
+             "2379m from route" with the header saying "On Bus #8228") and
+             draws the leg from the rider instead of from the anchor. */
+          aboardBeforeLeg={aboardBeforeLegStart({
+            legs: goMode.activeItinerary.legs,
+            riding: goMode.riding,
+            routeMatch: goMode.routeMatch,
+            vehicleNextStopId:
+              goMode.vehicleMatch?.match?.tripId === goMode.riding?.tripId
+                ? goMode.vehicleMatch?.match?.nextStopId ?? null
+                : null
+          })}
           activeLegIndex={goMode.ui.activeLeg}
           currentLegIndex={goMode.progress.currentLegIndex}
           currentLegMode={currentLeg?.mode ?? null}

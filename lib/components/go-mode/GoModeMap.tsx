@@ -46,6 +46,17 @@ const UserDot = styled.div`
 `
 
 interface Props {
+  /**
+   * The rider is aboard the bus this leg belongs to and has not reached the
+   * stop it starts at — `aboardBeforeLegStart`, util/go-mode/riding.
+   *
+   * On 2026-09-21 ride 2 the onboard splice anchored the bus leg at the
+   * vehicle's NEXT stop, 66th St, while the rider was 2.58 km north of it on
+   * I-35W. The map drew the orange line starting 2 km ahead of the dot and
+   * this banner read "2379m from route" — under a header saying "On Bus
+   * #8228". Backlog 22.1.
+   */
+  aboardBeforeLeg?: boolean
   activeLegIndex: number | null
   currentLegIndex: number
   currentLegMode: string | null
@@ -425,6 +436,7 @@ const GoModeMapOverlay = ({
 }
 
 const GoModeMap = ({
+  aboardBeforeLeg = false,
   activeLegIndex,
   currentLegIndex,
   currentLegMode,
@@ -452,26 +464,54 @@ const GoModeMap = ({
   // an active-leg lookup by index stays correct.
   const routeGeoJson = useMemo((): GeoJSON.FeatureCollection | null => {
     if (!itinerary?.legs) return null
+    // The ridden leg, joined to the rider. While `aboardBeforeLeg` holds, the
+    // leg's own geometry begins at a stop the bus has not reached, so drawn as
+    // recorded it starts ahead of the dot with a gap between — the 2 km of
+    // I-35W the rider's screenshot showed. Extending the SAME line back to the
+    // fix closes it without touching the itinerary: the leg still ends where
+    // it ends, and nothing downstream of the map reads this geometry.
+    const ridingLegIndex = aboardBeforeLeg ? routeMatch?.legIndex ?? -1 : -1
+    const riderPoint: [number, number] | null =
+      currentPosition && ridingLegIndex >= 0
+        ? [currentPosition.coords.longitude, currentPosition.coords.latitude]
+        : null
     try {
       const features: GeoJSON.Feature[] = itinerary.legs
         .map((leg, index) => ({ index, leg }))
         .filter(({ leg }) => leg.legGeometry?.points)
-        .map(({ index, leg }) => ({
-          geometry: polyline.toGeoJSON(leg.legGeometry.points),
-          properties: {
-            color: getLegColor(leg),
-            index,
-            isActive: index === activeLegIndex,
-            isCompleted: index < currentLegIndex,
-            isWalk: isWalkLike(leg.mode)
-          },
-          type: 'Feature' as const
-        }))
+        .map(({ index, leg }) => {
+          const geometry = polyline.toGeoJSON(leg.legGeometry.points)
+          if (
+            riderPoint &&
+            index === ridingLegIndex &&
+            geometry.type === 'LineString'
+          ) {
+            geometry.coordinates = [riderPoint, ...geometry.coordinates]
+          }
+          return {
+            geometry,
+            properties: {
+              color: getLegColor(leg),
+              index,
+              isActive: index === activeLegIndex,
+              isCompleted: index < currentLegIndex,
+              isWalk: isWalkLike(leg.mode)
+            },
+            type: 'Feature' as const
+          }
+        })
       return { features, type: 'FeatureCollection' }
     } catch {
       return null
     }
-  }, [itinerary, currentLegIndex, activeLegIndex])
+  }, [
+    itinerary,
+    currentLegIndex,
+    activeLegIndex,
+    aboardBeforeLeg,
+    currentPosition,
+    routeMatch
+  ])
 
   return (
     <MapContainer>
@@ -488,15 +528,19 @@ const GoModeMap = ({
         />
       </DefaultMap>
 
-      {/* Deviation Warning */}
-      {routeMatch && !routeMatch.isOnRoute && prevOffRouteDistance != null && (
-        <DeviationWarning>
-          {Math.round(
-            Math.min(routeMatch.distanceFromRoute, prevOffRouteDistance)
-          )}
-          m from route
-        </DeviationWarning>
-      )}
+      {/* Deviation Warning — never while the rider is aboard and simply has
+          not reached this leg's first stop yet (22.1). */}
+      {routeMatch &&
+        !routeMatch.isOnRoute &&
+        !aboardBeforeLeg &&
+        prevOffRouteDistance != null && (
+          <DeviationWarning>
+            {Math.round(
+              Math.min(routeMatch.distanceFromRoute, prevOffRouteDistance)
+            )}
+            m from route
+          </DeviationWarning>
+        )}
     </MapContainer>
   )
 }
