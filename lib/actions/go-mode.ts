@@ -209,6 +209,11 @@ import {
   getRouteDepartures
 } from '../util/go-mode/departure-anchor'
 import {
+  boardSourcesDisagree,
+  publishedBoardSource,
+  resolveBoardDeparture
+} from '../util/go-mode/board-departure'
+import {
   MISSED_BUS_NOTICE_ID,
   TURN_CARD_NOTIFICATION_ID,
   cancelPush,
@@ -484,6 +489,12 @@ export const ADD_NOTIFICATION = 'ADD_NOTIFICATION'
 // exists so the daemon can see the current-leg card and the tick pipeline
 // disagreeing about which departure the rider is travelling to — see 16.3.
 export const CARD_DEPARTURE_MISMATCH = 'CARD_DEPARTURE_MISMATCH'
+// Recording only, like CARD_DEPARTURE_MISMATCH: no reducer consumes it. It
+// exists so the OTP-side question behind 21.1 — why trip.stoptimesForDate and
+// stop.stoptimesForPatterns publish different realtime moments for the same
+// (stop, trip) in the same second — can be measured on the next ride instead
+// of inferred from a screenshot.
+export const BOARD_TIME_SOURCE_DISAGREEMENT = 'BOARD_TIME_SOURCE_DISAGREEMENT'
 export const CLEAR_RIDING = 'CLEAR_RIDING'
 export const CLEAR_VEHICLE_MATCH = 'CLEAR_VEHICLE_MATCH'
 export const CONFIRM_VEHICLE = 'CONFIRM_VEHICLE'
@@ -640,6 +651,33 @@ export const recordCardDepartureMismatch = (info: {
 }) => ({
   payload: { ...info, tMs: getCurrentTime().getTime() },
   type: CARD_DEPARTURE_MISMATCH
+})
+
+/**
+ * OTP's two live answers for the same boarding moment parted company.
+ *
+ * Recording only. 2026-09-21 08:26:24 (session mub9m39o-9pmdbh): for stop
+ * `1:56831` and trip `1:1346052`, `trip.stoptimesForDate` said
+ * `realtimeArrival == scheduledArrival == 08:26:00` under
+ * `realtimeState: UPDATED`, while `stop.stoptimesForPatterns` in the same
+ * second said `realtimeDeparture 08:31:27, departureDelay 327` — also UPDATED.
+ * The client now prefers the stop-level value (backlog 21.1), but WHY the
+ * server disagrees with itself is unmeasured, and a client that silently
+ * picked one would have buried the evidence for a second time.
+ *
+ * One entry per refresh poll per leg whose two sources are more than
+ * BOARD_SOURCE_DISAGREEMENT_MS apart; scalars only.
+ */
+export const recordBoardTimeDisagreement = (info: {
+  deltaMs: number
+  legIndex: number
+  stopEpoch: number | null
+  stopId: string | null
+  tripEpoch: number | null
+  tripId: string | null
+}) => ({
+  payload: { ...info, tMs: getCurrentTime().getTime() },
+  type: BOARD_TIME_SOURCE_DISAGREEMENT
 })
 /**
  * The controls Go Mode owns, as a closed set: the stream (and the daemon rule
@@ -5593,6 +5631,28 @@ export function refreshLiveLegTimes() {
         liveStopArrival(stopTimes, leg.to?.stop?.gtfsId, leg.to?.name, anchor),
         nowMs
       )
+      // "Always prio the real times" (rider, 2026-09-21). The boarding stop is
+      // polled separately (findStopTimesForStop -> transitIndex.stops[...]),
+      // and on 09-21 08:26:24 that poll held a +5m27s prediction for the very
+      // trip whose own query was publishing the SCHEDULE under an UPDATED
+      // flag. When the stop poll has a live departure for THIS trip it wins;
+      // the merge below is unchanged, so the monotonic display guarantees and
+      // the isFloor/projected honesty are the same as they ever were.
+      // Backlog 21.1; every rule lives in util/go-mode/board-departure.ts.
+      const boardStopId = leg.from?.stop?.gtfsId
+      const boardResolution = resolveBoardDeparture({
+        nowMs,
+        stopData: boardStopId
+          ? getState().otp?.transitIndex?.stops?.[boardStopId]
+          : null,
+        tripId,
+        tripPoint: liveStopArrival(
+          stopTimes,
+          leg.from?.stop?.gtfsId,
+          leg.from?.name,
+          anchor
+        )
+      })
       const board = mergeLiveTimePoint(
         prev?.boardEpoch != null
           ? {
@@ -5601,14 +5661,23 @@ export function refreshLiveLegTimes() {
               realtime: prev.boardRealtime ?? prev.realtime
             }
           : null,
-        liveStopArrival(
-          stopTimes,
-          leg.from?.stop?.gtfsId,
-          leg.from?.name,
-          anchor
-        ),
+        boardResolution.point,
         nowMs
       )
+      // The instrument, not the fix: record the gap so the OTP-side question
+      // (why the two queries disagree) is measurable on the next ride.
+      if (boardSourcesDisagree(boardResolution)) {
+        dispatch(
+          recordBoardTimeDisagreement({
+            deltaMs: boardResolution.disagreementMs as number,
+            legIndex: i,
+            stopEpoch: boardResolution.stopEpoch,
+            stopId: boardStopId ?? null,
+            tripEpoch: boardResolution.tripEpoch,
+            tripId
+          })
+        )
+      }
       if (alight || board) {
         liveTimes[i] = {
           alightEpoch: alight?.epoch ?? null,
@@ -5622,6 +5691,14 @@ export function refreshLiveLegTimes() {
           boardIsFloor: !!board?.isFloor,
           boardProjected: !!board?.projected,
           boardRealtime: !!board?.realtime,
+          // Which of OTP's two answers the published epoch came from. Truthful
+          // after the merge: "stop" only when the merge actually took the
+          // stop-level point (backlog 21.1).
+          boardSource: publishedBoardSource(
+            board,
+            boardResolution,
+            prev?.boardSource
+          ),
           realtime: !!(alight?.realtime || board?.realtime)
         }
       }
