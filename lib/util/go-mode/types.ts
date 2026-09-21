@@ -75,6 +75,21 @@ export interface LiveLegTime {
   boardProjected?: boolean
   /** Whether boardEpoch is a live prediction. */
   boardRealtime?: boolean
+  /**
+   * WHICH of OTP's two live answers boardEpoch came from — the trip query
+   * (`trip.stoptimesForDate`, the tick's only source until 2026-09-21) or the
+   * boarding stop's own poll (`stop.stoptimesForPatterns`, what the pacing
+   * card reads). They can disagree while BOTH claim `realtimeState: UPDATED`:
+   * on 2026-09-21 08:26:24 the trip query gave the schedule (08:26:00) for a
+   * bus the stop query had at 08:31:27 (+5m27s), and the board time was
+   * published `boardRealtime: true` at the scheduled moment for 17 ticks
+   * (backlog 21.1). The stop-level live value now wins, and this says so.
+   *
+   * Recorded, not acted on: display code should keep reading `boardRealtime`.
+   * Undefined on a record whose provenance is unknown (an older persisted
+   * session, or a value neither source produced).
+   */
+  boardSource?: 'stop' | 'trip'
   /** Legacy any-field-live flag; display code should use the per-field ones. */
   realtime: boolean
 }
