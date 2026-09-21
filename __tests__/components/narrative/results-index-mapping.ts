@@ -2,11 +2,13 @@
 import { addTrueIndex } from '../../../lib/components/map/itinerary-summary-overlay'
 import {
   collectItinerariesWithoutDuplicates,
+  itinerariesAreEqual,
   itineraryAccessModeId,
   transitRouteSignature
 } from '../../../lib/util/itinerary'
 import { doMergeItineraries } from '../../../lib/components/narrative/narrative-itineraries'
 import responses from '../../test-utils/mock-data/0921-0912-search-responses.json'
+import started from '../../test-utils/mock-data/0921-0902-started-itineraries.json'
 
 /**
  * Backlog 23.1 — 2026-09-21 09:02:04, session mubbbiy9-6zjoq9.
@@ -32,12 +34,16 @@ import responses from '../../test-utils/mock-data/0921-0912-search-responses.jso
  * itinerary object (keys: legs, index, rank, ... 11297 chars).
  *
  * What produces 30 -> 38 is that both itineraries live in the SAME merged
- * row, and the row renders every folded departure as its own button.
+ * row, and the row renders every folded departure as its own button. The
+ * ride proves it directly: index 38's START_GO_MODE payload carries the row's
+ * `allStartTimes`, eight entries long, whose first is index 30.
  *
- * The fixture is the 09:12:07 re-run of the same query (the 09:00:25
- * responses were logged as `__summary`), trimmed of the four keys
- * `hashItinerary` already excludes (alerts, intermediateStops, legGeometry,
- * steps) so dedupe and merging are bit-for-bit what the app did.
+ * Two fixtures. `0921-0902-started-itineraries.json` is the pair the rider
+ * actually started, out of the two START_GO_MODE payloads.
+ * `0921-0912-search-responses.json` is the 09:12:07 re-run of the same query,
+ * which is the only full copy of the response set (the 09:00:25 ones were
+ * logged as `__summary`); it is trimmed of keys `hashItinerary` already
+ * excludes plus intermediatePlaces/stopCalls, none of which the merge reads.
  */
 
 const DEFAULT_FARE_TYPE = { mediumId: null, riderCategoryId: null } as any
@@ -65,6 +71,62 @@ const storeResponse = () =>
 
 const buildList = () =>
   collectItinerariesWithoutDuplicates(storeResponse() as any) as any[]
+
+describe('backlog 23.1 > the two trips the rider actually started', () => {
+  // Both START_GO_MODE payloads, trimmed. `loggedRow` is what the payload's
+  // own `allStartTimes` said before the debug serialiser collapsed its
+  // repeated sub-objects: the row each itinerary belonged to.
+  const itin30 = (started as any)['30'].itinerary
+  const itin38 = (started as any)['38'].itinerary
+
+  it('started the 09:14 bus at 09:00:51 and the 10:12 bus at 09:02:05', () => {
+    expect(itin30.index).toBe(30)
+    expect(itin38.index).toBe(38)
+    const bus = (i: any) => i.legs.find((l: any) => l.transitLeg)
+    expect(bus(itin30).trip.gtfsId).toBe('1:1268952')
+    expect(bus(itin38).trip.gtfsId).toBe('1:1348464')
+    expect(hhmm(bus(itin30).startTime)).toBe('09:14')
+    expect(hhmm(bus(itin38).startTime)).toBe('10:12')
+    // Same journey: same route, same two stops, same bike legs either end.
+    expect(
+      itin30.legs.map((l: any) => [l.mode, Math.round(l.distance)])
+    ).toEqual(itin38.legs.map((l: any) => [l.mode, Math.round(l.distance)]))
+  })
+
+  it('had both of them in ONE row, with 30 as the row and 38 as a chip', () => {
+    // Straight out of the ride: allItineraries hangs the row's allStartTimes
+    // on every itinerary in it (narrative-itineraries.js:180-188), and index
+    // 38's copy starts with index 30 — the same eight-chip row, four of the
+    // departures realtime and four scheduled.
+    expect((started as any)['38'].loggedRow).toEqual(
+      (started as any)['30'].loggedRow
+    )
+    expect((started as any)['38'].loggedRow.chipCount).toBe(8)
+    expect((started as any)['38'].loggedRow.firstChipIndex).toBe(30)
+
+    // And that is what the merge does with the pair, by itself.
+    expect(
+      itinerariesAreEqual(
+        itin30,
+        itin38,
+        DEFAULT_FARE_TYPE,
+        MERGE_BY_ROUTE_SIGNATURE
+      )
+    ).toBe(true)
+    const { mergedItineraries } = doMergeItineraries(
+      [itin30, itin38],
+      DEFAULT_FARE_TYPE,
+      MERGE_BY_ROUTE_SIGNATURE
+    )
+    expect(mergedItineraries).toHaveLength(1)
+    expect(mergedItineraries[0].index).toBe(30)
+    expect(
+      mergedItineraries[0].allStartTimes.map(
+        (st: any) => `${st.itinerary.index}@${hhmm(+st.legs[0].startTime)}`
+      )
+    ).toEqual(['30@09:07', '38@10:04'])
+  })
+})
 
 describe('backlog 23.1 > results list index <-> departure chips', () => {
   it('numbers the combined list by position across the three responses', () => {
