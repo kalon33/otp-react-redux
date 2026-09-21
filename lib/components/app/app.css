@@ -385,3 +385,16 @@
   font-size: 12px;
   padding: 12px 10px;
 }
+
+/* The AppFrame pages (/feedback, /settings, saved places, the account screens)
+   are routed outside the mobile-screen tree, so none of them read
+   --return-to-trip-banner-height the way mobile.css does — and DesktopNav above
+   them is position: static, so nothing else moves them down either. The
+   ReturnToTripBanner is position: absolute at top: 50px, i.e. exactly over the
+   top of this main, and on 2026-09-20 it covered the feedback form. Where a
+   fixed mobile screen adds the published height to its own `top`, a static page
+   adds it as padding: same strip vacated, same 0px fallback when no banner is
+   up. #otp is AppFrame's own container (app-frame.tsx), not the planner's. */
+#otp > main {
+  padding-top: var(--return-to-trip-banner-height, 0px);
+}
