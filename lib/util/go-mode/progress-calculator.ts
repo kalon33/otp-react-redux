@@ -46,6 +46,13 @@ export interface TripProgress {
   effectiveDepartureMs?: number
   // 0-100%
   estimatedArrival: Date
+  /**
+   * The CURRENT leg's progress (0-100) when the rider is on the LAST leg of
+   * the itinerary, and null on every earlier leg. The arrival test's progress
+   * scalar: see hasArrivedAtDestination for why overall progress is the wrong
+   * one to grant arrival on.
+   */
+  finalLegProgress?: number | null
   // The turn after `nextTurnCue`, for a "then …" line
   followingTurnCue?: StepCue
   // seconds
@@ -448,6 +455,12 @@ export const ARRIVAL_MIN_PROGRESS = 90
  * Checked against every arrival in the recorded telemetry: 2026-08-31 16:22:05
  * (70 m), 18:52:55 (41 m) and 2026-09-01 08:59:37 (81 m) all still latch;
  * 2026-09-01 11:10:06 (159 m) no longer does.
+ *
+ * That list says only that this VETO leaves those three alone — it was never
+ * a finding that all three were at the destination. The 81 m one was not: the
+ * rider was still closing at ~2.5 m/s and reached 24.8 m half a minute later,
+ * which is backlog 21.2's defect, and hasArrivedAtDestination below now
+ * refuses it on the closing leg's own progress.
  */
 export const ARRIVAL_MAX_DISTANCE_M = 120
 
@@ -460,10 +473,36 @@ export const ARRIVAL_MAX_DISTANCE_M = 120
  * drive home, because every rule downstream kept evaluating a trip that was
  * over. A frozen scalar cannot be the only way to notice arrival, so being
  * physically at the destination counts too.
+ *
+ * The progress-only branch is judged on the FINAL LEG's own progress whenever
+ * the rider is on the last leg (2026-09-21, backlog 21.2). It used to be
+ * judged on OVERALL progress, which on a long trip says nothing about the
+ * last block: at 08:54:10 that morning `overallProgress` crossed the bar
+ * (99.498 -> 99.526) while `currentLegProgress` was 94.21% of a 1450 m
+ * closing bike leg and the rider's own fix was 83.26 m from the door.
+ * SET_ARRIVED, the TRIP_COMPLETE push and the 30 s arrived interval all went
+ * out 1m26s before they got there (they were 27.8 m out at 08:55:36), on
+ * 2.8 m fixes — nothing to do with GPS. Half a percent of that 17.7 km trip
+ * is 88 m of ground; half a percent of the leg that ends at the door is 7 m.
+ * The same arrival is in the record for 2026-09-09 (87 m out, overall
+ * 99.52%) in the comment above AUTO_END_AFTER_ARRIVAL_MS in actions/go-mode.
+ *
+ * The DISTANCE branch keeps reading overall progress on purpose. It is a
+ * floor against a destination that merely sits near the route, and the
+ * 2026-08-27 rescue — the final leg's own scalar frozen below the bar with
+ * the rider at the door — is the one that must stay as reachable as it was.
+ * Passing the leg's frozen figure into that floor would re-open the bug the
+ * distance branch exists to close.
  */
 export function hasArrivedAtDestination(
   actualProgress: number,
-  distanceToDestination: number | null | undefined
+  distanceToDestination: number | null | undefined,
+  /**
+   * Progress along the FINAL leg, when the rider is on it (TripProgress
+   * .finalLegProgress). Omitted/null on earlier legs, where overall progress
+   * is the only scalar there is.
+   */
+  finalLegProgress?: number | null
 ): boolean {
   // The measurement first, and as a veto: a rider this far from where they
   // asked to go has not arrived, whatever the projection says about them.
@@ -476,7 +515,11 @@ export function hasArrivedAtDestination(
   ) {
     return false
   }
-  if (actualProgress >= 99.5) return true
+  const progressAtDestination =
+    finalLegProgress != null && Number.isFinite(finalLegProgress)
+      ? finalLegProgress
+      : actualProgress
+  if (progressAtDestination >= 99.5) return true
   return (
     distanceToDestination != null &&
     Number.isFinite(distanceToDestination) &&
@@ -516,7 +559,9 @@ export function determineTripStatus(
   routeMatch: RouteMatchResult | null,
   expectedProgress: number,
   actualProgress: number,
-  distanceToDestination?: number | null
+  distanceToDestination?: number | null,
+  /** See TripProgress.finalLegProgress — null on any leg but the last. */
+  finalLegProgress?: number | null
 ): TripStatus {
   // Arrival is tested FIRST, ahead of the deviation checks. It used to run
   // last, which meant a rider standing at their destination could never be
@@ -525,7 +570,13 @@ export function determineTripStatus(
   // jitter around a parked phone easily clears the 100m bike threshold. On
   // 2026-08-27 that flapped completed/deviated ten times and then latched
   // deviated for four and a half hours.
-  if (hasArrivedAtDestination(actualProgress, distanceToDestination)) {
+  if (
+    hasArrivedAtDestination(
+      actualProgress,
+      distanceToDestination,
+      finalLegProgress
+    )
+  ) {
     return 'completed'
   }
 
@@ -952,11 +1003,21 @@ export function calculateTripProgress(
     totalDuration
   )
 
+  // The last leg's own progress, and only there. Overall progress is a
+  // distance-weighted average over the whole itinerary, so on a long trip its
+  // last half-percent is the closing leg's last hundred metres — see
+  // hasArrivedAtDestination (backlog 21.2).
+  const finalLegProgress =
+    legs.length > 0 && currentLegIndex === legs.length - 1
+      ? progressInCurrentLeg * 100
+      : null
+
   const status = determineTripStatus(
     routeMatch,
     expectedProgress,
     overallProgress,
-    distanceToDestination
+    distanceToDestination,
+    finalLegProgress
   )
 
   const currentLeg = legs[currentLegIndex]
@@ -1006,6 +1067,7 @@ export function calculateTripProgress(
     delay,
     distanceToDestination,
     estimatedArrival,
+    finalLegProgress,
     overallProgress,
     riderSpeedMps: riderSpeedMps ?? undefined,
     status,
