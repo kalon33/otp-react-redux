@@ -274,16 +274,45 @@ const WalkingNavigation = ({
     holdRef.current = { held: null, key: holdKey }
   }
 
-  const decision = resolveCardDeparture({
+  const departureInput = {
     boardingMiss: progress.boardingMiss ?? null,
     candidateMs: soonestCatchableMs,
-    departureOverride: departureOverride ?? null,
     departures: routeDepartures,
     held: isNextLegTransit ? holdRef.current.held : null,
     nowMs,
     plannedDepartureMs: progress.plannedDepartureTime ?? null
+  }
+
+  const decision = resolveCardDeparture({
+    ...departureInput,
+    departureOverride: departureOverride ?? null
   })
-  if (isNextLegTransit) holdRef.current.held = decision.held
+
+  /**
+   * What this card would headline if the override went away — the departure
+   * "Reset to planned" actually hands back (18.1).
+   *
+   * It has to be resolved separately because the override branch of
+   * `resolveCardDeparture` returns the override and nothing else, so with the
+   * override in force the card has no other way to know what it is holding
+   * the rider back from.
+   *
+   * The hold ref then carries THIS decision's hold rather than the override's.
+   * That is the half that makes the control honest: the hold used to be
+   * re-seeded from the override on every render, so releasing the override
+   * left the card holding the override's own run and the headline never moved
+   * — the rider tapped a control that could not change the number it sits
+   * under. Tracking the un-overridden resolution instead means the release
+   * lands on exactly the departure this label names. It is also what
+   * `evaluateDepartureAnchor` already documents for its own `clear` path
+   * ("with the override gone the display and the anchor both fall back to the
+   * soonest departure the rider CAN catch"), which the old re-seed defeated.
+   */
+  const releasedDecision =
+    departureOverride != null && Number.isFinite(departureOverride)
+      ? resolveCardDeparture({ ...departureInput, departureOverride: null })
+      : decision
+  if (isNextLegTransit) holdRef.current.held = releasedDecision.held
 
   const effectiveDepartureMs =
     decision.departureMs || progress.plannedDepartureTime
@@ -341,7 +370,34 @@ const WalkingNavigation = ({
   }, [routeDepartures, effectiveDepartureMs])
 
   const showAlternatives = laterDepartures.length > 0 && waitAtStopSeconds < 120
-  const showReset = !!progress.departureIsOverridden && !!onSelectDeparture
+
+  /**
+   * The departure "Reset to planned" gives back, named on the control itself.
+   *
+   * 2026-09-17 17:57:39, with a screenshot: *"Reset to planned? What's the
+   * point? I don't know what that means. And it did nothing."* The tap was
+   * mechanically correct — `SET_DEPARTURE_OVERRIDE {ms: null, source:
+   * 'rider'}` at 17:57:09, `departureIsOverridden` true->false on the next
+   * tick — but the override was 17:57:53 and what it fell back to was
+   * 17:57:00, and both render "5:57 PM". The rider was offered a control
+   * that named neither time and then changed nothing they could see.
+   *
+   * So the control states the time it restores, and it is offered only when
+   * that time READS differently from the one in force. Comparing the rendered
+   * strings rather than the epochs is deliberate: a 53-second difference is
+   * invisible on a card that shows minutes, and an affordance whose whole
+   * effect is invisible is worse than no affordance.
+   */
+  const resetDepartureMs =
+    releasedDecision.departureMs ?? progress.plannedDepartureTime ?? null
+  const resetWouldShowSameTime =
+    resetDepartureMs == null ||
+    !effectiveDepartureMs ||
+    formatClockTime(resetDepartureMs) === formatClockTime(effectiveDepartureMs)
+  const showReset =
+    !!progress.departureIsOverridden &&
+    !!onSelectDeparture &&
+    !resetWouldShowSameTime
   const showExtras = (showAlternatives || showReset) && !!onSelectDeparture
 
   // Rider ask 2026-09-04 15:08:30, with a screenshot: three `Next: … / Use
@@ -458,10 +514,13 @@ const WalkingNavigation = ({
                 onClick={() => onSelectDeparture?.(null)}
                 type="button"
               >
-                {intl.formatMessage({
-                  defaultMessage: 'Reset to planned',
-                  id: 'components.GoMode.resetToPlanned'
-                })}
+                {intl.formatMessage(
+                  {
+                    defaultMessage: 'Back to {time} (planned)',
+                    id: 'components.GoMode.resetToPlanned'
+                  },
+                  { time: formatClockTime(resetDepartureMs as number) }
+                )}
               </ResetButton>
             )}
             {showAlternatives && (

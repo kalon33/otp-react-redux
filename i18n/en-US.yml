@@ -531,7 +531,7 @@ components:
     rerouteNlPlaceholder: e.g. avoid stairs today
     rerouteNlSend: Go
     rerouteSearchHere: Search from here
-    resetToPlanned: Reset to planned
+    resetToPlanned: Back to {time} (planned)
     restOfTrip: Rest of your trip
     retry: Retry
     returnBannerArrived: You've arrived — tap to finish

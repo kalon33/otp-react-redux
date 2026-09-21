@@ -210,9 +210,9 @@ async function main() {
   // :158-176, c156e811) RELEASES an override the rider provably cannot reach,
   // and this loop time-travels straight past the anchored departure, so a
   // release here is a live possibility that the log has to be able to name —
-  // the "Reset to planned" button below renders only while
-  // `progress.departureIsOverridden` (WalkingNavigation.tsx:210), and a
-  // released override would take it away.
+  // the reset button below renders only while `progress.departureIsOverridden`
+  // (WalkingNavigation.tsx, `showReset`), and a released override would take
+  // it away.
   let released = false
   for (let i = 0; i < 15; i++) {
     // Halfway through, push well past the grace as well — a bus that really is
@@ -243,22 +243,25 @@ async function main() {
     )
   }
 
-  // (2) Manual reset must lock the anchor off. Click the REAL "Reset to
-  // planned" button — a dynamic import of go-mode.ts would create a second
-  // Vite module instance whose lock flag the app never reads.
+  // (2) Manual reset must lock the anchor off. Click the REAL reset button —
+  // a dynamic import of go-mode.ts would create a second Vite module instance
+  // whose lock flag the app never reads. Since 18.1 its label names the time
+  // it restores ("Back to 5:57 PM (planned)"), so it is matched on the
+  // "(planned)" qualifier rather than on a fixed sentence.
   //
   // When it is NOT there, say why rather than just that it is missing: this
   // step has failed on 7 of the 16 nightly runs on record (2026-08-29, 09-01,
   // 09-02, 09-03, 09-05, 09-10, 09-11) with identical setup numbers on every
   // one of them, and the bare message named nothing a later session could act
-  // on. The button's only condition is `progress.departureIsOverridden`
-  // (WalkingNavigation.tsx:210), which in turn needs the override still in
-  // force AND the rider still on the access leg with that card rendered — so
-  // the override, the flag, the matched leg, the riding fact and the buttons
-  // that ARE on screen are what separate the candidate causes.
+  // on. The button needs `progress.departureIsOverridden`, the rider still on
+  // the access leg with that card rendered, AND (since 18.1) the departure it
+  // would restore to read as a different clock minute from the one in force —
+  // an override the card would swap for the same displayed time is not offered
+  // at all. So the override, the flag, the matched leg, the riding fact and
+  // the buttons that ARE on screen are what separate the candidate causes.
   const clicked = await page.evaluate(() => {
     const btn = Array.from(document.querySelectorAll('button')).find((b) =>
-      b.textContent?.includes('Reset to planned')
+      /\(planned\)/.test(b.textContent || '')
     )
     if (btn) {
       btn.click()
@@ -279,7 +282,7 @@ async function main() {
   if (clicked) {
     await page.screenshot({ path: `${OUT}/auto-anchor-no-reset.png` })
     throw new Error(
-      'Reset to planned button not found in the UI — ' +
+      'reset-to-planned button not found in the UI — ' +
         `departureOverride=${fmt(clicked.departureOverride)}, ` +
         `departureIsOverridden=${clicked.departureIsOverridden}, ` +
         `matched leg ${clicked.matchedLeg}, riding=${clicked.riding}, ` +
