@@ -516,7 +516,14 @@ export function determineTripStatus(
   routeMatch: RouteMatchResult | null,
   expectedProgress: number,
   actualProgress: number,
-  distanceToDestination?: number | null
+  distanceToDestination?: number | null,
+  /**
+   * The rider is verifiably aboard the bus this leg belongs to and has not yet
+   * reached the stop the leg starts at — see `aboardBeforeLegStart` in
+   * util/go-mode/riding. Defaults false, which is the behaviour this function
+   * had before backlog 22.1.
+   */
+  aboardBeforeLeg = false
 ): TripStatus {
   // Arrival is tested FIRST, ahead of the deviation checks. It used to run
   // last, which meant a rider standing at their destination could never be
@@ -533,7 +540,23 @@ export function determineTripStatus(
     return 'deviated'
   }
 
-  if (!routeMatch.isOnRoute) {
+  // An aboard rider who has not reached their leg's first stop is APPROACHING
+  // the anchor, not off route.
+  //
+  // `buildOnboardItinerary` starts the bus leg at the vehicle's NEXT stop, so
+  // on 2026-09-21 ride 2 a rider 2.58 km north of 66th St — on the bus, header
+  // reading "On Bus #8228", `UPDATE_VEHICLE_MATCH.confidence 'confirmed'` on
+  // every tick — projected onto the leg's first vertex with `isOnRoute false`
+  // and read `deviated` for 116 s, until the bus itself crossed the 250 m
+  // buffer at 09:26:17. Nothing about that was the rider's route; it was the
+  // gap between where they were and where their leg had been anchored.
+  //
+  // The clock still decides: falling through means ahead/behind/on_track is
+  // computed from progress exactly as for any other tick (backlog 22.1). The
+  // exemption is narrow by construction — see the four gates on
+  // `aboardBeforeLegStart` — and ends the moment the projection moves off the
+  // leg's start, so a genuine detour mid-leg is still `deviated`.
+  if (!routeMatch.isOnRoute && !aboardBeforeLeg) {
     return 'deviated'
   }
 
@@ -894,7 +917,9 @@ export function calculateTripProgress(
   riderSpeedMps?: number | null,
   liveBoardMs?: number | null,
   liveAlightMs?: number | null,
-  riderPosition?: LatLngArray | null
+  riderPosition?: LatLngArray | null,
+  /** See {@link determineTripStatus}. Defaults false. */
+  aboardBeforeLeg = false
 ): TripProgress {
   const legs = itinerary.legs
   const currentLegIndex = routeMatch?.legIndex || 0
@@ -956,7 +981,8 @@ export function calculateTripProgress(
     routeMatch,
     expectedProgress,
     overallProgress,
-    distanceToDestination
+    distanceToDestination,
+    aboardBeforeLeg
   )
 
   const currentLeg = legs[currentLegIndex]

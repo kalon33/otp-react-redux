@@ -764,6 +764,13 @@ export interface RidingDecisionInput {
   prevRiding: RidingState | null
   /** The rider's own GPS ground speed, when the fix carries one. */
   riderSpeedMps: number | null
+  /**
+   * The rider's position matched against the leg the RIDDEN TRIP is on, when
+   * the matcher's own leg is not it — see the off-route branch in
+   * {@link decideRiding}. Omitted (or null) restores the pre-23.2 behaviour
+   * exactly: the fact is judged against whatever leg the matcher favours.
+   */
+  ridingCorridor?: Pick<RouteMatchResult, 'isOnRoute'> | null
   routeMatch: RouteMatchResult
   vehicleMatch: {
     consecutiveMatches?: number
@@ -777,6 +784,126 @@ function legRouteId(leg: any): string | null {
 
 function legTripId(leg: any): string | null {
   return leg?.trip?.gtfsId ?? leg?.tripId ?? null
+}
+
+/**
+ * How far along a leg still counts as "has not reached its first stop".
+ *
+ * The projection of a rider who is nowhere near a leg yet lands on its very
+ * first vertex, and `progressAlongLeg` comes back a literal 0 — measured on
+ * 2026-09-21 ride 2, eleven consecutive ticks at `0.0000` while the rider was
+ * 2,584 m -> 235 m north of the leg's anchor stop. A hair of slack is allowed
+ * so a shape whose first two vertices are centimetres apart still reads as
+ * "not started".
+ */
+export const PRE_LEG_PROGRESS_MAX = 0.005
+
+/**
+ * Which leg carries the bus the riding fact NAMES?
+ *
+ * `riding.legIndex` is written by whoever established the fact, and the two
+ * writers disagree about what it means. `decideRiding` only ever runs on a
+ * transit leg, so its index is the ridden leg. `confirmVehicleSelection` — the
+ * rider's own "I'm on the bus" — stamps `goMode.routeMatch.legIndex`, which on
+ * 2026-09-21 ride 1 was **0, the bike leg** (`SET_RIDING legIndex: 0` at
+ * 09:22:10, backlog 23.2b): the rider was aboard an Orange Line run while the
+ * plan still had them cycling to Lake St for a bus an hour out.
+ *
+ * So the index is not the question — the TRIP is. Resolution order, the same
+ * one `replanFromAboard` already uses for its splice anchor:
+ *
+ *  1. the leg whose own trip id IS `riding.tripId`. After a successful aboard
+ *     re-plan that is the spliced bus leg, which is what makes every gate
+ *     keyed on this self-terminating;
+ *  2. `riding.legIndex` when it already points at a transit leg;
+ *  3. the first transit leg AFTER it — the bus the rider is being carried
+ *     toward on an access leg — but only when the routes agree, because a
+ *     confirmed match on one route says nothing about a leg on another.
+ *
+ * Returns -1 when the fact names no trip, or when nothing above resolves.
+ */
+export function ridingTransitLegIndex(
+  legs: Leg[] | null | undefined,
+  riding: RidingState | null | undefined
+): number {
+  if (!riding?.tripId || !legs?.length) return -1
+
+  const byTrip = legs.findIndex(
+    (l: any) => l?.transitLeg && legTripId(l) === riding.tripId
+  )
+  if (byTrip >= 0) return byTrip
+
+  const at = riding.legIndex ?? -1
+  if (at >= 0 && (legs[at] as any)?.transitLeg) return at
+  if (at < 0) return -1
+
+  for (let i = at + 1; i < legs.length; i++) {
+    const leg: any = legs[i]
+    if (!leg?.transitLeg) continue
+    const legRoute = legRouteId(leg)
+    // Missing on either side passes, same policy as matchDescribesLeg: never
+    // block on data a feed simply does not publish.
+    if (
+      riding.routeId != null &&
+      legRoute != null &&
+      riding.routeId !== legRoute
+    ) {
+      return -1
+    }
+    return i
+  }
+  return -1
+}
+
+/**
+ * Is the rider verifiably aboard a bus that has not yet reached the start of
+ * the leg it is being measured against?
+ *
+ * The 2026-09-21 ride-2 signature (backlog 22.1). `buildOnboardItinerary`
+ * anchors the built bus leg at the vehicle's NEXT stop — 66th St — so a rider
+ * already aboard 2.58 km north of it projects onto the leg's first vertex and
+ * measures `distanceFromRoute` 2,584 m with `isOnRoute false`. Everything
+ * downstream then called that a deviation: `determineTripStatus` returned
+ * `deviated` for 116 s and `checkRouteDeviation` pushed a high-priority
+ * "Off route — 2070m from the route" card at a rider whose header read
+ * "On Bus #8228" on the same screen.
+ *
+ * That is not a rider who has left their route. It is a rider APPROACHING the
+ * anchor, from inside the vehicle the anchor was derived from. Four facts have
+ * to hold together, and each is a mis-read already on record:
+ *
+ *  - the riding fact names a trip AND a real bus (`ridingFactIsEvidenced`), so
+ *    a GPS-only projection can never buy this exemption;
+ *  - the leg being measured IS that bus's leg (`ridingTransitLegIndex`), not
+ *    some other leg the matcher drifted onto;
+ *  - the projection sits at the leg's very start — past that, an aboard rider
+ *    off the shape is a real detour and must still be told;
+ *  - when the bus's own feed record publishes a next stop, that stop is one of
+ *    this leg's calls. A bus heading somewhere this leg never goes is not
+ *    approaching its anchor. Null/unresolvable passes — never conclude from
+ *    data an agency may not publish.
+ */
+export function aboardBeforeLegStart(input: {
+  legs: Leg[] | null | undefined
+  riding: RidingState | null | undefined
+  routeMatch: RouteMatchResult | null | undefined
+  /** The ridden vehicle's own next stop, when the feed publishes one. */
+  vehicleNextStopId?: string | null
+}): boolean {
+  const { legs, riding, routeMatch, vehicleNextStopId } = input
+  if (!routeMatch || routeMatch.isOnRoute) return false
+  if (!riding?.tripId || !ridingFactIsEvidenced(riding)) return false
+  if (routeMatch.progressAlongLeg > PRE_LEG_PROGRESS_MAX) return false
+
+  const ridingLegIndex = ridingTransitLegIndex(legs, riding)
+  if (ridingLegIndex < 0 || ridingLegIndex !== routeMatch.legIndex) return false
+
+  const nextStop = stopKey(vehicleNextStopId)
+  if (nextStop == null) return true
+  const calls = legStopsInOrder(legs?.[ridingLegIndex])
+  const known = calls.some((s) => stopKey(s.stopId) != null)
+  if (!known) return true
+  return calls.some((s) => stopKey(s.stopId) === nextStop)
 }
 
 /**
@@ -883,6 +1010,7 @@ export function decideRiding(input: RidingDecisionInput): RidingDecision {
     offRouteClearMs,
     prevRiding,
     riderSpeedMps,
+    ridingCorridor,
     routeMatch,
     vehicleMatch
   } = input
@@ -890,6 +1018,31 @@ export function decideRiding(input: RidingDecisionInput): RidingDecision {
   const onTransit = routeMatch.isOnRoute && !!(matchedLeg as any)?.transitLeg
   if (!onTransit) {
     if (!prevRiding) return { kind: 'none' }
+    // Whose geometry is this fact being judged against?
+    //
+    // The off-route clock below used to run against whatever leg the matcher
+    // favours, and on an ACCESS leg that is the wrong shape entirely. On
+    // 2026-09-21 ride 1 the rider confirmed Orange Line 8228 at 09:22:10 while
+    // the current leg was the bike leg to Lake St; every tick after that
+    // measured them against the BIKE path (192 m -> 1,166 m away, because they
+    // were on a bus doing 28 m/s down I-35W), `offRouteSince` was stamped at
+    // 09:22:11.077, and `CLEAR_RIDING` landed 91 s later at 09:23:42.054 —
+    // the rider's own statement of which bus they were on, dropped by a
+    // measurement that was never about that bus (backlog 23.2d).
+    //
+    // So when the caller can hand us a match against the leg the ridden TRIP
+    // is on, that match is the authority: on its shape the fact refreshes, off
+    // it the clock runs exactly as before. Absent (no corridor resolvable, a
+    // fact with no trip, or one no real bus stands behind) nothing changes.
+    if (
+      ridingCorridor?.isOnRoute === true &&
+      prevRiding.tripId != null &&
+      ridingFactIsEvidenced(prevRiding)
+    ) {
+      return prevRiding.offRouteSince == null
+        ? { kind: 'none' }
+        : { kind: 'set', riding: { ...prevRiding, offRouteSince: null } }
+    }
     if (prevRiding.offRouteSince == null) {
       return {
         kind: 'markOffRoute',

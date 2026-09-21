@@ -29,10 +29,12 @@ import {
   hasArrivedAtDestination
 } from '../util/go-mode/progress-calculator'
 import {
+  aboardBeforeLegStart,
   BOARD_AUTO_CONFIRM_MIN_CONSECUTIVE,
   decideRiding,
   riderStopOnLeg,
   ridingFactIsEvidenced,
+  ridingTransitLegIndex,
   trackBoardStopDwell,
   trackEarlyAlight,
   vehiclePassedRiderStop,
@@ -5945,6 +5947,58 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     const matchedLeg: any = itinerary.legs[routeMatch.legIndex]
     const riding = goMode.riding
     const nowForRiding = getCurrentTime().getTime()
+
+    // ── The leg the RIDDEN BUS is on, and the rider's position on it ─────────
+    //
+    // Backlog 23.2 / 22.1, both the same question: how is "aboard" judged on a
+    // leg the rider has not reached? `riding.legIndex` cannot answer it — the
+    // rider's own "I'm on the bus" stamps whatever leg the matcher was on, and
+    // on 2026-09-21 ride 1 that was leg 0, the BIKE leg. So resolve the leg
+    // from the trip the fact names (ridingTransitLegIndex), and when that is
+    // not the leg the matcher favours, take a second match against it. That
+    // match is what the off-route clock is measured on (decideRiding below),
+    // and it is what makes a confirmed boarding on an access leg mean anything
+    // at all.
+    //
+    // Costs one extra projection per tick, and only while the two disagree.
+    const ridingLegIndex = ridingTransitLegIndex(itinerary.legs, riding)
+    const ridingCorridor =
+      ridingLegIndex >= 0 &&
+      ridingLegIndex !== routeMatch.legIndex &&
+      ridingFactIsEvidenced(riding)
+        ? matchPositionToRoute(
+            currentPosition,
+            itinerary.legs.slice(0, ridingLegIndex + 1),
+            ridingLegIndex,
+            null,
+            {
+              accuracyM: position.coords.accuracy,
+              movedSinceFixM,
+              nowMs: position.timestamp
+            }
+          )
+        : null
+
+    // The ridden bus's own next stop, as its feed record currently has it —
+    // the fourth gate on aboardBeforeLegStart. Only the match that speaks for
+    // the boarded bus may supply it.
+    const ridingMatchForAnchor = goMode.vehicleMatch?.match
+    const ridingNextStopId =
+      ridingMatchForAnchor != null &&
+      (ridingMatchForAnchor.tripId === riding?.tripId ||
+        (riding?.vehicleId != null &&
+          ridingMatchForAnchor.vehicleId === riding.vehicleId))
+        ? ridingMatchForAnchor.nextStopId ?? null
+        : null
+
+    // Aboard, and short of the stop this leg starts at (22.1). Read by the
+    // status, the deviation card and the map — one answer, computed once.
+    const aboardBeforeLeg = aboardBeforeLegStart({
+      legs: itinerary.legs,
+      riding,
+      routeMatch,
+      vehicleNextStopId: ridingNextStopId
+    })
     // Once the rider has arrived the trip is over, and neither of the two
     // side-effectful blocks below has anything left to decide. The quiesce
     // further down already stops notifications, reroutes and polling, but it
@@ -6122,6 +6176,7 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         offRouteClearMs: RIDING_OFFROUTE_CLEAR_MS,
         prevRiding: ridingNow,
         riderSpeedMps: position.coords.speed ?? null,
+        ridingCorridor,
         routeMatch,
         vehicleMatch: goMode.vehicleMatch
       })
@@ -6279,7 +6334,10 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       Number.isFinite(liveAlightMs) ? liveAlightMs : null,
       // The raw fix, so arrival can be judged by where the rider actually is
       // and not only by a progress scalar that can freeze short of the bar.
-      currentPosition
+      currentPosition,
+      // Aboard, short of this leg's first stop: the gap to the anchor is not a
+      // deviation, so the clock decides the status (22.1).
+      aboardBeforeLeg
     )
 
     // The rider's MEASURED pace, and the missed-bus classifier's last verdict.
@@ -6584,6 +6642,28 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     const currentLegRouteId = getLegRouteId(currentLegForVehicle)
     if (currentLegForVehicle?.transitLeg && currentLegRouteId) {
       dispatch(performVehicleMatching(currentLegRouteId))
+    } else if (ridingLegIndex >= 0 && ridingFactIsEvidenced(riding)) {
+      // ...and for the bus the rider has TOLD us they are on, even though the
+      // matcher is still on the access leg to it (backlog 23.2a).
+      //
+      // This gate used to be `transitLeg` and nothing else, so between 09:19
+      // and 09:23:50 on 2026-09-21 there was no UPDATE_VEHICLE_MATCH at all
+      // while the rider did 12-30 m/s down I-35W with their bus in the polled
+      // feed. After 09:22:10 that also meant the `confirmed` match the rider
+      // had just created was never refreshed: `refreshConfirmedMatch` is the
+      // only thing that keeps its distance, lastSeen and nextStopId current,
+      // and every gate downstream of the confirmation reads those.
+      //
+      // Deliberately NOT an automatic-detection path. `performVehicleMatching`
+      // can only auto-confirm a bus through `shouldShowBoardingPrompt`, which
+      // refuses while `boardingPrompt.transitLegEnteredAt` is null
+      // (vehicle-matching.ts:696) — and only `startVehicleTracking` stamps
+      // that, on transit legs. Requiring an EVIDENCED riding fact keeps it
+      // that way on purpose: this refreshes a boarding the rider has already
+      // asserted, it never asserts one.
+      const ridingRouteId =
+        riding?.routeId ?? getLegRouteId(itinerary.legs[ridingLegIndex])
+      if (ridingRouteId) dispatch(performVehicleMatching(ridingRouteId))
     }
 
     // Check for notifications
@@ -6687,6 +6767,7 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       itinerary.legs,
       alightContext,
       {
+        aboardBeforeLeg,
         geometryChangedAtMs: session.geometryChangedAtMs,
         handledAtMs: session.deviationHandledAtMs,
         nowMs: currentTime.getTime(),
@@ -6705,6 +6786,7 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     // the reasoning, and the reason the third arm can only extend an open
     // window and never open one, is on nextDeviationHandledAtMs.
     session.deviationHandledAtMs = nextDeviationHandledAtMs({
+      aboardBeforeLeg,
       alerted: notifications.some((n) => n.type === 'ROUTE_DEVIATION'),
       currentLeg,
       distanceFromRoute: persistedDistanceFromRoute,
@@ -7087,8 +7169,37 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         const riding = goMode.riding
         if (!riding || riding.legIndex == null || riding.legIndex < 0)
           return false
-        const ridingLeg = itinerary.legs[riding.legIndex]
+        // The leg the ridden TRIP is on, not the leg the fact happens to be
+        // stamped with (backlog 23.2c).
+        //
+        // This read `itinerary.legs[riding.legIndex]` and refused anything
+        // non-transit, and on 2026-09-21 ride 1 that made the rider's own
+        // confirmation unusable: `CONFIRM_VEHICLE` at 09:22:10 named Orange
+        // Line trip 1:1268952 at 215.7 m, `SET_RIDING` carried `legIndex: 0`
+        // — the BIKE leg — and so this returned false on every tick and
+        // `replanFromAboard({reason:'boarded-earlier'})` could never fire.
+        // The confirmed bus was never spliced in; three quiet access re-plans
+        // went on rebuilding a bike leg from the moving bus back to Lake St
+        // for a 10:12 departure, and the rider killed the trip at 09:23:45.
+        //
+        // replanFromAboard already resolves its splice anchor from the trip
+        // this way (`boardedLegIndex`), so the trigger now asks the same
+        // question as the remedy. An access-leg fact must also be EVIDENCED —
+        // a real vehicle id, i.e. the rider's confirmation or a trusted match,
+        // never a GPS projection.
+        const ridingLegForReplanIndex = ridingTransitLegIndex(
+          itinerary.legs,
+          riding
+        )
+        if (ridingLegForReplanIndex < 0) return false
+        const ridingLeg = itinerary.legs[ridingLegForReplanIndex]
         if (!ridingLeg?.transitLeg) return false
+        if (
+          ridingLegForReplanIndex !== riding.legIndex &&
+          !ridingFactIsEvidenced(riding)
+        ) {
+          return false
+        }
         // Key the latch on facts that SURVIVE an auto-apply. legIndex is
         // exactly the field the splice rewrites, so on 8/2 every successful
         // replan minted a fresh key and reset the attempt counter — the cap
@@ -7130,7 +7241,7 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         // early-board clock test runs on the plan's frozen startTime, and a bus
         // running ahead of schedule reads as a bus the rider could not yet be
         // on. Same resolution as the boarding-approach alert below.
-        const liveRidingBoard = goMode.liveLegTimes?.[riding.legIndex]
+        const liveRidingBoard = goMode.liveLegTimes?.[ridingLegForReplanIndex]
         if (
           !shouldReplanBoardedEarlier({
             liveBoardEpochMs:
