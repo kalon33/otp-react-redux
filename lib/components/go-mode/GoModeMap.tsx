@@ -119,6 +119,20 @@ function isWalkLike(mode: string): boolean {
 const FOLLOW_ARROW_SVG =
   '<svg width="29" height="29" viewBox="0 0 29 29" xmlns="http://www.w3.org/2000/svg" fill="#333333" style="display:block"><path d="M14.5 5.5L22 23l-7.5-3.6L7 23z"/></svg>'
 
+// Engaged/disengaged treatment for the follow toggle (backlog 21.4). The
+// engaged look is a SOLID fill with a white arrow, deliberately not MapLibre's
+// own active tint (#33b5e5, which only recolours the glyph on a white button):
+// the rider read the tinted arrow as a second copy of the native locate
+// crosshair stacked above it. Filled-vs-empty is the toggle affordance; the
+// colour is the app's transit blue, not MapLibre's.
+export const FOLLOW_ACTIVE_BG = '#1565c0'
+export const FOLLOW_ACTIVE_ARROW = '#ffffff'
+export const FOLLOW_IDLE_ARROW = '#333333'
+export const FOLLOW_CLASS_ACTIVE =
+  'go-mode-follow-toggle go-mode-follow-toggle--following'
+export const FOLLOW_CLASS_IDLE =
+  'go-mode-follow-toggle go-mode-follow-toggle--idle'
+
 /**
  * Follow-toggle button as a native MapLibre control: it stacks in a
  * `maplibregl-ctrl-group` beneath the existing locate crosshair (top-left) and
@@ -126,7 +140,7 @@ const FOLLOW_ARROW_SVG =
  * imperative (IControl contract), so active state and label are synced from
  * React via setActive/setLabel.
  */
-class FollowButtonControl implements IControl {
+export class FollowButtonControl implements IControl {
   button: HTMLButtonElement | null = null
   container: HTMLDivElement | null = null
   private readonly handleClick: () => void
@@ -142,6 +156,7 @@ class FollowButtonControl implements IControl {
     button.type = 'button'
     button.setAttribute('data-testid', 'go-mode-follow-toggle')
     button.setAttribute('aria-pressed', 'false')
+    button.className = FOLLOW_CLASS_IDLE
     button.innerHTML = FOLLOW_ARROW_SVG
     button.addEventListener('click', this.handleClick)
     container.appendChild(button)
@@ -160,10 +175,15 @@ class FollowButtonControl implements IControl {
   setActive(active: boolean): void {
     if (!this.button) return
     this.button.setAttribute('aria-pressed', active ? 'true' : 'false')
-    // MapLibre's own geolocate-active blue, so engaged reads the same as the
-    // native controls' active states.
+    // The button itself carries the state, not just the glyph: engaged is a
+    // filled blue chip with a white arrow, disengaged the plain white control
+    // chrome with a dark arrow. Neither is MapLibre's #33b5e5 active tint.
+    this.button.className = active ? FOLLOW_CLASS_ACTIVE : FOLLOW_CLASS_IDLE
+    this.button.style.backgroundColor = active ? FOLLOW_ACTIVE_BG : ''
     const svg = this.button.querySelector('svg')
-    if (svg) svg.setAttribute('fill', active ? '#33b5e5' : '#333333')
+    if (svg) {
+      svg.setAttribute('fill', active ? FOLLOW_ACTIVE_ARROW : FOLLOW_IDLE_ARROW)
+    }
   }
 
   setLabel(label: string): void {
@@ -173,7 +193,9 @@ class FollowButtonControl implements IControl {
   }
 }
 
-const FollowToggleControl = ({
+// Exported for unit tests: the label the rider sees is asserted without a
+// live MapLibre instance.
+export const FollowToggleControl = ({
   active,
   onToggle
 }: {
@@ -189,10 +211,19 @@ const FollowToggleControl = ({
     () => new FollowButtonControl(() => onToggleRef.current()),
     { position: 'top-left' }
   )
-  const label = intl.formatMessage({
-    defaultMessage: 'Follow my location',
-    id: 'components.GoMode.followToggle'
+  // The label says which state the button is IN, so the tooltip and the
+  // screen-reader name disambiguate it from the native locate control that
+  // used to sit above it (backlog 21.4). Both are formatted unconditionally so
+  // formatjs can extract them.
+  const followingLabel = intl.formatMessage({
+    defaultMessage: 'Following you',
+    id: 'components.GoMode.followToggleOn'
   })
+  const followLabel = intl.formatMessage({
+    defaultMessage: 'Follow me',
+    id: 'components.GoMode.followToggleOff'
+  })
+  const label = active ? followingLabel : followLabel
   useEffect(() => {
     control.setActive(active)
     control.setLabel(label)
