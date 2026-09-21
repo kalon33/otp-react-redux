@@ -13,10 +13,12 @@ import type { GoModeState } from '../../reducers/go-mode'
 
 /**
  * The height the banner is currently taking, published so the fixed-position
- * mobile screens underneath can start below it instead of behind it. Read as
+ * screens underneath can start below it instead of behind it. Read as
  * `calc(50px + var(--return-to-trip-banner-height, 0px))` in mobile.css and in
- * the mobile screens' styled-components; the fallback means nothing moves when
- * no banner is up.
+ * the mobile screens' styled-components, and as the `padding-top` of AppFrame's
+ * `main` in app.css (`#otp > main`) for the pages routed outside the
+ * mobile-screen tree — /feedback, /settings, saved places. The fallback means
+ * nothing moves when no banner is up.
  */
 export const BANNER_HEIGHT_VAR = '--return-to-trip-banner-height'
 
@@ -36,8 +38,9 @@ const TransitionStyles = styled.div`
     padding: 8px 5px;
     /* Absolute so the banner sits in the strip directly under the fixed nav
        bar. It does NOT get to overlap what is below it: its measured height is
-       published as --return-to-trip-banner-height and every mobile screen's top offset
-       adds it, so the strip is vacated rather than covered. */
+       published as --return-to-trip-banner-height and every screen below adds
+       it — mobile screens to their top offset, AppFrame pages to their
+       padding-top — so the strip is vacated rather than covered. */
     position: absolute;
     text-align: center;
     top: 50px;
