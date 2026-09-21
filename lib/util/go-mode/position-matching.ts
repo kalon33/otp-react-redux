@@ -220,6 +220,94 @@ export interface RouteMatchResult {
  */
 export const MATCH_NEAR_TIE_M = 5
 
+/**
+ * PROPOSED (backlog 21.3, measured 2026-09-21, nothing shipped).
+ *
+ * What multiple of the fix's own reported accuracy counts as "the same place",
+ * and the ceiling on the band that produces.
+ *
+ * MATCH_NEAR_TIE_M is a fixed 5 m, and 5 m is a statement about GPS noise on a
+ * GOOD fix. It says nothing about a fix that reports 59 m of uncertainty, and
+ * on 2026-09-21 that is what decided a 105 m jump. Session `mub9m39o-9pmdbh`,
+ * 08:49:07 local, the closing bike leg (1,477.7 m) of a self-overlapping path:
+ * the projection held segment 6 while the rider rode ~250 m of a loop the
+ * geometry does not follow, and on the first fix that moved (8.0 m step,
+ * accuracy 59.1 m) the candidates were
+ *
+ *     seg 13   51.14 m perpendicular   progress 0.124980
+ *     seg  6   59.96 m perpendicular   progress 0.053649   <- held
+ *
+ * — an 8.8 m difference, decided by an instrument reporting 59 m of error, and
+ * worth 105 m of invented progress. The 5 m band did not reach it: one second
+ * earlier the same two candidates sat 1.6 m apart and the band DID hold them
+ * together, which is the whole point — the answer flipped because the fix got
+ * worse, not because the rider moved. The same shape on 2026-09-20 18:11:41
+ * (`mua45zwn-ik29ib`, 1,839.2 m bike leg, accuracy 14.6 m): seg 53 at 49.25 m
+ * beat seg 45 at 58.65 m and moved the projection 120.8 m, to 99.19 % of a leg
+ * the rider still had 74 m of.
+ *
+ * So the band is the fix's own accuracy, halved, floored at the old 5 m and
+ * capped: as the instrument gets worse the search's willingness to move on a
+ * small difference shrinks, and the continuity preference — nearest to the
+ * projection already held — decides instead. It still cannot pin anyone: a
+ * candidate better by more than the band wins outright.
+ *
+ * Both constants are fitted, not chosen:
+ *
+ *  - k = 0.5 is the largest value that leaves every existing matcher test
+ *    passing. At k >= 0.65 `arrival-latch-0901` fails two cases, and the
+ *    reason is worth keeping: that leg's START and END project 5.53 m apart in
+ *    perpendicular distance (seg 0 at 137.99 m, seg 40 at 132.46 m, on a
+ *    9.47 m fix), so any band wider than 5.53 m makes "0 %" and "100 %" a tie
+ *    and the continuity rule answers 0 % — pre-empting the jump budget before
+ *    it can ever release. A near-tie band and the 12.17 release gate are not
+ *    independent, and this is where they collide.
+ *  - The 25 m cap is what k = 0.5 asks for at the worst accuracy these
+ *    recordings contain (~60 m). Uncapped at 50 m it measures the same; at
+ *    k = 1 the projection pins for 281 consecutive ticks on the 2026-09-21
+ *    ride against 107 unfixed, and four tests fail.
+ *
+ * Measured against the recordings, baseline -> k = 0.5:
+ *
+ *     2026-09-21 08:49:07   +105.4 m in one tick      -> no jump at all
+ *     2026-09-20 18:11:41   +120.8 m in one tick      -> +36.0 then +77.1 m
+ *     ride-long ticks >50 m excess   5 -> 3 (09-21),  1 -> 1 (09-20)
+ *     longest run of unchanged progress  unchanged on every fixture
+ */
+export const MATCH_NEAR_TIE_ACCURACY_K = 0.5
+export const MATCH_NEAR_TIE_MAX_M = 25
+
+/**
+ * The near-tie band for this fix, in perpendicular metres.
+ *
+ * Unknown, non-finite or non-positive accuracy reads as the old fixed band, so
+ * a caller that supplies no `accuracyM` — and every caller that passes no
+ * `gate` at all — is bit-for-bit unchanged.
+ *
+ * So does a fix past MATCH_FIX_ACCURACY_TRUSTED_M, and that is a deliberate
+ * seam rather than an omission. An error bar the module has already decided it
+ * does not believe is not evidence about how close two candidates are either,
+ * and a projection born of one is governed by the provisional-seed path
+ * (backlog 12.17), not by this. Measured: without this clause the synthetic
+ * all-untrusted control in `untrusted-seed-0917` shortens from 23 held ticks
+ * to 21 — no worse for the rider, but a change to 12.17's release arithmetic
+ * that this row has no evidence to ask for.
+ */
+export function nearTieBandM(accuracyM?: number | null): number {
+  if (
+    accuracyM == null ||
+    !Number.isFinite(accuracyM) ||
+    accuracyM <= 0 ||
+    !fixAccuracyTrusted(accuracyM)
+  ) {
+    return MATCH_NEAR_TIE_M
+  }
+  return Math.max(
+    MATCH_NEAR_TIE_M,
+    Math.min(MATCH_NEAR_TIE_MAX_M, MATCH_NEAR_TIE_ACCURACY_K * accuracyM)
+  )
+}
+
 /** @deprecated Kept as the old name for the same band; prefer MATCH_NEAR_TIE_M. */
 export const BACKWARD_JUMP_HYSTERESIS_M = MATCH_NEAR_TIE_M
 
@@ -520,6 +608,10 @@ export function matchPositionToRoute(
   // there is a previous match to be continuous with; with none, the search is
   // the plain global minimum it always was, allocation included.
   const nearTies: Array<{ legDistance: number; match: RouteMatchResult }> = []
+  // Scaled with this fix's own accuracy: a difference smaller than the
+  // instrument's stated error is not a measurement (backlog 21.3). Without a
+  // gate there is no accuracy to read and the band is the old fixed 5 m.
+  const tieBandM = nearTieBandM(gate?.accuracyM)
 
   // Search current leg and next 2 legs for best match
   const legsToSearch = Math.min(3, legs.length - currentLegIndex)
@@ -542,7 +634,7 @@ export function matchPositionToRoute(
       const perpDistance = projection.perpDistance
 
       const isNearTie =
-        previousMatch != null && perpDistance <= minDistance + MATCH_NEAR_TIE_M
+        previousMatch != null && perpDistance <= minDistance + tieBandM
       if (perpDistance < minDistance || isNearTie) {
         // Calculate progress along this segment
         const segmentStartDistance = cumulativeDistances[i]
@@ -587,10 +679,7 @@ export function matchPositionToRoute(
           // The band moved with the new best; anything it no longer covers is
           // not a tie any more.
           for (let k = nearTies.length - 1; k >= 0; k--) {
-            if (
-              nearTies[k].match.distanceFromRoute >
-              minDistance + MATCH_NEAR_TIE_M
-            ) {
+            if (nearTies[k].match.distanceFromRoute > minDistance + tieBandM) {
               nearTies.splice(k, 1)
             }
           }
@@ -611,7 +700,7 @@ export function matchPositionToRoute(
   if (previousMatch != null && winner != null && nearTies.length > 1) {
     let bestGap = Infinity
     for (const tie of nearTies) {
-      if (tie.match.distanceFromRoute > minDistance + MATCH_NEAR_TIE_M) continue
+      if (tie.match.distanceFromRoute > minDistance + tieBandM) continue
       const gap = continuityGapM(previousMatch, tie.match, tie.legDistance)
       if (gap < bestGap) {
         bestGap = gap
