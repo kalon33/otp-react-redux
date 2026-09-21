@@ -159,6 +159,14 @@ describe('util > go-mode > 2026-09-01 ride 3 arrival latch', () => {
       // Every real arrival in the recorded telemetry still latches:
       // 2026-08-31 16:22:05 (70 m, 95.5%), 18:52:55 (41 m, 99.7%) and
       // 2026-09-01 08:59:37 (81 m, 99.51%).
+      //
+      // The last of those three is a two-argument call on purpose. It latches
+      // here because overall progress is the only scalar it is given; in the
+      // TICK it no longer does, because that arrival was itself 81.4 m early
+      // and 21.2 now judges the progress-only branch on the closing leg (see
+      // post-arrival-delay-0901.ts, where the replay moves to 14:00:08.000Z
+      // at 24.8 m). The other two are distance-branch arrivals and are
+      // untouched either way.
       expect(
         hasArrivedAtDestination(95.47520431072041, 69.95598543807816)
       ).toBe(true)

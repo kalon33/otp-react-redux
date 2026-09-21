@@ -6435,7 +6435,8 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       (progress.status === 'completed' ||
         hasArrivedAtDestination(
           progress.overallProgress,
-          progress.distanceToDestination
+          progress.distanceToDestination,
+          progress.finalLegProgress
         ))
     ) {
       // Say which condition fired. The daemon reads this stream and had no way
@@ -6444,6 +6445,11 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       // eslint-disable-next-line no-console
       console.log(
         `[go-mode] arrived: progress=${progress.overallProgress.toFixed(2)}% ` +
+          `finalLegProgress=${
+            progress.finalLegProgress == null
+              ? 'n/a'
+              : `${progress.finalLegProgress.toFixed(2)}%`
+          } ` +
           `distanceToDestination=${
             progress.distanceToDestination == null
               ? 'unknown'
