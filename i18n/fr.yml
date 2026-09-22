@@ -476,6 +476,8 @@ components:
       nextStopTitle: "Prochain arrêt"
       offRouteDistance: "{metres} m hors itinéraire"
       offRouteTitle: "Hors itinéraire"
+      pacingDue: "imminent"
+      pacingWait: "{minutes} min d’attente"
       routeAtStop: "{routeName} · {stopName}"
       routeMinutes: "{routeName} · {minutes} min"
       routeMinutesLate: "{routeName} · {minutes} min de retard"

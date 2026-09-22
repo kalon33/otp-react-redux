@@ -483,6 +483,8 @@ components:
       nextStopTitle: Next stop
       offRouteDistance: "{metres}m from the route"
       offRouteTitle: Off route
+      pacingDue: due
+      pacingWait: "{minutes} min wait"
       routeAtStop: "{routeName} · {stopName}"
       routeMinutes: "{routeName} · {minutes} min"
       routeMinutesLate: "{routeName} · {minutes} min late"

@@ -74,6 +74,8 @@ import {
   deviationThresholdM,
   findBoardLegIndex,
   itineraryArrivalMs,
+  lastBoardMinutesPushAtMs,
+  liveBoardEpochFor,
   nextDeviationHandledAtMs,
   resetDelayAlerts,
   resetLegAnnouncements,
@@ -7299,6 +7301,16 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     const boardLegIndex = findBoardLegIndex(itinerary.legs, boardSearchLegIndex)
     const boardLeg: any =
       boardLegIndex >= 0 ? itinerary.legs[boardLegIndex] : null
+    // ONE live board epoch for every push that quotes this boarding's minutes
+    // — the approach alert and the departure-drift alert both read it, through
+    // one helper, so they cannot grow separate readings or separate roundings
+    // (24.4). Measured 2026-09-21 16:18:05 / 16:19:18: they already agreed on
+    // the source and still printed "4 min" and "5 min" 73 s apart, because the
+    // epoch had moved; the cadence rule is what fixes that, and this is what
+    // keeps the two from ALSO disagreeing about the same instant.
+    const boardPushEpochMs = liveBoardEpochFor(
+      boardLegIndex >= 0 ? goMode.liveLegTimes?.[boardLegIndex] : null
+    )
     const boardTripId: string | null = boardLeg
       ? boardLeg.trip?.gtfsId || boardLeg.tripId || null
       : null
@@ -7466,6 +7478,11 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       if (missedSettled) dispatch(clearReroute())
     }
 
+    // Set when the approach alert quotes this boarding's minutes on this tick,
+    // so the drift watcher can fold that figure in rather than contradict it
+    // a minute later (24.4).
+    let boardMinutesToldMs: number | null = null
+
     // "Your bus is coming", while the rider walks or bikes to the stop —
     // rider-requested from the kerb on 2026-08-27. Judged out here for the
     // same reason as missed-bus, on the same vehicle reading; skipped on a
@@ -7484,7 +7501,6 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         // receiving notifications then to board the next bus".
         earlyAlightNow?.legIndex === routeMatch.legIndex)
     ) {
-      const liveBoardForAlert = goMode.liveLegTimes?.[boardLegIndex]
       const boardAlert = checkBoardVehicleApproach(
         boardLeg,
         {
@@ -7492,11 +7508,7 @@ export function handlePositionUpdate(position: GeolocationPosition) {
           // a different run makes the planned trip's vehicle somebody else's
           // bus (2026-09-04: override 12:13 against a boarding at 11:15:30).
           departureOverrideMs: departureOverride,
-          liveBoardEpochMs:
-            liveBoardForAlert?.boardRealtime &&
-            liveBoardForAlert.boardEpoch != null
-              ? liveBoardForAlert.boardEpoch
-              : null,
+          liveBoardEpochMs: boardPushEpochMs,
           nowMs: currentTime.getTime(),
           // Gate B: the ground still in front of them, at the pace they are
           // actually keeping — the same access chain and the same observed
@@ -7517,7 +7529,14 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         },
         goMode.notifications?.sentNotifications || []
       )
-      if (boardAlert) notifications.push(boardAlert)
+      if (boardAlert) {
+        notifications.push(boardAlert)
+        // "Bus here" carries no number, so it cannot contradict anything; only
+        // the "Bus coming · N min" stage hands the rider a figure to hold.
+        if (boardAlert.type === 'BOARD_BUS_APPROACHING') {
+          boardMinutesToldMs = boardPushEpochMs
+        }
+      }
     }
 
     // Has the bus the rider is travelling toward moved? Judged out here rather
@@ -7539,6 +7558,13 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         currentLeg?.mode === 'WALK' || currentLeg?.mode === 'BICYCLE'
       const boardingTripId =
         boardingLeg?.trip?.gtfsId || boardingLeg?.tripId || null
+      // The drift alert and the approach alert must be talking about the SAME
+      // boarding, or "they agree on the number" is meaningless. They coincide
+      // on an ordinary walk-then-bus tick; where they do not (an early alight
+      // moves boardSearchLegIndex on, a transfer leg sits between them) the
+      // honest answer is no figure, which evaluateDepartureDrift handles by
+      // holding the baseline and saying nothing.
+      const driftWatchesBoardLeg = boardingLegIndex === boardLegIndex
       const drift = evaluateDepartureDrift(session.lastDepartureBaseline, {
         boardingKey:
           onAccessLeg && boardingLeg?.transitLeg && boardingTripId
@@ -7546,15 +7572,24 @@ export function handlePositionUpdate(position: GeolocationPosition) {
                 departureOverride ?? 'plan'
               }`
             : null,
+        // The rider's cadence window is shared with "Bus coming" / "Leave in
+        // N min" — whichever spoke last starts it (24.4).
+        lastBoardMinutesPushAtMs: lastBoardMinutesPushAtMs(
+          goMode.notifications?.sentNotifications
+        ),
         // A rider-selected departure is a DIFFERENT bus from the one
         // liveLegTimes follows (it keys off the planned leg's trip id), so
         // there is no honest live figure to watch and nothing to report.
-        liveDepartureMs: departureOverride == null ? liveBoardMs : null,
+        liveDepartureMs:
+          departureOverride == null && driftWatchesBoardLeg
+            ? boardPushEpochMs
+            : null,
         nowMs: currentTime.getTime(),
         routeName:
           boardingLeg?.routeShortName ||
           boardingLeg?.routeLongName ||
           'Your bus',
+        toldDepartureMs: driftWatchesBoardLeg ? boardMinutesToldMs : null,
         waitSeconds: progress.waitTimeAtStop ?? null
       })
       session.lastDepartureBaseline = drift.next

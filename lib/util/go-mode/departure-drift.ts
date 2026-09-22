@@ -1,3 +1,7 @@
+import {
+  LEAVE_SOON_THRESHOLD_SECONDS,
+  minutesUntilBoarding
+} from './notification-service'
 import { notifyIntl } from './notify-i18n'
 import type { NotificationEvent } from './notification-service'
 
@@ -21,11 +25,54 @@ import type { NotificationEvent } from './notification-service'
  * from the last figure the rider was told, in either direction. A bus that
  * hands back the time it borrowed is news too, and lands as "back on time".
  *
+ * ## The rider's cadence (2026-09-21, backlog 24.4)
+ *
+ * The ±2 min step alone still let a steadily-late bus push four times in under
+ * seven minutes on the 16:05 ride. So a second gate sits on top of it, in the
+ * rider's own words: at most one departure-change push per bus per 5 minutes,
+ * unless the change since they were last told is 5 min or more, or it drops
+ * their slack to the leave-now line. The window is shared with the other
+ * pushes that quote this boarding's minutes, which is what stops a drift alert
+ * and a "Bus coming" contradicting each other over a departure that moved
+ * between them. See DEPARTURE_DRIFT_MIN_GAP_MS.
+ *
  * Pure: every clock arrives via nowMs, so the cadence is unit-testable.
  */
 
 /** Movement from the last-announced figure worth another alert. */
 export const DEPARTURE_DRIFT_ALERT_MS = 120000
+
+/**
+ * The rider's cadence, answered on the board 2026-09-21 22:42 (backlog 24.4):
+ * "at most one departure-change push per bus every 5 minutes unless the change
+ * is 5+ minutes or risks a miss, and the 'Bus coming' push must agree with it".
+ *
+ * MEASURED on `0921-1605-465-wrongdir.json` (session `mubq7tfx-8dz3ar`). The
+ * baseline was 16:17:00, first seen at 16:07:39, and the feed then walked the
+ * 465's departure one poll at a time — 16:18:42, 16:19:52, 16:21:02, 16:22:05,
+ * 16:23:24, 16:24:25, 16:25:35, 16:26:45. Against the ±2 min step alone that
+ * is four pushes in under seven minutes (16:14:31 "3 min later", 16:16:14
+ * "5 min later", 16:19:18 "7 min later", 16:21:20 "10 min later" — the last of
+ * them in the same second as "Bus here"), for a bus that was simply late and
+ * about which the rider could do nothing new each time.
+ *
+ * The window is shared with the other pushes that quote this boarding's
+ * minutes (lastBoardMinutesPushAtMs), which is the "must agree" half. Sharing
+ * the epoch and the rounding was not enough: at 16:18:05 and 16:19:18 both
+ * pushes read the SAME `liveLegTimes[1].boardEpoch` and still said "4 min" and
+ * "5 min" 73 s apart, because the epoch itself had moved 2m20s. Two true
+ * numbers that contradict each other are what the rider objected to, and only
+ * one voice per window prevents them.
+ */
+export const DEPARTURE_DRIFT_MIN_GAP_MS = 300000
+
+/**
+ * A change big enough to speak inside the quiet window. The rider's "5+
+ * minutes", measured from the figure they were last GIVEN — not from the
+ * baseline, and not per poll: a bus that slips 2 min three times has moved six
+ * minutes on the rider, and that is worth interrupting for.
+ */
+export const DEPARTURE_DRIFT_URGENT_MS = 300000
 
 /**
  * How far behind the clock a live prediction may sit and still be believed.
@@ -42,7 +89,17 @@ export interface DepartureBaselineState {
   baselineMs: number
   /** Identity of the boarding — see the boardingKey note in evaluate. */
   boardingKey: string
-  /** Signed drift the rider was last told about; 0 = still at the baseline. */
+  /**
+   * When the rider was last told this boarding's departure — by this module's
+   * own alert or by the approach push folded in through `toldDepartureMs` —
+   * or null before anything has. The rider's 5-minute cadence clock.
+   */
+  lastAlertAtMs: number | null
+  /**
+   * Signed drift of the figure the rider was last told; 0 = still at the
+   * baseline. Set by a drift alert and by a folded-in approach push, so "the
+   * change since they were last told" means the same thing either way.
+   */
   lastAlertedDriftMs: number
 }
 
@@ -55,10 +112,29 @@ export interface DepartureDriftInput {
    * jump.
    */
   boardingKey: string | null
+  /**
+   * When another push last quoted this boarding's minutes to the rider —
+   * `lastBoardMinutesPushAtMs(sentNotifications)`. Shares the quiet window so
+   * a drift alert cannot contradict a "Bus coming" the rider just read.
+   */
+  lastBoardMinutesPushAtMs?: number | null
   /** Live (realtime-flagged) prediction for that boarding, epoch ms. */
   liveDepartureMs: number | null
   nowMs: number
   routeName: string
+  /**
+   * The departure epoch another push has quoted to the rider ON THIS TICK —
+   * the approach alert's "Bus coming · N min", which reads the same
+   * `boardPushEpochMs` this module does.
+   *
+   * It is folded into the baseline as a figure the rider now HOLDS, and this
+   * tick says nothing itself. That is what makes the rider's "the 'Bus coming'
+   * push must agree with it" true rather than hoped for: the next drift alert
+   * is measured from the number they last read, whoever showed it to them, so
+   * a departure that has moved 2 min since "Bus coming · 4 min" is no longer
+   * news worth a second, contradicting push.
+   */
+  toldDepartureMs?: number | null
   /** progress.waitTimeAtStop — slack once the rider reaches the stop. */
   waitSeconds: number | null | undefined
 }
@@ -140,8 +216,11 @@ function composeAlert(
         )
 
   const slack = slackPhrase(waitSeconds)
-  // Minutes until the departure, never its clock time.
-  const awayMin = Math.max(0, Math.round((departureMs - nowMs) / 60000))
+  // Minutes until the departure, never its clock time — and through the same
+  // helper the approach push uses, so the two can never round one epoch two
+  // ways (24.4). It also retires this line's own `Math.max(0, …)`, which could
+  // print "465 · 0 min" for a departure inside the stale grace.
+  const awayMin = minutesUntilBoarding(departureMs, nowMs)
 
   // Losing slack is the case worth a buzz on the wrist; a bus handing time back
   // is good news and arrives without one (showNotification vibrates on 'high'
@@ -185,11 +264,28 @@ export function evaluateDepartureDrift(
   prev: DepartureBaselineState | null,
   input: DepartureDriftInput
 ): { alert: NotificationEvent | null; next: DepartureBaselineState | null } {
-  const { boardingKey, liveDepartureMs, nowMs } = input
+  const { boardingKey, liveDepartureMs, nowMs, toldDepartureMs } = input
   if (!boardingKey) return { alert: null, next: null }
 
   // The baseline only counts if it belongs to THIS boarding.
   const baseline = prev?.boardingKey === boardingKey ? prev : null
+
+  // Another push has just told the rider this boarding's departure. Record it
+  // as the figure they now hold and stay quiet — two pushes about one bus in
+  // one tick is the churn itself, and it is how 16:21:20 landed a "10 min
+  // later" in the same second as "Bus here". Ahead of the staleness gate on
+  // purpose: the approach alert deliberately still speaks for a prediction
+  // just gone by ("late but coming"), and the window must start even then.
+  if (baseline && toldDepartureMs != null && Number.isFinite(toldDepartureMs)) {
+    return {
+      alert: null,
+      next: {
+        ...baseline,
+        lastAlertAtMs: nowMs,
+        lastAlertedDriftMs: toldDepartureMs - baseline.baselineMs
+      }
+    }
+  }
 
   // No usable prediction this tick — a realtime dropout, or a value the feed
   // has left behind the clock. Hold the baseline for a boarding still ahead
@@ -207,7 +303,12 @@ export function evaluateDepartureDrift(
   if (!baseline) {
     return {
       alert: null,
-      next: { baselineMs: liveDepartureMs, boardingKey, lastAlertedDriftMs: 0 }
+      next: {
+        baselineMs: liveDepartureMs,
+        boardingKey,
+        lastAlertAtMs: null,
+        lastAlertedDriftMs: 0
+      }
     }
   }
 
@@ -215,14 +316,64 @@ export function evaluateDepartureDrift(
   // Measured from the figure the rider was last given, not from the baseline:
   // that is what makes a slow slip re-alert at 2, 4, 6 min instead of once, and
   // what lets a recovering bus report its way back.
-  if (
-    Math.abs(driftMs - baseline.lastAlertedDriftMs) < DEPARTURE_DRIFT_ALERT_MS
-  ) {
+  const changeSinceLastAlertMs = driftMs - baseline.lastAlertedDriftMs
+  if (Math.abs(changeSinceLastAlertMs) < DEPARTURE_DRIFT_ALERT_MS) {
+    return { alert: null, next: baseline }
+  }
+
+  // The rider's cadence (24.4). Held, never discarded: `lastAlertedDriftMs` is
+  // untouched while the window is shut, so when it opens the rider is told the
+  // TOTAL movement — a bus that slipped 2 min three times in quiet reports
+  // "6 min later", not the last increment.
+  if (heldByCadence(input, baseline, changeSinceLastAlertMs)) {
     return { alert: null, next: baseline }
   }
 
   return {
     alert: composeAlert(input, driftMs, liveDepartureMs),
-    next: { ...baseline, lastAlertedDriftMs: driftMs }
+    next: {
+      ...baseline,
+      lastAlertAtMs: nowMs,
+      lastAlertedDriftMs: driftMs
+    }
   }
+}
+
+/**
+ * Whether the rider's 5-minute cadence holds this alert back.
+ *
+ * Two things override the window, both of them the rider's own words:
+ *
+ *  - a change of 5 min or more since the figure they were last given. A bus
+ *    that has moved that far has changed what they do, not just what they know.
+ *  - a change that risks the miss. Slack is `progress.waitTimeAtStop` and the
+ *    line is LEAVE_SOON's own threshold — the app's single definition of "you
+ *    must go now to make this" — so the interrupt fires exactly when the alert
+ *    the rider already understands would. A LATER bus cannot trip it: a
+ *    departure that moves back hands slack over, it does not take it, which is
+ *    why the direction is part of the test and not an afterthought.
+ */
+function heldByCadence(
+  input: DepartureDriftInput,
+  baseline: DepartureBaselineState,
+  changeSinceLastAlertMs: number
+): boolean {
+  const { lastBoardMinutesPushAtMs, nowMs, waitSeconds } = input
+  // The window starts at whichever push last quoted this boarding's minutes —
+  // the drift alert's own, or "Bus coming" / "Leave in N min".
+  const lastSpokeAtMs = Math.max(
+    baseline.lastAlertAtMs ?? -Infinity,
+    lastBoardMinutesPushAtMs ?? -Infinity
+  )
+  if (!Number.isFinite(lastSpokeAtMs)) return false
+  if (nowMs - lastSpokeAtMs >= DEPARTURE_DRIFT_MIN_GAP_MS) return false
+
+  const bigChange =
+    Math.abs(changeSinceLastAlertMs) >= DEPARTURE_DRIFT_URGENT_MS
+  const risksTheMiss =
+    changeSinceLastAlertMs < 0 &&
+    waitSeconds != null &&
+    Number.isFinite(waitSeconds) &&
+    waitSeconds <= LEAVE_SOON_THRESHOLD_SECONDS
+  return !bigChange && !risksTheMiss
 }
