@@ -222,6 +222,7 @@ import {
 } from '../util/go-mode/tracking-gates'
 import {
   anchorBoardingStopId,
+  boardingStopToPoll,
   currentServiceDate,
   evaluateDepartureAnchor,
   getRouteDepartures,
@@ -232,7 +233,8 @@ import {
   demoteSpentBoardPoint,
   publishedBoardSource,
   realtimeBoardIsSpent,
-  resolveBoardDeparture
+  resolveBoardDeparture,
+  tripQueryBoardPoint
 } from '../util/go-mode/board-departure'
 import { tripGtfsId } from '../util/go-mode/trip-id'
 import {
@@ -6040,7 +6042,8 @@ export function refreshLiveLegTimes() {
           ? getState().otp?.transitIndex?.stops?.[boardStopId]
           : null,
         tripId,
-        tripPoint: liveStopArrival(
+        // The trip query's timetable is never published as live (26.1).
+        tripPoint: tripQueryBoardPoint(
           stopTimes,
           leg.from?.stop?.gtfsId,
           leg.from?.name,
@@ -7187,10 +7190,18 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       // Every rule lives in util/go-mode/departure-anchor.ts.
       const anchorLeg = itinerary.legs[routeMatch.legIndex]
       const anchorNextLeg = itinerary.legs[routeMatch.legIndex + 1]
-      const boardingStopId = anchorBoardingStopId(anchorLeg, anchorNextLeg)
-      if (boardingStopId) {
-        // Re-poll the boarding stop's departures first — the trip-start
-        // snapshot goes stale, and an earlier bus only ever shows up here.
+      // Re-poll the boarding stop's departures first — the trip-start snapshot
+      // goes stale, and an earlier bus only ever shows up here. The poll runs
+      // through the platform wait as well, after the trip has stepped onto the
+      // bus leg (26.1: on 09-22 it stopped at 08:19:05 and the board time fell
+      // back to the trip query's schedule at 08:22:09). The ANCHOR below keeps
+      // its own, narrower gate — see boardingStopToPoll.
+      const pollStopId = boardingStopToPoll(
+        anchorLeg,
+        anchorNextLeg,
+        progress.waitingAtBoardingStop
+      )
+      if (pollStopId) {
         try {
           dispatch(
             findStopTimesForStop({
@@ -7199,13 +7210,15 @@ export function handlePositionUpdate(position: GeolocationPosition) {
                 getState().otp.config.homeTimezone
               ),
               forceFetch: true,
-              stopId: boardingStopId
+              stopId: pollStopId
             })
           )
         } catch {
           // Best-effort; the decision below uses whatever is in the store.
         }
-
+      }
+      const boardingStopId = anchorBoardingStopId(anchorLeg, anchorNextLeg)
+      if (boardingStopId) {
         const anchor = evaluateDepartureAnchor(session.lastAutoAnchorMs, {
           departureOverride,
           // Only the runs that go the rider's WAY. The stop serves both

@@ -36,11 +36,16 @@
  * reports the gap so the next ride can measure it (see
  * `BOARD_SOURCE_DISAGREEMENT_MS` and `recordBoardTimeDisagreement`).
  */
+import { findStopTimeIndex, liveStopArrival } from './alight-optimizer'
 import { LIVE_REALTIME_STATES } from './departure-anchor'
 import { tripIdsMatch } from './trip-id'
 import { vehicleShortOfBoardStop } from './transit-trust'
 import type { BoardVehicleEvidence } from './transit-trust'
-import type { LiveTimePoint } from './alight-optimizer'
+import type {
+  LiveTimePoint,
+  TripAnchor,
+  TripStopTime
+} from './alight-optimizer'
 
 /** Where a published board epoch actually came from. */
 export type BoardSource = 'stop' | 'trip'
@@ -125,6 +130,49 @@ export function stopLevelBoardDeparture(
     }
   }
   return null
+}
+
+/**
+ * The trip query's board point, with its SCHEDULE never passed off as live.
+ *
+ * `liveStopArrival` calls any stop time under `UPDATED`/`ADDED`/`MODIFIED`
+ * realtime. At the boarding stop that is not good enough: the trip query asks
+ * for ARRIVAL fields only, and on the Orange Line OTP answers the boarding
+ * stop with the timetable under an UPDATED flag while every stop after it
+ * carries the real delay. Measured 2026-09-22 (backlog 26.1, session
+ * `mucordp1-jqcrp2`, trip `1:1346857` at `1:56831`): from 08:09:46 to the end
+ * of the recording the stop time read `realtimeState UPDATED, arrivalDelay 0,
+ * realtimeArrival == scheduledArrival` (08:15:00) — the stop before it
+ * SCHEDULED, the stop after it +496 s at 08:19:05 and climbing to +1 376 s —
+ * while the stop query for the same trip at the same stop said 08:24:39. On
+ * 09-21 (21.1, trip `1:1346052`) it was the same shape: 08:26:00 published
+ * UPDATED with no delay, +5m27s at the stop.
+ *
+ * So a trip-query board time whose realtime value IS its scheduled value is
+ * handed on as the schedule (`realtime: false`). Nothing is lost when it is
+ * true: the stop poll's own live row still wins in `resolveBoardDeparture`,
+ * and `mergeLiveTimePoint` keeps the previous value rather than walk a
+ * displayed time backwards. What it stops is 08:22:09 on 09-22 — 08:15:00
+ * published `boardRealtime: true` for 17 minutes after the stop poll went
+ * stale. Board only: the ALIGHT side still reads `liveStopArrival` unchanged.
+ */
+export function tripQueryBoardPoint(
+  stopTimes: TripStopTime[],
+  stopGtfsId: string | null | undefined,
+  stopName?: string | null,
+  anchor?: TripAnchor | null
+): LiveTimePoint | null {
+  const point = liveStopArrival(stopTimes, stopGtfsId, stopName, anchor)
+  if (!point?.realtime) return point
+  const st = stopTimes[findStopTimeIndex(stopTimes, stopGtfsId, stopName)]
+  if (
+    st &&
+    st.scheduledArrival != null &&
+    st.realtimeArrival === st.scheduledArrival
+  ) {
+    return { ...point, realtime: false }
+  }
+  return point
 }
 
 /**
