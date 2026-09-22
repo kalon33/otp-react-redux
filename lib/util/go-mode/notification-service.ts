@@ -879,6 +879,12 @@ export interface MissedBusInput {
     ageSec: number | null
     distanceToBoardStopM: number | null
     nextStopId: string | null
+    /**
+     * Whether the bus is already past the boarding stop on its own run, read
+     * off the trip's ordered stop list (transit-trust vehiclePassedStopOnTrip).
+     * `null`/absent means unanswerable — no evidence either way, never a "no".
+     */
+    passedBoardStop?: boolean | null
   } | null
   currentLegIndex: number
   departureOverrideMs: number | null
@@ -1028,22 +1034,57 @@ export function classifyMissedBus(
     return null
   }
 
+  // How far the rider is from the boarding stop, measured once. Two rules read
+  // it: the bus-still-coming guard below, and the schedule-only definitiveness
+  // test further down.
+  const distanceToStop =
+    riderPosition && boardLeg.from
+      ? calculateDistance(
+          riderPosition[0],
+          riderPosition[1],
+          boardLeg.from.lat,
+          boardLeg.from.lon
+        )
+      : null
+  const riderAtBoardStop =
+    distanceToStop != null && distanceToStop <= MISSED_BUS_AT_STOP_RADIUS_M
+
   // The planned trip's own vehicle outranks a "departed" board epoch: a fresh
   // record showing the bus still headed to / near the boarding stop means the
   // epoch is stale, not the bus gone. On 7/29 MISSED_BUS fired while bus 8140
   // was pulling in 111m from the stop — this measures the BUS against the
-  // stop, never the rider.
+  // stop, and only then against the rider.
+  //
+  // Freshness is now the same test checkBoardVehicleApproach applies to the
+  // same record (`:394`, and isVehicleRecordFresh): a null `ageSec` PASSES.
+  // Metro Transit publishes no `lastUpdated` for a good share of in-service
+  // vehicles, and requiring a timestamp meant the one alert that says "your
+  // bus is coming" and the one that says "your bus has gone" disagreed about
+  // whether the very same record counted.
   if (
     boardVehicle &&
-    boardVehicle.ageSec != null &&
-    boardVehicle.ageSec <= VEHICLE_RECORD_STALE_SEC
+    (boardVehicle.ageSec == null ||
+      boardVehicle.ageSec <= VEHICLE_RECORD_STALE_SEC)
   ) {
     const boardStopId = (boardLeg.from as any)?.stop?.gtfsId ?? null
-    const atBoardStop =
-      (boardStopId != null && boardVehicle.nextStopId === boardStopId) ||
-      (boardVehicle.distanceToBoardStopM != null &&
-        boardVehicle.distanceToBoardStopM <= VEHICLE_AT_BOARD_STOP_M)
-    if (atBoardStop) return null
+    const shortOfStop =
+      // Nothing below can vouch for a bus we can SEE is past the stop — a bus
+      // 200 m beyond the kerb is inside VEHICLE_AT_BOARD_STOP_M and gone.
+      boardVehicle.passedBoardStop !== true &&
+      ((boardStopId != null && boardVehicle.nextStopId === boardStopId) ||
+        (boardVehicle.distanceToBoardStopM != null &&
+          boardVehicle.distanceToBoardStopM <= VEHICLE_AT_BOARD_STOP_M) ||
+        // The rider's ask, 2026-09-21 17:06:53: "determine if I'm at the bus
+        // stop or not with reasonable measures". They stood 14-23 m from the
+        // boarding stop, stationary since 16:57, while the trip's own bus ran
+        // 2.5 km up I-35W. From 17:03:03 to 17:04:01 that bus's `nextStopId`
+        // was Marquette & 11th — five stops SHORT of the boarding stop and
+        // 2.5 km away, so neither test above could see it, and only the
+        // trip's own stop order can say it had not been past. Standing where
+        // the bus must come, with a live record of that bus upstream of it,
+        // there is nothing yet to have missed.
+        (boardVehicle.passedBoardStop === false && riderAtBoardStop))
+    if (shortOfStop) return null
   }
 
   const effective = getEffectiveBoardTimeMs(
@@ -1065,14 +1106,8 @@ export function classifyMissedBus(
   // conclusive if the rider is clearly not at the stop (otherwise the bus may
   // just be running late with no realtime reporting).
   let definitive = effective.realtime
-  if (!definitive && riderPosition && boardLeg.from) {
-    const distanceToStop = calculateDistance(
-      riderPosition[0],
-      riderPosition[1],
-      boardLeg.from.lat,
-      boardLeg.from.lon
-    )
-    definitive = distanceToStop > MISSED_BUS_AT_STOP_RADIUS_M
+  if (!definitive && distanceToStop != null) {
+    definitive = !riderAtBoardStop
   }
 
   return {
