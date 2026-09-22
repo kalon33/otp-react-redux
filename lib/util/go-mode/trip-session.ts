@@ -16,7 +16,11 @@ import type { StopCountLatch } from './next-stop'
  * `replayTrackedRouteId` deliberately outlive a trip today. They stay module
  * scoped in actions/go-mode.ts rather than change behaviour silently.
  */
-import type { BoardStopDwell, EarlyAlightWatch } from './riding'
+import type {
+  AccessBoardWatch,
+  BoardStopDwell,
+  EarlyAlightWatch
+} from './riding'
 import type { DepartureBaselineState } from './departure-drift'
 import type { DestinationProgressState } from './destination-progress'
 import type { MissedBusAttempt } from './missed-bus-recovery'
@@ -25,6 +29,15 @@ import type { RiderSpeedAnchorBucket, RiderSpeedSample } from './rider-speed'
 import type { TimedSimulationPoint } from './geometry'
 
 export interface TripSession {
+  /**
+   * The run of access-leg ticks on which the rider looked like someone being
+   * carried by a bus the plan has not put them on yet — see
+   * ACCESS_BOARD_MIN_MS in riding.ts (backlog 23.6). Held here, like
+   * boardStopDwell and earlyAlightWatch, because "has this been true for
+   * twenty seconds" is not a question one fix can answer.
+   */
+  accessBoard: AccessBoardWatch | null
+
   /**
    * The one-way arrival dwell, armed from the WALL CLOCK rather than from the
    * position tick. `AUTO_END_AFTER_ARRIVAL_MS` used to be checked in the
@@ -320,6 +333,7 @@ export interface TripSession {
 /** A trip's state at its first GPS fix. */
 export function createTripSession(): TripSession {
   return {
+    accessBoard: null,
     autoEndTimeoutId: null,
     boardStopDwell: null,
     destinationProgress: null,
