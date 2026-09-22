@@ -600,6 +600,7 @@ components:
     title: Imagery of the street
   MetroUI:
     arriveAt: You arrive
+    confirmLaterDeparture: Start {chosen} instead of {row}?
     confirmSwitchTrip: Switch your active trip to this route? Your current guidance will update.
     fare: "{fare}"
     itineraryDescription: "{time} itinerary using {routes}"

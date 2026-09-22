@@ -593,6 +593,7 @@ components:
     titleTo: Choisissez votre destination
   MetroUI:
     arriveAt: Vous arrivez à
+    confirmLaterDeparture: "Partir à {chosen} au lieu de {row} ?"
     confirmSwitchTrip: "Basculer votre trajet actif sur cette ligne ? Vos indications seront mises à jour."
     fare: "{fare}"
     itineraryDescription: Trajet de {time} par les lignes {routes}
