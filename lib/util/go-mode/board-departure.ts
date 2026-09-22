@@ -38,6 +38,8 @@
  */
 import { LIVE_REALTIME_STATES } from './departure-anchor'
 import { tripIdsMatch } from './trip-id'
+import { vehicleShortOfBoardStop } from './transit-trust'
+import type { BoardVehicleEvidence } from './transit-trust'
 import type { LiveTimePoint } from './alight-optimizer'
 
 /** Where a published board epoch actually came from. */
@@ -123,6 +125,107 @@ export function stopLevelBoardDeparture(
     }
   }
   return null
+}
+
+/**
+ * How far behind `now` a realtime board time may sit and still be read as
+ * "this boarding is happening".
+ *
+ * A bus dwelling at the kerb legitimately carries a departure a few seconds
+ * old, and the whole minute the feed publishes is itself up to 59 s coarse.
+ * 90 s is MISSED_BUS_GRACE_REALTIME_MS — the same allowance the missed-bus
+ * classifier already gives a realtime departure before it will call a bus
+ * gone — so the two cannot disagree about when a realtime epoch has expired.
+ */
+export const REALTIME_BOARD_SPENT_AFTER_MS = 90000
+
+/** What the board-time rules need to know about the rider and the bus. */
+export interface BoardStopEvidence {
+  /** `leg.from.stop.gtfsId` — the stop this boarding happens at. */
+  boardStopId?: string | null
+  /** The rider is at the boarding stop (RIDER_AT_BOARD_STOP_M). */
+  riderAtBoardStop?: boolean
+  /** The rider is verifiably aboard this leg's vehicle (the sticky fact). */
+  riding: boolean
+  /** The trip's own vehicle record, or null when there is none. */
+  vehicle?: BoardVehicleEvidence | null
+}
+
+/**
+ * Is this "realtime" board time SPENT — a feed prediction already in the past
+ * that nothing on the ground supports, and therefore not a wait basis?
+ *
+ * MEASURED 2026-09-15, session `mu346i5y-ng2uqc` (backlog 17.18). Leg 0's
+ * board epoch took ~40 distinct values in 13 minutes, and one class arrived
+ * with `boardRealtime: true` while sitting minutes in the past: 15:26:00 at
+ * 15:36:33, 15:31:00 at 15:43:28, 15:33:00 at 15:44:06 — the feed's own
+ * prediction for a from-stop the bus had already passed, one per itinerary
+ * swap. `getEffectiveBoardTimeMs` trusts `boardRealtime` first, so these reach
+ * every surface that quotes a wait.
+ *
+ * Two things were re-measured on 2026-09-22 before this was written, and both
+ * corrected the row:
+ *
+ *  - all three of those values landed with the riding fact STANDING (SET_RIDING
+ *    15:36:27, held to 15:46:22 and re-set 15:46:25), so they never reached the
+ *    wait math: aboard, there is no boarding left to quote. The class that DID
+ *    reach it is a fourth value the row never named — leg 1's 15:35:00,
+ *    dispatched four times between 15:35:15 and 15:36:17, 15-78 s in the past,
+ *    with the bus still 70 s from the kerb.
+ *  - on that ride 21.1 already answers all four: the stop-level poll held
+ *    `1:1346556` at I-35W & 98th St as `UPDATED, realtimeDeparture 15:40:38`
+ *    (scheduled 15:35:00, delay 338 s) at the very instant the trip query
+ *    published 15:35:00 under an UPDATED flag. `resolveBoardDeparture` takes
+ *    the stop's answer and the past value never appears.
+ *
+ * So this is the LAST RESORT, for the case 21.1 cannot cover: no live stop-level
+ * entry for this trip, or a stop snapshot older than STOP_SNAPSHOT_MAX_AGE_MS —
+ * which is every transit leg the tick is not currently re-polling (see that
+ * constant). There the trip query's past "realtime" epoch is all there is.
+ *
+ * The rule, and what each arm is for:
+ *
+ *  - the epoch must be more than {@link REALTIME_BOARD_SPENT_AFTER_MS} old;
+ *  - the rider must have no riding fact — aboard, the board time is about
+ *    something already done and no surface quotes it anyway;
+ *  - and the bus's OWN record must place it short of the stop. That is the
+ *    contradiction: the feed says this run left, and the same feed's vehicle
+ *    says it has not got there. Absent or stale vehicle data answers FALSE —
+ *    the epoch is left alone. "The vehicle is not yet at the stop" is a claim
+ *    that needs evidence, and a missing record is not a "no" (the same policy
+ *    `vehiclePassedStopOnTrip` and `isVehicleRecordFresh` already state).
+ *
+ * A spent point is demoted, never deleted: the caller hands it on with
+ * `realtime: false, isFloor: true`, which is 17.6's existing vocabulary for
+ * "a bound, not a prediction". Every wait-quoting surface already refuses one —
+ * `legBoard`/`buildLiveItinerary` keep the plan's own startTime, TransitProgress
+ * drops the "Waiting at X · time" clock, `liveBoardEpochFor` returns null so no
+ * push quotes minutes from it, and `getEffectiveBoardTimeMs` falls to the
+ * override or the plan. Nothing new has to learn about this rule.
+ */
+export function realtimeBoardIsSpent(
+  point: LiveTimePoint | null | undefined,
+  nowMs: number,
+  evidence: BoardStopEvidence,
+  spentAfterMs: number = REALTIME_BOARD_SPENT_AFTER_MS
+): boolean {
+  if (!point?.realtime) return false
+  if (!Number.isFinite(point.epoch)) return false
+  if (point.epoch >= nowMs - spentAfterMs) return false
+  if (evidence.riding) return false
+  return vehicleShortOfBoardStop(
+    evidence.vehicle,
+    evidence.boardStopId,
+    evidence.riderAtBoardStop
+  )
+}
+
+/**
+ * The same point, demoted to a bound. Separate from the test so a caller that
+ * only wants the verdict (a rule, a report) never has to build the value.
+ */
+export function demoteSpentBoardPoint(point: LiveTimePoint): LiveTimePoint {
+  return { ...point, isFloor: true, projected: false, realtime: false }
 }
 
 export interface BoardDepartureResolution {

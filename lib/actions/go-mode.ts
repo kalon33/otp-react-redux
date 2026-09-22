@@ -9,12 +9,12 @@ import type { Itinerary, LatLngArray, Leg } from '@opentripplanner/types'
 
 import {
   builtAlightStop,
-  clampNonLiveLegTimes,
   findStopTimeIndex,
   getDownstreamStops,
   hasLiveArrival,
   journeySignature,
   liveStopArrival,
+  markStaleLegTimes,
   mergeLiveTimePoint,
   ONBOARD_CANDIDATE_SETTLE_MS,
   pickSameRouteAlight,
@@ -94,6 +94,7 @@ import {
   findRidingVehicle,
   findVehicleById,
   findVehicleForTrip,
+  RIDER_AT_BOARD_STOP_M,
   isVehicleRecordFresh,
   matchProvesAboard,
   refreshConfirmedMatch,
@@ -227,7 +228,9 @@ import {
 } from '../util/go-mode/departure-anchor'
 import {
   boardSourcesDisagree,
+  demoteSpentBoardPoint,
   publishedBoardSource,
+  realtimeBoardIsSpent,
   resolveBoardDeparture
 } from '../util/go-mode/board-departure'
 import { tripGtfsId } from '../util/go-mode/trip-id'
@@ -2923,8 +2926,8 @@ export function quietReplanAccessLeg() {
       // "Arrive on time" (rider ask 6.10b, opt-in): aim the access query a few
       // minutes ahead of the boarding instead of as-fast-as-possible. The
       // boarding time is the feed's when the feed is genuinely predicting it —
-      // a board epoch that is NOT realtime has been clamped forward to `now`
-      // by clampNonLiveLegTimes and would set a deadline of about right now —
+      // a board epoch that is NOT realtime is a moment already gone, flagged
+      // a floor by markStaleLegTimes, and would set a deadline in the past —
       // and the plan's own leg start otherwise. Null target = the ordinary
       // depart-now query, unchanged.
       const liveBoardForReplan = goMode.liveLegTimes?.[boardLegIndex]
@@ -5921,6 +5924,56 @@ export function refreshLiveLegTimes() {
           anchor
         )
       })
+      // ...and when even the stop poll has nothing live to say, a "realtime"
+      // board time already minutes in the past is still not a wait. Backlog
+      // 17.18: the feed publishes a prediction for a from-stop the bus has
+      // already passed, one per itinerary swap, and `boardRealtime` alone makes
+      // it look like a live departure. Demoted — not deleted — when the bus's
+      // OWN record places it short of the stop and the rider is not aboard;
+      // every wait-quoting surface already refuses a floored point (17.6). The
+      // rule and the measurement are in util/go-mode/board-departure.ts.
+      const lastBoardVehicle = session.lastBoardVehicle
+      const boardVehicleForLeg =
+        lastBoardVehicle && lastBoardVehicle.tripId === tripId
+          ? findVehicleForTrip([lastBoardVehicle.vehicle], tripId, nowMs)
+          : null
+      const boardPoint =
+        boardResolution.point &&
+        realtimeBoardIsSpent(boardResolution.point, nowMs, {
+          boardStopId: boardStopId ?? null,
+          riderAtBoardStop:
+            lastPos && leg.from?.lat != null && leg.from?.lon != null
+              ? calculateDistance(
+                  lastPos.lat,
+                  lastPos.lon,
+                  leg.from.lat,
+                  leg.from.lon
+                ) <= RIDER_AT_BOARD_STOP_M
+              : false,
+          riding: riding?.legIndex === i || riding?.tripId === tripId,
+          vehicle: boardVehicleForLeg
+            ? {
+                ageSec: boardVehicleForLeg.ageSec,
+                distanceToBoardStopM:
+                  leg.from?.lat != null && leg.from?.lon != null
+                    ? calculateDistance(
+                        boardVehicleForLeg.vehicle.lat,
+                        boardVehicleForLeg.vehicle.lon,
+                        leg.from.lat,
+                        leg.from.lon
+                      )
+                    : null,
+                nextStopId: boardVehicleForLeg.vehicle.nextStopId ?? null,
+                passedBoardStop: vehiclePassedStopOnTrip(
+                  tripStopIdsInOrder(trip ?? null),
+                  boardStopId ?? null,
+                  boardVehicleForLeg.vehicle.nextStopId ?? null
+                )
+              }
+            : null
+        })
+          ? demoteSpentBoardPoint(boardResolution.point)
+          : boardResolution.point
       const board = mergeLiveTimePoint(
         prev?.boardEpoch != null
           ? {
@@ -5929,7 +5982,7 @@ export function refreshLiveLegTimes() {
               realtime: prev.boardRealtime ?? prev.realtime
             }
           : null,
-        boardResolution.point,
+        boardPoint,
         nowMs
       )
       // The instrument, not the fix: record the gap so the OTP-side question
@@ -6717,8 +6770,8 @@ export function handlePositionUpdate(position: GeolocationPosition) {
 
     // The live GTFS-realtime prediction for the boarding the rider is heading
     // toward. Believed ONLY when the feed genuinely flagged it live: a non-live
-    // epoch is clamped forward to `now` by mergeLiveTimePoint /
-    // clampNonLiveLegTimes, so trusting it would read as a bus perpetually
+    // epoch is a moment that has gone, flagged a floor by mergeLiveTimePoint /
+    // markStaleLegTimes, so trusting it would read as a bus perpetually
     // about to leave. Without this the wait math runs on a departure time that
     // cannot move, and a bus running six minutes late reaches the pacing card
     // as if it were on time.
@@ -7069,11 +7122,11 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         }
       }
     } else if (!isReplayActive()) {
-      // Between polls the clock keeps walking — re-raise any non-live epoch
-      // that fell into the past so displayed times never sit behind now.
-      // (Replay reproduces recorded state and is left untouched, same as the
-      // poll itself.)
-      const staleClamped = clampNonLiveLegTimes(
+      // Between polls the clock keeps walking — flag any non-live epoch that
+      // has fallen behind the displayed minute so nothing quotes a wait from
+      // it. Nothing is moved (backlog 17.19). (Replay reproduces recorded state
+      // and is left untouched, same as the poll itself.)
+      const staleClamped = markStaleLegTimes(
         getState().otp.goMode?.liveLegTimes,
         currentTime.getTime()
       )
@@ -7139,10 +7192,10 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         : undefined
 
     // How close the rider is to their exit, for the two alight alerts. The live
-    // alight epoch is used ONLY when it is genuinely realtime: the non-live
-    // branch is clamped forward to `now` by clampNonLiveLegTimes, which would
-    // read as "arriving now" on every tick. Schedule data falls back to the
-    // plan leg's own endTime, and GPS distance backs both up at the kerb.
+    // alight epoch is used ONLY when it is genuinely realtime or a projection:
+    // the non-live branch is a moment already gone, flagged a floor by
+    // markStaleLegTimes. Schedule data falls back to the plan leg's own
+    // endTime, and GPS distance backs both up at the kerb.
     const liveAlight = goMode.liveLegTimes?.[routeMatch.legIndex]
     // Same value the header and the alight banner use. This used to be a
     // hand-rolled copy that honoured only alightRealtime, so it ignored a

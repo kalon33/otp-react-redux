@@ -34,9 +34,9 @@ import type { TripProgress } from './progress-calculator'
  *
  *  - the DEPARTURE becomes the feed's prediction, not the timetable's. The
  *    caller passes `liveBoardEpochMs` already gated on `boardRealtime`,
- *    because a board epoch that is NOT realtime has been clamped forward to
- *    `now` (clampNonLiveLegTimes) and would read as a bus perpetually about
- *    to leave;
+ *    because a board epoch that is NOT realtime is a moment already gone,
+ *    flagged a floor (markStaleLegTimes) and would read as a bus perpetually
+ *    about to leave;
  *  - the TRAVEL TIME becomes the rider's own: ground still ahead on this leg
  *    divided by the speed they are actually keeping. This is the shape 6.4
  *    built (progress-calculator.ts:218) — the plan's `duration × (1 −

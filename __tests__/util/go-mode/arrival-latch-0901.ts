@@ -12,7 +12,7 @@ import {
   matchPositionToRoute
 } from '../../../lib/util/go-mode/position-matching'
 import { checkTripComplete } from '../../../lib/util/go-mode/notification-service'
-import { clampNonLiveLegTimes } from '../../../lib/util/go-mode/alight-optimizer'
+import { markStaleLegTimes } from '../../../lib/util/go-mode/alight-optimizer'
 import fixture from '../../../lib/util/go-mode/replay/fixtures/ride-1048-orange-bike.json'
 import ride1 from '../../../lib/util/go-mode/replay/fixtures/orange-bike-0823.json'
 import type { RouteMatchResult } from '../../../lib/util/go-mode/position-matching'
@@ -344,17 +344,18 @@ describe('util > go-mode > 2026-09-01 ride 3 arrival latch', () => {
   })
 
   describe('6.4 one source of truth for the time remaining', () => {
-    // 11:48:57 local. The floor the clamp now raises to is 11:49:00's
-    // predecessor, 1788270540000 — see LIVE_TIME_CLAMP_GRANULARITY_MS.
+    // 11:48:57 local. The displayed minute is 11:49:00's predecessor,
+    // 1788270540000 — see LIVE_TIME_STALE_GRANULARITY_MS.
     const NOW_MS = 1788270557000
     const FLOOR_MS = 1788270540000
 
-    it('leaves a realtime alight alone when it raises a schedule board', () => {
+    it('leaves a realtime alight alone and no longer raises the board', () => {
       // The shape the ride actually carried: the feed's alight for the ridden
       // trip already in the past and flagged realtime, the board
-      // schedule-only. The board may be raised; the alight is evidence and
-      // must not be dragged with it, so the board is capped back onto it.
-      const clamped = clampNonLiveLegTimes(
+      // schedule-only. The raise that dragged the alight along is gone
+      // entirely (backlog 17.19) — the board is flagged stale where it stands,
+      // and the live alight is the feed's own figure, untouched.
+      const marked = markStaleLegTimes(
         {
           0: {
             alightEpoch: FLOOR_MS - 5000,
@@ -368,35 +369,37 @@ describe('util > go-mode > 2026-09-01 ride 3 arrival latch', () => {
         },
         NOW_MS
       )
-      expect(clamped).not.toBeNull()
-      expect((clamped as any)[0].alightEpoch).toBe(FLOOR_MS - 5000)
-      expect((clamped as any)[0].boardEpoch).toBe(FLOOR_MS - 5000)
+      expect(marked).not.toBeNull()
+      expect((marked as any)[0].alightEpoch).toBe(FLOOR_MS - 5000)
+      expect((marked as any)[0].boardEpoch).toBe(1788270300000)
+      expect((marked as any)[0].boardIsFloor).toBe(true)
     })
 
-    it('dispatches nothing when the cap hands the board straight back', () => {
-      // Corrected 2026-09-04. With board and alight already equal, the raise
-      // is undone by the cap and the record comes out byte-identical — which
-      // used to be reported as a change and dispatched on every 1 Hz tick.
-      expect(
-        clampNonLiveLegTimes(
-          {
-            0: {
-              alightEpoch: 1788270300000,
-              alightProjected: false,
-              alightRealtime: true,
-              boardEpoch: 1788270300000,
-              boardProjected: false,
-              boardRealtime: false,
-              realtime: true
-            }
-          },
-          NOW_MS
-        )
-      ).toBeNull()
+    it('dispatches nothing once the board is already flagged', () => {
+      // Corrected 2026-09-04, and again 2026-09-22. The byte-identical
+      // dispatch on every 1 Hz tick came from a raise that the inversion cap
+      // then undid; with no raise there is nothing to undo, and the flag is
+      // written once.
+      const first = markStaleLegTimes(
+        {
+          0: {
+            alightEpoch: 1788270300000,
+            alightProjected: false,
+            alightRealtime: true,
+            boardEpoch: 1788270300000,
+            boardProjected: false,
+            boardRealtime: false,
+            realtime: true
+          }
+        },
+        NOW_MS
+      )
+      expect((first as any)[0].boardIsFloor).toBe(true)
+      expect(markStaleLegTimes(first, NOW_MS + 1000)).toBeNull()
     })
 
-    it('still carries a non-live alight with the board it inverted', () => {
-      const clamped = clampNonLiveLegTimes(
+    it('leaves a non-live pair in the order the plan put them', () => {
+      const marked = markStaleLegTimes(
         {
           0: {
             alightEpoch: 1788270300000,
@@ -408,8 +411,10 @@ describe('util > go-mode > 2026-09-01 ride 3 arrival latch', () => {
         },
         NOW_MS
       )
-      expect((clamped as any)[0].boardEpoch).toBe(FLOOR_MS)
-      expect((clamped as any)[0].alightEpoch).toBe(FLOOR_MS)
+      expect((marked as any)[0].boardEpoch).toBe(1788270290000)
+      expect((marked as any)[0].alightEpoch).toBe(1788270300000)
+      expect((marked as any)[0].boardIsFloor).toBe(true)
+      expect((marked as any)[0].alightIsFloor).toBe(true)
     })
 
     it('counts down from the ground ahead once the plan end has passed', () => {

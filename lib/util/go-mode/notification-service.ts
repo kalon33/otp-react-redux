@@ -9,10 +9,13 @@ import { hasArrivedAtDestination } from './progress-calculator'
 import { MISSED_BUS_NOTICE_ID } from './native-notify'
 import { notifyIntl } from './notify-i18n'
 import {
+  RIDER_AT_BOARD_STOP_M,
   stopsAheadFromNextStopId,
   VEHICLE_AT_BOARD_STOP_M,
-  VEHICLE_RECORD_STALE_SEC
+  VEHICLE_RECORD_STALE_SEC,
+  vehicleShortOfBoardStop
 } from './transit-trust'
+import type { BoardVehicleEvidence } from './transit-trust'
 import type { TripProgress } from './progress-calculator'
 
 export type NotificationType =
@@ -338,7 +341,7 @@ export function minutesUntilBoarding(
  * `goMode.liveLegTimes[legIndex]`, shared by every boarding push.
  *
  * Believed ONLY when the feed genuinely flagged the BOARD field live: a
- * non-live epoch has been clamped forward to `now` by clampNonLiveLegTimes and
+ * non-live epoch whose moment has gone is flagged by markStaleLegTimes and
  * would read as a bus perpetually about to leave (17.6). The same gate the
  * action layer's `liveBoardMs` applies, exported so the drift alert and the
  * approach alert cannot each grow their own copy of it.
@@ -953,23 +956,14 @@ const MISSED_BUS_MAX_RIDER_SPEED_MPS = 4
 // Within this range of the boarding stop, schedule-only data can't distinguish
 // "bus hasn't come" from "rider missed it" — stay ambiguous, which means plan
 // alternatives and show them, never swap the trip.
-const MISSED_BUS_AT_STOP_RADIUS_M = 50
+/** @see RIDER_AT_BOARD_STOP_M — one radius, shared with the board-time rules. */
+const MISSED_BUS_AT_STOP_RADIUS_M = RIDER_AT_BOARD_STOP_M
 
 /** Everything classifyMissedBus needs to judge the upcoming boarding. */
 export interface MissedBusInput {
   /** The live record of the vehicle serving the board leg's PLANNED trip —
    * the bus's own geometry, never the rider's stop proximity. */
-  boardVehicle?: {
-    ageSec: number | null
-    distanceToBoardStopM: number | null
-    nextStopId: string | null
-    /**
-     * Whether the bus is already past the boarding stop on its own run, read
-     * off the trip's ordered stop list (transit-trust vehiclePassedStopOnTrip).
-     * `null`/absent means unanswerable — no evidence either way, never a "no".
-     */
-    passedBoardStop?: boolean | null
-  } | null
+  boardVehicle?: BoardVehicleEvidence | null
   currentLegIndex: number
   departureOverrideMs: number | null
   legs: Leg[]
@@ -1005,7 +999,7 @@ export interface MissedBusContext {
  *    an OR across board and alight (live-itinerary.ts says the same of
  *    legBoard/legAlight), and on that ride the boarding's alight was live
  *    while its board was a schedule time clamped forward to `now` once a
- *    second by clampNonLiveLegTimes. Reading the leg-level flag made that
+ *    second by the clamp that preceded markStaleLegTimes. Reading the leg-level flag made that
  *    fabricated "now" the effective departure, so classifyMissedBus could
  *    never conclude the bus had gone: it declared the miss seven minutes late
  *    (11:22:41), off a board time of 11:20:00 that no feed ever published,
@@ -1145,30 +1139,19 @@ export function classifyMissedBus(
   // vehicles, and requiring a timestamp meant the one alert that says "your
   // bus is coming" and the one that says "your bus has gone" disagreed about
   // whether the very same record counted.
-  if (
-    boardVehicle &&
-    (boardVehicle.ageSec == null ||
-      boardVehicle.ageSec <= VEHICLE_RECORD_STALE_SEC)
-  ) {
-    const boardStopId = (boardLeg.from as any)?.stop?.gtfsId ?? null
-    const shortOfStop =
-      // Nothing below can vouch for a bus we can SEE is past the stop — a bus
-      // 200 m beyond the kerb is inside VEHICLE_AT_BOARD_STOP_M and gone.
-      boardVehicle.passedBoardStop !== true &&
-      ((boardStopId != null && boardVehicle.nextStopId === boardStopId) ||
-        (boardVehicle.distanceToBoardStopM != null &&
-          boardVehicle.distanceToBoardStopM <= VEHICLE_AT_BOARD_STOP_M) ||
-        // The rider's ask, 2026-09-21 17:06:53: "determine if I'm at the bus
-        // stop or not with reasonable measures". They stood 14-23 m from the
-        // boarding stop, stationary since 16:57, while the trip's own bus ran
-        // 2.5 km up I-35W. From 17:03:03 to 17:04:01 that bus's `nextStopId`
-        // was Marquette & 11th — five stops SHORT of the boarding stop and
-        // 2.5 km away, so neither test above could see it, and only the
-        // trip's own stop order can say it had not been past. Standing where
-        // the bus must come, with a live record of that bus upstream of it,
-        // there is nothing yet to have missed.
-        (boardVehicle.passedBoardStop === false && riderAtBoardStop))
-    if (shortOfStop) return null
+  //
+  // The rider's ask, 2026-09-21 17:06:53: "determine if I'm at the bus stop or
+  // not with reasonable measures". They stood 14-23 m from the boarding stop,
+  // stationary since 16:57, while the trip's own bus ran 2.5 km up I-35W —
+  // five stops SHORT of the boarding stop, too far for either distance test to
+  // see, and only the trip's own stop order could say it had not been past.
+  //
+  // The predicate itself moved to transit-trust on 2026-09-22 (backlog 17.18):
+  // the board-time rules now ask the same question of the same record, and one
+  // copy is what stops the two answering differently.
+  const boardStopId = (boardLeg.from as any)?.stop?.gtfsId ?? null
+  if (vehicleShortOfBoardStop(boardVehicle, boardStopId, riderAtBoardStop)) {
+    return null
   }
 
   const effective = getEffectiveBoardTimeMs(

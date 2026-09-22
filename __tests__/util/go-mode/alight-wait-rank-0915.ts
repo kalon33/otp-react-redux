@@ -2,8 +2,8 @@ import type { Itinerary } from '@opentripplanner/types'
 
 import { buildLiveItinerary } from '../../../lib/util/go-mode/live-itinerary'
 import {
-  clampNonLiveLegTimes,
   getDownstreamStops,
+  markStaleLegTimes,
   mergeLiveTimePoint,
   rankAlightOptions,
   scoreAlightOption
@@ -466,15 +466,19 @@ describe('17.6 — a clamped epoch is a floor, not a time', () => {
       null,
       at('15:36:33')
     )
+    // Re-measured 2026-09-22 (backlog 17.19): the merge no longer re-values
+    // the epoch to `now`. It keeps 15:26:00 and says it is a floor, which is
+    // the half that ever mattered — the 35 now-valued dispatches this ride
+    // recorded were the fabricated half.
     expect(merged).toEqual({
-      epoch: at('15:36:33'),
+      epoch: at('15:26:00'),
       isFloor: true,
       projected: undefined,
       realtime: false
     })
-    // clampNonLiveLegTimes' minute-floor bridge, the `boardClamped: true`
-    // record seen at 15:43:00.
-    const clamped = clampNonLiveLegTimes(
+    // ...and the minute-floor bridge behind the `boardClamped: true` record
+    // seen at 15:43:00 is gone with it: the flag is written, the epoch stands.
+    const marked = markStaleLegTimes(
       {
         0: {
           alightEpoch: at('15:56:00'),
@@ -484,9 +488,9 @@ describe('17.6 — a clamped epoch is a floor, not a time', () => {
       },
       at('15:43:28')
     )
-    expect(clamped?.[0].boardEpoch).toBe(at('15:43:00'))
-    expect(clamped?.[0].boardClamped).toBe(true)
-    expect(clamped?.[0].boardIsFloor).toBe(true)
+    expect(marked?.[0].boardEpoch).toBe(at('15:31:00'))
+    expect(marked?.[0].boardIsFloor).toBe(true)
+    expect('boardClamped' in (marked?.[0] as any)).toBe(false)
   })
 
   it('never publishes a floored board time onto the leg', () => {
