@@ -16,6 +16,10 @@ import type { StopCountLatch } from './next-stop'
  * `replayTrackedRouteId` deliberately outlive a trip today. They stay module
  * scoped in actions/go-mode.ts rather than change behaviour silently.
  */
+import {
+  REPLAN_LATENCY_SEED_FULL_MS,
+  REPLAN_LATENCY_SEED_SCOPED_MS
+} from './replan-origin'
 import type { BoardStopDwell, EarlyAlightWatch } from './riding'
 import type { DepartureBaselineState } from './departure-drift'
 import type { DestinationProgressState } from './destination-progress'
@@ -129,6 +133,13 @@ export interface TripSession {
   /** What the sticky pacing card last showed. Null when no card is showing. */
   lastPacingCard: PacingCardState | null
 
+  /**
+   * When the last AUTOMATIC re-plan was installed, while its join window is
+   * still open — see noteReplanFollowed (deviation.ts). Null once the window
+   * has closed either way.
+   */
+  lastQuietReplanAppliedAt: number | null
+
   /** Debounce for the quiet access-leg replan (bike/walk deviation). */
   lastQuietReplanAt: number
 
@@ -209,10 +220,24 @@ export interface TripSession {
   quietReplanHistory: number[]
 
   /**
+   * Consecutive automatic re-plans the rider never joined (they were still off
+   * the new route a deviation-threshold later). Drives the backoff in
+   * ignoredReplanBackoffMs; reset the moment one is ridden.
+   */
+  quietReplanIgnoredStreak: number
+
+  /**
    * Quiet access-leg replans that keep coming back empty are counted but settle
    * silently; the streak is bookkeeping for the debug log.
    */
   quietReplanMissStreak: number
+
+  /**
+   * This trip's own measured plan round trip, per re-plan shape, in ms — what
+   * the projected origin is advanced by. Seeded from the measurements in
+   * replan-origin.ts and blended with each observed answer.
+   */
+  replanLatencyMs: { full: number; scoped: number }
   /** Reroute-snapshot capture interval (recording sessions only). */
   rerouteSnapshotIntervalId: ReturnType<typeof setInterval> | null
 
@@ -311,6 +336,7 @@ export function createTripSession(): TripSession {
     lastDepartureBaseline: null,
     lastLiveLegTimesAt: 0,
     lastPacingCard: null,
+    lastQuietReplanAppliedAt: null,
     lastQuietReplanAt: 0,
     lastRerouteSnapshotAt: 0,
     lastTransitionedLegIndex: null,
@@ -322,7 +348,12 @@ export function createTripSession(): TripSession {
     missedBusRerouteAttempt: null,
     prevDistanceFromRoute: null,
     quietReplanHistory: [],
+    quietReplanIgnoredStreak: 0,
     quietReplanMissStreak: 0,
+    replanLatencyMs: {
+      full: REPLAN_LATENCY_SEED_FULL_MS,
+      scoped: REPLAN_LATENCY_SEED_SCOPED_MS
+    },
     rerouteSnapshotIntervalId: null,
     returnRefreshInFlight: false,
     riderBoardingMiss: null,

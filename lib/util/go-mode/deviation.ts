@@ -44,6 +44,93 @@ export const QUIET_REPLAN_BURST_WINDOW_MS = 300000
 export const QUIET_REPLAN_BURST_MAX = 3
 
 /**
+ * How long a freshly-installed re-plan gets to be joined before it counts as
+ * ignored.
+ *
+ * A swap hands the rider a new polyline and the matcher starts over on it, so
+ * a few seconds at `currentLegProgress` 0 is normal and means nothing. What is
+ * NOT normal is still being off that polyline by the mode's own deviation
+ * threshold half a minute later — that is a plan the rider never joined, and
+ * re-planning again immediately just hands them another one.
+ *
+ * 30 s is set by the two recorded outcomes, which are cleanly separated.
+ * 2026-09-21 17:34:42 (`0921-1727-newbundle`): the rider converged onto the
+ * new plan in 14 s (`behind` -> `on_track` at 17:34:57) and rode it for 55 s —
+ * that re-plan worked and must not be penalised. 2026-09-21 16:38:05
+ * (`0921-1605-465-wrongdir`): `deviated` again at 16:38:16, 11 s in, and stayed
+ * deviated through both of the re-plans that followed.
+ */
+export const QUIET_REPLAN_IGNORED_WINDOW_MS = 30000
+
+/**
+ * ...and what the next automatic re-plan then has to wait.
+ *
+ * The 16:38 loop is three full-trip plans in 61 s, each installed, each
+ * abandoned within seconds, and by the third the rider's progress bar had been
+ * reset to zero twice and their map redrawn three times. None of the ordinary
+ * brakes could stop it: the scaled cooldown was 25-38 s because the leg kept
+ * getting shorter, and `QUIET_REPLAN_BURST_MAX` is exactly 3.
+ *
+ * Two minutes, doubling per consecutive ignored re-plan. It is deliberately
+ * far longer than the cooldown: the cooldown asks "has the rider had time to
+ * settle onto the last plan", and the answer here is that they had time and
+ * did not take it. A rider who is going their own way is better served by a
+ * stable map and their own eyes than by a plan a minute.
+ */
+export const QUIET_REPLAN_IGNORED_BACKOFF_MS = 120000
+
+/** Ceiling on the doubling — five minutes, the burst window. */
+export const QUIET_REPLAN_IGNORED_BACKOFF_MAX_MS = 300000
+
+/** The extra silence owed after `streak` consecutive ignored re-plans. */
+export function ignoredReplanBackoffMs(streak: number | undefined): number {
+  const n = Number.isFinite(streak)
+    ? Math.max(0, Math.floor(streak as number))
+    : 0
+  if (n <= 0) return 0
+  return Math.min(
+    QUIET_REPLAN_IGNORED_BACKOFF_MAX_MS,
+    QUIET_REPLAN_IGNORED_BACKOFF_MS * Math.pow(2, n - 1)
+  )
+}
+
+/**
+ * Did the rider join the re-plan just installed, or ride away from it?
+ *
+ * Called once per tick with the window's bookkeeping. It closes the window in
+ * both directions: drift past the mode's threshold inside the window counts
+ * the re-plan ignored and arms the backoff; surviving the window resets the
+ * streak, so a rider who settles onto a plan buys back the app's licence to
+ * re-plan for them later.
+ */
+export function noteReplanFollowed(input: {
+  /** When the last automatic re-plan was installed; null when none is open. */
+  appliedAtMs: number | null
+  /** This tick's smoothed distance from the planned route. */
+  distanceFromRoute?: number | null
+  ignoredStreak: number
+  nowMs: number
+  /** `deviationThresholdM` for the leg the rider is on. */
+  thresholdM: number
+}): { appliedAtMs: number | null; ignoredStreak: number } {
+  const { appliedAtMs, distanceFromRoute, ignoredStreak, nowMs, thresholdM } =
+    input
+  if (appliedAtMs == null) return { appliedAtMs, ignoredStreak }
+  if (nowMs - appliedAtMs > QUIET_REPLAN_IGNORED_WINDOW_MS) {
+    // Joined and stayed: the window closed with the rider on the plan.
+    return { appliedAtMs: null, ignoredStreak: 0 }
+  }
+  if (
+    distanceFromRoute != null &&
+    Number.isFinite(distanceFromRoute) &&
+    distanceFromRoute > thresholdM
+  ) {
+    return { appliedAtMs: null, ignoredStreak: ignoredStreak + 1 }
+  }
+  return { appliedAtMs, ignoredStreak }
+}
+
+/**
  * The distance-from-route to judge deviation on: the smaller of this tick's and
  * the previous tick's matched distance.
  *
@@ -143,6 +230,7 @@ export function shouldQuietReplanAccessLeg(input: {
 export function willQuietReplanAccessLeg(input: {
   currentLeg: Leg | undefined
   distanceFromRoute?: number | null
+  ignoredStreak?: number
   lastReplanAtMs: number
   nowMs: number
   reRouteStatus: string
@@ -152,6 +240,7 @@ export function willQuietReplanAccessLeg(input: {
   const {
     currentLeg,
     distanceFromRoute,
+    ignoredStreak,
     lastReplanAtMs,
     nowMs,
     recentReplanAtMs,
@@ -166,6 +255,7 @@ export function willQuietReplanAccessLeg(input: {
       reRouteStatus
     }) &&
     quietReplanAdmitted({
+      ignoredStreak,
       lastReplanAtMs,
       nowMs,
       recentReplanAtMs,
@@ -257,6 +347,8 @@ export function trimQuietReplanHistory(
  * The burst window is the backstop the scaled cooldown needs.
  */
 export function quietReplanAdmitted(input: {
+  /** Consecutive re-plans the rider never joined — see ignoredReplanBackoffMs. */
+  ignoredStreak?: number
   lastReplanAtMs: number
   nowMs: number
   reRouteStatus: string
@@ -266,6 +358,7 @@ export function quietReplanAdmitted(input: {
   remainingAccessMeters?: number | null
 }): boolean {
   const {
+    ignoredStreak,
     lastReplanAtMs,
     nowMs,
     recentReplanAtMs,
@@ -273,7 +366,11 @@ export function quietReplanAdmitted(input: {
     reRouteStatus
   } = input
   if (reRouteStatus !== 'idle' && reRouteStatus !== 'none') return false
-  if (nowMs - lastReplanAtMs < quietReplanCooldownMs(remainingAccessMeters)) {
+  const wait = Math.max(
+    quietReplanCooldownMs(remainingAccessMeters),
+    ignoredReplanBackoffMs(ignoredStreak)
+  )
+  if (nowMs - lastReplanAtMs < wait) {
     return false
   }
   return (

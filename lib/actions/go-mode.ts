@@ -68,6 +68,7 @@ import {
   checkForNotifications,
   checkMissedBus,
   classifyMissedBus,
+  deviationThresholdM,
   findBoardLegIndex,
   itineraryArrivalMs,
   nextDeviationHandledAtMs,
@@ -243,6 +244,7 @@ import type {
 import { evaluateTurnCard } from '../util/go-mode/turn-card'
 import { evaluateMissedBusRecovery } from '../util/go-mode/missed-bus-recovery'
 import {
+  noteReplanFollowed,
   quietReplanAdmitted,
   remainingAccessDistanceM,
   shouldQuietReplanAccessLeg,
@@ -250,6 +252,11 @@ import {
   trimQuietReplanHistory,
   willQuietReplanAccessLeg
 } from '../util/go-mode/deviation'
+import {
+  blendReplanLatencyMs,
+  projectReplanOrigin
+} from '../util/go-mode/replan-origin'
+import type { ProjectedOrigin } from '../util/go-mode/replan-origin'
 import { evaluateDepartureDrift } from '../util/go-mode/departure-drift'
 import type { DepartureBaselineState } from '../util/go-mode/departure-drift'
 import type { PacingCardState } from '../util/go-mode/pacing-card'
@@ -517,6 +524,28 @@ export const GO_MODE_CONTROL_TAP = 'GO_MODE_CONTROL_TAP'
 // Recording only, like REROUTE_SNAPSHOT: no reducer consumes either, they
 // exist to put a request/response pair in the debug stream for build-fixture.
 export const ONBOARD_CANDIDATE_SNAPSHOT = 'ONBOARD_CANDIDATE_SNAPSHOT'
+/**
+ * Recording only, like GO_MODE_CONTROL_TAP: no reducer consumes it, and the
+ * whole payload is scalars so the debug-log middleware keeps it verbatim
+ * without the full-capture whitelist (and therefore on every ride, recorded or
+ * not).
+ *
+ * It exists because the storm counter cannot see the app's own re-plans.
+ * `ride-watch`'s `reroute-storm` rule counts `START_REROUTE` records with
+ * `autoApply: true` (ride_watch.py:5685) — and the quiet access-leg re-plan,
+ * which is the busiest automatic re-plan there is, never dispatches one: it
+ * fetches in an isolated thunk and goes straight to `beginGoMode`. On
+ * 2026-09-21 that made three automatic re-plans in 61 s completely invisible
+ * to the daemon (backlog 24.3 / 17.9d): the 16:36-16:40 window contains ZERO
+ * `START_REROUTE` of any reason, only three `ONBOARD_CANDIDATE_SNAPSHOT
+ * {reason: quiet-replan-full}` + `START_GO_MODE` pairs — and even those are
+ * gated on trip recording being switched on.
+ *
+ * One entry per AUTOMATIC re-plan verdict, accepted or refused, naming the
+ * reason. The rider's own re-plans keep their existing `START_REROUTE
+ * {autoApply: false}`, so the two remain distinguishable.
+ */
+export const AUTO_REPLAN = 'AUTO_REPLAN'
 export const PAUSE_GPS_SIMULATION = 'PAUSE_GPS_SIMULATION'
 export const REROUTE_SNAPSHOT = 'REROUTE_SNAPSHOT'
 export const REPAIR_LEG_GEOMETRY = 'REPAIR_LEG_GEOMETRY'
@@ -1080,22 +1109,60 @@ function recordQuietReplanPlan(
  * worse plan is the same outcome as finding no plan, not an error.
  */
 function autoReplanRejected(
+  dispatch: any,
   state: any,
   candidate: Itinerary,
-  options: { currentPlanIsDead?: boolean; reason?: string | null } = {}
+  options: {
+    currentPlanIsDead?: boolean
+    /** What the origin was advanced by, when the caller projected it. */
+    projected?: ProjectedOrigin | null
+    reason?: string | null
+  } = {}
 ): boolean {
   const goMode = state?.otp?.goMode
   const coords = goMode?.tracking?.lastPosition?.coords
+  const position = coords
+    ? ([coords.latitude, coords.longitude] as [number, number])
+    : null
   const verdict = acceptAutoReplan(candidate, goMode?.activeItinerary, {
     currentPlanIsDead: !!options.currentPlanIsDead,
-    position: coords
-      ? ([coords.latitude, coords.longitude] as [number, number])
-      : null,
+    headingDeg: coords?.heading ?? null,
+    position,
     riding: !!goMode?.riding?.tripId,
+    speedMps: coords?.speed ?? null,
     tokenHopMaxMeters: tokenHopMeters(state),
     tokenHopToleranceMs: tokenHopToleranceMs(state)
   })
+  // The daemon's storm counter cannot see a quiet re-plan any other way — see
+  // AUTO_REPLAN. Scalars only, so this is recorded on every ride.
+  dispatch({
+    payload: {
+      accepted: verdict.accept,
+      autoApply: true,
+      originGapM: position ? originGapMeters(candidate, position) : null,
+      projectedAtMs: options.projected?.metres ? options.projected.atMs : null,
+      projectedM: options.projected?.metres ?? 0,
+      reason: options.reason || 'unknown',
+      refusedBecause: verdict.accept ? null : verdict.reason,
+      tMs: getCurrentTime().getTime()
+    },
+    type: AUTO_REPLAN
+  })
   if (verdict.accept) return false
+  // A plan refused for beginning where the rider ISN'T is the same evidence as
+  // one they rode away from: the planner is answering slower than they are
+  // moving. Both arm the same backoff, so the app stops asking a question it
+  // cannot get a usable answer to. Only the origin reasons — `arrives-later`
+  // and the feasibility refusals say nothing about the rider's motion, and the
+  // direction test is inert below PROJECTION_MIN_SPEED_MPS, so a rider
+  // standing still can never reach this line.
+  if (
+    verdict.reason === 'origin-behind-heading' ||
+    verdict.reason === 'origin-behind-rider'
+  ) {
+    session.lastQuietReplanAppliedAt = null
+    session.quietReplanIgnoredStreak += 1
+  }
   // eslint-disable-next-line no-console
   console.log(
     `[go-mode] auto replan (${options.reason || 'unknown'}) refused: ${
@@ -2442,7 +2509,7 @@ export function applyAutoReroute(
     // answer — the itinerary being replaced cannot happen at all — so only the
     // origin half of the gate applies here.
     if (
-      autoReplanRejected(state, best, {
+      autoReplanRejected(dispatch, state, best, {
         currentPlanIsDead: true,
         reason: goMode.reRoute?.reason ?? 'auto-reroute'
       })
@@ -2596,6 +2663,11 @@ export function quietReplanAccessLeg() {
 
     if (
       !quietReplanAdmitted({
+        // A re-plan the rider rode away from buys a long silence — see
+        // ignoredReplanBackoffMs. This is the brake the 16:38 loop needed: its
+        // scaled cooldown was 25-38 s because each swap made the leg shorter,
+        // and three in five minutes is exactly QUIET_REPLAN_BURST_MAX.
+        ignoredStreak: session.quietReplanIgnoredStreak,
         lastReplanAtMs: session.lastQuietReplanAt,
         nowMs,
         recentReplanAtMs: session.quietReplanHistory,
@@ -2653,14 +2725,54 @@ export function quietReplanAccessLeg() {
       state.otp.currentQuery?.routingPreferences,
       observedBikeSpeedMps()
     )
-    const zoned = utcToZonedTime(nowMs, homeTimezone)
-    const date = format(zoned, coreUtils.time.OTP_API_DATE_FORMAT)
-    const time = format(zoned, coreUtils.time.OTP_API_TIME_FORMAT)
-    const from = {
+    // WHERE the rider will be when this answer lands, not where they were when
+    // it was asked. The full-trip fetch measures 9.1-10.3 s on this rider's
+    // phone (replan-origin.ts quotes all eighteen samples), which at their
+    // 6-7 m/s is 60-72 m of road — the whole of 24.3. The scoped fetch
+    // measures 0.13-0.21 s and so projects essentially nothing, which is why
+    // the estimate is kept per shape.
+    //
+    // The projected instant rides along with the projected point: an origin
+    // the rider reaches at T+latency, time-anchored to T, describes a journey
+    // that began before they got there. This is NOT a change to the time
+    // FORMAT — `OTP_API_TIME_FORMAT` still floors to the minute, and that
+    // flooring is backlog 18.4's.
+    const projectAt = (latencyMs: number): ProjectedOrigin =>
+      projectReplanOrigin({
+        accuracyM: lastPosition.coords.accuracy,
+        headingDeg: lastPosition.coords.heading,
+        lat: lastPosition.coords.latitude,
+        latencyMs,
+        lon: lastPosition.coords.longitude,
+        nowMs,
+        speedMps: lastPosition.coords.speed
+      })
+    const originFrom = (projected: ProjectedOrigin) => ({
       category: 'CURRENT_LOCATION',
-      lat: lastPosition.coords.latitude,
-      lon: lastPosition.coords.longitude,
+      lat: projected.lat,
+      lon: projected.lon,
       name: 'Current location'
+    })
+    const originWhen = (projected: ProjectedOrigin) => {
+      const z = utcToZonedTime(projected.atMs, homeTimezone)
+      return {
+        date: format(z, coreUtils.time.OTP_API_DATE_FORMAT),
+        time: format(z, coreUtils.time.OTP_API_TIME_FORMAT)
+      }
+    }
+    const scopedProjection = projectAt(session.replanLatencyMs.scoped)
+    const fullProjection = projectAt(session.replanLatencyMs.full)
+    // Blend what this fetch actually cost back into the estimate. A
+    // non-positive sample is dropped (replay and the unit harness resolve
+    // inside one simulated millisecond) — see blendReplanLatencyMs.
+    const noteLatency = (shape: 'full' | 'scoped', sentAtMs: number) => {
+      session.replanLatencyMs = {
+        ...session.replanLatencyMs,
+        [shape]: blendReplanLatencyMs(
+          session.replanLatencyMs[shape],
+          getCurrentTime().getTime() - sentAtMs
+        )
+      }
     }
 
     // Rider exited Go Mode / a reroute started while a request was in flight?
@@ -2696,13 +2808,17 @@ export function quietReplanAccessLeg() {
       })
       const targetZoned =
         arriveTarget != null ? utcToZonedTime(arriveTarget, homeTimezone) : null
+      // An arrive-by query is anchored to the BUS, not to the rider, so only
+      // the depart-now branch takes the projected instant. The origin is
+      // projected either way: where the rider will be is the same question.
+      const scopedWhen = originWhen(scopedProjection)
       const scopedAt = (target: number | null) => ({
         arriveBy: target != null,
         date:
           target != null && targetZoned
             ? format(targetZoned, coreUtils.time.OTP_API_DATE_FORMAT)
-            : date,
-        from,
+            : scopedWhen.date,
+        from: originFrom(scopedProjection),
         modes: [{ mode: accessMode }],
         modeSettings,
         numItineraries: ACCESS_REPLAN_NUM_ITINERARIES,
@@ -2710,7 +2826,7 @@ export function quietReplanAccessLeg() {
         time:
           target != null && targetZoned
             ? format(targetZoned, coreUtils.time.OTP_API_TIME_FORMAT)
-            : time,
+            : scopedWhen.time,
         to: {
           lat: boardPlace.lat,
           lon: boardPlace.lon,
@@ -2722,8 +2838,10 @@ export function quietReplanAccessLeg() {
       // walk-only.
       const runScoped = async (target: number | null) => {
         const scopedCombo = scopedAt(target)
+        const sentAtMs = getCurrentTime().getTime()
         const { error, itineraries, query, response, variables } =
           await dispatch(fetchOnboardCandidatePlan(scopedCombo))
+        noteLatency('scoped', sentAtMs)
         recordQuietReplanPlan(dispatch, 'quiet-replan-scoped', scopedCombo, {
           query,
           response,
@@ -2756,7 +2874,8 @@ export function quietReplanAccessLeg() {
           boardLegIndex
         )
         if (
-          autoReplanRejected(getState(), spliced, {
+          autoReplanRejected(dispatch, getState(), spliced, {
+            projected: scopedProjection,
             reason: 'quiet-replan-scoped'
           })
         ) {
@@ -2764,6 +2883,9 @@ export function quietReplanAccessLeg() {
           return
         }
         session.quietReplanMissStreak = 0
+        // Opens the join window: the next 30 s of ticks decide whether this
+        // plan was ridden or ridden away from (noteReplanFollowed).
+        session.lastQuietReplanAppliedAt = getCurrentTime().getTime()
         dispatch(beginGoMode(spliced))
         return
       }
@@ -2771,15 +2893,16 @@ export function quietReplanAccessLeg() {
       // replan below (fallback, not default).
     }
 
+    const fullWhen = originWhen(fullProjection)
     const combo = {
       arriveBy: false,
-      date,
-      from,
+      date: fullWhen.date,
+      from: originFrom(fullProjection),
       modes,
       modeSettings,
       numItineraries,
       routingPreferences,
-      time,
+      time: fullWhen.time,
       to: {
         lat: destLeg.to.lat,
         lon: destLeg.to.lon,
@@ -2787,9 +2910,11 @@ export function quietReplanAccessLeg() {
       }
     }
 
+    const fullSentAtMs = getCurrentTime().getTime()
     const { error, itineraries, query, response, variables } = await dispatch(
       fetchOnboardCandidatePlan(combo)
     )
+    noteLatency('full', fullSentAtMs)
     recordQuietReplanPlan(dispatch, 'quiet-replan-full', combo, {
       query,
       response,
@@ -2831,7 +2956,12 @@ export function quietReplanAccessLeg() {
       return
     }
 
-    if (autoReplanRejected(getState(), best, { reason: 'quiet-replan' })) {
+    if (
+      autoReplanRejected(dispatch, getState(), best, {
+        projected: fullProjection,
+        reason: 'quiet-replan-full'
+      })
+    ) {
       // Same settle as an empty fetch: the rider keeps the plan they have, the
       // TripSheet is still their escape hatch, and the streak records that this
       // attempt changed nothing.
@@ -2840,6 +2970,7 @@ export function quietReplanAccessLeg() {
     }
 
     session.quietReplanMissStreak = 0
+    session.lastQuietReplanAppliedAt = getCurrentTime().getTime()
     dispatch(beginGoMode(best))
   }
 }
@@ -2936,6 +3067,12 @@ export function captureRerouteSnapshot() {
       )
       dispatch({
         payload: {
+          // Says what this record IS, because the row that asked for the field
+          // read one of these as the request behind a swap. It is not: the
+          // capture is periodic (REROUTE_SNAPSHOT_INTERVAL_MS), nothing
+          // consumes it, and it never changes the trip. Automatic re-plans
+          // announce themselves with AUTO_REPLAN instead.
+          reason: 'periodic',
           request: { departArrive: 'NOW', from, modes, query, to, variables },
           response,
           tMs: getCurrentTime().getTime()
@@ -4862,7 +4999,7 @@ export function replanFromAboard(
       // 08:42:51 -> 08:51:45 (+8:54) with no rider action; a re-plan that
       // arrives later than the plan in hand is not a recovery.
       if (
-        autoReplanRejected(getState(), spliced, {
+        autoReplanRejected(dispatch, getState(), spliced, {
           // A missed connection makes the plan in hand unachievable, so there
           // is no arrival left to defend — only the boarded-earlier case is
           // asked to be no worse than what it replaces.
@@ -6821,9 +6958,25 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     // gives missed-bus recovery and the boarded-earlier swap precedence. Both
     // of those are re-plans too, so a tick they win is still a tick the app is
     // fixing the route on.
+    // Did the rider join the plan the app last handed them? Asked here, on the
+    // same smoothed distance every other deviation decision uses, so "ignored"
+    // and "off route" can never disagree about the same metre. 2026-09-21
+    // 16:38:05 -> deviated again at 16:38:16 (11 s) is an ignored re-plan;
+    // 17:34:42 -> on_track at 17:34:57 (14 s) is not.
+    const replanFollowUp = noteReplanFollowed({
+      appliedAtMs: session.lastQuietReplanAppliedAt,
+      distanceFromRoute: persistedDistanceFromRoute,
+      ignoredStreak: session.quietReplanIgnoredStreak,
+      nowMs: currentTime.getTime(),
+      thresholdM: deviationThresholdM(currentLeg)
+    })
+    session.lastQuietReplanAppliedAt = replanFollowUp.appliedAtMs
+    session.quietReplanIgnoredStreak = replanFollowUp.ignoredStreak
+
     const quietReplanImminent = willQuietReplanAccessLeg({
       currentLeg,
       distanceFromRoute: persistedDistanceFromRoute,
+      ignoredStreak: session.quietReplanIgnoredStreak,
       lastReplanAtMs: session.lastQuietReplanAt,
       nowMs: currentTime.getTime(),
       recentReplanAtMs: session.quietReplanHistory,
