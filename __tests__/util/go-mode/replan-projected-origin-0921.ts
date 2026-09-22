@@ -387,10 +387,14 @@ describeRide(
       )
       expect(moved).toBeGreaterThan(60)
       expect(moved).toBeLessThan(75)
-      // ...and the query is anchored to when the rider gets there. The recorded
-      // request asked for "16:37", which is why the plan opened `behind` by 65 s
-      // (backlog 18.4 owns the flooring itself; this only removes the latency).
-      expect(combo.time).toBe('16:38')
+      // ...and the query is anchored to when the rider gets there, TO THE
+      // SECOND. The recorded request asked for "16:37" — the minute the fix
+      // fell in — and the plan OTP returned started at 16:37:00 while the app
+      // installed it at 16:38:05.029, which is the whole 65.029 s that ride
+      // opened `behind` by. 24.3 alone moved the anchor to 16:38:04.5 and
+      // `OTP_API_TIME_FORMAT` floored it straight back to 16:38:00, leaving
+      // 5.029 s; 18.4's `GO_MODE_API_TIME_FORMAT` asks for the second itself.
+      expect(combo.time).toBe('16:38:04')
       expect(combo.date).toBe('2026-09-21')
     })
 

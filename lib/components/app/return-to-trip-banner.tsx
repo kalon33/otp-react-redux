@@ -4,9 +4,11 @@ import { isMobile } from '@opentripplanner/core-utils/lib/ui'
 import { useIntl } from 'react-intl'
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import styled from 'styled-components'
+import type { IntlShape } from 'react-intl'
 
 import * as goModeActions from '../../actions/go-mode'
-import { liveArrivalMs } from '../../util/go-mode/live-itinerary'
+import { isWaitingForDeparture } from '../../util/go-mode/waiting-at-stop'
+import { legBoard, liveArrivalMs } from '../../util/go-mode/live-itinerary'
 import { MobileScreens } from '../../actions/ui-constants'
 import useActiveTripGuards from '../go-mode/use-active-trip-guards'
 import type { GoModeState } from '../../reducers/go-mode'
@@ -73,6 +75,68 @@ const TransitionStyles = styled.div`
     z-index: 20;
   }
 `
+
+/**
+ * The platform wait, or null when the rider is not in one.
+ *
+ * `departureMs` is null when the only epoch on offer is a FLOOR (17.6) — the
+ * wait is still a fact, the time is not one.
+ */
+function platformWait(
+  goMode: GoModeState | undefined
+): { departureMs: number | null; stop: string } | null {
+  const legIndex = goMode?.progress?.currentLegIndex ?? 0
+  const leg = goMode?.activeItinerary?.legs?.[legIndex]
+  if (!leg) return null
+  const board = legBoard(legIndex, leg, goMode?.liveLegTimes || {})
+  const epoch = Number(board.epoch)
+  const departureMs = Number.isFinite(epoch) ? epoch : null
+  const waiting = isWaitingForDeparture({
+    aboard: goMode?.riding?.legIndex === legIndex,
+    departureMs,
+    leg,
+    nowMs: Date.now()
+  })
+  if (!waiting || !leg.from?.name) return null
+  return {
+    departureMs: board.isFloor ? null : departureMs,
+    stop: leg.from.name
+  }
+}
+
+/**
+ * "Waiting at <stop> · <departure>", or just the stop when the only epoch on
+ * offer is a FLOOR — "no earlier than this" rather than a prediction (17.6),
+ * which gates the wording but may not be printed as a departure time.
+ */
+function waitingMessage(
+  intl: IntlShape,
+  stop: string,
+  departureMs: number | null
+): string {
+  if (departureMs == null) {
+    return intl.formatMessage(
+      {
+        defaultMessage: 'Waiting at {stop} — tap to return',
+        id: 'components.GoMode.returnBannerWaiting'
+      },
+      { stop }
+    )
+  }
+  return intl.formatMessage(
+    {
+      defaultMessage: 'Waiting at {stop} · {time} — tap to return',
+      id: 'components.GoMode.returnBannerWaitingTime'
+    },
+    {
+      stop,
+      time: new Date(departureMs).toLocaleTimeString(intl.locale, {
+        hour: 'numeric',
+        minute: '2-digit'
+      })
+    }
+  )
+}
 
 interface Props {
   goMode: GoModeState
@@ -144,12 +208,28 @@ const ReturnToTripBanner = ({
       ? new Date(progress.estimatedArrival).getTime()
       : null)
 
+  // The platform wait (13.9). The trip steps onto a transit leg before the bus
+  // leaves — 13.1 keeps that transition early on purpose, because advanceToLeg
+  // is the only place startVehicleTracking runs for a mid-trip transit leg —
+  // so `progress.nextStopName` is the stop AFTER the boarding stop for the
+  // whole wait, and the branch below states it as a ride in progress. The card
+  // stopped doing that on 2026-09-17 (TransitProgress, `gomode/card-truth`);
+  // this banner was the same claim on a different surface and kept making it.
+  //
+  // Same predicate as the card, imported rather than restated: before the
+  // bus's own departure time nobody can be riding it, and past that time the
+  // old wording returns, so a rider aboard a bus the feed never confirmed is
+  // never told they are waiting.
+  const wait = arrivedAt == null ? platformWait(goMode) : null
+
   let message: string
   if (arrivedAt != null) {
     message = intl.formatMessage({
       defaultMessage: "You've arrived — tap to finish",
       id: 'components.GoMode.returnBannerArrived'
     })
+  } else if (wait) {
+    message = waitingMessage(intl, wait.stop, wait.departureMs)
   } else if (progress?.nextStopName && liveArrival != null) {
     message = intl.formatMessage(
       {
