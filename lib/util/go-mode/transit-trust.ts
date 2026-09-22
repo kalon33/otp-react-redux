@@ -28,6 +28,13 @@ export const VEHICLE_RECORD_STALE_SEC = 120
 // VEHICLE's position, never the rider's.
 export const VEHICLE_AT_BOARD_STOP_M = 250
 
+// "The RIDER is standing at the boarding stop." Much tighter than the vehicle
+// radius: a bus 250 m out is arriving, a rider 250 m out is still walking.
+// Lives here because two rules read it — classifyMissedBus (is this miss
+// definitive?) and realtimeBoardIsSpent (backlog 17.18) — and they must not
+// each grow their own number.
+export const RIDER_AT_BOARD_STOP_M = 50
+
 // Past this separation a "confirmed" match is no longer describing the bus the
 // rider is on. Feed lag on freeway BRT can genuinely put the published position
 // several hundred metres from the rider, and MAX_ADJUSTED_RADIUS_METERS (2500,
@@ -322,6 +329,65 @@ export function vehiclePassedStopOnTrip(
   if (stopIdx === -1 || nextIdx === -1) return null
   // "Next stop is the one we care about" is not past it — the bus is pulling in.
   return nextIdx > stopIdx
+}
+
+/**
+ * The trip's own vehicle, as both the missed-bus classifier and the board-time
+ * rules read it. One shape, one reading — the two used to judge the same
+ * record from two copies of the same arithmetic.
+ */
+export interface BoardVehicleEvidence {
+  ageSec: number | null
+  distanceToBoardStopM: number | null
+  nextStopId: string | null
+  /**
+   * Whether the bus is already past the boarding stop on its own run
+   * ({@link vehiclePassedStopOnTrip}). `null`/absent is unanswerable — no
+   * evidence either way, never a "no".
+   */
+  passedBoardStop?: boolean | null
+}
+
+/**
+ * Does the bus's OWN record place it short of the boarding stop — i.e. is
+ * there positive evidence that this boarding has not happened yet?
+ *
+ * Extracted 2026-09-22 from classifyMissedBus, which has asked exactly this
+ * since 2026-07-29 (MISSED_BUS fired while bus 8140 was pulling in 111 m from
+ * the stop) and gained the trip-order arm on 2026-09-21 (backlog 25.1: the
+ * rider stood 14-23 m from the kerb while their bus ran 2.5 km up I-35W, five
+ * stops short, too far for either distance test to see). The board-time rules
+ * now ask the same question of the same record, and sharing the predicate is
+ * what keeps them from drifting apart.
+ *
+ * FALSE means "no such evidence", not "the bus has gone": a stale record, a
+ * missing one, or a bus whose position says nothing all answer false. Callers
+ * must treat it as silence.
+ *
+ * `riderAtBoardStop` is the rider's own corroboration for the trip-order arm
+ * only — standing where the bus must still come, with a live record of that
+ * bus upstream of the stop, there is nothing yet to have missed.
+ */
+export function vehicleShortOfBoardStop(
+  vehicle: BoardVehicleEvidence | null | undefined,
+  boardStopId: string | null | undefined,
+  riderAtBoardStop = false
+): boolean {
+  if (!vehicle) return false
+  // Same freshness policy as isVehicleRecordFresh, which takes a whole lookup
+  // record; this one is handed just the fields the rules read.
+  if (vehicle.ageSec != null && vehicle.ageSec > VEHICLE_RECORD_STALE_SEC) {
+    return false
+  }
+  // Nothing below can vouch for a bus we can SEE is past the stop — a bus
+  // 200 m beyond the kerb is inside VEHICLE_AT_BOARD_STOP_M and gone.
+  if (vehicle.passedBoardStop === true) return false
+  return (
+    (boardStopId != null && vehicle.nextStopId === boardStopId) ||
+    (vehicle.distanceToBoardStopM != null &&
+      vehicle.distanceToBoardStopM <= VEHICLE_AT_BOARD_STOP_M) ||
+    (vehicle.passedBoardStop === false && riderAtBoardStop)
+  )
 }
 
 /** The trip's stops in service order, as transitIndex.trips[id] stores them. */
