@@ -185,6 +185,7 @@ import {
   startOriginIsStale
 } from '../util/go-mode/replan-acceptance'
 import { accessArriveByTarget } from '../util/go-mode/arrive-on-time'
+import { notifyIntl } from '../util/go-mode/notify-i18n'
 import {
   boardingDenialHolds,
   knownAboardVehicle,
@@ -2705,17 +2706,38 @@ export function applyAutoReroute(
         (Number(firstTransitLeg.startTime) - getCurrentTime().getTime()) / 60000
       )
     )
-    const message = `${
-      firstTransitLeg.routeShortName ||
-      firstTransitLeg.routeLongName ||
-      'your bus'
-    } · in ${departsInMin} min · ${firstTransitLeg.from?.name || 'the stop'}`
+    const intl = notifyIntl()
+    const message = intl.formatMessage(
+      {
+        defaultMessage: '{routeName} · in {minutes} min · {stopName}',
+        id: 'components.GoMode.notify.tripUpdatedBoard'
+      },
+      {
+        minutes: departsInMin,
+        routeName:
+          firstTransitLeg.routeShortName ||
+          firstTransitLeg.routeLongName ||
+          intl.formatMessage({
+            defaultMessage: 'your bus',
+            id: 'components.GoMode.notify.yourBus'
+          }),
+        stopName:
+          firstTransitLeg.from?.name ||
+          intl.formatMessage({
+            defaultMessage: 'the stop',
+            id: 'components.GoMode.notify.theStop'
+          })
+      }
+    )
     const notification: NotificationEvent = {
       id: `TRIP_UPDATED_auto_${Date.now()}`,
       message,
       priority: 'high',
       timestamp: new Date(),
-      title: 'Trip updated',
+      title: intl.formatMessage({
+        defaultMessage: 'Trip updated',
+        id: 'components.GoMode.notify.tripUpdatedTitle'
+      }),
       type: 'TRIP_UPDATED'
     }
     // After beginGoMode so the fresh trip's notification state keeps it.
@@ -5245,22 +5267,53 @@ export function replanFromAboard(
       // 8:51:45 — see itineraryArrivalMs. Alight stop and arrival time are two
       // facts, so the copy no longer runs them into one clause.
       const arrivalMs = itineraryArrivalMs(spliced)
+      const intl = notifyIntl()
       const arrivalText =
         arrivalMs == null
           ? ''
-          : ` · arriving in ${Math.max(
-              0,
-              Math.round((arrivalMs - getCurrentTime().getTime()) / 60000)
-            )} min`
-      const message = `${
-        busLeg?.routeShortName || busLeg?.routeLongName || 'your bus'
-      } · off at ${busLeg?.to?.name || 'your stop'}${arrivalText}`
+          : intl.formatMessage(
+              {
+                defaultMessage: ' · arriving in {minutes} min',
+                id: 'components.GoMode.notify.tripUpdatedArriving'
+              },
+              {
+                minutes: Math.max(
+                  0,
+                  Math.round((arrivalMs - getCurrentTime().getTime()) / 60000)
+                )
+              }
+            )
+      const message = intl.formatMessage(
+        {
+          defaultMessage: '{routeName} · off at {stopName}{arrival}',
+          id: 'components.GoMode.notify.tripUpdatedAlight'
+        },
+        {
+          arrival: arrivalText,
+          routeName:
+            busLeg?.routeShortName ||
+            busLeg?.routeLongName ||
+            intl.formatMessage({
+              defaultMessage: 'your bus',
+              id: 'components.GoMode.notify.yourBus'
+            }),
+          stopName:
+            busLeg?.to?.name ||
+            intl.formatMessage({
+              defaultMessage: 'your stop',
+              id: 'components.GoMode.notify.yourStop'
+            })
+        }
+      )
       const notification: NotificationEvent = {
         id: `TRIP_UPDATED_auto_${Date.now()}`,
         message,
         priority: 'high',
         timestamp: new Date(),
-        title: 'Trip updated',
+        title: intl.formatMessage({
+          defaultMessage: 'Trip updated',
+          id: 'components.GoMode.notify.tripUpdatedTitle'
+        }),
         type: 'TRIP_UPDATED'
       }
       // After beginGoMode so the fresh trip's notification state keeps it.
@@ -5388,6 +5441,13 @@ export function startPositionTracking() {
     }
 
     if (!('geolocation' in navigator)) {
+      // `message` here is diagnostic, NOT copy: it is a field of the synthetic
+      // GeolocationPositionError this dispatches, and the only consumers are
+      // the debug-log digest (`err:` in lib/util/debug-log.js) and
+      // GoModeScreen, which renders its own already-localized sentence keyed
+      // on `code` (0 -> "Unable to determine your location…"). Translating it
+      // would translate the log and change nothing the rider reads, so it
+      // stays English on purpose — see backlog 17.25.
       dispatch(
         setTrackingError({
           code: 0,
@@ -5428,6 +5488,8 @@ export function startPositionTracking() {
     let initialResolved = false
     const initialTimeout = setTimeout(() => {
       if (!initialResolved) {
+        // Diagnostic, not copy — same reason as the `code: 0` error above:
+        // GoModeScreen renders its own localized sentence for `code === 3`.
         dispatch(
           setTrackingError({
             code: 3,
@@ -5588,6 +5650,11 @@ async function armReturnPushes(
 ): Promise<void> {
   await cancelPush(RETURN_LEAVE_SOON_NOTIFICATION_ID)
   await cancelPush(RETURN_LEAVE_NOW_NOTIFICATION_ID)
+  // Same words as the outbound LEAVE_SOON alert (notification-service's
+  // `leaveInTitle` / `leaveNowTitle` — that builder's comment says it copied
+  // this shape), so the two share one pair of keys and one translation. The
+  // ↩ is the return marker, not copy, so it stays outside the message.
+  const intl = notifyIntl()
   const soonAtMs = plan.leaveByMs - RETURN_LEAVE_SOON_MIN * 60000
   if (soonAtMs > nowMs) {
     await sendPush({
@@ -5595,7 +5662,13 @@ async function armReturnPushes(
       id: RETURN_LEAVE_SOON_NOTIFICATION_ID,
       message: '',
       priority: 1,
-      title: `↩ Leave in ${RETURN_LEAVE_SOON_MIN} min`
+      title: `↩ ${intl.formatMessage(
+        {
+          defaultMessage: 'Leave in {minutes} min',
+          id: 'components.GoMode.notify.leaveInTitle'
+        },
+        { minutes: RETURN_LEAVE_SOON_MIN }
+      )}`
     })
   }
   if (plan.leaveByMs > nowMs) {
@@ -5604,7 +5677,10 @@ async function armReturnPushes(
       id: RETURN_LEAVE_NOW_NOTIFICATION_ID,
       message: '',
       priority: 1,
-      title: '↩ Leave now'
+      title: `↩ ${intl.formatMessage({
+        defaultMessage: 'Leave now',
+        id: 'components.GoMode.notify.leaveNowTitle'
+      })}`
     })
   }
 }

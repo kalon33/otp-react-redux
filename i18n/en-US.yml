@@ -479,7 +479,7 @@ components:
       modeDrive: Drive
       modeGo: Go
       modeScooter: Scooter
-      nextStepTitle: Next Step
+      nextStepTitle: Next step
       nextStopTitle: Next stop
       offRouteDistance: "{metres}m from the route"
       offRouteTitle: Off route
@@ -501,6 +501,10 @@ components:
       theStop: the stop
       tightConnectionTitle: Tight connection
       tripCompleteTitle: Trip complete
+      tripUpdatedAlight: "{routeName} · off at {stopName}{arrival}"
+      tripUpdatedArriving: " · arriving in {minutes} min"
+      tripUpdatedBoard: "{routeName} · in {minutes} min · {stopName}"
+      tripUpdatedTitle: Trip updated
       turnIn: In {distance}{then}
       turnThen: ", then {instruction}"
       unreachable: "{howFar} · not getting closer"
@@ -509,6 +513,7 @@ components:
       yourBusLead: Your bus
       yourConnection: your connection
       yourDestination: your destination
+      yourRide: your ride
       yourRideLead: Your ride
       yourStop: your stop
       yourStopTitle: Your stop
