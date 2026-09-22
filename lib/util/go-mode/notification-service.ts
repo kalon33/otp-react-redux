@@ -1314,8 +1314,18 @@ export function checkLegTransition(
           },
           {
             destination,
+            // Both names are optional on a Leg and this branch is entered on
+            // the MODE alone, so an unnamed route used to render "Board  to
+            // X" (and "Board undefined to X" before 12.23). Mode-neutral on
+            // purpose: legRouteName's "your bus" would call the Green Line a
+            // bus, and RAIL reaches this branch.
             routeName:
-              enteredLeg.routeShortName || enteredLeg.routeLongName || ''
+              enteredLeg.routeShortName ||
+              enteredLeg.routeLongName ||
+              intl.formatMessage({
+                defaultMessage: 'your ride',
+                id: 'components.GoMode.notify.yourRide'
+              })
           }
         )
       } else if (enteredLeg.mode === 'WALK') {
@@ -1342,7 +1352,7 @@ export function checkLegTransition(
         priority: 'high',
         timestamp: new Date(),
         title: intl.formatMessage({
-          defaultMessage: 'Next Step',
+          defaultMessage: 'Next step',
           id: 'components.GoMode.notify.nextStepTitle'
         }),
         type: 'LEG_TRANSITION'
