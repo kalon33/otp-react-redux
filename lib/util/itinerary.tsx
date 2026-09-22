@@ -364,6 +364,76 @@ export function getLastLegEndTime(legs: Leg[]): number {
   return +legs[legs.length - 1].endTime
 }
 
+/**
+ * A name for the trip the rider picked that survives a re-plan.
+ *
+ * `ui_activeItinerary` in the URL is a POSITION in the results list, and the
+ * list is renumbered every time the response is replaced. On 2026-09-21 index
+ * 38 was the 10:12 Orange Line (trip 1:1348464) when the rider chose it at
+ * 09:02 and the 10:19 one (trip 1:1348091) in the 09:12:07 re-plan, so each
+ * return from the feedback screen re-selected a trip they had never picked
+ * (backlog 23.5). The trip ids do not move when the list does, so they are
+ * what the URL carries alongside the index.
+ *
+ * Shape: the transit trips in order, then the start minute —
+ * `1:1348464@29816404`. The minute is a tiebreak, not an identity: realtime
+ * nudges it between plans. An itinerary with no transit leg (bike the whole
+ * way) has no trip to name, so it falls back to its access mode.
+ */
+export function itineraryIdentityKey(itinerary?: Itinerary): string {
+  if (!itinerary?.legs?.length) return ''
+  const trips = itinerary.legs
+    .filter((leg) => leg.transitLeg)
+    .map((leg) => leg.trip?.gtfsId || leg.routeId || leg.mode)
+  const minute = Math.round(+itinerary.startTime / 60000)
+  return `${trips.join('~') || itineraryAccessModeId(itinerary)}@${minute}`
+}
+
+/**
+ * Where the itinerary named by `key` sits in this list, or -1.
+ *
+ * Matching is on the trips first and the minute only to break a tie, because
+ * a re-plan that keeps the trip can still move its start by a minute or two of
+ * realtime. -1 means the trip is not in the response any more — the caller
+ * should clear the selection rather than keep the rider's old position, which
+ * now points at somebody else's bus.
+ *
+ * `preferIndex` settles a genuine tie. Same-shape variants are the reason:
+ * the merge keeps trips that leave on the same minute on the same trips and
+ * differ only in where they put the rider down (16.6's drill-down exists for
+ * exactly those), and they share a key. When the rider has just chosen one,
+ * the position they chose is the better answer than the first of the pair.
+ */
+export function findItineraryIndexByKey(
+  itineraries: Itinerary[] | undefined | null,
+  key: string,
+  preferIndex = -1
+): number {
+  if (!key || !itineraries?.length) return -1
+  const [wantedMinute, wantedTrips] = splitIdentityKey(key)
+  let bestIndex = -1
+  let bestDistance = Number.POSITIVE_INFINITY
+  itineraries.forEach((itinerary, index) => {
+    const [minute, trips] = splitIdentityKey(itineraryIdentityKey(itinerary))
+    if (trips !== wantedTrips) return
+    const distance = Math.abs(minute - wantedMinute)
+    if (distance < bestDistance) {
+      bestDistance = distance
+      bestIndex = index
+    } else if (distance === bestDistance && index === preferIndex) {
+      bestIndex = index
+    }
+  })
+  return bestIndex
+}
+
+/** `1:1348464@29816404` -> [29816404, '1:1348464']. */
+function splitIdentityKey(key: string): [number, string] {
+  const at = key.lastIndexOf('@')
+  if (at === -1) return [NaN, key]
+  return [Number(key.slice(at + 1)), key.slice(0, at)]
+}
+
 export function sortStartTimes(
   startTimes: ItineraryStartTime[]
 ): ItineraryStartTime[] {
