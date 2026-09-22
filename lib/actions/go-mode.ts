@@ -270,6 +270,8 @@ import {
   remainingAccessDistanceM,
   shouldQuietReplanAccessLeg,
   smoothDistanceFromRoute,
+  trackTransitPace,
+  transitPaceHoldsAccessReplan,
   trimQuietReplanHistory,
   willQuietReplanAccessLeg
 } from '../util/go-mode/deviation'
@@ -2797,6 +2799,19 @@ export function quietReplanAccessLeg() {
     if (goMode.riding?.tripId) return
 
     const currentLegIndex = goMode.routeMatch?.legIndex ?? 0
+
+    // ...and the same answer when the trip id has not landed YET (26.6). On
+    // 2026-09-22 09:33 the rider was aboard Orange Line 8148 for eighteen
+    // seconds before the riding fact existed, because 8148's feed record was
+    // 52 s stale and there was nothing to establish on; this re-plan filled
+    // the gap with a 284 m bike leg for a rider doing 15.2 m/s and pushed
+    // "Board METRO Orange Line" to someone already on it. Transit pace, held,
+    // on the next transit leg's own shape is a bus by any measure but a
+    // vehicle id — the same evidence the boarded-earlier swap that repaired
+    // it five seconds later stood on — and it asks nothing of the feed.
+    if (transitPaceHoldsAccessReplan(session.transitPace, currentLegIndex)) {
+      return
+    }
     const currentLeg = legs[currentLegIndex]
     // Index-preserving find (not a slice): the suffix from this index is what
     // the scoped splice below must keep byte-identical.
@@ -4990,8 +5005,33 @@ export function replanFromAboard(
         l?.transitLeg &&
         (l.trip?.gtfsId === riding.tripId || l.tripId === riding.tripId)
     )
+    // ...and when the fallback's leg is an ACCESS leg, the bus is the next
+    // transit leg of the ridden route, not the bike ride before it. The
+    // access-leg boarding (23.6) writes the riding fact on the leg the matcher
+    // is on, which is the bike or walk leg by construction; when the rider
+    // caught an earlier run than planned the trip is not in the plan, and
+    // anchoring on that leg made the splice alight at the ACCESS leg's end —
+    // on the 2026-09-22 09:33 replay, "ride 1:1268952 Marquette -> Lake St,
+    // then board 1:1273236 at Lake St" for a rider already 250 m past Lake St
+    // on 1268952, with "Board METRO Orange Line" pushed to them (26.6).
+    const ridingLegIndex = riding.legIndex ?? -1
+    const ridingLegIsAccess =
+      ridingLegIndex >= 0 && !(legs[ridingLegIndex] as any)?.transitLeg
+    const nextRiddenRouteLegIndex = ridingLegIsAccess
+      ? legs.findIndex(
+          (l: any, i: number) =>
+            i > ridingLegIndex &&
+            l?.transitLeg &&
+            riding.routeId != null &&
+            getLegRouteId(l) === riding.routeId
+        )
+      : -1
     const aboardLegIndex =
-      boardedLegIndex >= 0 ? boardedLegIndex : riding.legIndex ?? -1
+      boardedLegIndex >= 0
+        ? boardedLegIndex
+        : nextRiddenRouteLegIndex >= 0
+        ? nextRiddenRouteLegIndex
+        : ridingLegIndex
 
     // The route to preserve is the one the rider has NOT boarded yet — the leg
     // after this bus. riding.routeId used to be written here, which is the bus
@@ -5005,9 +5045,16 @@ export function replanFromAboard(
     // boardedRouteId is only for the pre-trip onboard flow, where there is no
     // index to start after; with one resolved the boarded leg is already behind
     // us, and passing it would skip the very route we are trying to keep.
+    //
+    // Asked from the leg the riding fact names, not from the corrected alight
+    // anchor above: for a boarding on an access leg that is the ridden route's
+    // own leg, which is exactly the route an automatic update must keep (23.2,
+    // 23.6). Only where the splice ALIGHTS moved in 26.6.
+    const keepRouteAfterIndex =
+      boardedLegIndex >= 0 ? boardedLegIndex : ridingLegIndex
     const keepRouteId = onwardTransitRouteId(itinerary, {
-      afterLegIndex: aboardLegIndex,
-      boardedRouteId: aboardLegIndex >= 0 ? null : riding.routeId ?? null
+      afterLegIndex: keepRouteAfterIndex,
+      boardedRouteId: keepRouteAfterIndex >= 0 ? null : riding.routeId ?? null
     })
 
     // Single-flight bookkeeping: same token/stuck-detection contract as
@@ -6770,7 +6817,7 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         // whatever the geometry says, so there is nothing to pay for.
         (position.coords.speed ?? 0) >= ACCESS_BOARD_MIN_SPEED_MPS
       ) {
-        session.accessBoard = trackAccessBoard(session.accessBoard, {
+        const accessBoardSample = {
           boardLeg: itinerary.legs[accessBoardLegIndex],
           boardLegIndex: accessBoardLegIndex,
           fixAccuracyM: position.coords.accuracy ?? null,
@@ -6793,9 +6840,22 @@ export function handlePositionUpdate(position: GeolocationPosition) {
             }
           ),
           vehicleMatch: goMode.vehicleMatch
+        }
+        session.accessBoard = trackAccessBoard(
+          session.accessBoard,
+          accessBoardSample
+        )
+        // The same fix, the same projection, minus the vehicle: what stands
+        // the quiet access re-plan down while the feed is too stale to name
+        // the bus (26.6). Keyed on the fix's own clock so a fix the stream
+        // delivers twice is counted once.
+        session.transitPace = trackTransitPace(session.transitPace, {
+          ...accessBoardSample,
+          nowMs: position.timestamp
         })
       } else {
         session.accessBoard = null
+        session.transitPace = null
       }
       if (
         accessBoardEstablished(session.accessBoard) &&

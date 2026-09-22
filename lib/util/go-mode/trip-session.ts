@@ -31,6 +31,7 @@ import type { MissedBusAttempt } from './missed-bus-recovery'
 import type { PacingCardState } from './pacing-card'
 import type { RiderSpeedAnchorBucket, RiderSpeedSample } from './rider-speed'
 import type { TimedSimulationPoint } from './geometry'
+import type { TransitPaceRun } from './deviation'
 
 export interface TripSession {
   /**
@@ -348,6 +349,14 @@ export interface TripSession {
   /** Monotonic floor for stopsRemaining — see latchStopsRemaining. */
   stopCountLatch: StopCountLatch | null
 
+  /**
+   * The run of access-leg fixes at transit pace on the next transit leg's own
+   * shape, vehicle or no vehicle — see TRANSIT_PACE_REPLAN_HOLD_FIXES in
+   * deviation.ts (backlog 26.6). What stands the quiet access re-plan down
+   * while the feed is too stale for the riding fact to exist yet.
+   */
+  transitPace: TransitPaceRun | null
+
   /** Vehicle-position polling interval. */
   vehiclePositionIntervalId: ReturnType<typeof setInterval> | null
 
@@ -405,6 +414,7 @@ export function createTripSession(): TripSession {
     simulationPointIndex: 0,
     staleStartOriginPending: null,
     stopCountLatch: null,
+    transitPace: null,
     vehiclePositionIntervalId: null,
     visibilityChangeHandler: null
   }

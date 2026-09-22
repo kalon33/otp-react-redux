@@ -1,6 +1,8 @@
 import type { Leg } from '@opentripplanner/types'
 
+import { accessBoardGates } from './riding'
 import { deviationThresholdM, shouldAutoReroute } from './notification-service'
+import type { AccessBoardSample } from './riding'
 import type { NotificationEvent } from './notification-service'
 
 /**
@@ -204,6 +206,102 @@ export function shouldQuietReplanAccessLeg(input: {
     distanceFromRoute != null &&
     Number.isFinite(distanceFromRoute) &&
     distanceFromRoute > deviationThresholdM(currentLeg)
+  )
+}
+
+/**
+ * Consecutive fixes of transit-pace motion on the next transit leg's own shape
+ * before the quiet access re-plan stands down (backlog 26.6).
+ *
+ * The re-plan's other guard is `riding.tripId` — evidence of a specific bus —
+ * and on 2026-09-22 09:33 that fact was four seconds late: vehicle 8148's feed
+ * record was 52 s stale (`lastSeen` 09:32:43, `STOPPED_AT` Lake St), so the
+ * matcher had nothing to establish on while the rider rode away from the
+ * platform on it. Meanwhile the matcher was held on the finished bike leg
+ * (the board time the app held for the bus leg was 09:40:11, so the transition
+ * gate refused it) and every metre down the busway was a metre "off" that bike
+ * leg. The scoped re-plan went out on the 09:33:48.999 fix and installed a
+ * 284 m BICYCLE leg for a rider doing 15.2 m/s.
+ *
+ * The fixes of that window, rider speed in m/s:
+ *
+ *   09:33:42.999 11.37 | :43.999 12.36 | :44.999 12.72 | :45.999 13.13
+ *   :46.999 13.30 | :47.999 14.49 | :48.999 15.21 (the re-plan's own fix)
+ *
+ * — six distinct fixes at or above {@link ACCESS_BOARD_MIN_SPEED_MPS} by the
+ * one the re-plan went out on, all within 5 m of the Orange Line's shape. The
+ * drift crossed the bike leg's deviation threshold on the 09:33:46.999 fix
+ * (`UPDATE_PROGRESS status deviated` 09:33:47.081 on the day), the fourth of
+ * them, so four is the most this could ask and still be in hand on the first
+ * tick a re-plan could ever run. Three keeps one fix of margin for a phone
+ * that drops one, and is still more than a bad fix can manufacture: the one
+ * transit-pace sample on record from a rider on a bicycle is a single
+ * 13.0 m/s spike, 1,073 m off the corridor (`bike-false-board-1029`,
+ * 10:34:13).
+ *
+ * Counted in FIXES, not ticks: the stream delivers some fixes twice (the
+ * 09:33:48.999 and :53.999 fixes above are each dispatched twice), and a
+ * repeated fix is not a second observation.
+ */
+export const TRANSIT_PACE_REPLAN_HOLD_FIXES = 3
+
+/** A run of fixes that look like a rider carried along the next transit leg. */
+export interface TransitPaceRun {
+  /** The transit leg whose shape the run tracks. */
+  boardLegIndex: number
+  /** Distinct qualifying fixes in the run. */
+  fixes: number
+  /** The last fix folded in, by its own clock. */
+  lastFixMs: number
+  /** The access leg the matcher is on. */
+  legIndex: number
+}
+
+/**
+ * Fold one access-leg fix into the transit-pace run.
+ *
+ * The same three facts {@link accessBoardGates} asks of a boarding — transit
+ * pace, the fix on the next transit leg's own shape inside the establish
+ * bound, a fix good enough to place the rider — and NOT the fourth, a vehicle
+ * match. That is the whole point: this is the evidence-free arm, for exactly
+ * the minutes when the feed is too stale to name the bus. It never boards
+ * anybody; all it does is keep the quiet re-plan from answering "the rider is
+ * on a bus" with a bicycle.
+ */
+export function trackTransitPace(
+  prev: TransitPaceRun | null,
+  sample: AccessBoardSample
+): TransitPaceRun | null {
+  const gates = accessBoardGates({ ...sample, vehicleMatch: null })
+  if (!gates.transitPace || !gates.onCorridor || !gates.fixSound) return null
+  const { boardLegIndex, legIndex, nowMs } = sample
+  if (
+    !prev ||
+    prev.legIndex !== legIndex ||
+    prev.boardLegIndex !== boardLegIndex
+  ) {
+    return { boardLegIndex, fixes: 1, lastFixMs: nowMs, legIndex }
+  }
+  if (nowMs <= prev.lastFixMs) return prev
+  return { ...prev, fixes: prev.fixes + 1, lastFixMs: nowMs }
+}
+
+/**
+ * Should the quiet access re-plan stand down because the rider is, by every
+ * measure short of a vehicle id, already on the bus?
+ *
+ * Only for the access leg the run was measured on. Silence is not asked for
+ * anywhere else: a rider who slows below transit pace or leaves the transit
+ * leg's shape resets the run on that very fix, and the re-plan is theirs again.
+ */
+export function transitPaceHoldsAccessReplan(
+  run: TransitPaceRun | null | undefined,
+  legIndex: number
+): boolean {
+  return (
+    !!run &&
+    run.legIndex === legIndex &&
+    run.fixes >= TRANSIT_PACE_REPLAN_HOLD_FIXES
   )
 }
 
