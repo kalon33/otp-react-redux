@@ -540,6 +540,8 @@ components:
     returnBannerArrived: You've arrived — tap to finish
     returnBannerLive: On trip · Next stop {stop} · Arrive {eta} — tap to return
     returnBannerNoProgress: Trip in progress — tap to return
+    returnBannerWaiting: Waiting at {stop} — tap to return
+    returnBannerWaitingTime: Waiting at {stop} · {time} — tap to return
     returnCountdownLabel: Leave for return in
     returnLeaveBy: Leave by {time}
     returnLeaveNow: Leave now

@@ -533,6 +533,8 @@ components:
     returnBannerArrived: "Vous êtes arrivé — touchez pour terminer"
     returnBannerLive: "En trajet · Prochain arrêt {stop} · Arrivée {eta} — touchez pour revenir"
     returnBannerNoProgress: "Trajet en cours — touchez pour revenir"
+    returnBannerWaiting: "En attente à {stop} — touchez pour revenir"
+    returnBannerWaitingTime: "En attente à {stop} · {time} — touchez pour revenir"
     returnCountdownLabel: "Départ du retour dans"
     returnLeaveBy: "Partir à {time}"
     returnLeaveNow: "Partez maintenant"

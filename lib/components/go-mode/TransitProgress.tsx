@@ -10,6 +10,7 @@ import {
   NO_LIVE_VEHICLE_POLLS
 } from '../../util/go-mode/vehicle-matching'
 import { getModeIcon } from '../../util/go-mode/mode-icon'
+import { isWaitingForDeparture } from '../../util/go-mode/waiting-at-stop'
 import { legBoard } from '../../util/go-mode/live-itinerary'
 import { VEHICLE_MATCH_FRESH_MS } from '../../util/go-mode/transit-trust'
 import type { LiveLegTime } from '../../util/go-mode/types'
@@ -87,11 +88,15 @@ const TransitProgress = ({
   // may not be shown as a departure time — but it is still a fact that the
   // departure has not happened.
   const departureMs = Number.isFinite(boardMs) ? boardMs : null
-  const waiting =
-    !aboard &&
-    !!leg.transitLeg &&
-    departureMs != null &&
-    Date.now() < departureMs
+  // Lives in util/go-mode/waiting-at-stop since 2026-09-22: the backgrounded
+  // banner makes the same claim on a different surface (13.9's second half)
+  // and must not grow a second copy of this test.
+  const waiting = isWaitingForDeparture({
+    aboard,
+    departureMs,
+    leg,
+    nowMs: Date.now()
+  })
 
   // Only an assessed distrust suppresses (stopsTrusted is unset on legacy
   // trusted paths); a deviated route match means the count is being measured

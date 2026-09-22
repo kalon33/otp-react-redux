@@ -389,6 +389,36 @@ const PICKER_RADIUS_METERS = 750
 // picker takes the fastest anyway, so 3 keeps the fetch light.
 const ACCESS_REPLAN_NUM_ITINERARIES = 3
 
+/**
+ * The time format every NOW-anchored Go Mode plan request uses. Backlog 18.4.
+ *
+ * `coreUtils.time.OTP_API_TIME_FORMAT` is `"HH:mm"`, so a re-plan issued at
+ * 18:26:55.685 asked OTP for `time: "18:26"` and OTP — answering the question
+ * it was asked — returned an itinerary starting at 18:26:00. The plan was 0-59
+ * s stale before it was rendered, and `determineTripStatus` / `computeCurrentDelay`
+ * faithfully reported the rider as `behind` by exactly the flooring: +55.707 s
+ * on that one, +49.105 s on ride 2's 21:35:51 swap. All 35 `REROUTE_SNAPSHOT`s
+ * on that ride and all 17 on the other show the same 1:1 with no exception.
+ *
+ * OTP is innocent and accepts seconds. Measured twice, both read-only and
+ * serial:
+ *
+ *   desktop OTP 127.0.0.1:8090 (2026-09-18) — "18:26" -> 18:26:00,
+ *     "18:26:55" -> 18:26:55, "18:26:30" -> 18:26:30
+ *   PRODUCTION https://api.transit-nav.com:9966/otp/gtfs/v1 (2026-09-22),
+ *     bike-only, numItineraries 1, 44.82517,-93.290862 -> 44.816546,-93.30986 —
+ *     `time: "14:26"` -> startTime 14:26:00, `time: "14:26:55"` -> 14:26:55
+ *
+ * Used ONLY where the anchor is the present instant. A query anchored to a
+ * FUTURE bus arrival (the riding branch of `currentPositionOrigin`, the
+ * arrive-by target, the onboard alight candidates) keeps `OTP_API_TIME_FORMAT`:
+ * flooring is conservative there, and the rider's own minute picker in
+ * `plan.js` is a minute by construction.
+ *
+ * Do NOT "fix" this by editing `node_modules/@opentripplanner/core-utils`.
+ */
+const GO_MODE_API_TIME_FORMAT = 'HH:mm:ss'
+
 // A single wild GPS fix (urban multipath) can put the matched distance
 // kilometers off-route for one tick — 5836 m mid-ride on 7/22, while riding
 // the bus dead on its line. Deviation handling only sees a distance that
@@ -2145,6 +2175,10 @@ function currentPositionOrigin(state: any): {
       time: format(zoned, coreUtils.time.OTP_API_TIME_FORMAT)
     }
   }
+  // Anchored to NOW, so it asks for the second it is actually at (18.4).
+  // `coreUtils.time.getCurrentTime` is `format(now, OTP_API_TIME_FORMAT)` and
+  // would floor this request to the minute it started in.
+  const nowZoned = utcToZonedTime(getCurrentTime().getTime(), homeTimezone)
   return {
     date: coreUtils.time.getCurrentDate(homeTimezone),
     from: {
@@ -2153,7 +2187,7 @@ function currentPositionOrigin(state: any): {
       lon: lastPosition.coords.longitude,
       name: 'Current location'
     },
-    time: coreUtils.time.getCurrentTime(homeTimezone)
+    time: format(nowZoned, GO_MODE_API_TIME_FORMAT)
   }
 }
 
@@ -2865,9 +2899,11 @@ export function quietReplanAccessLeg() {
     //
     // The projected instant rides along with the projected point: an origin
     // the rider reaches at T+latency, time-anchored to T, describes a journey
-    // that began before they got there. This is NOT a change to the time
-    // FORMAT — `OTP_API_TIME_FORMAT` still floors to the minute, and that
-    // flooring is backlog 18.4's.
+    // that began before they got there. The format is the other half and is
+    // now fixed too: `GO_MODE_API_TIME_FORMAT` asks for the second (18.4),
+    // where `OTP_API_TIME_FORMAT` floored the projected instant back to the
+    // minute it fell in — which is why 2 of the 5 measured 09-21 re-plans
+    // still opened 41.1 s and 42.7 s `behind` with only the projection in.
     const projectAt = (latencyMs: number): ProjectedOrigin =>
       projectReplanOrigin({
         accuracyM: lastPosition.coords.accuracy,
@@ -2888,7 +2924,10 @@ export function quietReplanAccessLeg() {
       const z = utcToZonedTime(projected.atMs, homeTimezone)
       return {
         date: format(z, coreUtils.time.OTP_API_DATE_FORMAT),
-        time: format(z, coreUtils.time.OTP_API_TIME_FORMAT)
+        // To the SECOND (18.4). 24.3 moved this anchor forward to where the
+        // rider will be when the answer lands; flooring it to the minute threw
+        // the projection away again whenever it did not cross a boundary.
+        time: format(z, GO_MODE_API_TIME_FORMAT)
       }
     }
     const scopedProjection = projectAt(session.replanLatencyMs.scoped)
@@ -3188,7 +3227,11 @@ export function captureRerouteSnapshot() {
       modeSettings,
       numItineraries,
       routingPreferences,
-      time: format(zoned, coreUtils.time.OTP_API_TIME_FORMAT),
+      // Anchored to `getCurrentTime()` above, so it asks to the second (18.4).
+      // This is the query REROUTE_SNAPSHOT records: it has to be IDENTICAL to
+      // the live path it exists to reproduce, or the recording answers a
+      // different question from the one the rider got.
+      time: format(zoned, GO_MODE_API_TIME_FORMAT),
       to
     }
 
@@ -5667,7 +5710,10 @@ export function refreshReturnPlan() {
       modeSettings,
       numItineraries,
       routingPreferences: state.otp.currentQuery?.routingPreferences,
-      time: format(zoned, coreUtils.time.OTP_API_TIME_FORMAT),
+      // The `Math.max` above can land this exactly on NOW, and flooring a
+      // now-anchored request puts the refreshed return plan 0-59 s in the past
+      // (18.4).
+      time: format(zoned, GO_MODE_API_TIME_FORMAT),
       to: {
         lat: plan.origin.lat,
         lon: plan.origin.lon,
@@ -5775,7 +5821,8 @@ export function startReturnTrip() {
           modeSettings,
           numItineraries,
           routingPreferences: state.otp.currentQuery?.routingPreferences,
-          time: format(zoned, coreUtils.time.OTP_API_TIME_FORMAT),
+          // Departing NOW (18.4).
+          time: format(zoned, GO_MODE_API_TIME_FORMAT),
           to
         })
       )
@@ -6763,7 +6810,10 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       currentPosition,
       // Aboard, short of this leg's first stop: the gap to the anchor is not a
       // deviation, so the clock decides the status (22.1).
-      aboardBeforeLeg
+      aboardBeforeLeg,
+      // ...and the evidenced riding fact, which ends the platform wait: a
+      // rider the feed has confirmed aboard is riding, not standing (18.6).
+      goMode.riding?.legIndex ?? null
     )
 
     // The rider's MEASURED pace, and the missed-bus classifier's last verdict.
