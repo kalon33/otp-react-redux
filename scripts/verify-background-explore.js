@@ -53,6 +53,29 @@ async function main() {
   await page.goto(APP, { timeout: 60000, waitUntil: 'networkidle2' })
   await page.waitForFunction(() => !!window.store, { timeout: 30000 })
 
+  /**
+   * Import go-mode.ts ONCE and keep the module on `window.__gm`, so every step
+   * below dispatches from a SYNCHRONOUS evaluate.
+   *
+   * 2026-09-21 this script failed the nightly with `Protocol error
+   * (Runtime.callFunctionOn): Promise was collected` immediately after
+   * "[reroute] planner state untouched" — i.e. on the first
+   * `page.evaluate(async () => { await import(…); dispatch(…) })`. An async
+   * evaluate hands puppeteer a page-side promise to await, and a promise the
+   * page's heap collects while a dispatch is re-rendering the app takes the
+   * run down with an error that says nothing about Go Mode. It passed on
+   * 09-22 on a tree with no relevant change, which is the signature of a
+   * harness race rather than a defect. A sync evaluate returns its value
+   * inline and has no promise to lose (13.6).
+   */
+  const stashGoMode = () =>
+    page.evaluate(async () => {
+      // eslint-disable-next-line import/no-absolute-path
+      window.__gm = await import('/lib/actions/go-mode.ts')
+      return true
+    })
+  await stashGoMode()
+
   // ---- plan a trip through the app's own pipeline ----
   await page.evaluate(
     async (from, to) => {
@@ -156,10 +179,8 @@ async function main() {
   console.log('[reroute] planner state untouched (searchId/searches/query)')
 
   // ---- (2) background the trip: planner + banner ----
-  await page.evaluate(async () => {
-    // eslint-disable-next-line import/no-absolute-path
-    const goMode = await import('/lib/actions/go-mode.ts')
-    window.store.dispatch(goMode.backgroundGoMode())
+  await page.evaluate(() => {
+    window.store.dispatch(window.__gm.backgroundGoMode())
   })
   await page.waitForSelector(BANNER, { timeout: 10000 })
   const bg = await page.evaluate((sel) => {
@@ -192,10 +213,8 @@ async function main() {
   console.log('[return] banner tap restored the Go Mode screen')
 
   // ---- (4) background again and adopt an alternate from the planner ----
-  await page.evaluate(async () => {
-    // eslint-disable-next-line import/no-absolute-path
-    const goMode = await import('/lib/actions/go-mode.ts')
-    window.store.dispatch(goMode.backgroundGoMode())
+  await page.evaluate(() => {
+    window.store.dispatch(window.__gm.backgroundGoMode())
   })
   await page.waitForSelector(BANNER, { timeout: 10000 })
   // Different itineraries can share a startTime, so assert the swap by
@@ -247,15 +266,13 @@ async function main() {
   // The opposite of case (1) by design. An automatic re-route must never
   // disturb the planner; a search the rider asked for IS the planner, so it
   // moves activeSearchId and the query origin and lands on the results screen.
-  await page.evaluate(async () => {
-    // eslint-disable-next-line import/no-absolute-path
-    const goMode = await import('/lib/actions/go-mode.ts')
-    window.store.dispatch(goMode.returnToGoMode())
+  await page.evaluate(() => {
+    window.store.dispatch(window.__gm.returnToGoMode())
     window.__preBrowse = {
       activeSearchId: window.store.getState().otp.activeSearchId,
       pos: window.store.getState().otp.goMode.tracking.lastPosition
     }
-    window.store.dispatch(goMode.browseFromCurrentPosition())
+    window.store.dispatch(window.__gm.browseFromCurrentPosition())
   })
   await page.waitForFunction(
     () => {
@@ -330,11 +347,9 @@ async function main() {
 
   // endGoMode must put the rider's original origin back, or the planner is
   // left showing "Current location" after the trip.
-  const restored = await page.evaluate(async () => {
-    // eslint-disable-next-line import/no-absolute-path
-    const goMode = await import('/lib/actions/go-mode.ts')
+  const restored = await page.evaluate(() => {
     const originalFrom = window.store.getState().otp.goMode.originalFrom
-    window.store.dispatch(goMode.endGoMode())
+    window.store.dispatch(window.__gm.endGoMode())
     return {
       after: JSON.stringify(window.store.getState().otp.currentQuery.from),
       originalFrom: JSON.stringify(originalFrom)
@@ -351,10 +366,8 @@ async function main() {
   console.log('[browse] endGoMode restored the original origin')
 
   // Re-arm a running, backgrounded trip for case (6).
-  await page.evaluate(async () => {
-    // eslint-disable-next-line import/no-absolute-path
-    const goMode = await import('/lib/actions/go-mode.ts')
-    window.store.dispatch(goMode.beginGoMode(window.__bgExploreItinerary))
+  await page.evaluate(() => {
+    window.store.dispatch(window.__gm.beginGoMode(window.__bgExploreItinerary))
   })
   await page.waitForFunction(
     () => window.store.getState().otp.goMode.isActive,
@@ -362,14 +375,13 @@ async function main() {
   )
 
   // ---- (6) reload while backgrounded -> resumes backgrounded ----
-  await page.evaluate(async () => {
-    // eslint-disable-next-line import/no-absolute-path
-    const goMode = await import('/lib/actions/go-mode.ts')
-    window.store.dispatch(goMode.backgroundGoMode())
+  await page.evaluate(() => {
+    window.store.dispatch(window.__gm.backgroundGoMode())
   })
   await page.waitForSelector(BANNER, { timeout: 10000 })
   await page.reload({ timeout: 60000, waitUntil: 'networkidle2' })
   await page.waitForFunction(() => !!window.store, { timeout: 30000 })
+  await stashGoMode()
   await page.waitForSelector(BANNER, { timeout: 15000 })
   const reloaded = await page.evaluate((sel) => {
     const s = window.store.getState().otp

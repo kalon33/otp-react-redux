@@ -131,14 +131,32 @@ async function main() {
       transitLeg: true,
       trip: { gtfsId: tripId }
     }
+    // The plan handed to Go Mode must BEGIN where the rider is standing, not
+    // at the query origin they left 926 m back. 12.13's recoverStaleStartOrigin
+    // (go-mode.ts:1490-1545, START_ORIGIN_MAX_M = 500 m) re-plans any plan
+    // installed more than that from the rider's fix, and a re-plan of this pair
+    // comes back all-bike: measured 2026-09-22, `[go-mode] plan origin 926m
+    // from the rider - re-planning from here (12.13)` -> START_REROUTE ->
+    // AUTO_REPLAN, and the activeItinerary went BICYCLE,BUS -> BICYCLE 0.5 s
+    // into phase 2. Every later phase then watched a trip with no boarding in
+    // it and could not alert, which is what "expected exactly 1 re-alert, got
+    // 0" has meant on every red night since. So the itinerary starts at the
+    // bike leg, with its `from` moved to the teleported fix (the field
+    // originGapMeters actually reads) while the geometry is left untouched, so
+    // the rider is still 40 % along a real polyline with a real 6 min to ride.
+    const riderAt = { lat: poly[i][0], lon: poly[i][1] }
+    const startedBikeLeg = {
+      ...bikeLeg,
+      from: { ...bikeLeg.from, lat: riderAt.lat, lon: riderAt.lon }
+    }
     window.__itin = {
       ...base,
       endTime: busLeg.endTime,
-      legs: [...base.legs.slice(0, bikeLegIndex + 1), busLeg]
+      legs: [startedBikeLeg, busLeg]
     }
     return {
-      at: { lat: poly[i][0], lon: poly[i][1] },
-      boardLegIndex: bikeLegIndex + 1,
+      at: riderAt,
+      boardLegIndex: 1,
       busStart,
       remainingRideSecs: Math.round(remainingRideSecs)
     }
