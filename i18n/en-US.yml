@@ -738,6 +738,8 @@ components:
         A transit connection was found, but it was outside the search window,
         try adjusting your search window, using the vehicle types you selected.
       header: No transit connection in search window
+    NO_TRANSIT_OPTION_FOUND:
+      advisory: No transit option was found for this search.
     OTP_RR_TRIP_IN_PAST:
       body: One or more of these itineraries ends in the past.
       header: Trip has already occurred
