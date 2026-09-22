@@ -7,6 +7,10 @@ import {
   getMockInitialState,
   mockWithProvider
 } from '../../test-utils/mock-data/store'
+import {
+  isConnectionFirstEnabled,
+  resetConnectionFirstFlagCache
+} from '../../../lib/util/connection-first'
 import { setDefaultTestTime } from '../../test-utils'
 import SettingsScreen from '../../../lib/components/user/settings-screen'
 
@@ -172,6 +176,21 @@ describe('components > user > settings screen (backlog 9.1)', () => {
       .find('input#id-query-param-turnByTurn')
       .simulate('change', { target: { checked: true } })
     expect(ofType(store, 'SET_TURN_CUE_DEFAULT')).toHaveLength(1)
+    wrapper.unmount()
+    expect(ofType(store, 'ROUTING_REQUEST')).toHaveLength(0)
+  })
+
+  it('the "choose stops first" results flag starts off, and the checkbox turns it on without a search (21.5)', () => {
+    window.localStorage.clear()
+    resetConnectionFirstFlagCache()
+    const { store, wrapper } = renderScreen()
+    const box = () => wrapper.find('input#id-query-param-connectionFirst')
+    expect(box().prop('checked')).toBe(false)
+    box().simulate('change', { target: { checked: true } })
+    expect(isConnectionFirstEnabled()).toBe(true)
+    resetConnectionFirstFlagCache()
+    // Persisted, so it survives a reload of the app.
+    expect(isConnectionFirstEnabled()).toBe(true)
     wrapper.unmount()
     expect(ofType(store, 'ROUTING_REQUEST')).toHaveLength(0)
   })
