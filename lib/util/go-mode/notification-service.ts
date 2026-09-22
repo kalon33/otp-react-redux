@@ -277,9 +277,10 @@ export function checkAlightAlerts(
 // bus's feed record — and nothing else — drives a heads-up and an at-the-stop
 // alert. Stage 1 fires when the live board prediction is inside
 // BOARD_APPROACH_SECONDS or the bus is inside BOARD_APPROACH_METRES of the
-// stop; stage 2 when the bus's own next stop IS the boarding stop or it is
-// within BOARD_ARRIVE_METRES (the same figure classifyMissedBus uses for "the
-// bus is at the stop", so the two can never tell contradictory stories).
+// stop; stage 2 only when the bus's own position is within BOARD_ARRIVE_METRES
+// (the same figure classifyMissedBus uses for "the bus is at the stop"). Its
+// next stop being the boarding stop is NOT stage 2 (26.3): missed-bus reads
+// that as "still coming", which is what it means, and never as "here".
 export const BOARD_APPROACH_SECONDS = 240
 export const BOARD_APPROACH_METRES = 1500
 export const BOARD_ARRIVE_METRES = VEHICLE_AT_BOARD_STOP_M
@@ -498,23 +499,41 @@ export function checkBoardVehicleApproach(
     return null
   }
 
+  // "Bus here" is a statement about where the bus IS, so only the bus's own
+  // position can make it. The vehicle's `nextStopId` naming the boarding stop
+  // is not that: it is true for the whole run from the previous stop, and on
+  // 2026-09-22 (backlog 26.3) that previous stop was the Burnsville terminus —
+  // "Bus here" fired twice, at 08:16:52 and 08:38:56, for buses parked 6.0 km
+  // south with `nextStopId` already set to I-35W & 98th St. A bus that has the
+  // boarding stop next but is still kilometres out is at most approaching, and
+  // only when the feed's prediction or its distance says it is close
+  // (`comingSoon` below), judged against the prediction's real seconds rather
+  // than a forced zero. The guard above already silences a bus whose next stop
+  // is BEYOND the boarding.
   const atStop =
-    (boardStopId != null && vehicle.nextStopId === boardStopId) ||
-    (vehicle.distanceToBoardStopM != null &&
-      vehicle.distanceToBoardStopM <= BOARD_ARRIVE_METRES)
+    vehicle.distanceToBoardStopM != null &&
+    vehicle.distanceToBoardStopM <= BOARD_ARRIVE_METRES
   // A live prediction already in the past with a fresh not-yet-arrived vehicle
-  // record means "late but coming" — still worth the heads-up.
+  // record means "late but coming" — still worth the heads-up, but only while
+  // the bus's own position agrees it is close. A past prediction for a bus
+  // still kilometres out is refuted by that position: on 2026-09-22 the
+  // planned run's "realtime" 08:15:00 was still being published at 08:37 with
+  // its bus 5.3 km south; read as "late but coming" that is "1 min" (26.3).
+  const busIsFar =
+    vehicle.distanceToBoardStopM != null &&
+    vehicle.distanceToBoardStopM > BOARD_APPROACH_METRES
   const comingSoon =
     (liveBoardEpochMs != null &&
-      liveBoardEpochMs - nowMs <= BOARD_APPROACH_SECONDS * 1000) ||
+      liveBoardEpochMs - nowMs <= BOARD_APPROACH_SECONDS * 1000 &&
+      !(liveBoardEpochMs <= nowMs && busIsFar)) ||
     (vehicle.distanceToBoardStopM != null &&
       vehicle.distanceToBoardStopM <= BOARD_APPROACH_METRES)
   if (!atStop && !comingSoon) return null
 
   // Gate B — can the rider actually be there? How long the bus is still going
-  // to be reachable for: at the stop it is leaving now; otherwise the feed's
-  // own prediction, or, with no prediction behind the distance trigger, the
-  // window that let this alert fire at all.
+  // to be reachable for: at the stop (by its own position) it is leaving now;
+  // otherwise the feed's own prediction, or, with no prediction behind the
+  // distance trigger, the window that let this alert fire at all.
   const secondsUntilVehicle = atStop
     ? 0
     : liveBoardEpochMs != null
