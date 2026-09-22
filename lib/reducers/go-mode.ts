@@ -1092,7 +1092,19 @@ const goMode = handleActions<GoModeState, any>(
               // as a START_GO_MODE (daemon page `notification-repeat`). A
               // re-plan onto a different route or a different boarding stop
               // carries a different context and still re-arms.
-              id.startsWith('LEAVE_SOON_')
+              id.startsWith('LEAVE_SOON_') ||
+              // "Missed bus" survives its OWN recovery. The missed-bus replan
+              // dispatches START_GO_MODE, which used to wipe the id that had
+              // just been sent — and on 2026-09-21 the replan landed on the
+              // very same trip (1:1273254) at the very same stop (1:17781)
+              // with the same board epoch, so the next tick raised an
+              // identical claim and pushed it again 21 s later (17:05:45 and
+              // 17:06:06, both with an auto-applied re-plan behind them;
+              // daemon page `notification-repeat`). The id carries the route,
+              // the boarding stop and the effective departure, so a recovery
+              // onto a genuinely different departure has a different id and
+              // still re-arms — the same self-limiting rule as LEAVE_SOON_.
+              id.startsWith('MISSED_BUS_')
           )
         },
         originalFrom: originalFrom ?? null,

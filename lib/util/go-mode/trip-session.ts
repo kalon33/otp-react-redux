@@ -115,6 +115,30 @@ export interface TripSession {
   lastAutoAnchorMs: number | null
 
   /**
+   * The last live record of the BOARDING trip's own vehicle, carried across a
+   * vehicle poll that came back empty.
+   *
+   * REALTIME_VEHICLE_POSITIONS_RESPONSE `$set`s the route's vehicle list
+   * (create-otp-reducer :933), so a response carrying zero vehicles erases
+   * every vehicle the app knew about for that route until the next poll
+   * refills it. On the 2026-09-21 17:04 ride 15 of 124 polls for route 1:904
+   * came back empty — and MISSED_BUS fired 0.9 s after two of them (17:05:45
+   * after the 17:05:44 empty poll, 17:06:06 after the 17:06:05 one) while the
+   * bus was 2.5 km north with the boarding stop as its next stop. Every other
+   * tick in that window carried 12 vehicles.
+   *
+   * Only the boarding trip's record is kept, only here, and its age is
+   * recomputed from the feed's own `seconds` on every tick, so a carried
+   * record never claims to be fresher than it is; `seenAtMs` bounds it as well
+   * for the vehicles whose feed publishes no timestamp at all.
+   */
+  lastBoardVehicle: {
+    seenAtMs: number
+    tripId: string
+    vehicle: any
+  } | null
+
+  /**
    * The boarding being watched for departure jumps, and what the rider was last
    * told about it (see departure-drift.ts). Must survive a tick, never a trip.
    */
@@ -308,6 +332,7 @@ export function createTripSession(): TripSession {
     gpsWatchdogIntervalId: null,
     lastArrivedFixMs: null,
     lastAutoAnchorMs: null,
+    lastBoardVehicle: null,
     lastDepartureBaseline: null,
     lastLiveLegTimesAt: 0,
     lastPacingCard: null,

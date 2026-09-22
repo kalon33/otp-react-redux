@@ -1756,6 +1756,80 @@ describe('missed-bus detection', () => {
       ).toBeNull()
     })
 
+    it('a record with no feed timestamp counts, as it does for the approach alert', () => {
+      // checkBoardVehicleApproach treats a null ageSec as fresh (:394, and
+      // isVehicleRecordFresh) because Metro Transit publishes no lastUpdated
+      // for a good share of in-service vehicles. This guard used to require a
+      // timestamp, so the two alerts disagreed about the very same record.
+      expect(
+        classifyMissedBus(
+          baseInput({
+            boardVehicle: {
+              ageSec: null,
+              distanceToBoardStopM: null,
+              nextStopId: '1:stop-queen'
+            },
+            liveLegTimes: { 1: { boardEpoch: BOARD, realtime: true } },
+            nowMs: BOARD + 100000
+          })
+        )
+      ).toBeNull()
+    })
+
+    it('bus short of the stop on its own run + rider AT the stop -> null (25.1)', () => {
+      // 2026-09-21: the bus was five stops back with the boarding stop still
+      // ahead of it, 2.5 km up I-35W — too far for the 250 m test, and its
+      // nextStopId was not yet the boarding stop on the earlier polls.
+      expect(
+        classifyMissedBus(
+          baseInput({
+            boardVehicle: {
+              ageSec: 62,
+              distanceToBoardStopM: 2527,
+              nextStopId: '1:stop-upstream',
+              passedBoardStop: false
+            },
+            liveLegTimes: { 1: { boardEpoch: BOARD, realtime: true } },
+            nowMs: BOARD + 100000
+          })
+        )
+      ).toBeNull()
+    })
+
+    it('…but only for a rider who is actually at the stop', () => {
+      const ctx = classifyMissedBus(
+        baseInput({
+          boardVehicle: {
+            ageSec: 62,
+            distanceToBoardStopM: 2527,
+            nextStopId: '1:stop-upstream',
+            passedBoardStop: false
+          },
+          liveLegTimes: { 1: { boardEpoch: BOARD, realtime: true } },
+          nowMs: BOARD + 100000,
+          riderPosition: FAR_AWAY
+        })
+      )
+      expect(ctx?.definitive).toBe(true)
+    })
+
+    it('a bus we can SEE is past the stop is gone, radius or no radius', () => {
+      // 200 m beyond the kerb is inside VEHICLE_AT_BOARD_STOP_M and departed.
+      const ctx = classifyMissedBus(
+        baseInput({
+          boardVehicle: {
+            ageSec: 20,
+            distanceToBoardStopM: 200,
+            nextStopId: '1:stop-downstream',
+            passedBoardStop: true
+          },
+          liveLegTimes: { 1: { boardEpoch: BOARD, realtime: true } },
+          nowMs: BOARD + 100000
+        })
+      )
+      expect(ctx?.definitive).toBe(true)
+    })
+
     it('a stale vehicle record is not evidence — classification proceeds', () => {
       const ctx = classifyMissedBus(
         baseInput({

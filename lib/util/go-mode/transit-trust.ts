@@ -293,6 +293,49 @@ export function stopsAheadFromNextStopId(
 }
 
 /**
+ * Has the bus already been past a given stop on its own run?
+ *
+ * Answered from the TRIP's ordered stop list (transitIndex.trips[id].stopTimes
+ * — fetched every tick by refreshLiveLegTimes) rather than the leg's, because
+ * the leg only knows the stops between boarding and alighting. On 2026-09-21
+ * the planned Orange Line run was at Marquette & 11th (`1:53301`), five stops
+ * BEFORE the boarding stop `1:17781` and not on the board leg at all, so a
+ * leg-level lookup cannot tell "still coming, 2.5 km back" from "long gone".
+ *
+ * `null` means unanswerable — the trip record is not loaded, or one of the two
+ * stops is not in its list — and every caller must treat that as no evidence
+ * rather than as a "no".
+ *
+ * First occurrence wins. A trip that serves the same stop twice (a loop) would
+ * be judged against its first visit; no Metro Transit pattern in the graph
+ * does, and a wrong answer there is a "still coming", the safe direction.
+ */
+export function vehiclePassedStopOnTrip(
+  stopIdsInOrder: Array<string | null | undefined> | null | undefined,
+  stopId: string | null | undefined,
+  nextStopId: string | null | undefined
+): boolean | null {
+  if (!Array.isArray(stopIdsInOrder) || !stopIdsInOrder.length) return null
+  if (stopId == null || nextStopId == null) return null
+  const stopIdx = stopIdsInOrder.indexOf(stopId)
+  const nextIdx = stopIdsInOrder.indexOf(nextStopId)
+  if (stopIdx === -1 || nextIdx === -1) return null
+  // "Next stop is the one we care about" is not past it — the bus is pulling in.
+  return nextIdx > stopIdx
+}
+
+/** The trip's stops in service order, as transitIndex.trips[id] stores them. */
+export function tripStopIdsInOrder(
+  trip: {
+    stopTimes?: Array<{ stop?: { gtfsId?: string; id?: string } }>
+  } | null
+): string[] | null {
+  const stopTimes = trip?.stopTimes
+  if (!Array.isArray(stopTimes) || !stopTimes.length) return null
+  return stopTimes.map((st) => st?.stop?.id ?? st?.stop?.gtfsId ?? '')
+}
+
+/**
  * Is the rider's own GPS sound enough to drive stop counting? The same rule
  * getNextStopOnRide already applies (match anchored to the leg the rider is
  * on, and on-route), extended with fix staleness and accuracy: a 20s-old or

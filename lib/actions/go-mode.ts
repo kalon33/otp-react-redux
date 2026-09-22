@@ -94,6 +94,9 @@ import {
   shouldRebindRidingTrip,
   shouldReplanBoardedEarlier,
   stopsAheadFromNextStopId,
+  tripStopIdsInOrder,
+  VEHICLE_RECORD_STALE_SEC,
+  vehiclePassedStopOnTrip,
   vehicleProgressOnLeg
 } from '../util/go-mode/transit-trust'
 import { getRoutingProfile } from '../util/routing-profiles'
@@ -124,7 +127,10 @@ import type {
   LiveLegTime,
   RidingState
 } from '../util/go-mode/types'
-import { spliceAccessOntoItinerary } from '../util/go-mode/access-splice'
+import {
+  dropDegenerateAccessLeg,
+  spliceAccessOntoItinerary
+} from '../util/go-mode/access-splice'
 import { legAlight } from '../util/go-mode/live-itinerary'
 import {
   buildBannedRoutes,
@@ -2514,7 +2520,7 @@ export function applyAutoReroute(
     // the MODE rule, and `pickAccessReplanCandidate` is the picker that states
     // it: fastest access-only itinerary, and never a silent downgrade from
     // cycling to a long walk.
-    const best = pickHopFreeSibling(
+    const picked = pickHopFreeSibling(
       keepRouteId
         ? pickSameRouteReroute(rerouteCandidates, keepRouteId)
         : pickAccessReplanCandidate(rerouteCandidates, {
@@ -2532,6 +2538,10 @@ export function applyAutoReroute(
         toleranceMs: tokenHopToleranceMs(state)
       }
     )
+    // A rider who is already at the stop does not get a leg to walk to it.
+    // The 2026-09-21 missed-bus replan opened on a 3.33 m, one-second bike
+    // ride to a platform the rider had been standing on since 16:57.
+    const best = picked ? dropDegenerateAccessLeg(picked) : picked
     if (!best) {
       // No same-route option (last run of the day, outside the search
       // window...): settle the attempt instead of auto-swapping — 'found'
@@ -7029,14 +7039,51 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     const boardLegIndex = findBoardLegIndex(itinerary.legs, boardSearchLegIndex)
     const boardLeg: any =
       boardLegIndex >= 0 ? itinerary.legs[boardLegIndex] : null
-    const boardVehicleRecord = boardLeg
+    const boardTripId: string | null = boardLeg
+      ? boardLeg.trip?.gtfsId || boardLeg.tripId || null
+      : null
+    const nowForVehicle = currentTime.getTime()
+    const polledBoardVehicle = boardLeg
       ? findVehicleForTrip(
           state.otp?.transitIndex?.routes?.[getLegRouteId(boardLeg) ?? '']
             ?.vehicles,
-          boardLeg.trip?.gtfsId || boardLeg.tripId,
-          currentTime.getTime()
+          boardTripId,
+          nowForVehicle
         )
       : null
+    // A vehicle poll that comes back EMPTY must not be read as "the bus is
+    // gone". REALTIME_VEHICLE_POSITIONS_RESPONSE $sets the route's vehicle
+    // list, so one empty response erases every vehicle of the route until the
+    // next poll refills it — 15 of 124 polls did exactly that on the
+    // 2026-09-21 17:04 ride, and MISSED_BUS fired 0.9 s after two of them.
+    // The last record of the BOARDING trip's own bus is carried over instead,
+    // with its age recomputed from the feed's own timestamp so it ages out on
+    // its own (VEHICLE_RECORD_STALE_SEC), and `seenAtMs` bounding the carry
+    // for feeds that publish no timestamp at all.
+    if (polledBoardVehicle && boardTripId) {
+      session.lastBoardVehicle = {
+        seenAtMs: nowForVehicle,
+        tripId: boardTripId,
+        vehicle: polledBoardVehicle.vehicle
+      }
+    } else if (
+      session.lastBoardVehicle &&
+      (boardTripId == null ||
+        session.lastBoardVehicle.tripId !== boardTripId ||
+        nowForVehicle - session.lastBoardVehicle.seenAtMs >
+          VEHICLE_RECORD_STALE_SEC * 1000)
+    ) {
+      session.lastBoardVehicle = null
+    }
+    const boardVehicleRecord =
+      polledBoardVehicle ??
+      (session.lastBoardVehicle
+        ? findVehicleForTrip(
+            [session.lastBoardVehicle.vehicle],
+            session.lastBoardVehicle.tripId,
+            nowForVehicle
+          )
+        : null)
     // One reading of the planned trip's vehicle, shared by the missed-bus
     // classifier and the board-vehicle alert so they judge the same evidence.
     const boardVehicleInfo = boardVehicleRecord
@@ -7051,7 +7098,18 @@ export function handlePositionUpdate(position: GeolocationPosition) {
                   boardLeg.from.lon
                 )
               : null,
-          nextStopId: boardVehicleRecord.vehicle.nextStopId ?? null
+          nextStopId: boardVehicleRecord.vehicle.nextStopId ?? null,
+          // Where the bus is relative to the BOARDING stop on its own run.
+          // The board leg only knows the stops from boarding onward, so it
+          // cannot tell "five stops short" from "long gone"; the trip record
+          // refreshLiveLegTimes already fetches every tick can.
+          passedBoardStop: vehiclePassedStopOnTrip(
+            tripStopIdsInOrder(
+              state.otp?.transitIndex?.trips?.[boardTripId ?? ''] ?? null
+            ),
+            boardLeg?.from?.stop?.gtfsId ?? null,
+            boardVehicleRecord.vehicle.nextStopId ?? null
+          )
         }
       : null
     const missedCtx = classifyMissedBus({
