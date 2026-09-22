@@ -431,7 +431,8 @@ components:
     findAnotherWay: Find another way
     findingBestStop: Finding the best stop to get off…
     findingYourBus: Finding your bus…
-    followToggle: Follow my location
+    followToggleOff: Follow me
+    followToggleOn: Following you
     getReady: ⚠️ Get Ready - 2 stops away
     getReadyNow: 🔔 GET READY! Next stop is yours!
     gotOffHere: I got off here

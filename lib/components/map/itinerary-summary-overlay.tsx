@@ -101,7 +101,7 @@ function addItinLineString(itin: Itinerary): ItinWithGeometry {
     )
   }
 }
-function addTrueIndex(array: ItinWithGeometry[]): ItinWithGeometry[] {
+export function addTrueIndex(array: ItinWithGeometry[]): ItinWithGeometry[] {
   for (let i = 0; i < array.length; i++) {
     const prevIndex = array?.[i - 1]?.index
     const itin = array[i]

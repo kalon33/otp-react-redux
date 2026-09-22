@@ -46,6 +46,17 @@ const UserDot = styled.div`
 `
 
 interface Props {
+  /**
+   * The rider is aboard the bus this leg belongs to and has not reached the
+   * stop it starts at — `aboardBeforeLegStart`, util/go-mode/riding.
+   *
+   * On 2026-09-21 ride 2 the onboard splice anchored the bus leg at the
+   * vehicle's NEXT stop, 66th St, while the rider was 2.58 km north of it on
+   * I-35W. The map drew the orange line starting 2 km ahead of the dot and
+   * this banner read "2379m from route" — under a header saying "On Bus
+   * #8228". Backlog 22.1.
+   */
+  aboardBeforeLeg?: boolean
   activeLegIndex: number | null
   currentLegIndex: number
   currentLegMode: string | null
@@ -119,6 +130,20 @@ function isWalkLike(mode: string): boolean {
 const FOLLOW_ARROW_SVG =
   '<svg width="29" height="29" viewBox="0 0 29 29" xmlns="http://www.w3.org/2000/svg" fill="#333333" style="display:block"><path d="M14.5 5.5L22 23l-7.5-3.6L7 23z"/></svg>'
 
+// Engaged/disengaged treatment for the follow toggle (backlog 21.4). The
+// engaged look is a SOLID fill with a white arrow, deliberately not MapLibre's
+// own active tint (#33b5e5, which only recolours the glyph on a white button):
+// the rider read the tinted arrow as a second copy of the native locate
+// crosshair stacked above it. Filled-vs-empty is the toggle affordance; the
+// colour is the app's transit blue, not MapLibre's.
+export const FOLLOW_ACTIVE_BG = '#1565c0'
+export const FOLLOW_ACTIVE_ARROW = '#ffffff'
+export const FOLLOW_IDLE_ARROW = '#333333'
+export const FOLLOW_CLASS_ACTIVE =
+  'go-mode-follow-toggle go-mode-follow-toggle--following'
+export const FOLLOW_CLASS_IDLE =
+  'go-mode-follow-toggle go-mode-follow-toggle--idle'
+
 /**
  * Follow-toggle button as a native MapLibre control: it stacks in a
  * `maplibregl-ctrl-group` beneath the existing locate crosshair (top-left) and
@@ -126,7 +151,7 @@ const FOLLOW_ARROW_SVG =
  * imperative (IControl contract), so active state and label are synced from
  * React via setActive/setLabel.
  */
-class FollowButtonControl implements IControl {
+export class FollowButtonControl implements IControl {
   button: HTMLButtonElement | null = null
   container: HTMLDivElement | null = null
   private readonly handleClick: () => void
@@ -142,6 +167,7 @@ class FollowButtonControl implements IControl {
     button.type = 'button'
     button.setAttribute('data-testid', 'go-mode-follow-toggle')
     button.setAttribute('aria-pressed', 'false')
+    button.className = FOLLOW_CLASS_IDLE
     button.innerHTML = FOLLOW_ARROW_SVG
     button.addEventListener('click', this.handleClick)
     container.appendChild(button)
@@ -160,10 +186,15 @@ class FollowButtonControl implements IControl {
   setActive(active: boolean): void {
     if (!this.button) return
     this.button.setAttribute('aria-pressed', active ? 'true' : 'false')
-    // MapLibre's own geolocate-active blue, so engaged reads the same as the
-    // native controls' active states.
+    // The button itself carries the state, not just the glyph: engaged is a
+    // filled blue chip with a white arrow, disengaged the plain white control
+    // chrome with a dark arrow. Neither is MapLibre's #33b5e5 active tint.
+    this.button.className = active ? FOLLOW_CLASS_ACTIVE : FOLLOW_CLASS_IDLE
+    this.button.style.backgroundColor = active ? FOLLOW_ACTIVE_BG : ''
     const svg = this.button.querySelector('svg')
-    if (svg) svg.setAttribute('fill', active ? '#33b5e5' : '#333333')
+    if (svg) {
+      svg.setAttribute('fill', active ? FOLLOW_ACTIVE_ARROW : FOLLOW_IDLE_ARROW)
+    }
   }
 
   setLabel(label: string): void {
@@ -173,7 +204,9 @@ class FollowButtonControl implements IControl {
   }
 }
 
-const FollowToggleControl = ({
+// Exported for unit tests: the label the rider sees is asserted without a
+// live MapLibre instance.
+export const FollowToggleControl = ({
   active,
   onToggle
 }: {
@@ -189,10 +222,19 @@ const FollowToggleControl = ({
     () => new FollowButtonControl(() => onToggleRef.current()),
     { position: 'top-left' }
   )
-  const label = intl.formatMessage({
-    defaultMessage: 'Follow my location',
-    id: 'components.GoMode.followToggle'
+  // The label says which state the button is IN, so the tooltip and the
+  // screen-reader name disambiguate it from the native locate control that
+  // used to sit above it (backlog 21.4). Both are formatted unconditionally so
+  // formatjs can extract them.
+  const followingLabel = intl.formatMessage({
+    defaultMessage: 'Following you',
+    id: 'components.GoMode.followToggleOn'
   })
+  const followLabel = intl.formatMessage({
+    defaultMessage: 'Follow me',
+    id: 'components.GoMode.followToggleOff'
+  })
+  const label = active ? followingLabel : followLabel
   useEffect(() => {
     control.setActive(active)
     control.setLabel(label)
@@ -425,6 +467,7 @@ const GoModeMapOverlay = ({
 }
 
 const GoModeMap = ({
+  aboardBeforeLeg = false,
   activeLegIndex,
   currentLegIndex,
   currentLegMode,
@@ -452,26 +495,54 @@ const GoModeMap = ({
   // an active-leg lookup by index stays correct.
   const routeGeoJson = useMemo((): GeoJSON.FeatureCollection | null => {
     if (!itinerary?.legs) return null
+    // The ridden leg, joined to the rider. While `aboardBeforeLeg` holds, the
+    // leg's own geometry begins at a stop the bus has not reached, so drawn as
+    // recorded it starts ahead of the dot with a gap between — the 2 km of
+    // I-35W the rider's screenshot showed. Extending the SAME line back to the
+    // fix closes it without touching the itinerary: the leg still ends where
+    // it ends, and nothing downstream of the map reads this geometry.
+    const ridingLegIndex = aboardBeforeLeg ? routeMatch?.legIndex ?? -1 : -1
+    const riderPoint: [number, number] | null =
+      currentPosition && ridingLegIndex >= 0
+        ? [currentPosition.coords.longitude, currentPosition.coords.latitude]
+        : null
     try {
       const features: GeoJSON.Feature[] = itinerary.legs
         .map((leg, index) => ({ index, leg }))
         .filter(({ leg }) => leg.legGeometry?.points)
-        .map(({ index, leg }) => ({
-          geometry: polyline.toGeoJSON(leg.legGeometry.points),
-          properties: {
-            color: getLegColor(leg),
-            index,
-            isActive: index === activeLegIndex,
-            isCompleted: index < currentLegIndex,
-            isWalk: isWalkLike(leg.mode)
-          },
-          type: 'Feature' as const
-        }))
+        .map(({ index, leg }) => {
+          const geometry = polyline.toGeoJSON(leg.legGeometry.points)
+          if (
+            riderPoint &&
+            index === ridingLegIndex &&
+            geometry.type === 'LineString'
+          ) {
+            geometry.coordinates = [riderPoint, ...geometry.coordinates]
+          }
+          return {
+            geometry,
+            properties: {
+              color: getLegColor(leg),
+              index,
+              isActive: index === activeLegIndex,
+              isCompleted: index < currentLegIndex,
+              isWalk: isWalkLike(leg.mode)
+            },
+            type: 'Feature' as const
+          }
+        })
       return { features, type: 'FeatureCollection' }
     } catch {
       return null
     }
-  }, [itinerary, currentLegIndex, activeLegIndex])
+  }, [
+    itinerary,
+    currentLegIndex,
+    activeLegIndex,
+    aboardBeforeLeg,
+    currentPosition,
+    routeMatch
+  ])
 
   return (
     <MapContainer>
@@ -488,15 +559,19 @@ const GoModeMap = ({
         />
       </DefaultMap>
 
-      {/* Deviation Warning */}
-      {routeMatch && !routeMatch.isOnRoute && prevOffRouteDistance != null && (
-        <DeviationWarning>
-          {Math.round(
-            Math.min(routeMatch.distanceFromRoute, prevOffRouteDistance)
-          )}
-          m from route
-        </DeviationWarning>
-      )}
+      {/* Deviation Warning — never while the rider is aboard and simply has
+          not reached this leg's first stop yet (22.1). */}
+      {routeMatch &&
+        !routeMatch.isOnRoute &&
+        !aboardBeforeLeg &&
+        prevOffRouteDistance != null && (
+          <DeviationWarning>
+            {Math.round(
+              Math.min(routeMatch.distanceFromRoute, prevOffRouteDistance)
+            )}
+            m from route
+          </DeviationWarning>
+        )}
     </MapContainer>
   )
 }

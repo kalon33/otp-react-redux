@@ -1419,6 +1419,16 @@ export const DEVIATION_GEOMETRY_SETTLE_MS = 25000
  */
 export interface DeviationAlertGate {
   /**
+   * The rider is verifiably aboard the bus this leg belongs to and has not yet
+   * reached the stop the leg starts at (`aboardBeforeLegStart`,
+   * util/go-mode/riding). The distance being measured is then the gap to their
+   * own anchor, not a deviation: on 2026-09-21 ride 2 it produced a
+   * high-priority "Off route — 2070m from the route" card at 09:24:47 for a
+   * rider sitting on bus 8228, 2 km short of the 66th St stop the onboard
+   * splice had anchored their leg at. Backlog 22.1.
+   */
+  aboardBeforeLeg?: boolean
+  /**
    * When the leg geometry last changed under the rider — an itinerary swap or a
    * leg transition, the two places that already null out the deviation smoother
    * (actions/go-mode.ts). Geometry moving is not a rider going off course:
@@ -1468,6 +1478,10 @@ export function checkRouteDeviation(
   gate?: DeviationAlertGate
 ): NotificationEvent | null {
   if (distanceFromRoute <= deviationThresholdM(currentLeg)) return null
+
+  // Aboard, before this leg's own first stop — there is no deviation to report
+  // and nothing the rider could act on. See DeviationAlertGate.aboardBeforeLeg.
+  if (gate?.aboardBeforeLeg) return null
 
   if (gate?.replanImminent) return null
 
@@ -1538,6 +1552,9 @@ export function checkRouteDeviation(
  * the first card of an episode still lands when the settle expires.
  */
 export function nextDeviationHandledAtMs(input: {
+  /** See DeviationAlertGate.aboardBeforeLeg — an approach to the rider's own
+   * anchor is not an excursion, so it must not hold the cooldown open either. */
+  aboardBeforeLeg?: boolean
   /** A ROUTE_DEVIATION card went out on this tick. */
   alerted: boolean
   /** The leg the rider is on, for the per-mode threshold. */
@@ -1551,6 +1568,7 @@ export function nextDeviationHandledAtMs(input: {
   replanImminent: boolean
 }): number | null {
   const {
+    aboardBeforeLeg,
     alerted,
     currentLeg,
     distanceFromRoute,
@@ -1563,6 +1581,7 @@ export function nextDeviationHandledAtMs(input: {
   if (alerted || replanImminent) return nowMs
 
   const stillOffRoute =
+    !aboardBeforeLeg &&
     distanceFromRoute != null &&
     Number.isFinite(distanceFromRoute) &&
     distanceFromRoute > deviationThresholdM(currentLeg)
@@ -1939,7 +1958,8 @@ export function checkDelayAlert(
     progress.status === 'completed' ||
     hasArrivedAtDestination(
       progress.overallProgress,
-      progress.distanceToDestination
+      progress.distanceToDestination,
+      progress.finalLegProgress
     )
   ) {
     return null
@@ -2025,7 +2045,8 @@ export function checkTripComplete(
     progress.status === 'completed' ||
     hasArrivedAtDestination(
       progress.overallProgress,
-      progress.distanceToDestination
+      progress.distanceToDestination,
+      progress.finalLegProgress
     )
   ) {
     const id = generateNotificationId('TRIP_COMPLETE', 'trip_end')
