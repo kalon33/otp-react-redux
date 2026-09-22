@@ -258,8 +258,14 @@ async function main() {
       'FAIL: the initial pacing post should alert, not be passive'
     )
   }
-  // Rider-confirmed copy: ride time and projected wait, nothing else.
-  if (!/^🚲 \d+ min ride · −?\d+ min wait$/u.test(p1Posts[0].title)) {
+  // Rider-confirmed copy: ride time and projected wait, nothing else — and
+  // since 12.16 never a minus sign, because "−4 min wait" on the lock screen
+  // is what the rider called "the negative minute wait notifications".
+  if (
+    !/^🚲 \d+ min ride · (?:\d+ min (?:wait|short)|due)$/u.test(
+      p1Posts[0].title
+    )
+  ) {
     throw new Error(`FAIL: unexpected initial title "${p1Posts[0].title}"`)
   }
   if (p1Posts[0].body) {
@@ -274,10 +280,15 @@ async function main() {
         p2Posts.length
     )
   }
-  if (p2Posts[0].passive || !/−\d+ min wait/u.test(p2Posts[0].title)) {
+  if (
+    p2Posts[0].passive ||
+    !/(?:\d+ min short|due)$/u.test(p2Posts[0].title) ||
+    /[-−]\s?\d/u.test(p2Posts[0].title)
+  ) {
     throw new Error(
-      'FAIL: collapse repost should buzz and show a negative wait, got ' +
-        `"${p2Posts[0].title}" passive=${p2Posts[0].passive}`
+      'FAIL: collapse repost should buzz and name the shortfall without a ' +
+        `minus sign (12.16), got "${p2Posts[0].title}" ` +
+        `passive=${p2Posts[0].passive}`
     )
   }
   if (cancels.length < 1) {

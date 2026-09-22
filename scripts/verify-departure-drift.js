@@ -283,15 +283,29 @@ async function main() {
   const phase3 = (await pushLog()).slice(phase1.length + phase2.length)
   console.log(`[+7 min] ${phase3.filter(isDrift).length} drift alert(s)`)
 
-  // (4) Two more minutes past what the rider was told: it re-alerts, quoting
-  // total drift from the ORIGINAL estimate, not the increment.
+  // (4) Two more minutes past what the rider was told. Before 24.4 this
+  // re-alerted; the rider's cadence now holds it — one departure-change push
+  // per bus per 5 minutes, and only seconds have passed here.
   await tick(3, busStart + 8 * 60000, boardLegIndex)
   const phase4 = (await pushLog()).slice(
     phase1.length + phase2.length + phase3.length
   )
   console.log(
-    `[+8 min] ${phase4.filter(isDrift).length} drift alert(s): ` +
-      phase4
+    `[+8 min] ${phase4.filter(isDrift).length} drift alert(s) ` +
+      '(expected 0 — inside the 5-min window)'
+  )
+
+  // (5) The escape hatch the rider named: a change of 5 min or more since the
+  // figure they were given speaks immediately, whatever the window says. Five
+  // minutes on from the "+6 min" they were told, and it quotes the TOTAL
+  // movement from the original estimate, not the increment.
+  await tick(3, busStart + 11 * 60000, boardLegIndex)
+  const phase5 = (await pushLog()).slice(
+    phase1.length + phase2.length + phase3.length + phase4.length
+  )
+  console.log(
+    `[+11 min] ${phase5.filter(isDrift).length} drift alert(s): ` +
+      phase5
         .filter(isDrift)
         .map((p) => `"${p.title}" / "${p.body}"`)
         .join('; ')
@@ -350,18 +364,29 @@ async function main() {
   if (phase3.filter(isDrift).length !== 0) {
     fail('re-alerted 1 min after the last figure — the step is 2 min')
   }
-  const second = phase4.filter(isDrift)
-  if (second.length !== 1) {
-    fail(`expected exactly 1 re-alert at +8 min, got ${second.length}`)
+  // The rider's cadence, answered on the board 2026-09-21 (backlog 24.4).
+  // Measured on `0921-1605-465-wrongdir.json`: the ±2 min step alone pushed
+  // four times in under seven minutes for one bus that was simply late.
+  if (phase4.filter(isDrift).length !== 0) {
+    fail(
+      'pushed twice inside 5 minutes for a 2-min change — the rider asked for ' +
+        'at most one departure-change push per bus per 5 min'
+    )
   }
-  if (!/^8 min later\b/u.test(second[0].body || '')) {
+  const second = phase5.filter(isDrift)
+  if (second.length !== 1) {
+    fail(`expected exactly 1 re-alert at +11 min, got ${second.length}`)
+  }
+  if (!/^11 min later\b/u.test(second[0].body || '')) {
     fail(`re-alert quoted an increment, not total drift: "${second[0].body}"`)
   }
 
   console.log(
-    '\nPASS: silent on first sight, one alert per 2 min of movement, each ' +
-      'quoting total drift from the original estimate plus the slack left, ' +
-      'under a "<route> · <n> min" title.'
+    '\nPASS: silent on first sight; one alert per 2 min of movement and at ' +
+      'most one per 5 minutes, held rather than dropped, so the alert that ' +
+      'does go out quotes total drift from the original estimate plus the ' +
+      'slack left, under a "<route> · <n> min" title; a change of 5 min or ' +
+      'more speaks through the window.'
   )
 }
 

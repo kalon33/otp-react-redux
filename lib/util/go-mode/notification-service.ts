@@ -311,6 +311,85 @@ export const SAME_RUN_TOLERANCE_MS = 10 * 60 * 1000
 export const BOARD_REACH_MARGIN_SECONDS = 120
 
 /**
+ * Minutes to quote for a boarding — the ONE rounding both boarding pushes use.
+ *
+ * MEASURED 2026-09-21 (backlog 24.4, session `mubq7tfx-8dz3ar`): at 16:18:05
+ * "Bus coming · 465 · 4 min", at 16:19:18 "465 · 5 min", 73 s apart. Both read
+ * the same `liveLegTimes[1].boardEpoch` — the feed had genuinely walked the
+ * departure 16:22:05 -> 16:24:25 in between — but each push carried its own
+ * copy of this arithmetic, differing in the floor (`Math.max(1, …)` on the
+ * approach alert, `Math.max(0, …)` on the drift alert). Two floors is one bug
+ * waiting: a boarding 20 s out renders "1 min" on one push and "0 min" on the
+ * other, for the same instant and the same epoch.
+ *
+ * The floor is 1, not 0. "0 min" is 12.16's lie in another costume — a number
+ * that reads as "gone" about a bus the feed still says is coming — and whether
+ * a bus has actually gone is classifyMissedBus's call, never a countdown's.
+ */
+export function minutesUntilBoarding(
+  departureMs: number,
+  nowMs: number
+): number {
+  return Math.max(1, Math.round((departureMs - nowMs) / 60000))
+}
+
+/**
+ * The board epoch a push may quote, or null — one reading of
+ * `goMode.liveLegTimes[legIndex]`, shared by every boarding push.
+ *
+ * Believed ONLY when the feed genuinely flagged the BOARD field live: a
+ * non-live epoch has been clamped forward to `now` by clampNonLiveLegTimes and
+ * would read as a bus perpetually about to leave (17.6). The same gate the
+ * action layer's `liveBoardMs` applies, exported so the drift alert and the
+ * approach alert cannot each grow their own copy of it.
+ */
+export function liveBoardEpochFor(
+  liveLegTime:
+    | { boardEpoch?: number | null; boardRealtime?: boolean }
+    | null
+    | undefined
+): number | null {
+  if (!liveLegTime?.boardRealtime) return null
+  const epoch = liveLegTime.boardEpoch
+  return epoch != null && Number.isFinite(epoch) ? epoch : null
+}
+
+/**
+ * Push id prefixes that already quote this boarding's minutes to the rider.
+ *
+ * The rider's cadence rule (2026-09-21, backlog 24.4) couples them: "the 'Bus
+ * coming' push must agree with it". One epoch and one rounding is necessary
+ * but not sufficient — on the 16:05 ride the epoch itself moved 2m20s between
+ * the two pushes, so both numbers were true of their own instant and they
+ * still contradicted each other 73 s apart. What makes them agree is that only
+ * one of them speaks in a window; see DEPARTURE_DRIFT_MIN_GAP_MS.
+ */
+const BOARD_MINUTES_PUSH_PREFIXES = ['LEAVE_SOON_', 'BOARD_BUS_APPROACHING_']
+
+/**
+ * When the rider was last told this boarding's minutes by a push OTHER than
+ * the drift alert, or null if never.
+ *
+ * Read off `sentNotifications`, whose ids already carry their own send time
+ * (`generateNotificationId` appends it, `wasRecentlySent` parses it back) — no
+ * new bookkeeping, and it survives the itinerary swaps that preserve these ids.
+ */
+export function lastBoardMinutesPushAtMs(
+  sentNotifications: string[] | null | undefined
+): number | null {
+  if (!Array.isArray(sentNotifications)) return null
+  let latest: number | null = null
+  for (const id of sentNotifications) {
+    if (typeof id !== 'string') continue
+    if (!BOARD_MINUTES_PUSH_PREFIXES.some((p) => id.startsWith(p))) continue
+    const stamp = parseInt(id.slice(id.lastIndexOf('_') + 1), 10)
+    if (!Number.isFinite(stamp)) continue
+    if (latest == null || stamp > latest) latest = stamp
+  }
+  return latest
+}
+
+/**
  * Whether a rider-selected departure names a run OTHER than the one this leg
  * boards.
  *
@@ -478,7 +557,7 @@ export function checkBoardVehicleApproach(
   // rider a number they cannot act on.
   const busAwayMin =
     liveBoardEpochMs != null
-      ? Math.max(1, Math.round((liveBoardEpochMs - nowMs) / 60000))
+      ? minutesUntilBoarding(liveBoardEpochMs, nowMs)
       : null
   return stage === 'arriving'
     ? {
@@ -765,7 +844,12 @@ export function checkUpcomingTurn(
 
 // Lead time for the "time to go" alert: warn when the rider has this many
 // seconds (or fewer) of slack left before they must leave to catch the bus.
-const LEAVE_SOON_THRESHOLD_SECONDS = 120
+//
+// Exported because it is also the app's one definition of "this boarding is
+// now at risk": departure-drift.ts breaks the rider's 5-minute push cadence on
+// a change that drops their slack to this line, rather than inventing a second
+// threshold that could disagree with the alert the rider already knows.
+export const LEAVE_SOON_THRESHOLD_SECONDS = 120
 // Don't keep firing once they're well past the deadline; a single late nudge
 // (down to -60s) still lands if a GPS tick skipped over the exact crossing.
 const LEAVE_SOON_FLOOR_SECONDS = -60
