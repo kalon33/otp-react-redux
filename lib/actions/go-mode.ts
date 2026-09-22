@@ -30,11 +30,14 @@ import {
 } from '../util/go-mode/progress-calculator'
 import {
   aboardBeforeLegStart,
+  accessBoardEstablished,
+  ACCESS_BOARD_MIN_SPEED_MPS,
   BOARD_AUTO_CONFIRM_MIN_CONSECUTIVE,
   decideRiding,
   riderStopOnLeg,
   ridingFactIsEvidenced,
   ridingTransitLegIndex,
+  trackAccessBoard,
   trackBoardStopDwell,
   trackEarlyAlight,
   vehiclePassedRiderStop,
@@ -170,6 +173,7 @@ import {
 } from '../util/go-mode/replan-acceptance'
 import { accessArriveByTarget } from '../util/go-mode/arrive-on-time'
 import {
+  boardingDenialHolds,
   knownAboardVehicle,
   ridingSuppressedByRider
 } from '../util/go-mode/boarding-confirmation'
@@ -6292,6 +6296,87 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         dispatch(clearVehicleMatch())
         session.earlyAlightWatch = null
       }
+
+      // ── The app noticing a boarding BY ITSELF, on an access leg (23.6) ────
+      //
+      // The rider, 09:21:52: *"if I'm waiting at the stop and then I begin
+      // moving rapidly away…. It's pretty safe to assume I'm on the bus."*
+      // Nothing in Go Mode could reach that conclusion. `decideRiding` above
+      // returns at `onTransit` before it evaluates anything, and the
+      // auto-confirm inside `performVehicleMatching` is reachable only through
+      // `shouldShowBoardingPrompt`, which refuses while
+      // `boardingPrompt.transitLegEnteredAt` is null — and only
+      // `startVehicleTracking` stamps that, on transit legs. So on 2026-09-21
+      // the rider did 12-30 m/s down I-35W for two minutes with 8228 in the
+      // polled feed, and the app learned it only when they tapped the button
+      // at 09:22:08. 23.2 made that tap work; this is the automatic half.
+      //
+      // Every gate is riding.ts's own, all four at once and sustained (see
+      // trackAccessBoard). Nothing existing is relaxed and there is no second
+      // matcher: this can only ever ADD a riding fact that a trusted vehicle
+      // match on the leg's own route already stands behind.
+      const ridingBeforeAccessBoard = getState().otp?.goMode?.riding ?? null
+      const accessLegIndex = routeMatch.legIndex
+      const accessBoardLegIndex = matchedLeg?.transitLeg
+        ? -1
+        : itinerary.legs.findIndex(
+            (l: any, i: number) => i > accessLegIndex && l?.transitLeg
+          )
+      if (
+        !ridingBeforeAccessBoard &&
+        accessBoardLegIndex > 0 &&
+        // Asked before the projection below, which costs a decode-and-scan of
+        // the bus leg's shape: under transit pace the run cannot start
+        // whatever the geometry says, so there is nothing to pay for.
+        (position.coords.speed ?? 0) >= ACCESS_BOARD_MIN_SPEED_MPS
+      ) {
+        session.accessBoard = trackAccessBoard(session.accessBoard, {
+          boardLeg: itinerary.legs[accessBoardLegIndex],
+          boardLegIndex: accessBoardLegIndex,
+          fixAccuracyM: position.coords.accuracy ?? null,
+          legIndex: accessLegIndex,
+          nowMs: nowForRiding,
+          riderSpeedMps: position.coords.speed ?? null,
+          // Measured against the BUS's shape. The access leg the matcher
+          // favours is the wrong geometry entirely — on 09-21 the rider was
+          // 192 m -> 1,166 m off the bike path precisely BECAUSE they were on
+          // the bus (23.2d) — and stop proximity is never the question.
+          routeMatch: matchPositionToRoute(
+            currentPosition,
+            itinerary.legs.slice(0, accessBoardLegIndex + 1),
+            accessBoardLegIndex,
+            null,
+            {
+              accuracyM: position.coords.accuracy,
+              movedSinceFixM,
+              nowMs: position.timestamp
+            }
+          ),
+          vehicleMatch: goMode.vehicleMatch
+        })
+      } else {
+        session.accessBoard = null
+      }
+      if (
+        accessBoardEstablished(session.accessBoard) &&
+        // A rider who has just said "no, I'm still on my bike" outranks the
+        // app's own conclusion (6.10c). `ridingSuppressedByRider` would not
+        // catch this one — the fact written below is evidenced, and that
+        // function deliberately only holds guesses — so the denial is asked
+        // here directly.
+        !boardingDenialHolds(session.riderDeniedBoardingAtMs, nowForRiding)
+      ) {
+        const boardedVehicleId = session.accessBoard!.vehicleId
+        // Retired before the dispatch: the run has been spent, and the next
+        // tick must start a fresh one rather than re-fire on the same ticks.
+        session.accessBoard = null
+        // Handed to the rider's own flow verbatim. `confirmVehicleSelection`
+        // is what the "I'm on the bus" tap calls, and 23.2's aboard re-plan
+        // trigger reads exactly the fact it writes — so the plan re-targets
+        // the way a tap makes it re-target, and there is only ever one way to
+        // board. Inventing a second one is the shape of 6.1.
+        dispatch(confirmVehicleSelection(boardedVehicleId))
+      }
     }
 
     // Feed the rolling bike-speed estimate the re-plan builders query with.
@@ -6747,6 +6832,28 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       const ridingRouteId =
         riding?.routeId ?? getLegRouteId(itinerary.legs[ridingLegIndex])
       if (ridingRouteId) dispatch(performVehicleMatching(ridingRouteId))
+    } else if ((position.coords.speed ?? 0) >= ACCESS_BOARD_MIN_SPEED_MPS) {
+      // ...and for the bus the rider may have got on WITHOUT telling us — the
+      // automatic half of the same question (23.6). While the fix stream says
+      // they are being carried at a pace no bicycle reaches, match the NEXT
+      // transit leg's route, so the four-gate run above has real evidence to
+      // weigh instead of the nothing it had on 2026-09-21. Under that pace
+      // this does not run at all: the poll is not widened, only woken.
+      //
+      // Still not an auto-confirm path. `shouldShowBoardingPrompt` refuses
+      // while `boardingPrompt.transitLegEnteredAt` is null, which on an access
+      // leg it always is, so the only thing that can board the rider from here
+      // is trackAccessBoard's four gates, held for ACCESS_BOARD_MIN_MS. What
+      // it also fixes for free: the trip sheet's own "I'm on the bus" button
+      // names `vehicleMatch.match.vehicleId`, which on an access leg was
+      // always null — the rider's tap had to go through the search sheet.
+      const matcherLegIndex = routeMatch.legIndex
+      const aheadLegIndex = itinerary.legs.findIndex(
+        (l: any, i: number) => i > matcherLegIndex && l?.transitLeg
+      )
+      const aheadRouteId =
+        aheadLegIndex > 0 ? getLegRouteId(itinerary.legs[aheadLegIndex]) : null
+      if (aheadRouteId) dispatch(performVehicleMatching(aheadRouteId))
     }
 
     // Check for notifications
