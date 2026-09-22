@@ -15,6 +15,7 @@ import {
   getRouteDepartures,
   getSoonestCatchableMs,
   HeldDeparture,
+  legBoardingDirection,
   resolveCardDeparture
 } from '../../util/go-mode/departure-anchor'
 
@@ -233,12 +234,25 @@ const WalkingNavigation = ({
 
   // All upcoming departures of the boarding route at the boarding stop, from
   // the stop-times data (re-polled while walking; sorted earliest first).
+  //
+  // Narrowed to the direction the BOARDING LEG goes: a stop serves both
+  // directions of a route as often as not, and on 2026-09-21 at 16:15:31 the
+  // southbound 465 sat in this list against a rider waiting for the northbound
+  // and was adopted as "a meaningfully earlier run of the same route" (19.1).
+  const boardingDirection = useMemo(
+    () => legBoardingDirection(nextLeg),
+    [nextLeg]
+  )
   const routeDepartures = useMemo(
     () =>
       isNextLegTransit
-        ? getRouteDepartures(boardingStopData, nextLegRouteId)
+        ? getRouteDepartures(
+            boardingStopData,
+            nextLegRouteId,
+            boardingDirection
+          )
         : [],
-    [boardingStopData, isNextLegTransit, nextLegRouteId]
+    [boardingStopData, boardingDirection, isNextLegTransit, nextLegRouteId]
   )
 
   const soonestCatchableMs = useMemo(
@@ -280,7 +294,11 @@ const WalkingNavigation = ({
     departures: routeDepartures,
     held: isNextLegTransit ? holdRef.current.held : null,
     nowMs,
-    plannedDepartureMs: progress.plannedDepartureTime ?? null
+    plannedDepartureMs: progress.plannedDepartureTime ?? null,
+    // The run the rest of the trip is on. The card may hold that one and no
+    // other (19.1) — when the plan moves to an earlier bus (23.3) the card
+    // follows it there, and when the card has wandered it comes back.
+    tickTripId: boardingDirection.tripId ?? null
   }
 
   const decision = resolveCardDeparture({

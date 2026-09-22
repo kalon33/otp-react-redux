@@ -12,6 +12,7 @@ import type { Leg } from '@opentripplanner/types'
 
 import { epochMs } from './time'
 import { mergeAndSortStopTimes } from '../stop-times'
+import { patternDirectionId, tripIdsMatch } from './trip-id'
 
 // OTP realtimeState values that mean the time reflects live vehicle data
 // (as opposed to the static schedule).
@@ -39,6 +40,14 @@ export const RELEASE_MIN_RIDE_SECONDS = 60
 
 export interface RouteDeparture {
   depMs: number
+  /**
+   * Which way this run goes, from the direction half of its pattern id. Null
+   * when the feed named no pattern. See patternDirectionId (util/go-mode/
+   * trip-id) for why the variant is dropped.
+   */
+  directionId?: string | null
+  /** What the bus says on the front — the rider's own word for direction. */
+  headsign?: string | null
   realtime: boolean
   routeId?: string
   /**
@@ -49,6 +58,100 @@ export interface RouteDeparture {
    * onto the next run — the 2026-09-15 defect in miniature.
    */
   tripId?: string | null
+}
+
+/**
+ * Which run, out of all the ones a stop publishes for a route, the rider is
+ * actually waiting for — everything the BOARDING LEG knows about its own bus.
+ *
+ * Measured on the 2026-09-21 16:05 ride's fixture (`0921-1605-465-wrongdir`):
+ * an itinerary transit leg carries `headsign` ("North to UMN") and
+ * `trip.gtfsId` / `trip.id`, and nothing else about direction — no
+ * `directionId`, no `pattern`. (The plan query asks for those on the TRIP
+ * query, not on a leg: `leg.trip` comes back with exactly
+ * `arrivalStoptime, departureStoptime, gtfsId, id`.) So the direction of the
+ * leg is either its headsign, or the direction of whatever pattern the stop's
+ * own feed files its trip under.
+ */
+export interface BoardingDirection {
+  headsign?: string | null
+  tripId?: string | null
+}
+
+/** What the boarding leg knows about which way its bus is going. */
+export function legBoardingDirection(leg?: Leg | null): BoardingDirection {
+  const l = leg as any
+  return {
+    headsign: l?.headsign ?? l?.trip?.tripHeadsign ?? null,
+    tripId: l?.trip?.gtfsId ?? l?.tripId ?? l?.trip?.id ?? null
+  }
+}
+
+const normalizeHeadsign = (raw: unknown): string | null => {
+  const s = typeof raw === 'string' ? raw.trim().toLowerCase() : ''
+  return s || null
+}
+
+/**
+ * The departures at the boarding stop that go the rider's WAY.
+ *
+ * 2026-09-21 16:15:31, ride `mubq7tfx-8dz3ar`, backlog 19.1. I-35W & 98th
+ * Street Station Gate E (`2:51825`) serves both 465 patterns, and the stop's
+ * candidate list at that instant held exactly two departures:
+ *
+ *   16:18:20 LIVE  South to Burnsville TS  2:465:1:01  2:t609-b15C-sl1C-v64
+ *   16:21:02 LIVE  North to UMN            2:465:0:01  2:t64A-b156-sl1C-v64
+ *
+ * The second is the rider's — their leg's own trip. `getRouteDepartures`
+ * filtered on `routeId` alone, so the SOUTHBOUND run was a legitimate
+ * candidate, it was 162 s earlier than the held northbound (over
+ * AUTO_ANCHOR_MIN_GAIN_MS), and `resolveCardDeparture` adopted it:
+ * `CARD_DEPARTURE_MISMATCH reason 'adopted-earlier'` at 16:15:31 holding
+ * `Trip:2:t609-b15C-sl1C-v64`, then five `held` records to 16:17:34. Vehicle
+ * 4834 (directionId 1) passed the gate at 16:17:18 and the card said
+ * "4:16 PM · departed" while the rider's northbound 4051 was 5 km south.
+ *
+ * Three keys, strongest first:
+ *
+ *  1. the leg's own trip, found in the list: its pattern gives the direction
+ *     id, and that is the feed's own answer — no string matching at all;
+ *  2. the leg's headsign against the departures' — what the rider reads off
+ *     the front of the bus, and what the stop query publishes per stoptime;
+ *  3. nothing: the leg says nothing about direction, so neither does this.
+ *     The list comes back untouched, exactly as before.
+ *
+ * A stop that publishes ONE headsign for the route is left alone whatever the
+ * leg says: there is no other direction to confuse it with, so a headsign that
+ * fails to match is a spelling difference, not a wrong bus, and filtering on
+ * it would blind the anchor for no gain. Where there IS more than one, the
+ * filter is strict even when it empties the list — an empty candidate list
+ * falls back to the planned departure, which is the rider's own bus, and that
+ * is the safe direction to fail in.
+ */
+export function departuresInBoardingDirection(
+  departures: RouteDeparture[],
+  boarding: BoardingDirection | null | undefined
+): RouteDeparture[] {
+  if (!boarding || !departures?.length) return departures
+
+  const own = boarding.tripId
+    ? departures.find((d) => tripIdsMatch(d.tripId, boarding.tripId))
+    : undefined
+
+  const direction = own?.directionId ?? null
+  if (direction != null) {
+    return departures.filter((d) => d.directionId === direction)
+  }
+
+  const headsign = normalizeHeadsign(own?.headsign ?? boarding.headsign)
+  if (!headsign) return departures
+
+  const published = new Set(
+    departures.map((d) => normalizeHeadsign(d.headsign)).filter(Boolean)
+  )
+  if (published.size <= 1) return departures
+
+  return departures.filter((d) => normalizeHeadsign(d.headsign) === headsign)
 }
 
 /**
@@ -91,14 +194,21 @@ export function getLegRouteId(leg?: Leg | null): string | null {
  * stop-times data in the transit index (sorted earliest first). Each entry
  * prefers the live (realtime) departure when the feed reports one and falls
  * back to the static schedule otherwise.
+ *
+ * `boarding` — the leg's own answer to "which way is my bus going" — narrows
+ * the list to that direction. Optional so a caller with no boarding leg in
+ * hand keeps the old behaviour, but every Go Mode caller passes one: a route
+ * id alone is not a bus, it is a corridor, and on 2026-09-21 that put a
+ * southbound 465 on the card of a rider waiting for the northbound (19.1).
  */
 export function getRouteDepartures(
   stopData: any,
-  routeId: string | null
+  routeId: string | null,
+  boarding?: BoardingDirection | null
 ): RouteDeparture[] {
   if (!stopData || !routeId) return []
   try {
-    return mergeAndSortStopTimes(stopData)
+    const ofRoute = mergeAndSortStopTimes(stopData)
       .map((st: any) => {
         const live =
           LIVE_REALTIME_STATES.has(st.realtimeState) &&
@@ -106,6 +216,8 @@ export function getRouteDepartures(
         const secs = live ? st.realtimeDeparture : st.scheduledDeparture
         return {
           depMs: (st.serviceDay + secs) * 1000,
+          directionId: patternDirectionId(st.trip?.pattern?.id),
+          headsign: st.headsign ?? null,
           realtime: live,
           routeId: st.route?.gtfsId || st.trip?.route?.gtfsId,
           tripId: st.trip?.gtfsId ?? st.trip?.id ?? null
@@ -113,6 +225,7 @@ export function getRouteDepartures(
       })
       .filter((d: RouteDeparture) => d.routeId === routeId)
       .sort((a: RouteDeparture, b: RouteDeparture) => a.depMs - b.depMs)
+    return departuresInBoardingDirection(ofRoute, boarding)
   } catch {
     return []
   }
@@ -341,6 +454,11 @@ export type CardDepartureReason =
   | 'held'
   /** A meaningfully EARLIER run of the same route showed up. */
   | 'adopted-earlier'
+  /**
+   * The card was holding a run the trip is not on, and has been put back on
+   * the trip's own run. See resolveCardDeparture (backlog 19.1).
+   */
+  | 'released-split'
   /** Released: the missed-bus classifier called the boarding definitively gone. */
   | 'released-missed'
   /** Released: the run left the feed and its time is more than grace past. */
@@ -410,6 +528,31 @@ function holdFor(
  * Moving EARLIER is not "abandoning the timed pickup" and stays allowed, on
  * the same >= AUTO_ANCHOR_MIN_GAIN_MS terms shouldAdoptAnchor applies
  * everywhere else.
+ *
+ * ONE RUN, NOT TWO (backlog 19.1, 2026-09-21). `tickTripId` is the run the
+ * trip itself is on — the boarding leg's trip — and the card may not hold a
+ * different one. It used to be able to, and did:
+ *
+ *  - 16:05 ride, 16:15:31: the projection offered a SOUTHBOUND 465 (the stop
+ *    serves both directions and getRouteDepartures filtered on routeId alone)
+ *    and the hold adopted it, `reason: adopted-earlier`, then held it for five
+ *    more records to 16:17:34 while the tick counted down to the rider's
+ *    northbound. The southbound passed the gate at 16:17:18 and the card said
+ *    "departed". The direction filter above is what stops that one.
+ *  - 09:02 ride: 26 records 09:05:51-09:20:17 with the card on the 09:15
+ *    (`Trip:1:1268952`) and the tick on the 10:12 (`1:1348464`) — the card was
+ *    RIGHT about the bus and the plan was wrong, which is why 23.3 re-targets
+ *    the itinerary onto the adopted run instead of arguing with it. Once the
+ *    plan follows, `tickTripId` IS the adopted run and the hold agrees.
+ *
+ * So an earlier run reaches the card by the plan moving to it, and the hold
+ * then catches up (still `adopted-earlier` when the new run is meaningfully
+ * earlier — the rider is being shown an earlier bus). A hold on any other run
+ * is a split screen and is released. There is no oscillation in that pair
+ * because both outcomes put the card on the trip's own run.
+ *
+ * `tickTripId` null — a boarding leg with no trip id at all — leaves every
+ * rule below exactly as it was.
  */
 export function resolveCardDeparture(input: {
   /**
@@ -429,6 +572,12 @@ export function resolveCardDeparture(input: {
   nowMs: number
   /** OTP's planned board time, the last resort when there is no feed. */
   plannedDepartureMs?: number | null
+  /**
+   * The run the tick pipeline is counting down to — the boarding leg's trip,
+   * in the gtfsId spelling. Null when the leg names no trip, which leaves
+   * every rule here as it was.
+   */
+  tickTripId?: string | null
 }): CardDepartureDecision {
   const {
     boardingMiss,
@@ -438,7 +587,8 @@ export function resolveCardDeparture(input: {
     graceMs = CARD_HOLD_RELEASE_GRACE_MS,
     held,
     nowMs,
-    plannedDepartureMs
+    plannedDepartureMs,
+    tickTripId
   } = input
 
   // The rider's own choice is not a projection and is never held against.
@@ -459,12 +609,47 @@ export function resolveCardDeparture(input: {
     const missed = boardingMiss?.definitive === true
     const leftTheFeed = !current && nowMs > held.departureMs + graceMs
 
+    // 19.1: the card and the trip must name ONE run. When they disagree the
+    // card goes to the trip's, whichever way that moves the clock — earlier
+    // (the plan has followed the anchor onto a better bus: 23.3) or later
+    // (the card had wandered). Either way the split is over in one render.
+    const splitFromTrip =
+      tickTripId != null &&
+      held.tripId != null &&
+      !tripIdsMatch(held.tripId, tickTripId)
+    if (splitFromTrip && !missed) {
+      const onTrip = departures.find((d) => tripIdsMatch(d.tripId, tickTripId))
+      const next = onTrip?.depMs ?? plannedDepartureMs ?? null
+      if (next != null && Number.isFinite(next)) {
+        return {
+          departureMs: next,
+          held: onTrip
+            ? { departureMs: onTrip.depMs, tripId: onTrip.tripId ?? null }
+            : holdFor(next, departures),
+          reason: shouldAdoptAnchor(next, heldMs)
+            ? 'adopted-earlier'
+            : 'released-split'
+        }
+      }
+    }
+
     if (!missed && !leftTheFeed) {
       if (shouldAdoptAnchor(candidateMs, heldMs)) {
-        return {
-          departureMs: candidateMs,
-          held: holdFor(candidateMs as number, departures),
-          reason: 'adopted-earlier'
+        // Only ever onto the run the trip is on. A projection that fancies a
+        // different bus is a proposal for the ANCHOR to make (and for 23.3's
+        // re-target to carry into the plan), not a headline the card may
+        // publish on its own.
+        const candidateIsTheTrip =
+          tickTripId == null ||
+          departures.some(
+            (d) => d.depMs === candidateMs && tripIdsMatch(d.tripId, tickTripId)
+          )
+        if (candidateIsTheTrip) {
+          return {
+            departureMs: candidateMs,
+            held: holdFor(candidateMs as number, departures),
+            reason: 'adopted-earlier'
+          }
         }
       }
       return {

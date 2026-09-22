@@ -137,7 +137,8 @@ import {
   mergeAdjacentSameTripLegs,
   normalizeGoModeItinerary,
   polylineLength,
-  repairLegTimeInversions
+  repairLegTimeInversions,
+  retargetTransitLegToRun
 } from '../util/go-mode/leg-merge'
 import {
   collectRerouteCandidates,
@@ -164,6 +165,8 @@ import {
 } from '../util/go-mode/replay/replay-engine'
 import {
   acceptAutoReplan,
+  accessBoardOverrunMs,
+  AUTO_REPLAN_ACCESS_BOARD_SLACK_MS,
   originGapMeters,
   pickHopFreeSibling,
   startOriginIsStale
@@ -206,13 +209,15 @@ import {
   anchorBoardingStopId,
   currentServiceDate,
   evaluateDepartureAnchor,
-  getRouteDepartures
+  getRouteDepartures,
+  legBoardingDirection
 } from '../util/go-mode/departure-anchor'
 import {
   boardSourcesDisagree,
   publishedBoardSource,
   resolveBoardDeparture
 } from '../util/go-mode/board-departure'
+import { tripGtfsId } from '../util/go-mode/trip-id'
 import {
   MISSED_BUS_NOTICE_ID,
   TURN_CARD_NOTIFICATION_ID,
@@ -869,7 +874,7 @@ export const setDepartureOverride = createAction<
  * that stamp is what lets `resumeGoModeTrip` put this very lock back (12.15).
  */
 export function selectDeparture(epochMs: number | null) {
-  return function (dispatch: any) {
+  return async function (dispatch: any) {
     session.manualDepartureLock = true
     dispatch(
       setDepartureOverride({
@@ -877,6 +882,102 @@ export function selectDeparture(epochMs: number | null) {
         source: 'rider'
       })
     )
+    // The rider's own pick moves the whole plan too, not just the headline
+    // (23.3). A reset (`null`) moves nothing: it hands them back the plan's
+    // own bus, which is where the itinerary already is.
+    await dispatch(retargetPlanToDeparture(epochMs, 'rider'))
+  }
+}
+
+/**
+ * Put the ITINERARY on the run the card has moved to.
+ *
+ * Backlog 23.3. Rider, 2026-09-21 16:03 (board Q4): *"Yes override? Why are we
+ * on a bus an hour away?"*, and at 16:30 (Q7), asked plainly whether the whole
+ * plan should switch: *"YES duh!!"*.
+ *
+ * On the 09:02 ride the anchor was RIGHT about the bus — it moved the card to
+ * the 09:15 (`SET_DEPARTURE_OVERRIDE {source: anchor}` at 09:02:05, ms
+ * 09:15:27) and the 09:15 is the one that came — and wrong about what it
+ * changed: `departureOverride` is a display value, so `trip.gtfsId`,
+ * `liveLegTimes`, the trip sheet's wait and the vehicle matcher's gate all
+ * stayed on the 10:12. At 09:23:01 the rider had three surfaces naming three
+ * buses: *"The list does not agree with the top banner. The states are majorly
+ * screwed up"*.
+ *
+ * Three refusals, each measured rather than guessed:
+ *
+ *  - **aboard.** A rider with a riding fact that names a trip is on a bus, and
+ *    23.2's rule is that the riding fact wins. Re-targeting their plan onto
+ *    some other run at a stop behind them is the 09:20:59 / 09:21:19 mistake
+ *    (the anchor chasing Lake St departures while the rider did 28 m/s down
+ *    I-35W) with the itinerary attached.
+ *  - **not walking into a boarding.** `anchorBoardingStopId` is the same gate
+ *    the anchor itself uses: an access leg, and the next leg its transit one.
+ *  - **the access leg would not make it.** `accessBoardOverrunMs` is the
+ *    2026-09-15 rule (16.2) — two splices whose bike leg ended 3m05s and 49 s
+ *    after their bus stood in front of the rider for ten minutes. A run the
+ *    rider's own access leg finishes after is not a run to re-plan onto.
+ */
+export function retargetPlanToDeparture(
+  departureMs: number | null,
+  source: DepartureOverrideSource
+) {
+  return async function (dispatch: any, getState: any) {
+    if (departureMs == null || !Number.isFinite(departureMs)) return
+    const state = getState()
+    const goMode = state.otp?.goMode
+    const itinerary: Itinerary | null = goMode?.activeItinerary ?? null
+    if (!goMode?.isActive || !itinerary?.legs?.length) return
+
+    // 23.2: a rider who is aboard is not re-targeted.
+    if (goMode.riding?.tripId) return
+
+    const legIndex = goMode.routeMatch?.legIndex ?? 0
+    const boardLegIndex = legIndex + 1
+    const accessLeg = itinerary.legs[legIndex]
+    const boardLeg = itinerary.legs[boardLegIndex]
+    const stopId = anchorBoardingStopId(accessLeg, boardLeg)
+    if (!stopId) return
+
+    const routeId = getLegRouteId(boardLeg)
+    const departures = getRouteDepartures(
+      state.otp?.transitIndex?.stops?.[stopId],
+      routeId,
+      legBoardingDirection(boardLeg)
+    )
+    const run = departures.find((d) => d.depMs === departureMs)
+    const tripId = tripGtfsId(run?.tripId)
+    if (!run || !tripId) return
+
+    const candidate = retargetTransitLegToRun(itinerary, boardLegIndex, {
+      departureMs: run.depMs,
+      headsign: run.headsign ?? null,
+      realtime: run.realtime,
+      tripId
+    })
+    if (!candidate) return
+
+    const overrun = accessBoardOverrunMs(candidate)
+    if (overrun != null && overrun > AUTO_REPLAN_ACCESS_BOARD_SLACK_MS) {
+      // eslint-disable-next-line no-console
+      console.log(
+        `[go-mode] plan re-target to ${tripId} refused: access leg ends ` +
+          `${Math.round(overrun / 1000)}s after it (23.3)`
+      )
+      return
+    }
+
+    // eslint-disable-next-line no-console
+    console.log(
+      `[go-mode] plan follows the card (${source}): leg ${boardLegIndex} -> ` +
+        `trip ${tripId} at ${new Date(run.depMs).toISOString()} (23.3)`
+    )
+    await dispatch(beginGoMode(candidate, { originUnchanged: true }))
+    // beginGoMode clears the lock along with the override it belonged to. The
+    // rider's pick outlives both: the plan is now their bus, and the anchor
+    // must not move it again behind them.
+    if (source === 'rider') session.manualDepartureLock = true
   }
 }
 export const setNotificationConfig = createAction<{
@@ -1147,7 +1248,19 @@ function pushLiveActivity(getState: any, nowMs: number): void {
  */
 export function beginGoMode(
   rawItinerary: Itinerary,
-  options: { roundTrip?: RoundTripPlan | null } = {}
+  options: {
+    /**
+     * This plan re-uses the access legs the trip is already running on, so its
+     * origin is exactly as old as it was a tick ago and the 12.13 stale-origin
+     * question has already been answered for it. Set by the 23.3 re-target,
+     * which changes WHICH BUS the plan takes and nothing about the way to it:
+     * arming the check there would re-plan the whole trip from the rider's
+     * position the moment they were more than START_ORIGIN_MAX_M along their
+     * own bike leg, which is most of any ride.
+     */
+    originUnchanged?: boolean
+    roundTrip?: RoundTripPlan | null
+  } = {}
 ) {
   return async function (dispatch: any, getState: any) {
     // The one choke point every itinerary entering Go Mode passes through —
@@ -1183,7 +1296,9 @@ export function beginGoMode(
     // the rider is not" is only a defect at INSTALLATION: a rider three
     // quarters of the way along their own access leg is a long way from that
     // leg's start by the ordinary operation of walking.
-    session.staleStartOriginPending = itinerarySignature(itinerary)
+    session.staleStartOriginPending = options.originUnchanged
+      ? null
+      : itinerarySignature(itinerary)
     // START_GO_MODE nulls `departureOverride` (12.14), and the two session
     // facts that describe one have to go with it or the anchor is left holding
     // a lock for a boarding that no longer exists: `manualDepartureLock` would
@@ -6680,9 +6795,14 @@ export function handlePositionUpdate(position: GeolocationPosition) {
 
         const anchor = evaluateDepartureAnchor(session.lastAutoAnchorMs, {
           departureOverride,
+          // Only the runs that go the rider's WAY. The stop serves both
+          // directions of a route as often as not (19.1: I-35W & 98th St Gate
+          // E serves 2:465:0:* North to UMN and 2:465:1:* South to Burnsville
+          // TS), and a route id on its own cannot tell them apart.
           departures: getRouteDepartures(
             getState().otp.transitIndex?.stops?.[boardingStopId],
-            getLegRouteId(anchorNextLeg)
+            getLegRouteId(anchorNextLeg),
+            legBoardingDirection(anchorNextLeg)
           ),
           manualLock: session.manualDepartureLock,
           nowMs: currentTime.getTime(),
@@ -6706,6 +6826,12 @@ export function handlePositionUpdate(position: GeolocationPosition) {
           dispatch(
             setDepartureOverride({ ms: anchor.anchorMs, source: 'anchor' })
           )
+          // ...and the plan goes with it (23.3). Not awaited: the tick owns
+          // this second, and a re-target that has to be refused (the rider is
+          // aboard, the access leg would not make it) must not hold it up.
+          // The override above stands whatever this decides, so the card is
+          // never worse off than it was before the re-target existed.
+          dispatch(retargetPlanToDeparture(anchor.anchorMs, 'anchor'))
         }
       }
     } else if (!isReplayActive()) {

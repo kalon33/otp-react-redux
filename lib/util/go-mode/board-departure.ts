@@ -37,6 +37,7 @@
  * `BOARD_SOURCE_DISAGREEMENT_MS` and `recordBoardTimeDisagreement`).
  */
 import { LIVE_REALTIME_STATES } from './departure-anchor'
+import { tripIdsMatch } from './trip-id'
 import type { LiveTimePoint } from './alight-optimizer'
 
 /** Where a published board epoch actually came from. */
@@ -64,50 +65,14 @@ export const BOARD_SOURCE_DISAGREEMENT_MS = 60000
 export const STOP_SNAPSHOT_MAX_AGE_MS = 180000
 
 /**
- * OTP2's stop query returns `trip.id` as the relay global id — base64 of
- * `Trip:<feed>:<id>`, unpadded (`VHJpcDoxOjEzNDYwNTI` -> `Trip:1:1346052`) —
- * while the leg, the riding fact and `findTrip` all use the gtfsId
- * (`1:1346052`). Without this the two sources can never be matched at all.
- *
- * Deliberately strict: a decode only counts when it yields printable ASCII
- * beginning `Trip:`. A bare numeric gtfsId is itself valid base64 and would
- * otherwise "decode" to bytes that could collide with something.
+ * The two spellings of one trip id — as given, relay-decoded, and decoded
+ * minus the `Trip:` prefix — and the match across them. Both moved to
+ * `./trip-id` on 2026-09-21 so `departure-anchor` can use them without an
+ * import cycle (it is where `LIVE_REALTIME_STATES` above comes from); they are
+ * re-exported here because this is where every current caller imports them
+ * from. `VHJpcDoxOjEzNDYwNTI` -> `Trip:1:1346052` -> `1:1346052`.
  */
-function decodeTripGlobalId(raw: string): string | null {
-  if (!/^[A-Za-z0-9+/_-]+={0,2}$/.test(raw)) return null
-  const b64 = raw.replace(/-/g, '+').replace(/_/g, '/')
-  const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4)
-  let decoded: string
-  try {
-    decoded =
-      typeof atob === 'function'
-        ? atob(padded)
-        : // eslint-disable-next-line no-undef
-          Buffer.from(padded, 'base64').toString('binary')
-  } catch {
-    return null
-  }
-  if (!/^Trip:[\x20-\x7e]+$/.test(decoded)) return null
-  return decoded
-}
-
-/** Every spelling of one trip id: as given, decoded, and decoded-minus-prefix. */
-export function tripIdAliases(raw: string | null | undefined): string[] {
-  const s = typeof raw === 'string' ? raw.trim() : ''
-  if (!s) return []
-  const decoded = decodeTripGlobalId(s)
-  return decoded ? [s, decoded, decoded.slice('Trip:'.length)] : [s]
-}
-
-/** Whether two trip ids name the same run, across the two id spellings. */
-export function tripIdsMatch(
-  a: string | null | undefined,
-  b: string | null | undefined
-): boolean {
-  const aliasesA = tripIdAliases(a)
-  if (!aliasesA.length) return false
-  return tripIdAliases(b).some((alias) => aliasesA.indexOf(alias) >= 0)
-}
+export { tripIdAliases, tripIdsMatch } from './trip-id'
 
 /**
  * The live departure the stop-level poll holds for this trip at this stop, or
