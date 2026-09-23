@@ -1,3 +1,6 @@
+import { existsSync } from 'fs'
+import path from 'path'
+
 import {
   calculateCumulativeDistances,
   calculateDistance,
@@ -8,7 +11,8 @@ import {
 import type { RouteMatchResult } from '../../../lib/util/go-mode/position-matching'
 
 /**
- * PROPOSED — backlog 21.3, measured 2026-09-21, nothing shipped.
+ * Backlog 21.3 — measured 2026-09-21, shipped to the dev bundle `2026.0921.1`
+ * the same day. The case below fails on the matcher as it was before that.
  *
  * The near-tie band is a fixed 5 m (MATCH_NEAR_TIE_M), and 5 m is a statement
  * about GPS noise on a GOOD fix. Two rides say it is the wrong quantity when
@@ -46,9 +50,13 @@ import type { RouteMatchResult } from '../../../lib/util/go-mode/position-matchi
  * pass on exactly the source it exists to fail against.
  */
 
+const FIXTURE_DIR = path.join(
+  __dirname,
+  '../../../lib/util/go-mode/replay/fixtures'
+)
 const load = (name: string) =>
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  require(`../../../lib/util/go-mode/replay/fixtures/${name}.json`)
+  require(`${FIXTURE_DIR}/${name}.json`)
 
 const legDistancesOf = (legs: any[]) =>
   legs.map((leg) => {
@@ -192,110 +200,122 @@ const B_JUMP_MS = 1789927901000 // 2026-09-20T18:11:41Z, 13:11:41 local
 const B_FROM = '2026-09-20T18:11:25Z'
 const B_TO = '2026-09-20T18:12:10Z'
 
-describe('go-mode > the near-tie band is a fix-accuracy question (2026-09-21)', () => {
-  // Provenance: the recordings still have to carry the defect's own input.
-  it('(a) still carries the 8.8 m decision taken on a 59 m fix', () => {
-    const { accuracy, legDistance, rows } = candidatesAt(
-      A_FIXTURE,
-      A_JUMP_MS,
-      1
-    )
-    expect(load(A_FIXTURE).meta.session).toBe('mub9m39o-9pmdbh')
-    expect(legDistance).toBeGreaterThan(1470)
-    expect(legDistance).toBeLessThan(1485)
-    expect(accuracy).toBeGreaterThan(59)
-    expect(accuracy).toBeLessThan(60)
+// Both recordings are untracked — too large to commit — so on a fresh clone
+// this suite has nothing to measure and must SKIP rather than fail. It did
+// fail, six cases in any fresh worktree, until 2026-09-22 (backlog 21.3's
+// harness note).
+const hasFixtures = [A_FIXTURE, B_FIXTURE].every((name) =>
+  existsSync(path.join(FIXTURE_DIR, `${name}.json`))
+)
+const withFixtures = hasFixtures ? describe : describe.skip
 
-    const best = rows[0]
-    const heldSegment = rows.find((r) => r.segmentIndex === 6)!
-    expect(best.segmentIndex).toBe(13)
-    expect(best.perpDistance).toBeCloseTo(51.14, 1)
-    expect(heldSegment.perpDistance).toBeCloseTo(59.96, 1)
-    // The whole row: a difference five times smaller than the instrument's own
-    // stated error, and 105 m of progress riding on it.
-    expect(heldSegment.perpDistance - best.perpDistance).toBeLessThan(9)
-    expect(
-      (best.progressAlongLeg - heldSegment.progressAlongLeg) * legDistance
-    ).toBeGreaterThan(100)
-  })
+withFixtures(
+  'go-mode > the near-tie band is a fix-accuracy question (2026-09-21)',
+  () => {
+    // Provenance: the recordings still have to carry the defect's own input.
+    it('(a) still carries the 8.8 m decision taken on a 59 m fix', () => {
+      const { accuracy, legDistance, rows } = candidatesAt(
+        A_FIXTURE,
+        A_JUMP_MS,
+        1
+      )
+      expect(load(A_FIXTURE).meta.session).toBe('mub9m39o-9pmdbh')
+      expect(legDistance).toBeGreaterThan(1470)
+      expect(legDistance).toBeLessThan(1485)
+      expect(accuracy).toBeGreaterThan(59)
+      expect(accuracy).toBeLessThan(60)
 
-  it('(b) still carries the 9.4 m decision taken on a 14.6 m fix', () => {
-    const { accuracy, legDistance, rows } = candidatesAt(
-      B_FIXTURE,
-      B_JUMP_MS,
-      0
-    )
-    expect(load(B_FIXTURE).meta.session).toBe('mua45zwn-ik29ib')
-    expect(legDistance).toBeGreaterThan(1830)
-    expect(legDistance).toBeLessThan(1845)
-    expect(accuracy).toBeGreaterThan(14)
-    expect(accuracy).toBeLessThan(15)
-
-    expect(rows[0].segmentIndex).toBe(53)
-    expect(rows[0].perpDistance).toBeCloseTo(49.25, 1)
-    const heldSegment = rows.find((r) => r.segmentIndex === 45)!
-    expect(heldSegment.perpDistance).toBeCloseTo(58.65, 1)
-    expect(heldSegment.perpDistance - rows[0].perpDistance).toBeLessThan(10)
-  })
-
-  // Ruled out, and the reason this is not another 12.17 sighting: the gate
-  // never acts in either window. Unfixed, both windows contain zero holds.
-  it('neither window contains a single continuity-gate hold', () => {
-    expect(replayWindow(A_FIXTURE, A_FROM, A_TO).filter((t) => t.held)).toEqual(
-      []
-    )
-    expect(replayWindow(B_FIXTURE, B_FROM, B_TO).filter((t) => t.held)).toEqual(
-      []
-    )
-  })
-
-  // THE DEFECT. Unfixed, the worst single-tick along-leg advance in window (a)
-  // is 105.4 m on an 8.0 m step, and in window (b) 120.8 m on an 8.6 m step.
-  it('(a) does not cross seven segments on one degraded fix', () => {
-    const window = replayWindow(A_FIXTURE, A_FROM, A_TO)
-    expect(window.length).toBeGreaterThan(40)
-    const worst = window.reduce((a, b) => (b.advanceM > a.advanceM ? b : a))
-    expect(worst.advanceM).toBeLessThan(50)
-
-    // And specifically: the tick that jumped stays on the held segment.
-    const jump = window.find((t) => t.tMs === A_JUMP_MS)!
-    expect(jump.accuracy).toBeGreaterThan(59)
-    expect(jump.stepM).toBeCloseTo(8.0, 0)
-    expect(jump.segmentIndex).toBeLessThan(13)
-    expect(jump.progressAlongLeg).toBeLessThan(0.07)
-  })
-
-  it('(b) does not skip to 99 % of the leg with 74 m left to ride', () => {
-    const window = replayWindow(B_FIXTURE, B_FROM, B_TO)
-    expect(window.length).toBeGreaterThan(15)
-    const worst = window.reduce((a, b) => (b.advanceM > a.advanceM ? b : a))
-    // Unfixed: 120.8 m in one tick. This is an improvement, not a cure — the
-    // band buys two ticks (+36.0 m then +77.1 m) instead of one, and the row
-    // should say so.
-    expect(worst.advanceM).toBeLessThan(100)
-
-    const jump = window.find((t) => t.tMs === B_JUMP_MS)!
-    expect(jump.segmentIndex).toBeLessThan(52)
-    expect(jump.progressAlongLeg).toBeLessThan(0.99)
-  })
-
-  // The band may only ever REORDER near-ties, so a caller with no previous
-  // match — every leg's opening fix — must be the plain global minimum however
-  // bad the fix is.
-  it('a first match is the global minimum whatever the accuracy says', () => {
-    const { rows } = candidatesAt(A_FIXTURE, A_JUMP_MS, 1)
-    const fixture = load(A_FIXTURE)
-    const swaps = [...fixture.itinerarySwaps].sort(
-      (a: any, b: any) => a.tMs - b.tMs
-    )
-    const legs = swaps[swaps.length - 1].itinerary.legs
-    const fix = fixture.gpsTrack.find((f: any) => f.tMs === A_JUMP_MS)
-    const first = matchPositionToRoute([fix.lat, fix.lon], legs, 1, null, {
-      accuracyM: fix.accuracy,
-      movedSinceFixM: 8,
-      nowMs: fix.tMs
+      const best = rows[0]
+      const heldSegment = rows.find((r) => r.segmentIndex === 6)!
+      expect(best.segmentIndex).toBe(13)
+      expect(best.perpDistance).toBeCloseTo(51.14, 1)
+      expect(heldSegment.perpDistance).toBeCloseTo(59.96, 1)
+      // The whole row: a difference five times smaller than the instrument's own
+      // stated error, and 105 m of progress riding on it.
+      expect(heldSegment.perpDistance - best.perpDistance).toBeLessThan(9)
+      expect(
+        (best.progressAlongLeg - heldSegment.progressAlongLeg) * legDistance
+      ).toBeGreaterThan(100)
     })
-    expect(first!.segmentIndex).toBe(rows[0].segmentIndex)
-    expect(first!.distanceFromRoute).toBeCloseTo(rows[0].perpDistance, 6)
-  })
-})
+
+    it('(b) still carries the 9.4 m decision taken on a 14.6 m fix', () => {
+      const { accuracy, legDistance, rows } = candidatesAt(
+        B_FIXTURE,
+        B_JUMP_MS,
+        0
+      )
+      expect(load(B_FIXTURE).meta.session).toBe('mua45zwn-ik29ib')
+      expect(legDistance).toBeGreaterThan(1830)
+      expect(legDistance).toBeLessThan(1845)
+      expect(accuracy).toBeGreaterThan(14)
+      expect(accuracy).toBeLessThan(15)
+
+      expect(rows[0].segmentIndex).toBe(53)
+      expect(rows[0].perpDistance).toBeCloseTo(49.25, 1)
+      const heldSegment = rows.find((r) => r.segmentIndex === 45)!
+      expect(heldSegment.perpDistance).toBeCloseTo(58.65, 1)
+      expect(heldSegment.perpDistance - rows[0].perpDistance).toBeLessThan(10)
+    })
+
+    // Ruled out, and the reason this is not another 12.17 sighting: the gate
+    // never acts in either window. Unfixed, both windows contain zero holds.
+    it('neither window contains a single continuity-gate hold', () => {
+      expect(
+        replayWindow(A_FIXTURE, A_FROM, A_TO).filter((t) => t.held)
+      ).toEqual([])
+      expect(
+        replayWindow(B_FIXTURE, B_FROM, B_TO).filter((t) => t.held)
+      ).toEqual([])
+    })
+
+    // THE DEFECT. Unfixed, the worst single-tick along-leg advance in window (a)
+    // is 105.4 m on an 8.0 m step, and in window (b) 120.8 m on an 8.6 m step.
+    it('(a) does not cross seven segments on one degraded fix', () => {
+      const window = replayWindow(A_FIXTURE, A_FROM, A_TO)
+      expect(window.length).toBeGreaterThan(40)
+      const worst = window.reduce((a, b) => (b.advanceM > a.advanceM ? b : a))
+      expect(worst.advanceM).toBeLessThan(50)
+
+      // And specifically: the tick that jumped stays on the held segment.
+      const jump = window.find((t) => t.tMs === A_JUMP_MS)!
+      expect(jump.accuracy).toBeGreaterThan(59)
+      expect(jump.stepM).toBeCloseTo(8.0, 0)
+      expect(jump.segmentIndex).toBeLessThan(13)
+      expect(jump.progressAlongLeg).toBeLessThan(0.07)
+    })
+
+    it('(b) does not skip to 99 % of the leg with 74 m left to ride', () => {
+      const window = replayWindow(B_FIXTURE, B_FROM, B_TO)
+      expect(window.length).toBeGreaterThan(15)
+      const worst = window.reduce((a, b) => (b.advanceM > a.advanceM ? b : a))
+      // Unfixed: 120.8 m in one tick. This is an improvement, not a cure — the
+      // band buys two ticks (+36.0 m then +77.1 m) instead of one, and the row
+      // should say so.
+      expect(worst.advanceM).toBeLessThan(100)
+
+      const jump = window.find((t) => t.tMs === B_JUMP_MS)!
+      expect(jump.segmentIndex).toBeLessThan(52)
+      expect(jump.progressAlongLeg).toBeLessThan(0.99)
+    })
+
+    // The band may only ever REORDER near-ties, so a caller with no previous
+    // match — every leg's opening fix — must be the plain global minimum however
+    // bad the fix is.
+    it('a first match is the global minimum whatever the accuracy says', () => {
+      const { rows } = candidatesAt(A_FIXTURE, A_JUMP_MS, 1)
+      const fixture = load(A_FIXTURE)
+      const swaps = [...fixture.itinerarySwaps].sort(
+        (a: any, b: any) => a.tMs - b.tMs
+      )
+      const legs = swaps[swaps.length - 1].itinerary.legs
+      const fix = fixture.gpsTrack.find((f: any) => f.tMs === A_JUMP_MS)
+      const first = matchPositionToRoute([fix.lat, fix.lon], legs, 1, null, {
+        accuracyM: fix.accuracy,
+        movedSinceFixM: 8,
+        nowMs: fix.tMs
+      })
+      expect(first!.segmentIndex).toBe(rows[0].segmentIndex)
+      expect(first!.distanceFromRoute).toBeCloseTo(rows[0].perpDistance, 6)
+    })
+  }
+)

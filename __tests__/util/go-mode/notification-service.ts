@@ -809,14 +809,76 @@ describe('util > go-mode > notification-service', () => {
       expect(event!.type).toBe('BOARD_BUS_APPROACHING')
     })
 
-    it('escalates to arriving at the stop — by next-stop fact or distance', () => {
-      const byNextStop = check({ nextStopId: '1:board-stop' })
-      expect(byNextStop!.type).toBe('BOARD_BUS_ARRIVING')
-      expect(byNextStop!.priority).toBe('high')
+    it('escalates to arriving only when the bus itself is at the stop', () => {
       const byDistance = check({
-        distanceToBoardStopM: BOARD_ARRIVE_METRES - 50
+        distanceToBoardStopM: BOARD_ARRIVE_METRES - 50,
+        nextStopId: '1:board-stop'
       })
       expect(byDistance!.type).toBe('BOARD_BUS_ARRIVING')
+      expect(byDistance!.priority).toBe('high')
+    })
+
+    it('never says "Bus here" off the next-stop fact alone (26.3)', () => {
+      // 2026-09-22 08:16:52 and 08:38:56: the planned run's own vehicle had
+      // I-35W & 98th St as its next stop while parked 6,032 m / 6,026 m away
+      // at the Burnsville terminus, and "Bus here" fired both times.
+      expect(
+        check({ distanceToBoardStopM: 6032, nextStopId: '1:board-stop' })
+      ).toBeNull()
+      // ...and with no distance at all, the next-stop fact is still not "here".
+      expect(
+        check({ distanceToBoardStopM: null, nextStopId: '1:board-stop' })
+      ).toBeNull()
+    })
+
+    it('a next-stop match kilometres out is at most approaching, on the real prediction', () => {
+      // Feed says 3 min: the heads-up fires, quoting the feed's minutes.
+      const event = check(
+        { distanceToBoardStopM: 3000, nextStopId: '1:board-stop' },
+        { liveBoardEpochMs: NOW + 180000 }
+      )
+      expect(event!.type).toBe('BOARD_BUS_APPROACHING')
+      expect(event!.message).toContain('3 min')
+      // Gate B now judges the rider against those 180 s, not a forced 0: a
+      // rider 250 s out (inside 180 + BOARD_REACH_MARGIN_SECONDS) still hears
+      // it, and one 400 s out does not.
+      expect(
+        check(
+          { distanceToBoardStopM: 3000, nextStopId: '1:board-stop' },
+          { liveBoardEpochMs: NOW + 180000, secondsToBoardStop: 250 }
+        )
+      ).not.toBeNull()
+      expect(
+        check(
+          { distanceToBoardStopM: 3000, nextStopId: '1:board-stop' },
+          { liveBoardEpochMs: NOW + 180000, secondsToBoardStop: 400 }
+        )
+      ).toBeNull()
+    })
+
+    it('a prediction already past is "late but coming" only while the bus is close', () => {
+      // 08:37 on 2026-09-22: the feed still said 08:15:00 (realtime) with the
+      // bus 5.3 km south — the position refutes the prediction.
+      expect(
+        check(
+          { distanceToBoardStopM: 5349, nextStopId: '1:board-stop' },
+          { liveBoardEpochMs: NOW - 22 * 60000 }
+        )
+      ).toBeNull()
+      // A late bus that IS closing on the stop still gets its heads-up.
+      expect(
+        check(
+          { distanceToBoardStopM: 900, nextStopId: '1:board-stop' },
+          { liveBoardEpochMs: NOW - 60000 }
+        )!.type
+      ).toBe('BOARD_BUS_APPROACHING')
+      // ...and with no position at all the prediction is all there is.
+      expect(
+        check(
+          { distanceToBoardStopM: null },
+          { liveBoardEpochMs: NOW - 60000 }
+        )!.type
+      ).toBe('BOARD_BUS_APPROACHING')
     })
 
     it('fires each stage exactly once across a full approach', () => {
@@ -1754,6 +1816,80 @@ describe('missed-bus detection', () => {
           })
         )
       ).toBeNull()
+    })
+
+    it('a record with no feed timestamp counts, as it does for the approach alert', () => {
+      // checkBoardVehicleApproach treats a null ageSec as fresh (:394, and
+      // isVehicleRecordFresh) because Metro Transit publishes no lastUpdated
+      // for a good share of in-service vehicles. This guard used to require a
+      // timestamp, so the two alerts disagreed about the very same record.
+      expect(
+        classifyMissedBus(
+          baseInput({
+            boardVehicle: {
+              ageSec: null,
+              distanceToBoardStopM: null,
+              nextStopId: '1:stop-queen'
+            },
+            liveLegTimes: { 1: { boardEpoch: BOARD, realtime: true } },
+            nowMs: BOARD + 100000
+          })
+        )
+      ).toBeNull()
+    })
+
+    it('bus short of the stop on its own run + rider AT the stop -> null (25.1)', () => {
+      // 2026-09-21: the bus was five stops back with the boarding stop still
+      // ahead of it, 2.5 km up I-35W — too far for the 250 m test, and its
+      // nextStopId was not yet the boarding stop on the earlier polls.
+      expect(
+        classifyMissedBus(
+          baseInput({
+            boardVehicle: {
+              ageSec: 62,
+              distanceToBoardStopM: 2527,
+              nextStopId: '1:stop-upstream',
+              passedBoardStop: false
+            },
+            liveLegTimes: { 1: { boardEpoch: BOARD, realtime: true } },
+            nowMs: BOARD + 100000
+          })
+        )
+      ).toBeNull()
+    })
+
+    it('…but only for a rider who is actually at the stop', () => {
+      const ctx = classifyMissedBus(
+        baseInput({
+          boardVehicle: {
+            ageSec: 62,
+            distanceToBoardStopM: 2527,
+            nextStopId: '1:stop-upstream',
+            passedBoardStop: false
+          },
+          liveLegTimes: { 1: { boardEpoch: BOARD, realtime: true } },
+          nowMs: BOARD + 100000,
+          riderPosition: FAR_AWAY
+        })
+      )
+      expect(ctx?.definitive).toBe(true)
+    })
+
+    it('a bus we can SEE is past the stop is gone, radius or no radius', () => {
+      // 200 m beyond the kerb is inside VEHICLE_AT_BOARD_STOP_M and departed.
+      const ctx = classifyMissedBus(
+        baseInput({
+          boardVehicle: {
+            ageSec: 20,
+            distanceToBoardStopM: 200,
+            nextStopId: '1:stop-downstream',
+            passedBoardStop: true
+          },
+          liveLegTimes: { 1: { boardEpoch: BOARD, realtime: true } },
+          nowMs: BOARD + 100000
+        })
+      )
+      expect(ctx?.definitive).toBe(true)
     })
 
     it('a stale vehicle record is not evidence — classification proceeds', () => {

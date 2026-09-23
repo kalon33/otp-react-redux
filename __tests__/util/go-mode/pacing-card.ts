@@ -81,7 +81,7 @@ describe('util > go-mode > pacing-card', () => {
     // A worsening edge still jumps the floor and alerts.
     const worse = tick(first, T0 + 20_000, 900, -30, opts)
     expect(worse.post?.passive).toBe(false)
-    expect(worse.post?.title).toBe('🚶 16 min walk · −1 min wait')
+    expect(worse.post?.title).toBe('🚶 16 min walk · 1 min short')
   })
 
   it('clears the card once the data goes away (boarded)', () => {
@@ -152,9 +152,51 @@ describe('util > go-mode > pacing-card', () => {
     expect(r.post).not.toBeNull()
     expect(r.post?.passive).toBe(false)
     expect(r.post?.priority).toBe(1)
-    // A negative projected wait keeps the same two-number shape.
-    expect(r.post?.title).toContain('−1 min wait')
+    // A shortfall keeps the same two-number shape, without a minus sign (12.16).
+    expect(r.post?.title).toContain('1 min short')
     expect(r.next?.state).toBe('atRisk')
+  })
+
+  // 12.16, the rider on 2026-09-21 17:06:53: "I'm sick of the negative minute
+  // wait notifications." This card was the surface — a native push, which is
+  // why no ADD_NOTIFICATION in any day file ever carried the minus sign.
+  describe('never shows a negative wait (12.16)', () => {
+    it('says "N min short" while the bus is still ahead of the rider', () => {
+      // 5 min to the bus, but the rider is 90 s further away than that.
+      const { post } = tick(null, T0, 300, -90)
+      expect(post?.title).toBe('🚲 7 min ride · 2 min short')
+      expect(post?.title).not.toMatch(/[-−]\s?\d/u)
+    })
+
+    it('says "due" once the departure itself is in the past', () => {
+      // The 17:06:53 tick, to the second: waitTimeAtStop -237 s against a board
+      // epoch already 237 s gone, on a BICYCLE access leg. Was
+      // "🚲 0 min ride · −4 min wait"; the bus actually arrived at 17:08:18.
+      const { post } = tick(null, T0, -237, -237)
+      expect(post?.title).toBe('🚲 0 min ride · due')
+      expect(post?.title).not.toMatch(/[-−]\s?\d/u)
+    })
+
+    it('never says the bus has departed — the card cannot know that', () => {
+      expect(tick(null, T0, -237, -237).post?.title).not.toMatch(
+        /departed|gone|missed/i
+      )
+    })
+
+    it('stays clean for every tick of the 17:06:06–17:08:17 window', () => {
+      // 132 consecutive negative-wait ticks on mubq7tfx-8dz3ar ride 2, walked
+      // here at the measured rate (-187 s to -317 s): none may print a sign.
+      let state: PacingCardState | null = null
+      const titles: string[] = []
+      for (let s = -187; s >= -317; s -= 1) {
+        const r = tick(state, T0 + (s + 187) * -1000, s, s)
+        if (r.post) titles.push(r.post.title)
+        state = r.next ?? state
+      }
+      expect(titles.length).toBeGreaterThan(0)
+      expect(titles.filter((t) => /[-−]\s?\d/u.test(t))).toEqual([])
+      expect(titles.filter((t) => !t.endsWith('· due'))).toEqual([])
+    })
   })
 
   it('an improving edge waits for the floor and updates passively', () => {

@@ -8,6 +8,11 @@ import {
   transitRouteSignature
 } from '../itinerary'
 
+import {
+  angleBetweenDegrees,
+  bearingDegrees,
+  PROJECTION_MIN_SPEED_MPS
+} from './replan-origin'
 import { calculateDistance } from './position-matching'
 
 /**
@@ -78,6 +83,41 @@ export const AUTO_REPLAN_ARRIVAL_SLACK_MS = 60000
 export const AUTO_REPLAN_ORIGIN_MAX_M = 75
 
 /**
+ * ...and how far BEHIND them it may start, once the rider's own heading says
+ * which way "behind" is.
+ *
+ * `AUTO_REPLAN_ORIGIN_MAX_M` is a radius, and a radius cannot tell a plan that
+ * begins 60 m up the road the rider is riding onto (harmless — they arrive at
+ * it in nine seconds) from one that begins 60 m back down the road they have
+ * left (fatal — the matcher pins them to a polyline they will never rejoin).
+ * Both measure the same 60 m. On 2026-09-21 every one of the five automatic
+ * re-plans across the two evening rides had its origin BEHIND the rider:
+ * bearings 105.7, 174.0, 136.5, 180.0 and 158.4 degrees off their heading,
+ * gaps 58.2 / 65.4 / 33.9 / 9.1 / 68.2 m. Three of the five were installed
+ * (backlog 24.3).
+ *
+ * 25 m is not a new number. It is the larger of the two gaps this file already
+ * calls honest statements about where the rider was (see
+ * `AUTO_REPLAN_ORIGIN_MAX_M`: "the 25 m and 18 m gaps of the two swaps on that
+ * ride"), which is exactly the right bar — a plan may start a tick's travel
+ * plus GPS scatter behind the rider, and no further.
+ *
+ * The margins it actually runs on are thin and worth knowing: with the
+ * projected origin the 09-21 re-plans measure 20.0 m behind (kept), 83.7 m
+ * behind (already refused by the radius), 11.5 m ahead (kept), 30.9 m ahead
+ * (kept) and 32.3 m behind (refused). 20.0 and 32.3 are the two the threshold
+ * sits between.
+ */
+export const AUTO_REPLAN_ORIGIN_BEHIND_MAX_M = 25
+
+/**
+ * How far off the rider's heading the plan's origin must bear before it counts
+ * as behind them rather than ahead. A right angle: anything in the forward
+ * half-plane is road they have not covered yet.
+ */
+export const AUTO_REPLAN_BEHIND_ANGLE_DEG = 90
+
+/**
  * How far from the rider a plan the RIDER THEMSELVES just tapped may start
  * before the trip re-plans from where they actually are.
  *
@@ -131,6 +171,13 @@ export interface AutoReplanContext {
    * checked.
    */
   currentPlanIsDead?: boolean
+  /**
+   * The rider's own heading in degrees, from the same fix as `position`. With
+   * it (and a speed over `PROJECTION_MIN_SPEED_MPS`) the origin check gains a
+   * direction: see `AUTO_REPLAN_ORIGIN_BEHIND_MAX_M`. Without it the check is
+   * the radius alone, exactly as before.
+   */
+  headingDeg?: number | null
   /** The rider's last fix, as [lat, lon]. Null skips the origin check. */
   position?: [number, number] | null
   /**
@@ -140,6 +187,9 @@ export interface AutoReplanContext {
    * nothing to say about it.
    */
   riding?: boolean
+  /** The rider's ground speed at `position`; the heading is only trusted above
+   * `PROJECTION_MIN_SPEED_MPS`. */
+  speedMps?: number | null
   /** Override for TOKEN_TRANSIT_HOP_METERS (config itinerary.tokenTransitHopMeters). */
   tokenHopMaxMeters?: number
   /** Override for TOKEN_TRANSIT_HOP_TOLERANCE_MS. */
@@ -153,6 +203,7 @@ export type AutoReplanVerdict =
       reason:
         | 'access-misses-board'
         | 'arrives-later'
+        | 'origin-behind-heading'
         | 'origin-behind-rider'
         | 'token-transit-hop'
     }
@@ -175,6 +226,44 @@ function originIsBehindRider(
 ): boolean {
   const gap = originGapMeters(candidate, position)
   return gap != null && gap > AUTO_REPLAN_ORIGIN_MAX_M
+}
+
+/**
+ * Does this replacement begin somewhere the rider has already RIDDEN PAST?
+ *
+ * The directional half of the origin check, and the one the radius cannot
+ * express. Null — no answer, never false — whenever the question cannot be
+ * put: a plan that starts on a transit leg, a leg with no coordinates, a fix
+ * with no heading, or a rider too slow for their heading to mean anything.
+ */
+export function originIsBehindHeading(
+  candidate: Itinerary | null | undefined,
+  position: [number, number] | null | undefined,
+  headingDeg: number | null | undefined,
+  speedMps?: number | null
+): boolean | null {
+  if (position == null) return null
+  if (headingDeg == null || !Number.isFinite(headingDeg)) return null
+  if (
+    speedMps != null &&
+    (!Number.isFinite(speedMps) || speedMps < PROJECTION_MIN_SPEED_MPS)
+  ) {
+    return null
+  }
+  const gap = originGapMeters(candidate, position)
+  if (gap == null) return null
+  if (gap <= AUTO_REPLAN_ORIGIN_BEHIND_MAX_M) return false
+  const leg = (candidate?.legs || [])[0] as Leg | undefined
+  const toOrigin = bearingDegrees(
+    position[0],
+    position[1],
+    Number(leg?.from?.lat),
+    Number(leg?.from?.lon)
+  )
+  if (toOrigin == null) return null
+  return (
+    angleBetweenDegrees(toOrigin, headingDeg) > AUTO_REPLAN_BEHIND_ANGLE_DEG
+  )
 }
 
 /**
@@ -466,6 +555,22 @@ export function acceptAutoReplan(
     originIsBehindRider(candidate, context.position)
   ) {
     return { accept: false, reason: 'origin-behind-rider' }
+  }
+
+  // 2b. ...and it must not start on road the rider has already covered. The
+  // radius above cannot tell 60 m ahead from 60 m behind; this can, and on
+  // 2026-09-21 every automatic re-plan of the evening was behind (24.3).
+  if (
+    !context.riding &&
+    context.position &&
+    originIsBehindHeading(
+      candidate,
+      context.position,
+      context.headingDeg,
+      context.speedMps
+    ) === true
+  ) {
+    return { accept: false, reason: 'origin-behind-heading' }
   }
 
   // 3. Token hop: never swap the plan in hand for the same journey PLUS a

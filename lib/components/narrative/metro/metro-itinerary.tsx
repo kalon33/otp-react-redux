@@ -44,6 +44,9 @@ import {
 } from './attribute-utils'
 import DefaultRouteRenderer from './default-route-renderer'
 import DepartureTimesList, {
+  LATE_DEPARTURE_CONFIRM_MINUTES,
+  minutesAfterRowDeparture,
+  rowDepartureTime,
   SetActiveItineraryHandler
 } from './departure-times-list'
 import MetroItineraryRoutes from './metro-itinerary-routes'
@@ -69,6 +72,22 @@ const DepartureTimes = styled.span`
   font-size: 14px;
   text-overflow: ellipsis;
   width: 100%;
+
+  /*
+    A row with several departures shows them as 44 px chips (backlog 23.1),
+    and this cell is half a card wide — the grid is
+    repeat(auto-fit, minmax(50%, 1fr)) and ItineraryDetails holds the right
+    column. Two chips per line there, four lines for an Orange Line row. So
+    the chips take their own full-width row under the summary, the way the
+    variants control does (VariantsRow, backlog 16.6). Rows with a single
+    departure are unchanged: they stay inline beside the duration.
+  */
+  &.with-chips {
+    /* span 2, not -1: under repeat(auto-fit, minmax(50%, 1fr)) Chrome
+       resolves a span to line -1 as the FIRST track alone — measured 253 px
+       of a 390 px card, against 362 px for span 2. */
+    grid-column: 1 / span 2;
+  }
 
   .active {
     color: #090909ee;
@@ -185,13 +204,18 @@ const ItineraryGridSmall = styled.button`
 
 /**
  * ItineraryGrid is `repeat(auto-fit, minmax(50%, 1fr))`, so a plain child would
- * take half the card. `1 / -1` puts the variants control on its own full-width
+ * take half the card. This puts the variants control on its own full-width
  * row beneath the summary, clear of ItineraryDetails (which holds the right
  * column across rows 1-2). SameShapeVariants renders nothing when the row has
  * no variants, so no empty row or grid gap is left behind.
+ *
+ * `1 / span 2` rather than the `1 / -1` this shipped with on 2026-08-27: in an
+ * auto-fit track list Chrome resolves the span to -1 as the first track alone,
+ * so the "full-width" control measured 253 px of a 390 px card — half a card,
+ * which is the shape 16.6 was opened about. `span 2` measures 362 px.
  */
 const VariantsRow = styled(SameShapeVariants)`
-  grid-column: 1 / -1;
+  grid-column: 1 / span 2;
 `
 
 const BLUR_AMOUNT = 3
@@ -259,7 +283,7 @@ type Props = {
   tripActive?: boolean
 }
 
-class MetroItinerary extends NarrativeItinerary {
+export class MetroItinerary extends NarrativeItinerary {
   static contextType = ComponentContext
 
   static ModesAndRoutes = MetroItineraryRoutes
@@ -305,10 +329,44 @@ class MetroItinerary extends NarrativeItinerary {
     })
   }
 
+  /**
+   * A card can hold several departures of the same journey, so the trip about
+   * to start is not always the one the card advertises: on 2026-09-21 the
+   * rider's thumb landed on the 10:04 chip of a row whose own departure was
+   * 09:07, and 1.15 s later Go Mode started the 10:12 Orange Line instead of
+   * the 09:14 they had been riding towards (backlog 23.1).
+   *
+   * So when the chosen departure is more than LATE_DEPARTURE_CONFIRM_MINUTES
+   * after the row's own, starting it asks first — naming the two times and
+   * nothing else, because the two times are the whole of what went wrong.
+   * Returns false when the rider says no.
+   */
+  _confirmLaterDeparture = (): boolean => {
+    const { intl, itinerary } = this.props
+    const rowTime = rowDepartureTime(itinerary)
+    if (rowTime === null) return true
+    if (minutesAfterRowDeparture(itinerary) <= LATE_DEPARTURE_CONFIRM_MINUTES) {
+      return true
+    }
+    return window.confirm(
+      intl.formatMessage(
+        {
+          defaultMessage: 'Start {chosen} instead of {row}?',
+          id: 'components.MetroUI.confirmLaterDeparture'
+        },
+        {
+          chosen: intl.formatTime(itinerary.startTime),
+          row: intl.formatTime(rowTime)
+        }
+      )
+    )
+  }
+
   _handleStartTrip = () => {
     const { beginGoMode, intl, itinerary, returnToGoMode, tripActive } =
       this.props
     if (!beginGoMode) return
+    if (!this._confirmLaterDeparture()) return
     const roundTripPlan = this._roundTripPlan()
     if (tripActive) {
       // A trip is already running (backgrounded behind the planner):
@@ -577,7 +635,11 @@ class MetroItinerary extends NarrativeItinerary {
                     })()}
                   </SecondaryInfo>
                 </ItineraryDetails>
-                <DepartureTimes>
+                <DepartureTimes
+                  className={
+                    itinerary.allStartTimes?.length > 1 ? 'with-chips' : ''
+                  }
+                >
                   {showInlineItinerarySummary && getFirstTransitLeg(itinerary) && (
                     <Route
                       leg={getFirstTransitLeg(itinerary)}

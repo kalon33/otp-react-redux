@@ -21,54 +21,40 @@ export interface LiveLegTime {
   alightProjected?: boolean
   /** Whether alightEpoch is a live prediction (drives the pulsing icon). */
   alightRealtime?: boolean
-  /**
-   * Set by clampNonLiveLegTimes when it bridged a stale non-live board time
-   * across the poll gap, so the bridge happens once and a departed run is not
-   * projected forward on every tick. Cleared by the next refresh poll, which
-   * rebuilds the entry.
-   *
-   * This is the LATCH, not the provenance: it says "the bridge has been spent
-   * on this record", and clampNonLiveLegTimes tests it to stop the walk. What
-   * the value IS is `boardIsFloor` below. Keep them apart — setting this one
-   * from anywhere else would silently disarm that bridge.
-   *
-   * MEASURED 2026-09-15 (session mu346i5y-ng2uqc, leg 0, from the day file):
-   * the latch does NOT in fact stop the walk, because "cleared by the next
-   * refresh poll" happens every 20 s. Between 15:37:39 and 15:49:44 the board
-   * epoch was re-raised to the current millisecond on ~30 successive polls and
-   * re-clamped to the whole minute 11 times — 15:38:00, 15:39:00, 15:40:00,
-   * 15:41:00, 15:42:00, 15:43:00, 15:44:00, 15:46:00, 15:47:00, 15:48:00,
-   * 15:49:00, each with `boardClamped: true` and each undone 20 s later. The
-   * 2026-09-04 "bridge once" promise therefore holds only within a poll
-   * interval; fixing that is a separate matter from this flag. What
-   * `boardIsFloor` does is make the value unusable as a wait basis either way.
-   */
-  boardClamped?: boolean
   boardEpoch: number | null
   /**
    * boardEpoch is a FLOOR, not a statement about when the bus leaves: a stale
-   * non-live time raised to `now` (mergeLiveTimePoint) or to the current
-   * minute (clampNonLiveLegTimes). The raise exists so a displayed time never
-   * walks backwards, and for that it is right — but the number it produces is
-   * "no earlier than this", and the bus may be minutes further out.
+   * non-live time whose moment has gone (mergeLiveTimePoint / markStaleLegTimes
+   * both say so once it falls behind the displayed minute). The number is "no
+   * earlier than this", and the bus may be minutes further out.
    *
    * So nothing may compute a WAIT from it, and nothing may publish it as the
    * board time. 2026-09-15, backlog 17.6: the rider wrote "- minute waits make
    * no sense" at 15:37:32, and leg 0's boardEpoch that ride took roughly forty
-   * distinct values in thirteen minutes, of which two classes are this flag's:
-   * the current millisecond on every 20 s refresh poll (mergeLiveTimePoint's
-   * `Math.max(kept.epoch, nowMs)`) and the whole minute with
-   * `boardClamped: true` on every minute boundary (clampNonLiveLegTimes). Both
-   * sit at or barely behind `now`, so `boardEpoch − now` is always about zero.
+   * distinct values in thirteen minutes.
+   *
+   * DERIVED, never latched (backlog 17.19, 2026-09-22). Two of those forty
+   * classes were this flag's, and both were manufactured by the code that set
+   * it: the current millisecond on every 20 s refresh poll (mergeLiveTimePoint's
+   * `Math.max(kept.epoch, nowMs)`, 35 dispatches 15:37:39-15:49:00) and the
+   * whole minute on every minute boundary, carrying a `boardClamped` latch that
+   * the next poll rebuilt away — set and undone eleven times in twelve minutes.
+   * Neither raises the epoch now; the flag is recomputed from the clock on every
+   * call, and `boardClamped` is gone. A 725-second reconstruction of that
+   * cadence: 12 re-latches and 123 now-valued epochs before, 0 and 0 after.
    *
    * The row's third value is NOT this family and this flag does not cover it:
    * 15:26:00 at 15:36:33, 15:31:00 at 15:43:28 and 15:33:00 at 15:44:06 all
    * arrived with `boardRealtime: true`, one per itinerary swap — the feed's own
-   * prediction for a from-stop already behind the bus. getEffectiveBoardTimeMs
-   * trusts `boardRealtime` first, so that one still reaches the wait math.
+   * prediction for a from-stop already behind the bus. Re-measured 2026-09-22
+   * (backlog 17.18): all three landed while the riding fact stood, so they
+   * never reached the wait math; the class that did was leg 1's 15:35:00, four
+   * dispatches 15:35:15-15:36:17. `realtimeBoardIsSpent` (board-departure.ts)
+   * is what demotes one of those to this flag when the bus's own record says it
+   * has not reached the stop.
    *
-   * legBoard refuses to publish a floored epoch, which is what keeps these two
-   * out of the trip sheet's wait arithmetic.
+   * legBoard refuses to publish a floored epoch, which is what keeps every one
+   * of these out of the trip sheet's wait arithmetic.
    */
   boardIsFloor?: boolean
   /** Mirrors alightProjected. */

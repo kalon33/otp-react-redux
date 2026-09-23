@@ -316,6 +316,28 @@ components:
     noCompanions: You do not have any existing travel companions.
     submitNewCompanion: Send invitation
     title: Travel companions
+  ConnectionFirst:
+    accessBike: Bike {distance} to get here
+    accessWalk: Walk {distance} to get here
+    bikeWholeWay: Bike the whole way
+    change: Change
+    directDistance: "{distance}, no bus"
+    egressBike: Then bike {distance} to your destination
+    egressNone: Your destination is right here
+    egressWalk: Then walk {distance} to your destination
+    getOffHeading: Where do you get off?
+    getOnHeading: Where do you get on?
+    noTransit: No transit
+    offAt: Off at
+    onAt: On at
+    or: or
+    placesToGetOff: "{count, plural, one {# place to get off} other {# places to get off}}"
+    stepGetOff: Get off
+    stepGetOn: Get on
+    stepTimes: Times
+    then: then
+    walkWholeWay: Walk the whole way
+    waysToStart: "{count, plural, one {# way to start} other {# ways to start}}"
   DateTimeOptions:
     arriveBy: Arrive by
     departAt: Depart at
@@ -416,6 +438,7 @@ components:
     busHeadsign: to {headsign}
     busLabel: Bus {label}
     busNotBroadcasting: Bus not broadcasting yet — scheduled {time}
+    busNotBroadcastingWaiting: Bus not broadcasting yet
     changeBus: Choose bus
     confirmExit: Are you sure you want to stop tracking this trip?
     departureGone: departed
@@ -479,10 +502,12 @@ components:
       modeDrive: Drive
       modeGo: Go
       modeScooter: Scooter
-      nextStepTitle: Next Step
+      nextStepTitle: Next step
       nextStopTitle: Next stop
       offRouteDistance: "{metres}m from the route"
       offRouteTitle: Off route
+      pacingDue: due
+      pacingWait: "{minutes} min wait"
       routeAtStop: "{routeName} · {stopName}"
       routeMinutes: "{routeName} · {minutes} min"
       routeMinutesLate: "{routeName} · {minutes} min late"
@@ -499,6 +524,10 @@ components:
       theStop: the stop
       tightConnectionTitle: Tight connection
       tripCompleteTitle: Trip complete
+      tripUpdatedAlight: "{routeName} · off at {stopName}{arrival}"
+      tripUpdatedArriving: " · arriving in {minutes} min"
+      tripUpdatedBoard: "{routeName} · in {minutes} min · {stopName}"
+      tripUpdatedTitle: Trip updated
       turnIn: In {distance}{then}
       turnThen: ", then {instruction}"
       unreachable: "{howFar} · not getting closer"
@@ -507,6 +536,7 @@ components:
       yourBusLead: Your bus
       yourConnection: your connection
       yourDestination: your destination
+      yourRide: your ride
       yourRideLead: Your ride
       yourStop: your stop
       yourStopTitle: Your stop
@@ -538,6 +568,8 @@ components:
     returnBannerArrived: You've arrived — tap to finish
     returnBannerLive: On trip · Next stop {stop} · Arrive {eta} — tap to return
     returnBannerNoProgress: Trip in progress — tap to return
+    returnBannerWaiting: Waiting at {stop} — tap to return
+    returnBannerWaitingTime: Waiting at {stop} · {time} — tap to return
     returnCountdownLabel: Leave for return in
     returnLeaveBy: Leave by {time}
     returnLeaveNow: Leave now
@@ -569,6 +601,9 @@ components:
     vehicleDistance: "{distance}m away · #{label}"
     waitingAtStop: Waiting at {stop}
     waitingAtStopTime: Waiting at {stop} · {time}
+    waitingBusAtStop: "Bus #{label} is at the stop"
+    waitingBusDistanceAway: "Bus #{label} · {distance} away"
+    waitingBusStopsAway: "Bus #{label} · {count, plural, one {1 stop away} other {# stops away}}"
     waitingGPS: Acquiring GPS signal...
     walkToStop: "{emoji} {time} walk to {stop}"
     whereToAlight: Where do you want to get off?
@@ -600,6 +635,7 @@ components:
     title: Imagery of the street
   MetroUI:
     arriveAt: You arrive
+    confirmLaterDeparture: Start {chosen} instead of {row}?
     confirmSwitchTrip: Switch your active trip to this route? Your current guidance will update.
     fare: "{fare}"
     itineraryDescription: "{time} itinerary using {routes}"
@@ -738,6 +774,8 @@ components:
         A transit connection was found, but it was outside the search window,
         try adjusting your search window, using the vehicle types you selected.
       header: No transit connection in search window
+    NO_TRANSIT_OPTION_FOUND:
+      advisory: No transit option was found for this search.
     OTP_RR_TRIP_IN_PAST:
       body: One or more of these itineraries ends in the past.
       header: Trip has already occurred
@@ -911,8 +949,13 @@ components:
       your pace.
     bikeSpeedLabel: "Your biking speed: {speed} mph"
     bikeSpeedSlider: Biking speed
+    connectionFirstHelp: >-
+      Off by default. Results ask where you get on, then where you get off, and
+      only then show the times for the next bus.
+    connectionFirstLabel: Choose stops first (trial)
     gettingAroundHeader: Getting around
     heading: Settings
+    resultsHeader: Results
     routingHelp: >-
       These apply to every trip you plan, and to any route the app rebuilds
       while you ride.

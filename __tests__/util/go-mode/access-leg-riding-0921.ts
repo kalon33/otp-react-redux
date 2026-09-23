@@ -196,7 +196,12 @@ describe('util > go-mode > a confirmed boarding on an access leg (23.2)', () => 
     clock = undefined
   })
 
-  /** Run the window, tapping "I'm on the bus" at the recorded moment. */
+  /**
+   * Run the window, tapping "I'm on the bus" at the recorded moment — unless
+   * the app has already worked it out for itself by then (23.6), which from
+   * this branch on it does. Either way the boarding lands through
+   * `confirmVehicleSelection`, which is what this file is about.
+   */
   const runWindow = () => {
     // From the 09:21:17 re-plan up to the last recorded fix, 09:23:43.
     for (const fix of fixesBetween(CONFIRM_MS - 50000, CLEARED_MS + 2000)) {
@@ -231,10 +236,15 @@ describe('util > go-mode > a confirmed boarding on an access leg (23.2)', () => 
       true
     )
     expect(reroutes[0].payload.autoApply).toBe(true)
-    // The very next fix after the tap — 09:22:10.999, 463 ms after
-    // CONFIRM_VEHICLE. On 0e91867ef this window produced no START_REROUTE at
-    // all, of any reason.
-    expect(hhmmss(reroutes[0].payload.startedAtMs)).toBe('09:22:10')
+    // On 0e91867ef this window produced no START_REROUTE at all, of any
+    // reason. With only 23.2 in place the first one landed at 09:22:10.999,
+    // 463 ms after the rider's CONFIRM_VEHICLE — the tap being the only way
+    // the app could learn it. 23.6 now reaches the same conclusion from the
+    // same evidence without being asked: this window opens at 09:21:20, the
+    // four access-board gates are already satisfied, and the twenty-second
+    // bar is met at 09:21:44 — 26 s before the rider reached for the button.
+    // Same reason, same route, same trip; only sooner.
+    expect(hhmmss(reroutes[0].payload.startedAtMs)).toBe('09:21:44')
 
     // It splices from the trip the rider is ON. (The live-times refresh fetches
     // the PLANNED trip on its own schedule, so look for the id, not the order.)

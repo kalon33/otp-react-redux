@@ -36,8 +36,16 @@
  * reports the gap so the next ride can measure it (see
  * `BOARD_SOURCE_DISAGREEMENT_MS` and `recordBoardTimeDisagreement`).
  */
+import { findStopTimeIndex, liveStopArrival } from './alight-optimizer'
 import { LIVE_REALTIME_STATES } from './departure-anchor'
-import type { LiveTimePoint } from './alight-optimizer'
+import { tripIdsMatch } from './trip-id'
+import { vehicleShortOfBoardStop } from './transit-trust'
+import type { BoardVehicleEvidence } from './transit-trust'
+import type {
+  LiveTimePoint,
+  TripAnchor,
+  TripStopTime
+} from './alight-optimizer'
 
 /** Where a published board epoch actually came from. */
 export type BoardSource = 'stop' | 'trip'
@@ -64,50 +72,14 @@ export const BOARD_SOURCE_DISAGREEMENT_MS = 60000
 export const STOP_SNAPSHOT_MAX_AGE_MS = 180000
 
 /**
- * OTP2's stop query returns `trip.id` as the relay global id — base64 of
- * `Trip:<feed>:<id>`, unpadded (`VHJpcDoxOjEzNDYwNTI` -> `Trip:1:1346052`) —
- * while the leg, the riding fact and `findTrip` all use the gtfsId
- * (`1:1346052`). Without this the two sources can never be matched at all.
- *
- * Deliberately strict: a decode only counts when it yields printable ASCII
- * beginning `Trip:`. A bare numeric gtfsId is itself valid base64 and would
- * otherwise "decode" to bytes that could collide with something.
+ * The two spellings of one trip id — as given, relay-decoded, and decoded
+ * minus the `Trip:` prefix — and the match across them. Both moved to
+ * `./trip-id` on 2026-09-21 so `departure-anchor` can use them without an
+ * import cycle (it is where `LIVE_REALTIME_STATES` above comes from); they are
+ * re-exported here because this is where every current caller imports them
+ * from. `VHJpcDoxOjEzNDYwNTI` -> `Trip:1:1346052` -> `1:1346052`.
  */
-function decodeTripGlobalId(raw: string): string | null {
-  if (!/^[A-Za-z0-9+/_-]+={0,2}$/.test(raw)) return null
-  const b64 = raw.replace(/-/g, '+').replace(/_/g, '/')
-  const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4)
-  let decoded: string
-  try {
-    decoded =
-      typeof atob === 'function'
-        ? atob(padded)
-        : // eslint-disable-next-line no-undef
-          Buffer.from(padded, 'base64').toString('binary')
-  } catch {
-    return null
-  }
-  if (!/^Trip:[\x20-\x7e]+$/.test(decoded)) return null
-  return decoded
-}
-
-/** Every spelling of one trip id: as given, decoded, and decoded-minus-prefix. */
-export function tripIdAliases(raw: string | null | undefined): string[] {
-  const s = typeof raw === 'string' ? raw.trim() : ''
-  if (!s) return []
-  const decoded = decodeTripGlobalId(s)
-  return decoded ? [s, decoded, decoded.slice('Trip:'.length)] : [s]
-}
-
-/** Whether two trip ids name the same run, across the two id spellings. */
-export function tripIdsMatch(
-  a: string | null | undefined,
-  b: string | null | undefined
-): boolean {
-  const aliasesA = tripIdAliases(a)
-  if (!aliasesA.length) return false
-  return tripIdAliases(b).some((alias) => aliasesA.indexOf(alias) >= 0)
-}
+export { tripIdAliases, tripIdsMatch } from './trip-id'
 
 /**
  * The live departure the stop-level poll holds for this trip at this stop, or
@@ -158,6 +130,150 @@ export function stopLevelBoardDeparture(
     }
   }
   return null
+}
+
+/**
+ * The trip query's board point, with its SCHEDULE never passed off as live.
+ *
+ * `liveStopArrival` calls any stop time under `UPDATED`/`ADDED`/`MODIFIED`
+ * realtime. At the boarding stop that is not good enough: the trip query asks
+ * for ARRIVAL fields only, and on the Orange Line OTP answers the boarding
+ * stop with the timetable under an UPDATED flag while every stop after it
+ * carries the real delay. Measured 2026-09-22 (backlog 26.1, session
+ * `mucordp1-jqcrp2`, trip `1:1346857` at `1:56831`): from 08:09:46 to the end
+ * of the recording the stop time read `realtimeState UPDATED, arrivalDelay 0,
+ * realtimeArrival == scheduledArrival` (08:15:00) — the stop before it
+ * SCHEDULED, the stop after it +496 s at 08:19:05 and climbing to +1 376 s —
+ * while the stop query for the same trip at the same stop said 08:24:39. On
+ * 09-21 (21.1, trip `1:1346052`) it was the same shape: 08:26:00 published
+ * UPDATED with no delay, +5m27s at the stop.
+ *
+ * So a trip-query board time whose realtime value IS its scheduled value is
+ * handed on as the schedule (`realtime: false`). Nothing is lost when it is
+ * true: the stop poll's own live row still wins in `resolveBoardDeparture`,
+ * and `mergeLiveTimePoint` keeps the previous value rather than walk a
+ * displayed time backwards. What it stops is 08:22:09 on 09-22 — 08:15:00
+ * published `boardRealtime: true` for 17 minutes after the stop poll went
+ * stale. Board only: the ALIGHT side still reads `liveStopArrival` unchanged.
+ */
+export function tripQueryBoardPoint(
+  stopTimes: TripStopTime[],
+  stopGtfsId: string | null | undefined,
+  stopName?: string | null,
+  anchor?: TripAnchor | null
+): LiveTimePoint | null {
+  const point = liveStopArrival(stopTimes, stopGtfsId, stopName, anchor)
+  if (!point?.realtime) return point
+  const st = stopTimes[findStopTimeIndex(stopTimes, stopGtfsId, stopName)]
+  if (
+    st &&
+    st.scheduledArrival != null &&
+    st.realtimeArrival === st.scheduledArrival
+  ) {
+    return { ...point, realtime: false }
+  }
+  return point
+}
+
+/**
+ * How far behind `now` a realtime board time may sit and still be read as
+ * "this boarding is happening".
+ *
+ * A bus dwelling at the kerb legitimately carries a departure a few seconds
+ * old, and the whole minute the feed publishes is itself up to 59 s coarse.
+ * 90 s is MISSED_BUS_GRACE_REALTIME_MS — the same allowance the missed-bus
+ * classifier already gives a realtime departure before it will call a bus
+ * gone — so the two cannot disagree about when a realtime epoch has expired.
+ */
+export const REALTIME_BOARD_SPENT_AFTER_MS = 90000
+
+/** What the board-time rules need to know about the rider and the bus. */
+export interface BoardStopEvidence {
+  /** `leg.from.stop.gtfsId` — the stop this boarding happens at. */
+  boardStopId?: string | null
+  /** The rider is at the boarding stop (RIDER_AT_BOARD_STOP_M). */
+  riderAtBoardStop?: boolean
+  /** The rider is verifiably aboard this leg's vehicle (the sticky fact). */
+  riding: boolean
+  /** The trip's own vehicle record, or null when there is none. */
+  vehicle?: BoardVehicleEvidence | null
+}
+
+/**
+ * Is this "realtime" board time SPENT — a feed prediction already in the past
+ * that nothing on the ground supports, and therefore not a wait basis?
+ *
+ * MEASURED 2026-09-15, session `mu346i5y-ng2uqc` (backlog 17.18). Leg 0's
+ * board epoch took ~40 distinct values in 13 minutes, and one class arrived
+ * with `boardRealtime: true` while sitting minutes in the past: 15:26:00 at
+ * 15:36:33, 15:31:00 at 15:43:28, 15:33:00 at 15:44:06 — the feed's own
+ * prediction for a from-stop the bus had already passed, one per itinerary
+ * swap. `getEffectiveBoardTimeMs` trusts `boardRealtime` first, so these reach
+ * every surface that quotes a wait.
+ *
+ * Two things were re-measured on 2026-09-22 before this was written, and both
+ * corrected the row:
+ *
+ *  - all three of those values landed with the riding fact STANDING (SET_RIDING
+ *    15:36:27, held to 15:46:22 and re-set 15:46:25), so they never reached the
+ *    wait math: aboard, there is no boarding left to quote. The class that DID
+ *    reach it is a fourth value the row never named — leg 1's 15:35:00,
+ *    dispatched four times between 15:35:15 and 15:36:17, 15-78 s in the past,
+ *    with the bus still 70 s from the kerb.
+ *  - on that ride 21.1 already answers all four: the stop-level poll held
+ *    `1:1346556` at I-35W & 98th St as `UPDATED, realtimeDeparture 15:40:38`
+ *    (scheduled 15:35:00, delay 338 s) at the very instant the trip query
+ *    published 15:35:00 under an UPDATED flag. `resolveBoardDeparture` takes
+ *    the stop's answer and the past value never appears.
+ *
+ * So this is the LAST RESORT, for the case 21.1 cannot cover: no live stop-level
+ * entry for this trip, or a stop snapshot older than STOP_SNAPSHOT_MAX_AGE_MS —
+ * which is every transit leg the tick is not currently re-polling (see that
+ * constant). There the trip query's past "realtime" epoch is all there is.
+ *
+ * The rule, and what each arm is for:
+ *
+ *  - the epoch must be more than {@link REALTIME_BOARD_SPENT_AFTER_MS} old;
+ *  - the rider must have no riding fact — aboard, the board time is about
+ *    something already done and no surface quotes it anyway;
+ *  - and the bus's OWN record must place it short of the stop. That is the
+ *    contradiction: the feed says this run left, and the same feed's vehicle
+ *    says it has not got there. Absent or stale vehicle data answers FALSE —
+ *    the epoch is left alone. "The vehicle is not yet at the stop" is a claim
+ *    that needs evidence, and a missing record is not a "no" (the same policy
+ *    `vehiclePassedStopOnTrip` and `isVehicleRecordFresh` already state).
+ *
+ * A spent point is demoted, never deleted: the caller hands it on with
+ * `realtime: false, isFloor: true`, which is 17.6's existing vocabulary for
+ * "a bound, not a prediction". Every wait-quoting surface already refuses one —
+ * `legBoard`/`buildLiveItinerary` keep the plan's own startTime, TransitProgress
+ * drops the "Waiting at X · time" clock, `liveBoardEpochFor` returns null so no
+ * push quotes minutes from it, and `getEffectiveBoardTimeMs` falls to the
+ * override or the plan. Nothing new has to learn about this rule.
+ */
+export function realtimeBoardIsSpent(
+  point: LiveTimePoint | null | undefined,
+  nowMs: number,
+  evidence: BoardStopEvidence,
+  spentAfterMs: number = REALTIME_BOARD_SPENT_AFTER_MS
+): boolean {
+  if (!point?.realtime) return false
+  if (!Number.isFinite(point.epoch)) return false
+  if (point.epoch >= nowMs - spentAfterMs) return false
+  if (evidence.riding) return false
+  return vehicleShortOfBoardStop(
+    evidence.vehicle,
+    evidence.boardStopId,
+    evidence.riderAtBoardStop
+  )
+}
+
+/**
+ * The same point, demoted to a bound. Separate from the test so a caller that
+ * only wants the verdict (a rule, a report) never has to build the value.
+ */
+export function demoteSpentBoardPoint(point: LiveTimePoint): LiveTimePoint {
+  return { ...point, isFloor: true, projected: false, realtime: false }
 }
 
 export interface BoardDepartureResolution {

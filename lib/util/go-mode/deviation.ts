@@ -1,6 +1,8 @@
 import type { Leg } from '@opentripplanner/types'
 
+import { accessBoardGates } from './riding'
 import { deviationThresholdM, shouldAutoReroute } from './notification-service'
+import type { AccessBoardSample } from './riding'
 import type { NotificationEvent } from './notification-service'
 
 /**
@@ -42,6 +44,93 @@ export const QUIET_REPLAN_FULL_COOLDOWN_LEG_M = 2000
  */
 export const QUIET_REPLAN_BURST_WINDOW_MS = 300000
 export const QUIET_REPLAN_BURST_MAX = 3
+
+/**
+ * How long a freshly-installed re-plan gets to be joined before it counts as
+ * ignored.
+ *
+ * A swap hands the rider a new polyline and the matcher starts over on it, so
+ * a few seconds at `currentLegProgress` 0 is normal and means nothing. What is
+ * NOT normal is still being off that polyline by the mode's own deviation
+ * threshold half a minute later — that is a plan the rider never joined, and
+ * re-planning again immediately just hands them another one.
+ *
+ * 30 s is set by the two recorded outcomes, which are cleanly separated.
+ * 2026-09-21 17:34:42 (`0921-1727-newbundle`): the rider converged onto the
+ * new plan in 14 s (`behind` -> `on_track` at 17:34:57) and rode it for 55 s —
+ * that re-plan worked and must not be penalised. 2026-09-21 16:38:05
+ * (`0921-1605-465-wrongdir`): `deviated` again at 16:38:16, 11 s in, and stayed
+ * deviated through both of the re-plans that followed.
+ */
+export const QUIET_REPLAN_IGNORED_WINDOW_MS = 30000
+
+/**
+ * ...and what the next automatic re-plan then has to wait.
+ *
+ * The 16:38 loop is three full-trip plans in 61 s, each installed, each
+ * abandoned within seconds, and by the third the rider's progress bar had been
+ * reset to zero twice and their map redrawn three times. None of the ordinary
+ * brakes could stop it: the scaled cooldown was 25-38 s because the leg kept
+ * getting shorter, and `QUIET_REPLAN_BURST_MAX` is exactly 3.
+ *
+ * Two minutes, doubling per consecutive ignored re-plan. It is deliberately
+ * far longer than the cooldown: the cooldown asks "has the rider had time to
+ * settle onto the last plan", and the answer here is that they had time and
+ * did not take it. A rider who is going their own way is better served by a
+ * stable map and their own eyes than by a plan a minute.
+ */
+export const QUIET_REPLAN_IGNORED_BACKOFF_MS = 120000
+
+/** Ceiling on the doubling — five minutes, the burst window. */
+export const QUIET_REPLAN_IGNORED_BACKOFF_MAX_MS = 300000
+
+/** The extra silence owed after `streak` consecutive ignored re-plans. */
+export function ignoredReplanBackoffMs(streak: number | undefined): number {
+  const n = Number.isFinite(streak)
+    ? Math.max(0, Math.floor(streak as number))
+    : 0
+  if (n <= 0) return 0
+  return Math.min(
+    QUIET_REPLAN_IGNORED_BACKOFF_MAX_MS,
+    QUIET_REPLAN_IGNORED_BACKOFF_MS * Math.pow(2, n - 1)
+  )
+}
+
+/**
+ * Did the rider join the re-plan just installed, or ride away from it?
+ *
+ * Called once per tick with the window's bookkeeping. It closes the window in
+ * both directions: drift past the mode's threshold inside the window counts
+ * the re-plan ignored and arms the backoff; surviving the window resets the
+ * streak, so a rider who settles onto a plan buys back the app's licence to
+ * re-plan for them later.
+ */
+export function noteReplanFollowed(input: {
+  /** When the last automatic re-plan was installed; null when none is open. */
+  appliedAtMs: number | null
+  /** This tick's smoothed distance from the planned route. */
+  distanceFromRoute?: number | null
+  ignoredStreak: number
+  nowMs: number
+  /** `deviationThresholdM` for the leg the rider is on. */
+  thresholdM: number
+}): { appliedAtMs: number | null; ignoredStreak: number } {
+  const { appliedAtMs, distanceFromRoute, ignoredStreak, nowMs, thresholdM } =
+    input
+  if (appliedAtMs == null) return { appliedAtMs, ignoredStreak }
+  if (nowMs - appliedAtMs > QUIET_REPLAN_IGNORED_WINDOW_MS) {
+    // Joined and stayed: the window closed with the rider on the plan.
+    return { appliedAtMs: null, ignoredStreak: 0 }
+  }
+  if (
+    distanceFromRoute != null &&
+    Number.isFinite(distanceFromRoute) &&
+    distanceFromRoute > thresholdM
+  ) {
+    return { appliedAtMs: null, ignoredStreak: ignoredStreak + 1 }
+  }
+  return { appliedAtMs, ignoredStreak }
+}
 
 /**
  * The distance-from-route to judge deviation on: the smaller of this tick's and
@@ -121,6 +210,102 @@ export function shouldQuietReplanAccessLeg(input: {
 }
 
 /**
+ * Consecutive fixes of transit-pace motion on the next transit leg's own shape
+ * before the quiet access re-plan stands down (backlog 26.6).
+ *
+ * The re-plan's other guard is `riding.tripId` — evidence of a specific bus —
+ * and on 2026-09-22 09:33 that fact was four seconds late: vehicle 8148's feed
+ * record was 52 s stale (`lastSeen` 09:32:43, `STOPPED_AT` Lake St), so the
+ * matcher had nothing to establish on while the rider rode away from the
+ * platform on it. Meanwhile the matcher was held on the finished bike leg
+ * (the board time the app held for the bus leg was 09:40:11, so the transition
+ * gate refused it) and every metre down the busway was a metre "off" that bike
+ * leg. The scoped re-plan went out on the 09:33:48.999 fix and installed a
+ * 284 m BICYCLE leg for a rider doing 15.2 m/s.
+ *
+ * The fixes of that window, rider speed in m/s:
+ *
+ *   09:33:42.999 11.37 | :43.999 12.36 | :44.999 12.72 | :45.999 13.13
+ *   :46.999 13.30 | :47.999 14.49 | :48.999 15.21 (the re-plan's own fix)
+ *
+ * — six distinct fixes at or above {@link ACCESS_BOARD_MIN_SPEED_MPS} by the
+ * one the re-plan went out on, all within 5 m of the Orange Line's shape. The
+ * drift crossed the bike leg's deviation threshold on the 09:33:46.999 fix
+ * (`UPDATE_PROGRESS status deviated` 09:33:47.081 on the day), the fourth of
+ * them, so four is the most this could ask and still be in hand on the first
+ * tick a re-plan could ever run. Three keeps one fix of margin for a phone
+ * that drops one, and is still more than a bad fix can manufacture: the one
+ * transit-pace sample on record from a rider on a bicycle is a single
+ * 13.0 m/s spike, 1,073 m off the corridor (`bike-false-board-1029`,
+ * 10:34:13).
+ *
+ * Counted in FIXES, not ticks: the stream delivers some fixes twice (the
+ * 09:33:48.999 and :53.999 fixes above are each dispatched twice), and a
+ * repeated fix is not a second observation.
+ */
+export const TRANSIT_PACE_REPLAN_HOLD_FIXES = 3
+
+/** A run of fixes that look like a rider carried along the next transit leg. */
+export interface TransitPaceRun {
+  /** The transit leg whose shape the run tracks. */
+  boardLegIndex: number
+  /** Distinct qualifying fixes in the run. */
+  fixes: number
+  /** The last fix folded in, by its own clock. */
+  lastFixMs: number
+  /** The access leg the matcher is on. */
+  legIndex: number
+}
+
+/**
+ * Fold one access-leg fix into the transit-pace run.
+ *
+ * The same three facts {@link accessBoardGates} asks of a boarding — transit
+ * pace, the fix on the next transit leg's own shape inside the establish
+ * bound, a fix good enough to place the rider — and NOT the fourth, a vehicle
+ * match. That is the whole point: this is the evidence-free arm, for exactly
+ * the minutes when the feed is too stale to name the bus. It never boards
+ * anybody; all it does is keep the quiet re-plan from answering "the rider is
+ * on a bus" with a bicycle.
+ */
+export function trackTransitPace(
+  prev: TransitPaceRun | null,
+  sample: AccessBoardSample
+): TransitPaceRun | null {
+  const gates = accessBoardGates({ ...sample, vehicleMatch: null })
+  if (!gates.transitPace || !gates.onCorridor || !gates.fixSound) return null
+  const { boardLegIndex, legIndex, nowMs } = sample
+  if (
+    !prev ||
+    prev.legIndex !== legIndex ||
+    prev.boardLegIndex !== boardLegIndex
+  ) {
+    return { boardLegIndex, fixes: 1, lastFixMs: nowMs, legIndex }
+  }
+  if (nowMs <= prev.lastFixMs) return prev
+  return { ...prev, fixes: prev.fixes + 1, lastFixMs: nowMs }
+}
+
+/**
+ * Should the quiet access re-plan stand down because the rider is, by every
+ * measure short of a vehicle id, already on the bus?
+ *
+ * Only for the access leg the run was measured on. Silence is not asked for
+ * anywhere else: a rider who slows below transit pace or leaves the transit
+ * leg's shape resets the run on that very fix, and the re-plan is theirs again.
+ */
+export function transitPaceHoldsAccessReplan(
+  run: TransitPaceRun | null | undefined,
+  legIndex: number
+): boolean {
+  return (
+    !!run &&
+    run.legIndex === legIndex &&
+    run.fixes >= TRANSIT_PACE_REPLAN_HOLD_FIXES
+  )
+}
+
+/**
  * Whether a quiet access-leg re-plan will run on THIS tick — asked BEFORE the
  * notifications are raised, so the ROUTE_DEVIATION card can be held back for a
  * problem the app is about to fix silently.
@@ -143,6 +328,7 @@ export function shouldQuietReplanAccessLeg(input: {
 export function willQuietReplanAccessLeg(input: {
   currentLeg: Leg | undefined
   distanceFromRoute?: number | null
+  ignoredStreak?: number
   lastReplanAtMs: number
   nowMs: number
   reRouteStatus: string
@@ -152,6 +338,7 @@ export function willQuietReplanAccessLeg(input: {
   const {
     currentLeg,
     distanceFromRoute,
+    ignoredStreak,
     lastReplanAtMs,
     nowMs,
     recentReplanAtMs,
@@ -166,6 +353,7 @@ export function willQuietReplanAccessLeg(input: {
       reRouteStatus
     }) &&
     quietReplanAdmitted({
+      ignoredStreak,
       lastReplanAtMs,
       nowMs,
       recentReplanAtMs,
@@ -257,6 +445,8 @@ export function trimQuietReplanHistory(
  * The burst window is the backstop the scaled cooldown needs.
  */
 export function quietReplanAdmitted(input: {
+  /** Consecutive re-plans the rider never joined — see ignoredReplanBackoffMs. */
+  ignoredStreak?: number
   lastReplanAtMs: number
   nowMs: number
   reRouteStatus: string
@@ -266,6 +456,7 @@ export function quietReplanAdmitted(input: {
   remainingAccessMeters?: number | null
 }): boolean {
   const {
+    ignoredStreak,
     lastReplanAtMs,
     nowMs,
     recentReplanAtMs,
@@ -273,7 +464,11 @@ export function quietReplanAdmitted(input: {
     reRouteStatus
   } = input
   if (reRouteStatus !== 'idle' && reRouteStatus !== 'none') return false
-  if (nowMs - lastReplanAtMs < quietReplanCooldownMs(remainingAccessMeters)) {
+  const wait = Math.max(
+    quietReplanCooldownMs(remainingAccessMeters),
+    ignoredReplanBackoffMs(ignoredStreak)
+  )
+  if (nowMs - lastReplanAtMs < wait) {
     return false
   }
   return (

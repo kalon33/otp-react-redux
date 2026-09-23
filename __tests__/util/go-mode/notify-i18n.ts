@@ -6,7 +6,9 @@ import yaml from 'js-yaml'
 
 import {
   checkDestinationUnreachable,
-  checkTripComplete
+  checkLegTransition,
+  checkTripComplete,
+  resetLegAnnouncements
 } from '../../../lib/util/go-mode/notification-service'
 import { evaluateDepartureDrift } from '../../../lib/util/go-mode/departure-drift'
 import {
@@ -122,6 +124,58 @@ describe('util > go-mode > notification copy is localized', () => {
       /[A-Za-z]{4}/.test(en[k].replace(/\{\w+\}/g, ''))
     )
     expect(wordy.filter((k) => fr[k] === en[k])).toEqual([])
+  })
+
+  /**
+   * Backlog 17.27, both halves, in the one builder they share.
+   *
+   * (a) The title was 'Next Step' — the only Title Case title among the twelve
+   * this file raises ('Next stop', 'Your stop', 'Bus here', 'Bus coming',
+   * 'Missed bus', 'Off route', 'Routing stops here', 'Connection at risk',
+   * 'Tight connection', 'Running late', 'Trip complete').
+   *
+   * (b) `routeShortName` and `routeLongName` are BOTH optional on a Leg and
+   * this branch is entered on the mode alone, so an unnamed route rendered
+   * 'Board undefined to X' before 12.23 and 'Board  to X' (two spaces) after
+   * it. Every other builder in the file has a named fallback; this one now
+   * does too, and it is mode-neutral because RAIL reaches the same branch.
+   */
+  describe('the leg-transition alert (17.27)', () => {
+    afterEach(resetLegAnnouncements)
+
+    const namedLeg = () =>
+      ({
+        mode: 'BUS',
+        routeShortName: '21',
+        to: { name: 'Uptown Transit Station' }
+      } as any)
+    const namelessRail = () =>
+      ({ mode: 'RAIL', to: { name: 'Stadium Village' } } as any)
+
+    it('titles in sentence case, like its eleven siblings', () => {
+      setNotifyLocale('en-US', catalogue('en-US'))
+      expect(checkLegTransition(1, 0, namedLeg(), [])).toMatchObject({
+        message: 'Board 21 to Uptown Transit Station',
+        title: 'Next step'
+      })
+    })
+
+    it('never renders an empty route name', () => {
+      setNotifyLocale('en-US', catalogue('en-US'))
+      const alert = checkLegTransition(1, 0, namelessRail(), [])
+      expect(alert?.message).toBe('Board your ride to Stadium Village')
+      expect(alert?.message).not.toContain('  ')
+      expect(alert?.message).not.toContain('undefined')
+    })
+
+    it('translates both the title and the nameless fallback', () => {
+      setNotifyLocale('fr', catalogue('fr'))
+      const alert = checkLegTransition(1, 0, namelessRail(), [])
+      expect(alert?.title).toBe('\u00c9tape suivante')
+      expect(alert?.message).toBe(
+        'Monter dans votre v\u00e9hicule vers Stadium Village'
+      )
+    })
   })
 
   it('resolves through one handle, so a locale change is seen everywhere', () => {

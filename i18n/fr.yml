@@ -321,6 +321,28 @@ components:
     noCompanions: Vous n'avez aucun accompagnateur.
     submitNewCompanion: Envoyer l'invitation
     title: Accompagnateurs
+  ConnectionFirst:
+    accessBike: "{distance} à vélo pour y aller"
+    accessWalk: "{distance} à pied pour y aller"
+    bikeWholeWay: Tout le trajet à vélo
+    change: Modifier
+    directDistance: "{distance}, sans bus"
+    egressBike: "Puis {distance} à vélo jusqu'à votre destination"
+    egressNone: Votre destination est ici
+    egressWalk: "Puis {distance} à pied jusqu'à votre destination"
+    getOffHeading: Où descendez-vous ?
+    getOnHeading: Où montez-vous ?
+    noTransit: Sans transport en commun
+    offAt: Descente
+    onAt: Montée
+    or: ou
+    placesToGetOff: "{count, plural, one {# arrêt de descente} other {# arrêts de descente}}"
+    stepGetOff: Descente
+    stepGetOn: Montée
+    stepTimes: Horaires
+    then: puis
+    waysToStart: "{count, plural, one {# façon de partir} other {# façons de partir}}"
+    walkWholeWay: Tout le trajet à pied
   DateTimeOptions:
     arriveBy: Arriver à
     departAt: Partir à
@@ -411,6 +433,7 @@ components:
     busHeadsign: "vers {headsign}"
     busLabel: "Bus {label}"
     busNotBroadcasting: "Bus pas encore localisé — prévu à {time}"
+    busNotBroadcastingWaiting: "Le bus n'émet pas encore sa position"
     changeBus: "Choisir le bus"
     confirmExit: "Voulez-vous vraiment arrêter le suivi de ce trajet ?"
     departureGone: "parti"
@@ -476,6 +499,8 @@ components:
       nextStopTitle: "Prochain arrêt"
       offRouteDistance: "{metres} m hors itinéraire"
       offRouteTitle: "Hors itinéraire"
+      pacingDue: "imminent"
+      pacingWait: "{minutes} min d’attente"
       routeAtStop: "{routeName} · {stopName}"
       routeMinutes: "{routeName} · {minutes} min"
       routeMinutesLate: "{routeName} · {minutes} min de retard"
@@ -492,6 +517,10 @@ components:
       theStop: "l’arrêt"
       tightConnectionTitle: "Correspondance serrée"
       tripCompleteTitle: "Trajet terminé"
+      tripUpdatedAlight: "{routeName} · descente à {stopName}{arrival}"
+      tripUpdatedArriving: " · arrivée dans {minutes} min"
+      tripUpdatedBoard: "{routeName} · dans {minutes} min · {stopName}"
+      tripUpdatedTitle: "Trajet mis à jour"
       turnIn: "Dans {distance}{then}"
       turnThen: ", puis {instruction}"
       unreachable: "{howFar} · sans se rapprocher"
@@ -500,6 +529,7 @@ components:
       yourBusLead: "Votre bus"
       yourConnection: "votre correspondance"
       yourDestination: "votre destination"
+      yourRide: "votre véhicule"
       yourRideLead: "Votre trajet"
       yourStop: "votre arrêt"
       yourStopTitle: "Votre arrêt"
@@ -531,6 +561,8 @@ components:
     returnBannerArrived: "Vous êtes arrivé — touchez pour terminer"
     returnBannerLive: "En trajet · Prochain arrêt {stop} · Arrivée {eta} — touchez pour revenir"
     returnBannerNoProgress: "Trajet en cours — touchez pour revenir"
+    returnBannerWaiting: "En attente à {stop} — touchez pour revenir"
+    returnBannerWaitingTime: "En attente à {stop} · {time} — touchez pour revenir"
     returnCountdownLabel: "Départ du retour dans"
     returnLeaveBy: "Partir à {time}"
     returnLeaveNow: "Partez maintenant"
@@ -562,6 +594,9 @@ components:
     vehicleDistance: "à {distance} m · n° {label}"
     waitingAtStop: "En attente à {stop}"
     waitingAtStopTime: "En attente à {stop} · {time}"
+    waitingBusAtStop: "Le bus n° {label} est à l'arrêt"
+    waitingBusDistanceAway: "Bus n° {label} · à {distance}"
+    waitingBusStopsAway: "Bus n° {label} · {count, plural, one {à 1 arrêt} other {à # arrêts}}"
     waitingGPS: "Acquisition du signal GPS..."
     walkToStop: "{emoji} {time} de marche jusqu'à {stop}"
     whereToAlight: "Où voulez-vous descendre ?"
@@ -593,6 +628,7 @@ components:
     titleTo: Choisissez votre destination
   MetroUI:
     arriveAt: Vous arrivez à
+    confirmLaterDeparture: "Partir à {chosen} au lieu de {row} ?"
     confirmSwitchTrip: "Basculer votre trajet actif sur cette ligne ? Vos indications seront mises à jour."
     fare: "{fare}"
     itineraryDescription: Trajet de {time} par les lignes {routes}
@@ -736,6 +772,8 @@ components:
         Une desserte en transports a été trouvée mais ne correspond pas à vos
         critères. Veuillez ajuster votre recherche.
       header: Aucune desserte selon vos critères
+    NO_TRANSIT_OPTION_FOUND:
+      advisory: Aucune option en transports n'a été trouvée pour cette recherche.
     OTP_RR_TRIP_IN_PAST:
       body: L'heure d'arrivée d'un ou de plusieurs itinéraires est déjà passée.
       header: Trajet déjà terminé
@@ -910,8 +948,11 @@ components:
     bikeSpeedHelp: "Le temps que l'application attribue à vos étapes à vélo. Une fois réglée, cette vitesse est utilisée par tous les itinéraires, y compris avant que vous ayez roulé assez longtemps pour que l'application mesure votre allure."
     bikeSpeedLabel: "Votre vitesse à vélo : {speed} mph"
     bikeSpeedSlider: "Vitesse à vélo"
+    connectionFirstHelp: "Désactivé par défaut. Les résultats demandent d'abord où vous montez, puis où vous descendez, et seulement ensuite les horaires du prochain bus."
+    connectionFirstLabel: Choisir les arrêts d'abord (essai)
     gettingAroundHeader: "Vos déplacements"
     heading: "Paramètres"
+    resultsHeader: Résultats
     routingHelp: "Ces réglages s'appliquent à tous les itinéraires que vous planifiez, ainsi qu'à tout trajet recalculé en cours de route."
     speedHigh: "Plus vite"
     speedLow: "Moins vite"

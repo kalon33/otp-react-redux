@@ -3,6 +3,9 @@ import {
   BOARD_REACH_MARGIN_SECONDS,
   checkBoardVehicleApproach,
   getEffectiveBoardTimeMs,
+  lastBoardMinutesPushAtMs,
+  liveBoardEpochFor,
+  minutesUntilBoarding,
   overrideNamesAnotherRun,
   SAME_RUN_TOLERANCE_MS
 } from '../../../lib/util/go-mode/notification-service'
@@ -319,5 +322,61 @@ describe('accessSecondsToBoardStop', () => {
     expect(accessSecondsToBoardStop(legs, 1, 0, null)).toBeNull()
     expect(accessSecondsToBoardStop([], 0, 0, null)).toBeNull()
     expect(accessSecondsToBoardStop(undefined, 0, 0, null)).toBeNull()
+  })
+})
+
+/**
+ * Backlog 24.4, the 2026-09-21 16:05 ride (`0921-1605-465-wrongdir.json`,
+ * session `mubq7tfx-8dz3ar`).
+ *
+ * 16:18:05 "Bus coming · 465 · 4 min" and 16:19:18 "465 · 5 min", 73 s apart.
+ * MEASURED in the day file: both read the SAME `liveLegTimes[1].boardEpoch` —
+ * 1790025725000 (16:22:05) and 1790025865000 (16:24:25) respectively, the feed
+ * having walked the departure between them — so the contradiction was never a
+ * disagreement about the source. What each push DID have was its own copy of
+ * the arithmetic, and the two copies floored differently. They share one now.
+ */
+describe('one epoch, one rounding, for every boarding push (24.4)', () => {
+  it('rounds a boarding the same way for every push that quotes it', () => {
+    const now = 1790025485094 // 16:18:05, the approach push
+    expect(minutesUntilBoarding(1790025725000, now)).toBe(4)
+    // 73 s later the feed had moved the departure; the number moves with it,
+    // and both pushes would move together.
+    expect(minutesUntilBoarding(1790025865000, 1790025558055)).toBe(5)
+  })
+
+  it('never quotes a boarding as "0 min"', () => {
+    // The drift alert used to floor at 0, so a departure inside its 60 s stale
+    // grace printed "465 · 0 min" — 12.16's lie wearing a different number.
+    expect(minutesUntilBoarding(1790025725000, 1790025725000)).toBe(1)
+    expect(minutesUntilBoarding(1790025725000 - 59000, 1790025725000)).toBe(1)
+  })
+
+  it('reads a board epoch only when the FEED flagged the board time live', () => {
+    expect(
+      liveBoardEpochFor({ boardEpoch: 1790025725000, boardRealtime: true })
+    ).toBe(1790025725000)
+    // Not realtime: clampNonLiveLegTimes has pushed this forward to `now`.
+    expect(
+      liveBoardEpochFor({ boardEpoch: 1790025725000, boardRealtime: false })
+    ).toBeNull()
+    expect(liveBoardEpochFor({ boardRealtime: true })).toBeNull()
+    expect(liveBoardEpochFor(undefined)).toBeNull()
+  })
+
+  it('finds when a boarding push last quoted minutes to the rider', () => {
+    // The 465 ride's own ids, in the order the reducer kept them.
+    const sent = [
+      'LEAVE_SOON_465_I-35W & 98th Street Station Gate E_1790024757055',
+      'DEPARTURE_CHANGED_1:2:t64A-b156-sl1C-v64:plan_1790025271064',
+      'BOARD_BUS_APPROACHING_2:51825_2:t64A-b156-sl1C-v64_approaching_1790025485094',
+      'BOARD_BUS_ARRIVING_2:51825_2:t64A-b156-sl1C-v64_arriving_1790025680065'
+    ]
+    // "Bus coming" at 16:18:05 — the newest push carrying a number. "Bus here"
+    // carries none, so it is not in the set and cannot shut the window.
+    expect(lastBoardMinutesPushAtMs(sent)).toBe(1790025485094)
+    expect(lastBoardMinutesPushAtMs([sent[3]])).toBeNull()
+    expect(lastBoardMinutesPushAtMs([])).toBeNull()
+    expect(lastBoardMinutesPushAtMs(undefined)).toBeNull()
   })
 })
