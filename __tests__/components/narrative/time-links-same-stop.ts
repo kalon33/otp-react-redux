@@ -119,3 +119,27 @@ describe('components > narrative > "You leave" time links keep the stop (28.4)',
     expect(linkMinutes(row)).toEqual([32, 78, 123])
   })
 })
+
+describe('components > narrative > a run reached from "Other stops" carries its own pair\'s times (21.5)', () => {
+  const at948 = { alight: I35W_66, departMin: 108, index: 3 }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function all(specs: Spec[]): any[] {
+    return doMergeItineraries(specs.map(orangeLine), undefined, true)
+      .allItineraries
+  }
+
+  it("gives the 66th St run the 66th St departures, not the row's 98th St ones", () => {
+    const itins = all([at832, at918, at1003, at948])
+    // Index 1 is the 9:18 run to 66th St; its sibling to 66th St leaves 9:48.
+    expect(linkMinutes(itins[1])).toEqual([78, 108])
+    // The representative keeps the 98th St links it always had.
+    expect(linkMinutes(itins[0])).toEqual([32, 123])
+  })
+
+  it('keeps the whole row\'s variants on every folded run, so "Other stops" stays', () => {
+    const itins = all([at832, at918, at1003, at948])
+    expect(variantIndexes(itins[1])).toEqual([0, 1, 2, 3])
+    expect(variantIndexes(itins[3])).toEqual([0, 1, 2, 3])
+  })
+})
