@@ -7,6 +7,9 @@ import {
   TRANSIT_BOARD_PAST_STOP_M,
   TRANSIT_BOARD_STOP_RADIUS_M
 } from './position-matching'
+import { findVehicleForTrip, isVehicleRecordFresh } from './transit-trust'
+import { hasUsablePosition } from './vehicle-matching'
+import type { VehiclePosition } from './vehicle-matching'
 
 /**
  * The platform wait, as one fact the whole app reads.
@@ -195,4 +198,84 @@ export function waitingAtBoardingStop({
     Number.isFinite(riderSpeedMps) &&
     riderSpeedMps > TRANSIT_BOARD_ARRIVED_MAX_SPEED_MPS
   )
+}
+
+/**
+ * What the platform-wait card can truthfully say about the bus itself.
+ *
+ * Backlog 26.4. On 2026-09-22 08:21:57 the card read "Waiting at I-35W & 98th
+ * St Station · 8:24 AM / Locating your bus..." while the tick was polling that
+ * very trip's vehicle every 16 s and holding its position 6 km up the line.
+ * "Locating" is the RIDER-proximity matcher's state (`goMode.vehicleMatch`),
+ * and on the platform it is `none` by construction: the bus is not near the
+ * rider yet, and should not be. The wait has its own fact — the planned trip's
+ * own record in the route's vehicle feed, found by trip id, the same record
+ * the missed-bus classifier and the board-time rules read (`findVehicleForTrip`
+ * in the tick) — and this is that fact, reduced to what the card prints.
+ *
+ * Returns null when there is no fresh, positioned record for the trip: the
+ * bus is not broadcasting (yet), which the caller says in those words.
+ */
+export interface WaitingBusStatus {
+  /** Straight-line metres from the bus to the boarding stop, when both known. */
+  distanceM: number | null
+  /** Raw feed label (or vehicle id); the caller formats it for display. */
+  label: string
+  /** The bus's own run places it past the boarding stop. */
+  passed: boolean
+  /**
+   * Stops the bus still has to make before the boarding stop, counting the
+   * boarding stop: 1 = the boarding stop is its next stop, 0 = it is standing
+   * at the boarding stop. Null when the trip's
+   * stop order or the bus's next stop is unknown, or it is already past.
+   */
+  stopsAway: number | null
+}
+
+export function waitingBusStatus({
+  boardStopId,
+  boardStopLatLon,
+  nowMs,
+  record,
+  tripStopIds
+}: {
+  boardStopId: string | null | undefined
+  boardStopLatLon: { lat?: number | null; lon?: number | null } | null
+  nowMs: number
+  /** The trip's vehicle as the feed last published it, or null. */
+  record: VehiclePosition | null | undefined
+  /** tripStopIdsInOrder(transitIndex.trips[tripId]) */
+  tripStopIds: string[] | null
+}): WaitingBusStatus | null {
+  if (!record || !hasUsablePosition(record)) return null
+  const lookup = findVehicleForTrip([record], record.tripId, nowMs)
+  if (!isVehicleRecordFresh(lookup)) return null
+  const label = record.label || record.vehicleId
+  if (!label) return null
+
+  const distanceM =
+    boardStopLatLon?.lat != null && boardStopLatLon?.lon != null
+      ? calculateDistance(
+          record.lat,
+          record.lon,
+          boardStopLatLon.lat,
+          boardStopLatLon.lon
+        )
+      : null
+
+  let stopsAway: number | null = null
+  let passed = false
+  if (tripStopIds?.length && boardStopId && record.nextStopId) {
+    const boardIdx = tripStopIds.indexOf(boardStopId)
+    const nextIdx = tripStopIds.indexOf(record.nextStopId)
+    if (boardIdx !== -1 && nextIdx !== -1) {
+      // GTFS-RT names the stop a bus is STOPPED_AT as its "next" stop, so a
+      // bus standing at the boarding stop is 0 away, not 1.
+      const atNext =
+        String(record.stopStatus ?? '').toUpperCase() === 'STOPPED_AT'
+      if (nextIdx > boardIdx) passed = true
+      else stopsAway = boardIdx - nextIdx + (atNext ? 0 : 1)
+    }
+  }
+  return { distanceM, label, passed, stopsAway }
 }

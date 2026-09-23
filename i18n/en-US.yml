@@ -416,6 +416,7 @@ components:
     busHeadsign: to {headsign}
     busLabel: Bus {label}
     busNotBroadcasting: Bus not broadcasting yet — scheduled {time}
+    busNotBroadcastingWaiting: Bus not broadcasting yet
     changeBus: Choose bus
     confirmExit: Are you sure you want to stop tracking this trip?
     departureGone: departed
@@ -578,6 +579,9 @@ components:
     vehicleDistance: "{distance}m away · #{label}"
     waitingAtStop: Waiting at {stop}
     waitingAtStopTime: Waiting at {stop} · {time}
+    waitingBusAtStop: "Bus #{label} is at the stop"
+    waitingBusDistanceAway: "Bus #{label} · {distance} away"
+    waitingBusStopsAway: "Bus #{label} · {count, plural, one {1 stop away} other {# stops away}}"
     waitingGPS: Acquiring GPS signal...
     walkToStop: "{emoji} {time} walk to {stop}"
     whereToAlight: Where do you want to get off?
