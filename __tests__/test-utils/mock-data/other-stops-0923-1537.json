@@ -1,0 +1,895 @@
+{
+ "note": "Recorded by ~/projects/operator/shots/backlog-21.5-lookup/probe-entry.ts against the live API: the rider's 2026-09-23 15:37 search (backlog 21.5), its Orange Line representative, that run's trip, and the street plan from each get-off candidate.",
+ "from": {
+  "lat": 44.81714980301947,
+  "lon": -93.310251767095,
+  "name": "(Current Location)"
+ },
+ "to": {
+  "lat": 44.910008,
+  "lon": -93.233842,
+  "name": "5116 27th Avenue South"
+ },
+ "date": "2026-09-23",
+ "time": "15:37",
+ "representative": {
+  "accessibilityScore": null,
+  "duration": 3030,
+  "endTime": 1790199638000,
+  "legs": [
+   {
+    "accessibilityScore": null,
+    "agency": null,
+    "arrivalDelay": 0,
+    "departureDelay": 0,
+    "distance": 2122.91,
+    "dropOffBookingInfo": {
+     "latestBookingTime": null
+    },
+    "dropoffType": "SCHEDULED",
+    "duration": 530,
+    "endTime": 1790197138000,
+    "fareProducts": [],
+    "from": {
+     "lat": 44.8171498,
+     "lon": -93.3102518,
+     "name": "(Current Location)",
+     "rentalVehicle": null,
+     "stop": null,
+     "vertexType": "NORMAL"
+    },
+    "headsign": null,
+    "id": null,
+    "interlineWithPreviousLeg": false,
+    "intermediateStops": null,
+    "intermediatePlaces": null,
+    "legGeometry": {
+     "length": 80,
+     "points": "gjppG~soxPEH]a@@[@[Pc@FQDSAIy@aAm@gA{ByBEGEMIGEEsBqCSSg@WY[Sc@SMaAES?Y@U@i@u@sBuCaB_C{BaDWq@aA_BW]GGOUKMKO}A{BACUWo@o@i@u@AAi@w@o@aAu@mAaAeBg@_Ak@iAo@oA]sAI]G[ESE_@Ga@Ca@A[EsCEcA?[?yE?yA?}D?Y?}D?i@?}B?cD?g@?c@JCF?`@Ap@?PDVD?L@???"
+    },
+    "mode": "BICYCLE",
+    "pickupBookingInfo": null,
+    "pickupType": "SCHEDULED",
+    "realTime": false,
+    "realtimeState": null,
+    "rentedBike": false,
+    "rideHailingEstimate": null,
+    "startTime": 1790196608000,
+    "stopCalls": [],
+    "to": {
+     "lat": 44.825493,
+     "lon": -93.290872,
+     "name": "I-35W & 98th St Station",
+     "rentalVehicle": null,
+     "stop": {
+      "alerts": [],
+      "code": "56831",
+      "gtfsId": "1:56831",
+      "id": "U3RvcDoxOjU2ODMx",
+      "lat": 44.825493,
+      "lon": -93.290872
+     },
+     "vertexType": "TRANSIT",
+     "stopCode": "56831",
+     "stopId": "1:56831"
+    },
+    "transitLeg": false,
+    "trip": null,
+    "alightRule": "scheduled",
+    "boardRule": "scheduled",
+    "bookingRuleInfo": {
+     "dropOff": {},
+     "pickUp": {}
+    },
+    "steps": []
+   },
+   {
+    "accessibilityScore": null,
+    "agency": {
+     "alerts": [],
+     "gtfsId": "1:0",
+     "id": "1:0",
+     "name": "Metro Transit",
+     "timezone": "America/Chicago",
+     "url": "https://www.metrotransit.org"
+    },
+    "arrivalDelay": 795,
+    "departureDelay": 838,
+    "distance": 7654.23,
+    "dropOffBookingInfo": {
+     "latestBookingTime": null
+    },
+    "dropoffType": "SCHEDULED",
+    "duration": 617,
+    "endTime": 1790197755000,
+    "fareProducts": [],
+    "from": {
+     "lat": 44.825493,
+     "lon": -93.290872,
+     "name": "I-35W & 98th St Station",
+     "rentalVehicle": null,
+     "stop": {
+      "alerts": [],
+      "code": "56831",
+      "gtfsId": "1:56831",
+      "id": "U3RvcDoxOjU2ODMx",
+      "lat": 44.825493,
+      "lon": -93.290872
+     },
+     "vertexType": "TRANSIT",
+     "stopCode": "56831",
+     "stopId": "1:56831"
+    },
+    "headsign": "ORANGE Downtown Minneapolis",
+    "id": "rO0ABXdNABhTQ0hFRFVMRURfVFJBTlNJVF9MRUdfVjMACTE6MTM0Njc5NQAKMjAyNi0wOS0yMwAAAAIAAAAFAAcxOjU2ODMxAAcxOjQ4MDg0AAA=",
+    "interlineWithPreviousLeg": false,
+    "intermediateStops": [
+     {
+      "lat": 44.859396,
+      "locationType": "STOP",
+      "lon": -93.301744,
+      "name": "Knox Ave & American Blvd Station",
+      "stopCode": "51110",
+      "stopId": "U3RvcDoxOjUxMTEw"
+     },
+     {
+      "lat": 44.864536,
+      "locationType": "STOP",
+      "lon": -93.302232,
+      "name": "Knox Ave & 76th St Station",
+      "stopCode": "56828",
+      "stopId": "U3RvcDoxOjU2ODI4"
+     }
+    ],
+    "intermediatePlaces": [
+     {
+      "arrivalTime": 1790197432000,
+      "departureTime": 1790197432000,
+      "lat": 44.859396,
+      "lon": -93.301744,
+      "name": "Knox Ave & American Blvd Station",
+      "stop": {
+       "code": "51110",
+       "gtfsId": "1:51110",
+       "id": "U3RvcDoxOjUxMTEw"
+      }
+     },
+     {
+      "arrivalTime": 1790197531000,
+      "departureTime": 1790197531000,
+      "lat": 44.864536,
+      "lon": -93.302232,
+      "name": "Knox Ave & 76th St Station",
+      "stop": {
+       "code": "56828",
+       "gtfsId": "1:56828",
+       "id": "U3RvcDoxOjU2ODI4"
+      }
+     }
+    ],
+    "legGeometry": {
+     "length": 217,
+     "points": "c~qpGh{kxPE?w@?yA@[?gBb@}Ad@uBx@oB~@yA~@g@PoBr@u@Z_D|AQHiAn@oAp@q@\\i@Xm@Zy@d@_Ad@u@`@m@\\MHq@\\iAl@oAp@yAv@_Bz@_@RWLoAp@oBdAcAh@gB~@i@Tk@TUDuAb@oAZaBTaAHgBF}A?Y@A?qCCqB?kCAsA?u@A_FCyJCiFEU?WAgA@{DAeDCmBAy@?wB?_EAaCCiA[cAKa@Ig@Qi@Sc@Sc@WiAUAvC?l@?xB?^G^EtAE|@Az@@fDAP@dA?XAh@Ch@GdAQKa@A[?_@CYESEEAUGYOo@][QYIUI[Eg@AY?w@?oBAaA?_@?c@PaA???G?}D?AwIw@AKPiAvBMTKVKXKVIZGXGZE\\Kr@AHAFCBGB]@[?K?}A?_ABUREAI?kGDQ?S@????I@I@OBOBQ@uBGAcAAgEAsB@iD?aCAu@?uGW?I?GBGJEPMr@Kb@IVIRKRINMLONSJa@P]Hc@Hq@HqAZm@?cC@mAA{ACqACqAGkCKoCMeBGcDOeKc@eBIs@Es@Io@Im@Ku@Mi@Ku@Q_AYaA[w@[s@YcFcCME{@]cA_@_AYYG_Ao@w@Wm@Sg@Qe@Oe@Oc@KWCYCg@?kAAI?i@?"
+    },
+    "mode": "BUS",
+    "pickupBookingInfo": null,
+    "pickupType": "SCHEDULED",
+    "realTime": true,
+    "realtimeState": "UPDATED",
+    "rentedBike": null,
+    "rideHailingEstimate": null,
+    "route": {
+     "alerts": [],
+     "color": "F68B1F",
+     "gtfsId": "1:904",
+     "id": "1:904",
+     "longName": "METRO Orange Line",
+     "shortName": null,
+     "textColor": "000000",
+     "type": 3
+    },
+    "startTime": 1790197138000,
+    "stopCalls": [
+     {
+      "stopLocation": {
+       "__typename": "Stop"
+      }
+     },
+     {
+      "stopLocation": {
+       "__typename": "Stop"
+      }
+     },
+     {
+      "stopLocation": {
+       "__typename": "Stop"
+      }
+     },
+     {
+      "stopLocation": {
+       "__typename": "Stop"
+      }
+     }
+    ],
+    "to": {
+     "lat": 44.88321,
+     "lon": -93.295321,
+     "name": "I-35W & 66th St Station",
+     "rentalVehicle": null,
+     "stop": {
+      "alerts": [],
+      "code": "48084",
+      "gtfsId": "1:48084",
+      "id": "U3RvcDoxOjQ4MDg0",
+      "lat": 44.88321,
+      "lon": -93.295321
+     },
+     "vertexType": "TRANSIT",
+     "stopCode": "48084",
+     "stopId": "1:48084"
+    },
+    "transitLeg": true,
+    "trip": {
+     "arrivalStoptime": {
+      "stop": {
+       "gtfsId": "1:56800",
+       "id": "U3RvcDoxOjU2ODAw"
+      },
+      "stopPosition": 13
+     },
+     "departureStoptime": {
+      "stop": {
+       "gtfsId": "1:56830",
+       "id": "U3RvcDoxOjU2ODMw"
+      },
+      "stopPosition": 1
+     },
+     "gtfsId": "1:1346795",
+     "id": "VHJpcDoxOjEzNDY3OTU"
+    },
+    "agencyBrandingUrl": "https://www.metrotransit.org",
+    "agencyId": "1:0",
+    "agencyName": "Metro Transit",
+    "agencyUrl": "https://www.metrotransit.org",
+    "alightRule": "scheduled",
+    "boardRule": "scheduled",
+    "bookingRuleInfo": {
+     "dropOff": {},
+     "pickUp": {}
+    },
+    "routeColor": "F68B1F",
+    "routeId": "1:904",
+    "routeLongName": "METRO Orange Line",
+    "routeShortName": null,
+    "routeTextColor": "000000",
+    "tripId": "1:1346795",
+    "steps": []
+   },
+   {
+    "accessibilityScore": null,
+    "agency": null,
+    "arrivalDelay": 0,
+    "departureDelay": 0,
+    "distance": 8159.11,
+    "dropOffBookingInfo": {
+     "latestBookingTime": null
+    },
+    "dropoffType": "SCHEDULED",
+    "duration": 1883,
+    "endTime": 1790199638000,
+    "fareProducts": [],
+    "from": {
+     "lat": 44.88321,
+     "lon": -93.295321,
+     "name": "I-35W & 66th St Station",
+     "rentalVehicle": null,
+     "stop": {
+      "alerts": [],
+      "code": "48084",
+      "gtfsId": "1:48084",
+      "id": "U3RvcDoxOjQ4MDg0",
+      "lat": 44.88321,
+      "lon": -93.295321
+     },
+     "vertexType": "TRANSIT",
+     "stopCode": "48084",
+     "stopId": "1:48084"
+    },
+    "headsign": null,
+    "id": null,
+    "interlineWithPreviousLeg": false,
+    "intermediateStops": null,
+    "intermediatePlaces": null,
+    "legGeometry": {
+     "length": 498,
+     "points": "ag}pGxvlxPC?A[AUCcAAQ?OAQA]CaAA{@?u@@k@Hs@@EBSBQBQHe@\\aCV_BBKDK@UBU?K@}@EaACa@Ee@a@qB?CAGEUOy@K}@AmA?SAyCAg@A_@@MDEHCLBBI@GBU@G@IMEGKCKEOISG_@AUAc@?mE?K???YAG?I?G?eC?c@DU?Q?W?KAICg@?{C?E?kA?IAaH?uA?c@@S@SAw@Cw@?Y?K@OLYDKVIASASAOG@GEKQG_@?ICU?W?gB?KAU?c@CkACmB?E?EAUA_@?}D?a@?]A}A?cB?K?S?]?{AAaB?c@?W?cB?aBAI?UAU@iB?wA@G?K?W@QAuACi@?O?UBO@GBEBEDCBALC?Q?K@M@QGCIGCGCKAKAOAI@[@MAS?QC_@C[AUAeC@w@?C?_@?UAaEBK?U?O@eC?i@?OAM?U?U?A?}D?K?U?S?_C?s@?o@?c@@_EAS?Q?mA@o@?c@?MBW?G?C?Q@OAOCY@kD?UA[?_B?{@?O?[?W@S?iF?]?qC?E@Y@S?W?O?A?AAQAUAeD?YS?Q?AQ@C@C?IEs@?C?A?Y?E@O@O?CAU?CCQCUEOCGEGEEEEICc@DW?S?e@@GAMAk@@U@MBu@TUFM@C?MBO@gFCI?K?G?s@?cFCM@KBMDIFGHILGNGNAHA??BAHAH?@AL?dAI?E?C?C?K?I@MDIFKHIFIJILWXYJ_@HWFQ@MAO?SGUGUIYIO@MBCBIJEJCHCH?@?FAJ?L?PAJAJCDCHCDGFGFGBG?k@?WEc@EWGc@Km@OWEiAU_@Gm@Ba@Hm@\\KJgAz@{@p@[RiAv@GDIFGDC@[eAOw@eAoHGy@g@uDMg@Yq@_@k@g@e@w@k@i@a@i@u@{@sAIKKIOKI?O@KFSJQ@e@EGCKCAA@mBGEMAC?Y?gGGwEGo@HK?K@{@FM?UAU?D]BWFUBIBS@s@AYEs@K}@Ee@Cc@?w@?w@C}@OuA[wA]gB}@yBQ]c@w@_@o@e@i@USUa@c@o@c@c@k@_@m@[cA[cAWaA]s@]i@a@g@g@Yc@k@eAq@_Am@g@[SKMGMGWCWEw@K}@Ok@Ug@[Yi@U}@[IGMISMMIKIIGGGi@g@SOCCECGCKEME{A_@DYB@D@B@F@D@HBJBFBJBLDPFFBPFFBLFPFRJHBNHNFPJB@HDFBDBLHDQBGDIDMJYHOn@{AIImAmAGEGCgFkAIC?kB?mAM@yE@?cA"
+    },
+    "mode": "BICYCLE",
+    "pickupBookingInfo": null,
+    "pickupType": "SCHEDULED",
+    "realTime": false,
+    "realtimeState": null,
+    "rentedBike": false,
+    "rideHailingEstimate": null,
+    "startTime": 1790197755000,
+    "stopCalls": [],
+    "to": {
+     "lat": 44.910008,
+     "lon": -93.233842,
+     "name": "5116 27th Avenue South",
+     "rentalVehicle": null,
+     "stop": null,
+     "vertexType": "NORMAL"
+    },
+    "transitLeg": false,
+    "trip": null,
+    "alightRule": "scheduled",
+    "boardRule": "scheduled",
+    "bookingRuleInfo": {
+     "dropOff": {},
+     "pickUp": {}
+    },
+    "steps": []
+   }
+  ],
+  "startTime": 1790196608000,
+  "transfers": 0,
+  "waitingTime": 0,
+  "walkTime": 0
+ },
+ "trip": {
+  "id": "1:1346795",
+  "tripHeadsign": "ORANGE Downtown Minneapolis",
+  "route": {
+   "id": "1:904",
+   "shortName": null,
+   "longName": "METRO Orange Line",
+   "mode": "BUS",
+   "type": 3,
+   "color": "F68B1F"
+  },
+  "geometry": {
+   "length": 682,
+   "points": "qihpG~mixP?VNTHRSd@ATAH?`@h@`DrAlOv@xITjA^lA\\x@h@v@^d@jC|Cz@v@bAh@@?PD~Ab@hDFh@KzDmBd@IX?@?`A??IFuGL_@?i@C}@MyAGo@Ki@_@mAeAmC_F_M[eAWgAQuAMyAGaGK?O?iHAsC?aD?sB@a@Lo@Bs@Fy@C}@P[F_Bh@wCz@_FvAqAHwASo@Ya@ScA_Ao@cAmAsCe@y@{@eA{@q@WMaA_@eAOeA?eAN{@XgAr@s@p@cAzA|BbDtBvDz@hBfCvGn@dBd@nALb@Jf@D^BZ?D@L?X?XARAZCZETCPGTEPIVINCHCFMVGHKPQ^GJKPOTGLIVENENCNALCJAJ?XAF?N@R@T@NBVFVHd@DZRNsAH{ABO@ODODOLOJUVMH}AjAB^AVEZENKRILOJMHWFo@HeARq@Js@TK@o@DmAJuFZwYj@kK@iBD}@?uCHiHZsDXoANgEdBaBJyDf@_MxAkEh@mEf@eGr@kCPqAD}CDQ?sOAwB?oGA_FBkD@uI?mHA}B?gCAgB@cB?iFAkC?S?s@Sk@GkBQgAKkBOo@?E?w@?yA@[?gBb@}Ad@uBx@oB~@yA~@g@PoBr@u@Z_D|AQHiAn@oAp@q@\\i@Xm@Zy@d@_Ad@u@`@m@\\MHq@\\iAl@oAp@yAv@_Bz@_@RWLoAp@oBdAcAh@gB~@i@Tk@TUDuAb@oAZaBTaAHgBF}A?Y@A?qCCqB?kCAsA?u@A_FCyJCiFEU?WAgA@{DAeDCmBAy@?wB?_EAaCCiA[cAKa@Ig@Qi@Sc@Sc@WiAUAvC?l@?xB?^G^EtAE|@Az@@fDAP@dA?XAh@Ch@GdAQKa@A[?_@CYESEEAUGYOo@][QYIUI[Eg@AY?w@?oBAaA?_@?c@PaA?G?}D?AwIw@AKPiAvBMTKVKXKVIZGXGZE\\Kr@AHAFCBGB]@[?K?}A?_ABUREAI?kGDQ?S@??I@I@OBOBQ@uBGAcAAgEAsB@iD?aCAu@?uGW?I?GBGJEPMr@Kb@IVIRKRINMLONSJa@P]Hc@Hq@HqAZm@?cC@mAA{ACqACqAGkCKoCMeBGcDOeKc@eBIs@Es@Io@Im@Ku@Mi@Ku@Q_AYaA[w@[s@YcFcCME{@]cA_@_AYYG_Ao@w@Wm@Sg@Qe@Oe@Oc@KWCYCg@?kAAI?i@?K?IAI?a@Ae@@kCPu@Fk@@g@?o@A{BIiAC_ACiAEaAC{@Em@Ec@I]K_@O_@Q_@UYQ_@[e@m@]e@Ua@g@i@IYEOSo@O_AK{@Ky@Ey@Cw@As@AoAAmAAqAAkBAwAAyD?s@?}@@}C?kB@cD@_C?kA@aC?oB?wA@sBA}C@wC?wC@wB?sA?{@Ae@Cq@Eq@Gi@Gg@Ik@Ou@Mg@Og@Oa@M]ISWg@OYMU[a@Y_@]]][OMOKQMWOOGGEWK_@MSG[GWEWC[CYA[Aa@?m@AaBEm@AmBCoGGoEEc@?_DC}BAeA?uDA_J?iE@gBA]?WAoHAiIEwFEqEAiDCcE@sB?wDBuDDgE@wFEKAcBZkCD_CC}GG_@HIFU@sA?_@?O?a@?OEQGa@M}DAmFAw@?wCa@kD@iE?wFBg@@yD?aJCgD?qH?oLAu@?sG@yFCmC?gJBqG@cIBwA?mE@qOB_G@WR{@@U?O?O?I?[Uu@Aw@Eu@Ko@Mc@K_@KUIy@Ye@Wk@[c@Wg@a@g@]c@_@]YsDsCeCqBgG{EwAcAu@k@eAq@k@Yq@[k@Sq@OiB]OCiBD}@Bu@Fq@Hy@Lc@Hy@No@Js@Do@@{@AwJIi@?gC?mB@gA@iDBqC@W@W?kA?Y?qAAE?w@Cw@E{AG_AISCSCq@D_A?_@BYNA@UPm@r@i@x@JfB?f@?XCZETs@|BGVsBrGsC_CQMYUaE{CgEaDcE_DyCeCOMUS_E_DyCaCQMKKIG}AoAaBqAaEeDeCoBQM]YpBqGrBoGzAlAVBR@TAPGFK@CJY?C"
+  },
+  "stopTimes": [
+   {
+    "arrivalDelay": 0,
+    "realtimeArrival": 56280,
+    "realtimeState": "SCHEDULED",
+    "scheduledArrival": 56280,
+    "scheduledDeparture": 56280,
+    "serviceDay": 1790139600,
+    "stop": {
+     "code": "56830",
+     "id": "1:56830",
+     "lat": 44.776176,
+     "lon": -93.278552,
+     "name": "Burnsville Heart of the City Station"
+    }
+   },
+   {
+    "arrivalDelay": 0,
+    "realtimeArrival": 56400,
+    "realtimeState": "SCHEDULED",
+    "scheduledArrival": 56400,
+    "scheduledDeparture": 56400,
+    "serviceDay": 1790139600,
+    "stop": {
+     "code": "56829",
+     "id": "1:56829",
+     "lat": 44.770138,
+     "lon": -93.287037,
+     "name": "I-35W & Burnsville Pkwy Station"
+    }
+   },
+   {
+    "arrivalDelay": 0,
+    "realtimeArrival": 56700,
+    "realtimeState": "UPDATED",
+    "scheduledArrival": 56700,
+    "scheduledDeparture": 56700,
+    "serviceDay": 1790139600,
+    "stop": {
+     "code": "56831",
+     "id": "1:56831",
+     "lat": 44.825493,
+     "lon": -93.290872,
+     "name": "I-35W & 98th St Station"
+    }
+   },
+   {
+    "arrivalDelay": 832,
+    "realtimeArrival": 57832,
+    "realtimeState": "UPDATED",
+    "scheduledArrival": 57000,
+    "scheduledDeparture": 57000,
+    "serviceDay": 1790139600,
+    "stop": {
+     "code": "51110",
+     "id": "1:51110",
+     "lat": 44.859396,
+     "lon": -93.301744,
+     "name": "Knox Ave & American Blvd Station"
+    }
+   },
+   {
+    "arrivalDelay": 811,
+    "realtimeArrival": 57931,
+    "realtimeState": "UPDATED",
+    "scheduledArrival": 57120,
+    "scheduledDeparture": 57120,
+    "serviceDay": 1790139600,
+    "stop": {
+     "code": "56828",
+     "id": "1:56828",
+     "lat": 44.864536,
+     "lon": -93.302232,
+     "name": "Knox Ave & 76th St Station"
+    }
+   },
+   {
+    "arrivalDelay": 795,
+    "realtimeArrival": 58155,
+    "realtimeState": "UPDATED",
+    "scheduledArrival": 57360,
+    "scheduledDeparture": 57360,
+    "serviceDay": 1790139600,
+    "stop": {
+     "code": "48084",
+     "id": "1:48084",
+     "lat": 44.88321,
+     "lon": -93.295321,
+     "name": "I-35W & 66th St Station"
+    }
+   },
+   {
+    "arrivalDelay": 767,
+    "realtimeArrival": 58427,
+    "realtimeState": "UPDATED",
+    "scheduledArrival": 57660,
+    "scheduledDeparture": 57660,
+    "serviceDay": 1790139600,
+    "stop": {
+     "code": "53542",
+     "id": "1:53542",
+     "lat": 44.919902,
+     "lon": -93.274801,
+     "name": "I-35W & 46th St Station"
+    }
+   },
+   {
+    "arrivalDelay": 767,
+    "realtimeArrival": 58607,
+    "realtimeState": "UPDATED",
+    "scheduledArrival": 57840,
+    "scheduledDeparture": 57840,
+    "serviceDay": 1790139600,
+    "stop": {
+     "code": "17780",
+     "id": "1:17780",
+     "lat": 44.948626,
+     "lon": -93.274662,
+     "name": "I-35W & Lake St Station"
+    }
+   },
+   {
+    "arrivalDelay": 771,
+    "realtimeArrival": 58851,
+    "realtimeState": "UPDATED",
+    "scheduledArrival": 58080,
+    "scheduledDeparture": 58080,
+    "serviceDay": 1790139600,
+    "stop": {
+     "code": "53311",
+     "id": "1:53311",
+     "lat": 44.971664,
+     "lon": -93.27276,
+     "name": "2nd Ave S & 11th St - Stop Group F"
+    }
+   },
+   {
+    "arrivalDelay": 658,
+    "realtimeArrival": 58978,
+    "realtimeState": "UPDATED",
+    "scheduledArrival": 58320,
+    "scheduledDeparture": 58320,
+    "serviceDay": 1790139600,
+    "stop": {
+     "code": "53313",
+     "id": "1:53313",
+     "lat": 44.975587,
+     "lon": -93.269488,
+     "name": "2nd Ave S & 7th St - Stop Group F"
+    }
+   },
+   {
+    "arrivalDelay": 658,
+    "realtimeArrival": 59038,
+    "realtimeState": "UPDATED",
+    "scheduledArrival": 58380,
+    "scheduledDeparture": 58380,
+    "serviceDay": 1790139600,
+    "stop": {
+     "code": "53314",
+     "id": "1:53314",
+     "lat": 44.977502,
+     "lon": -93.267844,
+     "name": "2nd Ave S & 5th St - Stop Group F"
+    }
+   },
+   {
+    "arrivalDelay": 673,
+    "realtimeArrival": 59173,
+    "realtimeState": "UPDATED",
+    "scheduledArrival": 58500,
+    "scheduledDeparture": 58500,
+    "serviceDay": 1790139600,
+    "stop": {
+     "code": "19260",
+     "id": "1:19260",
+     "lat": 44.980324,
+     "lon": -93.265519,
+     "name": "2nd Ave S & Washington Ave S"
+    }
+   },
+   {
+    "arrivalDelay": 682,
+    "realtimeArrival": 59302,
+    "realtimeState": "UPDATED",
+    "scheduledArrival": 58620,
+    "scheduledDeparture": 58620,
+    "serviceDay": 1790139600,
+    "stop": {
+     "code": "56800",
+     "id": "1:56800",
+     "lat": 44.978319,
+     "lon": -93.262771,
+     "name": "Gateway Ramp Layover"
+    }
+   }
+  ]
+ },
+ "onward": {
+  "1:51110": {
+   "accessibilityScore": null,
+   "duration": 2654,
+   "endTime": 1790200034000,
+   "legs": [
+    {
+     "accessibilityScore": null,
+     "agency": null,
+     "arrivalDelay": 0,
+     "departureDelay": 0,
+     "distance": 11725.7,
+     "dropOffBookingInfo": {
+      "latestBookingTime": null
+     },
+     "dropoffType": "SCHEDULED",
+     "duration": 2654,
+     "endTime": 1790200034000,
+     "fareProducts": [],
+     "from": {
+      "lat": 44.859396,
+      "lon": -93.301744,
+      "name": "Knox Ave & American Blvd Station",
+      "rentalVehicle": null,
+      "stop": null,
+      "vertexType": "NORMAL"
+     },
+     "headsign": null,
+     "id": null,
+     "interlineWithPreviousLeg": false,
+     "intermediateStops": null,
+     "intermediatePlaces": null,
+     "legGeometry": {
+      "length": 547,
+      "points": "erxpGl_nxPq@?q@Au@?]??{HCOAEM?G?G?KBC?KDQJMJMRKXKb@Ij@Kp@Kd@M\\]v@KNKJOLKJ_@TQH[RMD[DW?O?OAQ?m@C[@q@?sB@M?M?U?O@WMY?UBE?QBWDQBE?i@A_@KSGE@M??o@CgEAaH?_A?eC?w@?eD?O?]?MAa@Bs@Fs@Jq@Pq@Nc@N[UQMOIMIOGOCMEQCQCS?OAC@SO??kC?uB?uF?wF?gE?m@?wB?Y?yA?[?Q?O?qA?_C?S?K?{E?S?M?mF?_F?a@?Y?aF?}F?{B?aC?yB?gB?Y?S?iF?}F?}F?{F?_F?I?O?Q?kF?aF?I?U?K?K?]?iD?Y?W?qE?U?M?{E?Q?O?yE?Q?M?}E?S?I?}E?O?OA{E?Q?Q@}E?M?KA{E?W?K?yE?S?M?{E?S?M?O?iE?O?O?oE?[E?G?G?qHAQ?Q?}H?W?Q?kC?c@?uCAO?I?{I?uA?SAMSMKiAeBa@m@A?U_@a@m@GKGKEKIMo@aAKOo@aAGKGKk@y@QWc@o@KSGKGKIOOc@Ka@EOEUCQEQEk@Em@?CG_AAG?AAG?KAY_CAW@}DA{AF}AAoB?}B@QA?B@P?N?DAvA?F?B?D?vA?D?L?F?D?HCD_G?]FWD{B?W?U@SJKJMPIXCPERCDENOTILKJIFIDUJMBIDKHEJABCFIAW?MAEOCGEGEEEEICc@DW?S?e@@GAMAk@@U@MBu@TUFM@C?MBO@gFCI?K?G?s@?cFCM@KBMDIFGHILGNGNAHA??BAHAH?@AL?dAI?E?C?C?K?I@MDIFKHIFIJILWXYJ_@HWFQ@MAO?SGUGUIYIO@MBCBIJEJCHCH?@?FAJ?L?PAJAJCDCHCDGFGFGBG?k@?WEc@EWGc@Km@OWEiAU_@Gm@Ba@Hm@\\KJgAz@{@p@[RiAv@GDIFGDC@[eAOw@eAoHGy@g@uDMg@Yq@_@k@g@e@w@k@i@a@i@u@{@sAIKKIOKI?O@KFSJQ@e@EGCKCAA@mBGEMAC?Y?gGGwEGo@HK?K@{@FM?UAU?D]BWFUBIBS@s@AYEs@K}@Ee@Cc@?w@?w@C}@OuA[wA]gB}@yBQ]c@w@_@o@e@i@USUa@c@o@c@c@k@_@m@[cA[cAWaA]s@]i@a@g@g@Yc@k@eAq@_Am@g@[SKMGMGWCWEw@K}@Ok@Ug@[Yi@U}@[IGMISMMIKIIGGGi@g@SOCCECGCKEME{A_@DYB@D@B@F@D@HBJBFBJBLDPFFBPFFBLFPFRJHBNHNFPJB@HDFBDBLHDQBGDIDMJYHOn@{AFUDM@K?_@?GAw@SU[[SQQKYE]?g@Ae@Ie@I}A_@GA?mAM@yE@?cA"
+     },
+     "mode": "BICYCLE",
+     "pickupBookingInfo": null,
+     "pickupType": "SCHEDULED",
+     "realTime": false,
+     "realtimeState": null,
+     "rentedBike": false,
+     "rideHailingEstimate": null,
+     "startTime": 1790197380000,
+     "stopCalls": [],
+     "to": {
+      "lat": 44.910008,
+      "lon": -93.233842,
+      "name": "5116 27th Avenue South",
+      "rentalVehicle": null,
+      "stop": null,
+      "vertexType": "NORMAL"
+     },
+     "transitLeg": false,
+     "trip": null,
+     "alightRule": "scheduled",
+     "boardRule": "scheduled",
+     "bookingRuleInfo": {
+      "dropOff": {},
+      "pickUp": {}
+     },
+     "steps": []
+    }
+   ],
+   "startTime": 1790197380000,
+   "transfers": 0,
+   "waitingTime": 0,
+   "walkTime": 0
+  },
+  "1:56828": {
+   "accessibilityScore": null,
+   "duration": 2521,
+   "endTime": 1790200021000,
+   "legs": [
+    {
+     "accessibilityScore": null,
+     "agency": null,
+     "arrivalDelay": 0,
+     "departureDelay": 0,
+     "distance": 10946.67,
+     "dropOffBookingInfo": {
+      "latestBookingTime": null
+     },
+     "dropoffType": "SCHEDULED",
+     "duration": 2521,
+     "endTime": 1790200021000,
+     "fareProducts": [],
+     "from": {
+      "lat": 44.864536,
+      "lon": -93.302232,
+      "name": "Knox Ave & 76th St Station",
+      "rentalVehicle": null,
+      "stop": null,
+      "vertexType": "NORMAL"
+     },
+     "headsign": null,
+     "id": null,
+     "interlineWithPreviousLeg": false,
+     "intermediateStops": null,
+     "intermediatePlaces": null,
+     "legGeometry": {
+      "length": 501,
+      "points": "irypGzanxPI@WHMFO?DPE?i@A_@KSGE@M??o@CgEAaH?_A?eC?w@?eD?O?]?MAa@Bs@Fs@Jq@Pq@Nc@N[UQMOIMIOGOCMEQCQCS?OAC@SO??kC?uB?uF?wF?gE?m@?wB?Y?yA?[?Q?O?qA?_C?S?K?{E?S?M?mF?_F?a@?Y?aF?}F?{B?aC?yB?gB?Y?S?iF?}F?}F?{F?_F?I?O?Q?kF?aF?I?U?K?K?]?iD?Y?W?qE?U?M?{E?Q?O?yE?Q?M?}E?S?I?}E?O?OA{E?Q?Q@}E?M?KA{E?W?K?yE?S?M?{E?S?M?O?iE?O?O?oE?[E?G?G?qHAQ?Q?}H?W?Q?kC?c@?uCAO?I?{I?uA?SAMSMKiAeBa@m@A?U_@a@m@GKGKEKIMo@aAKOo@aAGKGKk@y@QWc@o@KSGKGKIOOc@Ka@EOEUCQEQEk@Em@?CG_AAG?AAG?KAY_CAW@}DA{AF}AAoB?}B@QA?B@P?N?DAvA?F?B?D?vA?D?L?F?D?HCD_G?]FWD{B?W?U@SJKJMPIXCPERCDENOTILKJIFIDUJMBIDKHEJABCFIAW?MAEOCGEGEEEEICc@DW?S?e@@GAMAk@@U@MBu@TUFM@C?MBO@gFCI?K?G?s@?cFCM@KBMDIFGHILGNGNAHA??BAHAH?@AL?dAI?E?C?C?K?I@MDIFKHIFIJILWXYJ_@HWFQ@MAO?SGUGUIYIO@MBCBIJEJCHCH?@?FAJ?L?PAJAJCDCHCDGFGFGBG?k@?WEc@EWGc@Km@OWEiAU_@Gm@Ba@Hm@\\KJgAz@{@p@[RiAv@GDIFGDC@[eAOw@eAoHGy@g@uDMg@Yq@_@k@g@e@w@k@i@a@i@u@{@sAIKKIOKI?O@KFSJQ@e@EGCKCAA@mBGEMAC?Y?gGGwEGo@HK?K@{@FM?UAU?D]BWFUBIBS@s@AYEs@K}@Ee@Cc@?w@?w@C}@OuA[wA]gB}@yBQ]c@w@_@o@e@i@USUa@c@o@c@c@k@_@m@[cA[cAWaA]s@]i@a@g@g@Yc@k@eAq@_Am@g@[SKMGMGWCWEw@K}@Ok@Ug@[Yi@U}@[IGMISMMIKIIGGGi@g@SOCCECGCKEME{A_@DYB@D@B@F@D@HBJBFBJBLDPFFBPFFBLFPFRJHBNHNFPJB@HDFBDBLHDQBGDIDMJYHOn@{AFUDM@K?_@?GAw@SU[[SQQKYE]?g@Ae@Ie@I}A_@GA?mAM@yE@?cA"
+     },
+     "mode": "BICYCLE",
+     "pickupBookingInfo": null,
+     "pickupType": "SCHEDULED",
+     "realTime": false,
+     "realtimeState": null,
+     "rentedBike": false,
+     "rideHailingEstimate": null,
+     "startTime": 1790197500000,
+     "stopCalls": [],
+     "to": {
+      "lat": 44.910008,
+      "lon": -93.233842,
+      "name": "5116 27th Avenue South",
+      "rentalVehicle": null,
+      "stop": null,
+      "vertexType": "NORMAL"
+     },
+     "transitLeg": false,
+     "trip": null,
+     "alightRule": "scheduled",
+     "boardRule": "scheduled",
+     "bookingRuleInfo": {
+      "dropOff": {},
+      "pickUp": {}
+     },
+     "steps": []
+    }
+   ],
+   "startTime": 1790197500000,
+   "transfers": 0,
+   "waitingTime": 0,
+   "walkTime": 0
+  },
+  "1:53542": {
+   "accessibilityScore": null,
+   "duration": 1338,
+   "endTime": 1790199318000,
+   "legs": [
+    {
+     "accessibilityScore": null,
+     "agency": null,
+     "arrivalDelay": 0,
+     "departureDelay": 0,
+     "distance": 5204.72,
+     "dropOffBookingInfo": {
+      "latestBookingTime": null
+     },
+     "dropoffType": "SCHEDULED",
+     "duration": 1338,
+     "endTime": 1790199318000,
+     "fareProducts": [],
+     "from": {
+      "lat": 44.919902,
+      "lon": -93.274801,
+      "name": "I-35W & 46th St Station",
+      "rentalVehicle": null,
+      "stop": null,
+      "vertexType": "NORMAL"
+     },
+     "headsign": null,
+     "id": null,
+     "interlineWithPreviousLeg": false,
+     "intermediateStops": null,
+     "intermediatePlaces": null,
+     "legGeometry": {
+      "length": 364,
+      "points": "{kdqGfvhxPD?B??F@T?J?z@@TP??W?y@Aa@?C?C?e@?y@?]?W?kBA{@?g@?G?U?Q?EAgB?aB?GAU?O?mBAiB?W?U?S?}@?A?SAmB?S?QAeB?aB?E?_@?[?K?_B?q@DO@_@?S?O?_@EQ?u@?cB?C?[L?jI?L?L?lIBL?J?lIBL?N?jGB|@?L?L?v@BL?H?FBPFFGJETILE\\WLOLUNWFQFSDQDW@O@W?W?SAWAMEa@E[Ee@G[CW?a@GYCUEI?O?IAMAMCSEUEUE[COCSAMAMAOAMCQCYEMEQIOKSU[QSOUIMIQO_@OUOWIMGMGWGWGYGYEYK]KWKYU{@[yAOu@AGEQAIAIMg@Gu@MyACcAEg@Ce@@_@@s@Bm@@KD]@e@Ce@AUEq@Ee@Ie@Ie@I[K[KYUe@U]CEQUIOEI?I]WQUISEOGOIMIIWUQOQMOOKKMKOOOYMQEOAG?MAW?MAM?MAKCMCMCOI[GUCKAKAK?M?UAI?OAOAMAIESCOAIAO?UCOEMEKCOCIEIEOCOAOAU?o@@k@AU?W?[?E?Q?M@G?ADQBOBQDWB[Dm@Dm@B{@@{@AmAAyAAaAA]Gu@Gy@@_@Bg@B]@IFBB@B@B@B?B?D?B@D@H?R@@?@?@A@?@CHGBEDGR[DK@I@G?K?GAMAc@?Q?KBMBOBMMQ]k@EOIWEYKsAIoAE}AAi@@_ABg@De@LgAJq@D_@@SBWD{@?GBMFU@K@I@Q?MBM@KFMFSn@sBBIFQKMl@cBv@eB^y@Xg@TYV[h@c@|@c@`@E\\AFAL?NKFGFIFKDKBKBMDW?]?kBA_C?SNCH?dAB~F@J??R?lB?hB@PvB@?NF?BB?h@"
+     },
+     "mode": "BICYCLE",
+     "pickupBookingInfo": null,
+     "pickupType": "SCHEDULED",
+     "realTime": false,
+     "realtimeState": null,
+     "rentedBike": false,
+     "rideHailingEstimate": null,
+     "startTime": 1790197980000,
+     "stopCalls": [],
+     "to": {
+      "lat": 44.910008,
+      "lon": -93.233842,
+      "name": "5116 27th Avenue South",
+      "rentalVehicle": null,
+      "stop": null,
+      "vertexType": "NORMAL"
+     },
+     "transitLeg": false,
+     "trip": null,
+     "alightRule": "scheduled",
+     "boardRule": "scheduled",
+     "bookingRuleInfo": {
+      "dropOff": {},
+      "pickUp": {}
+     },
+     "steps": []
+    }
+   ],
+   "startTime": 1790197980000,
+   "transfers": 0,
+   "waitingTime": 0,
+   "walkTime": 0
+  },
+  "1:17780": {
+   "accessibilityScore": null,
+   "duration": 2206,
+   "endTime": 1790200366000,
+   "legs": [
+    {
+     "accessibilityScore": null,
+     "agency": null,
+     "arrivalDelay": 0,
+     "departureDelay": 0,
+     "distance": 9184.38,
+     "dropOffBookingInfo": {
+      "latestBookingTime": null
+     },
+     "dropoffType": "SCHEDULED",
+     "duration": 2206,
+     "endTime": 1790200366000,
+     "fareProducts": [],
+     "from": {
+      "lat": 44.948626,
+      "lon": -93.274662,
+      "name": "I-35W & Lake St Station",
+      "rentalVehicle": null,
+      "stop": null,
+      "vertexType": "NORMAL"
+     },
+     "headsign": null,
+     "id": null,
+     "interlineWithPreviousLeg": false,
+     "intermediateStops": null,
+     "intermediatePlaces": null,
+     "legGeometry": {
+      "length": 286,
+      "points": "s`jqGfuhxP@EL[FOLOLCEG?Ki@@U?}@GeACw@?WEQGEGEKCM?Y?Q?_@A_CA}B?_C?wE?kG?E?SI?SAI?I??S?s@IqA?sB?WA}I?G?{B?O?oF?wE?cC?A?mH?s@AiA?_C@{@?iG?uABc@Fi@BWA{@?eJ?sM?_LAmDA}@Ak@EaAGgASkBCQIm@EW[{Ac@gBk@eBm@wAm@yA]s@GMIG@mC?Y?U?kC?E?I?M?C?{F?WVOxA_AfAu@|EwC`GuDPKVMPKBCLKb@U`Ak@|BmAjAq@|@g@|@i@zDkCJCBCHIFGBEDCDANGHCDMvDcClIqF`MsHL@@CDI@EBCDADCDABAFEHABG@AjGwDbAm@~JgGbCyA`@Wz@g@x@g@PCFKBEFEDEDCLEFA@CdGsDvFiDbI{EbKiGrCcBHGF?@ABIBGHEDADCLGFCBAFCvD}BzEuCxCiBlDwBlDuBdDqBd@YlAu@HG??dAo@z@k@d@]HC@CBGDG@GHGD?DCRMFEB?AF?H@J@N|@s@pAeANp@DJLXBL?XBTFV?F?R?h@AnB@V@L@LAh@B`@?\\@ZDVNh@V`@ZZh@b@`@L`@L^RTTPRMZQNUF[LKBAJ??GTfBE|AGn@GFALAd@EZAF?L?@?F?t@Dp@AvD@J??N?`C@xB?P?PA~B@zB?N@N?`C?zB?P?N?rB?hB?N?N@nB?nB?N?N?nB?lB?NH?lIDP?T?fI@L??L?nB?jB?R?R?lB?hB@PvB@?NF?BB?h@"
+     },
+     "mode": "BICYCLE",
+     "pickupBookingInfo": null,
+     "pickupType": "SCHEDULED",
+     "realTime": false,
+     "realtimeState": null,
+     "rentedBike": false,
+     "rideHailingEstimate": null,
+     "startTime": 1790198160000,
+     "stopCalls": [],
+     "to": {
+      "lat": 44.910008,
+      "lon": -93.233842,
+      "name": "5116 27th Avenue South",
+      "rentalVehicle": null,
+      "stop": null,
+      "vertexType": "NORMAL"
+     },
+     "transitLeg": false,
+     "trip": null,
+     "alightRule": "scheduled",
+     "boardRule": "scheduled",
+     "bookingRuleInfo": {
+      "dropOff": {},
+      "pickUp": {}
+     },
+     "steps": []
+    }
+   ],
+   "startTime": 1790198160000,
+   "transfers": 0,
+   "waitingTime": 0,
+   "walkTime": 0
+  },
+  "1:53311": {
+   "accessibilityScore": null,
+   "duration": 2892,
+   "endTime": 1790201292000,
+   "legs": [
+    {
+     "accessibilityScore": null,
+     "agency": null,
+     "arrivalDelay": 0,
+     "departureDelay": 0,
+     "distance": 11479.79,
+     "dropOffBookingInfo": {
+      "latestBookingTime": null
+     },
+     "dropoffType": "SCHEDULED",
+     "duration": 2892,
+     "endTime": 1790201292000,
+     "fareProducts": [],
+     "from": {
+      "lat": 44.971664,
+      "lon": -93.27276,
+      "name": "2nd Ave S & 11th St - Stop Group F",
+      "rentalVehicle": null,
+      "stop": null,
+      "vertexType": "NORMAL"
+     },
+     "headsign": null,
+     "id": null,
+     "interlineWithPreviousLeg": false,
+     "intermediateStops": null,
+     "intermediatePlaces": null,
+     "legGeometry": {
+      "length": 377,
+      "points": "{onqGvihxPIG??GPHHLHbAv@`@\\^XPNL_@L_@FQX}@FUBGf@{AJ_@Nc@d@yADGPc@BOBK?K@K?aA?UBOBKHKHIJCNCP?`A?b@?rA?J?z@?N??K?C?E?wD?s@?y@?q@?qB?_@L?p@?dB?J?L?pC@D?J?L?jEAN?J?\\?r@?~B?H?J?dC?xA?@?L?R?hBAR?rB@T?|@?L?J?~H@L?P?|B?|A?\\?tA?N?H?|A?zB?^?nA?D?J@L?jIBJ?J?fA?B?pB@j@?l@@r@?N?N?t@?n@@`@?h@?hBAp@@T?A^?B?dB?zA?F?RI?SAI?I??S?s@IqA?sB?WA}I?G?{B?O?oF?wE?cC?A?mH?s@AiA?_C@{@?iG?uABc@Fi@BWA{@?eJ?sM?_LAmDA}@Ak@EaAGgASkBCQIm@EW[{Ac@gBk@eBm@wAm@yA]s@GMIG@mC?Y?U?kC?E?I?M?C?{F?WVOxA_AfAu@|EwC`GuDPKVMPKBCLKb@U`Ak@|BmAjAq@|@g@|@i@zDkCJCBCHIFGBEDCDANGHCDMvDcClIqF`MsHL@@CDI@EBCDADCDABAFEHABG@AjGwDbAm@~JgGbCyA`@Wz@g@x@g@PCFKBEFEDEDCLEFA@CdGsDvFiDbI{EbKiGrCcBHGF?@ABIBGHEDADCLGFCBAFCvD}BzEuCxCiBlDwBlDuBdDqBd@YlAu@HG??dAo@z@k@d@]HC@CBGDG@GHGD?DCRMFEB?AF?H@J@N|@s@pAeANp@DJLXBL?XBTFV?F?R?h@AnB@V@L@LAh@B`@?\\@ZDVNh@V`@ZZh@b@`@L`@L^RTTPRMZQNUF[LKBAJ??GTfBE|AGn@GFALAd@EZAF?L?@?F?t@Dp@AvD@J??N?`C@xB?P?PA~B@zB?N@N?`C?zB?P?N?rB?hB?N?N@nB?nB?N?N?nB?lB?NH?lIDP?T?fI@L??L?nB?jB?R?R?lB?hB@PvB@?NF?BB?h@"
+     },
+     "mode": "BICYCLE",
+     "pickupBookingInfo": null,
+     "pickupType": "SCHEDULED",
+     "realTime": false,
+     "realtimeState": null,
+     "rentedBike": false,
+     "rideHailingEstimate": null,
+     "startTime": 1790198400000,
+     "stopCalls": [],
+     "to": {
+      "lat": 44.910008,
+      "lon": -93.233842,
+      "name": "5116 27th Avenue South",
+      "rentalVehicle": null,
+      "stop": null,
+      "vertexType": "NORMAL"
+     },
+     "transitLeg": false,
+     "trip": null,
+     "alightRule": "scheduled",
+     "boardRule": "scheduled",
+     "bookingRuleInfo": {
+      "dropOff": {},
+      "pickUp": {}
+     },
+     "steps": []
+    }
+   ],
+   "startTime": 1790198400000,
+   "transfers": 0,
+   "waitingTime": 0,
+   "walkTime": 0
+  }
+ }
+}

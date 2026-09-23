@@ -201,18 +201,23 @@ describe('components > narrative > same shape variants (21.5: other stops)', () 
     expect(buttons.at(1).prop('className')).toBeUndefined()
   })
 
-  it('details each entry as distance and its NEXT departure', () => {
+  it('details each entry as distance and when it arrives (and leaves, when that differs)', () => {
     const { wrapper } = render(rowOf(FIVE_RUNS_THREE_PAIRS))
     open(wrapper)
     const details = pairButtons(wrapper).map((b: any) =>
       b.find('.variant-detail').text()
     )
     expect(details[0]).toMatch(
-      /^0\.9 miles? biking · next 8:00 AM currently shown$/
+      /^0\.9 miles? biking · arrives 8:40 AM currently shown$/
     )
-    // 46th St runs leave at 8:27 and 8:09: next is the earlier, 8:09.
-    expect(details[1]).toMatch(/^1\.6 miles? biking · next 8:09 AM$/)
-    expect(details[2]).toMatch(/^2\.6 miles? biking · next 8:21 AM$/)
+    // 46th St runs leave at 8:27 and 8:09: the earlier, 8:09, is named
+    // because it differs from the row's 8:00; each arrives 40 min later.
+    expect(details[1]).toMatch(
+      /^1\.6 miles? biking · leaves 8:09 AM · arrives 8:49 AM$/
+    )
+    expect(details[2]).toMatch(
+      /^2\.6 miles? biking · leaves 8:21 AM · arrives 9:01 AM$/
+    )
   })
 
   it('says walking when the pair has no biking', () => {
@@ -227,7 +232,7 @@ describe('components > narrative > same shape variants (21.5: other stops)', () 
     const { wrapper } = render(walkRow)
     open(wrapper)
     expect(pairButtons(wrapper).at(1).find('.variant-detail').text()).toMatch(
-      /walking · next 8:00 AM$/
+      /walking · arrives 8:40 AM$/
     )
   })
 
@@ -345,5 +350,101 @@ describe('21.5 > how a pair is identified', () => {
     expect(pairs[1].next.startTime).toBe(
       Math.min(...pairs[1].variants.map((v) => v.startTime))
     )
+  })
+})
+
+/**
+ * 21.5, third sighting (2026-09-23 15:37): "Why am I not getting an option to
+ * get off at 46th st station???" Every one of the Orange Line row's 13 runs
+ * got on and off at the same pair, so the control above was not there. In the
+ * planner's list (`onLookup` given) a transit row always has the button, and
+ * the first tap looks the other stops up.
+ */
+describe('21.5 > "Other stops" looks the other stops up', () => {
+  const ONE_PAIR: VariantSpec[] = [
+    { index: 0, stop: 'I-35W & 98th St Station' },
+    { departOffsetMin: 15, index: 1, stop: 'I-35W & 98th St Station' }
+  ]
+
+  function renderLookup(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    itinerary: any,
+    lookupStatus?: 'pending' | 'done' | 'failed'
+  ) {
+    const onLookup = jest.fn()
+    const { wrapper } = mockWithProvider(
+      SameShapeVariants,
+      { itinerary, lookupStatus, onLookup, setActiveItinerary: jest.fn() },
+      undefined,
+      messages
+    )
+    return { onLookup, wrapper }
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const looking = (wrapper: any) => wrapper.find('p.other-stops-looking')
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const none = (wrapper: any) => wrapper.find('p.other-stops-none')
+
+  it('shows the button on a one-pair transit row, and asks on the first tap only', () => {
+    const { onLookup, wrapper } = renderLookup(rowOf(ONE_PAIR))
+    expect(toggle(wrapper).text()).toBe('Other stops▶')
+    open(wrapper)
+    expect(onLookup).toHaveBeenCalledTimes(1)
+    // Closing does not ask; nothing is listed for a single pair.
+    open(wrapper)
+    expect(onLookup).toHaveBeenCalledTimes(1)
+    expect(pairButtons(wrapper).length).toBe(0)
+  })
+
+  it('does not ask again once the row has a lookup status', () => {
+    const { onLookup, wrapper } = renderLookup(rowOf(ONE_PAIR), 'done')
+    open(wrapper)
+    expect(onLookup).not.toHaveBeenCalled()
+  })
+
+  it('has no button on a row with no transit leg', () => {
+    const bikeOnly = makeItinerary({ index: 0, stop: 'Home' })
+    bikeOnly.legs = [bikeOnly.legs[0]]
+    const { wrapper } = renderLookup(bikeOnly)
+    expect(toggle(wrapper).length).toBe(0)
+  })
+
+  it('says "Looking…" while the lookup is out, and nothing else', () => {
+    const { wrapper } = renderLookup(rowOf(ONE_PAIR), 'pending')
+    open(wrapper)
+    expect(looking(wrapper).text()).toBe('Looking…')
+    expect(none(wrapper).length).toBe(0)
+    expect(pairButtons(wrapper).length).toBe(0)
+  })
+
+  it('keeps listing what is already there while looking', () => {
+    const { wrapper } = renderLookup(rowOf(FIVE_RUNS_THREE_PAIRS), 'pending')
+    open(wrapper)
+    expect(pairButtons(wrapper).length).toBe(3)
+    expect(looking(wrapper).length).toBe(1)
+  })
+
+  it('says "No other stops" once when the lookup found nothing', () => {
+    const { wrapper } = renderLookup(rowOf(ONE_PAIR), 'done')
+    // Not before the rider opens it.
+    expect(none(wrapper).length).toBe(0)
+    open(wrapper)
+    expect(none(wrapper).length).toBe(1)
+    expect(none(wrapper).text()).toBe('No other stops')
+    expect(looking(wrapper).length).toBe(0)
+  })
+
+  it('says the same when the lookup failed', () => {
+    const { wrapper } = renderLookup(rowOf(ONE_PAIR), 'failed')
+    open(wrapper)
+    expect(none(wrapper).text()).toBe('No other stops')
+  })
+
+  it('lists the found pairs and says nothing more once they are in', () => {
+    const { wrapper } = renderLookup(rowOf(FIVE_RUNS_THREE_PAIRS), 'done')
+    open(wrapper)
+    expect(pairButtons(wrapper).length).toBe(3)
+    expect(none(wrapper).length).toBe(0)
+    expect(looking(wrapper).length).toBe(0)
   })
 })

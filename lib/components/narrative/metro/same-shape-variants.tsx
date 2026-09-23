@@ -33,6 +33,17 @@ import { SetActiveItineraryHandler } from './departure-times-list'
  *  - when every run gets on and off where the row already does, there is no
  *    button at all ("you dont need to clarify if there are no options").
  *
+ * That last rule was wrong for the planner and lasted an hour. At 15:37 the
+ * same day the rider's Orange Line row folded 13 runs, every one boarding at
+ * 98th St and alighting at 66th St, so there was no button — "Why am I not
+ * getting an option to get off at 46th st station???" OTP answers ONE alight
+ * stop per connection; the list can only show what the answer holds. So in
+ * the planner's list (`onLookup` given) a row with a transit leg always has
+ * the button, and the first tap asks the planner about the other stops of
+ * the bus it rides (actions/other-stops-lookup.ts). What comes back is folded
+ * into the row as more pairs; while asking, one muted "Looking…"; when
+ * nothing came back and there is still one pair, one muted "No other stops".
+ *
  * Earlier history: until 16.6 (2026-09-15) this was a grey "3 options" link
  * beside "(departs 8:14 AM)" that the rider never found.
  */
@@ -46,11 +57,24 @@ import { SetActiveItineraryHandler } from './departure-times-list'
  */
 export type VariantItinerary = ItineraryWithIndex & { offStopName?: string }
 
+/** Where a row's "Other stops" lookup stands (actions/other-stops-lookup). */
+export type LookupStatus = 'pending' | 'done' | 'failed'
+
 type Props = {
   className?: string
   itinerary: ItineraryWithIndex & {
     sameShapeVariants?: VariantItinerary[]
   }
+  /** This row's lookup, when it has started. */
+  lookupStatus?: LookupStatus
+  /**
+   * Ask the planner for this row's other stops. Given only where the row is
+   * a result of the active search (the planner's list); without it the
+   * control is what it was before 2026-09-23 15:37 — shown only when the
+   * answer already holds a second pair. Go Mode's onboard list does not pass
+   * it: its rows are not in any search.
+   */
+  onLookup?: () => void
   setActiveItinerary: SetActiveItineraryHandler
 }
 
@@ -87,6 +111,14 @@ const Chevron = styled.span`
   &.open {
     transform: rotate(90deg);
   }
+`
+
+/** "Looking…" / "No other stops": one small muted line, nothing more. */
+const LookupLine = styled.p`
+  color: #767676;
+  font-size: 13px;
+  margin: 6px 0 0 0;
+  padding: 0 10px;
 `
 
 const VariantList = styled.ul`
@@ -259,16 +291,29 @@ export function stopPairs(
 const SameShapeVariants = ({
   className,
   itinerary,
+  lookupStatus,
+  onLookup,
   setActiveItinerary
 }: Props): JSX.Element | null => {
   const intl = useIntl()
   const [open, setOpen] = useState(false)
   const pairs = useMemo(() => stopPairs(itinerary), [itinerary])
-  const toggle = useCallback((e: MouseEvent) => {
-    setOpen((wasOpen) => !wasOpen)
-    // MetroItinerary's own click handler would make this row active.
-    e.stopPropagation()
-  }, [])
+  // 2026-09-23 15:37 (21.5, third sighting): OTP answers one alight stop per
+  // connection, so "every run gets on and off here" said nothing about the
+  // other stops the bus serves. A row with a transit leg can always look.
+  const canLookUp =
+    !!onLookup && (itinerary.legs || []).some((leg) => leg.transitLeg)
+  const toggle = useCallback(
+    (e: MouseEvent) => {
+      // The first opening asks; the action itself refuses a second lookup
+      // for the same row on the same search.
+      if (!open && canLookUp && !lookupStatus && onLookup) onLookup()
+      setOpen(!open)
+      // MetroItinerary's own click handler would make this row active.
+      e.stopPropagation()
+    },
+    [canLookUp, lookupStatus, onLookup, open]
+  )
   const choose = useCallback(
     (e: MouseEvent) => {
       const key = e.currentTarget.getAttribute('data-pair')
@@ -279,9 +324,10 @@ const SameShapeVariants = ({
     [pairs, setActiveItinerary]
   )
 
-  // Every run gets on and off where this row does: nothing to offer, and no
-  // button saying so.
-  if (pairs.length < 2) return null
+  // Every run gets on and off where this row does and there is no way to ask
+  // for more: nothing to offer, and no button saying so.
+  if (pairs.length < 2 && !canLookUp) return null
+  const settled = lookupStatus === 'done' || lookupStatus === 'failed'
 
   return (
     <div
@@ -301,7 +347,7 @@ const SameShapeVariants = ({
           ▶
         </Chevron>
       </Toggle>
-      {open && (
+      {open && pairs.length >= 2 && (
         <VariantList>
           {pairs.map((pair, i) => {
             const shown = i === 0
@@ -319,10 +365,28 @@ const SameShapeVariants = ({
                     { distance: humanizeDistanceString(walk, false, intl) }
                   )
                 : null
-            const next = intl.formatMessage(
-              { id: 'components.MetroUI.variantNext' },
-              { time: intl.formatTime(pair.next.startTime) }
-            )
+            // The time that tells the pairs apart. Get-off alternatives all
+            // board the same bus, so "next <departure>" said the same thing on
+            // every line (seen on the 2026-09-23 build); what differs is when
+            // the rider ARRIVES. A get-on alternative leaves at another time
+            // and arrives with the row, so it names its departure as well.
+            const own = pairs[0].next
+            const leaves =
+              i > 0 && pair.next.startTime !== own.startTime
+                ? intl.formatMessage(
+                    { id: 'components.MetroUI.variantLeaves' },
+                    { time: intl.formatTime(pair.next.startTime) }
+                  )
+                : null
+            const next = [
+              leaves,
+              intl.formatMessage(
+                { id: 'components.MetroUI.variantArrives' },
+                { time: intl.formatTime(pair.next.endTime) }
+              )
+            ]
+              .filter(Boolean)
+              .join(' · ')
             return (
               <li key={pair.key}>
                 <button
@@ -360,6 +424,19 @@ const SameShapeVariants = ({
             )
           })}
         </VariantList>
+      )}
+      {open && canLookUp && lookupStatus === 'pending' && (
+        <LookupLine className="other-stops-looking">
+          <FormattedMessage id="components.MetroUI.otherStopsLooking" />
+        </LookupLine>
+      )}
+      {/* Found nothing (or could not ask) and there is still one pair: say
+          so once, because an open control with nothing under it reads as
+          broken. With a list showing, the list is the answer. */}
+      {open && canLookUp && settled && pairs.length < 2 && (
+        <LookupLine className="other-stops-none">
+          <FormattedMessage id="components.MetroUI.otherStopsNone" />
+        </LookupLine>
       )}
     </div>
   )

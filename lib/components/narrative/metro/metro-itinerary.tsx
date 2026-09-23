@@ -30,6 +30,7 @@ import { ItineraryDescription } from '../default/itinerary-description'
 import { itineraryHasAccessibilityScore } from '../../../util/accessibility-routing'
 import { ItineraryView } from '../../../util/ui'
 import { localizeGradationMap } from '../utils'
+import { lookupOtherStops } from '../../../actions/other-stops-lookup'
 import { MobileScreens } from '../../../actions/ui-constants'
 import { outboundKeyOf, ReturnPlanState } from '../../../actions/round-trip'
 import FormattedDuration from '../../util/formatted-duration'
@@ -52,7 +53,7 @@ import DepartureTimesList, {
 import MetroItineraryRoutes from './metro-itinerary-routes'
 import ReturnTripPanel from './return-trip-panel'
 import RouteBlock from './route-block'
-import SameShapeVariants from './same-shape-variants'
+import SameShapeVariants, { LookupStatus } from './same-shape-variants'
 
 const { ensureAtLeastOneMinute } = coreUtils.time
 
@@ -251,7 +252,18 @@ type Props = {
   expanded: boolean
   intl: IntlShape
   itinerary: Itinerary
+  /** Ask the planner for this row's other stops (backlog 21.5). */
+  lookupOtherStops?: (itinerary: Itinerary) => void
   mini?: boolean
+  /**
+   * Set by the planner's results list only: this row is a result of the
+   * active search, so its "Other stops" may look the other stops up. Go
+   * Mode's onboard list renders this component too, with rows that are in no
+   * search, and leaves it off.
+   */
+  otherStopsLookup?: boolean
+  /** Where this row's lookup stands on the active search. */
+  otherStopsLookupStatus?: LookupStatus
   returnToGoMode?: () => void
   /** state.otp.roundTrip — the return options planned for this outbound. */
   roundTrip?: { returnPlan: ReturnPlanState | null }
@@ -279,6 +291,11 @@ export class MetroItinerary extends NarrativeItinerary {
     if (typeof setVisibleItinerary === 'function' && !isVisible) {
       setVisibleItinerary({ index })
     }
+  }
+
+  _lookupOtherStops = () => {
+    const { itinerary, lookupOtherStops } = this.props
+    if (lookupOtherStops) lookupOtherStops(itinerary)
   }
 
   _onMouseLeave = () => {
@@ -695,6 +712,12 @@ export class MetroItinerary extends NarrativeItinerary {
                 */}
                 <VariantsRow
                   itinerary={itinerary}
+                  lookupStatus={this.props.otherStopsLookupStatus}
+                  onLookup={
+                    this.props.otherStopsLookup
+                      ? this._lookupOtherStops
+                      : undefined
+                  }
                   setActiveItinerary={setActiveItinerary}
                 />
               </ItineraryGrid>
@@ -759,6 +782,13 @@ const mapStateToProps = (state: AppReduxState, ownProps: Props) => {
     configCosts: state.otp.config.itinerary?.costs,
     defaultFareType: state.otp.config.itinerary?.defaultFareType,
     enableDot: !state.otp.config.itinerary?.disableMetroSeperatorDot,
+    otherStopsLookupStatus: ownProps.otherStopsLookup
+      ? // @ts-expect-error TODO: type activeSearch
+        activeSearch?.otherStopsLookup?.[
+          // @ts-expect-error the list hands rows an index
+          ownProps.itinerary?.index
+        ]?.status
+      : undefined,
     // @ts-expect-error TODO: type activeSearch
     pending: activeSearch ? Boolean(activeSearch.pending) : false,
     roundTrip: state.otp.roundTrip,
@@ -775,6 +805,7 @@ const mapStateToProps = (state: AppReduxState, ownProps: Props) => {
 // TS TODO: correct redux types
 const mapDispatchToProps = {
   beginGoMode: goModeActions.beginGoMode,
+  lookupOtherStops,
   returnToGoMode: goModeActions.returnToGoMode,
   setItineraryView: uiActions.setItineraryView,
   setMobileScreen: uiActions.setMobileScreen
