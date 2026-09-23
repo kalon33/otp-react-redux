@@ -332,6 +332,39 @@ export function anchorBoardingStopId(
   return (nextLeg as any)?.from?.stop?.gtfsId ?? null
 }
 
+/**
+ * The boarding stop whose departures the tick should RE-POLL, or null.
+ *
+ * Wider than {@link anchorBoardingStopId} on purpose, and only for the poll.
+ * The trip steps onto the transit leg BEFORE the bus leaves (13.1 — it has to,
+ * `advanceToLeg` is where vehicle tracking starts), so for the whole platform
+ * wait the current leg is the bus leg and the anchor's walk/bike test is false.
+ * Measured 2026-09-22 (backlog 26.1, session `mucordp1-jqcrp2`): the last
+ * `FETCHING_STOP_TIMES_FOR_STOP {stopId: '1:56831'}` was 08:19:05,
+ * `TRANSITION_LEG {legIndex: 1}` came 08:19:21, and there was not another poll
+ * until 08:39:16 — twenty minutes of a rider standing at the stop with the
+ * one stop-specific live departure going stale. 180 s later
+ * (`STOP_SNAPSHOT_MAX_AGE_MS`) the board time fell through to the trip query's
+ * scheduled 08:15:00, published live.
+ *
+ * So the poll also runs while the rider is WAITING at the current transit
+ * leg's boarding stop — `waitingAtBoardingStop` (18.6), the spatial fact that
+ * ends on the riding fact or 150 m down the line. Everything else the anchor
+ * does (the departure override, 23.3's plan re-target) keeps the narrow gate:
+ * re-targeting the plan onto other runs while the rider stands at the kerb is
+ * not what this is for.
+ */
+export function boardingStopToPoll(
+  currentLeg: Leg | undefined,
+  nextLeg: Leg | undefined,
+  waitingAtBoardingStop: boolean | undefined
+): string | null {
+  const anchorStopId = anchorBoardingStopId(currentLeg, nextLeg)
+  if (anchorStopId) return anchorStopId
+  if (!waitingAtBoardingStop || !currentLeg?.transitLeg) return null
+  return (currentLeg as any)?.from?.stop?.gtfsId ?? null
+}
+
 export interface AnchorDecision {
   /** The departure to anchor to, or null to leave the override alone. */
   anchorMs: number | null
