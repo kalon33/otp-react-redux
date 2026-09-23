@@ -325,6 +325,48 @@ describe('lib > reducers > create-user-reducer', () => {
     })
   })
 
+  describe('RESTORE_LOCAL_USER_PLACES (backlog 28.1)', () => {
+    const config = {
+      locations: [{ lat: 1, lon: 2, name: 'Suggested' }],
+      persistence: { enabled: true, strategy: 'localStorage' }
+    }
+    const GYM = {
+      address: '456 Barbell Ave',
+      icon: 'map-marker',
+      id: 'place-gym1',
+      lat: 44.9,
+      lon: -93.2,
+      name: 'Gym',
+      type: 'custom'
+    }
+    afterEach(() => window.localStorage.clear())
+
+    it('rebuilds saved places from the restored keys, shaped as a boot would', () => {
+      const reducer = createUserReducer(config)
+      const empty = getUserInitialState(config)
+      expect(empty.localUser.savedLocations.map((l) => l.type)).toEqual([
+        'suggested'
+      ])
+      // The places-sync thunk writes the keys, then dispatches.
+      window.localStorage.setItem('otp.savedPlaces', JSON.stringify([GYM]))
+      window.localStorage.setItem(
+        'otp.home',
+        JSON.stringify({ lat: 1, lon: 2, name: '1 Home St', type: 'home' })
+      )
+      const state = reducer(empty, { type: 'RESTORE_LOCAL_USER_PLACES' })
+      expect(state.localUser.savedLocations).toEqual(
+        getUserInitialState(config).localUser.savedLocations
+      )
+      expect(state.localUser.savedLocations.map((l) => l.type)).toEqual([
+        'home',
+        'custom',
+        'suggested'
+      ])
+      // Nothing else in localUser moves.
+      expect(state.localUser.recentPlaces).toBe(empty.localUser.recentPlaces)
+    })
+  })
+
   describe('storeTripHistory default (persistence.trackRecentByDefault)', () => {
     afterEach(() => window.localStorage.clear())
 
