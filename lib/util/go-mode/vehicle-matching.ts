@@ -8,6 +8,21 @@ import { calculateDistance } from './position-matching'
  */
 export const NO_LIVE_VEHICLE_POLLS = 6
 
+/**
+ * How many consecutive EMPTY vehicle-position responses a route may carry its
+ * last non-empty vehicle list across (backlog 25.4). A 200 with `vehicles: []`
+ * used to erase the whole list until the next poll refilled it, so the map's
+ * buses, the riding checks and the missed-bus guard all went blind for a poll.
+ * Measured across every day file to 2026-09-22: 103 of 4 115 polls came back
+ * empty on routes that otherwise had vehicles, 34 of 45 blank runs were one
+ * poll long and the longest was five. Six polls (~90-120 s at the 15-20 s
+ * cadence) bridges every run seen and ends where VEHICLE_RECORD_STALE_SEC
+ * (transit-trust.ts, 120 s) would call the carried records stale anyway; past
+ * it the list is emptied and the route reads as having no live vehicles, as
+ * before. A route that never published a vehicle has nothing to carry.
+ */
+export const MAX_CARRIED_EMPTY_VEHICLE_POLLS = 6
+
 // --- Types ---
 
 export interface VehiclePosition {
