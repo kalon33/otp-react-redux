@@ -623,13 +623,16 @@ components:
     orAlternatives: or other routes in the same direction
     originallyScheduledTime: (originally {originalTime})
     otherStops: Other stops
+    otherStopsLooking: Looking…
+    otherStopsNone: No other stops
     singleModeItineraryDescription: "{time} {mode} itinerary"
     startTrip: Start Trip
     switchTrip: Switch to this trip
     timeBiking: "{time} biking"
     timeWalking: "{time} walking"
+    variantArrives: arrives {time}
     variantBiking: "{distance} biking"
-    variantNext: next {time}
+    variantLeaves: leaves {time}
     variantOff: "Off"
     variantOn: "On"
     variantShown: currently shown
