@@ -838,6 +838,13 @@ components:
     last: Dernier
     next: Suivant
     previous: Précédent
+  PlacesChips:
+    add: Ajouter
+    addPlace: Ajouter un lieu
+    heading: Vos lieux
+    home: Domicile
+    recent: "Destination récente : {place}"
+    work: Travail
   PlanTripButton:
     planTrip: Planifier le trajet
   PointPopup:

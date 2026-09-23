@@ -832,6 +832,13 @@ components:
     locationTypePrompt: "Location type:"
     nameExample: My coffee shop
     namePrompt: "Place name:"
+  PlacesChips:
+    add: Add
+    addPlace: Add a place
+    heading: Your places
+    home: Home
+    recent: "Recent destination: {place}"
+    work: Work
   PlanFirstLastButtons:
     first: First
     last: Last

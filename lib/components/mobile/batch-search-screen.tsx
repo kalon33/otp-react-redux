@@ -26,6 +26,7 @@ import SwitchButton from '../form/switch-button'
 
 import MobileContainer from './container'
 import MobileNavigationBar from './navigation-bar'
+import PlacesChips from './places-chips'
 
 const { SET_FROM_LOCATION, SET_TO_LOCATION } = MobileScreens
 
@@ -206,6 +207,10 @@ class BatchSearchScreen extends Component<Props> {
                         <div className="switch-button-container-mobile">
                           <SwitchButton />
                         </div>
+                        {/* Backlog 28.3: the rider's places one tap from the
+                            destination box; a second tap plans, exactly as
+                            the Plan button does. */}
+                        <PlacesChips onPlanTrip={this.handlePlanTripClick} />
                         <BatchSettings
                           onPlanTripClick={this.handlePlanTripClick}
                           openAdvancedSettings={this.openAdvancedSettings}
