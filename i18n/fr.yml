@@ -321,28 +321,6 @@ components:
     noCompanions: Vous n'avez aucun accompagnateur.
     submitNewCompanion: Envoyer l'invitation
     title: Accompagnateurs
-  ConnectionFirst:
-    accessBike: "{distance} à vélo pour y aller"
-    accessWalk: "{distance} à pied pour y aller"
-    bikeWholeWay: Tout le trajet à vélo
-    change: Modifier
-    directDistance: "{distance}, sans bus"
-    egressBike: "Puis {distance} à vélo jusqu'à votre destination"
-    egressNone: Votre destination est ici
-    egressWalk: "Puis {distance} à pied jusqu'à votre destination"
-    getOffHeading: Où descendez-vous ?
-    getOnHeading: Où montez-vous ?
-    noTransit: Sans transport en commun
-    offAt: Descente
-    onAt: Montée
-    or: ou
-    placesToGetOff: "{count, plural, one {# arrêt de descente} other {# arrêts de descente}}"
-    stepGetOff: Descente
-    stepGetOn: Montée
-    stepTimes: Horaires
-    then: puis
-    waysToStart: "{count, plural, one {# façon de partir} other {# façons de partir}}"
-    walkWholeWay: Tout le trajet à pied
   DateTimeOptions:
     arriveBy: Arriver à
     departAt: Partir à
@@ -637,20 +615,17 @@ components:
     multipleOptions: Plusieurs options
     orAlternatives: ou autres lignes dans la même direction
     originallyScheduledTime: (initialement {originalTime})
-    sameShapeVariants: >-
-      {count, plural, one {# option} other {# options}}
+    otherStops: Autres arrêts
     singleModeItineraryDescription: Trajet de {time} {mode}
     startTrip: "Démarrer le trajet"
     switchTrip: "Basculer sur ce trajet"
     timeBiking: "{time} de vélo"
     timeWalking: "{time} de marche"
     variantBiking: "{distance} à vélo"
-    variantBoardAt: Montez à {stop}
+    variantNext: prochain à {time}
+    variantOff: Descente
+    variantOn: Montée
     variantShown: actuellement affiché
-    variantsOtherStop: montez à {stop}
-    variantsOtherStopsNamed: montez à {stop} +{count} autres
-    variantsOtherTimes: >-
-      {count, plural, one {# autre horaire} other {# autres horaires}}
     variantWalking: "{distance} à pied"
   MobilityProfile:
     DevicesPane:
@@ -955,11 +930,8 @@ components:
     bikeSpeedHelp: "Le temps que l'application attribue à vos étapes à vélo. Une fois réglée, cette vitesse est utilisée par tous les itinéraires, y compris avant que vous ayez roulé assez longtemps pour que l'application mesure votre allure."
     bikeSpeedLabel: "Votre vitesse à vélo : {speed} mph"
     bikeSpeedSlider: "Vitesse à vélo"
-    connectionFirstHelp: "Désactivé par défaut. Les résultats demandent d'abord où vous montez, puis où vous descendez, et seulement ensuite les horaires du prochain bus."
-    connectionFirstLabel: Choisir les arrêts d'abord (essai)
     gettingAroundHeader: "Vos déplacements"
     heading: "Paramètres"
-    resultsHeader: Résultats
     routingHelp: "Ces réglages s'appliquent à tous les itinéraires que vous planifiez, ainsi qu'à tout trajet recalculé en cours de route."
     speedHigh: "Plus vite"
     speedLow: "Moins vite"

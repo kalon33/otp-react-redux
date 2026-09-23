@@ -1,5 +1,5 @@
+import { FormattedList, useIntl } from 'react-intl'
 import { Itinerary } from '@opentripplanner/types'
-import { useIntl } from 'react-intl'
 import React, { MouseEvent, useCallback } from 'react'
 
 import { firstTransitLegIsRealtime } from '../../../util/viewer'
@@ -72,7 +72,6 @@ type DepartureTimesProps = {
 
 interface TimeButtonProps {
   active?: boolean
-  chip?: boolean
   displayedTime: number
   itinerary: ItineraryWithIndex
   realTime?: boolean
@@ -81,7 +80,6 @@ interface TimeButtonProps {
 
 const TimeButton = ({
   active,
-  chip,
   displayedTime,
   itinerary,
   realTime,
@@ -89,9 +87,6 @@ const TimeButton = ({
 }: TimeButtonProps) => {
   const intl = useIntl()
   const classNames = ['timeInfo']
-  // A chip is one of several departures sharing a card, so it is a target in
-  // its own right (44 px, itinerary.css) rather than a word in a sentence.
-  if (chip) classNames.push('departure-chip')
   if (realTime) classNames.push('realtime')
   if (active) classNames.push('active')
   const timeString = intl.formatTime(displayedTime)
@@ -124,14 +119,13 @@ const TimeButton = ({
 }
 
 /**
- * The departures a result row offers.
- *
- * One departure stays inline: the row is that trip, and the whole card is the
- * tap target. Several are laid out as chips — a wrapped row of 44 px buttons,
- * the size the variants control beside them uses — because until 2026-09-21
- * they were rendered as `9:12 AM, 9:36 AM, or 10:49 AM`, inline-text-sized
- * buttons inside a disjunction list, and a thumb on a bike cannot tell one
- * from the next (backlog 23.1).
+ * The departures a result row offers, as the small inline sentence
+ * "9:12 AM, 9:36 AM, or 10:06 AM". From 2026-09-21 these were 44 px chips on
+ * their own full-width strip (23.1); on 2026-09-23 the rider asked for the
+ * smaller display back ("there are still times being shown with big buttons
+ * (i liked the display when it was smaller)", backlog 21.5). The guard 23.1
+ * added against starting a much later departure by mistake stays: see
+ * MetroItinerary._confirmLaterDeparture.
  */
 const DepartureTimesList = ({
   expanded,
@@ -152,8 +146,9 @@ const DepartureTimesList = ({
   }
 
   return (
-    <span className="departure-chips">
-      {itinerary.allStartTimes.map((time) => {
+    <FormattedList
+      type="disjunction"
+      value={itinerary.allStartTimes.map((time) => {
         const { itinerary: itinOption, legs, realtime } = time
         const displayedTime = showArrivals
           ? getLastLegEndTime(legs)
@@ -161,7 +156,6 @@ const DepartureTimesList = ({
         return (
           <TimeButton
             active={itinOption.index === itinerary.index}
-            chip
             displayedTime={displayedTime}
             itinerary={itinOption}
             key={displayedTime}
@@ -170,7 +164,7 @@ const DepartureTimesList = ({
           />
         )
       })}
-    </span>
+    />
   )
 }
 

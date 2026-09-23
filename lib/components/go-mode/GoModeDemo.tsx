@@ -589,14 +589,13 @@ const GoModeDemo = (): JSX.Element => (
       'components.GoMode.returnPlanNow': 'Plan return now',
       'components.GoMode.returnRouteDeparts': '{route} departs {time}',
       'components.GoMode.returnStart': 'Start return trip',
-      'components.MetroUI.sameShapeVariants':
-        '{count, plural, one {# option} other {# options}}',
-      'components.MetroUI.variantBoardAt': 'Board at {stop}',
-      'components.MetroUI.variantsOtherStop': 'board at {stop}',
-      'components.MetroUI.variantsOtherStopsNamed':
-        'board at {stop} +{count} more',
-      'components.MetroUI.variantsOtherTimes':
-        '{count, plural, one {# other time} other {# other times}}',
+      'components.MetroUI.otherStops': 'Other stops',
+      'components.MetroUI.variantBiking': '{distance} biking',
+      'components.MetroUI.variantNext': 'next {time}',
+      'components.MetroUI.variantOff': 'Off',
+      'components.MetroUI.variantOn': 'On',
+      'components.MetroUI.variantShown': 'currently shown',
+      'components.MetroUI.variantWalking': '{distance} walking',
       'components.StopTimeCell.realtime': 'Realtime',
       'components.StopTimeCell.scheduled': 'Scheduled'
     }}

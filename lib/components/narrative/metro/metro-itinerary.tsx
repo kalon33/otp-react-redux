@@ -73,22 +73,6 @@ const DepartureTimes = styled.span`
   text-overflow: ellipsis;
   width: 100%;
 
-  /*
-    A row with several departures shows them as 44 px chips (backlog 23.1),
-    and this cell is half a card wide — the grid is
-    repeat(auto-fit, minmax(50%, 1fr)) and ItineraryDetails holds the right
-    column. Two chips per line there, four lines for an Orange Line row. So
-    the chips take their own full-width row under the summary, the way the
-    variants control does (VariantsRow, backlog 16.6). Rows with a single
-    departure are unchanged: they stay inline beside the duration.
-  */
-  &.with-chips {
-    /* span 2, not -1: under repeat(auto-fit, minmax(50%, 1fr)) Chrome
-       resolves a span to line -1 as the FIRST track alone — measured 253 px
-       of a 390 px card, against 362 px for span 2. */
-    grid-column: 1 / span 2;
-  }
-
   .active {
     color: #090909ee;
     cursor: auto;
@@ -635,11 +619,7 @@ export class MetroItinerary extends NarrativeItinerary {
                     })()}
                   </SecondaryInfo>
                 </ItineraryDetails>
-                <DepartureTimes
-                  className={
-                    itinerary.allStartTimes?.length > 1 ? 'with-chips' : ''
-                  }
-                >
+                <DepartureTimes>
                   {showInlineItinerarySummary && getFirstTransitLeg(itinerary) && (
                     <Route
                       leg={getFirstTransitLeg(itinerary)}
