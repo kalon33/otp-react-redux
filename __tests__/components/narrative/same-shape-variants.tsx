@@ -6,17 +6,24 @@ import path from 'path'
 import React from 'react'
 import yaml from 'js-yaml'
 
+import { collectItinerariesWithoutDuplicates } from '../../../lib/util/itinerary'
+import { doMergeItineraries } from '../../../lib/components/narrative/narrative-itineraries'
 import { mockWithProvider } from '../../test-utils/mock-data/store'
-import SameShapeVariants from '../../../lib/components/narrative/metro/same-shape-variants'
+import lakeStRide from '../../../lib/util/go-mode/replay/fixtures/0921-0902-orange-lake-st.json'
+import SameShapeVariants, {
+  stopPairOf,
+  stopPairs
+} from '../../../lib/components/narrative/metro/same-shape-variants'
 
 /**
- * Backlog 16.6: the variants behind a result row were reachable only through a
- * 90%-size grey "3 options" link beside "(departs 8:14 AM)", and on 2026-09-15
- * the rider ran three searches and started Go Mode four times in two minutes
- * hunting for a different boarding stop on the same route without finding it.
- * These tests pin the two things that fix: the control is a real, full-width
- * button on the row, and its closed label NAMES the other boarding stop rather
- * than counting it.
+ * Backlog 21.5 (2026-09-23). The row's drill-down is "Other stops": one entry
+ * per distinct get-on / get-off pair among the runs folded into the row, the
+ * row's own pair first, and no button at all when every run gets on and off
+ * where the row already does. The rider: "it should be other boarding and
+ * egress stops, just like you can choose other egress stops in the 'already
+ * on the bus' flow", "description on button is just other stops", "you dont
+ * need to clarify if there are no options". Other departures from the same
+ * stops are the "You leave ..." sentence's job, not this control's.
  */
 
 /** Jest maps i18n/*.yml to an empty object; read the shipped English file. */
@@ -41,6 +48,7 @@ const BASE = 1_789_484_400_000
 const MIN = 60000
 
 type VariantSpec = {
+  alight?: string
   bikeMeters?: number
   departOffsetMin?: number
   index: number
@@ -49,6 +57,7 @@ type VariantSpec = {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const makeItinerary = ({
+  alight = 'I-35W & 98th St Station',
   bikeMeters = 3000,
   departOffsetMin = 0,
   index,
@@ -72,12 +81,7 @@ const makeItinerary = ({
       route: { id: '1:Orange' },
       routeShortName: 'Orange',
       startTime: BASE + (departOffsetMin + 10) * MIN,
-      to: {
-        lat: 44.86,
-        lon: -93.24,
-        name: 'Burnsville',
-        vertexType: 'TRANSIT'
-      },
+      to: { lat: 44.86, lon: -93.24, name: alight, vertexType: 'TRANSIT' },
       transitLeg: true
     }
   ],
@@ -108,9 +112,34 @@ function render(
 const toggle = (wrapper: any) =>
   wrapper.find('button.same-shape-variants-toggle')
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const variantButtons = (wrapper: any) => wrapper.find('button[data-index]')
+const pairButtons = (wrapper: any) => wrapper.find('button[data-pair]')
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function open(wrapper: any) {
+  toggle(wrapper).simulate('click')
+  wrapper.update()
+}
 
-describe('components > narrative > same shape variants', () => {
+/** Five departures, three pairs: the shape of an Orange Line row. */
+const FIVE_RUNS_THREE_PAIRS: VariantSpec[] = [
+  { bikeMeters: 1500, index: 0, stop: 'Lake St / Midtown' },
+  {
+    bikeMeters: 1500,
+    departOffsetMin: 15,
+    index: 1,
+    stop: 'Lake St / Midtown'
+  },
+  {
+    alight: 'I-35W & 66th St Station',
+    bikeMeters: 4200,
+    departOffsetMin: 21,
+    index: 2,
+    stop: 'Lake St / Midtown'
+  },
+  { bikeMeters: 2600, departOffsetMin: 27, index: 3, stop: '46th St Station' },
+  { bikeMeters: 2600, departOffsetMin: 9, index: 4, stop: '46th St Station' }
+]
+
+describe('components > narrative > same shape variants (21.5: other stops)', () => {
   it('renders nothing when the row folded nothing into itself', () => {
     const { wrapper } = render(
       makeItinerary({ index: 0, stop: 'Lake St / Midtown' })
@@ -119,138 +148,202 @@ describe('components > narrative > same shape variants', () => {
     expect(toggle(wrapper).length).toBe(0)
   })
 
-  it('renders nothing when a single itinerary is listed as its own variant', () => {
-    const only = makeItinerary({ index: 0, stop: 'Lake St / Midtown' })
-    const { wrapper } = render(
-      Object.assign({}, only, { sameShapeVariants: [only] })
-    )
-    expect(toggle(wrapper).length).toBe(0)
-  })
-
-  it('offers one full-width control, collapsed, when 2+ itineraries folded in', () => {
-    const { wrapper } = render(
-      rowOf([
-        { index: 0, stop: 'Lake St / Midtown' },
-        { departOffsetMin: 12, index: 1, stop: 'Lake St / Midtown' }
-      ])
-    )
-    expect(toggle(wrapper).length).toBe(1)
-    expect(toggle(wrapper).prop('aria-expanded')).toBe(false)
-    // Folded is still the default: no variant list until it is tapped.
-    expect(variantButtons(wrapper).length).toBe(0)
-  })
-
-  it('counts the other DEPARTURES on the closed label', () => {
+  it('renders nothing when every run gets on and off where the row does', () => {
+    // Four departures, one pair: other TIMES are the sentence's job, and
+    // "you dont need to clarify if there are no options".
     const { wrapper } = render(
       rowOf([
         { index: 0, stop: 'Lake St / Midtown' },
         { departOffsetMin: 12, index: 1, stop: 'Lake St / Midtown' },
-        { departOffsetMin: 27, index: 2, stop: 'Lake St / Midtown' }
+        { departOffsetMin: 27, index: 2, stop: 'Lake St / Midtown' },
+        { bikeMeters: 900, index: 3, stop: 'Lake St / Midtown' }
       ])
     )
-    expect(toggle(wrapper).text()).toContain('2 other times')
+    expect(wrapper.find('.same-shape-variants').length).toBe(0)
+    expect(toggle(wrapper).length).toBe(0)
   })
 
-  it('NAMES the other boarding stop rather than counting it', () => {
-    // The 2026-09-15 ask itself: same route, different place to get on.
-    const { wrapper } = render(
-      rowOf([
-        { index: 0, stop: 'Lake St / Midtown' },
-        { departOffsetMin: 12, index: 1, stop: '46th St Station' }
-      ])
-    )
-    const label = toggle(wrapper).text()
-    expect(label).toContain('board at 46th St Station')
-    expect(label).toContain('1 other time')
+  it('says "Other stops" on the button and nothing else', () => {
+    const { wrapper } = render(rowOf(FIVE_RUNS_THREE_PAIRS))
+    expect(toggle(wrapper).length).toBe(1)
+    expect(toggle(wrapper).text()).toBe('Other stops▶')
+    expect(toggle(wrapper).prop('aria-expanded')).toBe(false)
+    expect(pairButtons(wrapper).length).toBe(0)
   })
 
-  it('names one stop and counts the rest when there are several', () => {
-    const { wrapper } = render(
-      rowOf([
-        { index: 0, stop: 'Lake St / Midtown' },
-        { departOffsetMin: 12, index: 1, stop: '46th St Station' },
-        { departOffsetMin: 24, index: 2, stop: '38th St Station' }
-      ])
-    )
-    expect(toggle(wrapper).text()).toContain('board at 46th St Station +1 more')
-  })
-
-  it('falls back to a plain count when only the closing bike ride differs', () => {
-    // Same minute, same boarding stop: there is no axis worth naming, so the
-    // control says how many there are rather than inventing a difference.
-    const { wrapper } = render(
-      rowOf([
-        { bikeMeters: 6800, index: 0, stop: 'Lake St / Midtown' },
-        { bikeMeters: 2100, index: 1, stop: 'Lake St / Midtown' }
-      ])
-    )
-    const label = toggle(wrapper).text()
-    expect(label).toContain('2 options')
-    expect(label).not.toContain('other time')
-  })
-
-  it('expands and collapses, listing every variant with what differs', () => {
+  it('offers the button for another get-off stop alone, too', () => {
     const { wrapper } = render(
       rowOf([
         { index: 0, stop: 'Lake St / Midtown' },
         {
-          bikeMeters: 1200,
-          departOffsetMin: 12,
+          alight: 'I-35W & 66th St Station',
           index: 1,
-          stop: '46th St Station'
+          stop: 'Lake St / Midtown'
         }
       ])
     )
-    toggle(wrapper).simulate('click')
-    wrapper.update()
-    expect(toggle(wrapper).prop('aria-expanded')).toBe(true)
-
-    const buttons = variantButtons(wrapper)
-    expect(buttons.length).toBe(2)
-    // The representative is in the list and marked as the one on screen.
-    expect(buttons.at(0).prop('className')).toBe('active')
-    const second = buttons.at(1).text()
-    expect(second).toContain('Board at 46th St Station')
-    // Departure and arrival, plus the biking distance that is the whole point
-    // of keeping a same-minute variant around.
-    expect(second).toContain('8:12 AM')
-    expect(second).toContain('8:52 AM')
-    expect(second).toMatch(/biking/)
-
-    toggle(wrapper).simulate('click')
-    wrapper.update()
-    expect(toggle(wrapper).prop('aria-expanded')).toBe(false)
-    expect(variantButtons(wrapper).length).toBe(0)
+    expect(toggle(wrapper).text()).toBe('Other stops▶')
   })
 
-  it('selects the tapped variant, by its own itinerary index', () => {
-    const setActiveItinerary = jest.fn()
-    const { wrapper } = render(
-      rowOf([
-        { index: 4, stop: 'Lake St / Midtown' },
-        { departOffsetMin: 12, index: 7, stop: '46th St Station' }
-      ]),
-      setActiveItinerary
+  it("lists one entry per distinct pair, the row's own first and marked", () => {
+    const { wrapper } = render(rowOf(FIVE_RUNS_THREE_PAIRS))
+    open(wrapper)
+    const buttons = pairButtons(wrapper)
+    expect(buttons.length).toBe(3)
+    const texts = buttons.map((b: any) => b.find('span').first().text())
+    // Own pair, then the others by their next departure (46th St at 8:09
+    // before the 66th St alight at 8:21).
+    expect(texts[0]).toBe('OnLake St / MidtownOffI-35W & 98th St Station')
+    expect(texts[1]).toBe('On46th St StationOffI-35W & 98th St Station')
+    expect(texts[2]).toBe('OnLake St / MidtownOffI-35W & 66th St Station')
+    expect(buttons.at(0).prop('className')).toBe('active')
+    expect(buttons.at(0).text()).toContain('currently shown')
+    expect(buttons.at(1).prop('className')).toBeUndefined()
+  })
+
+  it('details each entry as distance and its NEXT departure', () => {
+    const { wrapper } = render(rowOf(FIVE_RUNS_THREE_PAIRS))
+    open(wrapper)
+    const details = pairButtons(wrapper).map((b: any) =>
+      b.find('.variant-detail').text()
     )
-    toggle(wrapper).simulate('click')
-    wrapper.update()
-    variantButtons(wrapper).at(1).simulate('click')
+    expect(details[0]).toMatch(
+      /^0\.9 miles? biking · next 8:00 AM currently shown$/
+    )
+    // 46th St runs leave at 8:27 and 8:09: next is the earlier, 8:09.
+    expect(details[1]).toMatch(/^1\.6 miles? biking · next 8:09 AM$/)
+    expect(details[2]).toMatch(/^2\.6 miles? biking · next 8:21 AM$/)
+  })
+
+  it('says walking when the pair has no biking', () => {
+    const walkRow = rowOf([
+      { index: 0, stop: 'Lake St / Midtown' },
+      { index: 1, stop: '46th St Station' }
+    ])
+    walkRow.sameShapeVariants.forEach((v: any) => {
+      v.legs[0].mode = 'WALK'
+      v.legs[0].distance = 400
+    })
+    const { wrapper } = render(walkRow)
+    open(wrapper)
+    expect(pairButtons(wrapper).at(1).find('.variant-detail').text()).toMatch(
+      /walking · next 8:00 AM$/
+    )
+  })
+
+  it("selects the pair's EARLIEST run when tapped", () => {
+    const { setActiveItinerary, wrapper } = render(rowOf(FIVE_RUNS_THREE_PAIRS))
+    open(wrapper)
+    pairButtons(wrapper).at(1).simulate('click')
     expect(setActiveItinerary).toHaveBeenCalledTimes(1)
-    expect(setActiveItinerary.mock.calls[0][0].index).toBe(7)
+    // index 4 (8:09), not index 3 (8:27).
+    expect(setActiveItinerary.mock.calls[0][0].index).toBe(4)
+  })
+
+  it('collapses again', () => {
+    const { wrapper } = render(rowOf(FIVE_RUNS_THREE_PAIRS))
+    open(wrapper)
+    expect(toggle(wrapper).prop('aria-expanded')).toBe(true)
+    open(wrapper)
+    expect(toggle(wrapper).prop('aria-expanded')).toBe(false)
+    expect(pairButtons(wrapper).length).toBe(0)
   })
 
   it('does not let a tap on the control fall through to the row', () => {
     // The whole card is clickable (MetroItinerary.handleClick); without
     // stopPropagation, opening the list would also activate the row.
     const rowClick = jest.fn()
-    const { wrapper } = render(
-      rowOf([
-        { index: 0, stop: 'Lake St / Midtown' },
-        { departOffsetMin: 12, index: 1, stop: '46th St Station' }
-      ])
-    )
-    const event = { stopPropagation: rowClick }
-    toggle(wrapper).simulate('click', event)
+    const { wrapper } = render(rowOf(FIVE_RUNS_THREE_PAIRS))
+    toggle(wrapper).simulate('click', { stopPropagation: rowClick })
     expect(rowClick).toHaveBeenCalled()
+  })
+})
+
+describe('21.5 > how a pair is identified', () => {
+  const withIds = (spec: VariantSpec, on: string, off: string): any => {
+    const itin = makeItinerary(spec)
+    itin.legs[1].from.stop = { gtfsId: on }
+    itin.legs[1].to.stop = { gtfsId: off }
+    return itin
+  }
+
+  it('compares stops by GTFS id before names', () => {
+    const a = withIds({ index: 0, stop: 'Lake St' }, '1:17781', '1:56833')
+    const b = withIds(
+      { index: 1, stop: 'Lake St Station' },
+      '1:17781',
+      '1:56833'
+    )
+    const c = withIds({ index: 2, stop: 'Lake St' }, '2:17781', '1:56833')
+    expect(stopPairOf(a).key).toBe(stopPairOf(b).key)
+    expect(stopPairOf(a).key).not.toBe(stopPairOf(c).key)
+  })
+
+  it('names a transfer chain by its first boarding and last alight', () => {
+    const chain = makeItinerary({ index: 0, stop: 'Lake St / Midtown' })
+    chain.legs.push({
+      from: { name: 'Transfer Pt' },
+      mode: 'BUS',
+      to: { name: 'Mall of America' },
+      transitLeg: true
+    })
+    expect(stopPairOf(chain)).toMatchObject({
+      offName: 'Mall of America',
+      onName: 'Lake St / Midtown'
+    })
+  })
+
+  it('lets the onboard list name the get-off stop it is choosing', () => {
+    const variant = {
+      ...makeItinerary({ index: 0, stop: 'Lake St / Midtown' }),
+      offStopName: '46th St Station'
+    }
+    expect(stopPairOf(variant).offName).toBe('46th St Station')
+  })
+
+  it('keeps every run and the row itself in the merged sameShapeVariants', () => {
+    // A real answer: the 2026-09-21 Orange Line search (replay fixture
+    // 0921-0902-orange-lake-st, routingResponses[8], 18 itineraries). The
+    // Orange row's earliest run boards at 46th St (9:06 AM Minneapolis); six
+    // later runs board at Lake St. After 28.4 allStartTimes holds same-stop
+    // runs only, so "You leave" names the 46th St run alone and the six Lake
+    // St runs are reachable only through sameShapeVariants -> Other stops.
+    const list = collectItinerariesWithoutDuplicates([
+      (lakeStRide as any).routingResponses[8].payload.response
+    ] as any).map((itin: any, index: number) => ({ ...itin, index }))
+    const { mergedItineraries } = doMergeItineraries(
+      list,
+      { mediumId: null, riderCategoryId: null },
+      true
+    )
+    let folded = 0
+    mergedItineraries.forEach((row: any) => {
+      const variants = row.sameShapeVariants
+      if (!variants) {
+        folded += 1
+        return
+      }
+      folded += variants.length
+      expect(variants.some((v: any) => v.index === row.index)).toBe(true)
+    })
+    // Every itinerary lands in exactly one row ...
+    expect(folded).toBe(list.length)
+    // ... and the Orange row offers both boarding stops.
+    const orange = mergedItineraries.find(
+      (row: any) => row.sameShapeVariants?.length === 7
+    )
+    expect(orange).toBeDefined()
+    expect(orange.allStartTimes).toHaveLength(1)
+    const pairs = stopPairs(orange)
+    expect(
+      pairs.map((pair) => [pair.onName, pair.offName, pair.variants.length])
+    ).toEqual([
+      ['I-35W & 46th St Station', 'I-35W & 98th St Station', 1],
+      ['I-35W & Lake St Station', 'I-35W & 98th St Station', 6]
+    ])
+    // "next" for Lake St is the earliest of its six runs.
+    expect(pairs[1].next.startTime).toBe(
+      Math.min(...pairs[1].variants.map((v) => v.startTime))
+    )
   })
 })

@@ -42,9 +42,11 @@ import started from '../../test-utils/mock-data/0921-0902-started-itineraries.js
  * every folded departure as its own inline-text button — eight of them,
  * 09:07 to 10:04, inside a single card. This file is the fix:
  *
- *  - 23.1  every departure is a 44 px chip, and starting one more than
- *          LATE_DEPARTURE_CONFIRM_MINUTES after the row's own time asks first
- *          (the rider's answer A, 2026-09-21 16:30).
+ *  - 23.1  starting a departure more than LATE_DEPARTURE_CONFIRM_MINUTES
+ *          after the row's own time asks first (the rider's answer A,
+ *          2026-09-21 16:30). 23.1 also made every departure a 44 px chip;
+ *          21.5 (2026-09-23) put them back in the small inline sentence at
+ *          the rider's request, and the confirm stays.
  *  - 23.5  the URL stops naming the chosen trip by its POSITION in the list.
  *
  * The suite runs in America/Los_Angeles (global-setup.js), so the Minneapolis
@@ -102,25 +104,23 @@ function render(itinerary: any, setActiveItinerary = jest.fn()) {
   return { setActiveItinerary, wrapper }
 }
 
-const chips = (wrapper: any) => wrapper.find('button.departure-chip')
+const times = (wrapper: any) => wrapper.find('button.timeInfo')
 
-describe('backlog 23.1 > a row of departures is a row of thumb targets', () => {
-  it('gives every folded departure its own chip', () => {
+describe('21.5 > the departures are the small sentence again', () => {
+  // 23.1 turned them into 44 px chips on 2026-09-21; on 2026-09-23 the rider
+  // asked for the smaller display back: "there are still times being shown
+  // with big buttons (i liked the display when it was smaller)".
+  it('lists every folded departure inline, joined with "or"', () => {
     const { wrapper } = render(riddenRow())
-    expect(chips(wrapper)).toHaveLength(2)
-    expect(chips(wrapper).at(0).text()).toContain('7:07 AM')
-    expect(chips(wrapper).at(1).text()).toContain('8:04 AM')
-    // They sit in a wrapping strip, not in a "7:07 AM or 8:04 AM" sentence.
-    expect(wrapper.find('span.departure-chips')).toHaveLength(1)
-    expect(wrapper.text()).not.toContain(' or ')
+    expect(times(wrapper)).toHaveLength(2)
+    // The "(Based on ... data)" parts are the screen-reader-only labels.
+    expect(wrapper.text()).toMatch(/^7:07 AM \([^)]*\) or 8:04 AM \([^)]*\)$/)
   })
 
-  it('sizes the chip for a thumb, outweighing the row-wide button reset', () => {
-    // The chips live inside `div.header`, where itinerary.css strips border,
-    // background and padding from every button and outweighs a styled
-    // component's single class. jsdom computes no stylesheet, so the rule
-    // itself is the artefact worth pinning: 44 px, and a selector heavy
-    // enough to win.
+  it('draws no chips and no chip strip', () => {
+    const { wrapper } = render(riddenRow())
+    expect(wrapper.find('.departure-chip')).toHaveLength(0)
+    expect(wrapper.find('.departure-chips')).toHaveLength(0)
     const css = readFileSync(
       path.join(
         __dirname,
@@ -128,36 +128,26 @@ describe('backlog 23.1 > a row of departures is a row of thumb targets', () => {
       ),
       'utf8'
     )
-    const rule = css.match(
-      /\.metro-itin div\.header button\.departure-chip \{[^}]*\}/
-    )?.[0]
-    expect(rule).toBeDefined()
-    expect(rule).toContain('min-height: 44px')
-    expect(rule).toContain('min-width: 44px')
-    // After the underline rule it ties with, so the chip is not underlined.
-    expect(css.indexOf('button.departure-chip {')).toBeGreaterThan(
-      css.indexOf('.metro-itin.expanded div.header button:not(.active)')
-    )
+    expect(css).not.toContain('departure-chip')
   })
 
   it('marks the departure the card is on', () => {
     const { wrapper } = render(riddenRow())
-    expect(chips(wrapper).at(0).prop('className')).toContain('active')
-    expect(chips(wrapper).at(1).prop('className')).not.toContain('active')
+    expect(times(wrapper).at(0).prop('className')).toContain('active')
+    expect(times(wrapper).at(1).prop('className')).not.toContain('active')
   })
 
-  it('selects the tapped departure, not the row (the 09:02:04 tap)', () => {
+  it('selects the tapped departure, not the row', () => {
     const { setActiveItinerary, wrapper } = render(riddenRow())
-    chips(wrapper).at(1).simulate('click')
+    times(wrapper).at(1).simulate('click')
     expect(setActiveItinerary).toHaveBeenCalledTimes(1)
     expect(setActiveItinerary.mock.calls[0][0].index).toBe(38)
   })
 
   it('leaves a one-departure row as the plain time it was', () => {
     const { wrapper } = render(itin30)
-    expect(chips(wrapper)).toHaveLength(0)
-    expect(wrapper.find('span.departure-chips')).toHaveLength(0)
-    expect(wrapper.find('button.timeInfo')).toHaveLength(1)
+    expect(times(wrapper)).toHaveLength(1)
+    expect(wrapper.text()).not.toContain(' or ')
   })
 })
 
@@ -167,7 +157,7 @@ describe('backlog 23.1 > starting a much later departure asks first', () => {
     window.confirm = realConfirm
   })
 
-  /** The card as rendered when a chip has made a later departure active. */
+  /** The card as rendered when a tap has made a later departure active. */
   function cardFor(itinerary: any, props: any = {}) {
     const beginGoMode = jest.fn()
     const card: any = new (MetroItinerary as any)({
@@ -179,7 +169,7 @@ describe('backlog 23.1 > starting a much later departure asks first', () => {
     return { beginGoMode, card }
   }
 
-  /** The row, with `itinerary` swapped for the chip the rider chose. */
+  /** The row, with `itinerary` swapped for the departure the rider chose. */
   function expandedOn(index: number): any {
     const row = riddenRow()
     const chosen = row.allStartTimes.find(
@@ -234,8 +224,8 @@ describe('backlog 23.1 > starting a much later departure asks first', () => {
   })
 
   it('leaves the next bus alone: 20 minutes is not an hour', () => {
-    // The threshold is the rider's; a chip inside it is the ordinary "take the
-    // one after" and must not grow a dialog.
+    // The threshold is the rider's; a departure inside it is the ordinary
+    // "take the one after" and must not grow a dialog.
     const row = riddenRow()
     const soon = {
       ...itin38,

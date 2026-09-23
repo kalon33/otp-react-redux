@@ -2,7 +2,7 @@ import { connect } from 'react-redux'
 import { QueryParamChangeEvent } from '@opentripplanner/trip-form/lib/types'
 import { Styled as TripFormStyled } from '@opentripplanner/trip-form'
 import { useIntl } from 'react-intl'
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef } from 'react'
 
 import * as goModeActions from '../../actions/go-mode'
 import * as routingProfileActions from '../../actions/routing-profiles'
@@ -30,10 +30,6 @@ import {
   SettingCheckbox,
   VisibleSubheader
 } from '../form/styled'
-import {
-  isConnectionFirstEnabled,
-  setConnectionFirstEnabled
-} from '../../util/connection-first'
 import AppFrame from '../app/app-frame'
 import PageTitle from '../util/page-title'
 
@@ -205,17 +201,6 @@ const SettingsScreen = ({
     [setTurnCueDefault]
   )
 
-  // Backlog 21.5: the connection-first results list, off until the rider
-  // turns it on. Device-local like the turn-cue default; never a query param.
-  const [connectionFirst, setConnectionFirst] = useState(
-    isConnectionFirstEnabled
-  )
-  const onConnectionFirstChange = useCallback((evt: QueryParamChangeEvent) => {
-    const enabled = !!evt.connectionFirst
-    setConnectionFirstEnabled(enabled)
-    setConnectionFirst(enabled)
-  }, [])
-
   const bikeSpeedMps = effectiveBikeSpeedMps(bikeSpeed)
   const walkSpeedMps = effectiveWalkSpeedMps(walkSpeed)
 
@@ -382,31 +367,6 @@ const SettingsScreen = ({
           defaultMessage:
             'Off by default. With this off you can still switch turn-by-turn on for one walking or biking leg from the trip overview once a trip has started.',
           id: 'components.SettingsScreen.turnByTurnHelp'
-        })}
-      </HelperText>
-
-      <VisibleSubheader>
-        {intl.formatMessage({
-          defaultMessage: 'Results',
-          id: 'components.SettingsScreen.resultsHeader'
-        })}
-      </VisibleSubheader>
-      <GlobalSettingsContainer>
-        <SettingCheckbox
-          label={intl.formatMessage({
-            defaultMessage: 'Choose stops first (trial)',
-            id: 'components.SettingsScreen.connectionFirstLabel'
-          })}
-          name="connectionFirst"
-          onChange={onConnectionFirstChange}
-          value={connectionFirst}
-        />
-      </GlobalSettingsContainer>
-      <HelperText>
-        {intl.formatMessage({
-          defaultMessage:
-            'Off by default. Results ask where you get on, then where you get off, and only then show the times for the next bus.',
-          id: 'components.SettingsScreen.connectionFirstHelp'
         })}
       </HelperText>
     </AppFrame>

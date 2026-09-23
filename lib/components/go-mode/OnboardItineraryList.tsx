@@ -118,7 +118,7 @@ const OnboardItineraryList = ({
           (variant, index) =>
             Object.assign({}, variant.displayItinerary || variant.itinerary, {
               index,
-              variantLabel: variant.alightStopName || variant.stopName
+              offStopName: variant.alightStopName || variant.stopName
             })
         )
 
