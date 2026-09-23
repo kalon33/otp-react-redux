@@ -596,7 +596,11 @@ export const ONBOARD_CANDIDATE_SNAPSHOT = 'ONBOARD_CANDIDATE_SNAPSHOT'
  *
  * One entry per AUTOMATIC re-plan verdict, accepted or refused, naming the
  * reason. The rider's own re-plans keep their existing `START_REROUTE
- * {autoApply: false}`, so the two remain distinguishable.
+ * {autoApply: false}`, so the two remain distinguishable. They never reach
+ * this record: `replanFromAboard` judges a splice here only on its
+ * `options.autoApply` branch, and the rider's two callers (`rider-reroute`,
+ * `rider-picked-bus`) take the explicit branch, which hands the choice to the
+ * onboard panel instead (pinned by onboard-flow.ts; backlog 25.6).
  */
 export const AUTO_REPLAN = 'AUTO_REPLAN'
 export const PAUSE_GPS_SIMULATION = 'PAUSE_GPS_SIMULATION'
