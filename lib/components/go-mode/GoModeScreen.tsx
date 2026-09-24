@@ -46,6 +46,7 @@ interface Props {
   clearOnboard: () => void
   closeOnboardAlightPreview: () => void
   departureOverride: number | null
+  departureOverrideTripId: string | null
   endGoMode: () => void
   finishArrivedTrip: () => void
   goMode: GoModeState
@@ -57,7 +58,7 @@ interface Props {
   }) => void
   pauseGpsSimulation: () => void
   resumeGpsSimulation: () => void
-  setDepartureOverride: (epochMs: number | null) => void
+  setDepartureOverride: (epochMs: number | null, tripId?: string | null) => void
   setMapFollow: (value: boolean) => void
   setMobileScreen: (screen: number) => void
   startGpsSimulation: (speedMultiplier?: number) => void
@@ -71,6 +72,7 @@ const GoModeScreen = ({
   clearOnboard,
   closeOnboardAlightPreview,
   departureOverride,
+  departureOverrideTripId,
   endGoMode,
   finishArrivedTrip,
   goMode,
@@ -300,6 +302,7 @@ const GoModeScreen = ({
           arrived={goMode.arrivedAt != null}
           boardingStopData={boardingStopData}
           departureOverride={departureOverride}
+          departureOverrideTripId={departureOverrideTripId}
           leg={currentLeg}
           nextLeg={
             goMode.progress.currentLegIndex <
@@ -533,6 +536,7 @@ const mapStateToProps = (state: any) => {
   return {
     boardingStopData,
     departureOverride: goMode?.departureOverride ?? null,
+    departureOverrideTripId: goMode?.departureOverrideTripId ?? null,
     goMode
   }
 }

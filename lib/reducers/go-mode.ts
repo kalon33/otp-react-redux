@@ -277,6 +277,14 @@ export interface GoModeState {
   departureOverrideSource: DepartureOverrideSource | null
 
   /**
+   * The RUN `departureOverride` names, when the pick came off a departure row
+   * that carried a trip id (backlog 29.3). The card and the tick follow that
+   * run's live time instead of freezing the tapped minute. Written and cleared
+   * with the value; null for an anchor pick or a session saved before 29.3.
+   */
+  departureOverrideTripId: string | null
+
+  /**
    * The rider got off a bus EARLY, at a stop that is still on the ridden leg's
    * route (8.11). Held because nothing else in the trip's shape says so: the
    * matcher stays on the transit leg (they are standing on its geometry), so
@@ -444,6 +452,8 @@ const defaultState: GoModeState = {
   departureOverride: null,
 
   departureOverrideSource: null,
+
+  departureOverrideTripId: null,
 
   earlyAlight: null,
 
@@ -819,10 +829,15 @@ const goMode = handleActions<GoModeState, any>(
         payload != null && typeof payload === 'object'
           ? payload.source ?? 'anchor'
           : 'anchor'
+      const tripId =
+        payload != null && typeof payload === 'object'
+          ? payload.tripId ?? null
+          : null
       return {
         ...state,
         departureOverride: ms ?? null,
-        departureOverrideSource: ms == null ? null : source
+        departureOverrideSource: ms == null ? null : source,
+        departureOverrideTripId: ms == null ? null : tripId
       }
     },
 
@@ -840,6 +855,7 @@ const goMode = handleActions<GoModeState, any>(
       // The plan's own departure pick belonged to the bus they just left.
       departureOverride: null,
       departureOverrideSource: null,
+      departureOverrideTripId: null,
       earlyAlight: action.payload,
       riding: null
     }),
@@ -1064,6 +1080,7 @@ const goMode = handleActions<GoModeState, any>(
         // dead boarding's lock alive are reset alongside it, in beginGoMode.
         departureOverride: null,
         departureOverrideSource: null,
+        departureOverrideTripId: null,
         isActive: true,
         liveLegTimes: {},
         notifications: {
@@ -1292,6 +1309,7 @@ const goMode = handleActions<GoModeState, any>(
           : state.alightedFrom,
         departureOverride: null,
         departureOverrideSource: null,
+        departureOverrideTripId: null,
         // The early-alight re-anchoring exists only while the matcher is still
         // stuck on the leg the rider stepped off; once the trip has actually
         // moved past it, the ordinary boarding path is back in charge.

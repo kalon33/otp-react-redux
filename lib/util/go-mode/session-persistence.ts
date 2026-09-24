@@ -99,6 +99,9 @@ export interface GoModeSession {
   // lock). `resumeGoModeTrip` reads this back and rebuilds the right one.
   // Backlog 12.15.
   departureOverrideSource?: DepartureOverrideSource | null
+  // ...and which RUN it names (29.3), so a restored pick keeps following that
+  // bus. Absent on a session saved before 29.3: the bare epoch is the fallback.
+  departureOverrideTripId?: string | null
   // The leg the trip has actually TRANSITIONED onto — `advanceToLeg`'s guard,
   // which lives on the module-level trip session and so is rebuilt as null by
   // a page load. Without it a re-mount reads `previousLegIndex` as 0
@@ -218,6 +221,7 @@ export function saveGoModeSession(
     debugSessionId: savedDebugSessionId,
     departureOverride: goMode.departureOverride ?? null,
     departureOverrideSource: goMode.departureOverrideSource ?? null,
+    departureOverrideTripId: goMode.departureOverrideTripId ?? null,
     lastTransitionedLegIndex: savedTransitionedLegIndex,
     notificationLatches: captureNotificationLatches(
       goMode.activeItinerary?.legs
