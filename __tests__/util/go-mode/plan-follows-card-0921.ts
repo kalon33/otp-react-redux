@@ -468,4 +468,21 @@ describe('go-mode > retargetPlanToDeparture, through the store', () => {
     })
     expect(after.anchorMs).toBeNull()
   })
+
+  it('a pick names its run, and the run is found even after its time moved (29.3)', async () => {
+    // The row the rider tapped was drawn a poll ago; by the time the tap lands
+    // the feed may have moved that bus. An epoch match would miss it.
+    const row = departuresAt(ANCHOR_AT).find((d) => d.depMs === ANCHORED_MS)
+    expect(row?.tripId).toBeTruthy()
+    store = makeStore()
+    await store.run(selectDeparture(ANCHORED_MS + 1234, row?.tripId ?? null))
+    const pick = store.actions.find((a) => a.type === 'SET_DEPARTURE_OVERRIDE')
+    expect(pick.payload).toEqual({
+      ms: ANCHORED_MS + 1234,
+      source: 'rider',
+      tripId: row?.tripId
+    })
+    expect(store.types()).toContain('START_GO_MODE')
+    expect(store.itinerary().legs[1].trip.gtfsId).toBe(ADOPTED_TRIP)
+  })
 })

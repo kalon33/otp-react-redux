@@ -52,6 +52,7 @@ Object {
     },
     "departureOverride": null,
     "departureOverrideSource": null,
+    "departureOverrideTripId": null,
     "earlyAlight": null,
     "isActive": false,
     "liveLegTimes": Object {},
