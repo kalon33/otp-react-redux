@@ -124,57 +124,6 @@
   color: #090909ef;
 }
 
-/*
-  Departure chips (backlog 23.1).
-
-  A result row folds every same-shape departure into one card, and on
-  2026-09-21 one card carried eight of them across an hour and a half as
-  inline-text buttons inside a "9:12 AM, 9:36 AM, or 10:49 AM" list. The rider
-  meant to open the row and instead selected a bus 58 minutes later. So each
-  departure is now a thumb target of its own, 44 px, the size the variants
-  control on the same card uses (same-shape-variants.tsx).
-
-  These rules live here rather than in the styled-component because
-  `.metro-itin div.header button` above strips border, background and padding
-  from every button in the row and outweighs a styled-component's single
-  class; `button.other-itin` a few lines up is the same workaround. The
-  underline rule directly above ties on specificity, so this block must stay
-  after it.
-*/
-.metro-itin div.header .departure-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 4px;
-}
-.metro-itin div.header button.departure-chip {
-  align-items: center;
-  background: #eef1f6;
-  border: 1px solid #c9d0dc;
-  border-radius: 8px;
-  color: #17314d;
-  display: inline-flex;
-  font-size: 14px;
-  font-weight: 600;
-  justify-content: center;
-  /* A thumb on a handlebar, not a word in a sentence. */
-  min-height: 44px;
-  min-width: 44px;
-  padding: 8px 12px;
-  text-decoration: none;
-}
-.metro-itin div.header button.departure-chip:hover {
-  background: #e2e7f0;
-  color: #17314d;
-}
-/* The departure this card is about to start, told apart at arm's length. */
-.metro-itin div.header button.departure-chip.active {
-  background: #17314d;
-  border-color: #17314d;
-  color: #ffffff;
-  cursor: auto;
-}
-
 @keyframes pulse-opacity {
   0% {
     opacity: 1;

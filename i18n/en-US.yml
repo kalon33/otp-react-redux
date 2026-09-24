@@ -316,28 +316,6 @@ components:
     noCompanions: You do not have any existing travel companions.
     submitNewCompanion: Send invitation
     title: Travel companions
-  ConnectionFirst:
-    accessBike: Bike {distance} to get here
-    accessWalk: Walk {distance} to get here
-    bikeWholeWay: Bike the whole way
-    change: Change
-    directDistance: "{distance}, no bus"
-    egressBike: Then bike {distance} to your destination
-    egressNone: Your destination is right here
-    egressWalk: Then walk {distance} to your destination
-    getOffHeading: Where do you get off?
-    getOnHeading: Where do you get on?
-    noTransit: No transit
-    offAt: Off at
-    onAt: On at
-    or: or
-    placesToGetOff: "{count, plural, one {# place to get off} other {# places to get off}}"
-    stepGetOff: Get off
-    stepGetOn: Get on
-    stepTimes: Times
-    then: then
-    walkWholeWay: Walk the whole way
-    waysToStart: "{count, plural, one {# way to start} other {# ways to start}}"
   DateTimeOptions:
     arriveBy: Arrive by
     departAt: Depart at
@@ -644,19 +622,21 @@ components:
     multipleOptions: Multiple Options
     orAlternatives: or other routes in the same direction
     originallyScheduledTime: (originally {originalTime})
-    sameShapeVariants: "{count, plural, one {# option} other {# options}}"
+    otherStops: Other stops
+    otherStopsLooking: Looking…
+    otherStopsNone: No other stops
     singleModeItineraryDescription: "{time} {mode} itinerary"
     startTrip: Start Trip
     switchTrip: Switch to this trip
     timeBiking: "{time} biking"
     timeWalking: "{time} walking"
+    variantArrives: arrives {time}
     variantBiking: "{distance} biking"
-    variantBoardAt: Board at {stop}
+    variantLeaves: leaves {time}
+    variantOff: "Off"
+    variantOn: "On"
     variantShown: currently shown
     variantWalking: "{distance} walking"
-    variantsOtherStop: board at {stop}
-    variantsOtherStopsNamed: board at {stop} +{count} more
-    variantsOtherTimes: "{count, plural, one {# other time} other {# other times}}"
   MobilityProfile:
     DevicesPane:
       devices:
@@ -832,6 +812,13 @@ components:
     locationTypePrompt: "Location type:"
     nameExample: My coffee shop
     namePrompt: "Place name:"
+  PlacesChips:
+    add: Add
+    addPlace: Add a place
+    heading: Your places
+    home: Home
+    recent: "Recent destination: {place}"
+    work: Work
   PlanFirstLastButtons:
     first: First
     last: Last
@@ -949,13 +936,8 @@ components:
       your pace.
     bikeSpeedLabel: "Your biking speed: {speed} mph"
     bikeSpeedSlider: Biking speed
-    connectionFirstHelp: >-
-      Off by default. Results ask where you get on, then where you get off, and
-      only then show the times for the next bus.
-    connectionFirstLabel: Choose stops first (trial)
     gettingAroundHeader: Getting around
     heading: Settings
-    resultsHeader: Results
     routingHelp: >-
       These apply to every trip you plan, and to any route the app rebuilds
       while you ride.

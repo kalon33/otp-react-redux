@@ -30,6 +30,7 @@ import { ItineraryDescription } from '../default/itinerary-description'
 import { itineraryHasAccessibilityScore } from '../../../util/accessibility-routing'
 import { ItineraryView } from '../../../util/ui'
 import { localizeGradationMap } from '../utils'
+import { lookupOtherStops } from '../../../actions/other-stops-lookup'
 import { MobileScreens } from '../../../actions/ui-constants'
 import { outboundKeyOf, ReturnPlanState } from '../../../actions/round-trip'
 import FormattedDuration from '../../util/formatted-duration'
@@ -52,7 +53,7 @@ import DepartureTimesList, {
 import MetroItineraryRoutes from './metro-itinerary-routes'
 import ReturnTripPanel from './return-trip-panel'
 import RouteBlock from './route-block'
-import SameShapeVariants from './same-shape-variants'
+import SameShapeVariants, { LookupStatus } from './same-shape-variants'
 
 const { ensureAtLeastOneMinute } = coreUtils.time
 
@@ -72,22 +73,6 @@ const DepartureTimes = styled.span`
   font-size: 14px;
   text-overflow: ellipsis;
   width: 100%;
-
-  /*
-    A row with several departures shows them as 44 px chips (backlog 23.1),
-    and this cell is half a card wide — the grid is
-    repeat(auto-fit, minmax(50%, 1fr)) and ItineraryDetails holds the right
-    column. Two chips per line there, four lines for an Orange Line row. So
-    the chips take their own full-width row under the summary, the way the
-    variants control does (VariantsRow, backlog 16.6). Rows with a single
-    departure are unchanged: they stay inline beside the duration.
-  */
-  &.with-chips {
-    /* span 2, not -1: under repeat(auto-fit, minmax(50%, 1fr)) Chrome
-       resolves a span to line -1 as the FIRST track alone — measured 253 px
-       of a 390 px card, against 362 px for span 2. */
-    grid-column: 1 / span 2;
-  }
 
   .active {
     color: #090909ee;
@@ -267,7 +252,18 @@ type Props = {
   expanded: boolean
   intl: IntlShape
   itinerary: Itinerary
+  /** Ask the planner for this row's other stops (backlog 21.5). */
+  lookupOtherStops?: (itinerary: Itinerary) => void
   mini?: boolean
+  /**
+   * Set by the planner's results list only: this row is a result of the
+   * active search, so its "Other stops" may look the other stops up. Go
+   * Mode's onboard list renders this component too, with rows that are in no
+   * search, and leaves it off.
+   */
+  otherStopsLookup?: boolean
+  /** Where this row's lookup stands on the active search. */
+  otherStopsLookupStatus?: LookupStatus
   returnToGoMode?: () => void
   /** state.otp.roundTrip — the return options planned for this outbound. */
   roundTrip?: { returnPlan: ReturnPlanState | null }
@@ -295,6 +291,11 @@ export class MetroItinerary extends NarrativeItinerary {
     if (typeof setVisibleItinerary === 'function' && !isVisible) {
       setVisibleItinerary({ index })
     }
+  }
+
+  _lookupOtherStops = () => {
+    const { itinerary, lookupOtherStops } = this.props
+    if (lookupOtherStops) lookupOtherStops(itinerary)
   }
 
   _onMouseLeave = () => {
@@ -635,11 +636,7 @@ export class MetroItinerary extends NarrativeItinerary {
                     })()}
                   </SecondaryInfo>
                 </ItineraryDetails>
-                <DepartureTimes
-                  className={
-                    itinerary.allStartTimes?.length > 1 ? 'with-chips' : ''
-                  }
-                >
+                <DepartureTimes>
                   {showInlineItinerarySummary && getFirstTransitLeg(itinerary) && (
                     <Route
                       leg={getFirstTransitLeg(itinerary)}
@@ -715,6 +712,12 @@ export class MetroItinerary extends NarrativeItinerary {
                 */}
                 <VariantsRow
                   itinerary={itinerary}
+                  lookupStatus={this.props.otherStopsLookupStatus}
+                  onLookup={
+                    this.props.otherStopsLookup
+                      ? this._lookupOtherStops
+                      : undefined
+                  }
                   setActiveItinerary={setActiveItinerary}
                 />
               </ItineraryGrid>
@@ -779,6 +782,13 @@ const mapStateToProps = (state: AppReduxState, ownProps: Props) => {
     configCosts: state.otp.config.itinerary?.costs,
     defaultFareType: state.otp.config.itinerary?.defaultFareType,
     enableDot: !state.otp.config.itinerary?.disableMetroSeperatorDot,
+    otherStopsLookupStatus: ownProps.otherStopsLookup
+      ? // @ts-expect-error TODO: type activeSearch
+        activeSearch?.otherStopsLookup?.[
+          // @ts-expect-error the list hands rows an index
+          ownProps.itinerary?.index
+        ]?.status
+      : undefined,
     // @ts-expect-error TODO: type activeSearch
     pending: activeSearch ? Boolean(activeSearch.pending) : false,
     roundTrip: state.otp.roundTrip,
@@ -795,6 +805,7 @@ const mapStateToProps = (state: AppReduxState, ownProps: Props) => {
 // TS TODO: correct redux types
 const mapDispatchToProps = {
   beginGoMode: goModeActions.beginGoMode,
+  lookupOtherStops,
   returnToGoMode: goModeActions.returnToGoMode,
   setItineraryView: uiActions.setItineraryView,
   setMobileScreen: uiActions.setMobileScreen
