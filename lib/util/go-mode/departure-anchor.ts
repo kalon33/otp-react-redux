@@ -525,6 +525,37 @@ function holdFor(
 }
 
 /**
+ * The time a run the card is already on should read now: the feed's current
+ * epoch for it, except that a realtime->SCHEDULED flip may not move it
+ * EARLIER than the last live time the card showed (backlog 29.3).
+ *
+ * 2026-09-23 15:55:23, trip `1:1346795` at I-35W & 98th St. The stop poll had
+ * published it `UPDATED` through 15:55:02 (15:54:12, +552 s); from 15:55:23
+ * the same trip came back `SCHEDULED` at its timetable 15:45:00, because the
+ * feed drops a departed stop's update once the vehicle is `IN_TRANSIT_TO` the
+ * next stop. It was still standing at the platform (speed 0 until 15:56:13),
+ * and the card jumped ten minutes into the past. The rider, 16:09:26: *"If the
+ * bus is slipping don't just switch to scheduled times!"*
+ *
+ * So a schedule row that would pull the time backwards keeps the last known
+ * time as a floor — the same carry the tick already makes in
+ * `mergeLiveTimePoint` (alight-optimizer.ts), which held 15:54:12 through the
+ * same poll. Shown plain (the rider's Q1 answer, "B"): it no longer matches a
+ * realtime row, so `departureIsLive` is false and no "live" mark is drawn.
+ *
+ * Only backwards. A schedule later than the last time still moves it (16.3's
+ * "a flip moves the number, never the bus"), a realtime row moves it either
+ * way, and the releases — `boardingMiss.definitive`, the run leaving the feed —
+ * are untouched, so the floor never outlives the bus.
+ */
+export function followHeldRun(run: RouteDeparture, lastMs: number): number {
+  if (!run.realtime && Number.isFinite(lastMs) && run.depMs < lastMs) {
+    return lastMs
+  }
+  return run.depMs
+}
+
+/**
  * The departure the current-leg card should headline, with HYSTERESIS: once a
  * departure has been shown, only physical evidence moves it on.
  *
@@ -556,7 +587,9 @@ function holdFor(
  *
  * A realtime->schedule flip is neither. The run is still in the feed, so the
  * hold follows it to whatever epoch the feed now publishes for THAT trip —
- * a new prediction for the same bus is not a different bus.
+ * a new prediction for the same bus is not a different bus. The one exception
+ * is backwards: a schedule row earlier than the last live time is floored at
+ * that time (29.3, see followHeldRun).
  *
  * Moving EARLIER is not "abandoning the timed pickup" and stays allowed, on
  * the same >= AUTO_ANCHOR_MIN_GAIN_MS terms shouldAdoptAnchor applies
@@ -597,6 +630,13 @@ export function resolveCardDeparture(input: {
   candidateMs: number | null
   /** goMode.departureOverride — the rider's own pick outranks everything. */
   departureOverride?: number | null
+  /**
+   * goMode.departureOverrideTripId — the RUN that pick named (29.3). With it,
+   * the override follows that run's current time instead of freezing the
+   * minute it was tapped at; without it (an anchor pick, a session saved
+   * before 29.3) the override is the bare epoch it always was.
+   */
+  departureOverrideTripId?: string | null
   /** Departures of the boarding route at the boarding stop, sorted. */
   departures: RouteDeparture[]
   graceMs?: number
@@ -616,6 +656,7 @@ export function resolveCardDeparture(input: {
     boardingMiss,
     candidateMs,
     departureOverride,
+    departureOverrideTripId,
     departures,
     graceMs = CARD_HOLD_RELEASE_GRACE_MS,
     held,
@@ -625,7 +666,42 @@ export function resolveCardDeparture(input: {
   } = input
 
   // The rider's own choice is not a projection and is never held against.
+  //
+  // But it is a choice of BUS, not of minute (29.3). On 2026-09-23 the rider
+  // tapped their own bus's live 15:53:49 at 15:42:16 and the card froze there
+  // while the same trip's live time slid to 15:55:44 — every
+  // CARD_DEPARTURE_MISMATCH that followed named the held trip as the tick's
+  // own. So an override that names its run follows that run: its current
+  // time, floored like any held run (followHeldRun). `held` is the caller's
+  // memory of what this override last showed, used only when it is the same
+  // run; otherwise the tapped minute is the floor.
   if (departureOverride != null && Number.isFinite(departureOverride)) {
+    const pickedRun = departureOverrideTripId
+      ? departures.find((d) => tripIdsMatch(d.tripId, departureOverrideTripId))
+      : undefined
+    const lastMs =
+      held != null &&
+      departureOverrideTripId &&
+      tripIdsMatch(held.tripId, departureOverrideTripId)
+        ? held.departureMs
+        : departureOverride
+    if (pickedRun) {
+      const ms = followHeldRun(pickedRun, lastMs)
+      return {
+        departureMs: ms,
+        held: { departureMs: ms, tripId: pickedRun.tripId ?? null },
+        reason: 'override'
+      }
+    }
+    if (departureOverrideTripId) {
+      // The run is not in this poll. Keep the last time it had rather than the
+      // minute it was tapped at; the override itself is released elsewhere.
+      return {
+        departureMs: lastMs,
+        held: { departureMs: lastMs, tripId: departureOverrideTripId },
+        reason: 'override'
+      }
+    }
     return {
       departureMs: departureOverride,
       held: holdFor(departureOverride, departures),
@@ -636,8 +712,11 @@ export function resolveCardDeparture(input: {
   if (held != null && Number.isFinite(held.departureMs)) {
     const current = findHeld(departures, held)
     // The same run at whatever time the feed publishes for it now. This is the
-    // realtime<->schedule flip: it moves the NUMBER, never the bus.
-    const heldMs = current?.depMs ?? held.departureMs
+    // realtime<->schedule flip: it moves the NUMBER, never the bus — except
+    // backwards off a live time, which is 29.3's floor (followHeldRun).
+    const heldMs = current
+      ? followHeldRun(current, held.departureMs)
+      : held.departureMs
 
     const missed = boardingMiss?.definitive === true
     const leftTheFeed = !current && nowMs > held.departureMs + graceMs
@@ -708,4 +787,59 @@ export function resolveCardDeparture(input: {
     held: holdFor(seeded, departures),
     reason: 'seeded'
   }
+}
+
+/**
+ * The departure the TICK should time the wait against when the rider has
+ * picked one (29.3) — the tick-side twin of resolveCardDeparture's override
+ * branch, so the card and `progress.effectiveDepartureMs` name one epoch.
+ *
+ * `departureOverrideMs || liveBoardMs || plan` (getUpcomingTransitTiming)
+ * assumed a pick names a DIFFERENT bus from the plan, whose live time
+ * `liveLegTimes` does not track. On 2026-09-23 the pick named the SAME bus,
+ * and the tick counted down to the tapped 15:53:49 while `liveLegTimes` for
+ * that very leg carried 15:55:44. So:
+ *
+ *  - no trip id (an anchor pick, a session saved before 29.3): the bare epoch;
+ *  - the plan's own run: the leg's live board epoch, or its floor once the
+ *    feed has flipped to schedule (`mergeLiveTimePoint` keeps the last live
+ *    time and marks it `isFloor`) — the same number the card holds;
+ *  - another run (a pick whose plan re-target was refused): that run's time
+ *    in the stop's departures, floored at the tapped minute on a schedule row.
+ */
+export function overrideDepartureForTick(input: {
+  boardingLegTripId: string | null
+  departureOverrideMs: number | null
+  departureOverrideTripId: string | null
+  departures: RouteDeparture[]
+  liveBoard?: {
+    boardEpoch?: number | null
+    boardIsFloor?: boolean
+    boardRealtime?: boolean
+  } | null
+}): number | null {
+  const {
+    boardingLegTripId,
+    departureOverrideMs,
+    departureOverrideTripId,
+    departures,
+    liveBoard
+  } = input
+  if (departureOverrideMs == null || !Number.isFinite(departureOverrideMs)) {
+    return null
+  }
+  if (!departureOverrideTripId) return departureOverrideMs
+  if (tripIdsMatch(departureOverrideTripId, boardingLegTripId)) {
+    const epoch = liveBoard?.boardEpoch
+    if (epoch == null || !Number.isFinite(epoch)) return departureOverrideMs
+    if (liveBoard?.boardRealtime || liveBoard?.boardIsFloor) return epoch
+    // Neither live nor a flagged floor: a kept last-live time still ahead of
+    // the clock, or a schedule the leg never had live. Either way it may not
+    // pull the pick earlier than the minute the rider tapped.
+    return Math.max(epoch, departureOverrideMs)
+  }
+  const run = departures.find((d) =>
+    tripIdsMatch(d.tripId, departureOverrideTripId)
+  )
+  return run ? followHeldRun(run, departureOverrideMs) : departureOverrideMs
 }

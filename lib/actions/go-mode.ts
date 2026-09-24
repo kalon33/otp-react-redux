@@ -180,6 +180,7 @@ import {
   acceptAutoReplan,
   accessBoardOverrunMs,
   AUTO_REPLAN_ACCESS_BOARD_SLACK_MS,
+  liveBoardForCandidate,
   originGapMeters,
   pickHopFreeSibling,
   startOriginIsStale
@@ -226,7 +227,8 @@ import {
   currentServiceDate,
   evaluateDepartureAnchor,
   getRouteDepartures,
-  legBoardingDirection
+  legBoardingDirection,
+  overrideDepartureForTick
 } from '../util/go-mode/departure-anchor'
 import {
   boardSourcesDisagree,
@@ -236,7 +238,7 @@ import {
   resolveBoardDeparture,
   tripQueryBoardPoint
 } from '../util/go-mode/board-departure'
-import { tripGtfsId } from '../util/go-mode/trip-id'
+import { tripGtfsId, tripIdsMatch } from '../util/go-mode/trip-id'
 import {
   MISSED_BUS_NOTICE_ID,
   TURN_CARD_NOTIFICATION_ID,
@@ -944,7 +946,14 @@ export const updateTrackingInterval = createAction<{ interval: number }>(
  * after a resume.
  */
 export const setDepartureOverride = createAction<
-  number | null | { ms: number | null; source: DepartureOverrideSource }
+  | number
+  | null
+  | {
+      ms: number | null
+      source: DepartureOverrideSource
+      /** The run the pick names, when known (29.3). */
+      tripId?: string | null
+    }
 >(SET_DEPARTURE_OVERRIDE)
 
 /**
@@ -956,19 +965,26 @@ export const setDepartureOverride = createAction<
  * stamped `source: 'rider'` in the store, where the session save can see it —
  * that stamp is what lets `resumeGoModeTrip` put this very lock back (12.15).
  */
-export function selectDeparture(epochMs: number | null) {
+export function selectDeparture(
+  epochMs: number | null,
+  tripId: string | null = null
+) {
   return async function (dispatch: any) {
     session.manualDepartureLock = true
     dispatch(
       setDepartureOverride({
         ms: epochMs,
-        source: 'rider'
+        source: 'rider',
+        // A tap picks a BUS, not a minute (29.3): the departure row the tap
+        // came from names its run, and the card and the tick follow that run's
+        // live time from here on instead of freezing the tapped epoch.
+        tripId: epochMs == null ? null : tripId
       })
     )
     // The rider's own pick moves the whole plan too, not just the headline
     // (23.3). A reset (`null`) moves nothing: it hands them back the plan's
     // own bus, which is where the itinerary already is.
-    await dispatch(retargetPlanToDeparture(epochMs, 'rider'))
+    await dispatch(retargetPlanToDeparture(epochMs, 'rider', tripId))
   }
 }
 
@@ -1004,7 +1020,8 @@ export function selectDeparture(epochMs: number | null) {
  */
 export function retargetPlanToDeparture(
   departureMs: number | null,
-  source: DepartureOverrideSource
+  source: DepartureOverrideSource,
+  runTripId: string | null = null
 ) {
   return async function (dispatch: any, getState: any) {
     if (departureMs == null || !Number.isFinite(departureMs)) return
@@ -1029,7 +1046,11 @@ export function retargetPlanToDeparture(
       routeId,
       legBoardingDirection(boardLeg)
     )
-    const run = departures.find((d) => d.depMs === departureMs)
+    // By run when the pick named one (29.3): its time may have moved since the
+    // row was drawn, and an epoch match would then miss the very bus tapped.
+    const run = runTripId
+      ? departures.find((d) => tripIdsMatch(d.tripId, runTripId))
+      : departures.find((d) => d.depMs === departureMs)
     const tripId = tripGtfsId(run?.tripId)
     if (!run || !tripId) return
 
@@ -1279,9 +1300,18 @@ function autoReplanRejected(
   const position = coords
     ? ([coords.latitude, coords.longitude] as [number, number])
     : null
+  // 29.1: the gate measures the access leg against the board time the card is
+  // showing, not the plan-time prediction frozen in the leg's startTime.
+  const liveBoard = liveBoardForCandidate(
+    candidate,
+    goMode?.activeItinerary,
+    goMode?.liveLegTimes
+  )
   const verdict = acceptAutoReplan(candidate, goMode?.activeItinerary, {
     currentPlanIsDead: !!options.currentPlanIsDead,
     headingDeg: coords?.heading ?? null,
+    liveBoardEpochMs: liveBoard?.epochMs ?? null,
+    liveBoardTripId: liveBoard?.tripId ?? null,
     position,
     riding: !!goMode?.riding?.tripId,
     speedMps: coords?.speed ?? null,
@@ -6989,11 +7019,35 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         )
       : null
 
+    // The rider's pick, as the run it names reads NOW (29.3). A pick is a bus,
+    // not a minute: on 2026-09-23 the tapped 15:53:49 stayed the tick's
+    // departure while that very trip's live board slid to 15:55:44. Only the
+    // timing below reads the followed value; the anchor, the missed-bus
+    // classifier and the drift baseline keep the stored epoch, whose identity
+    // they key on.
+    const tickDepartureOverride = overrideDepartureForTick({
+      boardingLegTripId:
+        boardingLeg?.trip?.gtfsId ?? boardingLeg?.tripId ?? null,
+      departureOverrideMs: departureOverride,
+      departureOverrideTripId: goMode.departureOverrideTripId ?? null,
+      departures:
+        departureOverride != null && goMode.departureOverrideTripId
+          ? getRouteDepartures(
+              state.otp?.transitIndex?.stops?.[
+                boardingLeg?.from?.stop?.gtfsId ?? ''
+              ],
+              getLegRouteId(boardingLeg),
+              legBoardingDirection(boardingLeg)
+            )
+          : [],
+      liveBoard: boardingLeg?.transitLeg ? liveBoarding : null
+    })
+
     const progress = calculateTripProgress(
       currentTime,
       itinerary,
       routeMatch,
-      departureOverride,
+      tickDepartureOverride,
       transitCtx,
       // The fix's own ground speed lets turn-announcement leads scale with how
       // fast the rider is actually moving (7/29: 6.5 m/s made the static 120 m

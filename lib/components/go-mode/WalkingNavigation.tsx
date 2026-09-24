@@ -18,6 +18,7 @@ import {
   legBoardingDirection,
   resolveCardDeparture
 } from '../../util/go-mode/departure-anchor'
+import { tripIdsMatch } from '../../util/go-mode/trip-id'
 
 import {
   AlternativeDeparture,
@@ -60,6 +61,11 @@ interface Props {
   arrived?: boolean
   boardingStopData?: any
   departureOverride?: number | null
+  /**
+   * The RUN the override names (29.3). With it the headline follows that bus's
+   * live time; without it the override is the bare minute it was tapped at.
+   */
+  departureOverrideTripId?: string | null
   leg: Leg
   nextLeg?: Leg
   /**
@@ -75,7 +81,7 @@ interface Props {
     tickDepartureMs: number | null
   }) => void
   onExit?: () => void
-  onSelectDeparture?: (epochMs: number | null) => void
+  onSelectDeparture?: (epochMs: number | null, tripId?: string | null) => void
   progress: TripProgress
 }
 
@@ -94,6 +100,7 @@ const WalkingNavigation = ({
   arrived,
   boardingStopData,
   departureOverride,
+  departureOverrideTripId,
   leg,
   nextLeg,
   onDepartureMismatch,
@@ -280,12 +287,18 @@ const WalkingNavigation = ({
   const holdKey = `${nextLegRouteId ?? ''}|${
     (nextLeg as any)?.from?.stop?.gtfsId ?? ''
   }`
-  const holdRef = useRef<{ held: HeldDeparture | null; key: string }>({
+  const holdRef = useRef<{
+    held: HeldDeparture | null
+    key: string
+    /** What the rider's pick last showed, for its floor (29.3). */
+    overrideHeld: HeldDeparture | null
+  }>({
     held: null,
-    key: holdKey
+    key: holdKey,
+    overrideHeld: null
   })
   if (holdRef.current.key !== holdKey) {
-    holdRef.current = { held: null, key: holdKey }
+    holdRef.current = { held: null, key: holdKey, overrideHeld: null }
   }
 
   const departureInput = {
@@ -301,10 +314,25 @@ const WalkingNavigation = ({
     tickTripId: boardingDirection.tripId ?? null
   }
 
+  // The rider's pick follows the run it named (29.3), so it needs a memory of
+  // its own: the last time it showed is the floor a schedule flip may not
+  // undercut. Kept apart from `held`, which tracks the un-overridden answer
+  // for "Back to …" (18.1).
+  const overrideInForce =
+    departureOverride != null && Number.isFinite(departureOverride)
   const decision = resolveCardDeparture({
     ...departureInput,
-    departureOverride: departureOverride ?? null
+    departureOverride: departureOverride ?? null,
+    departureOverrideTripId: departureOverrideTripId ?? null,
+    held: overrideInForce
+      ? isNextLegTransit
+        ? holdRef.current.overrideHeld
+        : null
+      : departureInput.held
   })
+  if (isNextLegTransit) {
+    holdRef.current.overrideHeld = overrideInForce ? decision.held : null
+  }
 
   /**
    * What this card would headline if the override went away — the departure
@@ -326,10 +354,9 @@ const WalkingNavigation = ({
    * ("with the override gone the display and the anchor both fall back to the
    * soonest departure the rider CAN catch"), which the old re-seed defeated.
    */
-  const releasedDecision =
-    departureOverride != null && Number.isFinite(departureOverride)
-      ? resolveCardDeparture({ ...departureInput, departureOverride: null })
-      : decision
+  const releasedDecision = overrideInForce
+    ? resolveCardDeparture({ ...departureInput, departureOverride: null })
+    : decision
   if (isNextLegTransit) holdRef.current.held = releasedDecision.held
 
   const effectiveDepartureMs =
@@ -379,13 +406,24 @@ const WalkingNavigation = ({
 
   // Later departures of the same route, offered as safer fallbacks when the
   // targeted bus is tight (or the rider just wants the next one).
+  //
+  // Never the run the card is already on (29.3). At 15:46 on 2026-09-23 the
+  // headline was the rider's own bus at the minute they had tapped and this
+  // list offered the same bus's newer live time as "Next: 3:55" — one bus,
+  // twice, reading as two.
+  const heldTripId = decision.held?.tripId ?? null
   const laterDepartures = useMemo(() => {
     if (!effectiveDepartureMs) return []
     return routeDepartures
       .filter((d) => d.depMs > effectiveDepartureMs + 30000)
+      .filter((d) => !heldTripId || !tripIdsMatch(d.tripId, heldTripId))
       .slice(0, 3)
-      .map((d) => ({ departureMs: d.depMs, realtime: d.realtime }))
-  }, [routeDepartures, effectiveDepartureMs])
+      .map((d) => ({
+        departureMs: d.depMs,
+        realtime: d.realtime,
+        tripId: d.tripId ?? null
+      }))
+  }, [routeDepartures, effectiveDepartureMs, heldTripId])
 
   const showAlternatives = laterDepartures.length > 0 && waitAtStopSeconds < 120
 
@@ -426,6 +464,10 @@ const WalkingNavigation = ({
   // mount: this card re-renders on every GPS tick, and an expansion that
   // survived a leg change would be a panel the rider never opened.
   const [alternativesOpen, setAlternativesOpen] = useState(false)
+  // A tap hands over the RUN as well as its minute (29.3).
+  const chooseDeparture =
+    (alt: { departureMs: number; tripId: string | null }) => () =>
+      onSelectDeparture?.(alt.departureMs, alt.tripId)
   const nextAlternative = laterDepartures[0]
 
   // Card content.
@@ -576,7 +618,11 @@ const WalkingNavigation = ({
                   <div id={LATER_DEPARTURES_ID}>
                     {laterDepartures.map(
                       (
-                        alt: { departureMs: number; realtime: boolean },
+                        alt: {
+                          departureMs: number
+                          realtime: boolean
+                          tripId: string | null
+                        },
                         idx: number
                       ) => (
                         <AlternativeDeparture key={idx}>
@@ -584,7 +630,7 @@ const WalkingNavigation = ({
                             {departureLine(alt)}
                           </span>
                           <UseNextButton
-                            onClick={() => onSelectDeparture?.(alt.departureMs)}
+                            onClick={chooseDeparture(alt)}
                             type="button"
                           >
                             {intl.formatMessage({

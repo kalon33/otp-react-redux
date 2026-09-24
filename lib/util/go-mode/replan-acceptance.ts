@@ -14,6 +14,8 @@ import {
   PROJECTION_MIN_SPEED_MPS
 } from './replan-origin'
 import { calculateDistance } from './position-matching'
+import { legTripId } from './leg-merge'
+import type { LiveLegTime } from './types'
 
 /**
  * The last gate before an AUTOMATIC itinerary replacement reaches the rider.
@@ -178,6 +180,20 @@ export interface AutoReplanContext {
    * the radius alone, exactly as before.
    */
   headingDeg?: number | null
+  /**
+   * The live board time of the transit leg the candidate's access chain feeds,
+   * as the departure card shows it — see `liveBoardForCandidate`, which is the
+   * only thing that should build it. With it, `access-misses-board` measures
+   * against when the bus is actually predicted to leave; without it, against
+   * the leg's `startTime`, the prediction frozen when the plan was fetched.
+   */
+  liveBoardEpochMs?: number | null
+  /**
+   * The trip `liveBoardEpochMs` belongs to. The live time is only applied to an
+   * itinerary whose first transit leg is this trip; any other falls back to its
+   * own `startTime`.
+   */
+  liveBoardTripId?: string | null
   /** The rider's last fix, as [lat, lon]. Null skips the origin check. */
   position?: [number, number] | null
   /**
@@ -451,6 +467,17 @@ function addsATokenHopTo(
   )
 }
 
+/** The live board time, if it is a usable number and names this leg's trip. */
+function liveBoardMsFor(
+  boardLeg: Leg,
+  liveBoard?: { epochMs?: number | null; tripId?: string | null } | null
+): number | null {
+  const ms = Number(liveBoard?.epochMs)
+  if (!Number.isFinite(ms) || ms <= 0) return null
+  if (liveBoard?.tripId && liveBoard.tripId !== legTripId(boardLeg)) return null
+  return ms
+}
+
 /**
  * By how long does this itinerary's access chain overrun the boarding it feeds?
  *
@@ -464,9 +491,17 @@ function addsATokenHopTo(
  * `spliceAccessOntoItinerary` writes: OTP returns an access plan as
  * walk -> bike -> walk as often as a single leg, and it is the END of that
  * chain that has to meet the bus.
+ *
+ * `liveBoard` (backlog 29.1): the live board time the departure card is
+ * showing, measured against instead of the board leg's `startTime` when it is
+ * given and names this itinerary's boarding trip. `startTime` is the prediction
+ * frozen when the plan was fetched and carried unchanged through every scoped
+ * splice; on 2026-09-23 it said 15:53:42 while the feed said 15:57:22, and two
+ * feasible re-plans (15:49:33, 15:50:08) were refused by 18 s and 32 s.
  */
 export function accessBoardOverrunMs(
-  itinerary: Itinerary | null | undefined
+  itinerary: Itinerary | null | undefined,
+  liveBoard?: { epochMs?: number | null; tripId?: string | null } | null
 ): number | null {
   const legs = (itinerary?.legs || []) as Leg[]
   const boardIndex = legs.findIndex((leg) => leg.transitLeg)
@@ -474,10 +509,57 @@ export function accessBoardOverrunMs(
   const access = legs[boardIndex - 1]
   if (!access || access.transitLeg) return null
   const accessEnd = Number(access.endTime)
-  const boardStart = Number(legs[boardIndex].startTime)
+  const boardStart =
+    liveBoardMsFor(legs[boardIndex], liveBoard) ??
+    Number(legs[boardIndex].startTime)
   if (!Number.isFinite(accessEnd) || !Number.isFinite(boardStart)) return null
   if (accessEnd <= 0 || boardStart <= 0) return null
   return accessEnd - boardStart
+}
+
+/** Same boarding stop, when both legs name one; unknown counts as the same. */
+function sameBoardStop(a: Leg, b: Leg): boolean {
+  const id = (leg: any) =>
+    leg?.from?.stop?.gtfsId || leg?.from?.stopId || leg?.from?.stop?.id || null
+  const aId = id(a)
+  const bId = id(b)
+  return !aId || !bId || aId === bId
+}
+
+/**
+ * The live board time `access-misses-board` should measure a candidate
+ * against, or null to keep the leg's own `startTime` (backlog 29.1).
+ *
+ * `liveLegTimes` is keyed by the HELD plan's leg index, and a candidate's
+ * board leg can sit at another index (OTP returns walk -> bike -> walk access
+ * as often as one leg), so the held leg is found by trip and stop instead:
+ * the candidate's first transit leg must be the same run from the same stop.
+ *
+ * Only a genuinely live prediction counts — `boardRealtime && !boardIsFloor`.
+ * A floor is "no earlier than", not a departure, and a timetable time is what
+ * `startTime` already says. A live time can be wrong in either direction
+ * (on 2026-09-23 the stop prediction drifted 4-5 min late before snapping
+ * back), so this is the card's own number, not a better one.
+ */
+export function liveBoardForCandidate(
+  candidate: Itinerary | null | undefined,
+  held: Itinerary | null | undefined,
+  liveLegTimes: Record<number, LiveLegTime> | null | undefined
+): { epochMs: number; tripId: string } | null {
+  const board = ((candidate?.legs || []) as Leg[]).find((leg) => leg.transitLeg)
+  const tripId = legTripId(board)
+  if (!board || !tripId || !liveLegTimes) return null
+  const heldLegs = (held?.legs || []) as Leg[]
+  const i = heldLegs.findIndex(
+    (leg) =>
+      leg.transitLeg && legTripId(leg) === tripId && sameBoardStop(leg, board)
+  )
+  if (i < 0) return null
+  const live = liveLegTimes[i]
+  if (!live?.boardRealtime || live.boardIsFloor) return null
+  const epochMs = Number(live.boardEpoch)
+  if (!Number.isFinite(epochMs) || epochMs <= 0) return null
+  return { epochMs, tripId }
 }
 
 /**
@@ -514,9 +596,13 @@ function accessMissesBoard(
 ): boolean {
   if (context.currentPlanIsDead) return false
   const slack = context.accessBoardSlackMs ?? AUTO_REPLAN_ACCESS_BOARD_SLACK_MS
-  const overrun = accessBoardOverrunMs(candidate)
+  const liveBoard = {
+    epochMs: context.liveBoardEpochMs,
+    tripId: context.liveBoardTripId
+  }
+  const overrun = accessBoardOverrunMs(candidate, liveBoard)
   if (overrun == null || overrun <= slack) return false
-  const currentOverrun = accessBoardOverrunMs(current)
+  const currentOverrun = accessBoardOverrunMs(current, liveBoard)
   return !(currentOverrun != null && currentOverrun > slack)
 }
 
