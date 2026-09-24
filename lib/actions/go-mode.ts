@@ -180,6 +180,7 @@ import {
   acceptAutoReplan,
   accessBoardOverrunMs,
   AUTO_REPLAN_ACCESS_BOARD_SLACK_MS,
+  liveBoardForCandidate,
   originGapMeters,
   pickHopFreeSibling,
   startOriginIsStale
@@ -1299,9 +1300,18 @@ function autoReplanRejected(
   const position = coords
     ? ([coords.latitude, coords.longitude] as [number, number])
     : null
+  // 29.1: the gate measures the access leg against the board time the card is
+  // showing, not the plan-time prediction frozen in the leg's startTime.
+  const liveBoard = liveBoardForCandidate(
+    candidate,
+    goMode?.activeItinerary,
+    goMode?.liveLegTimes
+  )
   const verdict = acceptAutoReplan(candidate, goMode?.activeItinerary, {
     currentPlanIsDead: !!options.currentPlanIsDead,
     headingDeg: coords?.heading ?? null,
+    liveBoardEpochMs: liveBoard?.epochMs ?? null,
+    liveBoardTripId: liveBoard?.tripId ?? null,
     position,
     riding: !!goMode?.riding?.tripId,
     speedMps: coords?.speed ?? null,
