@@ -563,6 +563,66 @@ export function liveBoardForCandidate(
 }
 
 /**
+ * How much earlier than the rider's recorded boarding the plan's run has to
+ * have left before the plan counts as dead (backlog 28.6).
+ *
+ * `riding.boardedAt` is stamped on evidence — the vehicle confirmation — so it
+ * trails the real boarding. On the 0729 fixture it trails the ridden trip's
+ * departure from I-35W & 46th St (17:26:56) by 54 s. On the seven real
+ * September `boarded-earlier` re-plans (debug day files 09-01 .. 09-22) the
+ * plan's board time sat 342, 90, 194, 231 s AFTER `boardedAt`, and twice
+ * BEFORE it: -59 s (09-21 `mub9m39o`) and -52 s (09-22 `mucordp1`), both
+ * re-plans that were applied as genuine earlier boardings. Those two are the
+ * same ~1 min evidence lag, so the slack is twice it: a run due within two
+ * minutes of the recorded boarding is not proof the rider missed it. The one
+ * dead plan on record (0729) left 1 161 s before.
+ */
+export const PLAN_RUN_LEFT_SLACK_MS = 120000
+
+/**
+ * Did the run the held plan boards leave before the rider boarded the one they
+ * are on (backlog 28.6)?
+ *
+ * On the 0729 fixture the plan still named `1:1171228`, due at 17:08:29, while
+ * the rider boarded `1:1173133` at 17:27:50. The aboard splice onto the ridden
+ * trip was then refused `arrives-later` against the plan's 17:40:00 arrival —
+ * an arrival on a bus that had left 19 minutes before the rider boarded, which
+ * nothing can achieve any more. That plan is as dead as a missed bus.
+ *
+ * True only when:
+ * - `planLeg` is a transit leg on ANOTHER trip than the one being ridden (the
+ *   same trip boarded late is still the plan);
+ * - its board time — the card's live time when it is a genuine live prediction
+ *   (`boardRealtime && !boardIsFloor`), else the leg's `startTime` — is more
+ *   than `slackMs` before `boardedAtMs`.
+ *
+ * A genuine EARLIER boarding (the plan's run still ahead of the rider) is
+ * false here, so it stays held to "no later arrival".
+ */
+export function planRunLeftBeforeRider(args: {
+  boardedAtMs: number | null | undefined
+  liveLegTime?: LiveLegTime | null
+  planLeg: Leg | null | undefined
+  ridingTripId: string | null | undefined
+  slackMs?: number
+}): boolean {
+  const { boardedAtMs, liveLegTime, planLeg, ridingTripId } = args
+  if (!planLeg?.transitLeg || !ridingTripId) return false
+  const planTripId = legTripId(planLeg)
+  if (!planTripId || planTripId === ridingTripId) return false
+  const boardedAt = Number(boardedAtMs)
+  if (!Number.isFinite(boardedAt) || boardedAt <= 0) return false
+  const live =
+    liveLegTime?.boardRealtime && !liveLegTime.boardIsFloor
+      ? Number(liveLegTime.boardEpoch)
+      : NaN
+  const planBoardMs =
+    Number.isFinite(live) && live > 0 ? live : Number(planLeg.startTime)
+  if (!Number.isFinite(planBoardMs) || planBoardMs <= 0) return false
+  return planBoardMs < boardedAt - (args.slackMs ?? PLAN_RUN_LEFT_SLACK_MS)
+}
+
+/**
  * Does this candidate hand the rider a trip they cannot physically start?
  *
  * 2026-09-15, backlog 16.2. Two spliced plans were auto-applied whose opening

@@ -183,6 +183,7 @@ import {
   liveBoardForCandidate,
   originGapMeters,
   pickHopFreeSibling,
+  planRunLeftBeforeRider,
   startOriginIsStale
 } from '../util/go-mode/replan-acceptance'
 import { accessArriveByTarget } from '../util/go-mode/arrive-on-time'
@@ -4582,7 +4583,11 @@ export function buildOnboardItinerary(
     return onward
   }
   const anchorSd = stopTimes[boardIdx].scheduledDeparture
-  const busLegStart = Date.now()
+  // The tick's clock, not the wall's: identical on a real ride, and under a
+  // replay or GPS simulation the splice is dated on the ride's own day. On
+  // Date.now() the 0729 replay's accepted boarded-earlier splice (28.6) was
+  // dated two months after the ride and announced "arriving in 80320 min".
+  const busLegStart = getCurrentTime().getTime()
   // Prefer the live (GPS-fed) realtime arrival per stop; otherwise anchor the
   // scheduled spacing to the start of the bus leg.
   const stopEpoch = (i: number) => {
@@ -4636,7 +4641,7 @@ export function buildOnboardItinerary(
   }
 
   // An arrival that has already passed is not evidence the rider has arrived.
-  // busLegStart is Date.now() while best.busArrivalEpoch can be a realtime
+  // busLegStart is the clock now while best.busArrivalEpoch can be a realtime
   // prediction already behind the clock — on 8/2 that produced legs whose
   // endTime preceded their startTime by 114s, 175s and 268s, and a "Trip
   // updated — arriving 9:23 PM" push sent at 9:24. Only then substitute the
@@ -5280,12 +5285,30 @@ export function replanFromAboard(
       // first ride this path auto-applied a splice that moved the arrival
       // 08:42:51 -> 08:51:45 (+8:54) with no rider action; a re-plan that
       // arrives later than the plan in hand is not a recovery.
+      //
+      // A boarding onto a LATER run than planned is the other dead plan (28.6):
+      // the 0729 fixture's plan still named the 17:08:29 run while the rider
+      // boarded the next one at 17:27:50, and every splice onto the ridden bus
+      // was refused against the 17:40:00 arrival of a bus that had already
+      // left. The plan leg the splice replaces is the yardstick; a genuine
+      // EARLIER boarding (that run still ahead) stays held to "no later".
+      const planRunLeft = planRunLeftBeforeRider({
+        boardedAtMs: riding.boardedAt,
+        // liveLegTimes is keyed by the plan now live; only read it for the
+        // leg captured above when that is still the same plan.
+        liveLegTime:
+          aboardLegIndex >= 0 && activeNow === itinerary
+            ? getState().otp?.goMode?.liveLegTimes?.[aboardLegIndex] ?? null
+            : null,
+        planLeg: ridingLegForAlight,
+        ridingTripId: tripId
+      })
       if (
         autoReplanRejected(dispatch, getState(), spliced, {
           // A missed connection makes the plan in hand unachievable, so there
           // is no arrival left to defend — only the boarded-earlier case is
           // asked to be no worse than what it replaces.
-          currentPlanIsDead: options.reason === 'missed-bus',
+          currentPlanIsDead: options.reason === 'missed-bus' || planRunLeft,
           reason: options.reason ?? 'boarded-earlier'
         })
       ) {
