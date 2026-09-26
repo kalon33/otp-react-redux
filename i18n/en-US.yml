@@ -1202,6 +1202,9 @@ config:
     continuous-dropoff: Communicate with operator about stop
     flex-service: Flex Service
     flex-service-colon: "Flex Service:"
+otpUi:
+  LocationField:
+    geocoderTimeout: Can't reach the server
 util:
   state:
     errorPlanningTrip: An error occurred while planning a trip.

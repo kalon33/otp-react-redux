@@ -1214,6 +1214,9 @@ config:
     continuous-dropoff: Demandez l'arrêt au conducteur
     flex-service: Service Flex
     flex-service-colon: "Service Flex :"
+otpUi:
+  LocationField:
+    geocoderTimeout: Impossible de joindre le serveur
 util:
   state:
     errorPlanningTrip: Une erreur s'est produite lors de la planification du 
