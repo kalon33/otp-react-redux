@@ -41,12 +41,17 @@ const busItinerary = {
   ]
 }
 
-function render(itineraries: any[]) {
+function render(
+  itineraries: any[],
+  errors: Record<string, Set<any>> = {
+    WALKING_BETTER_THAN_TRANSIT: new Set([null])
+  }
+) {
   const state: any = getMockInitialState()
   state.otp.config = { ...state.otp.config, itinerary: {} }
   const { wrapper } = mockWithProvider(
     ErrorRenderer,
-    { errors: { WALKING_BETTER_THAN_TRANSIT: new Set([null]) }, itineraries },
+    { errors, itineraries },
     state,
     messages
   )
@@ -100,5 +105,43 @@ describe('components > narrative > metro error renderer', () => {
       "Transit isn't the fastest way to make this trip"
     )
     expect(text).toContain('Walking is faster than transit for this trip')
+  })
+
+  describe('FEW_TRANSIT_ROUTES (backlog 14.2, answer b)', () => {
+    it('renders one advisory line, styled like 22.2’s', () => {
+      const wrapper = render([busItinerary], {
+        FEW_TRANSIT_ROUTES: new Set(),
+        // Raised by the walk+transit call at 00:02 and hidden on purpose.
+        NO_TRANSIT_CONNECTION_IN_SEARCH_WINDOW: new Set([null])
+      })
+      expect(wrapper.text()).toContain('Few routes run at this hour.')
+      expect(wrapper.text()).not.toContain('search window')
+      const lines = wrapper.find('li.advisory')
+      expect(lines).toHaveLength(1)
+      // No headline and no clock time.
+      expect(lines.find('h2')).toHaveLength(0)
+      expect(lines.text()).not.toMatch(/\d:\d\d/)
+    })
+
+    it('uses the same markup as the NO_TRANSIT_OPTION_FOUND line', () => {
+      const few = render([busItinerary], { FEW_TRANSIT_ROUTES: new Set() })
+        .find('li.advisory')
+        .first()
+      const none = render([walkItinerary], {
+        NO_TRANSIT_OPTION_FOUND: new Set()
+      })
+        .find('li.advisory')
+        .first()
+      expect(few.prop('className')).toBe(none.prop('className'))
+      expect(few.children().map((c) => c.name())).toEqual(
+        none.children().map((c) => c.name())
+      )
+    })
+
+    it('renders nothing for it when the key is absent', () => {
+      expect(render([busItinerary], {}).text()).not.toContain(
+        'Few routes run at this hour.'
+      )
+    })
   })
 })

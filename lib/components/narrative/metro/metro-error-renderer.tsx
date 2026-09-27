@@ -45,6 +45,30 @@ const ADVISORY_ERRORS = ['WALKING_BETTER_THAN_TRANSIT']
 const NO_TRANSIT_OPTION_FOUND = 'NO_TRANSIT_OPTION_FOUND'
 
 /**
+ * Backlog 14.2 (rider's answer (b), 2026-09-26). Not an OTP code either —
+ * `util/state`'s `searchIsThinOnTransit` raises it when a settled search that
+ * asked for transit found some, but fewer than five, even after 14.2's wider
+ * top-up. It is what NO_TRANSIT_CONNECTION_IN_SEARCH_WINDOW (hidden below)
+ * means to a rider, said as a fact about the hour and not about a window
+ * setting they cannot change. No clock time: the app only learns when service
+ * resumes by asking a wider question, which the rider chose not to add.
+ */
+const FEW_TRANSIT_ROUTES = 'FEW_TRANSIT_ROUTES'
+
+/**
+ * Error codes that render as one advisory line. Literal ids, so the i18n check
+ * can see each key in use.
+ */
+const ADVISORY_LINES: Record<string, JSX.Element> = {
+  [FEW_TRANSIT_ROUTES]: (
+    <FormattedMessage id="components.OTP2ErrorRenderer.FEW_TRANSIT_ROUTES.advisory" />
+  ),
+  [NO_TRANSIT_OPTION_FOUND]: (
+    <FormattedMessage id="components.OTP2ErrorRenderer.NO_TRANSIT_OPTION_FOUND.advisory" />
+  )
+}
+
+/**
  * How many whole minutes faster the quickest street-only itinerary is than the
  * quickest itinerary with a transit leg. Returns null when the comparison
  * cannot be made (no transit options came back, no street options came back, or
@@ -194,14 +218,13 @@ const ErrorRenderer = ({
         })
         .map((error: string) => {
           // One line, never a headline: there IS a card below it, and the only
-          // thing this is allowed to say is that the search found no transit.
-          if (error === NO_TRANSIT_OPTION_FOUND) {
+          // thing each may say is what the search found (no transit, or few
+          // routes at this hour).
+          if (error in ADVISORY_LINES) {
             return (
               <Container className="advisory" key={error}>
                 <Icon Icon={InfoCircle} size="lg" />
-                <p>
-                  <FormattedMessage id="components.OTP2ErrorRenderer.NO_TRANSIT_OPTION_FOUND.advisory" />
-                </p>
+                <p>{ADVISORY_LINES[error]}</p>
               </Container>
             )
           }

@@ -750,6 +750,8 @@ components:
         Une desserte en transports a été trouvée mais ne correspond pas à vos
         critères. Veuillez ajuster votre recherche.
       header: Aucune desserte selon vos critères
+    FEW_TRANSIT_ROUTES:
+      advisory: Peu de lignes circulent à cette heure-ci.
     NO_TRANSIT_OPTION_FOUND:
       advisory: Aucune option en transports n'a été trouvée pour cette recherche.
     OTP_RR_TRIP_IN_PAST:
@@ -816,13 +818,6 @@ components:
     last: Dernier
     next: Suivant
     previous: Précédent
-  PlacesChips:
-    add: Ajouter
-    addPlace: Ajouter un lieu
-    heading: Vos lieux
-    home: Domicile
-    recent: "Destination récente : {place}"
-    work: Travail
   PlanTripButton:
     planTrip: Planifier le trajet
   PointPopup:
@@ -1219,6 +1214,9 @@ config:
     continuous-dropoff: Demandez l'arrêt au conducteur
     flex-service: Service Flex
     flex-service-colon: "Service Flex :"
+otpUi:
+  LocationField:
+    geocoderTimeout: Impossible de joindre le serveur
 util:
   state:
     errorPlanningTrip: Une erreur s'est produite lors de la planification du 

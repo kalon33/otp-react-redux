@@ -732,6 +732,8 @@ components:
     noDeviceForPush: Register your device using the mobile app to access push notifications.
     notificationChannelPrompt: "Receive notifications about your saved trips via:"
   OTP2ErrorRenderer:
+    FEW_TRANSIT_ROUTES:
+      advisory: Few routes run at this hour.
     LOCATION_NOT_FOUND:
       body: >-
         {inputFields} {inputFieldsCount, plural, =0 {} one {location is} other
@@ -812,13 +814,6 @@ components:
     locationTypePrompt: "Location type:"
     nameExample: My coffee shop
     namePrompt: "Place name:"
-  PlacesChips:
-    add: Add
-    addPlace: Add a place
-    heading: Your places
-    home: Home
-    recent: "Recent destination: {place}"
-    work: Work
   PlanFirstLastButtons:
     first: First
     last: Last
@@ -1207,6 +1202,9 @@ config:
     continuous-dropoff: Communicate with operator about stop
     flex-service: Flex Service
     flex-service-colon: "Flex Service:"
+otpUi:
+  LocationField:
+    geocoderTimeout: Can't reach the server
 util:
   state:
     errorPlanningTrip: An error occurred while planning a trip.

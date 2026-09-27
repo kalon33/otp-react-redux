@@ -119,13 +119,32 @@ async function main() {
       to: { lat: 44.95, lon: -93.25, name: 'Far Stop' },
       transitLeg: true
     }
+    // The plan handed to Go Mode must BEGIN where the rider is standing, not
+    // at the query origin 926 m back. 12.13's recoverStaleStartOrigin
+    // (lib/actions/go-mode.ts:1563, run on the first fix at :6415;
+    // START_ORIGIN_MAX_M = 500 m, replan-acceptance.ts:147) re-plans any plan
+    // installed farther than that from the rider, and a re-plan of this pair
+    // comes back all-bike, so the card is cancelled and the collapse phase has
+    // no boarding to pace toward ("expected exactly 1 repost on buffer
+    // collapse, got 0" on 09-19, 09-20 and 09-25). Measured 2026-09-25 on
+    // a7b5721d6: `[go-mode] plan origin 926m from the rider` and the itinerary
+    // went BICYCLE,BUS -> BICYCLE 1.2 s into phase 1. Red whenever OTP answers
+    // fast. Same fix as verify-departure-drift.js (06a0e9f0c): start the
+    // itinerary at the bike leg with its `from` (what originGapMeters reads)
+    // moved to the teleported fix, geometry untouched, so the rider is still
+    // 40 % along a real polyline with a real ride left.
+    const riderAt = { lat: poly[i][0], lon: poly[i][1] }
+    const startedBikeLeg = {
+      ...bikeLeg,
+      from: { ...bikeLeg.from, lat: riderAt.lat, lon: riderAt.lon }
+    }
     window.__itin = {
       ...base,
       endTime: busLeg.endTime,
-      legs: [...base.legs.slice(0, bikeLegIndex + 1), busLeg]
+      legs: [startedBikeLeg, busLeg]
     }
     return {
-      at: { lat: poly[i][0], lon: poly[i][1] },
+      at: riderAt,
       busStart,
       remainingRideSecs: Math.round(remainingRideSecs)
     }
@@ -230,6 +249,15 @@ async function main() {
   }, plan.remainingRideSecs)
   await tick(4)
   const phase2 = (await cardLog()).slice(phase1.length)
+  // The plan this test paces toward must still be the one it installed. If
+  // anything swapped it (a stale-origin re-plan, a reroute), the card was
+  // cancelled for a trip with no boarding and "got 0 reposts" would blame
+  // the pacing card for the harness's plan being replaced.
+  const modesAtCollapse = await page.evaluate(() => {
+    const it = window.store.getState().otp.goMode.activeItinerary
+    return it ? it.legs.map((l) => l.mode).join(',') : 'none'
+  })
+  console.log(`[collapsed] active itinerary ${modesAtCollapse}`)
   console.log(
     `[collapsed] ${phase2.length} card write(s): ` +
       phase2.map((p) => `"${p.title}" passive=${p.passive}`).join('; ')
@@ -247,6 +275,13 @@ async function main() {
 
   await browser.close()
 
+  if (modesAtCollapse !== 'BICYCLE,BUS') {
+    throw new Error(
+      'FAIL: the installed BICYCLE,BUS plan was replaced before the collapse ' +
+        `tick (active itinerary is ${modesAtCollapse}) — the pacing phases ` +
+        'below never saw the synthetic 535'
+    )
+  }
   const p1Posts = phase1.filter((p) => p.kind === 'schedule')
   if (p1Posts.length !== 1) {
     throw new Error(
