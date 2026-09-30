@@ -129,6 +129,8 @@ interface ItineraryLike {
 export interface PlanResponseLike {
   error?: unknown
   plan?: { itineraries?: ItineraryLike[] | null } | null
+  /** Departures a route row's timetable filled in (backlog 36.1). */
+  routeRowTimetable?: boolean
 }
 
 const hasTransitLeg = (itin: ItineraryLike): boolean =>
@@ -163,6 +165,9 @@ export function countTransitItineraries(
 ): number {
   const seen = new Set<string>()
   responses?.forEach((res) => {
+    // A row's timetable adds departures of a route already counted, never a
+    // route (backlog 36.1): the thin-search line counts what OTP found.
+    if (res?.routeRowTimetable) return
     res?.plan?.itineraries?.forEach((itin) => {
       if (!hasTransitLeg(itin)) return
       seen.add(itinerarySignature(itin))
