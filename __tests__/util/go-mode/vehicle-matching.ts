@@ -2,7 +2,9 @@ import { calculateDistance } from '../../../lib/util/go-mode/position-matching'
 import {
   findNearbyVehicles,
   hasUsablePosition,
-  matchUserToVehicle
+  matchUserToVehicle,
+  ridingVehicleReachable,
+  vehicleFrameKey
 } from '../../../lib/util/go-mode/vehicle-matching'
 import type { VehiclePosition } from '../../../lib/util/go-mode/vehicle-matching'
 
@@ -350,6 +352,194 @@ describe('matchUserToVehicle', () => {
       )
       expect(match.vehicleId).toBe('1:8200')
     })
+  })
+})
+
+describe('riding vehicle hold (35.1, 12.11 — 2026-09-28)', () => {
+  // Metres due south of the rider, as latitude (haversine R = 6,371 km).
+  const M_PER_DEG = 111194.9
+  const RIDER: [number, number] = [44.83, -93.29]
+  const south = (m: number) => RIDER[0] - m / M_PER_DEG
+  const NOW_S = 1790634168 // 2026-09-28 17:22:48 CDT
+  const nowMs = NOW_S * 1000
+
+  // The rider's bus: last frame 46 s old, stamped at 25 m/s heading south,
+  // 650 m north of the rider — the projection runs 25 x 46 = 1,150 m, i.e.
+  // ~500 m PAST a rider who braked into the station.
+  const riddenFrame = vehicle({
+    heading: 180,
+    label: '8220',
+    lat: south(-650),
+    lon: RIDER[1],
+    seconds: NOW_S - 46,
+    speed: 25,
+    tripHeadsign: 'ORANGE Burnsville',
+    tripId: '1:1273254',
+    vehicleId: '1:8220'
+  })
+  // The stopped bus at the station ahead: 304 m, frame at a standstill.
+  const stopped = vehicle({
+    heading: null as any,
+    label: '8151',
+    lat: south(304),
+    lon: RIDER[1],
+    seconds: NOW_S - 50,
+    speed: 0,
+    tripHeadsign: 'ORANGE Burnsville',
+    tripId: '1:1273216',
+    vehicleId: '1:8151'
+  })
+  const previousMatch = {
+    confidence: 'high' as const,
+    distanceMeters: 53,
+    heading: 156,
+    label: '8220',
+    lastSeen: nowMs - 1000,
+    tripId: '1:1273254',
+    vehicleId: '1:8220'
+  }
+  const run = (vehicles: VehiclePosition[], ridingVehicleId: string | null) =>
+    matchUserToVehicle(
+      RIDER[0],
+      RIDER[1],
+      180,
+      vehicles,
+      '1:904',
+      previousMatch,
+      80,
+      6.6,
+      null,
+      { nowMs, ridingVehicleId }
+    )
+
+  it('an overshooting projection no longer hands the match to a stopped bus', () => {
+    // Without the riding vehicle: 304 m beats ~500 m by more than 150 m — the
+    // 17:22:48 switch.
+    expect(run([riddenFrame, stopped], null).vehicleId).toBe('1:8151')
+    // Riding 8220: ranked by its corridor, which the rider is on.
+    const held = run([riddenFrame, stopped], '1:8220')
+    expect(held.vehicleId).toBe('1:8220')
+    expect(held.confidence).toBe('high')
+  })
+
+  it('a challenger that is really closer than the whole corridor still wins', () => {
+    // The ridden bus 2 km up the road with a fresh frame heading north (away):
+    // not reachable, not on the corridor — the rider is on the other bus.
+    const gone = vehicle({
+      ...riddenFrame,
+      heading: 0,
+      lat: south(-2000),
+      seconds: NOW_S - 10
+    })
+    const atRider = vehicle({ ...stopped, lat: south(10) })
+    expect(run([gone, atRider], '1:8220').vehicleId).toBe('1:8151')
+  })
+
+  it('a heading-null, speed-0 frame of the ridden bus stays in range', () => {
+    // 17:16:28's shape: frame 49 s old at a standstill, rider 400 m on and
+    // stationary. The fallback radius is 80 m; the bus could be 1,550 m on.
+    const standstill = vehicle({
+      ...riddenFrame,
+      heading: null as any,
+      lat: south(-400),
+      seconds: NOW_S - 49,
+      speed: 0
+    })
+    const stationary = (ridingVehicleId: string | null) =>
+      matchUserToVehicle(
+        RIDER[0],
+        RIDER[1],
+        null,
+        [standstill],
+        '1:904',
+        previousMatch,
+        80,
+        0,
+        null,
+        { nowMs, ridingVehicleId }
+      )
+    expect(stationary(null).confidence).toBe('none')
+    const held = stationary('1:8220')
+    expect(held.vehicleId).toBe('1:8220')
+    // The last usable heading rides along for the next heading-less frame.
+    expect(held.heading).toBe(156)
+  })
+
+  it('holds only the ridden bus, and only while it could still be carrying the rider', () => {
+    const standstill = vehicle({
+      ...riddenFrame,
+      heading: null as any,
+      lat: south(-400),
+      seconds: NOW_S - 49,
+      speed: 0
+    })
+    // Any other vehicle in that position is not held.
+    expect(run([standstill], '1:9999').confidence).toBe('none')
+    // A FRESH frame 1 km away: 80 + 20 x 30 = 680 m of reach — gone.
+    expect(
+      ridingVehicleReachable(
+        RIDER[0],
+        RIDER[1],
+        { lat: south(-1000), lon: RIDER[1], seconds: NOW_S - 20 },
+        80,
+        nowMs
+      )
+    ).toBe(false)
+    expect(
+      ridingVehicleReachable(
+        RIDER[0],
+        RIDER[1],
+        { lat: south(-600), lon: RIDER[1], seconds: NOW_S - 20 },
+        80,
+        nowMs
+      )
+    ).toBe(true)
+    // No timestamp, or past the correctable age: no reach claimed.
+    expect(
+      ridingVehicleReachable(
+        RIDER[0],
+        RIDER[1],
+        { lat: south(-100), lon: RIDER[1], seconds: 0 },
+        80,
+        nowMs
+      )
+    ).toBe(false)
+    expect(
+      ridingVehicleReachable(
+        RIDER[0],
+        RIDER[1],
+        { lat: south(-100), lon: RIDER[1], seconds: NOW_S - 121 },
+        80,
+        nowMs
+      )
+    ).toBe(false)
+  })
+
+  it('nothing changes before riding is set', () => {
+    const a = matchUserToVehicle(
+      RIDER[0],
+      RIDER[1],
+      180,
+      [riddenFrame, stopped],
+      '1:904',
+      previousMatch,
+      80,
+      6.6,
+      null,
+      { nowMs }
+    )
+    expect(a).toEqual(run([riddenFrame, stopped], null))
+  })
+
+  it('names the feed frame each tick was scored against', () => {
+    expect(vehicleFrameKey(riddenFrame)).toBe(`t${NOW_S - 46}`)
+    expect(run([riddenFrame, stopped], '1:8220').frameKey).toBe(
+      `t${NOW_S - 46}`
+    )
+    // No timestamp (the 7/29 feed): the position identifies the frame.
+    expect(
+      vehicleFrameKey({ lat: 44.9, lon: -93.2, seconds: null as any })
+    ).toBe('p44.9,-93.2')
   })
 })
 

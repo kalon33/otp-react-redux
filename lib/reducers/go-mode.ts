@@ -417,6 +417,13 @@ export interface GoModeState {
   }
 
   vehicleMatch: {
+    /**
+     * How many DISTINCT feed frames (changes of the matched record's
+     * `seconds`) the current run of `consecutiveMatches` rests on. The run is
+     * counted per 1 s tick, the feed moves every 15-20 s; the riding rebind
+     * gate needs both (35.1, RIDING_REBIND_MIN_FRAMES).
+     */
+    consecutiveFrames: number
     consecutiveMatches: number
     /**
      * Consecutive vehicle-position polls that came back with ZERO vehicles on
@@ -533,6 +540,7 @@ const defaultState: GoModeState = {
   },
 
   vehicleMatch: {
+    consecutiveFrames: 0,
     consecutiveMatches: 0,
     emptyPolls: 0,
     match: null,
@@ -708,6 +716,7 @@ const goMode = handleActions<GoModeState, any>(
       earlyAlight: null,
       vehicleMatch: {
         ...state.vehicleMatch,
+        consecutiveFrames: 0,
         consecutiveMatches: 0,
         match: action.payload
       }
@@ -1410,6 +1419,9 @@ const goMode = handleActions<GoModeState, any>(
         ...state.vehicleMatch,
         ...(action.payload.consecutiveMatches !== undefined && {
           consecutiveMatches: action.payload.consecutiveMatches
+        }),
+        ...(action.payload.consecutiveFrames !== undefined && {
+          consecutiveFrames: action.payload.consecutiveFrames
         }),
         ...(action.payload.emptyPolls !== undefined && {
           emptyPolls: action.payload.emptyPolls

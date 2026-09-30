@@ -9,6 +9,8 @@ import {
   isVehicleRecordFresh,
   matchProvesAboard,
   refreshConfirmedMatch,
+  RIDING_REBIND_MIN_CONSECUTIVE,
+  RIDING_REBIND_MIN_FRAMES,
   shouldRebindRidingTrip,
   shouldReplanBoardedEarlier,
   stopsAheadFromNextStopId,
@@ -106,8 +108,11 @@ describe('shouldRebindRidingTrip', () => {
   const matchedLeg = { headsign: 'Orange Burnsville' }
   const matchState = (
     consecutiveMatches: number,
-    tripHeadsign: string | null
-  ) => ({ consecutiveMatches, match: { tripHeadsign } })
+    tripHeadsign: string | null,
+    // Distinct feed frames under the run; enough by default so the cases
+    // below keep testing what they were written for.
+    consecutiveFrames = RIDING_REBIND_MIN_FRAMES
+  ) => ({ consecutiveFrames, consecutiveMatches, match: { tripHeadsign } })
 
   it('allows first establishment (no riding fact / no tripId held)', () => {
     expect(
@@ -164,6 +169,44 @@ describe('shouldRebindRidingTrip', () => {
         matchedLeg,
         matchState(8, 'Orange Downtown Minneapolis')
       )
+    ).toBe(false)
+  })
+
+  it('35.1: eight ticks against one stale feed frame is not a sustained run', () => {
+    // 2026-09-28 17:22:48-17:22:56: nine one-second ticks on bus 8151, all
+    // scored against a single 8151 frame, rebound the ride off the bus the
+    // rider was sitting on. The run must rest on distinct frames too.
+    expect(
+      shouldRebindRidingTrip(
+        riding,
+        '1:1273216',
+        matchedLeg,
+        matchState(9, 'Orange Burnsville', 1)
+      )
+    ).toBe(false)
+    expect(
+      shouldRebindRidingTrip(
+        riding,
+        '1:1273216',
+        matchedLeg,
+        matchState(40, 'Orange Burnsville', RIDING_REBIND_MIN_FRAMES - 1)
+      )
+    ).toBe(false)
+    // Enough frames but too few ticks is still a flap.
+    expect(
+      shouldRebindRidingTrip(
+        riding,
+        '1:1273216',
+        matchedLeg,
+        matchState(RIDING_REBIND_MIN_CONSECUTIVE - 1, 'Orange Burnsville', 5)
+      )
+    ).toBe(false)
+    // A state with no frame count (nothing counted it) cannot prove a run.
+    expect(
+      shouldRebindRidingTrip(riding, '1:1273216', matchedLeg, {
+        consecutiveMatches: 40,
+        match: { tripHeadsign: 'Orange Burnsville' }
+      })
     ).toBe(false)
   })
 
@@ -224,6 +267,7 @@ describe('shouldReplanBoardedEarlier', () => {
         ridingLeg,
         ridingTripId: '1:trip-earlier-run',
         vehicleMatchState: {
+          consecutiveFrames: 3,
           consecutiveMatches: 8,
           match: {
             confidence: 'high',
@@ -240,6 +284,32 @@ describe('shouldReplanBoardedEarlier', () => {
     ).toBe(true)
   })
 
+  it('35.1: a run of ticks on ONE feed frame is not sustained — no replan', () => {
+    // 2026-09-28 17:22:57: the boarded-earlier re-plan fired on nine ticks
+    // scored against a single frame of bus 8151 (saved only by arrives-later).
+    expect(
+      shouldReplanBoardedEarlier({
+        nowMs: NOW,
+        ridingLeg,
+        ridingTripId: '1:trip-earlier-run',
+        vehicleMatchState: {
+          consecutiveFrames: 1,
+          consecutiveMatches: 9,
+          match: {
+            confidence: 'high',
+            distanceMeters: 304,
+            label: '8151',
+            lastSeen: NOW,
+            tripHeadsign: 'Orange Burnsville',
+            tripId: '1:trip-earlier-run',
+            vehicleId: '1:8151'
+          }
+        },
+        vehicleRecord: freshRecord
+      })
+    ).toBe(false)
+  })
+
   it('a stale feed record is not evidence — no replan', () => {
     expect(
       shouldReplanBoardedEarlier({
@@ -247,6 +317,7 @@ describe('shouldReplanBoardedEarlier', () => {
         ridingLeg,
         ridingTripId: '1:trip-earlier-run',
         vehicleMatchState: {
+          consecutiveFrames: 3,
           consecutiveMatches: 8,
           match: {
             confidence: 'high',
@@ -303,6 +374,7 @@ describe('shouldReplanBoardedEarlier', () => {
         ridingLeg,
         ridingTripId: '1:trip-earlier-run',
         vehicleMatchState: {
+          consecutiveFrames: 3,
           consecutiveMatches: 8,
           match: {
             confidence: 'high',
@@ -330,6 +402,7 @@ describe('shouldReplanBoardedEarlier', () => {
       ridingLeg: { ...ridingLeg, startTime: NOW + 285000 },
       ridingTripId: '1:1173133',
       vehicleMatchState: {
+        consecutiveFrames: 3,
         consecutiveMatches: 8,
         match: {
           confidence: 'high' as const,
@@ -453,6 +526,7 @@ describe('shouldReplanBoardedEarlier', () => {
           ridingLeg: { ...ridingLeg, trip: { gtfsId: '1:trip-earlier-run' } },
           ridingTripId: '1:trip-earlier-run',
           vehicleMatchState: {
+            consecutiveFrames: 3,
             consecutiveMatches: 8,
             match: {
               confidence: 'high',
