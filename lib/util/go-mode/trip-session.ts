@@ -27,6 +27,7 @@ import type {
 } from './riding'
 import type { DepartureBaselineState } from './departure-drift'
 import type { DestinationProgressState } from './destination-progress'
+import type { DeviatedStreak } from './replan-acceptance'
 import type { MissedBusAttempt } from './missed-bus-recovery'
 import type { PacingCardState } from './pacing-card'
 import type { RiderSpeedAnchorBucket, RiderSpeedSample } from './rider-speed'
@@ -71,6 +72,17 @@ export interface TripSession {
    * 8/28 ride that needed it.
    */
   destinationProgress: DestinationProgressState | null
+
+  /**
+   * When the rider's current `deviated` streak opened, on which leg and how far
+   * from the destination — the quiet full re-plan's evidence that the plan in
+   * hand is one they have left (backlog 35.2, `accessPlanDeadByDeviation`).
+   * Stamped and cleared from each tick's `UPDATE_PROGRESS.status` by
+   * `nextDeviatedSince`; cleared on an itinerary swap and on a leg change. Not
+   * the notifier's `deviationHandledAtMs`, which is when the rider was last
+   * TOLD, and not `riding.offRouteSince`, which exists only aboard.
+   */
+  deviatedSince: DeviatedStreak | null
 
   /**
    * When this deviation was last dealt with — the rider told, or the drift
@@ -371,6 +383,7 @@ export function createTripSession(): TripSession {
     autoEndTimeoutId: null,
     boardStopDwell: null,
     destinationProgress: null,
+    deviatedSince: null,
     deviationHandledAtMs: null,
     earlyAlightWatch: null,
     earlyBoardReplan: null,

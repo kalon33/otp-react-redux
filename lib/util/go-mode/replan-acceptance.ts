@@ -174,6 +174,16 @@ export interface AutoReplanContext {
    */
   currentPlanIsDead?: boolean
   /**
+   * Set when the rider has been off the plan's access leg for at least
+   * `DEVIATED_PLAN_DEAD_MS` without closing on the destination — see
+   * `accessPlanDeadByDeviation` (backlog 35.2). Narrower than
+   * `currentPlanIsDead`: it waives only the arrival test, because the arrival
+   * being defended belongs to a trip the rider is not making. The
+   * token-hop and access-misses-board gates still apply — a candidate the rider
+   * cannot physically start is no better for the old plan being dead.
+   */
+  currentPlanLeftByRider?: boolean
+  /**
    * The rider's own heading in degrees, from the same fix as `position`. With
    * it (and a speed over `PROJECTION_MIN_SPEED_MPS`) the origin check gains a
    * direction: see `AUTO_REPLAN_ORIGIN_BEHIND_MAX_M`. Without it the check is
@@ -623,6 +633,126 @@ export function planRunLeftBeforeRider(args: {
 }
 
 /**
+ * How long the rider must have been `deviated` on an access leg before the
+ * plan in hand can be called one they have left (backlog 35.2).
+ *
+ * 45 s keeps the veto on the first attempt after the rider leaves the line —
+ * the quiet re-plan fires 4-20 s into a streak (2026-09-28 17:35:53 at +20 s;
+ * the 16:38:43 attempt on `orange-1600-0928.json` at +4 s, a streak the rider
+ * closed themselves 51 s after it opened) — and admits the second, which
+ * `QUIET_REPLAN_MIN_COOLDOWN_MS` (25 s) puts at +29 s at the very earliest and
+ * the 09-28 ride put at +60 s. At a bike pace of 6 m/s, 45 s is ~270 m ridden
+ * outside the 100 m corridor that sets `isOnRoute` — not GPS wobble.
+ */
+export const DEVIATED_PLAN_DEAD_MS = 45000
+
+/**
+ * ...and how far, in a straight line, the rider may have closed on the
+ * destination over that streak and still be called lost (backlog 35.2).
+ *
+ * Off the line is not the same as off the trip. On 2026-09-28 17:35-17:39
+ * (`muls77mv-9u3dsl`, `ride-0928-1651.json`) the rider rode a parallel street
+ * up to 326 m from the plan for four minutes, and `distanceToDestination` fell
+ * the whole way: 831 m at the streak's first tick, 734 m at the +60 s re-plan,
+ * ~680 m at the +76 s one, 147 m at 17:39:20. All three `quiet-replan-full`
+ * answers wanted 1 772-2 068 m of riding from there and arrived 17:45:44,
+ * 17:46:53 and 17:48:39; the held plan said 17:40:37 and the rider arrived
+ * 17:39:57. The `arrives-later` refusals were right. A window alone waives
+ * the veto at +60 s and +76 s, leaving only the origin check between the rider
+ * and a plan 6-9 minutes later than the one they were riding (the phone's
+ * +60 s candidate began 22 m from them, inside the 75 m origin radius). The
+ * rider closed ~94 m in the first 45 s: converging on their own. One who has
+ * not closed 50 m in 45 s has stopped, turned away or is circling, and the
+ * plan's arrival is not theirs.
+ */
+export const DEVIATED_PLAN_MIN_CLOSING_M = 50
+
+/** The open `deviated` streak: when it opened, on which leg, and how far the
+ * rider then was from the destination in a straight line. */
+export type DeviatedStreak = {
+  atMs: number
+  destinationM: number | null
+  legIndex: number
+}
+
+/**
+ * Carry the current `deviated` streak across ticks. Null when the rider is not
+ * deviated.
+ *
+ * Opens on the first `deviated` tick, holds while every tick reads
+ * `deviated` on the same leg, and closes on any other status (back on the line,
+ * `behind`/`ahead` there, `completed`) or on a leg change — the previous leg's
+ * geometry says nothing about the new one. An itinerary swap clears it at the
+ * caller (`startGoModeTracking`), for the same reason.
+ */
+export function nextDeviatedSince(
+  prev: DeviatedStreak | null | undefined,
+  tick: {
+    destinationM: number | null | undefined
+    legIndex: number
+    nowMs: number
+    status: string | null | undefined
+  }
+): DeviatedStreak | null {
+  if (tick.status !== 'deviated') return null
+  if (prev && prev.legIndex === tick.legIndex) return prev
+  const d = Number(tick.destinationM)
+  return {
+    atMs: tick.nowMs,
+    destinationM: tick.destinationM != null && Number.isFinite(d) ? d : null,
+    legIndex: tick.legIndex
+  }
+}
+
+/**
+ * Has the rider left the plan's access leg — and the trip it describes — so
+ * that the plan's arrival is no longer theirs to lose (backlog 35.2)?
+ *
+ * The sibling of `planRunLeftBeforeRider` (28.6): both say the plan in hand is
+ * not a yardstick for `arrives-later`. 28.6 is the aboard case (the run the plan
+ * boards has gone); this is the access case (the rider is neither on the plan's
+ * street nor getting any closer to where it goes).
+ *
+ * True only when all of:
+ * - the rider is not verifiably aboard (`riding` — an aboard rider's leg is the
+ *   vehicle, and "off route" there is a matcher question, not a choice);
+ * - a `deviated` streak is open and has lasted at least `windowMs`;
+ * - both straight-line distances to the destination are known, and the rider
+ *   has closed less than `minClosingM` of it since the streak opened.
+ *
+ * Fails closed — missing evidence keeps the veto. The caller asks only on the
+ * quiet FULL re-plan: the scoped re-plan splices onto the same transit suffix,
+ * so its arrival test has nothing to defend against a detour.
+ */
+export function accessPlanDeadByDeviation(args: {
+  destinationM: number | null | undefined
+  minClosingM?: number
+  nowMs: number
+  riding: boolean
+  streak: DeviatedStreak | null | undefined
+  windowMs?: number
+}): boolean {
+  const { streak } = args
+  if (args.riding || !streak) return false
+  if (!Number.isFinite(streak.atMs)) return false
+  if (args.nowMs - streak.atMs < (args.windowMs ?? DEVIATED_PLAN_DEAD_MS)) {
+    return false
+  }
+  const now = Number(args.destinationM)
+  if (
+    args.destinationM == null ||
+    !Number.isFinite(now) ||
+    streak.destinationM == null
+  ) {
+    return false
+  }
+  return (
+    streak.destinationM - now <
+    (args.minClosingM ?? DEVIATED_PLAN_MIN_CLOSING_M)
+  )
+}
+
+/**
  * Does this candidate hand the rider a trip they cannot physically start?
  *
  * 2026-09-15, backlog 16.2. Two spliced plans were auto-applied whose opening
@@ -687,6 +817,7 @@ export function acceptAutoReplan(
   const currentArrival = arrivalMs(current)
   if (
     !context.currentPlanIsDead &&
+    !context.currentPlanLeftByRider &&
     candidateArrival != null &&
     currentArrival != null &&
     candidateArrival > currentArrival + AUTO_REPLAN_ARRIVAL_SLACK_MS
