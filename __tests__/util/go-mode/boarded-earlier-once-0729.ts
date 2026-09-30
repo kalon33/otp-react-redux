@@ -473,8 +473,11 @@ function expectOneSwapOntoRiddenBus(r: Run) {
   expect(atBoarding[atBoarding.length - 1].tripIds).toEqual([PLANNED_TRIP])
   expect(hhmmss(r.firstRidingMs)).toBe('17:27:49')
 
-  // One search, heard yes once, for the standing mismatch.
-  expect(r.boardedEarlier.map((s) => hhmmss(s.simMs))).toEqual(['17:27:52'])
+  // One search, heard yes once, for the standing mismatch. 17:28:05, not the
+  // 17:27:52 it was before 2026-09-30: the trip-mismatch trigger now also needs
+  // RIDING_REBIND_MIN_FRAMES distinct feed frames of the matched bus, not just
+  // eight 1 s ticks (35.1), and the third 8140 frame lands 13 s later.
+  expect(r.boardedEarlier.map((s) => hhmmss(s.simMs))).toEqual(['17:28:05'])
   expect(r.gateYes).toHaveLength(1)
   const g = r.gateYes[0]
   expect(g.plannedTripId).toBe(PLANNED_TRIP)
@@ -498,7 +501,7 @@ function expectOneSwapOntoRiddenBus(r: Run) {
   // to the stop the plan already alighted at.
   const aboard = r.itineraries.filter((i) => i.simMs > r.firstRidingMs)
   expect(aboard).toHaveLength(1)
-  expect(hhmmss(aboard[0].simMs)).toBe('17:27:52')
+  expect(hhmmss(aboard[0].simMs)).toBe('17:28:05')
   expect(aboard[0].tripIds).toEqual([BOARDED.tripId])
   expect(aboard[0].boardStop).toBe('I-35W & 46th St Station')
   expect(aboard[0].alightStop).toBe('I-35W & 98th St Station')

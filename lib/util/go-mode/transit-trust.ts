@@ -46,8 +46,36 @@ export const CONFIRMED_MATCH_MAX_SEPARATION_M = 2500
 // How many consecutive 1/s vehicle matches must agree before the sticky
 // riding.tripId may rebind to a different trip. Today's promotion needs only
 // 2 — exactly what the 7/29 flap survived. Eight is still fast for a real
-// correction (~8s) and beyond any flap a stale feed has produced.
+// correction (~8s). Ticks alone are not enough, though — see the frame count
+// below, which 2026-09-28 showed a stale feed can beat eight ticks without.
 export const RIDING_REBIND_MIN_CONSECUTIVE = 8
+
+// ...and how many DISTINCT feed frames of the challenger that run must rest on
+// (35.1). The matcher runs once a second, the feed publishes a frame every
+// 15-20 s, so eight ticks can be one frame scored eight times: on 2026-09-28
+// the rebind to bus 8151 passed at 17:22:56 on nine ticks against a single
+// 8151 frame and a single 8220 frame. Three frames is ~30-60 s at that
+// cadence — longer than any stale-frame flap recorded (the 09-28 one lasted
+// 44 s, the 7/29 one two ticks), and a real early board, where the rider sits
+// on the other bus for the whole leg, clears it within the first minute.
+// Counted by the caller as changes of the matched record's `seconds`
+// (performVehicleMatching, `vehicleMatch.consecutiveFrames`).
+export const RIDING_REBIND_MIN_FRAMES = 3
+
+/** Has a run of matches lasted long enough, in ticks AND in feed frames, to
+ * move the sticky riding fact? */
+function runIsSustained(
+  vehicleMatchState: {
+    consecutiveFrames?: number
+    consecutiveMatches?: number
+  } | null
+): boolean {
+  return (
+    (vehicleMatchState?.consecutiveMatches ?? 0) >=
+      RIDING_REBIND_MIN_CONSECUTIVE &&
+    (vehicleMatchState?.consecutiveFrames ?? 0) >= RIDING_REBIND_MIN_FRAMES
+  )
+}
 
 // You can't be aboard a bus that hasn't left yet: riding this much before the
 // planned board time proves the rider caught an earlier departure.
@@ -447,8 +475,8 @@ function headsignsConsistent(
  *
  * Establishing the fact and refreshing it on the same trip stay instant; a
  * REBIND — declaring the rider is on a different bus than we thought — needs
- * a sustained run of consecutive matches AND a headsign consistent with the
- * ride. On 7/29 two ticks of a stale-feed mismatch ("Orange Downtown
+ * a sustained run of consecutive matches — in ticks and in distinct feed
+ * frames — AND a headsign consistent with the ride. On 7/29 two ticks of a stale-feed mismatch ("Orange Downtown
  * Minneapolis" vs the ride's "Orange Burnsville") rewrote riding.tripId and
  * armed the boarded-earlier replan; this blocks that twice over.
  */
@@ -457,6 +485,7 @@ export function shouldRebindRidingTrip(
   candidateTripId: string | null,
   matchedLeg: { headsign?: string | null } | null,
   vehicleMatchState: {
+    consecutiveFrames?: number
     consecutiveMatches?: number
     match?: { tripHeadsign?: string | null } | null
   } | null
@@ -465,11 +494,7 @@ export function shouldRebindRidingTrip(
   if (!riding || riding.tripId == null) return true
   // Same trip: a refresh (legIndex change, offRouteSince clear), never gated.
   if (candidateTripId === riding.tripId) return true
-  if (
-    (vehicleMatchState?.consecutiveMatches ?? 0) < RIDING_REBIND_MIN_CONSECUTIVE
-  ) {
-    return false
-  }
+  if (!runIsSustained(vehicleMatchState)) return false
   return headsignsConsistent(
     vehicleMatchState?.match?.tripHeadsign ?? null,
     riding.headsign ?? matchedLeg?.headsign ?? null
@@ -521,6 +546,7 @@ export function shouldReplanBoardedEarlier({
    * actually build its splice from. See the trigger/remedy note below. */
   ridingTripId?: string | null
   vehicleMatchState: {
+    consecutiveFrames?: number
     consecutiveMatches?: number
     match?: VehicleMatchResult | null
   } | null
@@ -575,9 +601,7 @@ export function shouldReplanBoardedEarlier({
   // maintain consecutiveMatches, so requiring one made this gate unreachable
   // exactly when the rider had already told us which bus they're on.
   const sustained =
-    matched?.confidence === 'confirmed' ||
-    (vehicleMatchState?.consecutiveMatches ?? 0) >=
-      RIDING_REBIND_MIN_CONSECUTIVE
+    matched?.confidence === 'confirmed' || runIsSustained(vehicleMatchState)
   const tripMismatch =
     (matched?.confidence === 'confirmed' || matched?.confidence === 'high') &&
     matched?.tripId != null &&

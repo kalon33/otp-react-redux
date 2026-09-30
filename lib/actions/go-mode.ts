@@ -8343,24 +8343,41 @@ export function performVehicleMatching(routeId: string) {
       // was rejected 27 times in 28 minutes.
       80,
       riderSpeed,
-      expectedDirectionId
+      expectedDirectionId,
+      // The bus the rider is riding keeps the match unless it is truly gone
+      // (35.1, 12.11): held in range through a heading-less or turn-stale
+      // frame, and ranked by its corridor as well as its projected point.
+      { ridingVehicleId: goMode.riding?.vehicleId ?? null }
     )
 
-    // Track consecutive matches
+    // Track consecutive matches — per tick, and per distinct feed frame. The
+    // tick count drives the confidence promotion as before; the frame count
+    // is what the riding rebind gate also needs, because on 2026-09-28 nine
+    // ticks against ONE 8151 frame rebound the ride (35.1).
     const prevId = previousMatch?.vehicleId
     let consecutiveMatches = goMode.vehicleMatch?.consecutiveMatches || 0
+    let consecutiveFrames = goMode.vehicleMatch?.consecutiveFrames || 0
     if (matchResult.vehicleId && matchResult.vehicleId === prevId) {
       consecutiveMatches++
+      if (matchResult.frameKey !== previousMatch?.frameKey) {
+        consecutiveFrames++
+      }
       // Promote to 'high' after 2+ consecutive matches with same vehicle
       if (consecutiveMatches >= 2 && matchResult.confidence === 'medium') {
         matchResult.confidence = 'high'
       }
     } else {
       consecutiveMatches = matchResult.vehicleId ? 1 : 0
+      consecutiveFrames = matchResult.vehicleId ? 1 : 0
     }
 
     dispatch({
-      payload: { consecutiveMatches, emptyPolls: 0, match: matchResult },
+      payload: {
+        consecutiveFrames,
+        consecutiveMatches,
+        emptyPolls: 0,
+        match: matchResult
+      },
       type: UPDATE_VEHICLE_MATCH
     })
 
