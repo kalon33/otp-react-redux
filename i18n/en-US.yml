@@ -611,64 +611,8 @@ components:
     waitingGPS: Acquiring GPS signal...
     walkToStop: '{emoji} {time} walk to {stop}'
     whereToAlight: Where do you want to get off?
-    notify:
-      arrivedMessage: Arrived
-      backOnTime: back on time
-      busComingTitle: Bus coming
-      busHereTitle: Bus here
-      changeWithSlack: "{change} \xB7 {slack}"
-      connectionAtRiskTitle: Connection at risk
-      connectionLateAtStop: "{routeName} \xB7 {minutes} min late \xB7 {stopName}"
-      connectionSlack: "{routeName} \xB7 {seconds}s"
-      connectionSlackAtStop: "{routeName} \xB7 {seconds}s \xB7 {stopName}"
-      driftEarlier: '{minutes} min earlier'
-      driftLater: '{minutes} min later'
-      leaveInTitle: Leave in {minutes} min
-      leaveNowTitle: Leave now
-      metresAway: '{metres}m'
-      missedBestIn: "{routeName} likely missed \xB7 {bestRouteName} in {minutes} min"
-      missedBusTitle: Missed bus
-      missedNextDeparture: "{routeName} missed \xB7 next departure"
-      missedNextIn: "{routeName} likely missed \xB7 next in {minutes} min"
-      missedNoAlternatives: "{routeName} likely missed \xB7 no alternatives"
-      missedOptions: "{routeName} likely missed \xB7 {count} options"
-      modeDrive: Drive
-      modeGo: Go
-      modeScooter: Scooter
-      nextStepTitle: Next Step
-      nextStopTitle: Next stop
-      offRouteDistance: '{metres}m from the route'
-      offRouteTitle: Off route
-      routeAtStop: "{routeName} \xB7 {stopName}"
-      routeMinutes: "{routeName} \xB7 {minutes} min"
-      routeMinutesLate: "{routeName} \xB7 {minutes} min late"
-      routeMinutesStop: "{routeName} \xB7 {minutes} min \xB7 {stopName}"
-      routingStopsHereTitle: Routing stops here
-      runningLateTitle: Running late
-      slackLeft: '{minutes} min slack'
-      slackShort: '{minutes} min short'
-      someWay: some way
-      stepBoard: Board {routeName} to {destination}
-      stepContinue: Continue to {destination}
-      stepWalk: Walk to {destination}
-      stopInMinutes: "{stopName} \xB7 {minutes} min"
-      theStop: the stop
-      tightConnectionTitle: Tight connection
-      tripCompleteTitle: Trip complete
-      turnIn: In {distance}{then}
-      turnThen: ', then {instruction}'
-      unreachable: "{howFar} \xB7 not getting closer"
-      unreachableFromNamed: "{howFar} from {destination} \xB7 not getting closer"
-      yourBus: your bus
-      yourBusLead: Your bus
-      yourConnection: your connection
-      yourDestination: your destination
-      yourRideLead: Your ride
-      yourStop: your stop
-      yourStopTitle: Your stop
     departureGone: departed
     stopsAnswered: '{answered} of {total} stops answered'
-    waitingAtStopTime: "Waiting at {stop} \xB7 {time}"
   ItinerarySummary:
     itineraryDetails: Itinerary details
   LocationSearch:

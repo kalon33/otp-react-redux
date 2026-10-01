@@ -7120,7 +7120,6 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       // The raw fix, so arrival can be judged by where the rider actually is
       // and not only by a progress scalar that can freeze short of the bar.
       currentPosition,
-      currentPosition,
       // Aboard, short of this leg's first stop: the gap to the anchor is not a
       // deviation, so the clock decides the status (22.1).
       aboardBeforeLeg,
@@ -7128,7 +7127,6 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       // rider the feed has confirmed aboard is riding, not standing (18.6).
       goMode.riding?.legIndex ?? null,
       intl
-    )
     )
 
     // The rider's MEASURED pace, and the missed-bus classifier's last verdict.
