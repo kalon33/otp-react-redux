@@ -41,11 +41,15 @@ import {
   bikeReluctanceToWillingness,
   bikeSpeedMph,
   bikeWillingnessToReluctance,
+  clampStopCap,
   DEFAULT_PROFILE_ID,
+  effectiveStopCap,
   ITINERARY_COUNT_OPTIONS,
   ROUTING_PROFILES,
   RoutingPreferences,
   SERVER_BIKE_RELUCTANCE,
+  STOP_CAP_OPTIONS,
+  stopCapMessageId,
   ViaStop
 } from '../../util/routing-profiles'
 import { blue, getBaseColor } from '../util/colors'
@@ -296,8 +300,10 @@ const AdvancedSettingsPanel = ({
   applyRoutingProfile,
   autoPlan,
   closeAdvancedSettings,
+  configuredStopCap,
   currentQuery,
   defaultNumItineraries,
+  enableMaxStopCount,
   enabledModeButtons,
   findRoutesIfNeeded,
   getDependentUserInfo,
@@ -322,8 +328,10 @@ const AdvancedSettingsPanel = ({
   applyRoutingProfile: (profileId: string) => void
   autoPlan: boolean
   closeAdvancedSettings: () => void
+  configuredStopCap: number
   currentQuery: any
   defaultNumItineraries: number
+  enableMaxStopCount: boolean
   enabledModeButtons: string[]
   findRoutesIfNeeded: () => void
   getDependentUserInfo: (userIds: string[], intl: IntlShape) => void
@@ -346,6 +354,7 @@ const AdvancedSettingsPanel = ({
   ) => void
   setSearchOptions: (options: {
     hideWalkTransitOptions?: boolean
+    maxStopCount?: number
     noTransfers?: boolean
     numItineraries?: number
     viaStop?: ViaStop | null
@@ -595,6 +604,29 @@ const AdvancedSettingsPanel = ({
     [setSearchOptions]
   )
 
+  // Backlog 14.1: how far the access/egress search looks for a stop. The
+  // config's own cap is added to the steps if it is not one of them, so the
+  // control can always show what is in effect.
+  const stopCap = effectiveStopCap(currentQuery.maxStopCount, configuredStopCap)
+  const stopCapOptions = useMemo(() => {
+    const caps = Array.from(new Set([...STOP_CAP_OPTIONS, stopCap])).sort(
+      (a, b) => a - b
+    )
+    return caps.map((cap) => ({
+      text: intl.formatMessage({ id: stopCapMessageId(cap) }),
+      value: String(cap)
+    }))
+  }, [intl, stopCap])
+
+  const onStopCapChange = useCallback(
+    (evt: QueryParamChangeEvent) => {
+      const cap = Number(evt.maxStopCount)
+      if (Number.isNaN(cap)) return
+      setSearchOptions({ maxStopCount: cap })
+    },
+    [setSearchOptions]
+  )
+
   const onHideWalkTransitChange = useCallback(
     (evt: QueryParamChangeEvent) => {
       setSearchOptions({
@@ -709,7 +741,9 @@ const AdvancedSettingsPanel = ({
           name="routingProfile"
           onChange={onRoutingProfileChange}
           options={ROUTING_PROFILES.map((profile) => ({
-            text: intl.formatMessage({ id: `components.GoMode.${profile.id.replace(/-/g, '')}` }),
+            text: intl.formatMessage({
+              id: `components.GoMode.${profile.id.replace(/-/g, '')}`
+            }),
             value: profile.id
           }))}
           value={currentQuery.activeProfileId || DEFAULT_PROFILE_ID}
@@ -821,6 +855,22 @@ const AdvancedSettingsPanel = ({
           options={numItineraryOptions}
           value={String(numItineraries)}
         />
+        {enableMaxStopCount && (
+          <SearchOptionBlock>
+            <RoutingProfileDropdown
+              label={intl.formatMessage({
+                id: 'components.BatchSearchScreen.stopCapLabel'
+              })}
+              name="maxStopCount"
+              onChange={onStopCapChange}
+              options={stopCapOptions}
+              value={String(stopCap)}
+            />
+            <HelperText>
+              <FormattedMessage id="components.BatchSearchScreen.stopCapHelp" />
+            </HelperText>
+          </SearchOptionBlock>
+        )}
         <SearchOptionBlock>
           <GlobalSettingsContainer>
             <SettingCheckbox
@@ -1053,6 +1103,7 @@ const mapStateToProps = (state: AppReduxState) => {
     state.otp.config?.advancedSettingsPanel?.saveAndReturnButton
   return {
     autoPlan: autoPlan !== false,
+    configuredStopCap: clampStopCap(state.otp.config?.itinerary?.maxStopCount),
     currentQuery: state.otp.currentQuery,
     defaultNumItineraries: getDefaultNumItineraries(state.otp.config),
     // TODO: Duplicated in apiv2.js
@@ -1062,6 +1113,8 @@ const mapStateToProps = (state: AppReduxState) => {
       })?.modeButtons?.filter((mb): mb is string => mb !== null) ||
       modes?.initialState?.enabledModeButtons ||
       [],
+
+    enableMaxStopCount: !!state.otp.config?.itinerary?.enableMaxStopCount,
     loggedInUser: state.user.loggedInUser,
     mobilityProfile: state.otp.config?.mobilityProfile || false,
     modeButtonOptions: modes?.modeButtons || [],

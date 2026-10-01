@@ -31,16 +31,29 @@ jest.mock('../../../lib/actions/apiV2', () => ({
  *
  * The ride: a METRO Orange Line leg 13:26:27Z → 13:45:04Z, then a 1450 m bike
  * leg to 3322 Columbus Ave scheduled to end 13:51:45Z. The rider arrived at
- * 13:59:36.999Z and the phone went on reporting until 14:48:29Z — 48m52s and
- * 96 further fixes at the post-arrival 30 s cadence.
+ * 14:00:08.000Z and the phone went on reporting until 14:48:29Z — 48m21s and
+ * 95 further fixes at the post-arrival 30 s cadence.
+ *
+ * The arrival tick moved on 2026-09-21 (backlog 21.2), and the constants below
+ * moved with it. As RECORDED, this ride latched at 13:59:36.999Z with the
+ * rider's own fix 81.4 m from 3322 Columbus and still closing at ~2.5 m/s —
+ * the same progress-only early grant 21.2 is about, on `overallProgress`
+ * 99.51% with the leg that ends at the door at 99.0%. The replay now latches
+ * on the next recorded fix, 14:00:08.000Z at 24.8 m, and that 31 s is a
+ * cadence artefact rather than the cost of the fix: the stream had already
+ * tapered to 30 s BECAUSE of the early latch, and on the last 1 Hz fix
+ * (13:59:37.999Z) the rider was 78.9 m out, about two seconds from
+ * ARRIVAL_RADIUS_M. Nothing this file is about depends on which tick the
+ * arrival is — only that exactly one tick is, and that every tick after it
+ * quotes that tick's measurement.
  *
  * TWO HALVES, and they behaved differently.
  *
  * 1. A LIVE arrival already held. Replaying the 921 fixes from the bike leg's
- *    start: `SET_ARRIVED 13:59:36.999Z`, one `UPDATE_TRACKING_INTERVAL {30000}`,
- *    six notifications ending in the single TRIP_COMPLETE, and 98 post-arrival
+ *    start: `SET_ARRIVED 14:00:08.000Z`, one `UPDATE_TRACKING_INTERVAL {30000}`,
+ *    six notifications ending in the single TRIP_COMPLETE, and 97 post-arrival
  *    `UPDATE_PROGRESS` actions every one of which carries
- *    delay = 495.98664868164065 s. One distinct value across 48m52s. Unfrozen
+ *    delay = 506.66611254882815 s. One distinct value across 48m21s. Unfrozen
  *    the last of them would have read 3404 s — the card would have said
  *    "57 min late" about a rider who arrived 8 min late.
  *
@@ -49,8 +62,8 @@ jest.mock('../../../lib/actions/apiV2', () => ({
  *    measurement beside it, and the freeze — which read the PREVIOUS tick's
  *    `progress.delay` — had nothing to carry. The first resumed tick re-measured
  *    against the wall clock and every tick after it froze THAT: with the page
- *    coming back 61 s after the arrival, 534.7056889648437 s for the remaining
- *    46 minutes, 38.72 s adrift of the arrival measurement and rising with the
+ *    coming back 61 s after the arrival, 565.2180893554688 s for the remaining
+ *    47 minutes, 58.55 s adrift of the arrival measurement and rising with the
  *    length of the gap. `ARRIVED_RESUME_GRACE_MS` bounds a one-way trip's error
  *    at ~5 min; a ROUND trip's session is measured against `leaveByMs` instead
  *    and legitimately outlives the outbound arrival by hours, so there it is
@@ -63,7 +76,7 @@ jest.mock('../../../lib/actions/apiV2', () => ({
  * RULED OUT, by this same replay: the notifier and the funnel. The notification
  * pass fires TRIP_COMPLETE exactly once and nothing after it (e737da85 holds),
  * and no second `SET_ARRIVED` is ever dispatched across either half. Row 4.10's
- * funnel closure holds too — the resumed trip's 96 ticks arrive at exactly the
+ * funnel closure holds too — the resumed trip's 95 ticks arrive at exactly the
  * 30 s cadence, never the 1 Hz the native watcher is really delivering.
  */
 
@@ -134,8 +147,8 @@ const progressRows = (store: any) =>
  * because it is the whole point: every post-arrival tick, on both sides of a
  * re-mount, must quote this number and no other.
  */
-const ARRIVAL_DELAY_S = 495.98664868164065
-const ARRIVED_AT = 1788271176999 // 2026-09-01T13:59:36.999Z
+const ARRIVAL_DELAY_S = 506.66611254882815
+const ARRIVED_AT = 1788271208000 // 2026-09-01T14:00:08.000Z
 const LAST_FIX_MS = 1788274109000 // 2026-09-01T14:48:29.000Z
 
 describe('post-arrival delay, replayed live (2026-09-01 ride 1)', () => {
@@ -191,11 +204,11 @@ describe('post-arrival delay, replayed live (2026-09-01 ride 1)', () => {
     expect(store.getGoMode().arrivedDelay).toBe(ARRIVAL_DELAY_S)
   })
 
-  it('holds that one number across every post-arrival tick — 48m52s of them', () => {
+  it('holds that one number across every post-arrival tick — 48m21s of them', () => {
     const rows = progressRows(store)
     const post = rows.slice(arrivalRowIndex)
-    // 98 ticks: the arrival tick plus the 97 that follow it.
-    expect(post).toHaveLength(98)
+    // 97 ticks: the arrival tick plus the 96 that follow it.
+    expect(post).toHaveLength(97)
     expect(Array.from(new Set(post.map((p: any) => p.delay)))).toEqual([
       ARRIVAL_DELAY_S
     ])
@@ -239,7 +252,7 @@ describe('post-arrival delay, replayed live (2026-09-01 ride 1)', () => {
 describe('post-arrival delay across a re-mount (2026-09-01 ride 1)', () => {
   let clock: FakeTimers.InstalledClock
   let restored: any
-  /** The 96 recorded fixes the resumed page received. */
+  /** The 95 recorded fixes the resumed page received. */
   let tail: any[]
 
   const LOAD_MS = ARRIVED_AT + 60_000
@@ -297,7 +310,7 @@ describe('post-arrival delay across a re-mount (2026-09-01 ride 1)', () => {
     replay(store, clock, tail)
     const rows = progressRows(store)
     // The recorded post-arrival stream, at the 30 s cadence the funnel imposes.
-    expect(rows).toHaveLength(96)
+    expect(rows).toHaveLength(95)
     expect(Array.from(new Set(rows.map((p: any) => p.delay)))).toEqual([
       ARRIVAL_DELAY_S
     ])
@@ -315,14 +328,14 @@ describe('post-arrival delay across a re-mount (2026-09-01 ride 1)', () => {
 
   it('CONTROL: with the measurement missing, the same ticks re-measure and freeze the wrong number', () => {
     // Exactly the state a re-mount used to come back in: the trip is over and
-    // nothing says how late it ended. This is what produced 534.7 s.
+    // nothing says how late it ended. This is what produced 565.2 s.
     const store = makeStore({ ...restored, arrivedDelay: null })
     replay(store, clock, tail)
     const delays = Array.from(
       new Set(progressRows(store).map((p: any) => p.delay))
     )
-    expect(delays).toEqual([534.7056889648437])
-    expect((delays[0] as number) - ARRIVAL_DELAY_S).toBeCloseTo(38.72, 2)
+    expect(delays).toEqual([565.2180893554688])
+    expect((delays[0] as number) - ARRIVAL_DELAY_S).toBeCloseTo(58.55, 2)
     store.run(endGoMode())
   })
 })

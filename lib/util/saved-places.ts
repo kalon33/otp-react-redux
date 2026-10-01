@@ -10,18 +10,18 @@ const { getItem, storeItem } = coreUtils.storage
  * (Gym, Mom's house, ...) as one array. Home and Work keep their legacy
  * per-type keys ("otp.home"/"otp.work") and never appear in this one.
  *
- * This module is the only place that reads or writes the key, so a
- * server-backed sync can be added later without touching callers:
- * a thunk (patterned on lib/actions/routing-profiles.ts, never the
- * reducer) would debounce-POST { deviceId: getDeviceId(), places } to
- * config.placesApiUrl || PLACES_API_PATH and merge a GET by id at boot.
+ * This module is the only place that reads or writes the key. The server
+ * copy (backlog 28.1) lives in lib/actions/places-sync.ts — a thunk, never
+ * the reducer — which debounce-POSTs { deviceId, places, home, work } to
+ * config.placesApiUrl || PLACES_API_PATH and merges a GET by id at boot.
  */
 export const SAVED_PLACES_KEY = 'savedPlaces'
 
 /**
- * Future sync endpoint on the Flask prefs-api (same-origin, proxied by
- * nginx), mirroring PREFERENCES_API_PATH in ./routing-profiles.ts.
- * Not called yet — documented here so the seam has an address.
+ * The server copy's endpoint on the Flask prefs-api (transitnav
+ * places_api.py, proxied by nginx), mirroring PREFERENCES_API_PATH in
+ * ./routing-profiles.ts. Prefixed with the API base (util/api-base) so the
+ * bundled native app reaches it cross-origin.
  */
 export const PLACES_API_PATH = '/api/places'
 

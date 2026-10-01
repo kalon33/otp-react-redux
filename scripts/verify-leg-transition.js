@@ -44,6 +44,26 @@ const TO = { lat: 44.9778, lon: -93.2707, name: 'Downtown Minneapolis' }
 
 const TICKS = 15
 
+// Exit code for "the thing under test could not be exercised, and that is not a
+// defect". nightly-verify.sh maps it to SKIP; anything else is still a failure.
+// Same convention as verify-onboard-options.js.
+//
+// This script needs the live graph to hand it a very particular shape -- a
+// walk->bus itinerary whose bus is inside the five-minute board window and
+// whose transit geometry the route matcher agrees with -- and none of that is
+// a property of the code under test. Three consecutive runs on 2026-09-17
+// produced three different outcomes on ONE unchanged tree (PASS; isOnRoute
+// false at 1703 m; no walk->bus itinerary at all), so every one of those
+// preconditions was reporting a red row for a fact about Metro Transit's
+// timetable. The two real assertions -- waiting advances nothing, boarding
+// advances exactly once -- still FAIL loudly. (backlog 13.6)
+const EXIT_SKIP = 75
+
+function skip(reason) {
+  console.log(`SKIP: ${reason}`)
+  process.exit(EXIT_SKIP)
+}
+
 async function main() {
   const browser = await puppeteer.launch({
     args: ['--no-sandbox'],
@@ -62,7 +82,16 @@ async function main() {
   })
   page.on('pageerror', (e) => console.log('[pageerror]', e.message))
   await page.goto(APP, { timeout: 60000, waitUntil: 'networkidle2' })
-  await page.waitForFunction(() => !!window.store, { timeout: 30000 })
+  // 60s, not 30s: this is the FIRST wait in every script and it is a Vite dev
+  // server transforming the module graph, not the product. Two runs on
+  // 2026-09-17 died here -- 30s after a `docker restart otp-frontend-dev`, with
+  // a cold transform cache -- and reported it as the script's failure. A red
+  // row that means "the dev server was still warming up" is the kind that
+  // taught everyone to stop reading this suite (backlog 13.6). If this wait is
+  // what times out, the app at :9967 never booted: `docker restart
+  // otp-frontend-dev` (a full `yarn jest` or `ship_web.sh` clobbers its
+  // tmp/config.yml).
+  await page.waitForFunction(() => !!window.store, { timeout: 60000 })
 
   await page.evaluate(
     async (from, to) => {
@@ -79,20 +108,55 @@ async function main() {
     TO
   )
 
-  await page.waitForFunction(
-    () => {
-      const searches = window.store.getState().otp.searches || {}
-      return Object.values(searches).some(
-        (s) =>
-          s.pending === 0 &&
-          (s.response || []).some((r) => r?.plan?.itineraries?.length > 0)
+  // Five of the eleven red rows on the 2026-09-17 nightly were this one wait
+  // expiring, reported as the bare line "waiting for function failed: timeout
+  // 60000ms exceeded" (backlog 13.6). A plan that never comes back is the
+  // backend, not this script: 17.8 measured the Linode behind
+  // api.transit-nav.com going intermittently unresponsive under the
+  // cap-10000 searches the app now sends, and the nightly's 05:00 CDT slot is
+  // the same hour as the OTP log's `AStar Search timeout` bursts. So tell the
+  // two apart rather than calling both a failure -- still PENDING after 60s
+  // means nothing answered (SKIP); SETTLED with no itineraries is an answer
+  // from the planner, and that is a real red row.
+  const planned = await page
+    .waitForFunction(
+      () => {
+        const searches = window.store.getState().otp.searches || {}
+        return Object.values(searches).some(
+          (s) =>
+            s.pending === 0 &&
+            (s.response || []).some((r) => r?.plan?.itineraries?.length > 0)
+        )
+      },
+      { polling: 500, timeout: 60000 }
+    )
+    .then(() => true)
+    .catch(() => false)
+  if (!planned) {
+    const searches = await page.evaluate(() =>
+      Object.values(window.store.getState().otp.searches || {}).map((s) => ({
+        itineraries: (s.response || []).flatMap(
+          (r) => r?.plan?.itineraries || []
+        ).length,
+        pending: s.pending
+      }))
+    )
+    const stillPending = searches.some((s) => s.pending !== 0)
+    if (stillPending || searches.length === 0) {
+      skip(
+        'no plan came back within 60s and the search is still in flight ' +
+          `(${JSON.stringify(searches)}) — the OTP behind ` +
+          'api.transit-nav.com did not answer, so nothing was verified'
       )
-    },
-    { polling: 500, timeout: 60000 }
-  )
+    }
+    throw new Error(
+      'the planner settled with no itineraries for this pair: ' +
+        JSON.stringify(searches)
+    )
+  }
 
   // A walk→bus itinerary: leg 0 is the access walk the rider finishes early.
-  const chosen = await page.evaluate(async () => {
+  const chosen = await page.evaluate(async (ticks) => {
     // eslint-disable-next-line import/no-absolute-path
     const pm = await import('/lib/util/go-mode/position-matching.js')
     const searches = window.store.getState().otp.searches || {}
@@ -154,27 +218,58 @@ async function main() {
     if (i < 1) i = poly.length - 1
     const [lat, lon] = poly[i]
 
-    // ...and then the bus actually comes: a point well along the transit leg's
-    // own geometry, which is the evidence that must still advance the leg.
+    // ...and then the bus actually comes. The rider RIDES onto the transit
+    // leg — a path of fixes along the bus's own geometry, starting at the
+    // boarding stop — rather than being teleported to a point a kilometre
+    // along it.
+    //
+    // Teleporting is what made this script SKIP on 21 of the nights it ran
+    // (17.29). The route matcher's jump budget (position-matching.ts:478-558,
+    // MATCH_JUMP_SLACK_M = 50 m across a leg boundary plus 2x the rider's own
+    // displacement) refuses a projection that moves further than the rider
+    // provably did, and a rider who has moved 0 m cannot buy 1.7 km of it. So
+    // the match stayed HELD on leg 0 and the script reported
+    // `isOnRoute=false distanceFromRoute=1703m` — the held leg-0 projection's
+    // distance to the teleported fix, not a fact about leg advance. Stepping
+    // along the shape hands the gate the displacement it asks for: the first
+    // step crosses the shared endpoint (a real transition measures ~0 m) and
+    // every later one is ordinary riding.
     const busPoly = pm.decodeLegGeometry(busLeg)
     const busCum = pm.calculateCumulativeDistances(busPoly)
     let j = busCum.findIndex((d) => d >= busCum[busCum.length - 1] * 0.25)
     if (j < 1) j = Math.floor(busPoly.length / 2)
     const [busLat, busLon] = busPoly[j]
+    const ridePath = []
+    for (let k = 0; k < ticks; k++) {
+      const along = (busCum[j] * k) / Math.max(1, ticks - 1)
+      let idx = busCum.findIndex((d) => d >= along)
+      if (idx < 0) idx = j
+      ridePath.push({ lat: busPoly[idx][0], lon: busPoly[idx][1] })
+    }
 
     return {
+      alightEpoch: Number(busLeg.endTime),
       boardEarlyMs: EARLY,
+      boardEpoch: boardOf(picked),
       boardLeadMs,
       boardMaxDistanceM: pm.TRANSIT_BOARD_MAX_DISTANCE_M,
       busRoute: busLeg.routeShortName || busLeg.routeLongName,
       candidates: ok.length,
       rideAt: { lat: busLat, lon: busLon },
+      rideFirst: ridePath[0],
+      ridePath,
+      rideStepM: Math.round(busCum[j] / Math.max(1, ticks - 1)),
       shiftedByMs,
       stop: busLeg.from?.name,
       waitAt: { lat, lon }
     }
-  })
-  if (!chosen) throw new Error('no walk→bus itinerary found')
+  }, TICKS)
+  if (!chosen) {
+    skip(
+      'the live graph returned no walk→bus itinerary for this pair, so there ' +
+        'is no access→transit leg change to drive'
+    )
+  }
   console.log(
     `[setup] walk to ${chosen.stop}, board ${chosen.busRoute}; rider will wait at the stop`
   )
@@ -204,9 +299,30 @@ async function main() {
   )
 
   // Feed the thunk a fixed position for N ticks and count what it dispatches.
-  const tick = (at, ticks) =>
+  /**
+   * `live` is the live board/alight time to re-assert before every tick, and
+   * it is what makes this script RUN rather than SKIP (17.29).
+   *
+   * The board gate prefers the LIVE board time over the plan's
+   * (`boardEpoch ?? targetLeg.startTime`, position-matching.ts:994-998) — "a
+   * bus running late should not pull the rider onto its leg on the strength
+   * of the plan alone". The harness shifts the plan's clock to put the
+   * boarding inside the five-minute window, but `liveLegTimes` is filled from
+   * the real trip fetch and carries the UNSHIFTED departure, so on every run
+   * that needed a shift the gate saw a bus 15-20 min out and refused —
+   * measured 2026-09-22: shift -15.4 min, nomination leg 1 at 0 m and
+   * `isOnRoute` true, refused, and the match re-taken over leg 0 alone
+   * (`prog=0.00 dist=142`). That is the SKIP this script has reported on 21
+   * of the nights it ran, and it says nothing about leg advance.
+   *
+   * So the shift is applied to the live record too, which is the same thing
+   * verify-departure-drift.js does with its synthetic boarding: re-asserted
+   * every tick because refreshLiveLegTimes' 20 s poll overwrites it with the
+   * real trip's own times.
+   */
+  const tick = (path, ticks, live) =>
     page.evaluate(
-      async (at, ticks) => {
+      async (path, ticks, live) => {
         // eslint-disable-next-line import/no-absolute-path
         const goMode = await import('/lib/actions/go-mode.js')
         const seen = []
@@ -229,14 +345,27 @@ async function main() {
         const getState = () => window.store.getState()
 
         for (let i = 0; i < ticks; i++) {
+          if (live) {
+            window.store.dispatch(
+              goMode.setLiveLegTimes({
+                [live.legIndex]: {
+                  alightEpoch: live.alightEpoch,
+                  alightRealtime: true,
+                  boardEpoch: live.boardEpoch,
+                  boardRealtime: true,
+                  realtime: true
+                }
+              })
+            )
+          }
           const position = {
             coords: {
               accuracy: 10,
               altitude: null,
               altitudeAccuracy: null,
               heading: null,
-              latitude: at.lat,
-              longitude: at.lon,
+              latitude: path[Math.min(i, path.length - 1)].lat,
+              longitude: path[Math.min(i, path.length - 1)].lon,
               speed: 0
             },
             timestamp: Date.now() + i * 1000
@@ -274,13 +403,19 @@ async function main() {
           transitionedTo
         }
       },
-      at,
-      ticks
+      path,
+      ticks,
+      live
     )
 
   // (1) The rider reaches the stop and waits for the bus. No storm, no advance:
   // standing on the curb is not boarding.
-  const waiting = await tick(chosen.waitAt, TICKS)
+  const live = {
+    alightEpoch: chosen.alightEpoch,
+    boardEpoch: chosen.boardEpoch,
+    legIndex: 1
+  }
+  const waiting = await tick([chosen.waitAt], TICKS, live)
   console.log(
     `[wait] ${TICKS} ticks standing at the stop ` +
       `(matched leg ${waiting.matchedLeg}, ${(
@@ -293,14 +428,18 @@ async function main() {
   )
 
   // (2) The bus comes and they board: the leg must still advance, exactly once.
+  // The real watcher is pinned to where the ride STARTS (the boarding stop),
+  // so a live fix landing between synthetic ticks agrees with the rider
+  // instead of yanking the projection back down the route.
   await page.setGeolocation({
     accuracy: 10,
-    latitude: chosen.rideAt.lat,
-    longitude: chosen.rideAt.lon
+    latitude: chosen.rideFirst.lat,
+    longitude: chosen.rideFirst.lon
   })
-  const riding = await tick(chosen.rideAt, TICKS)
+  const riding = await tick(chosen.ridePath, TICKS, live)
   console.log(
-    `[ride] ${TICKS} ticks aboard the ${chosen.busRoute} ` +
+    `[ride] ${TICKS} ticks aboard the ${chosen.busRoute}, riding the shape ` +
+      `from the stop in ~${chosen.rideStepM} m steps ` +
       `(matched leg ${riding.matchedLeg})`
   )
   console.log(
@@ -322,10 +461,11 @@ async function main() {
   await browser.close()
 
   if (waiting.progressAlongLeg < 0.98) {
-    throw new Error(
-      `test setup is not exercising the bug: rider is only ${(
-        waiting.progressAlongLeg * 100
-      ).toFixed(1)}% along the access leg, needs >=98%`
+    skip(
+      `the rider is only ${(waiting.progressAlongLeg * 100).toFixed(
+        1
+      )}% along the access leg (needs >=98%), so "waiting at the stop" was ` +
+        'never set up — a fact about the leg geometry, not about leg advance'
     )
   }
   if (waiting.legTransitions > 0) {
@@ -351,23 +491,27 @@ async function main() {
   )
   if (!gate.isRiding) {
     if (!gate.isOnRoute) {
-      throw new Error(
-        'PRECONDITION: the ride position did not match the bus leg ' +
-          '(isOnRoute false) — the transition gate refuses on position, not ' +
-          'on leg order'
+      skip(
+        'the ride position did not match the bus leg (isOnRoute false, ' +
+          `${
+            gate.distanceFromRoute == null
+              ? 'n/a'
+              : `${gate.distanceFromRoute.toFixed(0)}m from the shape`
+          }) — the transition gate refuses on position, not on leg order, so ` +
+          'leg advance was never reached'
       )
     }
     if (gate.distanceFromRoute > chosen.boardMaxDistanceM) {
-      throw new Error(
-        `PRECONDITION: ride position is ${gate.distanceFromRoute.toFixed(
+      skip(
+        `ride position is ${gate.distanceFromRoute.toFixed(
           0
         )} m from the bus shape, over TRANSIT_BOARD_MAX_DISTANCE_M ` +
           `(${chosen.boardMaxDistanceM} m)`
       )
     }
     if (boardLead >= chosen.boardEarlyMs) {
-      throw new Error(
-        `PRECONDITION: the bus boards in ${(boardLead / 60000).toFixed(
+      skip(
+        `the bus boards in ${(boardLead / 60000).toFixed(
           1
         )} min, outside the ${(chosen.boardEarlyMs / 60000).toFixed(
           0
@@ -388,6 +532,11 @@ async function main() {
 }
 
 main().catch((e) => {
-  console.error(e.message)
+  // e.stack, not e.message: a puppeteer waitForFunction timeout says only
+  // "waiting for function failed: timeout 60000ms exceeded" and names neither
+  // the wait that failed nor its line. Six of the eleven red rows on
+  // 2026-09-17 were that one line and nothing else, which is much of why this
+  // suite's output stopped being read (backlog 13.6). The stack names the wait.
+  console.error(e.stack || e.message)
   process.exit(1)
 })

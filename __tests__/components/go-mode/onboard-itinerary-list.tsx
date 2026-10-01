@@ -84,7 +84,11 @@ const option = (
   stopName
 })
 
-function renderList(options: any[], onSelect = jest.fn()) {
+function renderList(
+  options: any[],
+  onPreview = jest.fn(),
+  onPreviewVariant = jest.fn()
+) {
   const state = getMockInitialState()
   // The component is rendered through ComponentContext's ItineraryBody, the
   // same way the real narrative list is.
@@ -97,11 +101,11 @@ function renderList(options: any[], onSelect = jest.fn()) {
   )
   const { wrapper } = mockWithProvider(
     Wrapped,
-    { onSelect, options },
+    { onPreview, onPreviewVariant, options },
     state,
     messages
   )
-  return { onSelect, wrapper }
+  return { onPreview, onPreviewVariant, wrapper }
 }
 
 /**
@@ -127,7 +131,9 @@ describe('components > go-mode > OnboardItineraryList', () => {
       const { wrapper } = renderList(sameChain)
       const toggle = wrapper.find('button.same-shape-variants-toggle')
       expect(toggle).toHaveLength(1)
-      expect(toggle.text()).toBe('3 options')
+      // Three places to get off: the control says "Other stops" and nothing
+      // else (21.5, 2026-09-23: "description on button is just other stops").
+      expect(toggle.text()).toBe('Other stops▶')
     })
 
     it('names the alight stop on each variant — that is the choice', () => {
@@ -138,25 +144,29 @@ describe('components > go-mode > OnboardItineraryList', () => {
       expect(text).toContain('Burnsville')
     })
 
-    it('starts guidance to the variant the rider picks, not the row', () => {
-      const { onSelect, wrapper } = renderList(sameChain)
+    it('previews the variant the rider picks, not the row', () => {
+      const { onPreview, onPreviewVariant, wrapper } = renderList(sameChain)
       wrapper.find('button.same-shape-variants-toggle').simulate('click')
-      wrapper.find('button[data-index=2]').simulate('click')
-      expect(onSelect).toHaveBeenCalledTimes(1)
-      expect(onSelect.mock.calls[0][0].stopName).toBe('Burnsville')
+      // Own pair (98th St) first, then Nicollet, then Burnsville.
+      wrapper.find('button[data-pair]').at(2).simulate('click')
+      expect(onPreviewVariant).toHaveBeenCalledTimes(1)
+      expect(onPreviewVariant.mock.calls[0][0].stopName).toBe('Burnsville')
+      // The drill-down pick is a VIEW, never the commit it used to be (17.1).
+      expect(onPreview).not.toHaveBeenCalled()
     })
 
     it('opening the drill-down does not choose the row', () => {
-      const { onSelect, wrapper } = renderList(sameChain)
+      const { onPreview, onPreviewVariant, wrapper } = renderList(sameChain)
       wrapper.find('button.same-shape-variants-toggle').simulate('click')
-      expect(onSelect).not.toHaveBeenCalled()
+      expect(onPreview).not.toHaveBeenCalled()
+      expect(onPreviewVariant).not.toHaveBeenCalled()
     })
 
-    it('still starts guidance when the row itself is tapped', () => {
-      const { onSelect, wrapper } = renderList(sameChain)
+    it('previews the row when the row itself is tapped', () => {
+      const { onPreview, wrapper } = renderList(sameChain)
       wrapper.find('div.stub-itin').simulate('click')
-      expect(onSelect).toHaveBeenCalledTimes(1)
-      expect(onSelect.mock.calls[0][0].stopName).toBe('98th St')
+      expect(onPreview).toHaveBeenCalledTimes(1)
+      expect(onPreview.mock.calls[0][0].stopName).toBe('98th St')
     })
 
     it('leaves genuinely different journeys as separate rows', () => {
@@ -203,31 +213,45 @@ describe('components > go-mode > OnboardItineraryList', () => {
       expect(rows.at(1).text()).not.toContain('I-35W & Lake St Station')
     })
 
-    it('starts guidance to the stop the tapped row names', () => {
-      const { onSelect, wrapper } = renderList(liveShape)
+    it('previews the stop the tapped row names', () => {
+      const { onPreview, wrapper } = renderList(liveShape)
       const rows = wrapper.find('li.result')
       rows.at(1).find('div.stub-itin').simulate('click')
-      expect(onSelect).toHaveBeenCalledTimes(1)
-      const chosen = onSelect.mock.calls[0][0]
+      expect(onPreview).toHaveBeenCalledTimes(1)
+      const chosen = onPreview.mock.calls[0][0]
       expect(chosen.alightStopName).toBe('Burnsville Heart of the City Station')
       expect(rows.at(1).text()).toContain(`Off at ${chosen.alightStopName}`)
     })
 
-    it('names the real stop on the drill-down variants too', () => {
+    it('offers no "Other stops" when both options really get off at the same stop', () => {
+      // Lake St and 46th St are only where the two onward plans were
+      // PLANNED from; both rides actually end at Burnsville Heart of the City
+      // (alightStopName). Named by the real stop they are one get-on / get-off
+      // pair, and a drill-down listing Burnsville twice is the "clarify if
+      // there are no options" the rider asked not to see (21.5).
       const { wrapper } = renderList(liveShape)
-      wrapper
-        .find('li.result')
-        .at(1)
-        .find('button.same-shape-variants-toggle')
-        .simulate('click')
-      const variants = wrapper
-        .find('li.result')
-        .at(1)
-        .find('button[data-index]')
-      expect(variants).toHaveLength(2)
-      variants.forEach((b: any) => {
-        expect(b.text()).toContain('Burnsville Heart of the City Station')
-      })
+      expect(
+        wrapper
+          .find('li.result')
+          .at(1)
+          .find('button.same-shape-variants-toggle')
+      ).toHaveLength(0)
+    })
+
+    it('names the real get-off stop in the drill-down when there is a choice', () => {
+      const { wrapper } = renderList([
+        option('I-35W & Lake St Station', ['1:904'], {
+          alightStopName: 'Burnsville Heart of the City Station'
+        }),
+        option('I-35W & 98th St Station', ['1:904'])
+      ])
+      wrapper.find('button.same-shape-variants-toggle').simulate('click')
+      const pairs = wrapper.find('button[data-pair]')
+      expect(pairs).toHaveLength(2)
+      expect(pairs.at(0).text()).toContain(
+        'OffBurnsville Heart of the City Station'
+      )
+      expect(pairs.at(1).text()).toContain('OffI-35W & 98th St Station')
     })
   })
 

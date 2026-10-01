@@ -7,6 +7,13 @@ const TRANSIT_MODES = new Set(['BUS', 'FERRY', 'RAIL', 'SUBWAY', 'TRAM'])
 
 interface TimePoint {
   epoch: number | string | undefined
+  /**
+   * The epoch is a clamp FLOOR — "no earlier than this" — rather than an
+   * estimate: a stale non-live time raised to `now` or to the current minute.
+   * See LiveLegTime.boardIsFloor (backlog 17.6). A floored epoch is never
+   * published onto the leg, so no surface can compute a wait from it.
+   */
+  isFloor?: boolean
   /** Schedule shifted to where the bus actually is — an estimate, not a feed. */
   projected?: boolean
   realtime: boolean
@@ -32,6 +39,7 @@ export function legAlight(
     // alight, which kept styling a schedule-fallback alight time as live.
     return {
       epoch: live.alightEpoch,
+      isFloor: live.alightIsFloor,
       projected: live.alightProjected,
       realtime: live.alightRealtime ?? live.realtime
     }
@@ -49,6 +57,7 @@ export function legBoard(
   if (TRANSIT_MODES.has(leg.mode) && live?.boardEpoch) {
     return {
       epoch: live.boardEpoch,
+      isFloor: live.boardIsFloor,
       projected: live.boardProjected,
       realtime: live.boardRealtime ?? live.realtime
     }
@@ -142,7 +151,21 @@ export function buildLiveItinerary(
     // `time - delay * 1000` to show the scheduled time struck through, and an
     // undefined delay renders that as "Invalid Date".
     const boardMs = Number(board.epoch)
-    if (!board.realtime && board.projected && Number.isFinite(boardMs)) {
+    // A floored epoch is a bound, not a time: publishing it onto the leg is
+    // how "- minute waits make no sense" reached the rider on 2026-09-15
+    // (backlog 17.6). The trip sheet measures the wait before a later bus as
+    // `leg.startTime - legs[i-1].endTime` off THIS itinerary, so a board time
+    // clamped to `now` renders a wait that has nothing to do with the bus.
+    // The plan's own startTime is the honest fallback — it is at least a time
+    // somebody published. Realtime is unaffected: a live prediction is never
+    // floored.
+    const boardFloored = !board.realtime && !!board.isFloor
+    if (
+      !board.realtime &&
+      board.projected &&
+      !boardFloored &&
+      Number.isFinite(boardMs)
+    ) {
       next.startTime = boardMs
     }
     if (board.realtime && Number.isFinite(boardMs)) {
@@ -162,7 +185,11 @@ export function buildLiveItinerary(
       next.arrivalDelay = Number.isFinite(scheduled)
         ? Math.round((alightMs - scheduled) / 1000)
         : 0
-    } else if (alight.projected && Number.isFinite(alightMs)) {
+    } else if (
+      alight.projected &&
+      !alight.isFloor &&
+      Number.isFinite(alightMs)
+    ) {
       // A projected time DOES get shown — the alternative is the plan's
       // build-time arrival, frozen at the moment the trip was planned and
       // wrong by however late the bus has since become (3m41s on the 8/16

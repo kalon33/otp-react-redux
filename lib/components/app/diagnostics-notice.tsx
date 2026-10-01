@@ -7,6 +7,8 @@ import {
   shouldShowDiagnosticsNotice
 } from '../../util/debug-log'
 
+import { BANNER_HEIGHT_VAR } from './return-to-trip-banner'
+
 /**
  * A one-time disclosure that this build records trips.
  *
@@ -28,7 +30,17 @@ const Bar = styled.div`
   gap: 12px;
   line-height: 1.45;
   padding: 12px 14px;
+  /* Below the live-trip banner, not over it (26.5). The banner is absolute at
+     top: 50px — out of flow — so this in-flow bar lays out in the SAME strip
+     under the nav, and its higher z-index put it in front: on 2026-09-22
+     08:22:06 only ~10 px of "On trip · Next stop …" survived above it. The
+     banner publishes its measured height (BANNER_HEIGHT_VAR,
+     return-to-trip-banner.tsx), so shift down by exactly that. A top offset, not a
+     margin: a relative offset leaves the flow alone, and the pages below
+     already pad themselves by the banner's height (#otp > main, mobile.css) —
+     a margin would add it twice. 0px when no banner is up. */
   position: relative;
+  top: var(${BANNER_HEIGHT_VAR}, 0px);
   z-index: 27;
 
   button {

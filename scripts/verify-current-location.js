@@ -35,7 +35,16 @@ async function main() {
     .overridePermissions(APP, ['geolocation'])
   await page.setGeolocation({ accuracy: 10, ...P1 })
   await page.goto(APP, { timeout: 60000, waitUntil: 'networkidle2' })
-  await page.waitForFunction(() => !!window.store, { timeout: 30000 })
+  // 60s, not 30s: this is the FIRST wait in every script and it is a Vite dev
+  // server transforming the module graph, not the product. Two runs on
+  // 2026-09-17 died here -- 30s after a `docker restart otp-frontend-dev`, with
+  // a cold transform cache -- and reported it as the script's failure. A red
+  // row that means "the dev server was still warming up" is the kind that
+  // taught everyone to stop reading this suite (backlog 13.6). If this wait is
+  // what times out, the app at :9967 never booted: `docker restart
+  // otp-frontend-dev` (a full `yarn jest` or `ship_web.sh` clobbers its
+  // tmp/config.yml).
+  await page.waitForFunction(() => !!window.store, { timeout: 60000 })
 
   // (1)+(2) auto-populated, stable label. The old reverse-geocode overwrite
   // landed within a second of the auto-populate — wait it out, then assert.
@@ -157,6 +166,11 @@ async function main() {
 }
 
 main().catch((e) => {
-  console.error('FAIL:', e.message)
+  // e.stack, not e.message: a puppeteer waitForFunction timeout says only
+  // "waiting for function failed: timeout 60000ms exceeded" and names neither
+  // the wait that failed nor its line. Six of the eleven red rows on
+  // 2026-09-17 were that one line and nothing else, which is much of why this
+  // suite's output stopped being read (backlog 13.6). The stack names the wait.
+  console.error('FAIL:', e.stack || e.message)
   process.exit(1)
 })

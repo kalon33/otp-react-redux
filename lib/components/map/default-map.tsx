@@ -27,9 +27,11 @@ import {
   carRentalQuery,
   findFeeds,
   findStopTimesForStop,
+  getStopClosures,
   rentalVehicleQuery
 } from '../../actions/api'
 import { ComponentContext } from '../../util/contexts'
+import { flattenStopClosures } from '../../util/itinerary'
 import { getActiveItinerary, getActiveSearch } from '../../util/state'
 import {
   getCurrentPosition,
@@ -63,6 +65,28 @@ import TransitVehicleOverlay from './connected-transit-vehicle-overlay'
 import TripViewerOverlay from './connected-trip-viewer-overlay'
 import VehicleRentalOverlay from './connected-vehicle-rental-overlay'
 import withMap from './with-map'
+
+/**
+ * Whether the planner's one-shot locate crosshair (MapLibre's GeolocateControl)
+ * should be left off the map because the rider is on the Go Mode screen.
+ *
+ * GoModeMap wraps this same DefaultMap, so the crosshair rendered on top of a
+ * live trip — stacked directly above Go Mode's own follow toggle, at the same
+ * corner, in the same chrome. It is not a follow control: it takes one browser
+ * fix and writes the PLANNER's "my location" for trip planning, touching no Go
+ * Mode state. On 2026-09-20 the rider alternated between the two four times in
+ * six seconds and asked what the two GPS buttons were for (backlog 21.4).
+ *
+ * Backgrounded is the exception, as in `hidePlannerItineraryOverlay` and
+ * `goModeOwnsMapCamera`: the rider has stepped out to the planner, the
+ * planner's map is what is on screen, and its crosshair is wanted. Not
+ * rendering the element unmounts react-map-gl's useControl, which calls
+ * map.removeControl — the button leaves the DOM rather than hiding, so there
+ * is nothing left to tap. Exported for unit tests.
+ */
+export function hidePlannerGeolocateControl(goMode) {
+  return !!goMode?.isActive && !goMode?.ui?.backgrounded
+}
 
 const MapContainer = styled.div<{ hideLayerFilters: boolean }>`
   height: 100%;
@@ -180,8 +204,11 @@ interface DefaultMapProps {
   carRentalQuery: () => void
   carRentalStations: VehicleRentalStation[]
   children?: React.ReactNode
+  closedStops?: Map<string, Set<string>>
   config: AppConfig
   getCurrentPosition: GetCurrentPositionFunction
+  /** See hidePlannerGeolocateControl: true only while Go Mode is foregrounded. */
+  hideGeolocateControl?: boolean
   intl: IntlShape
   itinerary: Itinerary
   mapConfig: MapConfig
@@ -196,7 +223,9 @@ interface DefaultMapProps {
   viewedRouteStops: string[]
 }
 
-class DefaultMap extends Component<DefaultMapProps> {
+// Exported for unit tests: the render tree is asserted without a live
+// MapLibre instance or a store.
+export class DefaultMap extends Component<DefaultMapProps> {
   static contextType = ComponentContext
 
   constructor(props: DefaultMapProps) {
@@ -359,6 +388,8 @@ class DefaultMap extends Component<DefaultMapProps> {
 
     // Fetch feeds in the background
     this.props.findFeeds()
+    // Load closed stops into state for usage throughout UI (map popup, timetable, itinerary, etc.)
+    this.props.getStopClosures()
   }
 
   componentDidUpdate(prevProps) {
@@ -380,9 +411,11 @@ class DefaultMap extends Component<DefaultMapProps> {
       carRentalQuery,
       carRentalStations,
       children,
+      closedStops,
       config,
       feeds,
       getCurrentPosition,
+      hideGeolocateControl,
       intl,
       itinerary,
       mapConfig,
@@ -419,6 +452,12 @@ class DefaultMap extends Component<DefaultMapProps> {
         (station) => station.vehicleType?.formFactor === 'BICYCLE'
       )
     ]
+
+    // Closed stops are stored as a map with route ID as the key; we just want a set
+    // of all the stop values
+    const closedStopIds = closedStops
+      ? flattenStopClosures(closedStops)
+      : new Set()
 
     const scooters = rentalVehicles.filter(
       (vehicle) => vehicle.vehicleType?.formFactor === 'SCOOTER'
@@ -491,13 +530,17 @@ class DefaultMap extends Component<DefaultMapProps> {
               routeBasedTransitVehicleOverlayNameOverride?.initiallyVisible
             }
           />
-          <GeolocateControl
-            onGeolocate={() => {
-              getCurrentPosition(intl)
-            }}
-            position="top-left"
-            ref={this.geolocateControlRef}
-          />
+          {/* Off the map entirely while Go Mode is foregrounded: see
+              hidePlannerGeolocateControl. */}
+          {!hideGeolocateControl && (
+            <GeolocateControl
+              onGeolocate={() => {
+                getCurrentPosition(intl)
+              }}
+              position="top-left"
+              ref={this.geolocateControlRef}
+            />
+          )}
           <TransitiveOverlay
             getTransitiveRouteLabel={getTransitiveRouteLabel}
             mapRef={this.baseMapRef}
@@ -588,7 +631,8 @@ class DefaultMap extends Component<DefaultMapProps> {
                   viewedRouteStops,
                   config.companies,
                   this.getEntityPrefix,
-                  feeds
+                  feeds,
+                  closedStopIds
                 ).map((layer: JSX.Element) => (
                   <MapLayerErrorBoundary
                     alwaysShow={layer.props?.alwaysShow}
@@ -628,7 +672,8 @@ class DefaultMap extends Component<DefaultMapProps> {
 
 // connect to the redux store
 
-const mapStateToProps = (state) => {
+// Exported for unit tests.
+export const mapStateToProps = (state) => {
   const activeSearch = getActiveSearch(state)
   const viewedRoute = state.otp?.ui?.viewedRoute?.routeId
   const activeNearbyFilters = state.otp?.ui?.nearbyView?.filters
@@ -659,9 +704,13 @@ const mapStateToProps = (state) => {
     activeNearbyFilters,
     bikeRentalStations: state.otp.overlay.bikeRental.stations,
     carRentalStations: state.otp.overlay.carRental.stations,
+    closedStops: state.otp.ui.stopClosures.closedStops,
     config: state.otp.config,
     currentPositionError,
     feeds: state.otp.transitIndex.feeds,
+    // While a live trip is on screen, Go Mode owns the position stream and its
+    // own follow toggle sits in this corner (backlog 21.4).
+    hideGeolocateControl: hidePlannerGeolocateControl(state.otp.goMode),
     itinerary: getActiveItinerary(state),
     mapConfig: state.otp.config.map,
     mapPickActive: Boolean(state.otp.ui.mapPickLocationType),
@@ -681,6 +730,7 @@ const mapDispatchToProps = {
   findFeeds,
   findStopTimesForStop,
   getCurrentPosition,
+  getStopClosures,
   rentalVehicleQuery,
   setLocation,
   setMapPopupLocationAndGeocode,

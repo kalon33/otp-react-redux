@@ -126,7 +126,11 @@ const mockStore = (onboard: any) =>
           itinerary: { hideViewTripButton: true },
           transitOperators: []
         },
-        goMode: { onboard }
+        goMode: { onboard },
+        ui: {
+          diagramLeg: null,
+          stopClosures: { closedStops: undefined, error: undefined }
+        }
       }
     }),
     subscribe: () => () => undefined
@@ -364,6 +368,23 @@ const readyOnboard = (realtime: boolean) => {
   }
 }
 
+/**
+ * The same ready list, with the rider LOOKING at its second option — the
+ * preview screen 17.1 added. Second option on purpose: it is the one with a
+ * transfer, so the frame shows the leg rows and the wait between them.
+ */
+const previewOnboard = () => {
+  const onboard = readyOnboard(true)
+  return {
+    ...onboard,
+    preview: {
+      control: 'row' as const,
+      openedAtMs: NOW,
+      option: onboard.alightOptions[1]
+    }
+  }
+}
+
 const demoSheetItinerary = {
   endTime: NOW + 28 * 60000,
   legs: [
@@ -446,7 +467,10 @@ const demoSheetStore = {
         },
         ui: { activeLeg: null, backgrounded: false, mapFollowUser: true }
       },
-      ui: { diagramLeg: null }
+      ui: {
+        diagramLeg: null,
+        stopClosures: { closedStops: undefined, error: undefined }
+      }
     }
   }),
   subscribe: () => () => undefined
@@ -572,8 +596,14 @@ const GoModeDemo = (): JSX.Element => (
       'components.GoMode.returnPlanNow': 'Plan return now',
       'components.GoMode.returnRouteDeparts': '{route} departs {time}',
       'components.GoMode.returnStart': 'Start return trip',
-      'components.MetroUI.sameShapeVariants':
-        '{count, plural, one {# option} other {# options}}',
+      'components.MetroUI.otherStops': 'Other stops',
+      'components.MetroUI.variantArrives': 'arrives {time}',
+      'components.MetroUI.variantBiking': '{distance} biking',
+      'components.MetroUI.variantLeaves': 'leaves {time}',
+      'components.MetroUI.variantOff': 'Off',
+      'components.MetroUI.variantOn': 'On',
+      'components.MetroUI.variantShown': 'currently shown',
+      'components.MetroUI.variantWalking': '{distance} walking',
       'components.StopTimeCell.realtime': 'Realtime',
       'components.StopTimeCell.scheduled': 'Scheduled'
     }}
@@ -740,6 +770,41 @@ const GoModeDemo = (): JSX.Element => (
           <ComponentContext.Provider value={demoComponentContext}>
             <AlightRecommendation />
           </ComponentContext.Provider>
+        </Provider>
+      </Frame>
+
+      <Frame
+        minHeight={420}
+        note="17.1: a tap on a row opens THIS instead of committing the trip. Its own screen for one option — legs, arrival, and the wait the row cannot show (15.9 scores that wait as free) — with Confirm this stop / Back to options. The options list stays in state underneath, so Back costs no re-plan."
+        title="Alight preview (one option, not a commit)"
+      >
+        <Provider store={mockStore(previewOnboard())}>
+          <ComponentContext.Provider value={demoComponentContext}>
+            <AlightRecommendation />
+          </ComponentContext.Provider>
+        </Provider>
+      </Frame>
+
+      <Frame
+        note="15.3: after a Stop, 'I'm on the bus' re-adopts the remembered vehicle with no picker. The screen used to read only 'Finding the best stop to get off...'. It now states the assumption and offers the deny path."
+        title="Alight recommendation, assumed vehicle"
+      >
+        <Provider
+          store={mockStore({
+            bestAlightStop: null,
+            candidates: [],
+            status: 'optimizing',
+            trip: null,
+            vehicle: {
+              label: 'METRO Green Line',
+              nextStopId: null,
+              routeId: '1:902',
+              tripId: '1:879781',
+              vehicleId: '1:32141'
+            }
+          })}
+        >
+          <AlightRecommendation />
         </Provider>
       </Frame>
 

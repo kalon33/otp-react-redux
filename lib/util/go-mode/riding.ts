@@ -764,6 +764,13 @@ export interface RidingDecisionInput {
   prevRiding: RidingState | null
   /** The rider's own GPS ground speed, when the fix carries one. */
   riderSpeedMps: number | null
+  /**
+   * The rider's position matched against the leg the RIDDEN TRIP is on, when
+   * the matcher's own leg is not it — see the off-route branch in
+   * {@link decideRiding}. Omitted (or null) restores the pre-23.2 behaviour
+   * exactly: the fact is judged against whatever leg the matcher favours.
+   */
+  ridingCorridor?: Pick<RouteMatchResult, 'isOnRoute'> | null
   routeMatch: RouteMatchResult
   vehicleMatch: {
     consecutiveMatches?: number
@@ -777,6 +784,126 @@ function legRouteId(leg: any): string | null {
 
 function legTripId(leg: any): string | null {
   return leg?.trip?.gtfsId ?? leg?.tripId ?? null
+}
+
+/**
+ * How far along a leg still counts as "has not reached its first stop".
+ *
+ * The projection of a rider who is nowhere near a leg yet lands on its very
+ * first vertex, and `progressAlongLeg` comes back a literal 0 — measured on
+ * 2026-09-21 ride 2, eleven consecutive ticks at `0.0000` while the rider was
+ * 2,584 m -> 235 m north of the leg's anchor stop. A hair of slack is allowed
+ * so a shape whose first two vertices are centimetres apart still reads as
+ * "not started".
+ */
+export const PRE_LEG_PROGRESS_MAX = 0.005
+
+/**
+ * Which leg carries the bus the riding fact NAMES?
+ *
+ * `riding.legIndex` is written by whoever established the fact, and the two
+ * writers disagree about what it means. `decideRiding` only ever runs on a
+ * transit leg, so its index is the ridden leg. `confirmVehicleSelection` — the
+ * rider's own "I'm on the bus" — stamps `goMode.routeMatch.legIndex`, which on
+ * 2026-09-21 ride 1 was **0, the bike leg** (`SET_RIDING legIndex: 0` at
+ * 09:22:10, backlog 23.2b): the rider was aboard an Orange Line run while the
+ * plan still had them cycling to Lake St for a bus an hour out.
+ *
+ * So the index is not the question — the TRIP is. Resolution order, the same
+ * one `replanFromAboard` already uses for its splice anchor:
+ *
+ *  1. the leg whose own trip id IS `riding.tripId`. After a successful aboard
+ *     re-plan that is the spliced bus leg, which is what makes every gate
+ *     keyed on this self-terminating;
+ *  2. `riding.legIndex` when it already points at a transit leg;
+ *  3. the first transit leg AFTER it — the bus the rider is being carried
+ *     toward on an access leg — but only when the routes agree, because a
+ *     confirmed match on one route says nothing about a leg on another.
+ *
+ * Returns -1 when the fact names no trip, or when nothing above resolves.
+ */
+export function ridingTransitLegIndex(
+  legs: Leg[] | null | undefined,
+  riding: RidingState | null | undefined
+): number {
+  if (!riding?.tripId || !legs?.length) return -1
+
+  const byTrip = legs.findIndex(
+    (l: any) => l?.transitLeg && legTripId(l) === riding.tripId
+  )
+  if (byTrip >= 0) return byTrip
+
+  const at = riding.legIndex ?? -1
+  if (at >= 0 && (legs[at] as any)?.transitLeg) return at
+  if (at < 0) return -1
+
+  for (let i = at + 1; i < legs.length; i++) {
+    const leg: any = legs[i]
+    if (!leg?.transitLeg) continue
+    const legRoute = legRouteId(leg)
+    // Missing on either side passes, same policy as matchDescribesLeg: never
+    // block on data a feed simply does not publish.
+    if (
+      riding.routeId != null &&
+      legRoute != null &&
+      riding.routeId !== legRoute
+    ) {
+      return -1
+    }
+    return i
+  }
+  return -1
+}
+
+/**
+ * Is the rider verifiably aboard a bus that has not yet reached the start of
+ * the leg it is being measured against?
+ *
+ * The 2026-09-21 ride-2 signature (backlog 22.1). `buildOnboardItinerary`
+ * anchors the built bus leg at the vehicle's NEXT stop — 66th St — so a rider
+ * already aboard 2.58 km north of it projects onto the leg's first vertex and
+ * measures `distanceFromRoute` 2,584 m with `isOnRoute false`. Everything
+ * downstream then called that a deviation: `determineTripStatus` returned
+ * `deviated` for 116 s and `checkRouteDeviation` pushed a high-priority
+ * "Off route — 2070m from the route" card at a rider whose header read
+ * "On Bus #8228" on the same screen.
+ *
+ * That is not a rider who has left their route. It is a rider APPROACHING the
+ * anchor, from inside the vehicle the anchor was derived from. Four facts have
+ * to hold together, and each is a mis-read already on record:
+ *
+ *  - the riding fact names a trip AND a real bus (`ridingFactIsEvidenced`), so
+ *    a GPS-only projection can never buy this exemption;
+ *  - the leg being measured IS that bus's leg (`ridingTransitLegIndex`), not
+ *    some other leg the matcher drifted onto;
+ *  - the projection sits at the leg's very start — past that, an aboard rider
+ *    off the shape is a real detour and must still be told;
+ *  - when the bus's own feed record publishes a next stop, that stop is one of
+ *    this leg's calls. A bus heading somewhere this leg never goes is not
+ *    approaching its anchor. Null/unresolvable passes — never conclude from
+ *    data an agency may not publish.
+ */
+export function aboardBeforeLegStart(input: {
+  legs: Leg[] | null | undefined
+  riding: RidingState | null | undefined
+  routeMatch: RouteMatchResult | null | undefined
+  /** The ridden vehicle's own next stop, when the feed publishes one. */
+  vehicleNextStopId?: string | null
+}): boolean {
+  const { legs, riding, routeMatch, vehicleNextStopId } = input
+  if (!routeMatch || routeMatch.isOnRoute) return false
+  if (!riding?.tripId || !ridingFactIsEvidenced(riding)) return false
+  if (routeMatch.progressAlongLeg > PRE_LEG_PROGRESS_MAX) return false
+
+  const ridingLegIndex = ridingTransitLegIndex(legs, riding)
+  if (ridingLegIndex < 0 || ridingLegIndex !== routeMatch.legIndex) return false
+
+  const nextStop = stopKey(vehicleNextStopId)
+  if (nextStop == null) return true
+  const calls = legStopsInOrder(legs?.[ridingLegIndex])
+  const known = calls.some((s) => stopKey(s.stopId) != null)
+  if (!known) return true
+  return calls.some((s) => stopKey(s.stopId) === nextStop)
 }
 
 /**
@@ -883,6 +1010,7 @@ export function decideRiding(input: RidingDecisionInput): RidingDecision {
     offRouteClearMs,
     prevRiding,
     riderSpeedMps,
+    ridingCorridor,
     routeMatch,
     vehicleMatch
   } = input
@@ -890,6 +1018,31 @@ export function decideRiding(input: RidingDecisionInput): RidingDecision {
   const onTransit = routeMatch.isOnRoute && !!(matchedLeg as any)?.transitLeg
   if (!onTransit) {
     if (!prevRiding) return { kind: 'none' }
+    // Whose geometry is this fact being judged against?
+    //
+    // The off-route clock below used to run against whatever leg the matcher
+    // favours, and on an ACCESS leg that is the wrong shape entirely. On
+    // 2026-09-21 ride 1 the rider confirmed Orange Line 8228 at 09:22:10 while
+    // the current leg was the bike leg to Lake St; every tick after that
+    // measured them against the BIKE path (192 m -> 1,166 m away, because they
+    // were on a bus doing 28 m/s down I-35W), `offRouteSince` was stamped at
+    // 09:22:11.077, and `CLEAR_RIDING` landed 91 s later at 09:23:42.054 —
+    // the rider's own statement of which bus they were on, dropped by a
+    // measurement that was never about that bus (backlog 23.2d).
+    //
+    // So when the caller can hand us a match against the leg the ridden TRIP
+    // is on, that match is the authority: on its shape the fact refreshes, off
+    // it the clock runs exactly as before. Absent (no corridor resolvable, a
+    // fact with no trip, or one no real bus stands behind) nothing changes.
+    if (
+      ridingCorridor?.isOnRoute === true &&
+      prevRiding.tripId != null &&
+      ridingFactIsEvidenced(prevRiding)
+    ) {
+      return prevRiding.offRouteSince == null
+        ? { kind: 'none' }
+        : { kind: 'set', riding: { ...prevRiding, offRouteSince: null } }
+    }
     if (prevRiding.offRouteSince == null) {
       return {
         kind: 'markOffRoute',
@@ -1094,4 +1247,267 @@ export function decideRiding(input: RidingDecisionInput): RidingDecision {
       vehicleId: nextVehicleId
     }
   }
+}
+
+/**
+ * ─── Noticing a boarding the plan did not expect (backlog 23.6) ─────────────
+ *
+ * The rider, 2026-09-21 09:21:52: *"if I'm waiting at the stop and then I
+ * begin moving rapidly away…. It's pretty safe to assume I'm on the bus. What
+ * went wrong here?"*
+ *
+ * What went wrong is that nothing in Go Mode could reach that conclusion. On
+ * an ACCESS leg every automatic path is closed by construction:
+ * `performVehicleMatching` can only auto-confirm through
+ * `shouldShowBoardingPrompt`, which refuses while
+ * `boardingPrompt.transitLegEnteredAt` is null, and the only writer of that
+ * stamp is `startVehicleTracking`, armed on transit legs; and `decideRiding`
+ * above returns at `onTransit` before it evaluates anything. So between
+ * 09:20:05 and 09:22:08 the rider did 12-30 m/s down I-35W with their bus in
+ * the polled feed and the app learned it only when they tapped the button
+ * (23.2). This is the automatic half.
+ *
+ * It is also the exact shape of every false board on record, so the bar is
+ * that history, not convenience. 2026-08-27: a cyclist 248 m from a parallel
+ * bus route, declared aboard on route proximity. 2026-09-01 ride 1: one poll,
+ * a bus 135 m out whose own next stop was still the rider's platform.
+ * 2026-09-01 ride 2: 8.01 m/s, 4.3 km from the boarding stop, `vehicleId:
+ * null`, zero vehicles in the feed — nothing moved on the deciding tick but
+ * `distanceFromRoute` crossing 100 m as a bike path converged on the Orange
+ * Line. Each of those was fixed by ADDING evidence, and none of those gates is
+ * relaxed here: this path asks for all of them at once, plus motion no
+ * bicycle produces, sustained.
+ *
+ * Four facts, on the same tick, for {@link ACCESS_BOARD_MIN_TICKS} consecutive
+ * ticks spanning {@link ACCESS_BOARD_MIN_MS}, all naming ONE vehicle:
+ *
+ *  1. transit-pace motion — {@link ACCESS_BOARD_MIN_SPEED_MPS};
+ *  2. the rider's own fix projected onto the NEXT TRANSIT LEG's shape, inside
+ *     {@link RIDING_ESTABLISH_MAX_DISTANCE_M} of it. Route GEOMETRY, never
+ *     stop proximity — the rider's standing rule — and the tight establish
+ *     bound rather than the matcher's 250 m usable-corridor, because 250 m is
+ *     what the 8/27 parallel-street board came in under;
+ *  3. a vehicle of that route matched to the rider on the ordinary terms:
+ *     `confidence` high or confirmed, {@link matchDescribesLeg} and
+ *     {@link matchServesLegStops} (it is about THIS leg, and it is going
+ *     somewhere this leg goes), {@link vehicleReachedBoardStop} (a bus still
+ *     naming the rider's own stop has not arrived), and
+ *     {@link BOARD_AUTO_CONFIRM_MIN_CONSECUTIVE} consecutive polls. Every one
+ *     of those is the rule `decideRiding` already applies to a first
+ *     establishment — there is deliberately no second matcher here;
+ *  4. a fix good enough to place the rider at all,
+ *     {@link RIDING_ESTABLISH_MAX_ACCURACY_M} (the 8/31 1,254 m board).
+ *
+ * "The rider started biking fast downhill beside a busway" fails 1 and 3 and
+ * usually 2. A cyclist keeping pace with a bus in traffic fails 1. A bus on
+ * the other carriageway fails 3 twice over.
+ *
+ * Measured on the recorded rides, ticks where all four hold at once:
+ *  - `bike-false-board-1029` ride 2, the 10:47:15 board: **0 of 1,058**
+ *    access-leg ticks. Gate 1 passes on one tick (a 13.0 m/s GPS spike at
+ *    10:34:13, 1,073 m off the corridor), gate 3 on none — the feed had no
+ *    vehicle anywhere near them for the whole ride.
+ *  - `0921-0902-orange-lake-st`: all four from 09:20:17, held 104 ticks.
+ */
+
+/**
+ * Ground speed that no rider produces under their own power.
+ *
+ * NOT {@link RIDING_ESTABLISH_MIN_SPEED_MPS} (3 m/s) — that number only
+ * separates a rider standing at a kerb from one being carried, and it is
+ * allowed to be that low because the gates beside it are doing the work. This
+ * one has to separate a rider on a BICYCLE from a rider on a bus, on a leg the
+ * plan says they are cycling.
+ *
+ * 12 m/s is 27 mph. It is the ride-watch daemon's own
+ * `ACCESS_TRANSIT_SPEED_MPS`, chosen there against the same evidence: above
+ * any bicycle, above the 5.9 m/s that `early-leg-transition` measured on a
+ * rider genuinely sprinting for a station (2026-09-09 08:24:55), and below a
+ * freeway. The 2026-09-01 cyclist who was falsely boarded was doing 8.01 m/s.
+ * Its rule fired on this very ride at 09:20:25, twenty seconds in.
+ *
+ * The cost of setting it here is honest and worth stating: a local bus crawling
+ * through city traffic never reaches 27 mph, so this path will not notice that
+ * boarding. The rider's own "I'm on the bus" still does (23.2), and a gate that
+ * guesses is the thing this whole module exists to prevent.
+ */
+export const ACCESS_BOARD_MIN_SPEED_MPS = 12
+
+/**
+ * Consecutive qualifying ticks before the app boards the rider on its own.
+ *
+ * Five, the same figure as {@link EARLY_ALIGHT_MIN_TICKS} and for the same
+ * reason: "is this still true" is not a question a single fix can answer, and
+ * five is what the other sustained rule in this module already asks.
+ */
+export const ACCESS_BOARD_MIN_TICKS = 5
+
+/**
+ * ...and how long those ticks must span.
+ *
+ * Twenty seconds — the daemon's `ACCESS_TRANSIT_SPEED_MS`, measured on the
+ * 2026-09-13 Green Line ride, where "20 s so a single absurd fix cannot fire
+ * it" was written against a device that has reported 1,414 m of accuracy. Two
+ * clocks rather than one because tick rate is not constant: five ticks can be
+ * five seconds on a good fix stream, and twenty seconds can be two ticks on a
+ * backgrounded phone.
+ */
+export const ACCESS_BOARD_MIN_MS = 20_000
+
+/**
+ * The most one tick may add to the hold, as {@link BOARD_STOP_DWELL_MAX_STEP_MS}
+ * is to the dwell: a phone that delivered no fixes for four minutes has not
+ * observed four minutes of anything.
+ */
+export const ACCESS_BOARD_MAX_STEP_MS = 10_000
+
+/** The four gates of {@link trackAccessBoard}, evaluated on one tick. */
+export interface AccessBoardGates {
+  /** The fix places the rider well enough to mean anything. */
+  fixSound: boolean
+  /** The rider is on the next transit leg's own shape, tightly. */
+  onCorridor: boolean
+  /** Transit-pace motion. */
+  transitPace: boolean
+  /** A trusted, sustained, leg-appropriate vehicle match. */
+  vehicleEvidence: boolean
+}
+
+export interface AccessBoardSample {
+  /** The next TRANSIT leg — the one the rider is being carried toward. */
+  boardLeg: Leg | null | undefined
+  /** Its index in the itinerary. */
+  boardLegIndex: number
+  /** Reported accuracy of the fix behind this tick, in metres. */
+  fixAccuracyM: number | null
+  /** The ACCESS leg the matcher is on. */
+  legIndex: number
+  nowMs: number
+  riderSpeedMps: number | null
+  /**
+   * The rider's position matched against the BOARD leg's shape — not against
+   * the access leg the matcher favours. Null reads as "cannot say", which
+   * fails the gate.
+   */
+  routeMatch:
+    | Pick<RouteMatchResult, 'distanceFromRoute' | 'isOnRoute'>
+    | null
+    | undefined
+  vehicleMatch: {
+    consecutiveMatches?: number
+    match?: VehicleMatchResult | null
+  } | null
+}
+
+/** Evaluate the four gates for one tick. Every one of them is a refusal. */
+export function accessBoardGates(sample: AccessBoardSample): AccessBoardGates {
+  const { boardLeg, fixAccuracyM, riderSpeedMps, routeMatch, vehicleMatch } =
+    sample
+  const match = vehicleMatch?.match ?? null
+  return {
+    fixSound:
+      fixAccuracyM == null ||
+      !Number.isFinite(fixAccuracyM) ||
+      fixAccuracyM <= RIDING_ESTABLISH_MAX_ACCURACY_M,
+    onCorridor:
+      routeMatch?.isOnRoute === true &&
+      Number.isFinite(routeMatch.distanceFromRoute) &&
+      routeMatch.distanceFromRoute <= RIDING_ESTABLISH_MAX_DISTANCE_M,
+    transitPace:
+      riderSpeedMps != null &&
+      Number.isFinite(riderSpeedMps) &&
+      riderSpeedMps >= ACCESS_BOARD_MIN_SPEED_MPS,
+    vehicleEvidence:
+      !!match?.vehicleId &&
+      (match.confidence === 'confirmed' || match.confidence === 'high') &&
+      matchDescribesLeg(match, boardLeg) &&
+      matchServesLegStops(match, boardLeg) &&
+      vehicleReachedBoardStop(match, boardLeg) &&
+      (vehicleMatch?.consecutiveMatches ?? 0) >=
+        BOARD_AUTO_CONFIRM_MIN_CONSECUTIVE
+  }
+}
+
+/** A run of ticks on which all four gates held, about one bus. */
+export interface AccessBoardWatch {
+  /** The transit leg the rider is being carried toward. */
+  boardLegIndex: number
+  /** ms spanned by the run, capped per tick. */
+  heldMs: number
+  /** The fix clock of the last tick folded in. */
+  lastTickMs: number
+  /** The ACCESS leg this run is about. */
+  legIndex: number
+  /** Qualifying ticks in the run. */
+  ticks: number
+  /** The run's trip, as the matched vehicle's feed record has it. */
+  tripId: string | null
+  /** The one vehicle every tick of the run agreed on. */
+  vehicleId: string
+}
+
+/**
+ * Fold one access-leg tick into the run.
+ *
+ * Anything that breaks the claim restarts it from nothing: a gate that fails,
+ * a different vehicle, a different leg. Returning null rather than a zeroed
+ * run is deliberate — there is no such thing as a partially-observed boarding
+ * to carry forward.
+ */
+export function trackAccessBoard(
+  prev: AccessBoardWatch | null,
+  sample: AccessBoardSample
+): AccessBoardWatch | null {
+  const { boardLegIndex, legIndex, nowMs, vehicleMatch } = sample
+  const gates = accessBoardGates(sample)
+  if (
+    !gates.transitPace ||
+    !gates.onCorridor ||
+    !gates.vehicleEvidence ||
+    !gates.fixSound
+  ) {
+    return null
+  }
+  const match = vehicleMatch?.match
+  const vehicleId = match?.vehicleId as string
+  const opening: AccessBoardWatch = {
+    boardLegIndex,
+    heldMs: 0,
+    lastTickMs: nowMs,
+    legIndex,
+    ticks: 1,
+    tripId: match?.tripId ?? null,
+    vehicleId
+  }
+  if (
+    !prev ||
+    prev.legIndex !== legIndex ||
+    prev.boardLegIndex !== boardLegIndex ||
+    prev.vehicleId !== vehicleId
+  ) {
+    return opening
+  }
+  const step = Math.min(
+    Math.max(0, nowMs - prev.lastTickMs),
+    ACCESS_BOARD_MAX_STEP_MS
+  )
+  return {
+    ...prev,
+    heldMs: prev.heldMs + step,
+    lastTickMs: nowMs,
+    ticks: prev.ticks + 1,
+    // Keep the first trip id the run saw unless the feed has since supplied
+    // one: the id is the thing the aboard re-plan splices from.
+    tripId: prev.tripId ?? match?.tripId ?? null
+  }
+}
+
+/** Has the run met both halves of the sustained bar? */
+export function accessBoardEstablished(
+  watch: AccessBoardWatch | null | undefined
+): boolean {
+  if (!watch) return false
+  return (
+    watch.ticks >= ACCESS_BOARD_MIN_TICKS && watch.heldMs >= ACCESS_BOARD_MIN_MS
+  )
 }

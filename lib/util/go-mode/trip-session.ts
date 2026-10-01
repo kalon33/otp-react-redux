@@ -16,15 +16,48 @@ import type { StopCountLatch } from './next-stop'
  * `replayTrackedRouteId` deliberately outlive a trip today. They stay module
  * scoped in actions/go-mode.ts rather than change behaviour silently.
  */
-import type { BoardStopDwell, EarlyAlightWatch } from './riding'
+import {
+  REPLAN_LATENCY_SEED_FULL_MS,
+  REPLAN_LATENCY_SEED_SCOPED_MS
+} from './replan-origin'
+import type {
+  AccessBoardWatch,
+  BoardStopDwell,
+  EarlyAlightWatch
+} from './riding'
 import type { DepartureBaselineState } from './departure-drift'
 import type { DestinationProgressState } from './destination-progress'
+import type { DeviatedStreak } from './replan-acceptance'
 import type { MissedBusAttempt } from './missed-bus-recovery'
 import type { PacingCardState } from './pacing-card'
-import type { RiderSpeedSample } from './rider-speed'
+import type { RiderSpeedAnchorBucket, RiderSpeedSample } from './rider-speed'
 import type { TimedSimulationPoint } from './geometry'
+import type { TransitPaceRun } from './deviation'
 
 export interface TripSession {
+  /**
+   * The run of access-leg ticks on which the rider looked like someone being
+   * carried by a bus the plan has not put them on yet — see
+   * ACCESS_BOARD_MIN_MS in riding.ts (backlog 23.6). Held here, like
+   * boardStopDwell and earlyAlightWatch, because "has this been true for
+   * twenty seconds" is not a question one fix can answer.
+   */
+  accessBoard: AccessBoardWatch | null
+
+  /**
+   * The one-way arrival dwell, armed from the WALL CLOCK rather than from the
+   * position tick. `AUTO_END_AFTER_ARRIVAL_MS` used to be checked in the
+   * arrived branch of handlePositionUpdate, which meant a phone that stopped
+   * producing fixes after arrival never evaluated it: on 2026-09-17 the rider
+   * went indoors, `POSITION_FETCHING` stopped being answered at 21:42:43, and
+   * the finished trip was still open 7m24s later (backlog 13.5). A dwell is a
+   * statement about time passing, so it is measured by a timer.
+   *
+   * Never armed during GPS simulation or replay — those run on the simulated
+   * clock (`getCurrentTime`), which a wall-clock timeout knows nothing about.
+   */
+  autoEndTimeoutId: ReturnType<typeof setTimeout> | null
+
   /**
    * How long the rider has waited, continuously, at the boarding stop of the
    * leg the matcher is on. The board gate's one non-instantaneous input — see
@@ -39,6 +72,17 @@ export interface TripSession {
    * 8/28 ride that needed it.
    */
   destinationProgress: DestinationProgressState | null
+
+  /**
+   * When the rider's current `deviated` streak opened, on which leg and how far
+   * from the destination — the quiet full re-plan's evidence that the plan in
+   * hand is one they have left (backlog 35.2, `accessPlanDeadByDeviation`).
+   * Stamped and cleared from each tick's `UPDATE_PROGRESS.status` by
+   * `nextDeviatedSince`; cleared on an itinerary swap and on a leg change. Not
+   * the notifier's `deviationHandledAtMs`, which is when the rider was last
+   * TOLD, and not `riding.offRouteSince`, which exists only aboard.
+   */
+  deviatedSince: DeviatedStreak | null
 
   /**
    * When this deviation was last dealt with — the rider told, or the drift
@@ -101,6 +145,30 @@ export interface TripSession {
   lastAutoAnchorMs: number | null
 
   /**
+   * The last live record of the BOARDING trip's own vehicle, carried across a
+   * vehicle poll that came back empty.
+   *
+   * REALTIME_VEHICLE_POSITIONS_RESPONSE `$set`s the route's vehicle list
+   * (create-otp-reducer :933), so a response carrying zero vehicles erases
+   * every vehicle the app knew about for that route until the next poll
+   * refills it. On the 2026-09-21 17:04 ride 15 of 124 polls for route 1:904
+   * came back empty — and MISSED_BUS fired 0.9 s after two of them (17:05:45
+   * after the 17:05:44 empty poll, 17:06:06 after the 17:06:05 one) while the
+   * bus was 2.5 km north with the boarding stop as its next stop. Every other
+   * tick in that window carried 12 vehicles.
+   *
+   * Only the boarding trip's record is kept, only here, and its age is
+   * recomputed from the feed's own `seconds` on every tick, so a carried
+   * record never claims to be fresher than it is; `seenAtMs` bounds it as well
+   * for the vehicles whose feed publishes no timestamp at all.
+   */
+  lastBoardVehicle: {
+    seenAtMs: number
+    tripId: string
+    vehicle: any
+  } | null
+
+  /**
    * The boarding being watched for departure jumps, and what the rider was last
    * told about it (see departure-drift.ts). Must survive a tick, never a trip.
    */
@@ -114,6 +182,13 @@ export interface TripSession {
 
   /** What the sticky pacing card last showed. Null when no card is showing. */
   lastPacingCard: PacingCardState | null
+
+  /**
+   * When the last AUTOMATIC re-plan was installed, while its join window is
+   * still open — see noteReplanFollowed (deviation.ts). Null once the window
+   * has closed either way.
+   */
+  lastQuietReplanAppliedAt: number | null
 
   /** Debounce for the quiet access-leg replan (bike/walk deviation). */
   lastQuietReplanAt: number
@@ -195,10 +270,24 @@ export interface TripSession {
   quietReplanHistory: number[]
 
   /**
+   * Consecutive automatic re-plans the rider never joined (they were still off
+   * the new route a deviation-threshold later). Drives the backoff in
+   * ignoredReplanBackoffMs; reset the moment one is ridden.
+   */
+  quietReplanIgnoredStreak: number
+
+  /**
    * Quiet access-leg replans that keep coming back empty are counted but settle
    * silently; the streak is bookkeeping for the debug log.
    */
   quietReplanMissStreak: number
+
+  /**
+   * This trip's own measured plan round trip, per re-plan shape, in ms — what
+   * the projected origin is advanced by. Seeded from the measurements in
+   * replan-origin.ts and blended with each observed answer.
+   */
+  replanLatencyMs: { full: number; scoped: number }
   /** Reroute-snapshot capture interval (recording sessions only). */
   rerouteSnapshotIntervalId: ReturnType<typeof setInterval> | null
 
@@ -212,12 +301,29 @@ export interface TripSession {
   returnRefreshInFlight: boolean
 
   /**
+   * The last tick's classifyMissedBus verdict for the upcoming boarding, so
+   * the NEXT tick can put it on TripProgress for the current-leg card's hold
+   * (departure-anchor.resolveCardDeparture). The classifier runs well after
+   * progress is dispatched within a tick, and a one-tick lag on a release
+   * decision that already waits minutes of grace costs nothing.
+   */
+  riderBoardingMiss: { definitive: boolean; effectiveBoardMs: number } | null
+
+  /**
    * When the rider last tapped "Not on the bus" on the trip sheet. Holds the
    * automatic, evidence-free half of the board gate off for a few minutes so
    * the matcher cannot immediately put them back aboard — see
    * boarding-confirmation.ts. Trip state, never trip-crossing.
    */
   riderDeniedBoardingAtMs: number | null
+
+  /**
+   * The sparse ride-level companion to riderSpeedSamples: one peak moving fix
+   * per minute of riding, fed from the same gate. It is what puts a floor under
+   * the short-window median so a downtown crawl cannot time a whole access leg
+   * — see rider-speed.ts (backlog 16.1).
+   */
+  riderSpeedAnchor: RiderSpeedAnchorBucket[]
 
   /**
    * Recent ground speeds off the rider's own fixes while they are on a bike
@@ -236,8 +342,32 @@ export interface TripSession {
 
   simulationPointIndex: number
 
+  /**
+   * Signature of a plan that has just been INSTALLED and whose origin has not
+   * yet been checked against the rider's position (backlog 12.13).
+   *
+   * Armed by `beginGoMode`, cleared by the first look that had a fix to look
+   * with — `recoverStaleStartOrigin` may be reached before any fix exists, so
+   * "armed" and "answered" have to be separate states. Keyed on the plan rather
+   * than latched with a boolean so a SECOND stale tap arms the question again.
+   *
+   * Arming is what scopes the question to an installation. A rider halfway
+   * along their access leg is legitimately far from their own plan's origin —
+   * they walked away from it — so the same check asked on an ordinary tick
+   * would re-plan a trip that is going perfectly well.
+   */
+  staleStartOriginPending: string | null
+
   /** Monotonic floor for stopsRemaining — see latchStopsRemaining. */
   stopCountLatch: StopCountLatch | null
+
+  /**
+   * The run of access-leg fixes at transit pace on the next transit leg's own
+   * shape, vehicle or no vehicle — see TRANSIT_PACE_REPLAN_HOLD_FIXES in
+   * deviation.ts (backlog 26.6). What stands the quiet access re-plan down
+   * while the feed is too stale for the riding fact to exist yet.
+   */
+  transitPace: TransitPaceRun | null
 
   /** Vehicle-position polling interval. */
   vehiclePositionIntervalId: ReturnType<typeof setInterval> | null
@@ -249,8 +379,11 @@ export interface TripSession {
 /** A trip's state at its first GPS fix. */
 export function createTripSession(): TripSession {
   return {
+    accessBoard: null,
+    autoEndTimeoutId: null,
     boardStopDwell: null,
     destinationProgress: null,
+    deviatedSince: null,
     deviationHandledAtMs: null,
     earlyAlightWatch: null,
     earlyBoardReplan: null,
@@ -260,9 +393,11 @@ export function createTripSession(): TripSession {
     gpsWatchdogIntervalId: null,
     lastArrivedFixMs: null,
     lastAutoAnchorMs: null,
+    lastBoardVehicle: null,
     lastDepartureBaseline: null,
     lastLiveLegTimesAt: 0,
     lastPacingCard: null,
+    lastQuietReplanAppliedAt: null,
     lastQuietReplanAt: 0,
     lastRerouteSnapshotAt: 0,
     lastTransitionedLegIndex: null,
@@ -274,16 +409,25 @@ export function createTripSession(): TripSession {
     missedBusRerouteAttempt: null,
     prevDistanceFromRoute: null,
     quietReplanHistory: [],
+    quietReplanIgnoredStreak: 0,
     quietReplanMissStreak: 0,
+    replanLatencyMs: {
+      full: REPLAN_LATENCY_SEED_FULL_MS,
+      scoped: REPLAN_LATENCY_SEED_SCOPED_MS
+    },
     rerouteSnapshotIntervalId: null,
     returnRefreshInFlight: false,
+    riderBoardingMiss: null,
     riderDeniedBoardingAtMs: null,
+    riderSpeedAnchor: [],
     riderSpeedSamples: [],
     simulatedTimeMs: 0,
     simulationActive: false,
     simulationCoords: [],
     simulationPointIndex: 0,
+    staleStartOriginPending: null,
     stopCountLatch: null,
+    transitPace: null,
     vehiclePositionIntervalId: null,
     visibilityChangeHandler: null
   }

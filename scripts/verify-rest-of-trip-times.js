@@ -43,6 +43,16 @@ const fmt = (ms) =>
         timeZone: 'America/Chicago'
       })
 
+// Exit code for "the thing under test could not be exercised, and that is not a
+// defect". nightly-verify.sh maps it to SKIP; anything else is still a failure.
+// Same convention as verify-onboard-options.js.
+const EXIT_SKIP = 75
+
+function skip(reason) {
+  console.log(`SKIP: ${reason}`)
+  process.exit(EXIT_SKIP)
+}
+
 async function main() {
   // ---- live vehicle whose trip is actually IN PROGRESS ----
   // (a vehicle heading to layover reports its NEXT trip, which may be hours away)
@@ -116,7 +126,16 @@ async function main() {
   })
   page.on('pageerror', (e) => console.log('[pageerror]', e.message))
   await page.goto(APP, { timeout: 60000, waitUntil: 'networkidle2' })
-  await page.waitForFunction(() => !!window.store, { timeout: 30000 })
+  // 60s, not 30s: this is the FIRST wait in every script and it is a Vite dev
+  // server transforming the module graph, not the product. Two runs on
+  // 2026-09-17 died here -- 30s after a `docker restart otp-frontend-dev`, with
+  // a cold transform cache -- and reported it as the script's failure. A red
+  // row that means "the dev server was still warming up" is the kind that
+  // taught everyone to stop reading this suite (backlog 13.6). If this wait is
+  // what times out, the app at :9967 never booted: `docker restart
+  // otp-frontend-dev` (a full `yarn jest` or `ship_web.sh` clobbers its
+  // tmp/config.yml).
+  await page.waitForFunction(() => !!window.store, { timeout: 60000 })
 
   await page.evaluate(
     async (ride, destination) => {
@@ -169,6 +188,14 @@ async function main() {
   // guidance to start. That is exactly the 20 s timeout this script has reported
   // every night since 2026-09-03, and it is the same break 6.42 fixed in
   // verify-onboard-options (scripts/verify-onboard-options.js:259-263).
+  //
+  // AND, since `gomode/onboard-preview` (66fd9ce32, 2026-09-17, backlog 17.1):
+  // a row tap no longer commits the trip. It dispatches OPEN_ONBOARD_PREVIEW
+  // and opens OnboardAlightPreview — its own screen for that one option —
+  // where `Confirm this stop` is what commits and `Back to options` returns to
+  // the untouched list. So the tap has to be followed by the Confirm, and
+  // waiting on `activeItinerary` straight after the tap can only time out.
+  // That is the 20 s timeout at this line, and it is a UI change, not a defect.
   const started = await page.evaluate(() => {
     const row = document.querySelector('li.result')
     if (!row) return 'no rows'
@@ -181,11 +208,59 @@ async function main() {
     throw new Error(`no alight-option rows — onboard flow failed (${started})`)
   }
   await page.waitForFunction(
+    () => window.store.getState().otp.goMode.onboard.preview?.option != null,
+    { polling: 200, timeout: 20000 }
+  )
+  const confirmed = await page.evaluate(() => {
+    const button = document.querySelector(
+      '[data-testid="onboard-preview-confirm"]'
+    )
+    if (!button) return 'preview open in state but Confirm is not rendered'
+    button.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    return null
+  })
+  if (confirmed) throw new Error(confirmed)
+  await page.waitForFunction(
     () => window.store.getState().otp.goMode.activeItinerary != null,
     { polling: 300, timeout: 20000 }
   )
+  // The default alight has to still be AHEAD of the rider when the sampling
+  // finishes, or every invariant below is asked about a stop the bus has
+  // already passed. On 2026-09-17 the ranker's default alight was the vehicle's
+  // own next stop, ~1 min out; the bus passed it during this settle and the run
+  // failed on "projected alight 14:44:42 is in the past" — true, and about
+  // nothing. SETTLE_MS plus a minute of slack is the horizon this check needs.
+  //
+  // Deliberately NOT relaxing the past-alight assertion instead: a non-live
+  // alight sitting in the past is the 7/12 bug this script exists for.
+  const alightLead = await page.evaluate(() => {
+    const g = window.store.getState().otp.goMode
+    const legs = g.activeItinerary?.legs || []
+    const busIdx = legs.findIndex((l) => l.transitLeg)
+    const t = g.liveLegTimes?.[busIdx]
+    const at = Number(t?.alightEpoch ?? legs[busIdx]?.endTime)
+    return {
+      leadMs: Number.isFinite(at) ? at - Date.now() : null,
+      stop: legs[busIdx]?.to?.name ?? null
+    }
+  })
+  if (alightLead.leadMs == null || alightLead.leadMs < SETTLE_MS + 60000) {
+    skip(
+      `the default alight ("${alightLead.stop}") is ${
+        alightLead.leadMs == null
+          ? 'at an unknown time'
+          : `only ${(alightLead.leadMs / 1000).toFixed(0)}s ahead`
+      }, and this check samples for ${
+        SETTLE_MS / 1000
+      }s — the bus would pass ` +
+        'it mid-run and every assertion below would be about a stop already ' +
+        'behind the rider'
+    )
+  }
   console.log(
-    `[guidance] started; settling ${
+    `[guidance] started; default alight "${alightLead.stop}" is ${(
+      alightLead.leadMs / 1000
+    ).toFixed(0)}s ahead; settling ${
       SETTLE_MS / 1000
     }s for live-time refresh cycles...`
   )
@@ -502,6 +577,11 @@ async function main() {
 }
 
 main().catch((e) => {
-  console.error('FAIL:', e.message)
+  // e.stack, not e.message: a puppeteer waitForFunction timeout says only
+  // "waiting for function failed: timeout 60000ms exceeded" and names neither
+  // the wait that failed nor its line. Six of the eleven red rows on
+  // 2026-09-17 were that one line and nothing else, which is much of why this
+  // suite's output stopped being read (backlog 13.6). The stack names the wait.
+  console.error('FAIL:', e.stack || e.message)
   process.exit(1)
 })

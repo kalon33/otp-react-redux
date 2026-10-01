@@ -72,10 +72,13 @@ describe('util > go-mode > the pacing card over the 7/31 ride', () => {
     })
   })
 
+  // Since 12.16 the card never prints a minus sign: a shortfall is "N min
+  // short" and a departure already past is "due" (no number at all).
   const waitMinutes = (title: string): number => {
-    const m = title.match(/·\s*(−?-?\d+) min wait/)
+    if (/· due$/u.test(title)) return 0
+    const m = title.match(/·\s*(\d+) min (wait|short)/u)
     if (!m) throw new Error('unparseable card title: ' + title)
-    return Number(m[1].replace('−', '-'))
+    return m[2] === 'short' ? -Number(m[1]) : Number(m[1])
   }
 
   it('replays a ride the card actually applies to', () => {

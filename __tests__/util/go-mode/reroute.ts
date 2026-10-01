@@ -450,9 +450,10 @@ describe('quietReplanAccessLeg (leg-scoped with full-trip fallback)', () => {
     }
   }
 
-  const makeStore = (trip: ReturnType<typeof makeTrip>) => {
+  const makeStore = (trip: ReturnType<typeof makeTrip>, extra: any = {}) => {
     let goModeState: any = {
       ...initial,
+      ...extra,
       activeItinerary: trip.itinerary,
       isActive: true,
       routeMatch: { legIndex: 0 },
@@ -528,9 +529,17 @@ describe('quietReplanAccessLeg (leg-scoped with full-trip fallback)', () => {
 
   it('applies the splice: suffix legs are the ORIGINAL objects', async () => {
     const trip = makeTrip()
+    // Ends at T+640000, 20 s BEFORE the T+660000 bus. It used to end at
+    // T+700000 — 40 s after the bus had gone — which as of 2026-09-15 is a
+    // plan acceptAutoReplan refuses outright (`access-misses-board`, backlog
+    // 16.2: two such splices were auto-applied on that ride and shown to the
+    // rider as "you will miss the bus" for ten minutes). This case is about
+    // suffix identity, not feasibility, so it gets an access leg that can
+    // actually make its connection; the infeasible one is asserted on in
+    // __tests__/util/go-mode/access-feasibility-0915.ts.
     const newBike = {
       distance: 2400,
-      endTime: T + 700000,
+      endTime: T + 640000,
       mode: 'BICYCLE',
       startTime: T + 160000,
       transitLeg: false
@@ -540,8 +549,8 @@ describe('quietReplanAccessLeg (leg-scoped with full-trip fallback)', () => {
         error: false,
         itineraries: [
           {
-            duration: 540,
-            endTime: T + 700000,
+            duration: 480,
+            endTime: T + 640000,
             legs: [newBike],
             startTime: T + 160000
           }
@@ -561,6 +570,64 @@ describe('quietReplanAccessLeg (leg-scoped with full-trip fallback)', () => {
     expect(applied.legs[1]).toBe(trip.busLeg)
     expect(applied.legs[2]).toBe(trip.walkLeg)
     expect(applied.endTime).toBe(T + 1800000)
+  })
+
+  it('measures the access leg against the live board time the card shows (29.1)', async () => {
+    // 40 s past the plan-time board (T+660000): refused against startTime,
+    // accepted against a live prediction of T+900000 for the same run.
+    const lateBike = () => ({
+      distance: 2400,
+      endTime: T + 700000,
+      mode: 'BICYCLE',
+      startTime: T + 160000,
+      transitLeg: false
+    })
+    const respond = () =>
+      mockedFetch.mockReturnValue(() =>
+        Promise.resolve({
+          error: false,
+          itineraries: [
+            {
+              duration: 540,
+              endTime: T + 700000,
+              legs: [lateBike()],
+              startTime: T + 160000
+            }
+          ]
+        })
+      )
+    const liveRecord = (extra: any = {}) => ({
+      1: {
+        alightEpoch: null,
+        boardEpoch: T + 900000,
+        boardIsFloor: false,
+        boardRealtime: true,
+        realtime: true,
+        ...extra
+      }
+    })
+    const run = async (liveLegTimes: any) => {
+      const trip = makeTrip()
+      trip.busLeg.tripId = '1:777'
+      respond()
+      const store = makeStore(trip, { liveLegTimes })
+      await store.dispatch(quietReplanAccessLeg())
+      advanceClock(600000)
+      return store.actions.find((a) => a.type === 'AUTO_REPLAN')?.payload
+    }
+
+    expect(await run({})).toMatchObject({
+      accepted: false,
+      refusedBecause: 'access-misses-board'
+    })
+    expect(await run(liveRecord({ boardIsFloor: true }))).toMatchObject({
+      accepted: false,
+      refusedBecause: 'access-misses-board'
+    })
+    expect(await run(liveRecord())).toMatchObject({
+      accepted: true,
+      refusedBecause: null
+    })
   })
 
   it('falls back to the full-trip replan when the scoped plan is empty', async () => {

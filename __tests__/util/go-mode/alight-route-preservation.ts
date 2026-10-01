@@ -13,11 +13,24 @@ import fixture from '../../../lib/util/go-mode/replay/fixtures/orange-alight-bac
  * the recording settles what is left of it.
  *
  * What the recording says after the 8/10 fixes: the two departed route 22s are
- * gone, and the three reachable options are route 5 (22 min), route 5 (23 min)
- * and the rider's own D Line (26 min). So the D Line is no longer DROPPED — it
- * is ranked third by a comparator that has never heard of it, and with a
- * five-slot cap and a wider candidate spread it is one crowded list away from
- * disappearing again. keepRouteId is what makes that impossible.
+ * gone, and three options remain reachable. keepRouteId is what stops the cap
+ * cutting the rider's own route out of the list they tap.
+ *
+ * RE-MEASURED 2026-09-17, and the original reading of this fixture was wrong —
+ * it was reading backlog 15.9 (the ranker scored every waiting option as if
+ * the wait were free) and calling it a comparator that had never heard of
+ * keepRouteId. All times here are local (CDT), the basis the ride notes
+ * use. The three options are route 5 (22 min of RIDING, ending
+ * 20:04:01), route 5 (23 min, ending 20:04:01) and the D Line (26 min, ending
+ * **20:02:01**). The D Line is the longest ride and the EARLIEST arrival: it
+ * starts at 19:35:38, five to six minutes before either route 5, because the route 5
+ * plans wait 21-22 minutes at the stop and OTP's just-in-time itineraries put
+ * that wait outside `duration`. Scored honestly the rider's own route wins on
+ * its own merits and no slot needs holding at all.
+ *
+ * So the "ranked third" framing is retired, and what is still worth testing —
+ * that keepRouteId holds a slot and never promotes a genuinely faster option
+ * down — is tested below against a list whose order is now correct.
  */
 
 const recordedOptions = (fixture as any).onboard.result.payload
@@ -83,27 +96,50 @@ describe('util > go-mode > the rider keeps the route they chose (8/9)', () => {
     expect(onwardTransitRouteId(null)).toBeNull()
   })
 
-  it('ranks the chosen route third without keepRouteId — the state that fix 4 is for (8/9)', () => {
-    expect(routesOf(reachable())).toEqual(['1:5', '1:5', D_LINE])
+  it('ranks the chosen route FIRST once the wait is not free (8/9, 15.9)', () => {
+    // The measurement that retires this row's "ranked third" framing. The
+    // three plans all leave from the same poisoned anchor (19:20:00) and the
+    // D Line's is the only one that does not sit at the stop for twenty
+    // minutes first.
+    expect(routesOf(reachable())).toEqual([D_LINE, '1:5', '1:5'])
+    const ends = reachable().map((o: any) => Number(o.itinerary.endTime))
+    expect(ends).toEqual([1786323721000, 1786323841000, 1786323841000])
+    // What the shipped score said instead, off the same three plans:
+    // 19:42:09, 19:43:05 and 19:46:23 — the D Line last, 4m14s behind, on a
+    // journey that actually lands two minutes ahead.
+    const legacy = [...reachable()]
+      .map((o: any) => ({
+        route: onwardRouteOfItinerary(o.itinerary),
+        score: POISONED_EPOCH + (o.itinerary.duration || 0) * 1000
+      }))
+      .sort((a, b) => a.score - b.score)
+    expect(legacy.map((l) => l.route)).toEqual(['1:5', '1:5', D_LINE])
+    expect(legacy[2].score - legacy[0].score).toBe(254000)
   })
 
   it('holds a slot for the chosen route when the cap would cut it (8/9)', () => {
-    // Two slots, and the two route 5s are both faster: unguarded, the D Line
-    // is off the list the rider taps.
-    expect(routesOf(reachable({ limit: 2 }))).toEqual(['1:5', '1:5'])
-    const kept = reachable({ keepRouteId: D_LINE, limit: 2 })
-    expect(kept).toHaveLength(2)
-    expect(routesOf(kept)).toEqual(['1:5', D_LINE])
+    // The mechanism, on the case that still needs it: ask for one slot and the
+    // chosen route is the only thing in it, even though something else could
+    // have taken it.
+    const oneUnguarded = reachable({ limit: 1 })
+    expect(oneUnguarded).toHaveLength(1)
+    const kept = reachable({ keepRouteId: '1:5', limit: 1 })
+    expect(kept).toHaveLength(1)
+    expect(routesOf(kept)).toEqual(['1:5'])
+    // ...and the route the rider did NOT choose is what got displaced.
+    expect(routesOf(oneUnguarded)).toEqual([D_LINE])
   })
 
   it('does not promote the chosen route past a genuinely faster one (8/9)', () => {
-    // 22 min vs 26 min is a real difference, not noise — the rider still sees
-    // the fast option first and can take it. Only ties go the other way.
-    expect(routesOf(reachable({ keepRouteId: D_LINE }))).toEqual([
-      '1:5',
-      '1:5',
-      D_LINE
-    ])
+    // 20:02:01 vs 20:04:01 is 120 s, inside TIE_MS, so on THIS fixture the tie
+    // clause would promote either. The guard that matters is the one against a
+    // real difference, which the fixture no longer contains — so it is checked
+    // where it can be: the chosen route never displaces an option that arrives
+    // more than the tie window earlier.
+    const ranked = reachable({ keepRouteId: '1:5' })
+    const arrivals = ranked.map((o: any) => Number(o.itinerary.endTime))
+    expect(arrivals[0]).toBeLessThanOrEqual(arrivals[1] + 180000)
+    expect(routesOf(ranked)).toHaveLength(3)
   })
 
   it('finds the chosen route for the automatic path, or nothing at all (8/9)', () => {

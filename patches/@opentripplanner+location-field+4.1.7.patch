@@ -1,8 +1,19 @@
 diff --git a/node_modules/@opentripplanner/location-field/esm/index.js b/node_modules/@opentripplanner/location-field/esm/index.js
-index 153c58e..8eb02d8 100644
+index 153c58e..823281d 100644
 --- a/node_modules/@opentripplanner/location-field/esm/index.js
 +++ b/node_modules/@opentripplanner/location-field/esm/index.js
-@@ -229,6 +229,8 @@ var LocationField = function LocationField(_ref4) {
+@@ -50,6 +50,10 @@ function filter(list, layers, include, limit) {
+ }
+ var defaultMessages = flatten(defaultEnglishMessages);
+ 
++// TransitNav fork (backlog 20.1): how long an autocomplete request may run
++// before the field gives up on it. Pelias answers in 0.22-0.95 s when healthy.
++var GEOCODER_DEADLINE_MS = 10000;
++
+ /**
+  * Puts the given geocoded features into several categories with upper bounds.
+  */
+@@ -229,6 +233,8 @@ var LocationField = function LocationField(_ref4) {
      _ref4$LocationIconCom = _ref4.LocationIconComponent,
      LocationIconComponent = _ref4$LocationIconCom === void 0 ? DefaultLocationIcon : _ref4$LocationIconCom,
      locationType = _ref4.locationType,
@@ -11,7 +22,7 @@ index 153c58e..8eb02d8 100644
      _ref4$nearbyStops = _ref4.nearbyStops,
      nearbyStops = _ref4$nearbyStops === void 0 ? [] : _ref4$nearbyStops,
      _ref4$onBlur = _ref4.onBlur,
-@@ -240,6 +242,10 @@ var LocationField = function LocationField(_ref4) {
+@@ -240,6 +246,10 @@ var LocationField = function LocationField(_ref4) {
      onTextInputClick = _ref4$onTextInputClic === void 0 ? null : _ref4$onTextInputClic,
      _ref4$operatorIconMap = _ref4.operatorIconMap,
      operatorIconMap = _ref4$operatorIconMap === void 0 ? {} : _ref4$operatorIconMap,
@@ -22,7 +33,57 @@ index 153c58e..8eb02d8 100644
      _ref4$preferredLayers = _ref4.preferredLayers,
      preferredLayers = _ref4$preferredLayers === void 0 ? [] : _ref4$preferredLayers,
      _ref4$sessionOptionIc = _ref4.sessionOptionIcon,
-@@ -640,6 +646,22 @@ var LocationField = function LocationField(_ref4) {
+@@ -338,6 +348,27 @@ var LocationField = function LocationField(_ref4) {
+     }));
+     var newController = new AbortController();
+     setAbortController([].concat(_toConsumableArray(abortControllers), [newController]));
++
++    // TransitNav fork (backlog 20.1): a stalled geocoder fetch never settles, so
++    // the row under the field used to spin "Fetching suggestions…" forever. Give
++    // each autocomplete request a 10 s deadline: on expiry, abort it, stop the
++    // spinner and say so in the same row (the exclamation-icon row the failed-
++    // search message already uses; the text has no "AbortError" in it, so it is
++    // not hidden). A request a keystroke already aborted is left alone: its
++    // successor owns the row, and that abort stays silent as before.
++    var timedOut = false;
++    var deadline = setTimeout(function () {
++      if (newController.signal.aborted) return;
++      timedOut = true;
++      newController.abort();
++      setGeocodedFeatures([]);
++      setMessage(intl.formatMessage({
++        defaultMessage: "Can't reach the server",
++        description: "Shown when geocoder suggestions have not arrived after 10 seconds",
++        id: "otpUi.LocationField.geocoderTimeout"
++      }));
++      setFetching(false);
++    }, GEOCODER_DEADLINE_MS);
+     getGeocoder(geocoderConfig).autocomplete({
+       text: text,
+       options: {
+@@ -346,6 +377,8 @@ var LocationField = function LocationField(_ref4) {
+     })
+     // TODO: Better type?
+     .then(function (result) {
++      clearTimeout(deadline);
++      if (timedOut) return;
+       var message;
+       // If no features found in response, default to empty array.
+       var geocodedFeatures = result === null || result === void 0 ? void 0 : result.features;
+@@ -418,9 +451,12 @@ var LocationField = function LocationField(_ref4) {
+       setMessage(message);
+       setFetching(false);
+     })["catch"](function (err) {
++      clearTimeout(deadline);
++      if (timedOut) return;
+       console.error(err);
+       var message = getGeocoderErrorMessage(intl, err.toString());
+       setMessage(message);
++      setFetching(false);
+     });
+   }, {
+     wait: 300
+@@ -640,6 +676,22 @@ var LocationField = function LocationField(_ref4) {
        locationSelected: locationSelected
      });
    };
@@ -45,7 +106,7 @@ index 153c58e..8eb02d8 100644
  
    /* 0) Include user saved locations if the typed text contains those locations name. */
    if (showUserSettings) {
-@@ -785,9 +807,11 @@ var LocationField = function LocationField(_ref4) {
+@@ -785,9 +837,11 @@ var LocationField = function LocationField(_ref4) {
        // Create and return the option menu item
        return /*#__PURE__*/React.createElement(TransitStopOption, {
          id: stopId,
@@ -57,7 +118,7 @@ index 153c58e..8eb02d8 100644
          stop: stop,
          stopOptionIcon: stopOptionIcon
        });
-@@ -879,12 +903,17 @@ var LocationField = function LocationField(_ref4) {
+@@ -879,12 +933,17 @@ var LocationField = function LocationField(_ref4) {
    }
    var optionId = "current-position";
  
@@ -78,7 +139,7 @@ index 153c58e..8eb02d8 100644
        disabled: positionUnavailable,
        icon: optionIcon,
        id: optionId,
-@@ -894,6 +923,20 @@ var LocationField = function LocationField(_ref4) {
+@@ -894,6 +953,20 @@ var LocationField = function LocationField(_ref4) {
        title: optionTitle
      }));
    }
@@ -99,7 +160,7 @@ index 153c58e..8eb02d8 100644
    if (message && !message.includes("AbortError")) {
      if (geocodedFeatures.length === 0) {
        var icon = isFetching ? /*#__PURE__*/React.createElement(S.Spinner, {
-@@ -911,6 +954,12 @@ var LocationField = function LocationField(_ref4) {
+@@ -911,6 +984,12 @@ var LocationField = function LocationField(_ref4) {
      statusMessages.push(message);
    }
  
@@ -174,10 +235,21 @@ index bb1b2ce..a759b6d 100644
      return /*#__PURE__*/React.createElement(S.RouteName, {
        key: "route-".concat(name)
 diff --git a/node_modules/@opentripplanner/location-field/lib/index.js b/node_modules/@opentripplanner/location-field/lib/index.js
-index 1b70e99..e0c6c9a 100644
+index 1b70e99..7b1dcdf 100644
 --- a/node_modules/@opentripplanner/location-field/lib/index.js
 +++ b/node_modules/@opentripplanner/location-field/lib/index.js
-@@ -216,12 +216,15 @@ const LocationField = ({
+@@ -55,6 +55,10 @@ function filter(list, layers, include, limit) {
+ }
+ const defaultMessages = (0, _flat.default)(_enUS.default);
+ 
++// TransitNav fork (backlog 20.1): how long an autocomplete request may run
++// before the field gives up on it. Pelias answers in 0.22-0.95 s when healthy.
++const GEOCODER_DEADLINE_MS = 10000;
++
+ /**
+  * Puts the given geocoded features into several categories with upper bounds.
+  */
+@@ -216,12 +220,15 @@ const LocationField = ({
    location = null,
    LocationIconComponent = DefaultLocationIcon,
    locationType,
@@ -193,7 +265,57 @@ index 1b70e99..e0c6c9a 100644
    preferredLayers = [],
    sessionOptionIcon = /*#__PURE__*/_react.default.createElement(_Search.Search, {
      size: _options.ICON_SIZE
-@@ -590,6 +593,22 @@ const LocationField = ({
+@@ -288,6 +295,27 @@ const LocationField = ({
+     }));
+     const newController = new AbortController();
+     setAbortController([...abortControllers, newController]);
++
++    // TransitNav fork (backlog 20.1): a stalled geocoder fetch never settles, so
++    // the row under the field used to spin "Fetching suggestions…" forever. Give
++    // each autocomplete request a 10 s deadline: on expiry, abort it, stop the
++    // spinner and say so in the same row (the exclamation-icon row the failed-
++    // search message already uses; the text has no "AbortError" in it, so it is
++    // not hidden). A request a keystroke already aborted is left alone: its
++    // successor owns the row, and that abort stays silent as before.
++    let timedOut = false;
++    const deadline = setTimeout(() => {
++      if (newController.signal.aborted) return;
++      timedOut = true;
++      newController.abort();
++      setGeocodedFeatures([]);
++      setMessage(intl.formatMessage({
++        defaultMessage: "Can't reach the server",
++        description: "Shown when geocoder suggestions have not arrived after 10 seconds",
++        id: "otpUi.LocationField.geocoderTimeout"
++      }));
++      setFetching(false);
++    }, GEOCODER_DEADLINE_MS);
+     (0, _geocoder.default)(geocoderConfig).autocomplete({
+       text,
+       options: {
+@@ -296,6 +324,8 @@ const LocationField = ({
+     })
+     // TODO: Better type?
+     .then(result => {
++      clearTimeout(deadline);
++      if (timedOut) return;
+       let message;
+       // If no features found in response, default to empty array.
+       let geocodedFeatures = result === null || result === void 0 ? void 0 : result.features;
+@@ -369,9 +399,12 @@ const LocationField = ({
+       setMessage(message);
+       setFetching(false);
+     }).catch(err => {
++      clearTimeout(deadline);
++      if (timedOut) return;
+       console.error(err);
+       const message = (0, _utils.getGeocoderErrorMessage)(intl, err.toString());
+       setMessage(message);
++      setFetching(false);
+     });
+   }, {
+     wait: 300
+@@ -590,6 +623,22 @@ const LocationField = ({
        locationSelected
      });
    };
@@ -216,7 +338,7 @@ index 1b70e99..e0c6c9a 100644
  
    /* 0) Include user saved locations if the typed text contains those locations name. */
    if (showUserSettings) {
-@@ -733,9 +752,11 @@ const LocationField = ({
+@@ -733,9 +782,11 @@ const LocationField = ({
        // Create and return the option menu item
        return /*#__PURE__*/_react.default.createElement(_options.TransitStopOption, {
          id: stopId,
@@ -228,7 +350,7 @@ index 1b70e99..e0c6c9a 100644
          stop: stop,
          stopOptionIcon: stopOptionIcon
        });
-@@ -825,12 +846,17 @@ const LocationField = ({
+@@ -825,12 +876,17 @@ const LocationField = ({
    }
    const optionId = `current-position`;
  
@@ -249,7 +371,7 @@ index 1b70e99..e0c6c9a 100644
        disabled: positionUnavailable,
        icon: optionIcon,
        id: optionId,
-@@ -840,6 +866,20 @@ const LocationField = ({
+@@ -840,6 +896,20 @@ const LocationField = ({
        title: optionTitle
      }));
    }
@@ -270,7 +392,7 @@ index 1b70e99..e0c6c9a 100644
    if (message && !message.includes("AbortError")) {
      if (geocodedFeatures.length === 0) {
        const icon = isFetching ? /*#__PURE__*/_react.default.createElement(S.Spinner, {
-@@ -857,6 +897,12 @@ const LocationField = ({
+@@ -857,6 +927,12 @@ const LocationField = ({
      statusMessages.push(message);
    }
  
@@ -374,3 +496,71 @@ index f520750..ee7ecdc 100644
      /**
       * A custom component for rendering the icon for options that are either saved
       * user locations or recent places. The component will be sent a single prop
+diff --git a/node_modules/@opentripplanner/location-field/src/index.tsx b/node_modules/@opentripplanner/location-field/src/index.tsx
+index 61d3576..12f2428 100644
+--- a/node_modules/@opentripplanner/location-field/src/index.tsx
++++ b/node_modules/@opentripplanner/location-field/src/index.tsx
+@@ -79,6 +79,10 @@ function filter(
+ 
+ const defaultMessages: Record<string, string> = flatten(defaultEnglishMessages);
+ 
++// TransitNav fork (backlog 20.1): how long an autocomplete request may run
++// before the field gives up on it. Pelias answers in 0.22-0.95 s when healthy.
++const GEOCODER_DEADLINE_MS = 10000;
++
+ /**
+  * Puts the given geocoded features into several categories with upper bounds.
+  */
+@@ -390,6 +394,30 @@ const LocationField = ({
+         const newController = new AbortController();
+         setAbortController([...abortControllers, newController]);
+ 
++        // TransitNav fork (backlog 20.1): a stalled geocoder fetch never settles, so
++        // the row under the field used to spin "Fetching suggestions…" forever. Give
++        // each autocomplete request a 10 s deadline: on expiry, abort it, stop the
++        // spinner and say so in the same row (the exclamation-icon row the failed-
++        // search message already uses; the text has no "AbortError" in it, so it is
++        // not hidden). A request a keystroke already aborted is left alone: its
++        // successor owns the row, and that abort stays silent as before.
++        let timedOut = false;
++        const deadline = setTimeout(() => {
++          if (newController.signal.aborted) return;
++          timedOut = true;
++          newController.abort();
++          setGeocodedFeatures([]);
++          setMessage(
++            intl.formatMessage({
++              defaultMessage: "Can't reach the server",
++              description:
++                "Shown when geocoder suggestions have not arrived after 10 seconds",
++              id: "otpUi.LocationField.geocoderTimeout"
++            })
++          );
++          setFetching(false);
++        }, GEOCODER_DEADLINE_MS);
++
+         getGeocoder(geocoderConfig)
+           .autocomplete({ text, options: { signal: newController.signal } })
+           // TODO: Better type?
+@@ -398,6 +426,8 @@ const LocationField = ({
+               features: Location[];
+               results: { error: { message: string } };
+             }) => {
++              clearTimeout(deadline);
++              if (timedOut) return;
+               let message: ReactNode;
+               // If no features found in response, default to empty array.
+               let geocodedFeatures = result?.features;
+@@ -489,9 +519,12 @@ const LocationField = ({
+             }
+           )
+           .catch((err: unknown) => {
++            clearTimeout(deadline);
++            if (timedOut) return;
+             console.error(err);
+             const message = getGeocoderErrorMessage(intl, err.toString());
+             setMessage(message);
++            setFetching(false);
+           });
+       },
+       {

@@ -63,7 +63,10 @@
       "nlPreferencesError",
       "nlPreferencesHeader",
       "nlPreferencesLoading",
-      "nlPreferencesPlaceholder"
+      "nlPreferencesPlaceholder",
+      "stopCapQuick",
+      "stopCapStandard",
+      "stopCapThorough"
     ],
     "components.ActiveRoutingPreferences.*": [
       "avoidingBiking",
@@ -99,6 +102,7 @@
   "ignoredIds": [
     "components.AppMenu.openRideConsole",
     "components.GoMode.accessible",
+    "components.GoMode.currentLocation",
     "components.GoMode.avoidBiking",
     "components.GoMode.avoidbiking",
     "components.GoMode.bikeforward",
@@ -122,6 +126,13 @@
     "components.DiagnosticsNotice.dismiss",
     "components.ServerUnreachable.forMinutes",
     "components.ServerUnreachable.now",
-    "otpUi.TripDetails.title"
+    "otpUi.TripDetails.title",
+    "otpUi.AccessLegBody.RentedVehicleSubheader.dropoffRental",
+    "otpUi.ItineraryBody.canceledMessage",
+    "otpUi.TextOnlyItinerary.arriveAt",
+    "otpUi.TextOnlyItinerary.departFrom",
+    "otpUi.TextOnlyItinerary.transitArriveAt",
+    "otpUi.TextOnlyItinerary.transitDepartFrom",
+    "otpUi.LocationField.geocoderTimeout"
   ]
 }

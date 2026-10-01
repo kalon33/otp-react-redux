@@ -4,6 +4,7 @@ import type { Itinerary, LatLngArray, Leg } from '@opentripplanner/types'
 import { calculateDistance } from './position-matching'
 import { countStopsAhead, hasDegenerateStopList } from './next-stop'
 import { getNextCueWithIntl, selectCueForNavigation } from './turn-by-turn'
+import { waitingAtBoardingStop } from './waiting-at-stop'
 import type { RouteMatchResult } from './position-matching'
 import type { StepCue } from './turn-by-turn'
 
@@ -15,6 +16,17 @@ export type TripStatus =
   | 'completed'
 
 export interface TripProgress {
+  /**
+   * The missed-bus classifier's verdict on the boarding the rider is heading
+   * for, carried so the card can reuse the app's one definition of "gone"
+   * instead of inventing a second one (see resolveCardDeparture). Written by
+   * the tick from the PREVIOUS tick's classifyMissedBus — the classifier runs
+   * after progress is dispatched, and a ~1 s lag is nothing against the
+   * minutes of grace every release condition already requires. Null when the
+   * classifier had nothing to say (rider aboard, departure still ahead, no
+   * upcoming transit leg).
+   */
+  boardingMiss?: { definitive: boolean; effectiveBoardMs: number } | null
   // 0-100%
   currentLegIndex: number
   currentLegProgress: number
@@ -36,6 +48,13 @@ export interface TripProgress {
   effectiveDepartureMs?: number
   // 0-100%
   estimatedArrival: Date
+  /**
+   * The CURRENT leg's progress (0-100) when the rider is on the LAST leg of
+   * the itinerary, and null on every earlier leg. The arrival test's progress
+   * scalar: see hasArrivedAtDestination for why overall progress is the wrong
+   * one to grant arrival on.
+   */
+  finalLegProgress?: number | null
   // The turn after `nextTurnCue`, for a "then …" line
   followingTurnCue?: StepCue
   // seconds
@@ -48,6 +67,13 @@ export interface TripProgress {
   overallProgress: number
   // Epoch ms — the originally planned departure time from itinerary
   plannedDepartureTime?: number
+  /**
+   * The rider's MEASURED rolling pace in m/s (rider-speed.ts, rolling median
+   * of moving fixes on a bike leg), not this fix's instantaneous speed. Null
+   * until there is real evidence. Distinct from `riderSpeedMps` on purpose:
+   * that one is a single sample and reads 0 at every red light.
+   */
+  riderPaceMps?: number | null
   // The rider's own GPS ground speed in m/s, when the fix carries one. Lets
   // announcement leads scale with how fast the rider actually moves.
   riderSpeedMps?: number
@@ -76,6 +102,12 @@ export interface TripProgress {
   turnDistanceIsDirect?: boolean
   // Seconds of estimated wait at next stop (walking legs only)
   waitTimeAtStop?: number
+  // The rider is standing at the boarding stop and has not gone anywhere: the
+  // wait is neither ahead nor behind, `delay` is 0, and a late bus is the
+  // bus's own delay (18.6). Published so the wait is legible in the recorded
+  // stream — 13.9's rehearsal could not verify the card's copy because no
+  // action carried this fact.
+  waitingAtBoardingStop?: boolean
 }
 
 /**
@@ -241,6 +273,62 @@ function paceRemainingSeconds(pace?: PaceContext | null): number | null {
 }
 
 /**
+ * Where the trip really ends, given a live alight for the leg the rider is on
+ * and nothing but the plan for everything after it.
+ *
+ * NOT `liveAlightMs + Σ(later leg durations)`, which is what this was until
+ * 2026-09-17 (backlog 12.22). A duration is moving time; the gap between one
+ * leg's end and the next one's start is a WAIT, and a sum of durations drops
+ * every one of them. Measured on the 2026-09-08 11:22 Orange Line ride
+ * (session `mtsvo7ss-4nzccy`): live alight 11:41:09, tail WALK 60 s + BUS 546
+ * 366 s + WALK 80 s = 506 s, so the anchor read 11:49:35 — the first
+ * `estimatedArrival` the stream carries after the 11:23:42 re-plan, to the
+ * second — and it stayed between 11:49:35 and 11:50:50 for the whole ride,
+ * while the 546 did not leave Gate D until 11:51:00 and `SET_ARRIVED` fired
+ * 11:58:08. Eight minutes of a 35-minute trip, missing.
+ *
+ * So the tail is WALKED rather than summed, and the two kinds of leg are
+ * treated as what they are:
+ *
+ * - an access leg (walk, bike) starts when the rider is free to start it, so
+ *   it hangs off wherever the trip has got to — its own duration, nothing else;
+ * - a transit leg departs when it departs. Its planned start is a schedule the
+ *   rider cannot bring forward, so the projection waits for it, and that wait
+ *   is the quantity the old sum threw away. A rider who arrives at the stop
+ *   late enough to be past that departure keeps the ride's span from where
+ *   they are — whether they actually catch it is `classifyMissedBus`'s
+ *   question, not this one.
+ *
+ * On the ride above that yields 11:41:09 + 60 s = 11:42:09, then the 546's own
+ * 11:51:00 → 11:57:06, then 80 s of walking = **11:58:26**, 18 s from the
+ * recorded arrival.
+ */
+function projectTripEndMs(
+  legs: Leg[],
+  currentLegIndex: number,
+  liveAlightMs: number
+): number {
+  let end = liveAlightMs
+  for (let i = currentLegIndex + 1; i < legs.length; i++) {
+    const leg: any = legs[i]
+    const start = Number(leg.startTime)
+    const stop = Number(leg.endTime)
+    const spanMs =
+      Number.isFinite(start) && Number.isFinite(stop) && stop > start
+        ? stop - start
+        : Math.max(0, (leg.duration || 0) * 1000)
+    // `transitLeg` is OTP's own flag, and the same one `accessSecondsToBoardStop`
+    // above keys on — one definition of "this leg has a timetable", not a
+    // second mode list.
+    end =
+      leg.transitLeg && Number.isFinite(start)
+        ? Math.max(end, start) + spanMs
+        : end + spanMs
+  }
+  return end
+}
+
+/**
  * Calculate time remaining based on current progress and scheduled times
  */
 export function calculateTimeRemaining(
@@ -375,6 +463,12 @@ export const ARRIVAL_MIN_PROGRESS = 90
  * Checked against every arrival in the recorded telemetry: 2026-08-31 16:22:05
  * (70 m), 18:52:55 (41 m) and 2026-09-01 08:59:37 (81 m) all still latch;
  * 2026-09-01 11:10:06 (159 m) no longer does.
+ *
+ * That list says only that this VETO leaves those three alone — it was never
+ * a finding that all three were at the destination. The 81 m one was not: the
+ * rider was still closing at ~2.5 m/s and reached 24.8 m half a minute later,
+ * which is backlog 21.2's defect, and hasArrivedAtDestination below now
+ * refuses it on the closing leg's own progress.
  */
 export const ARRIVAL_MAX_DISTANCE_M = 120
 
@@ -387,10 +481,36 @@ export const ARRIVAL_MAX_DISTANCE_M = 120
  * drive home, because every rule downstream kept evaluating a trip that was
  * over. A frozen scalar cannot be the only way to notice arrival, so being
  * physically at the destination counts too.
+ *
+ * The progress-only branch is judged on the FINAL LEG's own progress whenever
+ * the rider is on the last leg (2026-09-21, backlog 21.2). It used to be
+ * judged on OVERALL progress, which on a long trip says nothing about the
+ * last block: at 08:54:10 that morning `overallProgress` crossed the bar
+ * (99.498 -> 99.526) while `currentLegProgress` was 94.21% of a 1450 m
+ * closing bike leg and the rider's own fix was 83.26 m from the door.
+ * SET_ARRIVED, the TRIP_COMPLETE push and the 30 s arrived interval all went
+ * out 1m26s before they got there (they were 27.8 m out at 08:55:36), on
+ * 2.8 m fixes — nothing to do with GPS. Half a percent of that 17.7 km trip
+ * is 88 m of ground; half a percent of the leg that ends at the door is 7 m.
+ * The same arrival is in the record for 2026-09-09 (87 m out, overall
+ * 99.52%) in the comment above AUTO_END_AFTER_ARRIVAL_MS in actions/go-mode.
+ *
+ * The DISTANCE branch keeps reading overall progress on purpose. It is a
+ * floor against a destination that merely sits near the route, and the
+ * 2026-08-27 rescue — the final leg's own scalar frozen below the bar with
+ * the rider at the door — is the one that must stay as reachable as it was.
+ * Passing the leg's frozen figure into that floor would re-open the bug the
+ * distance branch exists to close.
  */
 export function hasArrivedAtDestination(
   actualProgress: number,
-  distanceToDestination: number | null | undefined
+  distanceToDestination: number | null | undefined,
+  /**
+   * Progress along the FINAL leg, when the rider is on it (TripProgress
+   * .finalLegProgress). Omitted/null on earlier legs, where overall progress
+   * is the only scalar there is.
+   */
+  finalLegProgress?: number | null
 ): boolean {
   // The measurement first, and as a veto: a rider this far from where they
   // asked to go has not arrived, whatever the projection says about them.
@@ -403,7 +523,11 @@ export function hasArrivedAtDestination(
   ) {
     return false
   }
-  if (actualProgress >= 99.5) return true
+  const progressAtDestination =
+    finalLegProgress != null && Number.isFinite(finalLegProgress)
+      ? finalLegProgress
+      : actualProgress
+  if (progressAtDestination >= 99.5) return true
   return (
     distanceToDestination != null &&
     Number.isFinite(distanceToDestination) &&
@@ -443,7 +567,22 @@ export function determineTripStatus(
   routeMatch: RouteMatchResult | null,
   expectedProgress: number,
   actualProgress: number,
-  distanceToDestination?: number | null
+  distanceToDestination?: number | null,
+  /**
+   * The rider is verifiably aboard the bus this leg belongs to and has not yet
+   * reached the stop the leg starts at — see `aboardBeforeLegStart` in
+   * util/go-mode/riding. Defaults false, which is the behaviour this function
+   * had before backlog 22.1.
+   */
+  aboardBeforeLeg = false,
+  /** See TripProgress.finalLegProgress — null on any leg but the last. */
+  finalLegProgress?: number | null,
+  /**
+   * The rider is standing at the boarding stop, not yet gone anywhere — see
+   * `waitingAtBoardingStop`. Defaults false, which is the behaviour this
+   * function had before backlog 18.6.
+   */
+  waitingAtStop = false
 ): TripStatus {
   // Arrival is tested FIRST, ahead of the deviation checks. It used to run
   // last, which meant a rider standing at their destination could never be
@@ -452,7 +591,13 @@ export function determineTripStatus(
   // jitter around a parked phone easily clears the 100m bike threshold. On
   // 2026-08-27 that flapped completed/deviated ten times and then latched
   // deviated for four and a half hours.
-  if (hasArrivedAtDestination(actualProgress, distanceToDestination)) {
+  if (
+    hasArrivedAtDestination(
+      actualProgress,
+      distanceToDestination,
+      finalLegProgress
+    )
+  ) {
     return 'completed'
   }
 
@@ -460,8 +605,45 @@ export function determineTripStatus(
     return 'deviated'
   }
 
-  if (!routeMatch.isOnRoute) {
+  // An aboard rider who has not reached their leg's first stop is APPROACHING
+  // the anchor, not off route.
+  //
+  // `buildOnboardItinerary` starts the bus leg at the vehicle's NEXT stop, so
+  // on 2026-09-21 ride 2 a rider 2.58 km north of 66th St — on the bus, header
+  // reading "On Bus #8228", `UPDATE_VEHICLE_MATCH.confidence 'confirmed'` on
+  // every tick — projected onto the leg's first vertex with `isOnRoute false`
+  // and read `deviated` for 116 s, until the bus itself crossed the 250 m
+  // buffer at 09:26:17. Nothing about that was the rider's route; it was the
+  // gap between where they were and where their leg had been anchored.
+  //
+  // The clock still decides: falling through means ahead/behind/on_track is
+  // computed from progress exactly as for any other tick (backlog 22.1). The
+  // exemption is narrow by construction — see the four gates on
+  // `aboardBeforeLegStart` — and ends the moment the projection moves off the
+  // leg's start, so a genuine detour mid-leg is still `deviated`.
+  if (!routeMatch.isOnRoute && !aboardBeforeLeg) {
     return 'deviated'
+  }
+
+  // Standing at the boarding stop is neither ahead nor behind (backlog 18.6).
+  //
+  // Everything below compares SPATIAL progress with a purely time-based
+  // expected curve, and a rider at the stop cannot make spatial progress: on
+  // 2026-09-21 at I-35W & Lake St `overallProgress` sat frozen while
+  // `expectedProgress` climbed at 1 s/s, so the trip flipped to `behind`
+  // purely on elapsed time and the `delay` shown was how long the rider had
+  // been standing there. There is no wait term in `calculateExpectedProgress`
+  // and there cannot be one that survives a re-plan, so the wait is taken out
+  // of the comparison instead.
+  //
+  // Deliberately AFTER the arrival and deviation tests: a rider who is at
+  // their destination is `completed`, and one whose projection reads off-route
+  // is still `deviated` — waiting suppresses the clock comparison only.
+  //
+  // A late bus is the BUS's delay and already reaches the rider as
+  // `DELAY_ALERT`; it is not charged to them.
+  if (waitingAtStop) {
+    return 'on_track'
   }
 
   const progressDifference = actualProgress - expectedProgress
@@ -887,6 +1069,15 @@ export function calculateTripProgress(
   liveBoardMs?: number | null,
   liveAlightMs?: number | null,
   riderPosition?: LatLngArray | null,
+  /** See {@link determineTripStatus}. Defaults false. */
+  aboardBeforeLeg = false,
+  /**
+   * `goMode.riding?.legIndex` — the evidenced fact that the rider is aboard
+   * the bus for that leg. Ends the platform wait (18.6) whatever the geometry
+   * says. Null/omitted reads as "no such fact", which is the behaviour this
+   * function had before 18.6.
+   */
+  ridingLegIndex: number | null = null,
   intl?: IntlShape
 ): TripProgress {
   const legs = itinerary.legs
@@ -906,13 +1097,14 @@ export function calculateTripProgress(
   )
 
   // The live end of the trip: the live/projected alight of the current transit
-  // leg plus whatever legs follow it. Anything downstream of a live figure is
-  // still plan-time, which is the honest best guess for legs not yet started.
+  // leg, then the legs that follow it walked forward from there — their own
+  // durations, and their own departures where they have one. Anything
+  // downstream of a live figure is still plan-time, which is the honest best
+  // guess for legs not yet started. See projectTripEndMs for why this is not
+  // a sum of durations (backlog 12.22).
   const liveTripEndMs =
     liveAlightMs != null
-      ? legs
-          .slice(currentLegIndex + 1)
-          .reduce((acc, l) => acc + (l.duration || 0) * 1000, liveAlightMs)
+      ? projectTripEndMs(legs, currentLegIndex, liveAlightMs)
       : null
 
   const timeRemaining = calculateTimeRemaining(
@@ -944,11 +1136,35 @@ export function calculateTripProgress(
     totalDuration
   )
 
+  // The last leg's own progress, and only there. Overall progress is a
+  // distance-weighted average over the whole itinerary, so on a long trip its
+  // last half-percent is the closing leg's last hundred metres — see
+  // hasArrivedAtDestination (backlog 21.2).
+  const finalLegProgress =
+    legs.length > 0 && currentLegIndex === legs.length - 1
+      ? progressInCurrentLeg * 100
+      : null
+
+  // The platform wait, measured spatially — see waitingAtBoardingStop for why
+  // it is not `legBoard` in the future (backlog 18.6).
+  const waitingAtStop = waitingAtBoardingStop({
+    aboardBeforeLeg,
+    currentLegIndex,
+    legs,
+    progressAlongLeg: progressInCurrentLeg,
+    riderPosition,
+    riderSpeedMps,
+    ridingLegIndex
+  })
+
   const status = determineTripStatus(
     routeMatch,
     expectedProgress,
     overallProgress,
-    distanceToDestination
+    distanceToDestination,
+    aboardBeforeLeg,
+    finalLegProgress,
+    waitingAtStop
   )
 
   const currentLeg = legs[currentLegIndex]
@@ -993,11 +1209,13 @@ export function calculateTripProgress(
 
   // Measured schedule delay at the rider's current position (real GPS progress
   // vs the current leg's scheduled timing). Feeds connection-risk detection.
-  const delay = computeCurrentDelay(
-    currentLeg,
-    progressInCurrentLeg,
-    currentTime
-  )
+  //
+  // Zero through the platform wait (18.6): standing at the stop, the only
+  // thing this measures is how long the rider has been standing there, and it
+  // is the number the card was turning into "you are N minutes behind".
+  const delay = waitingAtStop
+    ? 0
+    : computeCurrentDelay(currentLeg, progressInCurrentLeg, currentTime)
 
   return {
     currentLegIndex,
@@ -1006,10 +1224,12 @@ export function calculateTripProgress(
     delay,
     distanceToDestination,
     estimatedArrival,
+    finalLegProgress,
     overallProgress,
     riderSpeedMps: riderSpeedMps ?? undefined,
     status,
     timeRemaining,
+    waitingAtBoardingStop: waitingAtStop,
     ...transitInfo,
     ...walkingInfo,
     ...timingInfo

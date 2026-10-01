@@ -42,7 +42,9 @@ describe('components > go-mode > GoModeDemo gallery', () => {
     const wrapper = mount(<GoModeDemo />)
     const toggles = wrapper.find('button.same-shape-variants-toggle')
     expect(toggles.length).toBe(2)
-    expect(toggles.at(0).text()).toBe('2 options')
+    // The two 21 > 6 options get off the 21 at different stops, so the row
+    // offers "Other stops" — and says nothing more (21.5).
+    expect(toggles.at(0).text()).toBe('Other stops▶')
   })
 })
 

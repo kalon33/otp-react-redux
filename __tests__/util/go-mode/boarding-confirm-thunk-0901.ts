@@ -94,7 +94,9 @@ describe('the rider’s own say on boarding (2026-09-01)', () => {
 
   it('opens the existing prompt when nothing is matched yet', () => {
     // Nothing honest to name — so the rider picks from the buses actually
-    // nearby, in the sheet that already exists for exactly that.
+    // nearby, in the sheet that already exists for exactly that. This leg
+    // carries no route id, so there is no feed for the tap's own search to
+    // poll (15.2, boarding-search-0913.ts) and the prompt opens on its own.
     const store = makeStore()
     store.run(confirmBoardingByRider())
     expect(store.types()).toEqual(['SHOW_BOARDING_PROMPT'])

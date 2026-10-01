@@ -38,6 +38,11 @@ export interface SearchOptions {
    */
   arriveOnTimeAccess?: boolean
   hideWalkTransitOptions?: boolean
+  /**
+   * Backlog 14.1: how many stops the access/egress search may reach (OTP
+   * `maxStopCount`, sent per request). Unset means the config/default cap.
+   */
+  maxStopCount?: number
   /** Rider ask 4.9: one vehicle, no connections (OTP `maxTransfers: 0`). */
   noTransfers?: boolean
   numItineraries?: number
@@ -103,6 +108,7 @@ export function setSearchOptions(
     const next: SearchOptions = {
       arriveOnTimeAccess: !!currentQuery.arriveOnTimeAccess,
       hideWalkTransitOptions: !!currentQuery.hideWalkTransitOptions,
+      maxStopCount: currentQuery.maxStopCount,
       noTransfers: !!currentQuery.noTransfers,
       numItineraries: currentQuery.numItineraries,
       viaStop: currentQuery.viaStop || null,
@@ -127,6 +133,7 @@ export function clearRoutingPreferences() {
         {
           arriveOnTimeAccess: false,
           hideWalkTransitOptions: false,
+          maxStopCount: undefined,
           noTransfers: false,
           numItineraries: getDefaultNumItineraries(getState().otp.config),
           viaStop: null

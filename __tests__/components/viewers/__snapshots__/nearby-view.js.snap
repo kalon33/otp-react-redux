@@ -6036,6 +6036,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                     tabIndex={0}
                   >
                     <Connect(Stop)
+                      closed={false}
                       fromToSlot={
                         <Memo(Connect(FromToPicker))
                           place={
@@ -7173,6 +7174,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                       }
                     >
                       <Stop
+                        closed={false}
                         dispatch={[Function]}
                         fromToSlot={
                           <Memo(Connect(FromToPicker))
@@ -8335,6 +8337,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                   id="components.StopViewer.viewSchedule"
                                 />
                               }
+                              closed={false}
                               fromToSlot={
                                 <Memo(Connect(FromToPicker))
                                   place={
@@ -9490,6 +9493,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                     id="components.StopViewer.viewSchedule"
                                   />
                                 }
+                                closed={false}
                                 dispatch={[Function]}
                                 fromToSlot={
                                   <Memo(Connect(FromToPicker))
@@ -15179,6 +15183,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                     tabIndex={0}
                   >
                     <Connect(Stop)
+                      closed={false}
                       fromToSlot={
                         <Memo(Connect(FromToPicker))
                           place={
@@ -15914,6 +15919,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                       }
                     >
                       <Stop
+                        closed={false}
                         dispatch={[Function]}
                         fromToSlot={
                           <Memo(Connect(FromToPicker))
@@ -16674,6 +16680,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                   id="components.StopViewer.viewSchedule"
                                 />
                               }
+                              closed={false}
                               fromToSlot={
                                 <Memo(Connect(FromToPicker))
                                   place={
@@ -17427,6 +17434,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                     id="components.StopViewer.viewSchedule"
                                   />
                                 }
+                                closed={false}
                                 dispatch={[Function]}
                                 fromToSlot={
                                   <Memo(Connect(FromToPicker))
@@ -22907,6 +22915,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                     tabIndex={0}
                   >
                     <Connect(Stop)
+                      closed={false}
                       fromToSlot={
                         <Memo(Connect(FromToPicker))
                           place={
@@ -24198,6 +24207,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                       }
                     >
                       <Stop
+                        closed={false}
                         dispatch={[Function]}
                         fromToSlot={
                           <Memo(Connect(FromToPicker))
@@ -25514,6 +25524,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                   id="components.StopViewer.viewSchedule"
                                 />
                               }
+                              closed={false}
                               fromToSlot={
                                 <Memo(Connect(FromToPicker))
                                   place={
@@ -26823,6 +26834,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                     id="components.StopViewer.viewSchedule"
                                   />
                                 }
+                                closed={false}
                                 dispatch={[Function]}
                                 fromToSlot={
                                   <Memo(Connect(FromToPicker))
@@ -35416,6 +35428,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                     tabIndex={0}
                   >
                     <Connect(Stop)
+                      closed={false}
                       fromToSlot={
                         <Memo(Connect(FromToPicker))
                           place={
@@ -36151,6 +36164,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                       }
                     >
                       <Stop
+                        closed={false}
                         dispatch={[Function]}
                         fromToSlot={
                           <Memo(Connect(FromToPicker))
@@ -36911,6 +36925,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                   id="components.StopViewer.viewSchedule"
                                 />
                               }
+                              closed={false}
                               fromToSlot={
                                 <Memo(Connect(FromToPicker))
                                   place={
@@ -37664,6 +37679,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                     id="components.StopViewer.viewSchedule"
                                   />
                                 }
+                                closed={false}
                                 dispatch={[Function]}
                                 fromToSlot={
                                   <Memo(Connect(FromToPicker))
@@ -42324,6 +42340,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                     tabIndex={0}
                   >
                     <Connect(Stop)
+                      closed={false}
                       fromToSlot={
                         <Memo(Connect(FromToPicker))
                           place={
@@ -43409,6 +43426,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                       }
                     >
                       <Stop
+                        closed={false}
                         dispatch={[Function]}
                         fromToSlot={
                           <Memo(Connect(FromToPicker))
@@ -44519,6 +44537,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                   id="components.StopViewer.viewSchedule"
                                 />
                               }
+                              closed={false}
                               fromToSlot={
                                 <Memo(Connect(FromToPicker))
                                   place={
@@ -45622,6 +45641,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                     id="components.StopViewer.viewSchedule"
                                   />
                                 }
+                                closed={false}
                                 dispatch={[Function]}
                                 fromToSlot={
                                   <Memo(Connect(FromToPicker))
@@ -49659,6 +49679,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                     tabIndex={0}
                   >
                     <Connect(Stop)
+                      closed={false}
                       fromToSlot={
                         <Memo(Connect(FromToPicker))
                           place={
@@ -50950,6 +50971,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                       }
                     >
                       <Stop
+                        closed={false}
                         dispatch={[Function]}
                         fromToSlot={
                           <Memo(Connect(FromToPicker))
@@ -52266,6 +52288,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                   id="components.StopViewer.viewSchedule"
                                 />
                               }
+                              closed={false}
                               fromToSlot={
                                 <Memo(Connect(FromToPicker))
                                   place={
@@ -53575,6 +53598,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                     id="components.StopViewer.viewSchedule"
                                   />
                                 }
+                                closed={false}
                                 dispatch={[Function]}
                                 fromToSlot={
                                   <Memo(Connect(FromToPicker))
@@ -62251,6 +62275,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                     tabIndex={0}
                   >
                     <Connect(Stop)
+                      closed={false}
                       fromToSlot={
                         <Memo(Connect(FromToPicker))
                           place={
@@ -63388,6 +63413,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                       }
                     >
                       <Stop
+                        closed={false}
                         dispatch={[Function]}
                         fromToSlot={
                           <Memo(Connect(FromToPicker))
@@ -64550,6 +64576,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                   id="components.StopViewer.viewSchedule"
                                 />
                               }
+                              closed={false}
                               fromToSlot={
                                 <Memo(Connect(FromToPicker))
                                   place={
@@ -65705,6 +65732,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                     id="components.StopViewer.viewSchedule"
                                   />
                                 }
+                                closed={false}
                                 dispatch={[Function]}
                                 fromToSlot={
                                   <Memo(Connect(FromToPicker))

@@ -28,6 +28,13 @@ export const VEHICLE_RECORD_STALE_SEC = 120
 // VEHICLE's position, never the rider's.
 export const VEHICLE_AT_BOARD_STOP_M = 250
 
+// "The RIDER is standing at the boarding stop." Much tighter than the vehicle
+// radius: a bus 250 m out is arriving, a rider 250 m out is still walking.
+// Lives here because two rules read it — classifyMissedBus (is this miss
+// definitive?) and realtimeBoardIsSpent (backlog 17.18) — and they must not
+// each grow their own number.
+export const RIDER_AT_BOARD_STOP_M = 50
+
 // Past this separation a "confirmed" match is no longer describing the bus the
 // rider is on. Feed lag on freeway BRT can genuinely put the published position
 // several hundred metres from the rider, and MAX_ADJUSTED_RADIUS_METERS (2500,
@@ -39,8 +46,36 @@ export const CONFIRMED_MATCH_MAX_SEPARATION_M = 2500
 // How many consecutive 1/s vehicle matches must agree before the sticky
 // riding.tripId may rebind to a different trip. Today's promotion needs only
 // 2 — exactly what the 7/29 flap survived. Eight is still fast for a real
-// correction (~8s) and beyond any flap a stale feed has produced.
+// correction (~8s). Ticks alone are not enough, though — see the frame count
+// below, which 2026-09-28 showed a stale feed can beat eight ticks without.
 export const RIDING_REBIND_MIN_CONSECUTIVE = 8
+
+// ...and how many DISTINCT feed frames of the challenger that run must rest on
+// (35.1). The matcher runs once a second, the feed publishes a frame every
+// 15-20 s, so eight ticks can be one frame scored eight times: on 2026-09-28
+// the rebind to bus 8151 passed at 17:22:56 on nine ticks against a single
+// 8151 frame and a single 8220 frame. Three frames is ~30-60 s at that
+// cadence — longer than any stale-frame flap recorded (the 09-28 one lasted
+// 44 s, the 7/29 one two ticks), and a real early board, where the rider sits
+// on the other bus for the whole leg, clears it within the first minute.
+// Counted by the caller as changes of the matched record's `seconds`
+// (performVehicleMatching, `vehicleMatch.consecutiveFrames`).
+export const RIDING_REBIND_MIN_FRAMES = 3
+
+/** Has a run of matches lasted long enough, in ticks AND in feed frames, to
+ * move the sticky riding fact? */
+function runIsSustained(
+  vehicleMatchState: {
+    consecutiveFrames?: number
+    consecutiveMatches?: number
+  } | null
+): boolean {
+  return (
+    (vehicleMatchState?.consecutiveMatches ?? 0) >=
+      RIDING_REBIND_MIN_CONSECUTIVE &&
+    (vehicleMatchState?.consecutiveFrames ?? 0) >= RIDING_REBIND_MIN_FRAMES
+  )
+}
 
 // You can't be aboard a bus that hasn't left yet: riding this much before the
 // planned board time proves the rider caught an earlier departure.
@@ -293,6 +328,108 @@ export function stopsAheadFromNextStopId(
 }
 
 /**
+ * Has the bus already been past a given stop on its own run?
+ *
+ * Answered from the TRIP's ordered stop list (transitIndex.trips[id].stopTimes
+ * — fetched every tick by refreshLiveLegTimes) rather than the leg's, because
+ * the leg only knows the stops between boarding and alighting. On 2026-09-21
+ * the planned Orange Line run was at Marquette & 11th (`1:53301`), five stops
+ * BEFORE the boarding stop `1:17781` and not on the board leg at all, so a
+ * leg-level lookup cannot tell "still coming, 2.5 km back" from "long gone".
+ *
+ * `null` means unanswerable — the trip record is not loaded, or one of the two
+ * stops is not in its list — and every caller must treat that as no evidence
+ * rather than as a "no".
+ *
+ * First occurrence wins. A trip that serves the same stop twice (a loop) would
+ * be judged against its first visit; no Metro Transit pattern in the graph
+ * does, and a wrong answer there is a "still coming", the safe direction.
+ */
+export function vehiclePassedStopOnTrip(
+  stopIdsInOrder: Array<string | null | undefined> | null | undefined,
+  stopId: string | null | undefined,
+  nextStopId: string | null | undefined
+): boolean | null {
+  if (!Array.isArray(stopIdsInOrder) || !stopIdsInOrder.length) return null
+  if (stopId == null || nextStopId == null) return null
+  const stopIdx = stopIdsInOrder.indexOf(stopId)
+  const nextIdx = stopIdsInOrder.indexOf(nextStopId)
+  if (stopIdx === -1 || nextIdx === -1) return null
+  // "Next stop is the one we care about" is not past it — the bus is pulling in.
+  return nextIdx > stopIdx
+}
+
+/**
+ * The trip's own vehicle, as both the missed-bus classifier and the board-time
+ * rules read it. One shape, one reading — the two used to judge the same
+ * record from two copies of the same arithmetic.
+ */
+export interface BoardVehicleEvidence {
+  ageSec: number | null
+  distanceToBoardStopM: number | null
+  nextStopId: string | null
+  /**
+   * Whether the bus is already past the boarding stop on its own run
+   * ({@link vehiclePassedStopOnTrip}). `null`/absent is unanswerable — no
+   * evidence either way, never a "no".
+   */
+  passedBoardStop?: boolean | null
+}
+
+/**
+ * Does the bus's OWN record place it short of the boarding stop — i.e. is
+ * there positive evidence that this boarding has not happened yet?
+ *
+ * Extracted 2026-09-22 from classifyMissedBus, which has asked exactly this
+ * since 2026-07-29 (MISSED_BUS fired while bus 8140 was pulling in 111 m from
+ * the stop) and gained the trip-order arm on 2026-09-21 (backlog 25.1: the
+ * rider stood 14-23 m from the kerb while their bus ran 2.5 km up I-35W, five
+ * stops short, too far for either distance test to see). The board-time rules
+ * now ask the same question of the same record, and sharing the predicate is
+ * what keeps them from drifting apart.
+ *
+ * FALSE means "no such evidence", not "the bus has gone": a stale record, a
+ * missing one, or a bus whose position says nothing all answer false. Callers
+ * must treat it as silence.
+ *
+ * `riderAtBoardStop` is the rider's own corroboration for the trip-order arm
+ * only — standing where the bus must still come, with a live record of that
+ * bus upstream of the stop, there is nothing yet to have missed.
+ */
+export function vehicleShortOfBoardStop(
+  vehicle: BoardVehicleEvidence | null | undefined,
+  boardStopId: string | null | undefined,
+  riderAtBoardStop = false
+): boolean {
+  if (!vehicle) return false
+  // Same freshness policy as isVehicleRecordFresh, which takes a whole lookup
+  // record; this one is handed just the fields the rules read.
+  if (vehicle.ageSec != null && vehicle.ageSec > VEHICLE_RECORD_STALE_SEC) {
+    return false
+  }
+  // Nothing below can vouch for a bus we can SEE is past the stop — a bus
+  // 200 m beyond the kerb is inside VEHICLE_AT_BOARD_STOP_M and gone.
+  if (vehicle.passedBoardStop === true) return false
+  return (
+    (boardStopId != null && vehicle.nextStopId === boardStopId) ||
+    (vehicle.distanceToBoardStopM != null &&
+      vehicle.distanceToBoardStopM <= VEHICLE_AT_BOARD_STOP_M) ||
+    (vehicle.passedBoardStop === false && riderAtBoardStop)
+  )
+}
+
+/** The trip's stops in service order, as transitIndex.trips[id] stores them. */
+export function tripStopIdsInOrder(
+  trip: {
+    stopTimes?: Array<{ stop?: { gtfsId?: string; id?: string } }>
+  } | null
+): string[] | null {
+  const stopTimes = trip?.stopTimes
+  if (!Array.isArray(stopTimes) || !stopTimes.length) return null
+  return stopTimes.map((st) => st?.stop?.id ?? st?.stop?.gtfsId ?? '')
+}
+
+/**
  * Is the rider's own GPS sound enough to drive stop counting? The same rule
  * getNextStopOnRide already applies (match anchored to the leg the rider is
  * on, and on-route), extended with fix staleness and accuracy: a 20s-old or
@@ -338,8 +475,8 @@ function headsignsConsistent(
  *
  * Establishing the fact and refreshing it on the same trip stay instant; a
  * REBIND — declaring the rider is on a different bus than we thought — needs
- * a sustained run of consecutive matches AND a headsign consistent with the
- * ride. On 7/29 two ticks of a stale-feed mismatch ("Orange Downtown
+ * a sustained run of consecutive matches — in ticks and in distinct feed
+ * frames — AND a headsign consistent with the ride. On 7/29 two ticks of a stale-feed mismatch ("Orange Downtown
  * Minneapolis" vs the ride's "Orange Burnsville") rewrote riding.tripId and
  * armed the boarded-earlier replan; this blocks that twice over.
  */
@@ -348,6 +485,7 @@ export function shouldRebindRidingTrip(
   candidateTripId: string | null,
   matchedLeg: { headsign?: string | null } | null,
   vehicleMatchState: {
+    consecutiveFrames?: number
     consecutiveMatches?: number
     match?: { tripHeadsign?: string | null } | null
   } | null
@@ -356,11 +494,7 @@ export function shouldRebindRidingTrip(
   if (!riding || riding.tripId == null) return true
   // Same trip: a refresh (legIndex change, offRouteSince clear), never gated.
   if (candidateTripId === riding.tripId) return true
-  if (
-    (vehicleMatchState?.consecutiveMatches ?? 0) < RIDING_REBIND_MIN_CONSECUTIVE
-  ) {
-    return false
-  }
+  if (!runIsSustained(vehicleMatchState)) return false
   return headsignsConsistent(
     vehicleMatchState?.match?.tripHeadsign ?? null,
     riding.headsign ?? matchedLeg?.headsign ?? null
@@ -412,6 +546,7 @@ export function shouldReplanBoardedEarlier({
    * actually build its splice from. See the trigger/remedy note below. */
   ridingTripId?: string | null
   vehicleMatchState: {
+    consecutiveFrames?: number
     consecutiveMatches?: number
     match?: VehicleMatchResult | null
   } | null
@@ -466,9 +601,7 @@ export function shouldReplanBoardedEarlier({
   // maintain consecutiveMatches, so requiring one made this gate unreachable
   // exactly when the rider had already told us which bus they're on.
   const sustained =
-    matched?.confidence === 'confirmed' ||
-    (vehicleMatchState?.consecutiveMatches ?? 0) >=
-      RIDING_REBIND_MIN_CONSECUTIVE
+    matched?.confidence === 'confirmed' || runIsSustained(vehicleMatchState)
   const tripMismatch =
     (matched?.confidence === 'confirmed' || matched?.confidence === 'high') &&
     matched?.tripId != null &&

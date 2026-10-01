@@ -17,10 +17,19 @@ interface Props {
   arrived?: boolean
   boardingStopData?: any
   departureOverride?: number | null
+  /** The run that override names (29.3) — see WalkingNavigation. */
+  departureOverrideTripId?: string | null
   leg: Leg
   nextLeg?: Leg
+  /** Recording hook — see WalkingNavigation. */
+  onDepartureMismatch?: (info: {
+    cardDepartureMs: number | null
+    heldTripId: string | null
+    reason: string
+    tickDepartureMs: number | null
+  }) => void
   onExit?: () => void
-  onSelectDeparture?: (epochMs: number | null) => void
+  onSelectDeparture?: (epochMs: number | null, tripId?: string | null) => void
   progress: TripProgress
   units: 'imperial' | 'metric'
 }
@@ -31,8 +40,10 @@ const CurrentLegPanel = ({
   arrived,
   boardingStopData,
   departureOverride,
+  departureOverrideTripId,
   leg,
   nextLeg,
+  onDepartureMismatch,
   onExit,
   onSelectDeparture,
   progress,
@@ -51,8 +62,10 @@ const CurrentLegPanel = ({
           arrived={arrived}
           boardingStopData={boardingStopData}
           departureOverride={departureOverride}
+          departureOverrideTripId={departureOverrideTripId}
           leg={leg}
           nextLeg={nextLeg}
+          onDepartureMismatch={onDepartureMismatch}
           onExit={onExit}
           onSelectDeparture={onSelectDeparture}
           progress={progress}
@@ -65,8 +78,10 @@ const CurrentLegPanel = ({
           arrived={arrived}
           boardingStopData={boardingStopData}
           departureOverride={departureOverride}
+          departureOverrideTripId={departureOverrideTripId}
           leg={leg}
           nextLeg={nextLeg}
+          onDepartureMismatch={onDepartureMismatch}
           onExit={onExit}
           onSelectDeparture={onSelectDeparture}
           progress={progress}

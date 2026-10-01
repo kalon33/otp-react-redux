@@ -8,12 +8,16 @@ import {
   CLEAR_REROUTE,
   CLEAR_RIDING,
   CLEAR_VEHICLE_MATCH,
+  CLOSE_ONBOARD_PREVIEW,
   CONFIRM_VEHICLE,
   DISMISS_BOARDING_PROMPT,
+  OPEN_ONBOARD_PREVIEW,
   PAUSE_GPS_SIMULATION,
   REPAIR_LEG_GEOMETRY,
   RESUME_GPS_SIMULATION,
   SET_ARRIVED,
+  SET_BOARDING_SEARCH_FAILED,
+  SET_BOARDING_SEARCHING,
   SET_DEPARTURE_OVERRIDE,
   SET_EARLY_ALIGHT,
   SET_GO_MODE_ACTIVE_LEG,
@@ -55,8 +59,12 @@ import {
   TurnCueSettings
 } from '../util/go-mode/turn-cue-settings'
 import { ridingFactIsEvidenced } from '../util/go-mode/riding'
+import type {
+  DepartureOverrideSource,
+  LiveLegTime,
+  RidingState
+} from '../util/go-mode/types'
 import type { EarlyAlightRecord } from '../util/go-mode/riding'
-import type { LiveLegTime, RidingState } from '../util/go-mode/types'
 import type {
   NearbyVehicleOption,
   VehicleMatchResult
@@ -113,6 +121,30 @@ export interface OnboardAlightOption {
 }
 
 /**
+ * The option the rider is LOOKING AT — a separate preview screen over the
+ * options list, which stays alive underneath it (17.1).
+ *
+ * Before this existed, every tap on a row WAS the commit: the row's
+ * `onClickCapture` went straight to `confirmOnboardAlightStop`, whose first
+ * act was `clearOnboard()` — and `alightOptions` is the only copy of the list,
+ * so there was no back. On 2026-09-15 15:56:13 the rider tapped a row to look
+ * at it, the trip started, the list was gone, and recovering it cost five
+ * fresh OTP plan requests at 15:57:15-19. Their note: *"Again: I just want to
+ * view alternatives ... but just viewing switched and then other options are
+ * gone"* — the second time they had asked.
+ *
+ * So: opening this changes nothing but this field, and closing it clears
+ * nothing but this field. Commit happens only from the preview's own Confirm.
+ */
+export interface OnboardAlightPreview {
+  /** Which control opened it — the row itself, or the same-shape drill-down.
+   * Recorded so the debug stream says what the rider touched (17.11). */
+  control: 'row' | 'variant'
+  openedAtMs: number
+  option: OnboardAlightOption
+}
+
+/**
  * "I'm already on the bus" flow: discover the live vehicle the rider is on,
  * fetch its schedule, and find the best stop to alight to finish the trip.
  * Distinct from reRoute (a mid-trip swap of an already-active itinerary).
@@ -132,6 +164,17 @@ export interface OnboardState {
   answeredCandidates: number | null
   bestAlightStop: OnboardAlightOption | null
   candidates: OnboardCandidate[]
+  /**
+   * Candidates that settled with no plan at all and have nothing more coming —
+   * the request errored or timed out and its retry did too. Null when unknown.
+   *
+   * Counted apart from `pendingCandidates` because the two mean opposite things
+   * to the rider ("wait" versus "this stop has no answer") and because on
+   * 2026-09-15 15:54:19 three of five candidates failed, `pendingCandidates`
+   * was 0, and the panel — which only ever read that number — presented two of
+   * five stops as the answer with nothing saying so (backlog 17.3).
+   */
+  failedCandidates: number | null
   /** The route the rider already chose for the leg after this bus, captured
    * when the flow opened (BEGIN_ONBOARD_FLOW nulls activeItinerary, so it
    * cannot be re-derived later). Ranks its options up, never filters. */
@@ -142,6 +185,10 @@ export interface OnboardState {
    * counted here — those are over. Null when unknown.
    */
   pendingCandidates: number | null
+  /** Set while the rider is previewing one option; null on the list itself.
+   * Never cleared by a result landing — a straggler folding into the list
+   * behind the preview must not close it. */
+  preview: OnboardAlightPreview | null
   status:
     | 'idle'
     | 'discovering'
@@ -150,6 +197,13 @@ export interface OnboardState {
     | 'optimizing'
     | 'ready'
     | 'error'
+  /**
+   * How many candidate stops this optimize asked about — the denominator for
+   * the three counts above. `candidates.length` is the same number while the
+   * run that produced the options is the current one; this is what it was when
+   * the options were ranked.
+   */
+  totalCandidates: number | null
   trip: any | null
   vehicle: OnboardVehicle | null
 }
@@ -190,11 +244,45 @@ export interface GoModeState {
 
   boardingPrompt: {
     lastDismissedAt: number | null
+    /**
+     * The last vehicle search for this prompt FAILED — the feed reads did not
+     * answer — as opposed to honestly finding nothing nearby. Without this the
+     * two were indistinguishable on screen, and on 2026-09-15 the rider read a
+     * four-minute OTP outage (17.8: five REALTIME_VEHICLE_POSITIONS_ERRORs,
+     * every one a 20 s timeout) as the app losing their bus. Drives the
+     * sheet's error line and its retry (17.5); the 2026-08-31 sighting is
+     * written up at util/go-mode/alight-optimizer.ts:618 — "no state anywhere
+     * said the search had failed".
+     */
+    searchFailed: boolean
+    /**
+     * A vehicle search is running for this prompt and no poll has been
+     * compared yet. The sheet says so instead of "No buses detected nearby":
+     * on 2026-09-13 11:36:24 the rider tapped "I'm on the bus" from a bike leg
+     * — where nothing had ever written `nearbyVehicles` — and read the empty
+     * list as an answer about the train they were sitting on.
+     */
+    searching: boolean
     shown: boolean
     transitLegEnteredAt: number | null
   }
 
   departureOverride: number | null
+
+  /**
+   * Who chose `departureOverride` — see DepartureOverrideSource (12.15).
+   * Always written with the value and cleared with it, so the pair is never
+   * half-set; null exactly when there is no override.
+   */
+  departureOverrideSource: DepartureOverrideSource | null
+
+  /**
+   * The RUN `departureOverride` names, when the pick came off a departure row
+   * that carried a trip id (backlog 29.3). The card and the tick follow that
+   * run's live time instead of freezing the tapped minute. Written and cleared
+   * with the value; null for an anchor pick or a session saved before 29.3.
+   */
+  departureOverrideTripId: string | null
 
   /**
    * The rider got off a bus EARLY, at a stop that is still on the ridden leg's
@@ -311,8 +399,6 @@ export interface GoModeState {
    */
   turnCues: TurnCueSettings
 
-  units: 'imperial' | 'metric'
-
   ui: {
     /**
      * Index of the leg the rider tapped in the trip sheet, or null for none.
@@ -330,7 +416,16 @@ export interface GoModeState {
     mapFollowUser: boolean
   }
 
+  units: 'imperial' | 'metric'
+
   vehicleMatch: {
+    /**
+     * How many DISTINCT feed frames (changes of the matched record's
+     * `seconds`) the current run of `consecutiveMatches` rests on. The run is
+     * counted per 1 s tick, the feed moves every 15-20 s; the riding rebind
+     * gate needs both (35.1, RIDING_REBIND_MIN_FRAMES).
+     */
+    consecutiveFrames: number
     consecutiveMatches: number
     /**
      * Consecutive vehicle-position polls that came back with ZERO vehicles on
@@ -357,11 +452,17 @@ const defaultState: GoModeState = {
 
   boardingPrompt: {
     lastDismissedAt: null,
+    searchFailed: false,
+    searching: false,
     shown: false,
     transitLegEnteredAt: null
   },
 
   departureOverride: null,
+
+  departureOverrideSource: null,
+
+  departureOverrideTripId: null,
 
   earlyAlight: null,
 
@@ -380,9 +481,12 @@ const defaultState: GoModeState = {
     answeredCandidates: null,
     bestAlightStop: null,
     candidates: [],
+    failedCandidates: null,
     keepRouteId: null,
     pendingCandidates: null,
+    preview: null,
     status: 'idle',
+    totalCandidates: null,
     trip: null,
     vehicle: null
   },
@@ -425,8 +529,6 @@ const defaultState: GoModeState = {
 
   turnCues: { ...DEFAULT_TURN_CUE_SETTINGS },
 
-  units: 'imperial',
-
   ui: {
     activeLeg: null,
     backgrounded: false,
@@ -439,7 +541,10 @@ const defaultState: GoModeState = {
     mapFollowUser: true
   },
 
+  units: 'imperial',
+
   vehicleMatch: {
+    consecutiveFrames: 0,
     consecutiveMatches: 0,
     emptyPolls: 0,
     match: null,
@@ -587,11 +692,24 @@ const goMode = handleActions<GoModeState, any>(
       ...state,
       boardingPrompt: {
         ...state.boardingPrompt,
+        searching: false,
         shown: false,
         transitLegEnteredAt: null
       },
       vehicleMatch: {
         ...defaultState.vehicleMatch
+      }
+    }),
+
+    // "Back to options". Clears the preview and NOTHING else: the list, the
+    // trip, the vehicle and the candidate answers all stand, so returning
+    // costs no re-plan and no refetch (17.1 — recovering the list used to cost
+    // five OTP plan requests).
+    [CLOSE_ONBOARD_PREVIEW]: (state) => ({
+      ...state,
+      onboard: {
+        ...state.onboard,
+        preview: null
       }
     }),
 
@@ -602,11 +720,13 @@ const goMode = handleActions<GoModeState, any>(
       alightedFrom: null,
       boardingPrompt: {
         ...state.boardingPrompt,
+        searching: false,
         shown: false
       },
       earlyAlight: null,
       vehicleMatch: {
         ...state.vehicleMatch,
+        consecutiveFrames: 0,
         consecutiveMatches: 0,
         match: action.payload
       }
@@ -617,9 +737,46 @@ const goMode = handleActions<GoModeState, any>(
       boardingPrompt: {
         ...state.boardingPrompt,
         lastDismissedAt: Date.now(),
+        searching: false,
         shown: false
       }
     }),
+
+    /**
+     * A tap on an option — the row, or one of its same-shape variants — opens
+     * the preview for it. The payload names the option rather than carrying
+     * it, so the debug-stream entry for the tap stays small (17.11); the
+     * option is resolved out of the live list here.
+     *
+     * Resolution is by index with the stop id as the check, falling back to
+     * the stop id alone: a straggler can have re-ranked the list between
+     * render and tap, in which case the index is stale but the identity is
+     * not. An option that is no longer in the list at all leaves state alone
+     * (the tap is stale) rather than previewing something the rider did not
+     * choose.
+     */
+    [OPEN_ONBOARD_PREVIEW]: (state, action) => {
+      const list = state.onboard.alightOptions || []
+      const { control, index, stopId } = action.payload || {}
+      const atIndex = typeof index === 'number' ? list[index] : undefined
+      const option =
+        atIndex && (!stopId || atIndex.stopId === stopId)
+          ? atIndex
+          : list.find((o: OnboardAlightOption) => o.stopId === stopId)
+      if (!option) return state
+      return {
+        ...state,
+        onboard: {
+          ...state.onboard,
+          preview: {
+            control:
+              control === 'variant' ? ('variant' as const) : ('row' as const),
+            openedAtMs: action.payload?.tMs ?? Date.now(),
+            option
+          }
+        }
+      }
+    },
 
     [PAUSE_GPS_SIMULATION]: (state) => ({
       ...state,
@@ -663,10 +820,45 @@ const goMode = handleActions<GoModeState, any>(
       arrivedDelay: state.progress?.delay ?? null
     }),
 
-    [SET_DEPARTURE_OVERRIDE]: (state, action) => ({
+    [SET_BOARDING_SEARCH_FAILED]: (state, action) => ({
       ...state,
-      departureOverride: action.payload
+      boardingPrompt: {
+        ...state.boardingPrompt,
+        searchFailed: !!action.payload
+      }
     }),
+
+    [SET_BOARDING_SEARCHING]: (state, action) => ({
+      ...state,
+      boardingPrompt: {
+        ...state.boardingPrompt,
+        searching: !!action.payload
+      }
+    }),
+
+    // The payload is either a bare epoch (or null), which is the auto-anchor's
+    // own voice and the shape every caller used before 12.15, or
+    // `{ ms, source }` when the writer knows whose pick it is. Normalized here
+    // rather than at the call sites so the two fields can never disagree.
+    [SET_DEPARTURE_OVERRIDE]: (state, action) => {
+      const { payload } = action
+      const ms =
+        payload != null && typeof payload === 'object' ? payload.ms : payload
+      const source =
+        payload != null && typeof payload === 'object'
+          ? payload.source ?? 'anchor'
+          : 'anchor'
+      const tripId =
+        payload != null && typeof payload === 'object'
+          ? payload.tripId ?? null
+          : null
+      return {
+        ...state,
+        departureOverride: ms ?? null,
+        departureOverrideSource: ms == null ? null : source,
+        departureOverrideTripId: ms == null ? null : tripId
+      }
+    },
 
     [SET_EARLY_ALIGHT]: (state, action) => ({
       ...state,
@@ -681,6 +873,8 @@ const goMode = handleActions<GoModeState, any>(
         : state.alightedFrom,
       // The plan's own departure pick belonged to the bus they just left.
       departureOverride: null,
+      departureOverrideSource: null,
+      departureOverrideTripId: null,
       earlyAlight: action.payload,
       riding: null
     }),
@@ -753,8 +947,15 @@ const goMode = handleActions<GoModeState, any>(
             ? payload.answeredCandidates ?? null
             : state.onboard.candidates.length || null,
           bestAlightStop: options[0] || null,
+          // A bare array still means "this is the whole answer", so it has no
+          // failures by definition.
+          failedCandidates: isCounted ? payload.failedCandidates ?? 0 : 0,
           pendingCandidates: isCounted ? payload.pendingCandidates ?? 0 : 0,
-          status: options.length ? ('ready' as const) : ('error' as const)
+          status: options.length ? ('ready' as const) : ('error' as const),
+          totalCandidates: isCounted
+            ? payload.totalCandidates ??
+              (state.onboard.candidates.length || null)
+            : state.onboard.candidates.length || null
         }
       }
     },
@@ -779,7 +980,13 @@ const goMode = handleActions<GoModeState, any>(
       ...state,
       onboard: {
         ...state.onboard,
-        status: 'fetching-schedule' as const,
+        // Adopting a vehicle IS the start of its schedule fetch. DROPPING one
+        // is not: a denial reopening the picker clears the vehicle the rider
+        // just rejected (so the sheet's fallback row cannot hand it back —
+        // 15.3, 17.5) and owns the status itself.
+        status: action.payload
+          ? ('fetching-schedule' as const)
+          : state.onboard.status,
         vehicle: action.payload
       }
     }),
@@ -865,7 +1072,12 @@ const goMode = handleActions<GoModeState, any>(
     }),
 
     [START_GO_MODE]: (state, action) => {
-      const { itinerary, originalFrom, roundTrip, units = 'imperial' } = action.payload
+      const {
+        itinerary,
+        originalFrom,
+        roundTrip,
+        units = 'imperial'
+      } = action.payload
 
       // `ui` is deliberately preserved: a background auto-update (missed bus,
       // quiet access replan) swaps the itinerary via this action while the
@@ -876,9 +1088,25 @@ const goMode = handleActions<GoModeState, any>(
         activeItinerary: itinerary,
         arrivedAt: null,
         arrivedDelay: null,
+        // The departure pick belonged to the plan that has just been replaced
+        // (12.14). A mid-trip auto-update IS a START_GO_MODE, so an override
+        // chosen against the pre-swap itinerary used to survive onto one that
+        // may board a different run entirely — the card would headline a bus
+        // the new plan does not contain. `TRANSITION_LEG` and
+        // `SET_EARLY_ALIGHT` have always nulled it for the same reason; this
+        // path never did.
+        //
+        // Clearing is the whole fix, and it does not fight the anchor's own
+        // re-target: with the override gone, `evaluateDepartureAnchor` falls
+        // back to the new plan's `plannedBoardMs` and re-acquires the soonest
+        // catchable departure on the route the rider chose, which is the
+        // rider's standing rule. The session flags that would otherwise keep a
+        // dead boarding's lock alive are reset alongside it, in beginGoMode.
+        departureOverride: null,
+        departureOverrideSource: null,
+        departureOverrideTripId: null,
         isActive: true,
         liveLegTimes: {},
-        units,
         notifications: {
           ...state.notifications,
           recentNotifications: [],
@@ -905,7 +1133,19 @@ const goMode = handleActions<GoModeState, any>(
               // as a START_GO_MODE (daemon page `notification-repeat`). A
               // re-plan onto a different route or a different boarding stop
               // carries a different context and still re-arms.
-              id.startsWith('LEAVE_SOON_')
+              id.startsWith('LEAVE_SOON_') ||
+              // "Missed bus" survives its OWN recovery. The missed-bus replan
+              // dispatches START_GO_MODE, which used to wipe the id that had
+              // just been sent — and on 2026-09-21 the replan landed on the
+              // very same trip (1:1273254) at the very same stop (1:17781)
+              // with the same board epoch, so the next tick raised an
+              // identical claim and pushed it again 21 s later (17:05:45 and
+              // 17:06:06, both with an auto-applied re-plan behind them;
+              // daemon page `notification-repeat`). The id carries the route,
+              // the boarding stop and the effective departure, so a recovery
+              // onto a genuinely different departure has a different id and
+              // still re-arms — the same self-limiting rule as LEAVE_SOON_.
+              id.startsWith('MISSED_BUS_')
           )
         },
         originalFrom: originalFrom ?? null,
@@ -957,6 +1197,7 @@ const goMode = handleActions<GoModeState, any>(
           enabledByDefault: state.turnCues.enabledByDefault,
           legOverrides: {}
         },
+        units,
         // The vehicle match belongs to the itinerary that just went away. It
         // was carried across untouched, so the first tick after a swap
         // refreshed a CONFIRMED match against the previous trip's cached
@@ -998,8 +1239,12 @@ const goMode = handleActions<GoModeState, any>(
         answeredCandidates: 0,
         bestAlightStop: null,
         candidates: action.payload.candidates,
+        failedCandidates: 0,
         pendingCandidates: action.payload.candidates?.length ?? 0,
-        status: 'optimizing' as const
+        // A fresh search invalidates a preview of the old list's option.
+        preview: null,
+        status: 'optimizing' as const,
+        totalCandidates: action.payload.candidates?.length ?? 0
       }
     }),
 
@@ -1088,6 +1333,8 @@ const goMode = handleActions<GoModeState, any>(
             }
           : state.alightedFrom,
         departureOverride: null,
+        departureOverrideSource: null,
+        departureOverrideTripId: null,
         // The early-alight re-anchoring exists only while the matcher is still
         // stuck on the leg the rider stepped off; once the trip has actually
         // moved past it, the ordinary boarding path is back in charge.
@@ -1123,6 +1370,12 @@ const goMode = handleActions<GoModeState, any>(
 
     [UPDATE_NEARBY_VEHICLES]: (state: GoModeState, action: any) => ({
       ...state,
+      // A poll has been compared against the rider's position, so an empty
+      // list is now a finding rather than a state the sheet has not reached.
+      boardingPrompt: {
+        ...state.boardingPrompt,
+        searching: false
+      },
       vehicleMatch: {
         ...state.vehicleMatch,
         nearbyVehicles: action.payload
@@ -1182,6 +1435,9 @@ const goMode = handleActions<GoModeState, any>(
         ...state.vehicleMatch,
         ...(action.payload.consecutiveMatches !== undefined && {
           consecutiveMatches: action.payload.consecutiveMatches
+        }),
+        ...(action.payload.consecutiveFrames !== undefined && {
+          consecutiveFrames: action.payload.consecutiveFrames
         }),
         ...(action.payload.emptyPolls !== undefined && {
           emptyPolls: action.payload.emptyPolls

@@ -137,4 +137,76 @@ describe('lib > reducers > create-otp-reducer', () => {
       }).ui.mapPickLocationType
     ).toBeNull()
   })
+
+  // Backlog 14.2: the wider re-query lands on a search that has already
+  // settled, so it has to say "one more answer is coming" without re-setting
+  // anything else. `pending` is read as a boolean in util/state.js, so a
+  // response that decremented an already-zero counter would leave the search
+  // looking pending forever.
+  it('counts an extra plan query onto a settled search', () => {
+    setDefaultTestTime()
+    const reducer = createOtpReducer({})
+    const initial = reducer(undefined, { type: '@@INIT' })
+
+    const requested = reducer(initial, {
+      payload: {
+        activeItinerary: null,
+        pending: 2,
+        routingType: 'ITINERARY',
+        searchId: 'search-1'
+      },
+      type: 'ROUTING_REQUEST'
+    })
+    expect(requested.searches['search-1'].pending).toBe(2)
+
+    const settled = reducer(
+      reducer(requested, {
+        payload: {
+          index: 0,
+          response: { plan: { itineraries: [] } },
+          searchId: 'search-1'
+        },
+        type: 'ROUTING_RESPONSE'
+      }),
+      {
+        payload: {
+          index: 1,
+          response: { plan: { itineraries: [] } },
+          searchId: 'search-1'
+        },
+        type: 'ROUTING_RESPONSE'
+      }
+    )
+    expect(settled.searches['search-1'].pending).toBe(0)
+    expect(settled.searches['search-1'].response).toHaveLength(2)
+
+    const widened = reducer(settled, {
+      payload: { searchId: 'search-1' },
+      type: 'ROUTING_EXTRA_REQUEST'
+    })
+    expect(widened.searches['search-1'].pending).toBe(1)
+    // The answers already collected are untouched, and the wider one lands
+    // beside them rather than replacing them.
+    expect(widened.searches['search-1'].response).toHaveLength(2)
+
+    const topped = reducer(widened, {
+      payload: {
+        index: 2,
+        response: { plan: { itineraries: [] } },
+        searchId: 'search-1'
+      },
+      type: 'ROUTING_RESPONSE'
+    })
+    expect(topped.searches['search-1'].pending).toBe(0)
+    expect(topped.searches['search-1'].response).toHaveLength(3)
+
+    // An extra request for a search that does not exist changes no search
+    // (every action bumps lastActionMillis, so identity is not the test).
+    expect(
+      reducer(settled, {
+        payload: { searchId: 'nope' },
+        type: 'ROUTING_EXTRA_REQUEST'
+      }).searches
+    ).toEqual(settled.searches)
+  })
 })

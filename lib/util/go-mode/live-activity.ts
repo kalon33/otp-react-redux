@@ -13,6 +13,7 @@ import {
   getEffectiveBoardTimeMs,
   itineraryArrivalMs
 } from './notification-service'
+import { notifyIntl } from './notify-i18n'
 import { RETURN_MISSED_AFTER_MIN } from './round-trip'
 import type { LiveLegTime, RidingState } from './types'
 import type { TripProgress } from './progress-calculator'
@@ -71,19 +72,44 @@ function isTransitMode(mode: string | undefined): boolean {
   return mode != null && TRANSIT_MODES.includes(mode)
 }
 
-/** The mode word for a leg with no route: what the rider is doing right now. */
+/**
+ * The mode word for a leg with no route: what the rider is doing right now.
+ *
+ * This lands on the LOCK SCREEN (the Live Activity card), so it is localized
+ * like the notification copy it sits beside — through the same handle, since
+ * this module is called from the Go Mode tick and has no React context
+ * (backlog 12.23). `legBike`/`legWalk` are the ids the Go Mode leg list
+ * already uses for the same two words; reusing them keeps one translation of
+ * each rather than two that can drift.
+ */
 function modeWord(mode: string | undefined): string {
+  const intl = notifyIntl()
   switch (mode) {
     case 'BICYCLE':
-      return 'Bike'
+      return intl.formatMessage({
+        defaultMessage: 'Bike',
+        id: 'components.GoMode.legBike'
+      })
     case 'CAR':
-      return 'Drive'
+      return intl.formatMessage({
+        defaultMessage: 'Drive',
+        id: 'components.GoMode.notify.modeDrive'
+      })
     case 'SCOOTER':
-      return 'Scooter'
+      return intl.formatMessage({
+        defaultMessage: 'Scooter',
+        id: 'components.GoMode.notify.modeScooter'
+      })
     case 'WALK':
-      return 'Walk'
+      return intl.formatMessage({
+        defaultMessage: 'Walk',
+        id: 'components.GoMode.legWalk'
+      })
     default:
-      return 'Go'
+      return intl.formatMessage({
+        defaultMessage: 'Go',
+        id: 'components.GoMode.notify.modeGo'
+      })
   }
 }
 
@@ -164,7 +190,10 @@ export function buildLiveActivityContent(
 
   const destinationName = placeName(
     (legs[legs.length - 1] as any)?.to,
-    'your destination'
+    notifyIntl().formatMessage({
+      defaultMessage: 'your destination',
+      id: 'components.GoMode.notify.yourDestination'
+    })
   )
 
   // --- arrived: one last card, then it comes down --------------------------
@@ -212,7 +241,13 @@ export function buildLiveActivityContent(
       boardEpochMs: null,
       boardIsRealtime: false,
       destinationName,
-      legDetail: placeName((currentLeg as any)?.to, 'your stop'),
+      legDetail: placeName(
+        (currentLeg as any)?.to,
+        notifyIntl().formatMessage({
+          defaultMessage: 'your stop',
+          id: 'components.GoMode.notify.yourStop'
+        })
+      ),
       legHeadline: routeName(currentLeg),
       legMode: currentLeg.mode,
       phase: 'riding',
@@ -240,7 +275,13 @@ export function buildLiveActivityContent(
       boardEpochMs: Number.isFinite(board.ms) ? board.ms : null,
       boardIsRealtime: board.realtime,
       destinationName,
-      legDetail: placeName((boardLeg as any)?.from, 'your stop'),
+      legDetail: placeName(
+        (boardLeg as any)?.from,
+        notifyIntl().formatMessage({
+          defaultMessage: 'your stop',
+          id: 'components.GoMode.notify.yourStop'
+        })
+      ),
       legHeadline: routeName(boardLeg),
       legMode: boardLeg.mode,
       phase: 'toStop',
