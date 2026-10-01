@@ -51,7 +51,10 @@ describe('actions > apiV2 > routingQuery fan-out', () => {
   const config = {
     api: { host: 'http://mock-host.com', path: '/api', port: 80 },
     homeTimezone: 'America/Chicago',
-    itinerary: {},
+    // These tests simulate the go-mode OTP fork, which is the only server
+    // that accepts maxStopCount; standard OTP rejects the whole query, so the
+    // lever is opt-in and the fork is explicitly enabled here.
+    itinerary: { enableMaxStopCount: true },
     modes: {
       initialState: { enabledModeButtons: ['transit', 'bicycle'] },
       modeButtons: [
