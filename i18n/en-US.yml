@@ -1032,10 +1032,12 @@ components:
   Timetable:
     errorLoadingStopClosures: Error loading stop closures
     errorLoadingTimetable: Error loading timetable
+    routeInformation: Route Information
     showAllStops: Show All Stops
     showTimepointsOnly: Show Timepoints Only
     switchDirection: Switch Direction
     timetable: Timetable
+    timetableDate: Select Date
   TransitVehicleOverlay:
     travelingAt: Traveling at {milesPerHour}
     vehicleName: Vehicle {vehicleNumber}
@@ -1144,6 +1146,7 @@ components:
     notificationsSnoozed: Notifications are snoozed for today.
     timeAndDuration: Trip time and duration
   TripTools:
+    copyItineraryText: Copy Trip Text
     copyLink: Copy Link
     header: Trip Tools
     linkCopied: Copied
@@ -1168,7 +1171,6 @@ components:
 
       '
     reportIssue: Report Issue
-    copyItineraryText: Copy Trip Text
   TripViewer:
     accessible: Accessible
     bicyclesAllowed: Allowed
