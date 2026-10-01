@@ -181,7 +181,7 @@ describe('components > go-mode > 16.3 departure hold (2026-09-15)', () => {
     expect(hero(wrapper)).toContain(clock(DEP_LIVE))
   })
 
-  it('a realtime -> schedule flip moves the number, not the bus', () => {
+  it('a realtime -> schedule flip keeps the bus, and never moves it backwards (29.3)', () => {
     const props = {
       boardingStopData: stopData({ epoch: DEP_LIVE, live: true }),
       leg: bikeLeg,
@@ -203,7 +203,12 @@ describe('components > go-mode > 16.3 departure hold (2026-09-15)', () => {
       )
     })
     wrapper.update()
-    expect(hero(wrapper)).toContain(clock(DEP_SCHED))
+    // Not the bus: never the 10:09. And since 29.3 not backwards either — a
+    // timetable 09:53 earlier than the last live 09:54 keeps 09:54 as a floor,
+    // drawn plain (the "Based on schedule data" label, no live mark). 09:54
+    // is the bus the rider caught.
+    expect(hero(wrapper)).toContain(clock(DEP_LIVE))
+    expect(hero(wrapper)).toContain('Based on schedule data')
     expect(hero(wrapper)).not.toContain(clock(DEP_NEXT))
   })
 

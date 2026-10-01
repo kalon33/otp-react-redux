@@ -8,7 +8,14 @@ import {
   transitRouteSignature
 } from '../itinerary'
 
+import {
+  angleBetweenDegrees,
+  bearingDegrees,
+  PROJECTION_MIN_SPEED_MPS
+} from './replan-origin'
 import { calculateDistance } from './position-matching'
+import { legTripId } from './leg-merge'
+import type { LiveLegTime } from './types'
 
 /**
  * The last gate before an AUTOMATIC itinerary replacement reaches the rider.
@@ -78,6 +85,41 @@ export const AUTO_REPLAN_ARRIVAL_SLACK_MS = 60000
 export const AUTO_REPLAN_ORIGIN_MAX_M = 75
 
 /**
+ * ...and how far BEHIND them it may start, once the rider's own heading says
+ * which way "behind" is.
+ *
+ * `AUTO_REPLAN_ORIGIN_MAX_M` is a radius, and a radius cannot tell a plan that
+ * begins 60 m up the road the rider is riding onto (harmless — they arrive at
+ * it in nine seconds) from one that begins 60 m back down the road they have
+ * left (fatal — the matcher pins them to a polyline they will never rejoin).
+ * Both measure the same 60 m. On 2026-09-21 every one of the five automatic
+ * re-plans across the two evening rides had its origin BEHIND the rider:
+ * bearings 105.7, 174.0, 136.5, 180.0 and 158.4 degrees off their heading,
+ * gaps 58.2 / 65.4 / 33.9 / 9.1 / 68.2 m. Three of the five were installed
+ * (backlog 24.3).
+ *
+ * 25 m is not a new number. It is the larger of the two gaps this file already
+ * calls honest statements about where the rider was (see
+ * `AUTO_REPLAN_ORIGIN_MAX_M`: "the 25 m and 18 m gaps of the two swaps on that
+ * ride"), which is exactly the right bar — a plan may start a tick's travel
+ * plus GPS scatter behind the rider, and no further.
+ *
+ * The margins it actually runs on are thin and worth knowing: with the
+ * projected origin the 09-21 re-plans measure 20.0 m behind (kept), 83.7 m
+ * behind (already refused by the radius), 11.5 m ahead (kept), 30.9 m ahead
+ * (kept) and 32.3 m behind (refused). 20.0 and 32.3 are the two the threshold
+ * sits between.
+ */
+export const AUTO_REPLAN_ORIGIN_BEHIND_MAX_M = 25
+
+/**
+ * How far off the rider's heading the plan's origin must bear before it counts
+ * as behind them rather than ahead. A right angle: anything in the forward
+ * half-plane is road they have not covered yet.
+ */
+export const AUTO_REPLAN_BEHIND_ANGLE_DEG = 90
+
+/**
  * How far from the rider a plan the RIDER THEMSELVES just tapped may start
  * before the trip re-plans from where they actually are.
  *
@@ -131,6 +173,37 @@ export interface AutoReplanContext {
    * checked.
    */
   currentPlanIsDead?: boolean
+  /**
+   * Set when the rider has been off the plan's access leg for at least
+   * `DEVIATED_PLAN_DEAD_MS` without closing on the destination — see
+   * `accessPlanDeadByDeviation` (backlog 35.2). Narrower than
+   * `currentPlanIsDead`: it waives only the arrival test, because the arrival
+   * being defended belongs to a trip the rider is not making. The
+   * token-hop and access-misses-board gates still apply — a candidate the rider
+   * cannot physically start is no better for the old plan being dead.
+   */
+  currentPlanLeftByRider?: boolean
+  /**
+   * The rider's own heading in degrees, from the same fix as `position`. With
+   * it (and a speed over `PROJECTION_MIN_SPEED_MPS`) the origin check gains a
+   * direction: see `AUTO_REPLAN_ORIGIN_BEHIND_MAX_M`. Without it the check is
+   * the radius alone, exactly as before.
+   */
+  headingDeg?: number | null
+  /**
+   * The live board time of the transit leg the candidate's access chain feeds,
+   * as the departure card shows it — see `liveBoardForCandidate`, which is the
+   * only thing that should build it. With it, `access-misses-board` measures
+   * against when the bus is actually predicted to leave; without it, against
+   * the leg's `startTime`, the prediction frozen when the plan was fetched.
+   */
+  liveBoardEpochMs?: number | null
+  /**
+   * The trip `liveBoardEpochMs` belongs to. The live time is only applied to an
+   * itinerary whose first transit leg is this trip; any other falls back to its
+   * own `startTime`.
+   */
+  liveBoardTripId?: string | null
   /** The rider's last fix, as [lat, lon]. Null skips the origin check. */
   position?: [number, number] | null
   /**
@@ -140,6 +213,9 @@ export interface AutoReplanContext {
    * nothing to say about it.
    */
   riding?: boolean
+  /** The rider's ground speed at `position`; the heading is only trusted above
+   * `PROJECTION_MIN_SPEED_MPS`. */
+  speedMps?: number | null
   /** Override for TOKEN_TRANSIT_HOP_METERS (config itinerary.tokenTransitHopMeters). */
   tokenHopMaxMeters?: number
   /** Override for TOKEN_TRANSIT_HOP_TOLERANCE_MS. */
@@ -153,6 +229,7 @@ export type AutoReplanVerdict =
       reason:
         | 'access-misses-board'
         | 'arrives-later'
+        | 'origin-behind-heading'
         | 'origin-behind-rider'
         | 'token-transit-hop'
     }
@@ -175,6 +252,44 @@ function originIsBehindRider(
 ): boolean {
   const gap = originGapMeters(candidate, position)
   return gap != null && gap > AUTO_REPLAN_ORIGIN_MAX_M
+}
+
+/**
+ * Does this replacement begin somewhere the rider has already RIDDEN PAST?
+ *
+ * The directional half of the origin check, and the one the radius cannot
+ * express. Null — no answer, never false — whenever the question cannot be
+ * put: a plan that starts on a transit leg, a leg with no coordinates, a fix
+ * with no heading, or a rider too slow for their heading to mean anything.
+ */
+export function originIsBehindHeading(
+  candidate: Itinerary | null | undefined,
+  position: [number, number] | null | undefined,
+  headingDeg: number | null | undefined,
+  speedMps?: number | null
+): boolean | null {
+  if (position == null) return null
+  if (headingDeg == null || !Number.isFinite(headingDeg)) return null
+  if (
+    speedMps != null &&
+    (!Number.isFinite(speedMps) || speedMps < PROJECTION_MIN_SPEED_MPS)
+  ) {
+    return null
+  }
+  const gap = originGapMeters(candidate, position)
+  if (gap == null) return null
+  if (gap <= AUTO_REPLAN_ORIGIN_BEHIND_MAX_M) return false
+  const leg = (candidate?.legs || [])[0] as Leg | undefined
+  const toOrigin = bearingDegrees(
+    position[0],
+    position[1],
+    Number(leg?.from?.lat),
+    Number(leg?.from?.lon)
+  )
+  if (toOrigin == null) return null
+  return (
+    angleBetweenDegrees(toOrigin, headingDeg) > AUTO_REPLAN_BEHIND_ANGLE_DEG
+  )
 }
 
 /**
@@ -362,6 +477,17 @@ function addsATokenHopTo(
   )
 }
 
+/** The live board time, if it is a usable number and names this leg's trip. */
+function liveBoardMsFor(
+  boardLeg: Leg,
+  liveBoard?: { epochMs?: number | null; tripId?: string | null } | null
+): number | null {
+  const ms = Number(liveBoard?.epochMs)
+  if (!Number.isFinite(ms) || ms <= 0) return null
+  if (liveBoard?.tripId && liveBoard.tripId !== legTripId(boardLeg)) return null
+  return ms
+}
+
 /**
  * By how long does this itinerary's access chain overrun the boarding it feeds?
  *
@@ -375,9 +501,17 @@ function addsATokenHopTo(
  * `spliceAccessOntoItinerary` writes: OTP returns an access plan as
  * walk -> bike -> walk as often as a single leg, and it is the END of that
  * chain that has to meet the bus.
+ *
+ * `liveBoard` (backlog 29.1): the live board time the departure card is
+ * showing, measured against instead of the board leg's `startTime` when it is
+ * given and names this itinerary's boarding trip. `startTime` is the prediction
+ * frozen when the plan was fetched and carried unchanged through every scoped
+ * splice; on 2026-09-23 it said 15:53:42 while the feed said 15:57:22, and two
+ * feasible re-plans (15:49:33, 15:50:08) were refused by 18 s and 32 s.
  */
 export function accessBoardOverrunMs(
-  itinerary: Itinerary | null | undefined
+  itinerary: Itinerary | null | undefined,
+  liveBoard?: { epochMs?: number | null; tripId?: string | null } | null
 ): number | null {
   const legs = (itinerary?.legs || []) as Leg[]
   const boardIndex = legs.findIndex((leg) => leg.transitLeg)
@@ -385,10 +519,237 @@ export function accessBoardOverrunMs(
   const access = legs[boardIndex - 1]
   if (!access || access.transitLeg) return null
   const accessEnd = Number(access.endTime)
-  const boardStart = Number(legs[boardIndex].startTime)
+  const boardStart =
+    liveBoardMsFor(legs[boardIndex], liveBoard) ??
+    Number(legs[boardIndex].startTime)
   if (!Number.isFinite(accessEnd) || !Number.isFinite(boardStart)) return null
   if (accessEnd <= 0 || boardStart <= 0) return null
   return accessEnd - boardStart
+}
+
+/** Same boarding stop, when both legs name one; unknown counts as the same. */
+function sameBoardStop(a: Leg, b: Leg): boolean {
+  const id = (leg: any) =>
+    leg?.from?.stop?.gtfsId || leg?.from?.stopId || leg?.from?.stop?.id || null
+  const aId = id(a)
+  const bId = id(b)
+  return !aId || !bId || aId === bId
+}
+
+/**
+ * The live board time `access-misses-board` should measure a candidate
+ * against, or null to keep the leg's own `startTime` (backlog 29.1).
+ *
+ * `liveLegTimes` is keyed by the HELD plan's leg index, and a candidate's
+ * board leg can sit at another index (OTP returns walk -> bike -> walk access
+ * as often as one leg), so the held leg is found by trip and stop instead:
+ * the candidate's first transit leg must be the same run from the same stop.
+ *
+ * Only a genuinely live prediction counts — `boardRealtime && !boardIsFloor`.
+ * A floor is "no earlier than", not a departure, and a timetable time is what
+ * `startTime` already says. A live time can be wrong in either direction
+ * (on 2026-09-23 the stop prediction drifted 4-5 min late before snapping
+ * back), so this is the card's own number, not a better one.
+ */
+export function liveBoardForCandidate(
+  candidate: Itinerary | null | undefined,
+  held: Itinerary | null | undefined,
+  liveLegTimes: Record<number, LiveLegTime> | null | undefined
+): { epochMs: number; tripId: string } | null {
+  const board = ((candidate?.legs || []) as Leg[]).find((leg) => leg.transitLeg)
+  const tripId = legTripId(board)
+  if (!board || !tripId || !liveLegTimes) return null
+  const heldLegs = (held?.legs || []) as Leg[]
+  const i = heldLegs.findIndex(
+    (leg) =>
+      leg.transitLeg && legTripId(leg) === tripId && sameBoardStop(leg, board)
+  )
+  if (i < 0) return null
+  const live = liveLegTimes[i]
+  if (!live?.boardRealtime || live.boardIsFloor) return null
+  const epochMs = Number(live.boardEpoch)
+  if (!Number.isFinite(epochMs) || epochMs <= 0) return null
+  return { epochMs, tripId }
+}
+
+/**
+ * How much earlier than the rider's recorded boarding the plan's run has to
+ * have left before the plan counts as dead (backlog 28.6).
+ *
+ * `riding.boardedAt` is stamped on evidence — the vehicle confirmation — so it
+ * trails the real boarding. On the 0729 fixture it trails the ridden trip's
+ * departure from I-35W & 46th St (17:26:56) by 54 s. On the seven real
+ * September `boarded-earlier` re-plans (debug day files 09-01 .. 09-22) the
+ * plan's board time sat 342, 90, 194, 231 s AFTER `boardedAt`, and twice
+ * BEFORE it: -59 s (09-21 `mub9m39o`) and -52 s (09-22 `mucordp1`), both
+ * re-plans that were applied as genuine earlier boardings. Those two are the
+ * same ~1 min evidence lag, so the slack is twice it: a run due within two
+ * minutes of the recorded boarding is not proof the rider missed it. The one
+ * dead plan on record (0729) left 1 161 s before.
+ */
+export const PLAN_RUN_LEFT_SLACK_MS = 120000
+
+/**
+ * Did the run the held plan boards leave before the rider boarded the one they
+ * are on (backlog 28.6)?
+ *
+ * On the 0729 fixture the plan still named `1:1171228`, due at 17:08:29, while
+ * the rider boarded `1:1173133` at 17:27:50. The aboard splice onto the ridden
+ * trip was then refused `arrives-later` against the plan's 17:40:00 arrival —
+ * an arrival on a bus that had left 19 minutes before the rider boarded, which
+ * nothing can achieve any more. That plan is as dead as a missed bus.
+ *
+ * True only when:
+ * - `planLeg` is a transit leg on ANOTHER trip than the one being ridden (the
+ *   same trip boarded late is still the plan);
+ * - its board time — the card's live time when it is a genuine live prediction
+ *   (`boardRealtime && !boardIsFloor`), else the leg's `startTime` — is more
+ *   than `slackMs` before `boardedAtMs`.
+ *
+ * A genuine EARLIER boarding (the plan's run still ahead of the rider) is
+ * false here, so it stays held to "no later arrival".
+ */
+export function planRunLeftBeforeRider(args: {
+  boardedAtMs: number | null | undefined
+  liveLegTime?: LiveLegTime | null
+  planLeg: Leg | null | undefined
+  ridingTripId: string | null | undefined
+  slackMs?: number
+}): boolean {
+  const { boardedAtMs, liveLegTime, planLeg, ridingTripId } = args
+  if (!planLeg?.transitLeg || !ridingTripId) return false
+  const planTripId = legTripId(planLeg)
+  if (!planTripId || planTripId === ridingTripId) return false
+  const boardedAt = Number(boardedAtMs)
+  if (!Number.isFinite(boardedAt) || boardedAt <= 0) return false
+  const live =
+    liveLegTime?.boardRealtime && !liveLegTime.boardIsFloor
+      ? Number(liveLegTime.boardEpoch)
+      : NaN
+  const planBoardMs =
+    Number.isFinite(live) && live > 0 ? live : Number(planLeg.startTime)
+  if (!Number.isFinite(planBoardMs) || planBoardMs <= 0) return false
+  return planBoardMs < boardedAt - (args.slackMs ?? PLAN_RUN_LEFT_SLACK_MS)
+}
+
+/**
+ * How long the rider must have been `deviated` on an access leg before the
+ * plan in hand can be called one they have left (backlog 35.2).
+ *
+ * 45 s keeps the veto on the first attempt after the rider leaves the line —
+ * the quiet re-plan fires 4-20 s into a streak (2026-09-28 17:35:53 at +20 s;
+ * the 16:38:43 attempt on `orange-1600-0928.json` at +4 s, a streak the rider
+ * closed themselves 51 s after it opened) — and admits the second, which
+ * `QUIET_REPLAN_MIN_COOLDOWN_MS` (25 s) puts at +29 s at the very earliest and
+ * the 09-28 ride put at +60 s. At a bike pace of 6 m/s, 45 s is ~270 m ridden
+ * outside the 100 m corridor that sets `isOnRoute` — not GPS wobble.
+ */
+export const DEVIATED_PLAN_DEAD_MS = 45000
+
+/**
+ * ...and how far, in a straight line, the rider may have closed on the
+ * destination over that streak and still be called lost (backlog 35.2).
+ *
+ * Off the line is not the same as off the trip. On 2026-09-28 17:35-17:39
+ * (`muls77mv-9u3dsl`, `ride-0928-1651.json`) the rider rode a parallel street
+ * up to 326 m from the plan for four minutes, and `distanceToDestination` fell
+ * the whole way: 831 m at the streak's first tick, 734 m at the +60 s re-plan,
+ * ~680 m at the +76 s one, 147 m at 17:39:20. All three `quiet-replan-full`
+ * answers wanted 1 772-2 068 m of riding from there and arrived 17:45:44,
+ * 17:46:53 and 17:48:39; the held plan said 17:40:37 and the rider arrived
+ * 17:39:57. The `arrives-later` refusals were right. A window alone waives
+ * the veto at +60 s and +76 s, leaving only the origin check between the rider
+ * and a plan 6-9 minutes later than the one they were riding (the phone's
+ * +60 s candidate began 22 m from them, inside the 75 m origin radius). The
+ * rider closed ~94 m in the first 45 s: converging on their own. One who has
+ * not closed 50 m in 45 s has stopped, turned away or is circling, and the
+ * plan's arrival is not theirs.
+ */
+export const DEVIATED_PLAN_MIN_CLOSING_M = 50
+
+/** The open `deviated` streak: when it opened, on which leg, and how far the
+ * rider then was from the destination in a straight line. */
+export type DeviatedStreak = {
+  atMs: number
+  destinationM: number | null
+  legIndex: number
+}
+
+/**
+ * Carry the current `deviated` streak across ticks. Null when the rider is not
+ * deviated.
+ *
+ * Opens on the first `deviated` tick, holds while every tick reads
+ * `deviated` on the same leg, and closes on any other status (back on the line,
+ * `behind`/`ahead` there, `completed`) or on a leg change — the previous leg's
+ * geometry says nothing about the new one. An itinerary swap clears it at the
+ * caller (`startGoModeTracking`), for the same reason.
+ */
+export function nextDeviatedSince(
+  prev: DeviatedStreak | null | undefined,
+  tick: {
+    destinationM: number | null | undefined
+    legIndex: number
+    nowMs: number
+    status: string | null | undefined
+  }
+): DeviatedStreak | null {
+  if (tick.status !== 'deviated') return null
+  if (prev && prev.legIndex === tick.legIndex) return prev
+  const d = Number(tick.destinationM)
+  return {
+    atMs: tick.nowMs,
+    destinationM: tick.destinationM != null && Number.isFinite(d) ? d : null,
+    legIndex: tick.legIndex
+  }
+}
+
+/**
+ * Has the rider left the plan's access leg — and the trip it describes — so
+ * that the plan's arrival is no longer theirs to lose (backlog 35.2)?
+ *
+ * The sibling of `planRunLeftBeforeRider` (28.6): both say the plan in hand is
+ * not a yardstick for `arrives-later`. 28.6 is the aboard case (the run the plan
+ * boards has gone); this is the access case (the rider is neither on the plan's
+ * street nor getting any closer to where it goes).
+ *
+ * True only when all of:
+ * - the rider is not verifiably aboard (`riding` — an aboard rider's leg is the
+ *   vehicle, and "off route" there is a matcher question, not a choice);
+ * - a `deviated` streak is open and has lasted at least `windowMs`;
+ * - both straight-line distances to the destination are known, and the rider
+ *   has closed less than `minClosingM` of it since the streak opened.
+ *
+ * Fails closed — missing evidence keeps the veto. The caller asks only on the
+ * quiet FULL re-plan: the scoped re-plan splices onto the same transit suffix,
+ * so its arrival test has nothing to defend against a detour.
+ */
+export function accessPlanDeadByDeviation(args: {
+  destinationM: number | null | undefined
+  minClosingM?: number
+  nowMs: number
+  riding: boolean
+  streak: DeviatedStreak | null | undefined
+  windowMs?: number
+}): boolean {
+  const { streak } = args
+  if (args.riding || !streak) return false
+  if (!Number.isFinite(streak.atMs)) return false
+  if (args.nowMs - streak.atMs < (args.windowMs ?? DEVIATED_PLAN_DEAD_MS)) {
+    return false
+  }
+  const now = Number(args.destinationM)
+  if (
+    args.destinationM == null ||
+    !Number.isFinite(now) ||
+    streak.destinationM == null
+  ) {
+    return false
+  }
+  return (
+    streak.destinationM - now <
+    (args.minClosingM ?? DEVIATED_PLAN_MIN_CLOSING_M)
+  )
 }
 
 /**
@@ -425,9 +786,13 @@ function accessMissesBoard(
 ): boolean {
   if (context.currentPlanIsDead) return false
   const slack = context.accessBoardSlackMs ?? AUTO_REPLAN_ACCESS_BOARD_SLACK_MS
-  const overrun = accessBoardOverrunMs(candidate)
+  const liveBoard = {
+    epochMs: context.liveBoardEpochMs,
+    tripId: context.liveBoardTripId
+  }
+  const overrun = accessBoardOverrunMs(candidate, liveBoard)
   if (overrun == null || overrun <= slack) return false
-  const currentOverrun = accessBoardOverrunMs(current)
+  const currentOverrun = accessBoardOverrunMs(current, liveBoard)
   return !(currentOverrun != null && currentOverrun > slack)
 }
 
@@ -452,6 +817,7 @@ export function acceptAutoReplan(
   const currentArrival = arrivalMs(current)
   if (
     !context.currentPlanIsDead &&
+    !context.currentPlanLeftByRider &&
     candidateArrival != null &&
     currentArrival != null &&
     candidateArrival > currentArrival + AUTO_REPLAN_ARRIVAL_SLACK_MS
@@ -466,6 +832,22 @@ export function acceptAutoReplan(
     originIsBehindRider(candidate, context.position)
   ) {
     return { accept: false, reason: 'origin-behind-rider' }
+  }
+
+  // 2b. ...and it must not start on road the rider has already covered. The
+  // radius above cannot tell 60 m ahead from 60 m behind; this can, and on
+  // 2026-09-21 every automatic re-plan of the evening was behind (24.3).
+  if (
+    !context.riding &&
+    context.position &&
+    originIsBehindHeading(
+      candidate,
+      context.position,
+      context.headingDeg,
+      context.speedMps
+    ) === true
+  ) {
+    return { accept: false, reason: 'origin-behind-heading' }
   }
 
   // 3. Token hop: never swap the plan in hand for the same journey PLUS a

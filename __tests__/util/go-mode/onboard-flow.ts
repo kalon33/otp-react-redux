@@ -719,6 +719,38 @@ describe('replanFromAboard (mid-ride aboard-aware replan)', () => {
     expect(store.getGoMode().reRoute.status).toBe('idle')
   })
 
+  it('only the automatic splice is recorded as AUTO_REPLAN — never the rider (25.6)', async () => {
+    // Backlog 25.6 said the rider's two aboard re-plans reach
+    // autoReplanRejected and are recorded `autoApply: true`. They do not:
+    // replanFromAboard judges a splice there only on its autoApply branch, and
+    // both rider callers take the explicit branch (the onboard panel).
+    const trip = makeTripFixture()
+    mockedFetch.mockReturnValue(() =>
+      Promise.resolve({ error: false, itineraries: [onwardItin()] })
+    )
+    for (const options of [
+      { autoApply: false, reason: 'rider-reroute' },
+      { reason: 'rider-picked-bus' }
+    ]) {
+      const store = makeStore({ trips: { [TRIP_ID]: trip } })
+      await store.dispatch(replanFromAboard(options))
+      const types = store.actions.map((a) => a.type)
+      expect(types).not.toContain('AUTO_REPLAN')
+      expect(
+        store.actions.find((a) => a.type === 'START_REROUTE')?.payload
+          ?.autoApply
+      ).toBe(false)
+    }
+    const auto = makeStore({ trips: { [TRIP_ID]: trip } })
+    await auto.dispatch(
+      replanFromAboard({ autoApply: true, reason: 'boarded-earlier' })
+    )
+    const verdict = auto.actions.find((a) => a.type === 'AUTO_REPLAN')
+    expect(verdict?.payload).toEqual(
+      expect.objectContaining({ autoApply: true, reason: 'boarded-earlier' })
+    )
+  })
+
   it('TripSheet reroutes route through the aboard flow while riding (no planner search)', async () => {
     const trip = makeTripFixture()
     mockedFetch.mockReturnValue(() =>

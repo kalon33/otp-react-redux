@@ -8,6 +8,21 @@ import { calculateDistance } from './position-matching'
  */
 export const NO_LIVE_VEHICLE_POLLS = 6
 
+/**
+ * How many consecutive EMPTY vehicle-position responses a route may carry its
+ * last non-empty vehicle list across (backlog 25.4). A 200 with `vehicles: []`
+ * used to erase the whole list until the next poll refilled it, so the map's
+ * buses, the riding checks and the missed-bus guard all went blind for a poll.
+ * Measured across every day file to 2026-09-22: 103 of 4 115 polls came back
+ * empty on routes that otherwise had vehicles, 34 of 45 blank runs were one
+ * poll long and the longest was five. Six polls (~90-120 s at the 15-20 s
+ * cadence) bridges every run seen and ends where VEHICLE_RECORD_STALE_SEC
+ * (transit-trust.ts, 120 s) would call the carried records stale anyway; past
+ * it the list is emptied and the route reads as having no live vehicles, as
+ * before. A route that never published a vehicle has nothing to carry.
+ */
+export const MAX_CARRIED_EMPTY_VEHICLE_POLLS = 6
+
 // --- Types ---
 
 export interface VehiclePosition {
@@ -47,6 +62,23 @@ export interface VehicleMatchResult {
    * notice the vehicle rolling onto a trip going the other way. */
   directionId?: number | string | null
   distanceMeters: number | null
+  /**
+   * Which feed FRAME this tick was scored against: the matched record's
+   * `seconds`, or its position when the feed publishes no timestamp (the 7/29
+   * recording has `seconds: null` on half its records). The matcher runs once
+   * a second but the feed publishes a new frame every 15-20 s, so a run of
+   * consecutive ticks can be one frame scored over and over (35.1); the caller
+   * counts changes of this to know how many frames a run actually rests on.
+   */
+  frameKey?: string | null
+  /**
+   * The last USABLE heading of the matched vehicle: the frame's own when it has
+   * one, otherwise the one carried from the previous match of the same
+   * vehicle. This feed publishes `heading: null` at a standstill, and while
+   * riding that vehicle the matcher projects its frame along this instead
+   * (12.11, fifth sighting).
+   */
+  heading?: number | null
   label: string | null
   lastSeen: number // epoch ms
   nextStopId?: string | null
@@ -371,18 +403,25 @@ export function measureVehicle(
   baseMeters: number,
   userSpeedMps: number | null | undefined,
   nowMs: number
-): { aged: AgedVehiclePosition; distance: number; inRange: boolean } {
+): {
+  aged: AgedVehiclePosition
+  /** Rider to the nearest point of the corridor; null when there is none. */
+  corridorDistance: number | null
+  distance: number
+  inRange: boolean
+} {
   const aged = ageCorrectVehicle(vehicle, nowMs)
   // What the rider is told, and what candidates are ranked by.
   const distance = calculateDistance(userLat, userLon, aged.lat, aged.lon)
   const fallbackRadius = speedAdjustedRadius(baseMeters, userSpeedMps)
   if (aged.corridorMeters <= 0) {
-    return { aged, distance, inRange: distance <= fallbackRadius }
+    return {
+      aged,
+      corridorDistance: null,
+      distance,
+      inRange: distance <= fallbackRadius
+    }
   }
-  // An explicitly unbounded base means "rank them all, reject none"
-  // (confirmOnboardRoute passes Infinity to pick the nearest vehicle on a route
-  // the rider just named), so never turn that ranking call into a filter.
-  if (!Number.isFinite(baseMeters)) return { aged, distance, inRange: true }
   const corridorDistance = distanceToSegment(
     userLat,
     userLon,
@@ -391,6 +430,12 @@ export function measureVehicle(
     aged.corridorLat,
     aged.corridorLon
   )
+  // An explicitly unbounded base means "rank them all, reject none"
+  // (confirmOnboardRoute passes Infinity to pick the nearest vehicle on a route
+  // the rider just named), so never turn that ranking call into a filter.
+  if (!Number.isFinite(baseMeters)) {
+    return { aged, corridorDistance, distance, inRange: true }
+  }
   const radius = Math.min(
     Math.max(
       baseMeters + aged.corridorMeters * CORRIDOR_LATERAL_SLACK,
@@ -398,7 +443,68 @@ export function measureVehicle(
     ),
     MAX_ADJUSTED_RADIUS_METERS
   )
-  return { aged, distance, inRange: corridorDistance <= radius }
+  return {
+    aged,
+    corridorDistance,
+    distance,
+    inRange: corridorDistance <= radius
+  }
+}
+
+/**
+ * Could the vehicle the rider is RIDING still be carrying them, given only
+ * that its last frame is `ageSeconds` old? Everywhere it can have got to lies
+ * within `MAX_TRANSIT_SPEED_MPS × age` of that frame, whatever its heading
+ * did in between — so a rider inside that disc (plus the base radius) has not
+ * been shown to be off the bus, and the incumbent stays in range.
+ *
+ * This is the riding hold's Phase 1 half (12.11, fifth sighting, 2026-09-28).
+ * The corridor assumes the frame's heading held, and it does not across a
+ * turn: at 17:13:04 bus 8220's frame said 272° while the bus had already
+ * turned south onto Knox, so the rider sat ~650 m off a corridor pointing the
+ * wrong way (allowed ~590 m) and the lock dropped for 24 s. And a frame with
+ * `heading: null` (this feed's standstill value) has no corridor at all, so it
+ * fell back to `speedAdjustedRadius(80, riderSpeed)` — three more drops.
+ *
+ * Only the riding vehicle is held this way. For any other vehicle the disc
+ * would admit buses a kilometre off route; for the one the rider is known to
+ * be on it is the honest statement of "not proven gone", and it stays tight
+ * where it matters: a FRESH frame of a bus that has driven off without the
+ * rider gives a small disc (20 s → 680 m), and the next frame drops it.
+ */
+export function ridingVehicleReachable(
+  userLat: number,
+  userLon: number,
+  vehicle: Pick<VehiclePosition, 'lat' | 'lon' | 'seconds'>,
+  baseMeters: number,
+  nowMs: number
+): boolean {
+  const { seconds } = vehicle
+  if (
+    typeof seconds !== 'number' ||
+    !Number.isFinite(seconds) ||
+    seconds <= 0 ||
+    !Number.isFinite(nowMs)
+  ) {
+    return false
+  }
+  const ageSeconds = Math.max(0, nowMs / 1000 - seconds)
+  if (ageSeconds > MAX_CORRECTABLE_FRAME_AGE_SECONDS) return false
+  const reach = Math.min(
+    baseMeters + ageSeconds * MAX_TRANSIT_SPEED_MPS,
+    MAX_ADJUSTED_RADIUS_METERS
+  )
+  return calculateDistance(userLat, userLon, vehicle.lat, vehicle.lon) <= reach
+}
+
+/** See VehicleMatchResult.frameKey. */
+export function vehicleFrameKey(
+  vehicle: Pick<VehiclePosition, 'lat' | 'lon' | 'seconds'>
+): string {
+  const { seconds } = vehicle
+  return typeof seconds === 'number' && Number.isFinite(seconds) && seconds > 0
+    ? `t${seconds}`
+    : `p${vehicle.lat},${vehicle.lon}`
 }
 
 /**
@@ -478,6 +584,12 @@ function headingDifference(h1: number, h2: number): number {
  * 4. Use heading correlation as tiebreaker
  * 5. Keep the incumbent match unless a challenger clearly beats it
  * 6. Boost confidence if same vehicle matched consecutively (via previousMatch)
+ *
+ * While the rider is RIDING a known vehicle (`ridingVehicleId`, from
+ * `goMode.riding.vehicleId`) that vehicle is held: it stays in range until the
+ * rider is outside anywhere it could physically be, and it is ranked by the
+ * nearer of its projected point and its corridor. Nothing changes before
+ * riding is set — boarding detection keeps the plain matcher.
  */
 export function matchUserToVehicle(
   userLat: number,
@@ -490,7 +602,10 @@ export function matchUserToVehicle(
   userSpeedMps: number | null = null,
   /** GTFS direction_id of the leg the rider is trying to ride, when known. */
   expectedDirectionId: number | string | null = null,
-  { nowMs = Date.now() }: { nowMs?: number } = {}
+  {
+    nowMs = Date.now(),
+    ridingVehicleId = null
+  }: { nowMs?: number; ridingVehicleId?: string | null } = {}
 ): VehicleMatchResult {
   const noMatch: VehicleMatchResult = {
     confidence: 'none',
@@ -506,24 +621,62 @@ export function matchUserToVehicle(
   // distance carried forward from here — into the incumbent margin, the
   // confidence ladder and the rider-facing `distanceMeters` — is the corrected
   // one, because that is the honest answer to "how far away is that bus".
+  //
+  // The riding vehicle is held (35.1, 12.11 — 2026-09-28):
+  //  - a frame with no heading borrows the last usable one this match carried,
+  //    so it is still projected and still has a corridor;
+  //  - it stays in range while the rider is anywhere it could have reached
+  //    since the frame (ridingVehicleReachable), which survives both a
+  //    `heading: null` frame and a heading gone stale across a turn;
+  //  - it is RANKED by min(projected distance, corridor distance). The
+  //    projection assumes the frame's speed held; at 17:22:48 8220's frames
+  //    said 25 m/s while the rider braked into 98th St, so the projected point
+  //    ran ~460 m past the rider and the stopped 8151 at ~304 m won the 150 m
+  //    margin. The corridor (everywhere the bus could be) was ~195 m away.
+  //    Only the riding vehicle gets the corridor as a rank — for everyone else
+  //    the projected point stays the honest "where is that bus".
+  const heldHeading =
+    ridingVehicleId != null &&
+    previousMatch?.vehicleId === ridingVehicleId &&
+    typeof previousMatch.heading === 'number' &&
+    Number.isFinite(previousMatch.heading)
+      ? previousMatch.heading
+      : null
   let nearby = vehicles
     .map((v) => {
+      const isRiding =
+        ridingVehicleId != null && v.vehicleId === ridingVehicleId
+      const frameHasHeading =
+        typeof v.heading === 'number' && Number.isFinite(v.heading)
+      const measuredFrame =
+        isRiding && !frameHasHeading && heldHeading != null
+          ? { ...v, heading: heldHeading }
+          : v
       const measured = measureVehicle(
         userLat,
         userLon,
-        v,
+        measuredFrame,
         proximityMeters,
         userSpeedMps,
         nowMs
       )
+      const inRange =
+        measured.inRange ||
+        (isRiding &&
+          ridingVehicleReachable(userLat, userLon, v, proximityMeters, nowMs))
+      const rank =
+        isRiding && measured.corridorDistance != null
+          ? Math.min(measured.distance, measured.corridorDistance)
+          : measured.distance
       return {
         distance: measured.distance,
-        inRange: measured.inRange,
+        inRange,
+        rank,
         vehicle: v
       }
     })
     .filter((v) => v.inRange)
-    .sort((a, b) => a.distance - b.distance)
+    .sort((a, b) => a.rank - b.rank)
 
   if (nearby.length === 0) return noMatch
 
@@ -606,7 +759,7 @@ export function matchUserToVehicle(
   // Sort by: route match already filtered, then distance, then heading
   scored.sort((a, b) => {
     // Prefer closer, then better heading
-    const distDiff = a.distance - b.distance
+    const distDiff = a.rank - b.rank
     if (Math.abs(distDiff) > 10) return distDiff
     return b.headingScore - a.headingScore
   })
@@ -615,20 +768,25 @@ export function matchUserToVehicle(
   // more than a few meters (the bus outruns its own record), so the vehicle
   // already matched keeps the match unless a challenger CLEARLY beats it. On
   // 7/29 the flap was 847m vs 852m; a 5m edge is noise, not a new bus.
+  //
+  // While riding, the incumbent is the RIDING vehicle, not merely last tick's
+  // match: after a tick the matcher lost it (or a tick a challenger took), the
+  // bus the rider is on must not have to win its seat back from scratch. When
+  // the riding vehicle is not in range at all, last tick's match is the
+  // incumbent, as before.
   let best = scored[0]
+  const incumbent =
+    (ridingVehicleId != null &&
+      scored.find((c) => c.vehicle.vehicleId === ridingVehicleId)) ||
+    (previousMatch?.vehicleId != null &&
+      scored.find((c) => c.vehicle.vehicleId === previousMatch.vehicleId)) ||
+    null
   if (
-    previousMatch?.vehicleId != null &&
-    best.vehicle.vehicleId !== previousMatch.vehicleId
+    incumbent &&
+    incumbent !== best &&
+    best.rank >= incumbent.rank - INCUMBENT_SWITCH_MARGIN_M
   ) {
-    const incumbent = scored.find(
-      (c) => c.vehicle.vehicleId === previousMatch.vehicleId
-    )
-    if (
-      incumbent &&
-      best.distance >= incumbent.distance - INCUMBENT_SWITCH_MARGIN_M
-    ) {
-      best = incumbent
-    }
+    best = incumbent
   }
   const bestVehicle = best.vehicle
 
@@ -664,6 +822,14 @@ export function matchUserToVehicle(
     confidence,
     directionId: bestVehicle.directionId ?? null,
     distanceMeters: Math.round(best.distance),
+    frameKey: vehicleFrameKey(bestVehicle),
+    heading:
+      typeof bestVehicle.heading === 'number' &&
+      Number.isFinite(bestVehicle.heading)
+        ? bestVehicle.heading
+        : isContinuation
+        ? previousMatch?.heading ?? null
+        : null,
     label: bestVehicle.label,
     lastSeen: Date.now(),
     nextStopId: bestVehicle.nextStopId ?? null,

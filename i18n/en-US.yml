@@ -413,7 +413,8 @@ components:
     boardingSubtitle: Looking for {route} nearby
     busHeadsign: to {headsign}
     busLabel: Bus {label}
-    busNotBroadcasting: "Bus not broadcasting yet \u2014 scheduled {time}"
+    busNotBroadcasting: Bus not broadcasting yet — scheduled {time}
+    busNotBroadcastingWaiting: Bus not broadcasting yet
     changeBus: Choose bus
     chooseBus: Choose bus
     confirmExit: Are you sure you want to stop tracking this trip?
@@ -432,11 +433,12 @@ components:
     fastest: Fastest
     fewerTransfers: Fewer Transfers
     findAnotherWay: Find another way
-    findingBestStop: "Finding the best stop to get off\u2026"
-    findingYourBus: "Finding your bus\u2026"
-    followToggle: Follow my location
-    getReady: "\u26A0\uFE0F Get Ready - 2 stops away"
-    getReadyNow: "\U0001F514 GET READY! Next stop is yours!"
+    findingBestStop: Finding the best stop to get off…
+    findingYourBus: Finding your bus…
+    followToggleOff: Follow me
+    followToggleOn: Following you
+    getReady: ⚠️ Get Ready - 2 stops away
+    getReadyNow: 🔔 GET READY! Next stop is yours!
     gotOffHere: I got off here
     gpsError: GPS signal lost. Trying to reconnect...
     gpsErrorTitle: GPS Error
@@ -460,6 +462,68 @@ components:
       bus stop.
     noLiveVehicleData: "No live bus data \u2014 tracking by GPS"
     notYet: Not yet
+    notify:
+      arrivedMessage: Arrived
+      backOnTime: back on time
+      busComingTitle: Bus coming
+      busHereTitle: Bus here
+      changeWithSlack: "{change} · {slack}"
+      connectionAtRiskTitle: Connection at risk
+      connectionLateAtStop: "{routeName} · {minutes} min late · {stopName}"
+      connectionSlack: "{routeName} · {seconds}s"
+      connectionSlackAtStop: "{routeName} · {seconds}s · {stopName}"
+      driftEarlier: "{minutes} min earlier"
+      driftLater: "{minutes} min later"
+      leaveInTitle: Leave in {minutes} min
+      leaveNowTitle: Leave now
+      metresAway: "{metres}m"
+      missedBestIn: "{routeName} likely missed · {bestRouteName} in {minutes} min"
+      missedBusTitle: Missed bus
+      missedNextDeparture: "{routeName} missed · next departure"
+      missedNextIn: "{routeName} likely missed · next in {minutes} min"
+      missedNoAlternatives: "{routeName} likely missed · no alternatives"
+      missedOptions: "{routeName} likely missed · {count} options"
+      modeDrive: Drive
+      modeGo: Go
+      modeScooter: Scooter
+      nextStepTitle: Next step
+      nextStopTitle: Next stop
+      offRouteDistance: "{metres}m from the route"
+      offRouteTitle: Off route
+      pacingDue: due
+      pacingWait: "{minutes} min wait"
+      routeAtStop: "{routeName} · {stopName}"
+      routeMinutes: "{routeName} · {minutes} min"
+      routeMinutesLate: "{routeName} · {minutes} min late"
+      routeMinutesStop: "{routeName} · {minutes} min · {stopName}"
+      routingStopsHereTitle: Routing stops here
+      runningLateTitle: Running late
+      slackLeft: "{minutes} min slack"
+      slackShort: "{minutes} min short"
+      someWay: some way
+      stepBoard: Board {routeName} to {destination}
+      stepContinue: Continue to {destination}
+      stepWalk: Walk to {destination}
+      stopInMinutes: "{stopName} · {minutes} min"
+      theStop: the stop
+      tightConnectionTitle: Tight connection
+      tripCompleteTitle: Trip complete
+      tripUpdatedAlight: "{routeName} · off at {stopName}{arrival}"
+      tripUpdatedArriving: " · arriving in {minutes} min"
+      tripUpdatedBoard: "{routeName} · in {minutes} min · {stopName}"
+      tripUpdatedTitle: Trip updated
+      turnIn: In {distance}{then}
+      turnThen: ", then {instruction}"
+      unreachable: "{howFar} · not getting closer"
+      unreachableFromNamed: "{howFar} from {destination} · not getting closer"
+      yourBus: your bus
+      yourBusLead: Your bus
+      yourConnection: your connection
+      yourDestination: your destination
+      yourRide: your ride
+      yourRideLead: Your ride
+      yourStop: your stop
+      yourStopTitle: Your stop
     offAtStop: Off at {stop}
     onBus: 'On Bus #{label}'
     onBusButton: I'm already on the bus
@@ -483,13 +547,14 @@ components:
     rerouteNlPlaceholder: e.g. avoid stairs today
     rerouteNlSend: Go
     rerouteSearchHere: Search from here
-    resetToPlanned: Reset to planned
+    resetToPlanned: Back to {time} (planned)
     restOfTrip: Rest of your trip
     retry: Retry
-    returnBannerArrived: "You've arrived \u2014 tap to finish"
-    returnBannerLive: "On trip \xB7 Next stop {stop} \xB7 Arrive {eta} \u2014 tap\
-      \ to return"
-    returnBannerNoProgress: "Trip in progress \u2014 tap to return"
+    returnBannerArrived: You've arrived — tap to finish
+    returnBannerLive: On trip · Next stop {stop} · Arrive {eta} — tap to return
+    returnBannerNoProgress: Trip in progress — tap to return
+    returnBannerWaiting: Waiting at {stop} — tap to return
+    returnBannerWaitingTime: Waiting at {stop} · {time} — tap to return
     returnCountdownLabel: Leave for return in
     returnLeaveBy: Leave by {time}
     returnLeaveNow: Leave now
@@ -536,8 +601,13 @@ components:
       turnRight: Turn right
       uTurn: Make a U-turn
     useThisDeparture: Use this
-    vehicleDetail: "Next stop: {stop} - {distance}m away \xB7 #{label}"
-    vehicleDistance: "{distance}m away \xB7 #{label}"
+    vehicleDetail: "Next stop: {stop} - {distance}m away · #{label}"
+    vehicleDistance: "{distance}m away · #{label}"
+    waitingAtStop: Waiting at {stop}
+    waitingAtStopTime: Waiting at {stop} · {time}
+    waitingBusAtStop: "Bus #{label} is at the stop"
+    waitingBusDistanceAway: "Bus #{label} · {distance} away"
+    waitingBusStopsAway: "Bus #{label} · {count, plural, one {1 stop away} other {# stops away}}"
     waitingGPS: Acquiring GPS signal...
     walkToStop: '{emoji} {time} walk to {stop}'
     whereToAlight: Where do you want to get off?
@@ -597,9 +667,7 @@ components:
       yourStop: your stop
       yourStopTitle: Your stop
     departureGone: departed
-    noBusesNearby: No buses detected nearby
     stopsAnswered: '{answered} of {total} stops answered'
-    waitingAtStop: Waiting at {stop}
     waitingAtStopTime: "Waiting at {stop} \xB7 {time}"
   ItinerarySummary:
     itineraryDetails: Itinerary details
@@ -632,29 +700,31 @@ components:
   MetroUI:
     arriveAt: You arrive
     arrivesAtTime: arrives {time}
-    confirmSwitchTrip: Switch your active trip to this route? Your current guidance
-      will update.
+    confirmLaterDeparture: Start {chosen} instead of {row}?
     departsAtTime: departs {time}
-    fare: '{fare}'
-    itineraryDescription: '{time} itinerary using {routes}'
+    confirmSwitchTrip: Switch your active trip to this route? Your current guidance will update.
+    fare: "{fare}"
+    itineraryDescription: "{time} itinerary using {routes}"
     itinerarySummary: from {stopName} | {cost}
     leaveAt: You leave
     multipleOptions: Multiple Options
     orAlternatives: or other routes in the same direction
     originallyScheduledTime: (originally {originalTime})
-    sameShapeVariants: '{count, plural, one {# option} other {# options}}'
-    singleModeItineraryDescription: '{time} {mode} itinerary'
+    otherStops: Other stops
+    otherStopsLooking: Looking…
+    otherStopsNone: No other stops
+    singleModeItineraryDescription: "{time} {mode} itinerary"
     startTrip: Start Trip
     switchTrip: Switch to this trip
-    timeBiking: '{time} biking'
-    timeWalking: '{time} walking'
-    variantBiking: '{distance} biking'
-    variantBoardAt: Board at {stop}
+    timeBiking: "{time} biking"
+    timeWalking: "{time} walking"
+    variantArrives: arrives {time}
+    variantBiking: "{distance} biking"
+    variantLeaves: leaves {time}
+    variantOff: "Off"
+    variantOn: "On"
     variantShown: currently shown
-    variantWalking: '{distance} walking'
-    variantsOtherStop: board at {stop}
-    variantsOtherStopsNamed: board at {stop} +{count} more
-    variantsOtherTimes: '{count, plural, one {# other time} other {# other times}}'
+    variantWalking: "{distance} walking"
   MobilityProfile:
     DevicesPane:
       devices:
@@ -745,6 +815,8 @@ components:
     noDeviceForPush: Register your device using the mobile app to access push notifications.
     notificationChannelPrompt: 'Receive notifications about your saved trips via:'
   OTP2ErrorRenderer:
+    FEW_TRANSIT_ROUTES:
+      advisory: Few routes run at this hour.
     LOCATION_NOT_FOUND:
       body: "{inputFields} {inputFieldsCount, plural, =0 {} one {location is} other\
         \ {locations are}} outside the area we have street data for, which covers\
@@ -763,6 +835,8 @@ components:
       body: A transit connection was found, but it was outside the search window,
         try adjusting your search window, using the vehicle types you selected.
       header: No transit connection in search window
+    NO_TRANSIT_OPTION_FOUND:
+      advisory: No transit option was found for this search.
     OTP_RR_TRIP_IN_PAST:
       body: One or more of these itineraries ends in the past.
       header: Trip has already occurred
@@ -1209,18 +1283,10 @@ config:
     call-ahead: Call to reserve
     continuous-dropoff: Communicate with operator about stop
     flex-service: Flex Service
-    flex-service-colon: 'Flex Service:'
-util:
-  state:
-    errorPlanningTrip: An error occurred while planning a trip.
-    networkUnavailable: The {network} network is unavailable at this moment.
-    noTripFound: No trip found.
-    noTripFoundForMode: No trip found for {modes}.
-    noTripFoundReason: There may be no transit service within the maximum specified
-      distance or at the specified time, or your start or end point might not be safely
-      accessible.
-    noTripFoundWithReason: '{noTripFound} {reason}'
+    flex-service-colon: "Flex Service:"
 otpUi:
+  LocationField:
+    geocoderTimeout: Can't reach the server
   AccessLegBody:
     RentedVehicleSubheader:
       dropoffRental: Drop off {company} {vehicleType} {vehicleName} at {dropoffLocation}
@@ -1234,3 +1300,13 @@ otpUi:
     transitDepartFrom: 'Depart from {place} {hasStopId, select, true {(Stop Id: {stopId})}
       other {}} at {timeMillis, time, short} on {routeName}{hasHeadsign, select, true
       { towards {headsign}} other {}}.'
+util:
+  state:
+    errorPlanningTrip: An error occurred while planning a trip.
+    networkUnavailable: The {network} network is unavailable at this moment.
+    noTripFound: No trip found.
+    noTripFoundForMode: No trip found for {modes}.
+    noTripFoundReason: There may be no transit service within the maximum specified
+      distance or at the specified time, or your start or end point might not be safely
+      accessible.
+    noTripFoundWithReason: '{noTripFound} {reason}'

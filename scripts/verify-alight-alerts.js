@@ -191,21 +191,47 @@ async function main() {
 
     const poly = pm.decodeLegGeometry(busLeg)
     const cum = pm.calculateCumulativeDistances(poly)
+    // `i < 0` (not found), never `i < 1`: at(0) is the boarding stop, and the
+    // old guard turned it into the LAST point of the shape — the exit stop.
+    // That put the rider at their own door on the first tick of the ride and
+    // spent the single ARRIVING_STOP alert there, 11 min from the alight time
+    // (measured 2026-09-22: `leg=1 prog=1.00 legProg=100 liveAlight=660s`).
+    // Harmless while every caller asked for a fraction well inside the leg;
+    // not harmless now that the rider boards at the stop and rides.
     const at = (fraction) => {
       const target = cum[cum.length - 1] * fraction
       let i = cum.findIndex((d) => d >= target)
-      if (i < 1) i = poly.length - 1
+      if (i < 0) i = poly.length - 1
       return { lat: poly[i][0], lon: poly[i][1] }
     }
 
+    // The rider RIDES: a path of fixes along the bus's own shape, rather than
+    // a teleport to a point kilometres along it. The route matcher's jump
+    // budget (position-matching.ts:478-558) licenses a projection by the
+    // ground the rider provably covered — 50 m across a leg boundary plus
+    // twice their own step — so a rider who moved 0 m cannot buy 3 km of it,
+    // and the match stays pinned to the access leg. That is the
+    // "matched leg 0 is not a transit leg" SKIP this script has reported on
+    // most nights since 09-01 (17.29).
+    const path = (from, to, steps) => {
+      const out = []
+      for (let k = 0; k < steps; k++) {
+        out.push(at(from + ((to - from) * k) / Math.max(1, steps - 1)))
+      }
+      return out
+    }
+
     return {
+      alightEpoch: Number(busLeg.endTime),
       alightStop: busLeg.to?.name,
+      boardEpoch: Number(busLeg.startTime),
       boardStop: busLeg.from?.name,
       busRoute: busLeg.routeShortName || busLeg.routeLongName,
       legIndex,
-      // Mid-ride, and then a few seconds from the door.
-      midRide: at(0.35),
-      nearExit: at(0.97),
+      // Board at the stop and ride to a third of the way along, then ride the
+      // rest of the way to the door.
+      midRide: path(0, 0.35, 8),
+      nearExit: path(0.35, 0.97, 8),
       rideMinutes: Math.round(
         (Number(busLeg.endTime) - Number(busLeg.startTime)) / 60000
       ),
@@ -245,14 +271,26 @@ async function main() {
   )
 
   // Fire N ticks at a fixed position and report the alight alerts they raise.
-  const runAt = async (at, ticks) => {
+  /**
+   * `path` is one fix per tick. `live` is the live board/alight record to
+   * re-assert before every tick, and it is the other half of making this
+   * script RUN (17.29): the board gate prefers the LIVE board time over the
+   * plan's (`boardEpoch ?? targetLeg.startTime`,
+   * position-matching.ts:994-998), and `liveLegTimes` is filled from the real
+   * trip fetch, which knows nothing of the clock shift this harness applies.
+   * On every run that needed a shift the gate therefore saw a bus 10-20 min
+   * out and refused the transition. Re-asserted each tick because
+   * refreshLiveLegTimes' 20 s poll overwrites it — the same thing
+   * verify-departure-drift.js does with its synthetic boarding.
+   */
+  const runAt = async (path, ticks, live) => {
     await page.setGeolocation({
       accuracy: 10,
-      latitude: at.lat,
-      longitude: at.lon
+      latitude: path[0].lat,
+      longitude: path[0].lon
     })
     return page.evaluate(
-      async (at, ticks) => {
+      async (path, ticks, live) => {
         // eslint-disable-next-line import/no-absolute-path
         const goMode = await import('/lib/actions/go-mode.js')
         const emitted = []
@@ -264,6 +302,28 @@ async function main() {
         const getState = () => window.store.getState()
 
         for (let i = 0; i < ticks; i++) {
+          const at = path[Math.min(i, path.length - 1)]
+          // Keyed on the CURRENT itinerary's transit leg, not on the index the
+          // plan had when the script started: an auto-update can renumber the
+          // legs underneath the test (it already does), and a live record
+          // written to a stale index is a record about the wrong leg.
+          const legsNow = getState().otp.goMode.activeItinerary?.legs || []
+          const tIdx = legsNow.findIndex((l) => l.transitLeg)
+          if (tIdx >= 0) {
+            window.store.dispatch(
+              goMode.setLiveLegTimes({
+                [tIdx]: {
+                  alightEpoch: live.alightEpoch,
+                  alightRealtime: true,
+                  boardEpoch: live.aboard
+                    ? Date.now() - 30000
+                    : live.boardEpoch,
+                  boardRealtime: true,
+                  realtime: true
+                }
+              })
+            )
+          }
           goMode.handlePositionUpdate({
             coords: {
               accuracy: 10,
@@ -292,32 +352,45 @@ async function main() {
           onTransitLeg: !!leg?.transitLeg
         }
       },
-      at,
-      ticks
+      path,
+      ticks,
+      live
     )
   }
 
   // (0) Waiting at the boarding stop. Nothing about the exit is due here, and
   //     this is the stretch that earns the riding fact the ride phases need.
-  const waiting = await runAt(chosen.waitAt, 15)
+  const live = {
+    alightEpoch: chosen.alightEpoch,
+    boardEpoch: chosen.boardEpoch,
+    legIndex: chosen.legIndex
+  }
+  const waiting = await runAt([chosen.waitAt], 15, live)
   console.log(
     `[at stop] leg ${waiting.legIndex} at ${(
       (waiting.legProgress ?? 0) * 100
     ).toFixed(0)}%: ${waiting.alightAlerts.length} alight alert(s)`
   )
 
-  const mid = await runAt(chosen.midRide, 6)
+  // Once the rider is aboard, the bus has LEFT: the live board time is in the
+  // past, which is what it is on a real ride and what keeps the
+  // boarded-earlier machinery from re-planning the trip out from under the
+  // test.
+  const aboard = { ...live, aboard: true }
+  const mid = await runAt(chosen.midRide, chosen.midRide.length, aboard)
   console.log(
     `[mid-ride] leg ${mid.legIndex} at ${((mid.legProgress ?? 0) * 100).toFixed(
       0
     )}%: ${mid.alightAlerts.length} alight alert(s)`
   )
+  mid.alightAlerts.forEach((n) => console.log(`  ${n.type}: ${n.message}`))
 
-  const exit = await runAt(chosen.nearExit, 10)
+  const exit = await runAt(chosen.nearExit, chosen.nearExit.length, aboard)
   console.log(
     `[at exit] leg ${exit.legIndex} at ${(
       (exit.legProgress ?? 0) * 100
-    ).toFixed(0)}%: ${exit.alightAlerts.length} alight alert(s)`
+    ).toFixed(0)}%: ${exit.alightAlerts.length} alight alert(s)` +
+      ` (transit=${exit.onTransitLeg}, exit stop "${exit.exitStop}")`
   )
   exit.alightAlerts.forEach((n) => console.log(`  ${n.type}: ${n.message}`))
 

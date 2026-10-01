@@ -277,6 +277,14 @@ export interface GoModeState {
   departureOverrideSource: DepartureOverrideSource | null
 
   /**
+   * The RUN `departureOverride` names, when the pick came off a departure row
+   * that carried a trip id (backlog 29.3). The card and the tick follow that
+   * run's live time instead of freezing the tapped minute. Written and cleared
+   * with the value; null for an anchor pick or a session saved before 29.3.
+   */
+  departureOverrideTripId: string | null
+
+  /**
    * The rider got off a bus EARLY, at a stop that is still on the ridden leg's
    * route (8.11). Held because nothing else in the trip's shape says so: the
    * matcher stays on the transit leg (they are standing on its geometry), so
@@ -411,6 +419,13 @@ export interface GoModeState {
   units: 'imperial' | 'metric'
 
   vehicleMatch: {
+    /**
+     * How many DISTINCT feed frames (changes of the matched record's
+     * `seconds`) the current run of `consecutiveMatches` rests on. The run is
+     * counted per 1 s tick, the feed moves every 15-20 s; the riding rebind
+     * gate needs both (35.1, RIDING_REBIND_MIN_FRAMES).
+     */
+    consecutiveFrames: number
     consecutiveMatches: number
     /**
      * Consecutive vehicle-position polls that came back with ZERO vehicles on
@@ -446,6 +461,8 @@ const defaultState: GoModeState = {
   departureOverride: null,
 
   departureOverrideSource: null,
+
+  departureOverrideTripId: null,
 
   earlyAlight: null,
 
@@ -527,6 +544,7 @@ const defaultState: GoModeState = {
   units: 'imperial',
 
   vehicleMatch: {
+    consecutiveFrames: 0,
     consecutiveMatches: 0,
     emptyPolls: 0,
     match: null,
@@ -708,6 +726,7 @@ const goMode = handleActions<GoModeState, any>(
       earlyAlight: null,
       vehicleMatch: {
         ...state.vehicleMatch,
+        consecutiveFrames: 0,
         consecutiveMatches: 0,
         match: action.payload
       }
@@ -829,10 +848,15 @@ const goMode = handleActions<GoModeState, any>(
         payload != null && typeof payload === 'object'
           ? payload.source ?? 'anchor'
           : 'anchor'
+      const tripId =
+        payload != null && typeof payload === 'object'
+          ? payload.tripId ?? null
+          : null
       return {
         ...state,
         departureOverride: ms ?? null,
-        departureOverrideSource: ms == null ? null : source
+        departureOverrideSource: ms == null ? null : source,
+        departureOverrideTripId: ms == null ? null : tripId
       }
     },
 
@@ -850,6 +874,7 @@ const goMode = handleActions<GoModeState, any>(
       // The plan's own departure pick belonged to the bus they just left.
       departureOverride: null,
       departureOverrideSource: null,
+      departureOverrideTripId: null,
       earlyAlight: action.payload,
       riding: null
     }),
@@ -1079,6 +1104,7 @@ const goMode = handleActions<GoModeState, any>(
         // dead boarding's lock alive are reset alongside it, in beginGoMode.
         departureOverride: null,
         departureOverrideSource: null,
+        departureOverrideTripId: null,
         isActive: true,
         liveLegTimes: {},
         notifications: {
@@ -1107,7 +1133,19 @@ const goMode = handleActions<GoModeState, any>(
               // as a START_GO_MODE (daemon page `notification-repeat`). A
               // re-plan onto a different route or a different boarding stop
               // carries a different context and still re-arms.
-              id.startsWith('LEAVE_SOON_')
+              id.startsWith('LEAVE_SOON_') ||
+              // "Missed bus" survives its OWN recovery. The missed-bus replan
+              // dispatches START_GO_MODE, which used to wipe the id that had
+              // just been sent — and on 2026-09-21 the replan landed on the
+              // very same trip (1:1273254) at the very same stop (1:17781)
+              // with the same board epoch, so the next tick raised an
+              // identical claim and pushed it again 21 s later (17:05:45 and
+              // 17:06:06, both with an auto-applied re-plan behind them;
+              // daemon page `notification-repeat`). The id carries the route,
+              // the boarding stop and the effective departure, so a recovery
+              // onto a genuinely different departure has a different id and
+              // still re-arms — the same self-limiting rule as LEAVE_SOON_.
+              id.startsWith('MISSED_BUS_')
           )
         },
         originalFrom: originalFrom ?? null,
@@ -1296,6 +1334,7 @@ const goMode = handleActions<GoModeState, any>(
           : state.alightedFrom,
         departureOverride: null,
         departureOverrideSource: null,
+        departureOverrideTripId: null,
         // The early-alight re-anchoring exists only while the matcher is still
         // stuck on the leg the rider stepped off; once the trip has actually
         // moved past it, the ordinary boarding path is back in charge.
@@ -1396,6 +1435,9 @@ const goMode = handleActions<GoModeState, any>(
         ...state.vehicleMatch,
         ...(action.payload.consecutiveMatches !== undefined && {
           consecutiveMatches: action.payload.consecutiveMatches
+        }),
+        ...(action.payload.consecutiveFrames !== undefined && {
+          consecutiveFrames: action.payload.consecutiveFrames
         }),
         ...(action.payload.emptyPolls !== undefined && {
           emptyPolls: action.payload.emptyPolls

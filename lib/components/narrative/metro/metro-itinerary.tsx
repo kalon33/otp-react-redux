@@ -29,6 +29,7 @@ import { ItineraryDescription } from '../default/itinerary-description'
 import { itineraryHasAccessibilityScore } from '../../../util/accessibility-routing'
 import { ItineraryView } from '../../../util/ui'
 import { localizeGradationMap } from '../utils'
+import { lookupOtherStops } from '../../../actions/other-stops-lookup'
 import { MobileScreens } from '../../../actions/ui-constants'
 import { outboundKeyOf, ReturnPlanState } from '../../../actions/round-trip'
 import FormattedDuration from '../../util/formatted-duration'
@@ -43,13 +44,16 @@ import {
 } from './attribute-utils'
 import DefaultRouteRenderer from './default-route-renderer'
 import DepartureTimesList, {
+  LATE_DEPARTURE_CONFIRM_MINUTES,
+  minutesAfterRowDeparture,
+  rowDepartureTime,
   SetActiveItineraryHandler
 } from './departure-times-list'
 import MetroItineraryRoutes from './metro-itinerary-routes'
 import ReturnTripPanel from './return-trip-panel'
 import RouteBlock from './route-block'
 import RouteBlockWithModeDecoration from './route-block-with-mode-decoration'
-import SameShapeVariants from './same-shape-variants'
+import SameShapeVariants, { LookupStatus } from './same-shape-variants'
 
 const { ensureAtLeastOneMinute } = coreUtils.time
 
@@ -185,13 +189,18 @@ const ItineraryGridSmall = styled.button`
 
 /**
  * ItineraryGrid is `repeat(auto-fit, minmax(50%, 1fr))`, so a plain child would
- * take half the card. `1 / -1` puts the variants control on its own full-width
+ * take half the card. This puts the variants control on its own full-width
  * row beneath the summary, clear of ItineraryDetails (which holds the right
  * column across rows 1-2). SameShapeVariants renders nothing when the row has
  * no variants, so no empty row or grid gap is left behind.
+ *
+ * `1 / span 2` rather than the `1 / -1` this shipped with on 2026-08-27: in an
+ * auto-fit track list Chrome resolves the span to -1 as the first track alone,
+ * so the "full-width" control measured 253 px of a 390 px card — half a card,
+ * which is the shape 16.6 was opened about. `span 2` measures 362 px.
  */
 const VariantsRow = styled(SameShapeVariants)`
-  grid-column: 1 / -1;
+  grid-column: 1 / span 2;
 `
 
 const BLUR_AMOUNT = 3
@@ -251,7 +260,18 @@ type Props = {
   expanded: boolean
   intl: IntlShape
   itinerary: Itinerary
+  /** Ask the planner for this row's other stops (backlog 21.5). */
+  lookupOtherStops?: (itinerary: Itinerary) => void
   mini?: boolean
+  /**
+   * Set by the planner's results list only: this row is a result of the
+   * active search, so its "Other stops" may look the other stops up. Go
+   * Mode's onboard list renders this component too, with rows that are in no
+   * search, and leaves it off.
+   */
+  otherStopsLookup?: boolean
+  /** Where this row's lookup stands on the active search. */
+  otherStopsLookupStatus?: LookupStatus
   returnToGoMode?: () => void
   /** state.otp.roundTrip — the return options planned for this outbound. */
   roundTrip?: { returnPlan: ReturnPlanState | null }
@@ -267,7 +287,7 @@ type Props = {
   tripActive?: boolean
 }
 
-class MetroItinerary extends NarrativeItinerary {
+export class MetroItinerary extends NarrativeItinerary {
   static contextType = ComponentContext
 
   static ModesAndRoutes = MetroItineraryRoutes
@@ -279,6 +299,11 @@ class MetroItinerary extends NarrativeItinerary {
     if (typeof setVisibleItinerary === 'function' && !isVisible) {
       setVisibleItinerary({ index })
     }
+  }
+
+  _lookupOtherStops = () => {
+    const { itinerary, lookupOtherStops } = this.props
+    if (lookupOtherStops) lookupOtherStops(itinerary)
   }
 
   _onMouseLeave = () => {
@@ -313,10 +338,44 @@ class MetroItinerary extends NarrativeItinerary {
     })
   }
 
+  /**
+   * A card can hold several departures of the same journey, so the trip about
+   * to start is not always the one the card advertises: on 2026-09-21 the
+   * rider's thumb landed on the 10:04 chip of a row whose own departure was
+   * 09:07, and 1.15 s later Go Mode started the 10:12 Orange Line instead of
+   * the 09:14 they had been riding towards (backlog 23.1).
+   *
+   * So when the chosen departure is more than LATE_DEPARTURE_CONFIRM_MINUTES
+   * after the row's own, starting it asks first — naming the two times and
+   * nothing else, because the two times are the whole of what went wrong.
+   * Returns false when the rider says no.
+   */
+  _confirmLaterDeparture = (): boolean => {
+    const { intl, itinerary } = this.props
+    const rowTime = rowDepartureTime(itinerary)
+    if (rowTime === null) return true
+    if (minutesAfterRowDeparture(itinerary) <= LATE_DEPARTURE_CONFIRM_MINUTES) {
+      return true
+    }
+    return window.confirm(
+      intl.formatMessage(
+        {
+          defaultMessage: 'Start {chosen} instead of {row}?',
+          id: 'components.MetroUI.confirmLaterDeparture'
+        },
+        {
+          chosen: intl.formatTime(itinerary.startTime),
+          row: intl.formatTime(rowTime)
+        }
+      )
+    )
+  }
+
   _handleStartTrip = () => {
     const { beginGoMode, intl, itinerary, returnToGoMode, tripActive } =
       this.props
     if (!beginGoMode) return
+    if (!this._confirmLaterDeparture()) return
     const roundTripPlan = this._roundTripPlan()
     if (tripActive) {
       // A trip is already running (backgrounded behind the planner):
@@ -664,6 +723,12 @@ class MetroItinerary extends NarrativeItinerary {
                 */}
                 <VariantsRow
                   itinerary={itinerary}
+                  lookupStatus={this.props.otherStopsLookupStatus}
+                  onLookup={
+                    this.props.otherStopsLookup
+                      ? this._lookupOtherStops
+                      : undefined
+                  }
                   setActiveItinerary={setActiveItinerary}
                 />
               </ItineraryGrid>
@@ -728,6 +793,13 @@ const mapStateToProps = (state: AppReduxState, ownProps: Props) => {
     configCosts: state.otp.config.itinerary?.costs,
     defaultFareType: state.otp.config.itinerary?.defaultFareType,
     enableDot: !state.otp.config.itinerary?.disableMetroSeperatorDot,
+    otherStopsLookupStatus: ownProps.otherStopsLookup
+      ? // @ts-expect-error TODO: type activeSearch
+        activeSearch?.otherStopsLookup?.[
+          // @ts-expect-error the list hands rows an index
+          ownProps.itinerary?.index
+        ]?.status
+      : undefined,
     // @ts-expect-error TODO: type activeSearch
     pending: activeSearch ? Boolean(activeSearch.pending) : false,
     roundTrip: state.otp.roundTrip,
@@ -744,6 +816,7 @@ const mapStateToProps = (state: AppReduxState, ownProps: Props) => {
 // TS TODO: correct redux types
 const mapDispatchToProps = {
   beginGoMode: goModeActions.beginGoMode,
+  lookupOtherStops,
   returnToGoMode: goModeActions.returnToGoMode,
   setItineraryView: uiActions.setItineraryView,
   setMobileScreen: uiActions.setMobileScreen

@@ -12,6 +12,7 @@ import type { Leg } from '@opentripplanner/types'
 
 import { epochMs } from './time'
 import { mergeAndSortStopTimes } from '../stop-times'
+import { patternDirectionId, tripIdsMatch } from './trip-id'
 
 // OTP realtimeState values that mean the time reflects live vehicle data
 // (as opposed to the static schedule).
@@ -39,6 +40,14 @@ export const RELEASE_MIN_RIDE_SECONDS = 60
 
 export interface RouteDeparture {
   depMs: number
+  /**
+   * Which way this run goes, from the direction half of its pattern id. Null
+   * when the feed named no pattern. See patternDirectionId (util/go-mode/
+   * trip-id) for why the variant is dropped.
+   */
+  directionId?: string | null
+  /** What the bus says on the front — the rider's own word for direction. */
+  headsign?: string | null
   realtime: boolean
   routeId?: string
   /**
@@ -49,6 +58,100 @@ export interface RouteDeparture {
    * onto the next run — the 2026-09-15 defect in miniature.
    */
   tripId?: string | null
+}
+
+/**
+ * Which run, out of all the ones a stop publishes for a route, the rider is
+ * actually waiting for — everything the BOARDING LEG knows about its own bus.
+ *
+ * Measured on the 2026-09-21 16:05 ride's fixture (`0921-1605-465-wrongdir`):
+ * an itinerary transit leg carries `headsign` ("North to UMN") and
+ * `trip.gtfsId` / `trip.id`, and nothing else about direction — no
+ * `directionId`, no `pattern`. (The plan query asks for those on the TRIP
+ * query, not on a leg: `leg.trip` comes back with exactly
+ * `arrivalStoptime, departureStoptime, gtfsId, id`.) So the direction of the
+ * leg is either its headsign, or the direction of whatever pattern the stop's
+ * own feed files its trip under.
+ */
+export interface BoardingDirection {
+  headsign?: string | null
+  tripId?: string | null
+}
+
+/** What the boarding leg knows about which way its bus is going. */
+export function legBoardingDirection(leg?: Leg | null): BoardingDirection {
+  const l = leg as any
+  return {
+    headsign: l?.headsign ?? l?.trip?.tripHeadsign ?? null,
+    tripId: l?.trip?.gtfsId ?? l?.tripId ?? l?.trip?.id ?? null
+  }
+}
+
+const normalizeHeadsign = (raw: unknown): string | null => {
+  const s = typeof raw === 'string' ? raw.trim().toLowerCase() : ''
+  return s || null
+}
+
+/**
+ * The departures at the boarding stop that go the rider's WAY.
+ *
+ * 2026-09-21 16:15:31, ride `mubq7tfx-8dz3ar`, backlog 19.1. I-35W & 98th
+ * Street Station Gate E (`2:51825`) serves both 465 patterns, and the stop's
+ * candidate list at that instant held exactly two departures:
+ *
+ *   16:18:20 LIVE  South to Burnsville TS  2:465:1:01  2:t609-b15C-sl1C-v64
+ *   16:21:02 LIVE  North to UMN            2:465:0:01  2:t64A-b156-sl1C-v64
+ *
+ * The second is the rider's — their leg's own trip. `getRouteDepartures`
+ * filtered on `routeId` alone, so the SOUTHBOUND run was a legitimate
+ * candidate, it was 162 s earlier than the held northbound (over
+ * AUTO_ANCHOR_MIN_GAIN_MS), and `resolveCardDeparture` adopted it:
+ * `CARD_DEPARTURE_MISMATCH reason 'adopted-earlier'` at 16:15:31 holding
+ * `Trip:2:t609-b15C-sl1C-v64`, then five `held` records to 16:17:34. Vehicle
+ * 4834 (directionId 1) passed the gate at 16:17:18 and the card said
+ * "4:16 PM · departed" while the rider's northbound 4051 was 5 km south.
+ *
+ * Three keys, strongest first:
+ *
+ *  1. the leg's own trip, found in the list: its pattern gives the direction
+ *     id, and that is the feed's own answer — no string matching at all;
+ *  2. the leg's headsign against the departures' — what the rider reads off
+ *     the front of the bus, and what the stop query publishes per stoptime;
+ *  3. nothing: the leg says nothing about direction, so neither does this.
+ *     The list comes back untouched, exactly as before.
+ *
+ * A stop that publishes ONE headsign for the route is left alone whatever the
+ * leg says: there is no other direction to confuse it with, so a headsign that
+ * fails to match is a spelling difference, not a wrong bus, and filtering on
+ * it would blind the anchor for no gain. Where there IS more than one, the
+ * filter is strict even when it empties the list — an empty candidate list
+ * falls back to the planned departure, which is the rider's own bus, and that
+ * is the safe direction to fail in.
+ */
+export function departuresInBoardingDirection(
+  departures: RouteDeparture[],
+  boarding: BoardingDirection | null | undefined
+): RouteDeparture[] {
+  if (!boarding || !departures?.length) return departures
+
+  const own = boarding.tripId
+    ? departures.find((d) => tripIdsMatch(d.tripId, boarding.tripId))
+    : undefined
+
+  const direction = own?.directionId ?? null
+  if (direction != null) {
+    return departures.filter((d) => d.directionId === direction)
+  }
+
+  const headsign = normalizeHeadsign(own?.headsign ?? boarding.headsign)
+  if (!headsign) return departures
+
+  const published = new Set(
+    departures.map((d) => normalizeHeadsign(d.headsign)).filter(Boolean)
+  )
+  if (published.size <= 1) return departures
+
+  return departures.filter((d) => normalizeHeadsign(d.headsign) === headsign)
 }
 
 /**
@@ -82,7 +185,6 @@ export function getLegRouteId(leg?: Leg | null): string | null {
   return (
     (route && typeof route === 'object' ? route.id || route.gtfsId : null) ||
     (leg as any)?.routeId ||
-    (leg as any)?.routeShortName ||
     null
   )
 }
@@ -92,14 +194,21 @@ export function getLegRouteId(leg?: Leg | null): string | null {
  * stop-times data in the transit index (sorted earliest first). Each entry
  * prefers the live (realtime) departure when the feed reports one and falls
  * back to the static schedule otherwise.
+ *
+ * `boarding` — the leg's own answer to "which way is my bus going" — narrows
+ * the list to that direction. Optional so a caller with no boarding leg in
+ * hand keeps the old behaviour, but every Go Mode caller passes one: a route
+ * id alone is not a bus, it is a corridor, and on 2026-09-21 that put a
+ * southbound 465 on the card of a rider waiting for the northbound (19.1).
  */
 export function getRouteDepartures(
   stopData: any,
-  routeId: string | null
+  routeId: string | null,
+  boarding?: BoardingDirection | null
 ): RouteDeparture[] {
-  if (!stopData) return []
+  if (!stopData || !routeId) return []
   try {
-    const departures = mergeAndSortStopTimes(stopData)
+    const ofRoute = mergeAndSortStopTimes(stopData)
       .map((st: any) => {
         const live =
           LIVE_REALTIME_STATES.has(st.realtimeState) &&
@@ -107,18 +216,16 @@ export function getRouteDepartures(
         const secs = live ? st.realtimeDeparture : st.scheduledDeparture
         return {
           depMs: (st.serviceDay + secs) * 1000,
+          directionId: patternDirectionId(st.trip?.pattern?.id),
+          headsign: st.headsign ?? null,
           realtime: live,
           routeId: st.route?.gtfsId || st.trip?.route?.gtfsId,
           tripId: st.trip?.gtfsId ?? st.trip?.id ?? null
         }
       })
+      .filter((d: RouteDeparture) => d.routeId === routeId)
       .sort((a: RouteDeparture, b: RouteDeparture) => a.depMs - b.depMs)
-
-    // If no routeId specified, return all departures
-    if (!routeId) return departures
-
-    // Otherwise filter by routeId
-    return departures.filter((d: RouteDeparture) => d.routeId === routeId)
+    return departuresInBoardingDirection(ofRoute, boarding)
   } catch {
     return []
   }
@@ -223,6 +330,39 @@ export function anchorBoardingStopId(
     currentLeg?.mode === 'WALK' || currentLeg?.mode === 'BICYCLE'
   if (!onAccessLeg || !nextLeg?.transitLeg) return null
   return (nextLeg as any)?.from?.stop?.gtfsId ?? null
+}
+
+/**
+ * The boarding stop whose departures the tick should RE-POLL, or null.
+ *
+ * Wider than {@link anchorBoardingStopId} on purpose, and only for the poll.
+ * The trip steps onto the transit leg BEFORE the bus leaves (13.1 — it has to,
+ * `advanceToLeg` is where vehicle tracking starts), so for the whole platform
+ * wait the current leg is the bus leg and the anchor's walk/bike test is false.
+ * Measured 2026-09-22 (backlog 26.1, session `mucordp1-jqcrp2`): the last
+ * `FETCHING_STOP_TIMES_FOR_STOP {stopId: '1:56831'}` was 08:19:05,
+ * `TRANSITION_LEG {legIndex: 1}` came 08:19:21, and there was not another poll
+ * until 08:39:16 — twenty minutes of a rider standing at the stop with the
+ * one stop-specific live departure going stale. 180 s later
+ * (`STOP_SNAPSHOT_MAX_AGE_MS`) the board time fell through to the trip query's
+ * scheduled 08:15:00, published live.
+ *
+ * So the poll also runs while the rider is WAITING at the current transit
+ * leg's boarding stop — `waitingAtBoardingStop` (18.6), the spatial fact that
+ * ends on the riding fact or 150 m down the line. Everything else the anchor
+ * does (the departure override, 23.3's plan re-target) keeps the narrow gate:
+ * re-targeting the plan onto other runs while the rider stands at the kerb is
+ * not what this is for.
+ */
+export function boardingStopToPoll(
+  currentLeg: Leg | undefined,
+  nextLeg: Leg | undefined,
+  waitingAtBoardingStop: boolean | undefined
+): string | null {
+  const anchorStopId = anchorBoardingStopId(currentLeg, nextLeg)
+  if (anchorStopId) return anchorStopId
+  if (!waitingAtBoardingStop || !currentLeg?.transitLeg) return null
+  return (currentLeg as any)?.from?.stop?.gtfsId ?? null
 }
 
 export interface AnchorDecision {
@@ -347,6 +487,11 @@ export type CardDepartureReason =
   | 'held'
   /** A meaningfully EARLIER run of the same route showed up. */
   | 'adopted-earlier'
+  /**
+   * The card was holding a run the trip is not on, and has been put back on
+   * the trip's own run. See resolveCardDeparture (backlog 19.1).
+   */
+  | 'released-split'
   /** Released: the missed-bus classifier called the boarding definitively gone. */
   | 'released-missed'
   /** Released: the run left the feed and its time is more than grace past. */
@@ -377,6 +522,37 @@ function holdFor(
 ): HeldDeparture {
   const match = departures.find((d) => d.depMs === departureMs)
   return { departureMs, tripId: match?.tripId ?? null }
+}
+
+/**
+ * The time a run the card is already on should read now: the feed's current
+ * epoch for it, except that a realtime->SCHEDULED flip may not move it
+ * EARLIER than the last live time the card showed (backlog 29.3).
+ *
+ * 2026-09-23 15:55:23, trip `1:1346795` at I-35W & 98th St. The stop poll had
+ * published it `UPDATED` through 15:55:02 (15:54:12, +552 s); from 15:55:23
+ * the same trip came back `SCHEDULED` at its timetable 15:45:00, because the
+ * feed drops a departed stop's update once the vehicle is `IN_TRANSIT_TO` the
+ * next stop. It was still standing at the platform (speed 0 until 15:56:13),
+ * and the card jumped ten minutes into the past. The rider, 16:09:26: *"If the
+ * bus is slipping don't just switch to scheduled times!"*
+ *
+ * So a schedule row that would pull the time backwards keeps the last known
+ * time as a floor — the same carry the tick already makes in
+ * `mergeLiveTimePoint` (alight-optimizer.ts), which held 15:54:12 through the
+ * same poll. Shown plain (the rider's Q1 answer, "B"): it no longer matches a
+ * realtime row, so `departureIsLive` is false and no "live" mark is drawn.
+ *
+ * Only backwards. A schedule later than the last time still moves it (16.3's
+ * "a flip moves the number, never the bus"), a realtime row moves it either
+ * way, and the releases — `boardingMiss.definitive`, the run leaving the feed —
+ * are untouched, so the floor never outlives the bus.
+ */
+export function followHeldRun(run: RouteDeparture, lastMs: number): number {
+  if (!run.realtime && Number.isFinite(lastMs) && run.depMs < lastMs) {
+    return lastMs
+  }
+  return run.depMs
 }
 
 /**
@@ -411,11 +587,38 @@ function holdFor(
  *
  * A realtime->schedule flip is neither. The run is still in the feed, so the
  * hold follows it to whatever epoch the feed now publishes for THAT trip —
- * a new prediction for the same bus is not a different bus.
+ * a new prediction for the same bus is not a different bus. The one exception
+ * is backwards: a schedule row earlier than the last live time is floored at
+ * that time (29.3, see followHeldRun).
  *
  * Moving EARLIER is not "abandoning the timed pickup" and stays allowed, on
  * the same >= AUTO_ANCHOR_MIN_GAIN_MS terms shouldAdoptAnchor applies
  * everywhere else.
+ *
+ * ONE RUN, NOT TWO (backlog 19.1, 2026-09-21). `tickTripId` is the run the
+ * trip itself is on — the boarding leg's trip — and the card may not hold a
+ * different one. It used to be able to, and did:
+ *
+ *  - 16:05 ride, 16:15:31: the projection offered a SOUTHBOUND 465 (the stop
+ *    serves both directions and getRouteDepartures filtered on routeId alone)
+ *    and the hold adopted it, `reason: adopted-earlier`, then held it for five
+ *    more records to 16:17:34 while the tick counted down to the rider's
+ *    northbound. The southbound passed the gate at 16:17:18 and the card said
+ *    "departed". The direction filter above is what stops that one.
+ *  - 09:02 ride: 26 records 09:05:51-09:20:17 with the card on the 09:15
+ *    (`Trip:1:1268952`) and the tick on the 10:12 (`1:1348464`) — the card was
+ *    RIGHT about the bus and the plan was wrong, which is why 23.3 re-targets
+ *    the itinerary onto the adopted run instead of arguing with it. Once the
+ *    plan follows, `tickTripId` IS the adopted run and the hold agrees.
+ *
+ * So an earlier run reaches the card by the plan moving to it, and the hold
+ * then catches up (still `adopted-earlier` when the new run is meaningfully
+ * earlier — the rider is being shown an earlier bus). A hold on any other run
+ * is a split screen and is released. There is no oscillation in that pair
+ * because both outcomes put the card on the trip's own run.
+ *
+ * `tickTripId` null — a boarding leg with no trip id at all — leaves every
+ * rule below exactly as it was.
  */
 export function resolveCardDeparture(input: {
   /**
@@ -427,6 +630,13 @@ export function resolveCardDeparture(input: {
   candidateMs: number | null
   /** goMode.departureOverride — the rider's own pick outranks everything. */
   departureOverride?: number | null
+  /**
+   * goMode.departureOverrideTripId — the RUN that pick named (29.3). With it,
+   * the override follows that run's current time instead of freezing the
+   * minute it was tapped at; without it (an anchor pick, a session saved
+   * before 29.3) the override is the bare epoch it always was.
+   */
+  departureOverrideTripId?: string | null
   /** Departures of the boarding route at the boarding stop, sorted. */
   departures: RouteDeparture[]
   graceMs?: number
@@ -435,20 +645,63 @@ export function resolveCardDeparture(input: {
   nowMs: number
   /** OTP's planned board time, the last resort when there is no feed. */
   plannedDepartureMs?: number | null
+  /**
+   * The run the tick pipeline is counting down to — the boarding leg's trip,
+   * in the gtfsId spelling. Null when the leg names no trip, which leaves
+   * every rule here as it was.
+   */
+  tickTripId?: string | null
 }): CardDepartureDecision {
   const {
     boardingMiss,
     candidateMs,
     departureOverride,
+    departureOverrideTripId,
     departures,
     graceMs = CARD_HOLD_RELEASE_GRACE_MS,
     held,
     nowMs,
-    plannedDepartureMs
+    plannedDepartureMs,
+    tickTripId
   } = input
 
   // The rider's own choice is not a projection and is never held against.
+  //
+  // But it is a choice of BUS, not of minute (29.3). On 2026-09-23 the rider
+  // tapped their own bus's live 15:53:49 at 15:42:16 and the card froze there
+  // while the same trip's live time slid to 15:55:44 — every
+  // CARD_DEPARTURE_MISMATCH that followed named the held trip as the tick's
+  // own. So an override that names its run follows that run: its current
+  // time, floored like any held run (followHeldRun). `held` is the caller's
+  // memory of what this override last showed, used only when it is the same
+  // run; otherwise the tapped minute is the floor.
   if (departureOverride != null && Number.isFinite(departureOverride)) {
+    const pickedRun = departureOverrideTripId
+      ? departures.find((d) => tripIdsMatch(d.tripId, departureOverrideTripId))
+      : undefined
+    const lastMs =
+      held != null &&
+      departureOverrideTripId &&
+      tripIdsMatch(held.tripId, departureOverrideTripId)
+        ? held.departureMs
+        : departureOverride
+    if (pickedRun) {
+      const ms = followHeldRun(pickedRun, lastMs)
+      return {
+        departureMs: ms,
+        held: { departureMs: ms, tripId: pickedRun.tripId ?? null },
+        reason: 'override'
+      }
+    }
+    if (departureOverrideTripId) {
+      // The run is not in this poll. Keep the last time it had rather than the
+      // minute it was tapped at; the override itself is released elsewhere.
+      return {
+        departureMs: lastMs,
+        held: { departureMs: lastMs, tripId: departureOverrideTripId },
+        reason: 'override'
+      }
+    }
     return {
       departureMs: departureOverride,
       held: holdFor(departureOverride, departures),
@@ -459,18 +712,56 @@ export function resolveCardDeparture(input: {
   if (held != null && Number.isFinite(held.departureMs)) {
     const current = findHeld(departures, held)
     // The same run at whatever time the feed publishes for it now. This is the
-    // realtime<->schedule flip: it moves the NUMBER, never the bus.
-    const heldMs = current?.depMs ?? held.departureMs
+    // realtime<->schedule flip: it moves the NUMBER, never the bus — except
+    // backwards off a live time, which is 29.3's floor (followHeldRun).
+    const heldMs = current
+      ? followHeldRun(current, held.departureMs)
+      : held.departureMs
 
     const missed = boardingMiss?.definitive === true
     const leftTheFeed = !current && nowMs > held.departureMs + graceMs
 
+    // 19.1: the card and the trip must name ONE run. When they disagree the
+    // card goes to the trip's, whichever way that moves the clock — earlier
+    // (the plan has followed the anchor onto a better bus: 23.3) or later
+    // (the card had wandered). Either way the split is over in one render.
+    const splitFromTrip =
+      tickTripId != null &&
+      held.tripId != null &&
+      !tripIdsMatch(held.tripId, tickTripId)
+    if (splitFromTrip && !missed) {
+      const onTrip = departures.find((d) => tripIdsMatch(d.tripId, tickTripId))
+      const next = onTrip?.depMs ?? plannedDepartureMs ?? null
+      if (next != null && Number.isFinite(next)) {
+        return {
+          departureMs: next,
+          held: onTrip
+            ? { departureMs: onTrip.depMs, tripId: onTrip.tripId ?? null }
+            : holdFor(next, departures),
+          reason: shouldAdoptAnchor(next, heldMs)
+            ? 'adopted-earlier'
+            : 'released-split'
+        }
+      }
+    }
+
     if (!missed && !leftTheFeed) {
       if (shouldAdoptAnchor(candidateMs, heldMs)) {
-        return {
-          departureMs: candidateMs,
-          held: holdFor(candidateMs as number, departures),
-          reason: 'adopted-earlier'
+        // Only ever onto the run the trip is on. A projection that fancies a
+        // different bus is a proposal for the ANCHOR to make (and for 23.3's
+        // re-target to carry into the plan), not a headline the card may
+        // publish on its own.
+        const candidateIsTheTrip =
+          tickTripId == null ||
+          departures.some(
+            (d) => d.depMs === candidateMs && tripIdsMatch(d.tripId, tickTripId)
+          )
+        if (candidateIsTheTrip) {
+          return {
+            departureMs: candidateMs,
+            held: holdFor(candidateMs as number, departures),
+            reason: 'adopted-earlier'
+          }
         }
       }
       return {
@@ -496,4 +787,59 @@ export function resolveCardDeparture(input: {
     held: holdFor(seeded, departures),
     reason: 'seeded'
   }
+}
+
+/**
+ * The departure the TICK should time the wait against when the rider has
+ * picked one (29.3) — the tick-side twin of resolveCardDeparture's override
+ * branch, so the card and `progress.effectiveDepartureMs` name one epoch.
+ *
+ * `departureOverrideMs || liveBoardMs || plan` (getUpcomingTransitTiming)
+ * assumed a pick names a DIFFERENT bus from the plan, whose live time
+ * `liveLegTimes` does not track. On 2026-09-23 the pick named the SAME bus,
+ * and the tick counted down to the tapped 15:53:49 while `liveLegTimes` for
+ * that very leg carried 15:55:44. So:
+ *
+ *  - no trip id (an anchor pick, a session saved before 29.3): the bare epoch;
+ *  - the plan's own run: the leg's live board epoch, or its floor once the
+ *    feed has flipped to schedule (`mergeLiveTimePoint` keeps the last live
+ *    time and marks it `isFloor`) — the same number the card holds;
+ *  - another run (a pick whose plan re-target was refused): that run's time
+ *    in the stop's departures, floored at the tapped minute on a schedule row.
+ */
+export function overrideDepartureForTick(input: {
+  boardingLegTripId: string | null
+  departureOverrideMs: number | null
+  departureOverrideTripId: string | null
+  departures: RouteDeparture[]
+  liveBoard?: {
+    boardEpoch?: number | null
+    boardIsFloor?: boolean
+    boardRealtime?: boolean
+  } | null
+}): number | null {
+  const {
+    boardingLegTripId,
+    departureOverrideMs,
+    departureOverrideTripId,
+    departures,
+    liveBoard
+  } = input
+  if (departureOverrideMs == null || !Number.isFinite(departureOverrideMs)) {
+    return null
+  }
+  if (!departureOverrideTripId) return departureOverrideMs
+  if (tripIdsMatch(departureOverrideTripId, boardingLegTripId)) {
+    const epoch = liveBoard?.boardEpoch
+    if (epoch == null || !Number.isFinite(epoch)) return departureOverrideMs
+    if (liveBoard?.boardRealtime || liveBoard?.boardIsFloor) return epoch
+    // Neither live nor a flagged floor: a kept last-live time still ahead of
+    // the clock, or a schedule the leg never had live. Either way it may not
+    // pull the pick earlier than the minute the rider tapped.
+    return Math.max(epoch, departureOverrideMs)
+  }
+  const run = departures.find((d) =>
+    tripIdsMatch(d.tripId, departureOverrideTripId)
+  )
+  return run ? followHeldRun(run, departureOverrideMs) : departureOverrideMs
 }

@@ -15,8 +15,10 @@ import {
   getRouteDepartures,
   getSoonestCatchableMs,
   HeldDeparture,
+  legBoardingDirection,
   resolveCardDeparture
 } from '../../util/go-mode/departure-anchor'
+import { tripIdsMatch } from '../../util/go-mode/trip-id'
 
 import {
   AlternativeDeparture,
@@ -59,6 +61,11 @@ interface Props {
   arrived?: boolean
   boardingStopData?: any
   departureOverride?: number | null
+  /**
+   * The RUN the override names (29.3). With it the headline follows that bus's
+   * live time; without it the override is the bare minute it was tapped at.
+   */
+  departureOverrideTripId?: string | null
   leg: Leg
   nextLeg?: Leg
   /**
@@ -74,7 +81,7 @@ interface Props {
     tickDepartureMs: number | null
   }) => void
   onExit?: () => void
-  onSelectDeparture?: (epochMs: number | null) => void
+  onSelectDeparture?: (epochMs: number | null, tripId?: string | null) => void
   progress: TripProgress
   units?: 'imperial' | 'metric'
 }
@@ -94,6 +101,7 @@ const WalkingNavigation = ({
   arrived,
   boardingStopData,
   departureOverride,
+  departureOverrideTripId,
   leg,
   nextLeg,
   onDepartureMismatch,
@@ -236,12 +244,25 @@ const WalkingNavigation = ({
 
   // All upcoming departures of the boarding route at the boarding stop, from
   // the stop-times data (re-polled while walking; sorted earliest first).
+  //
+  // Narrowed to the direction the BOARDING LEG goes: a stop serves both
+  // directions of a route as often as not, and on 2026-09-21 at 16:15:31 the
+  // southbound 465 sat in this list against a rider waiting for the northbound
+  // and was adopted as "a meaningfully earlier run of the same route" (19.1).
+  const boardingDirection = useMemo(
+    () => legBoardingDirection(nextLeg),
+    [nextLeg]
+  )
   const routeDepartures = useMemo(
     () =>
       isNextLegTransit
-        ? getRouteDepartures(boardingStopData, nextLegRouteId)
+        ? getRouteDepartures(
+            boardingStopData,
+            nextLegRouteId,
+            boardingDirection
+          )
         : [],
-    [boardingStopData, isNextLegTransit, nextLegRouteId]
+    [boardingStopData, boardingDirection, isNextLegTransit, nextLegRouteId]
   )
 
   const soonestCatchableMs = useMemo(
@@ -269,24 +290,77 @@ const WalkingNavigation = ({
   const holdKey = `${nextLegRouteId ?? ''}|${
     (nextLeg as any)?.from?.stop?.gtfsId ?? ''
   }`
-  const holdRef = useRef<{ held: HeldDeparture | null; key: string }>({
+  const holdRef = useRef<{
+    held: HeldDeparture | null
+    key: string
+    /** What the rider's pick last showed, for its floor (29.3). */
+    overrideHeld: HeldDeparture | null
+  }>({
     held: null,
-    key: holdKey
+    key: holdKey,
+    overrideHeld: null
   })
   if (holdRef.current.key !== holdKey) {
-    holdRef.current = { held: null, key: holdKey }
+    holdRef.current = { held: null, key: holdKey, overrideHeld: null }
   }
 
-  const decision = resolveCardDeparture({
+  const departureInput = {
     boardingMiss: progress.boardingMiss ?? null,
     candidateMs: soonestCatchableMs,
-    departureOverride: departureOverride ?? null,
     departures: routeDepartures,
     held: isNextLegTransit ? holdRef.current.held : null,
     nowMs,
-    plannedDepartureMs: progress.plannedDepartureTime ?? null
+    plannedDepartureMs: progress.plannedDepartureTime ?? null,
+    // The run the rest of the trip is on. The card may hold that one and no
+    // other (19.1) — when the plan moves to an earlier bus (23.3) the card
+    // follows it there, and when the card has wandered it comes back.
+    tickTripId: boardingDirection.tripId ?? null
+  }
+
+  // The rider's pick follows the run it named (29.3), so it needs a memory of
+  // its own: the last time it showed is the floor a schedule flip may not
+  // undercut. Kept apart from `held`, which tracks the un-overridden answer
+  // for "Back to …" (18.1).
+  const overrideInForce =
+    departureOverride != null && Number.isFinite(departureOverride)
+  const decision = resolveCardDeparture({
+    ...departureInput,
+    departureOverride: departureOverride ?? null,
+    departureOverrideTripId: departureOverrideTripId ?? null,
+    held: overrideInForce
+      ? isNextLegTransit
+        ? holdRef.current.overrideHeld
+        : null
+      : departureInput.held
   })
-  if (isNextLegTransit) holdRef.current.held = decision.held
+  if (isNextLegTransit) {
+    holdRef.current.overrideHeld = overrideInForce ? decision.held : null
+  }
+
+  /**
+   * What this card would headline if the override went away — the departure
+   * "Reset to planned" actually hands back (18.1).
+   *
+   * It has to be resolved separately because the override branch of
+   * `resolveCardDeparture` returns the override and nothing else, so with the
+   * override in force the card has no other way to know what it is holding
+   * the rider back from.
+   *
+   * The hold ref then carries THIS decision's hold rather than the override's.
+   * That is the half that makes the control honest: the hold used to be
+   * re-seeded from the override on every render, so releasing the override
+   * left the card holding the override's own run and the headline never moved
+   * — the rider tapped a control that could not change the number it sits
+   * under. Tracking the un-overridden resolution instead means the release
+   * lands on exactly the departure this label names. It is also what
+   * `evaluateDepartureAnchor` already documents for its own `clear` path
+   * ("with the override gone the display and the anchor both fall back to the
+   * soonest departure the rider CAN catch"), which the old re-seed defeated.
+   */
+  const releasedDecision = overrideInForce
+    ? resolveCardDeparture({ ...departureInput, departureOverride: null })
+    : decision
+  if (isNextLegTransit) holdRef.current.held = releasedDecision.held
 
   const effectiveDepartureMs =
     decision.departureMs || progress.plannedDepartureTime
@@ -335,16 +409,54 @@ const WalkingNavigation = ({
 
   // Later departures of the same route, offered as safer fallbacks when the
   // targeted bus is tight (or the rider just wants the next one).
+  //
+  // Never the run the card is already on (29.3). At 15:46 on 2026-09-23 the
+  // headline was the rider's own bus at the minute they had tapped and this
+  // list offered the same bus's newer live time as "Next: 3:55" — one bus,
+  // twice, reading as two.
+  const heldTripId = decision.held?.tripId ?? null
   const laterDepartures = useMemo(() => {
     if (!effectiveDepartureMs) return []
     return routeDepartures
       .filter((d) => d.depMs > effectiveDepartureMs + 30000)
+      .filter((d) => !heldTripId || !tripIdsMatch(d.tripId, heldTripId))
       .slice(0, 3)
-      .map((d) => ({ departureMs: d.depMs, realtime: d.realtime }))
-  }, [routeDepartures, effectiveDepartureMs])
+      .map((d) => ({
+        departureMs: d.depMs,
+        realtime: d.realtime,
+        tripId: d.tripId ?? null
+      }))
+  }, [routeDepartures, effectiveDepartureMs, heldTripId])
 
   const showAlternatives = laterDepartures.length > 0 && waitAtStopSeconds < 120
-  const showReset = !!progress.departureIsOverridden && !!onSelectDeparture
+
+  /**
+   * The departure "Reset to planned" gives back, named on the control itself.
+   *
+   * 2026-09-17 17:57:39, with a screenshot: *"Reset to planned? What's the
+   * point? I don't know what that means. And it did nothing."* The tap was
+   * mechanically correct — `SET_DEPARTURE_OVERRIDE {ms: null, source:
+   * 'rider'}` at 17:57:09, `departureIsOverridden` true->false on the next
+   * tick — but the override was 17:57:53 and what it fell back to was
+   * 17:57:00, and both render "5:57 PM". The rider was offered a control
+   * that named neither time and then changed nothing they could see.
+   *
+   * So the control states the time it restores, and it is offered only when
+   * that time READS differently from the one in force. Comparing the rendered
+   * strings rather than the epochs is deliberate: a 53-second difference is
+   * invisible on a card that shows minutes, and an affordance whose whole
+   * effect is invisible is worse than no affordance.
+   */
+  const resetDepartureMs =
+    releasedDecision.departureMs ?? progress.plannedDepartureTime ?? null
+  const resetWouldShowSameTime =
+    resetDepartureMs == null ||
+    !effectiveDepartureMs ||
+    formatClockTime(resetDepartureMs) === formatClockTime(effectiveDepartureMs)
+  const showReset =
+    !!progress.departureIsOverridden &&
+    !!onSelectDeparture &&
+    !resetWouldShowSameTime
   const showExtras = (showAlternatives || showReset) && !!onSelectDeparture
 
   // Rider ask 2026-09-04 15:08:30, with a screenshot: three `Next: … / Use
@@ -355,6 +467,10 @@ const WalkingNavigation = ({
   // mount: this card re-renders on every GPS tick, and an expansion that
   // survived a leg change would be a panel the rider never opened.
   const [alternativesOpen, setAlternativesOpen] = useState(false)
+  // A tap hands over the RUN as well as its minute (29.3).
+  const chooseDeparture =
+    (alt: { departureMs: number; tripId: string | null }) => () =>
+      onSelectDeparture?.(alt.departureMs, alt.tripId)
   const nextAlternative = laterDepartures[0]
 
   // Card content.
@@ -461,10 +577,13 @@ const WalkingNavigation = ({
                 onClick={() => onSelectDeparture?.(null)}
                 type="button"
               >
-                {intl.formatMessage({
-                  defaultMessage: 'Reset to planned',
-                  id: 'components.GoMode.resetToPlanned'
-                })}
+                {intl.formatMessage(
+                  {
+                    defaultMessage: 'Back to {time} (planned)',
+                    id: 'components.GoMode.resetToPlanned'
+                  },
+                  { time: formatClockTime(resetDepartureMs as number) }
+                )}
               </ResetButton>
             )}
             {showAlternatives && (
@@ -502,7 +621,11 @@ const WalkingNavigation = ({
                   <div id={LATER_DEPARTURES_ID}>
                     {laterDepartures.map(
                       (
-                        alt: { departureMs: number; realtime: boolean },
+                        alt: {
+                          departureMs: number
+                          realtime: boolean
+                          tripId: string | null
+                        },
                         idx: number
                       ) => (
                         <AlternativeDeparture key={idx}>
@@ -510,7 +633,7 @@ const WalkingNavigation = ({
                             {departureLine(alt)}
                           </span>
                           <UseNextButton
-                            onClick={() => onSelectDeparture?.(alt.departureMs)}
+                            onClick={chooseDeparture(alt)}
                             type="button"
                           >
                             {intl.formatMessage({

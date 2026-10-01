@@ -128,14 +128,37 @@ async function main() {
     .then(() => true)
     .catch(() => false)
   if (!planned) {
+    // A request the client gave up on is not an answer either. api.js aborts
+    // it at config.api.timeoutMs (20 s) with timeoutError (`timedOut: true`,
+    // "Request timed out after 20000 ms"), which lands as ROUTING_ERROR: pending
+    // drops to 0 and the Error is pushed onto response[].error
+    // (create-otp-reducer.js ROUTING_ERROR). Without reading it, that looked
+    // exactly like a planner that settled empty, and 09-22..09-25 went red four
+    // nights running during the Linode's 10:04Z Full-GC cluster (backlog 13.6,
+    // 20.1). The Error is mapped to plain fields HERE, inside the page: an Error
+    // crosses page.evaluate as {}.
     const searches = await page.evaluate(() =>
       Object.values(window.store.getState().otp.searches || {}).map((s) => ({
+        errors: (s.response || [])
+          .filter((r) => r && r.error)
+          .map((r) => ({
+            message:
+              typeof r.error === 'string'
+                ? r.error
+                : r.error.message || JSON.stringify(r.error),
+            timedOut: r.error.timedOut === true
+          })),
         itineraries: (s.response || []).flatMap(
           (r) => r?.plan?.itineraries || []
         ).length,
         pending: s.pending
       }))
     )
+    const errorText = searches
+      .flatMap((s) => s.errors)
+      .map((e) => `${e.message}${e.timedOut ? ' [timedOut]' : ''}`)
+      .join('; ')
+    if (errorText) console.log(`[plan] routing errors: ${errorText}`)
     const stillPending = searches.some((s) => s.pending !== 0)
     if (stillPending || searches.length === 0) {
       skip(
@@ -144,8 +167,19 @@ async function main() {
           'api.transit-nav.com did not answer, so nothing was verified'
       )
     }
+    const anyTimedOut = searches.some((s) => s.errors.some((e) => e.timedOut))
+    const anyItineraries = searches.some((s) => s.itineraries > 0)
+    if (anyTimedOut && !anyItineraries) {
+      skip(
+        `the plan request timed out client-side (${errorText}) — the OTP ` +
+          'behind api.transit-nav.com did not answer in time, so nothing was ' +
+          `verified (${JSON.stringify(searches)})`
+      )
+    }
     throw new Error(
-      'the planner settled with no itineraries for this pair: ' +
+      'the planner settled with no itineraries for this pair' +
+        (errorText ? ` (errors: ${errorText})` : '') +
+        ': ' +
         JSON.stringify(searches)
     )
   }

@@ -59,8 +59,21 @@
  *      during deviation — 54bd4ecb/3ed7d078 removed it. (The old-code ABOARD
  *      misfire stays covered by the classifyMissedBus unit tests; it cannot
  *      re-fire here under replay — see tracking-reset note above.)
- *   b. zero autoApply reroutes (missed-bus / boarded-earlier) and zero
- *      itinerary replacements after boarding
+ *   b. once aboard: no autoApply missed-bus reroute, no itinerary swap that
+ *      moves the ridden trip off 1:1173133, and at most one swap — a
+ *      boarded-earlier one that names 1:1173133. Rewritten 2026-09-24
+ *      (backlog 28.6/28.7) from "zero autoApply replans and zero swaps
+ *      aboard": the recorded plan still names the 17:08:29 run the rider
+ *      missed, and whether the missed-bus update replaces it before boarding
+ *      depends on the replay's wall/sim ratio (its retry reads Date.now()).
+ *      When it does not (~6x, what this browser actually keeps up with), the
+ *      one correct remedy is ONE boarded-earlier swap onto the ridden bus
+ *      (28.6); before that fix it was three refused re-plans, a red nightly
+ *      09-18 -> 09-24 on unchanged code. Refused silent re-plans are printed,
+ *      not failed. The deterministic version of this check, at fixed
+ *      1x/6x/8x/25x, is __tests__/util/go-mode/boarded-earlier-once-0729.ts;
+ *      this script prints its measured effective speed so a verdict can be
+ *      read against it.
  *   c. riding stays trip 1:1173133 / vehicle 1:8140 for the whole bus leg
  *   d. stopsRemaining starts at 4, is non-increasing, stays >1 through the
  *      first half of the leg, and hits 1 only near the end (no false GET READY)
@@ -173,6 +186,10 @@ async function main() {
   // ---- install the timeline recorder BEFORE the replay starts ----
   await page.evaluate(() => {
     const rec = (window.__rec = {
+      // Sim/wall pairs at the first and latest running tick: the effective
+      // replay speed. The requested REPLAY_SPEED is a ceiling; the browser
+      // runs as fast as it keeps up with (~6x on the nightly box, 28.7).
+      clock: null,
       itinerarySwaps: [],
       notifications: [],
       progressSamples: [],
@@ -188,6 +205,8 @@ async function main() {
     let lastProgress = null
     let lastSimMs = null
     let lastVmKey = 'uninit'
+    // The reason of the latest autoApply search, to say what caused a swap.
+    let lastAutoReason = null
     window.store.subscribe(() => {
       const g = window.store.getState().otp.goMode
       if (!g) return
@@ -201,6 +220,10 @@ async function main() {
       if (p && p.currentTime) {
         const t = new Date(p.currentTime).getTime()
         lastSimMs = t
+        const wall = Date.now()
+        if (!rec.clock) rec.clock = { firstSim: t, firstWall: wall }
+        rec.clock.lastSim = t
+        rec.clock.lastWall = wall
         if (p !== lastProgress) {
           lastProgress = p
           rec.progressSamples.push({
@@ -236,6 +259,9 @@ async function main() {
         const prevStatus = lastReRoute ? lastReRoute.status : 'idle'
         lastReRoute = rr
         if (rr.status !== prevStatus) {
+          if (rr.status === 'searching' && rr.autoApply) {
+            lastAutoReason = rr.reason || null
+          }
           rec.reroutes.push({
             autoApply: !!rr.autoApply,
             reason: rr.reason,
@@ -279,8 +305,12 @@ async function main() {
         lastItin = it
         if (it) {
           rec.itinerarySwaps.push({
+            cause: lastAutoReason,
             startTime: Number(it.startTime),
-            t: lastSimMs
+            t: lastSimMs,
+            tripIds: (it.legs || [])
+              .filter((l) => l.transitLeg)
+              .map((l) => (l.trip && l.trip.gtfsId) || l.tripId || null)
           })
         }
       }
@@ -355,6 +385,19 @@ async function main() {
 
   const rec = await page.evaluate(() => window.__rec)
   await browser.close()
+
+  // Replay minutes per wall minute, measured — not the requested SPEED.
+  const effectiveSpeed =
+    rec.clock && rec.clock.lastWall > rec.clock.firstWall
+      ? (rec.clock.lastSim - rec.clock.firstSim) /
+        (rec.clock.lastWall - rec.clock.firstWall)
+      : null
+  const speedText =
+    effectiveSpeed == null ? 'n/a' : `${effectiveSpeed.toFixed(1)}x`
+  console.log(
+    `[replay] effective speed ${speedText} (requested ${SPEED}x) — ` +
+      'replay minutes per wall minute; (b) depends on it, see header'
+  )
 
   // ---- reconstruct the aboard window ----
   const firstRiding = rec.ridingChanges.find((r) => r.tripId)
@@ -452,7 +495,8 @@ async function main() {
             : '')
   )
 
-  // (b) zero autoApply reroutes + zero itinerary replacements after boarding
+  // (b) once aboard: no missed-bus auto-update, no swap off the ridden trip,
+  // at most one swap and it is a boarded-earlier one onto the ridden trip.
   const autoReplans = rec.reroutes.filter(
     (e) =>
       e.status === 'searching' &&
@@ -460,13 +504,28 @@ async function main() {
       ['boarded-earlier', 'missed-bus'].includes(e.reason) &&
       e.t >= firstRiding.t
   )
+  const missedBusAboard = autoReplans.filter((e) => e.reason === 'missed-bus')
   const swapsAboard = rec.itinerarySwaps.filter((s) => s.t >= firstRiding.t)
+  const swapsOffRidden = swapsAboard.filter(
+    (s) => !(s.tripIds || []).includes(BOARDED.tripId)
+  )
+  const otherSwaps = swapsAboard.filter((s) => s.cause !== 'boarded-earlier')
   check(
-    'b. no autoApply replans / itinerary swaps once aboard',
-    autoReplans.length === 0 && swapsAboard.length === 0,
-    `${autoReplans.length} autoApply reroute(s) [${autoReplans
+    `b. aboard: no missed-bus update, no swap off ${BOARDED.tripId}, at most one boarded-earlier swap onto it`,
+    missedBusAboard.length === 0 &&
+      swapsOffRidden.length === 0 &&
+      otherSwaps.length === 0 &&
+      swapsAboard.length <= 1,
+    `${autoReplans.length} autoApply search(es) [${autoReplans
       .map((e) => `${fmt(e.t)} ${e.reason}`)
-      .join(', ')}], ${swapsAboard.length} itinerary swap(s)`
+      .join(', ')}], ${swapsAboard.length} itinerary swap(s) [${swapsAboard
+      .map(
+        (s) =>
+          `${fmt(s.t)} ${s.cause || 'no search'} -> ${(s.tripIds || []).join(
+            '+'
+          )}`
+      )
+      .join(', ')}], effective speed ${speedText}`
   )
 
   // (c) riding identity stays on the boarded bus for the whole leg

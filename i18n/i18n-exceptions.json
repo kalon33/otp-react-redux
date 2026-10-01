@@ -132,6 +132,7 @@
     "otpUi.TextOnlyItinerary.arriveAt",
     "otpUi.TextOnlyItinerary.departFrom",
     "otpUi.TextOnlyItinerary.transitArriveAt",
-    "otpUi.TextOnlyItinerary.transitDepartFrom"
+    "otpUi.TextOnlyItinerary.transitDepartFrom",
+    "otpUi.LocationField.geocoderTimeout"
   ]
 }

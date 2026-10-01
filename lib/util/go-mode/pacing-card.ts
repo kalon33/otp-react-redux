@@ -1,5 +1,6 @@
 import type { Leg } from '@opentripplanner/types'
 
+import { notifyIntl } from './notify-i18n'
 import type { TripProgress } from './progress-calculator'
 
 /**
@@ -33,9 +34,9 @@ import type { TripProgress } from './progress-calculator'
  *
  *  - the DEPARTURE becomes the feed's prediction, not the timetable's. The
  *    caller passes `liveBoardEpochMs` already gated on `boardRealtime`,
- *    because a board epoch that is NOT realtime has been clamped forward to
- *    `now` (clampNonLiveLegTimes) and would read as a bus perpetually about
- *    to leave;
+ *    because a board epoch that is NOT realtime is a moment already gone,
+ *    flagged a floor (markStaleLegTimes) and would read as a bus perpetually
+ *    about to leave;
  *  - the TRAVEL TIME becomes the rider's own: ground still ahead on this leg
  *    divided by the speed they are actually keeping. This is the shape 6.4
  *    built (progress-calculator.ts:218) — the plan's `duration × (1 −
@@ -102,27 +103,73 @@ export function classifyBuffer(waitSeconds: number): PacingState {
   return 'comfortable'
 }
 
-// Rider-confirmed copy: travel time left and projected wait, NOTHING else. A
-// negative wait shows with its minus sign — "−2 min wait" says everything
-// "go fast" did without adding words. Urgency still arrives as the buzz on a
-// worsening pacing edge; the glance stays two numbers. (The words the rider
-// asked for — hurry, take your time — live on the departure-drift alert, which
-// fires on a change and has room to explain itself.)
+/**
+ * Rider-confirmed copy: travel time left and projected wait, NOTHING else.
+ * Urgency arrives as the buzz on a worsening pacing edge; the glance stays two
+ * numbers. (The words the rider asked for — hurry, take your time — live on
+ * the departure-drift alert, which fires on a change and has room to explain
+ * itself.)
+ *
+ * ## No negative wait (rider, 2026-09-21 17:06:53; backlog 12.16)
+ *
+ * "I'm sick of the negative minute wait notifications." This card was the
+ * surface. It used to render the shortfall with its own minus sign — the code
+ * here said so in as many words, "−2 min wait says everything 'go fast' did" —
+ * and on `mubq7tfx-8dz3ar` ride 2 it stood on the lock screen reading
+ * "🚲 0 min ride · −4 min wait" at the exact minute the rider wrote that note,
+ * then −5 and −6 as the clock ran on. It never reached the debug stream:
+ * sendPush schedules it natively, so no ADD_NOTIFICATION records it and a
+ * search of the action log finds nothing. `progress.waitTimeAtStop` went
+ * negative at 17:06:06 and stayed negative for 132 consecutive ticks until the
+ * rider boarded at 17:08:18 — the bus had NOT gone, the board epoch was wrong
+ * (21.1), and a minus sign is not a fact about the world in any case.
+ *
+ * So the number never carries a sign. Three sentences instead:
+ *
+ *  - slack left  -> "{n} min wait", as before;
+ *  - short of it -> "{n} min short", the phrase the drift alert already uses
+ *    for the same quantity, so the rider reads one vocabulary;
+ *  - the departure itself already past -> "due", with no number at all. NOT
+ *    "departed": the card cannot know that, this one is proof it cannot, and
+ *    whether a bus has gone is classifyMissedBus's call.
+ */
 function composePost(
   travelMin: number,
   bufferMin: number,
+  departureSec: number,
   state: PacingState,
   passive: boolean,
   walking: boolean
 ): PacingCardPost {
-  const wait = bufferMin < 0 ? `−${-bufferMin}` : `${bufferMin}`
+  const intl = notifyIntl()
+  const wait =
+    departureSec <= 0
+      ? intl.formatMessage({
+          defaultMessage: 'due',
+          id: 'components.GoMode.notify.pacingDue'
+        })
+      : bufferMin < 0
+      ? intl.formatMessage(
+          {
+            defaultMessage: '{minutes} min short',
+            id: 'components.GoMode.notify.slackShort'
+          },
+          { minutes: -bufferMin }
+        )
+      : intl.formatMessage(
+          {
+            defaultMessage: '{minutes} min wait',
+            id: 'components.GoMode.notify.pacingWait'
+          },
+          { minutes: bufferMin }
+        )
   const icon = walking ? '🚶' : '🚲'
   const verb = walking ? 'walk' : 'ride'
   return {
     message: '',
     passive,
     priority: state === 'atRisk' ? 1 : 0,
-    title: `${icon} ${travelMin} min ${verb} · ${wait} min wait`
+    title: `${icon} ${travelMin} min ${verb} · ${wait}`
   }
 }
 
@@ -207,10 +254,16 @@ export function evaluatePacingCard(
   const buffer = flex ? flex.bufferSec : wait
   const travelSec = flex ? flex.travelSec : due - wait
   const travelMin = Math.max(0, Math.round(travelSec / 60))
-  // Negative waits round AWAY from zero: 30 s short is "−1 min wait", never a
+  // Negative waits round AWAY from zero: 30 s short is "1 min short", never a
   // false "0 min wait".
   const bufferMin =
     buffer < 0 ? Math.floor(buffer / 60) : Math.round(buffer / 60)
+  // Seconds until the departure this card is pacing the rider toward — the
+  // feed's own when the measured flex is in force, the progress figure
+  // otherwise, so the two never describe different buses. Its SIGN is what
+  // separates "short of it" from "already past" (12.16).
+  const departureSec =
+    flex && liveBoardEpochMs != null ? (liveBoardEpochMs - nowMs) / 1000 : due
   const state = classifyBuffer(buffer)
   const legKey = String(currentLeg.startTime)
 
@@ -220,7 +273,14 @@ export function evaluatePacingCard(
   return {
     clear: false,
     next: { bufferMin, legKey, live, postedAtMs: nowMs, state },
-    post: composePost(travelMin, bufferMin, state, cadence.passive, walking)
+    post: composePost(
+      travelMin,
+      bufferMin,
+      departureSec,
+      state,
+      cadence.passive,
+      walking
+    )
   }
 }
 

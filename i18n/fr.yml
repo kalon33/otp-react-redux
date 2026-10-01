@@ -417,52 +417,188 @@ components:
   FormNavigationButtons:
     ariaLabel: Navigation du formulaire
   GoMode:
-    arrivedDone: "Termin\xE9"
-    arrivedTitle: "\U0001F389 Vous \xEAtes arriv\xE9 !"
-    arrivesIn: arrive dans {time}
-    boardingAboard: "\xC0 bord du {route}"
-    boardingConfirm: Je suis dans le bus
-    boardingDeny: Je ne suis pas dans ce bus
-    boardingKnownVehicle: "D\xE9j\xE0 suivi \xB7 n\xB0{label}"
-    boardingQuestion: "\xCAtes-vous dans le bus ?"
-    boardingRetry: "R\xE9essayer"
-    boardingSearchFailed: Flux des bus injoignable.
-    boardingSearching: "Recherche\u2026"
-    boardingSubtitle: "Recherche du {route} \xE0 proximit\xE9"
-    busHeadsign: vers {headsign}
-    busLabel: Bus {label}
-    busNotBroadcasting: "Bus pas encore localis\xE9 \u2014 pr\xE9vu \xE0 {time}"
-    changeBus: Choisir le bus
-    confirmExit: "Voulez-vous vraiment arr\xEAter le suivi de ce trajet ?"
+    arrivedDone: "Terminé"
+    arrivedTitle: "🎉 Vous êtes arrivé !"
+    arrivesIn: "arrive dans {time}"
+    boardingAboard: "À bord du {route}"
+    boardingConfirm: "Je suis dans le bus"
+    boardingDeny: "Je ne suis pas dans ce bus"
+    boardingKnownVehicle: "Déjà suivi · n°{label}"
+    boardingQuestion: "Êtes-vous dans le bus ?"
+    boardingRetry: "Réessayer"
+    boardingSearchFailed: "Flux des bus injoignable."
+    boardingSearching: "Recherche…"
+    boardingSubtitle: "Recherche du {route} à proximité"
+    busHeadsign: "vers {headsign}"
+    busLabel: "Bus {label}"
+    busNotBroadcasting: "Bus pas encore localisé — prévu à {time}"
+    busNotBroadcastingWaiting: "Le bus n'émet pas encore sa position"
+    changeBus: "Choisir le bus"
+    confirmExit: "Voulez-vous vraiment arrêter le suivi de ce trajet ?"
+    departureGone: "parti"
+    directionEB: "Direction est"
+    directionNB: "Direction nord"
+    directionSB: "Direction sud"
+    directionWB: "Direction ouest"
+    errorPermissionDenied: "Accès à la position refusé. Autorisez la localisation dans les réglages de votre navigateur."
+    errorTimeout: "Signal GPS expiré. Vérifiez que vous êtes dans une zone couverte par le GPS."
+    errorUnavailable: "Impossible de déterminer votre position. Vérifiez les réglages de votre appareil."
+    findAnotherWay: "Trouver un autre chemin"
+    findingBestStop: "Recherche du meilleur arrêt pour descendre…"
+    findingYourBus: "Recherche de votre bus…"
+    followToggleOff: "Me suivre"
+    followToggleOn: "Suivi activé"
+    getReady: "⚠️ Préparez-vous - 2 arrêts"
+    getReadyNow: "🔔 PRÉPAREZ-VOUS ! C'est le prochain arrêt !"
+    gotOffHere: "Je suis descendu ici"
+    gpsError: "Signal GPS perdu. Nouvelle tentative de connexion..."
+    gpsErrorTitle: "Erreur GPS"
+    headerDestination: "Vers {destination}"
+    legBike: "Vélo"
+    hideLaterDepartures: "Moins"
+    laterDepartures: "Départs suivants"
+    legStopsTo: "{count, plural, one {# arrêt} other {# arrêts}} jusqu'à {dest}"
+    legTo: "vers {dest}"
+    legWait: "🕒 {mins} min d'attente"
+    legWalk: "Marche"
+    liveBanner: "Mode Go actif — suivi de votre bus"
+    loading: "Démarrage du trajet..."
+    loadingSchedule: "Chargement des horaires de votre bus…"
+    locatingBus: "Localisation de votre bus..."
+    nextBusesAtStop: "Prochains bus à {stop}"
+    nextDeparture: "Prochain : {time} (dans {mins} min)"
+    noLiveVehicleData: "Pas de données en temps réel — suivi par GPS"
+    notYet: "Pas encore"
+    notify:
+      arrivedMessage: "Arrivé"
+      backOnTime: "sans retard"
+      busComingTitle: "Bus en approche"
+      busHereTitle: "Bus ici"
+      changeWithSlack: "{change} · {slack}"
+      connectionAtRiskTitle: "Correspondance en danger"
+      connectionLateAtStop: "{routeName} · {minutes} min de retard · {stopName}"
+      connectionSlack: "{routeName} · {seconds} s"
+      connectionSlackAtStop: "{routeName} · {seconds} s · {stopName}"
+      driftEarlier: "{minutes} min plus tôt"
+      driftLater: "{minutes} min plus tard"
+      leaveInTitle: "Partir dans {minutes} min"
+      leaveNowTitle: "Partir maintenant"
+      metresAway: "{metres} m"
+      missedBestIn: "{routeName} probablement manqué · {bestRouteName} dans {minutes} min"
+      missedBusTitle: "Bus manqué"
+      missedNextDeparture: "{routeName} manqué · prochain départ"
+      missedNextIn: "{routeName} probablement manqué · prochain dans {minutes} min"
+      missedNoAlternatives: "{routeName} probablement manqué · aucune solution"
+      missedOptions: "{routeName} probablement manqué · {count} options"
+      modeDrive: "Voiture"
+      modeGo: "En route"
+      modeScooter: "Trottinette"
+      nextStepTitle: "Étape suivante"
+      nextStopTitle: "Prochain arrêt"
+      offRouteDistance: "{metres} m hors itinéraire"
+      offRouteTitle: "Hors itinéraire"
+      pacingDue: "imminent"
+      pacingWait: "{minutes} min d’attente"
+      routeAtStop: "{routeName} · {stopName}"
+      routeMinutes: "{routeName} · {minutes} min"
+      routeMinutesLate: "{routeName} · {minutes} min de retard"
+      routeMinutesStop: "{routeName} · {minutes} min · {stopName}"
+      routingStopsHereTitle: "Itinéraire interrompu"
+      runningLateTitle: "En retard"
+      slackLeft: "{minutes} min de marge"
+      slackShort: "{minutes} min manquantes"
+      someWay: "assez loin"
+      stepBoard: "Monter dans {routeName} vers {destination}"
+      stepContinue: "Continuer vers {destination}"
+      stepWalk: "Marcher vers {destination}"
+      stopInMinutes: "{stopName} · {minutes} min"
+      theStop: "l’arrêt"
+      tightConnectionTitle: "Correspondance serrée"
+      tripCompleteTitle: "Trajet terminé"
+      tripUpdatedAlight: "{routeName} · descente à {stopName}{arrival}"
+      tripUpdatedArriving: " · arrivée dans {minutes} min"
+      tripUpdatedBoard: "{routeName} · dans {minutes} min · {stopName}"
+      tripUpdatedTitle: "Trajet mis à jour"
+      turnIn: "Dans {distance}{then}"
+      turnThen: ", puis {instruction}"
+      unreachable: "{howFar} · sans se rapprocher"
+      unreachableFromNamed: "{howFar} de {destination} · sans se rapprocher"
+      yourBus: "votre bus"
+      yourBusLead: "Votre bus"
+      yourConnection: "votre correspondance"
+      yourDestination: "votre destination"
+      yourRide: "votre véhicule"
+      yourRideLead: "Votre trajet"
+      yourStop: "votre arrêt"
+      yourStopTitle: "Votre arrêt"
+    offAtStop: "Descente à {stop}"
+    onBus: "Dans le bus n° {label}"
+    onBusButton: "Je suis déjà dans le bus"
+    onboardAssumedRoute: "À bord du {route}"
+    onboardAssumedVehicle: "À bord du {route} · {vehicle}"
+    onboardBackToTrip: "Retour au trajet"
+    onboardCancel: "Annuler"
+    onboardError: "Impossible d'identifier votre bus. Réessayer ?"
+    onboardNotThisVehicle: "Ce n'est pas celui-ci"
+    onboardPreviewArrive: "Arrivée {time}"
+    onboardPreviewBack: "Retour aux options"
+    onboardPreviewConfirm: "Confirmer cet arrêt"
+    onboardPreviewWait: "{mins} min d'attente"
+    onboardTitle: "Dans le bus"
+    openTripSheet: "Ouvrir l'aperçu du trajet"
+    pickYourBus: "Dans quel bus êtes-vous ? Choisissez-le ci-dessous."
+    pickYourRoute: "Aucun bus détecté en temps réel — choisissez votre ligne :"
+    rerouteNlError: "Impossible de comprendre — réessayez."
+    rerouteNlLabel: "Décrivez ce dont vous avez besoin"
+    rerouteNlPlaceholder: "ex. éviter les escaliers aujourd'hui"
+    rerouteNlSend: "Envoyer"
+    rerouteSearchHere: "Chercher depuis ici"
+    resetToPlanned: "Revenir à {time} (prévu)"
+    restOfTrip: "Suite de votre trajet"
+    retry: "Réessayer"
+    returnBannerArrived: "Vous êtes arrivé — touchez pour terminer"
+    returnBannerLive: "En trajet · Prochain arrêt {stop} · Arrivée {eta} — touchez pour revenir"
+    returnBannerNoProgress: "Trajet en cours — touchez pour revenir"
+    returnBannerWaiting: "En attente à {stop} — touchez pour revenir"
+    returnBannerWaitingTime: "En attente à {stop} · {time} — touchez pour revenir"
+    returnCountdownLabel: "Départ du retour dans"
+    returnLeaveBy: "Partir à {time}"
+    returnLeaveNow: "Partez maintenant"
+    returnMissed: "Départ du retour dépassé"
+    returnPlanNow: "Planifier le retour"
+    returnRouteDeparts: "{route} part à {time}"
+    returnStart: "Commencer le retour"
+    rideToStop: "{emoji} {time} de trajet jusqu'à {stop}"
+    selectVehicle: "Celui-ci"
+    showLaterDepartures: "Plus"
+    sheetHandleLabel: "Voir le trajet et les autres options"
+    stillCheckingStops: "Vérification de {count, plural, one {1 arrêt supplémentaire} other {# arrêts supplémentaires}} en cours…"
+    stopDeparturesTitle: "Départs"
+    stopsAnswered: "{answered} arrêts sur {total} ont répondu"
+    stopsRemainingCompact: "Encore {count, plural, one {1 arrêt} other {# arrêts}}"
+    theBus: "le bus"
+    thenTurn: "puis {turn}"
+    toStop: "{emoji} Vers {stop}"
+    trackingBus: "Suivi du bus n° {label}"
+    turnCuesLegLabel: "Navigation détaillée pour l'étape {leg}"
+    turnCuesLegOff: "Navigation détaillée ({leg}) : désactivée"
+    turnCuesLegOn: "Navigation détaillée ({leg}) : activée"
+    turnCuesOff: "Navigation détaillée : désactivée"
+    turnCuesOn: "Navigation détaillée : activée"
+    tripSheetHeading: "Votre trajet"
+    tripSheetTitle: "Aperçu du trajet"
+    useThisDeparture: "Utiliser celui-ci"
+    vehicleDetail: "Prochain arrêt : {stop} - à {distance} m · n° {label}"
+    vehicleDistance: "à {distance} m · n° {label}"
+    waitingAtStop: "En attente à {stop}"
+    waitingAtStopTime: "En attente à {stop} · {time}"
+    waitingBusAtStop: "Le bus n° {label} est à l'arrêt"
+    waitingBusDistanceAway: "Bus n° {label} · à {distance}"
+    waitingBusStopsAway: "Bus n° {label} · {count, plural, one {à 1 arrêt} other {à # arrêts}}"
+    waitingGPS: "Acquisition du signal GPS..."
+    walkToStop: "{emoji} {time} de marche jusqu'à {stop}"
+    whereToAlight: "Où voulez-vous descendre ?"
     currentLocation: (Emplacement actuel)
-    directionEB: Direction est
-    directionNB: Direction nord
-    directionSB: Direction sud
-    directionWB: Direction ouest
-    errorPermissionDenied: "Acc\xE8s \xE0 la position refus\xE9. Autorisez la localisation\
-      \ dans les r\xE9glages de votre navigateur."
-    errorTimeout: "Signal GPS expir\xE9. V\xE9rifiez que vous \xEAtes dans une zone\
-      \ couverte par le GPS."
-    errorUnavailable: "Impossible de d\xE9terminer votre position. V\xE9rifiez les\
-      \ r\xE9glages de votre appareil."
-    findAnotherWay: Trouver un autre chemin
-    findingBestStop: "Recherche du meilleur arr\xEAt pour descendre\u2026"
-    findingYourBus: "Recherche de votre bus\u2026"
-    followToggle: Suivre ma position
-    getReady: "\u26A0\uFE0F Pr\xE9parez-vous - 2 arr\xEAts"
-    getReadyNow: "\U0001F514 PR\xC9PAREZ-VOUS ! C'est le prochain arr\xEAt !"
-    gotOffHere: Je suis descendu ici
-    gpsError: Signal GPS perdu. Nouvelle tentative de connexion...
-    gpsErrorTitle: Erreur GPS
-    headerDestination: Vers {destination}
-    legBike: "V\xE9lo"
-    hideLaterDepartures: Moins
-    laterDepartures: "D\xE9parts suivants"
-    legStopsTo: "{count, plural, one {# arr\xEAt} other {# arr\xEAts}} jusqu'\xE0\
-      \ {dest}"
-    legTo: vers {dest}
-    legWait: "\U0001F552 {mins} min d'attente"
-    legWalk: Marche
     avoidBiking: "\xC9viter le v\xE9lo"
     fewerTransfers: Moins de correspondances
     lessWalking: Moins de marche
@@ -478,137 +614,6 @@ components:
     deviationWarning: '{distance} m de la ligne'
     noBusesOrRoutesNearby: "Aucun bus ou ligne d\xE9tect\xE9 \xE0 proximit\xE9. Essayez\
       \ de vous rapprocher d'un arr\xEAt de bus."
-    liveBanner: "Mode Go actif \u2014 suivi de votre bus"
-    loading: "D\xE9marrage du trajet..."
-    loadingSchedule: "Chargement des horaires de votre bus\u2026"
-    locatingBus: Localisation de votre bus...
-    nextBusesAtStop: "Prochains bus \xE0 {stop}"
-    nextDeparture: 'Prochain : {time} (dans {mins} min)'
-    noLiveVehicleData: "Pas de donn\xE9es en temps r\xE9el \u2014 suivi par GPS"
-    notYet: Pas encore
-    notify:
-      arrivedMessage: "Arriv\xE9"
-      backOnTime: sans retard
-      busComingTitle: Bus en approche
-      busHereTitle: Bus ici
-      changeWithSlack: "{change} \xB7 {slack}"
-      connectionAtRiskTitle: Correspondance en danger
-      connectionLateAtStop: "{routeName} \xB7 {minutes} min de retard \xB7 {stopName}"
-      connectionSlack: "{routeName} \xB7 {seconds} s"
-      connectionSlackAtStop: "{routeName} \xB7 {seconds} s \xB7 {stopName}"
-      driftEarlier: "{minutes} min plus t\xF4t"
-      driftLater: '{minutes} min plus tard'
-      leaveInTitle: Partir dans {minutes} min
-      leaveNowTitle: Partir maintenant
-      metresAway: '{metres} m'
-      missedBestIn: "{routeName} probablement manqu\xE9 \xB7 {bestRouteName} dans\
-        \ {minutes} min"
-      missedBusTitle: "Bus manqu\xE9"
-      missedNextDeparture: "{routeName} manqu\xE9 \xB7 prochain d\xE9part"
-      missedNextIn: "{routeName} probablement manqu\xE9 \xB7 prochain dans {minutes}\
-        \ min"
-      missedNoAlternatives: "{routeName} probablement manqu\xE9 \xB7 aucune solution"
-      missedOptions: "{routeName} probablement manqu\xE9 \xB7 {count} options"
-      modeDrive: Voiture
-      modeGo: En route
-      modeScooter: Trottinette
-      nextStepTitle: "\xC9tape suivante"
-      nextStopTitle: "Prochain arr\xEAt"
-      offRouteDistance: "{metres} m hors itin\xE9raire"
-      offRouteTitle: "Hors itin\xE9raire"
-      routeAtStop: "{routeName} \xB7 {stopName}"
-      routeMinutes: "{routeName} \xB7 {minutes} min"
-      routeMinutesLate: "{routeName} \xB7 {minutes} min de retard"
-      routeMinutesStop: "{routeName} \xB7 {minutes} min \xB7 {stopName}"
-      routingStopsHereTitle: "Itin\xE9raire interrompu"
-      runningLateTitle: En retard
-      slackLeft: '{minutes} min de marge'
-      slackShort: '{minutes} min manquantes'
-      someWay: assez loin
-      stepBoard: Monter dans {routeName} vers {destination}
-      stepContinue: Continuer vers {destination}
-      stepWalk: Marcher vers {destination}
-      stopInMinutes: "{stopName} \xB7 {minutes} min"
-      theStop: "l\u2019arr\xEAt"
-      tightConnectionTitle: "Correspondance serr\xE9e"
-      tripCompleteTitle: "Trajet termin\xE9"
-      turnIn: Dans {distance}{then}
-      turnThen: ', puis {instruction}'
-      unreachable: "{howFar} \xB7 sans se rapprocher"
-      unreachableFromNamed: "{howFar} de {destination} \xB7 sans se rapprocher"
-      yourBus: votre bus
-      yourBusLead: Votre bus
-      yourConnection: votre correspondance
-      yourDestination: votre destination
-      yourRideLead: Votre trajet
-      yourStop: "votre arr\xEAt"
-      yourStopTitle: "Votre arr\xEAt"
-    offAtStop: "Descente \xE0 {stop}"
-    onBus: "Dans le bus n\xB0 {label}"
-    onBusButton: "Je suis d\xE9j\xE0 dans le bus"
-    onboardAssumedRoute: "\xC0 bord du {route}"
-    onboardAssumedVehicle: "\xC0 bord du {route} \xB7 {vehicle}"
-    onboardBackToTrip: Retour au trajet
-    onboardCancel: Annuler
-    onboardError: "Impossible d'identifier votre bus. R\xE9essayer ?"
-    onboardNotThisVehicle: Ce n'est pas celui-ci
-    onboardPreviewArrive: "Arriv\xE9e {time}"
-    onboardPreviewBack: Retour aux options
-    onboardPreviewConfirm: "Confirmer cet arr\xEAt"
-    onboardPreviewWait: '{mins} min d''attente'
-    onboardTitle: Dans le bus
-    openTripSheet: "Ouvrir l'aper\xE7u du trajet"
-    pickYourBus: "Dans quel bus \xEAtes-vous ? Choisissez-le ci-dessous."
-    pickYourRoute: "Aucun bus d\xE9tect\xE9 en temps r\xE9el \u2014 choisissez votre\
-      \ ligne :"
-    rerouteNlError: "Impossible de comprendre \u2014 r\xE9essayez."
-    rerouteNlLabel: "D\xE9crivez ce dont vous avez besoin"
-    rerouteNlPlaceholder: "ex. \xE9viter les escaliers aujourd'hui"
-    rerouteNlSend: Envoyer
-    rerouteSearchHere: Chercher depuis ici
-    resetToPlanned: "Revenir au trajet pr\xE9vu"
-    restOfTrip: Suite de votre trajet
-    retry: "R\xE9essayer"
-    returnBannerArrived: "Vous \xEAtes arriv\xE9 \u2014 touchez pour terminer"
-    returnBannerLive: "En trajet \xB7 Prochain arr\xEAt {stop} \xB7 Arriv\xE9e {eta}\
-      \ \u2014 touchez pour revenir"
-    returnBannerNoProgress: "Trajet en cours \u2014 touchez pour revenir"
-    returnCountdownLabel: "D\xE9part du retour dans"
-    returnLeaveBy: "Partir \xE0 {time}"
-    returnLeaveNow: Partez maintenant
-    returnMissed: "D\xE9part du retour d\xE9pass\xE9"
-    returnPlanNow: Planifier le retour
-    returnRouteDeparts: "{route} part \xE0 {time}"
-    returnStart: Commencer le retour
-    rideToStop: "{emoji} {time} de trajet jusqu'\xE0 {stop}"
-    selectVehicle: Celui-ci
-    showLaterDepartures: Plus
-    sheetHandleLabel: Voir le trajet et les autres options
-    stillCheckingStops: "V\xE9rification de {count, plural, one {1 arr\xEAt suppl\xE9\
-      mentaire} other {# arr\xEAts suppl\xE9mentaires}} en cours\u2026"
-    stopDeparturesTitle: "D\xE9parts"
-    stopsAnswered: "{answered} arr\xEAts sur {total} ont r\xE9pondu"
-    stopsRemainingCompact: "Encore {count, plural, one {1 arr\xEAt} other {# arr\xEA\
-      ts}}"
-    theBus: le bus
-    thenTurn: puis {turn}
-    toStop: '{emoji} Vers {stop}'
-    trackingBus: "Suivi du bus n\xB0 {label}"
-    turnCuesLegLabel: "Navigation d\xE9taill\xE9e pour l'\xE9tape {leg}"
-    turnCuesLegOff: "Navigation d\xE9taill\xE9e ({leg}) : d\xE9sactiv\xE9e"
-    turnCuesLegOn: "Navigation d\xE9taill\xE9e ({leg}) : activ\xE9e"
-    turnCuesOff: "Navigation d\xE9taill\xE9e : d\xE9sactiv\xE9e"
-    turnCuesOn: "Navigation d\xE9taill\xE9e : activ\xE9e"
-    tripSheetHeading: Votre trajet
-    tripSheetTitle: "Aper\xE7u du trajet"
-    useThisDeparture: Utiliser celui-ci
-    vehicleDetail: "Prochain arr\xEAt : {stop} - \xE0 {distance} m \xB7 n\xB0 {label}"
-    vehicleDistance: "\xE0 {distance} m \xB7 n\xB0 {label}"
-    waitingAtStop: "En attente \xE0 {stop}"
-    waitingAtStopTime: "En attente \xE0 {stop} \xB7 {time}"
-    waitingGPS: Acquisition du signal GPS...
-    walkToStop: "{emoji} {time} de marche jusqu'\xE0 {stop}"
-    whereToAlight: "O\xF9 voulez-vous descendre ?"
     turnInstructions:
       arrivingAt: "Arriv\xE9e \xE0 {destination}"
       bearLeft: "L\xE9g\xE8rement \xE0 gauche"
@@ -626,8 +631,6 @@ components:
       turnLeft: "Tourner \xE0 gauche"
       turnRight: "Tourner \xE0 droite"
       uTurn: Faire demi-tour
-    departureGone: departed
-    noBusesNearby: No buses detected nearby
   ItinerarySummary:
     itineraryDetails: "D\xE9tails du trajet"
   LocationSearch:
@@ -657,31 +660,33 @@ components:
     titleFrom: "Choisissez votre point de d\xE9part"
     titleTo: Choisissez votre destination
   MetroUI:
-    arriveAt: "Vous arrivez \xE0"
-    arrivesAtTime: "arriv\xE9e {time}"
-    confirmSwitchTrip: "Basculer votre trajet actif sur cette ligne ? Vos indications\
-      \ seront mises \xE0 jour."
-    departsAtTime: "d\xE9part {time}"
-    fare: '{fare}'
+    arriveAt: Vous arrivez à
+    arrivesAtTime: arrivée {time}
+    confirmLaterDeparture: "Partir à {chosen} au lieu de {row} ?"
+    confirmSwitchTrip: "Basculer votre trajet actif sur cette ligne ? Vos indications seront mises à jour."
+    departsAtTime: départ {time}
+    fare: "{fare}"
     itineraryDescription: Trajet de {time} par les lignes {routes}
     itinerarySummary: "Partez \xE0 {stopName} | {cost}"
     leaveAt: "Partez \xE0"
     multipleOptions: Plusieurs options
     orAlternatives: "ou autres lignes dans la m\xEAme direction"
     originallyScheduledTime: (initialement {originalTime})
-    sameShapeVariants: '{count, plural, one {# option} other {# options}}'
+    otherStops: Autres arrêts
+    otherStopsLooking: Recherche…
+    otherStopsNone: Aucun autre arrêt
     singleModeItineraryDescription: Trajet de {time} {mode}
-    startTrip: "D\xE9marrer le trajet"
-    switchTrip: Basculer sur ce trajet
-    timeBiking: "{time} de v\xE9lo"
-    timeWalking: '{time} de marche'
-    variantBiking: "{distance} \xE0 v\xE9lo"
-    variantBoardAt: "Montez \xE0 {stop}"
-    variantShown: "actuellement affich\xE9"
-    variantsOtherStop: "montez \xE0 {stop}"
-    variantsOtherStopsNamed: "montez \xE0 {stop} +{count} autres"
-    variantsOtherTimes: '{count, plural, one {# autre horaire} other {# autres horaires}}'
-    variantWalking: "{distance} \xE0 pied"
+    startTrip: "Démarrer le trajet"
+    switchTrip: "Basculer sur ce trajet"
+    timeBiking: "{time} de vélo"
+    timeWalking: "{time} de marche"
+    variantBiking: "{distance} à vélo"
+    variantArrives: arrivée à {time}
+    variantLeaves: départ à {time}
+    variantOff: Descente
+    variantOn: Montée
+    variantShown: actuellement affiché
+    variantWalking: "{distance} à pied"
   MobilityProfile:
     DevicesPane:
       devices:
@@ -789,9 +794,14 @@ components:
         \ de d\xE9part et d'arriv\xE9e pour la date indiqu\xE9e."
       header: Aucune desserte
     NO_TRANSIT_CONNECTION_IN_SEARCH_WINDOW:
-      body: "Une desserte en transports a \xE9t\xE9 trouv\xE9e mais ne correspond\
-        \ pas \xE0 vos crit\xE8res. Veuillez ajuster votre recherche."
-      header: "Aucune desserte selon vos crit\xE8res"
+      body: >-
+        Une desserte en transports a été trouvée mais ne correspond pas à vos
+        critères. Veuillez ajuster votre recherche.
+      header: Aucune desserte selon vos critères
+    FEW_TRANSIT_ROUTES:
+      advisory: Peu de lignes circulent à cette heure-ci.
+    NO_TRANSIT_OPTION_FOUND:
+      advisory: Aucune option en transports n'a été trouvée pour cette recherche.
     OTP_RR_TRIP_IN_PAST:
       body: "L'heure d'arriv\xE9e d'un ou de plusieurs itin\xE9raires est d\xE9j\xE0\
         \ pass\xE9e."
@@ -1223,18 +1233,10 @@ config:
     call-ahead: "Appelez pour r\xE9server"
     continuous-dropoff: "Demandez l'arr\xEAt au conducteur"
     flex-service: Service Flex
-    flex-service-colon: "Service Flex\u202F:"
-util:
-  state:
-    errorPlanningTrip: Une erreur s'est produite lors de la planification du trajet.
-    networkUnavailable: "Le syst\xE8me {network} n'est pas disponible pour le moment."
-    noTripFound: "Aucun trajet trouv\xE9."
-    noTripFoundForMode: "Aucun trajet {modes} n'a \xE9t\xE9 trouv\xE9."
-    noTripFoundReason: "Vos points de d\xE9part et d'arriv\xE9e ne sont peut-\xEA\
-      tre pas desservis dans le rayon sp\xE9cifi\xE9 ou aux heures indiqu\xE9es, ou\
-      \ ne sont pas accessibles en toute s\xE9curit\xE9."
-    noTripFoundWithReason: '{noTripFound} {reason}'
+    flex-service-colon: "Service Flex :"
 otpUi:
+  LocationField:
+    geocoderTimeout: Impossible de joindre le serveur
   AccessLegBody:
     RentedVehicleSubheader:
       dropoffRental: "D\xE9posez {company} {vehicleType} {vehicleName} \xE0 {dropoffLocation}"
@@ -1248,3 +1250,13 @@ otpUi:
     transitDepartFrom: "D\xE9part de {place} {hasStopId, select, true {(Arr\xEAt :\
       \ {stopId})} other {}} \xE0 {timeMillis, time, short} via {routeName}{hasHeadsign,\
       \ select, true { direction {headsign}} other {}}."
+util:
+  state:
+    errorPlanningTrip: Une erreur s'est produite lors de la planification du trajet.
+    networkUnavailable: "Le syst\xE8me {network} n'est pas disponible pour le moment."
+    noTripFound: "Aucun trajet trouv\xE9."
+    noTripFoundForMode: "Aucun trajet {modes} n'a \xE9t\xE9 trouv\xE9."
+    noTripFoundReason: "Vos points de d\xE9part et d'arriv\xE9e ne sont peut-\xEA\
+      tre pas desservis dans le rayon sp\xE9cifi\xE9 ou aux heures indiqu\xE9es, ou\
+      \ ne sont pas accessibles en toute s\xE9curit\xE9."
+    noTripFoundWithReason: '{noTripFound} {reason}'

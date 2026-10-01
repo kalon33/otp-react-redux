@@ -106,11 +106,22 @@ describe('go-mode > 16.3 the card holds the departure it showed', () => {
   })
 
   describe('a realtime -> schedule flip is not a different bus', () => {
-    it('follows the held TRIP to its scheduled time', () => {
+    it('stays on the held TRIP, floored at its last live time (29.3)', () => {
+      // Until 29.3 this followed the trip back to its 09:53 timetable. A
+      // schedule row EARLIER than the last live time now keeps that time: the
+      // 2026-09-23 flip put the card ten minutes into the past this way.
       const flipped = departures({ depMs: DEP_SCHED, realtime: false })
       const decision = resolve({ departures: flipped })
-      expect(decision.departureMs).toBe(DEP_SCHED)
+      expect(decision.departureMs).toBe(DEP_LIVE)
       expect(decision.departureMs).not.toBe(DEP_NEXT)
+      expect(decision.reason).toBe('held')
+    })
+
+    it('still follows the held TRIP to a LATER scheduled time', () => {
+      const later = DEP_LIVE + 120000
+      const flipped = departures({ depMs: later, realtime: false })
+      const decision = resolve({ departures: flipped })
+      expect(decision.departureMs).toBe(later)
       expect(decision.reason).toBe('held')
     })
 

@@ -35,6 +35,12 @@ interface UpdaterBridge {
     native?: string
   }>
   /**
+   * The plugin's own device id (definitions.d.ts:1145). Kept in the iOS
+   * Keychain (DeviceIdHelper.swift), NOT in the WebView's website data — so it
+   * outlives whatever clears localStorage, which `otpDeviceId` does not.
+   */
+  getDeviceId?: () => Promise<{ deviceId?: string }>
+  /**
    * The bundle QUEUED for the next reload, or null. Note the plugin's `next()`
    * is a SETTER (`next({id})`, definitions.d.ts:545) — this is the reader, and
    * it is the one this file wants.
@@ -94,6 +100,27 @@ export async function getRunningBundle(): Promise<{
       native: info?.native ?? null,
       version: info?.bundle?.version ?? null
     }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * The native updater's device id, or null in a browser / on any failure.
+ *
+ * Backlog 28.1: the server copy of the rider's places is keyed on a device id,
+ * and the web one (`otpDeviceId`, debug-log-boot.js) lives in the SAME
+ * localStorage the places do — so the loss the copy exists to undo would take
+ * its key with it. This one is stored natively and survives that.
+ */
+export async function getNativeDeviceId(): Promise<string | null> {
+  const plugin = bridge()
+  if (!plugin?.getDeviceId) return null
+  try {
+    const info = await plugin.getDeviceId()
+    return typeof info?.deviceId === 'string' && info.deviceId
+      ? info.deviceId
+      : null
   } catch {
     return null
   }

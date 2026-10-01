@@ -42,10 +42,9 @@ describe('components > go-mode > GoModeDemo gallery', () => {
     const wrapper = mount(<GoModeDemo />)
     const toggles = wrapper.find('button.same-shape-variants-toggle')
     expect(toggles.length).toBe(2)
-    // `toContain`, not `toBe`: the control carries a disclosure chevron beside
-    // the label now (backlog 16.6). These two leave at the same minute from the
-    // same stop, so there is no departure or boarding stop to name.
-    expect(toggles.at(0).text()).toContain('2 options')
+    // The two 21 > 6 options get off the 21 at different stops, so the row
+    // offers "Other stops" — and says nothing more (21.5).
+    expect(toggles.at(0).text()).toBe('Other stops▶')
   })
 })
 

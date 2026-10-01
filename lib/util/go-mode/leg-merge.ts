@@ -446,3 +446,149 @@ export function normalizeGoModeItinerary(
   }
   return next as Itinerary
 }
+
+/**
+ * A run of the boarding route at the boarding stop, as the stop-times feed
+ * names it — enough to put that run ON the leg.
+ */
+export interface AdoptedRun {
+  /** When it leaves the boarding stop: the feed's live time, else schedule. */
+  departureMs: number
+  headsign?: string | null
+  /** Whether `departureMs` is a prediction rather than the timetable. */
+  realtime?: boolean
+  /** gtfsId spelling — see util/go-mode/trip-id.tripGtfsId. */
+  tripId: string
+}
+
+const shifted = (v: any, delta: number): any => {
+  const n = Number(v)
+  return Number.isFinite(n) ? n + delta : v
+}
+
+/** Move every time on a leg by `delta`, leaving everything else alone. */
+function shiftLeg(leg: any, delta: number): any {
+  if (!delta) return leg
+  const next: any = {
+    ...leg,
+    endTime: shifted(leg.endTime, delta),
+    startTime: shifted(leg.startTime, delta)
+  }
+  for (const end of ['from', 'to'] as const) {
+    const place = leg[end]
+    if (!place) continue
+    if (place.arrival != null || place.departure != null) {
+      next[end] = {
+        ...place,
+        ...(place.arrival != null
+          ? { arrival: shifted(place.arrival, delta) }
+          : {}),
+        ...(place.departure != null
+          ? { departure: shifted(place.departure, delta) }
+          : {})
+      }
+    }
+  }
+  if (Array.isArray(leg.intermediatePlaces)) {
+    next.intermediatePlaces = leg.intermediatePlaces.map((p: any) =>
+      p && (p.arrivalTime != null || p.departureTime != null)
+        ? {
+            ...p,
+            ...(p.arrivalTime != null
+              ? { arrivalTime: shifted(p.arrivalTime, delta) }
+              : {}),
+            ...(p.departureTime != null
+              ? { departureTime: shifted(p.departureTime, delta) }
+              : {})
+          }
+        : p
+    )
+  }
+  return next
+}
+
+/**
+ * Put the plan on the bus the rider is actually going to take.
+ *
+ * Backlog 23.3, and the rider's answer to it ("YES duh!!", 2026-09-21 16:30):
+ * when the card moves to an earlier real run of the same route from the same
+ * boarding stop, the WHOLE plan follows — the trip sheet, the boarding logic
+ * and the leg transition, not just the headline. On the 09:02 ride it did not,
+ * and three surfaces named three different buses at 09:23:01: the card on the
+ * 09:43, the sheet counting a wait to a 10:13 board, and the chip on the
+ * Orange Line the rider was already sitting on.
+ *
+ * NOT a new splicer, and deliberately not one. `buildOnboardItinerary` and
+ * `replanFromAboard` both presuppose the rider is ABOARD — the first
+ * synthesizes a bus leg starting at `Date.now()` from the vehicle's next stop,
+ * the second refuses without `riding.tripId` — and the rider here is still
+ * cycling to the stop. Nothing about the SHAPE of their trip changes: same
+ * boarding stop, same alight stop, same geometry, same intermediate stops,
+ * same access legs. Only which run serves it, and therefore when.
+ *
+ * So: the boarding leg keeps everything and is moved to the new run's
+ * departure, carrying its own duration; every leg after it moves by the same
+ * delta; every leg before it is returned BY REFERENCE, untouched (the 7/29
+ * "only reroute the bike leg" promise the other splicers keep). The ride's
+ * running time is the timetable's for that pattern, which is the same claim
+ * the plan was already making — and `refreshLiveLegTimes` polls the new trip
+ * from the next tick and publishes its realtime board and alight over the top.
+ *
+ * Returns null when there is nothing to do or nothing safe to do: not a
+ * transit leg, no run named, the leg is already on that run, or the times do
+ * not arithmetic.
+ */
+export function retargetTransitLegToRun(
+  itinerary: Itinerary | null | undefined,
+  legIndex: number,
+  run: AdoptedRun | null | undefined
+): Itinerary | null {
+  const legs = itinerary?.legs
+  if (!legs?.length || !run?.tripId) return null
+  const leg: any = legs[legIndex]
+  if (!leg?.transitLeg) return null
+  if (legTripId(leg) === run.tripId) return null
+
+  const start = Number(leg.startTime)
+  const departure = Number(run.departureMs)
+  if (!Number.isFinite(start) || !Number.isFinite(departure)) return null
+  const delta = departure - start
+
+  const retargeted: any = {
+    ...shiftLeg(leg, delta),
+    // The delays described the OLD run against ITS timetable.
+    arrivalDelay: 0,
+    departureDelay: 0,
+    headsign: run.headsign ?? leg.headsign,
+    realTime: !!run.realtime,
+    realtimeState: run.realtime ? 'UPDATED' : 'SCHEDULED',
+    // `arrivalStoptime`/`departureStoptime` name the old run's terminals and
+    // would outlive it; the trip is now only its id.
+    trip: { gtfsId: run.tripId },
+    tripId: run.tripId
+  }
+
+  const nextLegs = legs.map((l: Leg, i: number) => {
+    if (i < legIndex) return l
+    if (i === legIndex) return retargeted as Leg
+    return shiftLeg(l, delta) as Leg
+  })
+
+  const endTime = shifted(itinerary?.endTime, delta)
+  const startTime = (itinerary as any).startTime
+  const next: any = { ...itinerary, endTime, legs: nextLegs }
+  if (Number.isFinite(Number(startTime)) && Number.isFinite(Number(endTime))) {
+    next.duration = (Number(endTime) - Number(startTime)) / 1000
+  }
+  if ((itinerary as any).waitingTime != null) {
+    const moving = nextLegs.reduce(
+      (sum: number, l: any) => sum + (Number(l.duration) || 0),
+      0
+    )
+    next.waitingTime = Math.max(
+      0,
+      (Number(endTime) - Number(startTime)) / 1000 - moving
+    )
+  }
+  return next as Itinerary
+}

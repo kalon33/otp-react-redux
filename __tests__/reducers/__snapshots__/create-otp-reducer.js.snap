@@ -52,6 +52,7 @@ Object {
     },
     "departureOverride": null,
     "departureOverrideSource": null,
+    "departureOverrideTripId": null,
     "earlyAlight": null,
     "isActive": false,
     "liveLegTimes": Object {},
@@ -114,6 +115,7 @@ Object {
     },
     "units": "imperial",
     "vehicleMatch": Object {
+      "consecutiveFrames": 0,
       "consecutiveMatches": 0,
       "emptyPolls": 0,
       "match": null,

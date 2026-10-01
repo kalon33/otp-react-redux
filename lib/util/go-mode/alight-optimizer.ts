@@ -189,8 +189,23 @@ export interface LiveTimePoint {
  * SCHEDULE — on 7/12 the alight time jumped backwards from a live 14:07:27 to
  * a scheduled 14:01:00 (already in the past) and froze there, styled live.
  * Rules: live data always wins (predictions may legitimately move earlier);
- * without live data the best-known epoch is kept, clamped to now (a bus can't
- * arrive in the past) and honestly flagged non-live.
+ * without live data the best-known epoch is KEPT AS IT IS and flagged
+ * `isFloor` once it falls behind `now`.
+ *
+ * Kept as it is, not raised — changed 2026-09-22, backlog 17.19. Until then
+ * this returned `Math.max(kept.epoch, nowMs)`, which re-valued the epoch to
+ * the current millisecond on every 20 s refresh poll: measured on the 09-15
+ * ride (session `mu346i5y-ng2uqc`), 35 SET_LIVE_LEG_TIMES dispatches between
+ * 15:37:39.122 and 15:49:00 carried a board epoch equal to `now` (15:37:59.128,
+ * 15:38:20.107, …), and a 725-second reconstruction of that cadence produces
+ * 123 of them. The raise existed so a DISPLAYED time never walks backwards —
+ * but since 17.6 nothing displays a floored value at all: `legBoard` refuses to
+ * publish one, buildLiveItinerary keeps the plan's own time, and the pacing
+ * card and the pushes read `boardRealtime`. So the raise bought nothing and
+ * cost a fabricated number that read as a bus perpetually about to leave.
+ *
+ * The flag is derived from `nowMs` on every call rather than latched, which is
+ * what makes "is this stale?" answerable without anybody having to remember.
  */
 export function mergeLiveTimePoint(
   prev: LiveTimePoint | null,
@@ -206,11 +221,11 @@ export function mergeLiveTimePoint(
   const kept = prev ?? next
   if (!kept) return null
   return {
-    epoch: Math.max(kept.epoch, nowMs),
-    // The raise happened: the value is now "no earlier than now", which is a
-    // bound and not a prediction. Said out loud so a wait is never computed
-    // from it (backlog 17.6) — the clamp protects the DISPLAY from walking
-    // backwards and was never evidence about when the bus leaves.
+    epoch: kept.epoch,
+    // The value has gone by: it is a bound ("no earlier than this"), not a
+    // prediction. Said out loud so a wait is never computed from it (backlog
+    // 17.6). Sticky once set — a schedule that was stale a minute ago did not
+    // become evidence by being re-read.
     isFloor: kept.epoch < nowMs || !!kept.isFloor,
     projected: kept.projected,
     realtime: false
@@ -218,50 +233,57 @@ export function mergeLiveTimePoint(
 }
 
 /**
- * How coarse the between-polls clamp is allowed to be.
+ * How stale a non-live epoch must be before it stops being an estimate.
  *
- * The clamp runs on the 1 Hz position tick, and until 2026-09-04 it raised a
- * stale epoch to `nowMs` exactly — a new value every single second, and a
- * SET_LIVE_LEG_TIMES dispatch behind each one. Measured on the kerb ride
- * (session mtn4ui3s-xfjx8m): 11:17:30 → 11:22:42, boardEpoch equal to the
- * current second on all 312 consecutive ticks, against a poll path that emits
- * one every ~20 s. Nothing displays seconds: the trip sheet, the pacing card
- * and the alight banner all round to the minute. Raising to the minute FLOOR
- * therefore changes no displayed value and re-arms the clamp at most once a
- * minute per leg.
+ * The test runs on the 1 Hz position tick. Until 2026-09-04 it raised a stale
+ * epoch to `nowMs` exactly — a new value every single second, and a
+ * SET_LIVE_LEG_TIMES dispatch behind each one (measured on the kerb ride,
+ * session mtn4ui3s-xfjx8m: 11:17:30 -> 11:22:42, boardEpoch equal to the
+ * current second on all 312 consecutive ticks). Nothing displays seconds: the
+ * trip sheet, the pacing card and the alight banner all round to the minute,
+ * so a value still inside the displayed minute is not yet stale and nothing
+ * needs saying about it.
  */
-export const LIVE_TIME_CLAMP_GRANULARITY_MS = 60000
+export const LIVE_TIME_STALE_GRANULARITY_MS = 60000
 
 /**
- * mergeLiveTimePoint clamps at merge time, but merges only run once per
- * refresh poll (20 s apart) — between polls the clock keeps walking, so a
- * non-live epoch can sit up to a full poll interval in the past (seen
- * 2026-07-21: an end-of-service realtime dropout left the alight time 6 s
- * stale). Re-raise every non-live epoch that has fallen behind the current
- * minute. Returns the updated record, or null when nothing actually moved so
- * callers can skip the dispatch.
+ * Mark every non-live epoch that has fallen behind the displayed minute as a
+ * FLOOR — a bound, not a prediction (backlog 17.6). Returns the updated record,
+ * or null when nothing changed, so callers can skip the dispatch.
  *
- * Two rate rules, both from the 2026-09-04 ride:
+ * It marks; it no longer moves. Renamed from `clampNonLiveLegTimes` on
+ * 2026-09-22 (backlog 17.19), because the clamp it was named for is gone.
  *
- *  - the floor is LIVE_TIME_CLAMP_GRANULARITY_MS, not `nowMs`, so a value
- *    that is already inside the displayed minute is left alone;
- *  - a BOARD epoch is bridged across the poll gap ONCE. A departure is a
- *    one-way fact: the bus leaves when it leaves, and a boarding still being
- *    projected forward on the hundredth tick is not late data, it is a run
- *    that has gone. Marking the record (`boardClamped`) stops the walk;
- *    the next refresh poll rebuilds the entry from scratch and the flag goes
- *    with it, so genuinely fresh data is never held back. What happens to a
- *    departed run is then classifyMissedBus's story to tell, and it can tell
- *    it, now that getEffectiveBoardTimeMs reads the per-field boardRealtime
- *    flag instead of the leg-level OR that made this clamped value look like
- *    a live prediction.
+ * WHAT WENT WRONG, measured on the 09-15 ride (session `mu346i5y-ng2uqc`,
+ * leg 0, straight from the day file). The 2026-09-04 design was "bridge the
+ * poll gap ONCE; marking the record (`boardClamped`) stops the walk". In
+ * practice the next 20-second refresh poll rebuilt the entry from scratch and
+ * the flag went with it, so the latch was set and undone ELEVEN times in twelve
+ * minutes — 15:38:00, 15:39:00 … 15:49:00, each with `boardClamped: true` and
+ * each gone 20 s later — while ~30 further dispatches carried a board epoch
+ * equal to the current millisecond with no flag at all. The 312-tick behaviour
+ * the 09-04 fix was meant to end was still happening, at 20-second granularity
+ * instead of one-second. A 725-second reconstruction of that cadence measured
+ * 12 re-latches and 123 now-valued epochs before this change, 0 and 0 after.
+ *
+ * A latch is the wrong shape for this. `boardIsFloor` is DERIVED — "is this
+ * epoch behind the displayed minute?" is a question the clock answers on every
+ * call, so there is nothing to remember, nothing to rebuild away, and no
+ * second field that can disagree with the first. `boardClamped` is deleted
+ * rather than fixed: with no epoch being walked forward there is no walk to
+ * stop, and a departed run is classifyMissedBus's story to tell.
+ *
+ * Nothing downstream changes shape. `boardIsFloor`/`alightIsFloor` mean exactly
+ * what they meant after 17.6 — `legBoard` still refuses to publish a floored
+ * epoch, buildLiveItinerary still keeps the plan's own time, and the pushes
+ * still read `boardRealtime`. What is gone is the fabricated number underneath
+ * the flag.
  */
-export function clampNonLiveLegTimes<
+export function markStaleLegTimes<
   T extends {
     alightEpoch: number | null
     alightIsFloor?: boolean
     alightRealtime?: boolean
-    boardClamped?: boolean
     boardEpoch: number | null
     boardIsFloor?: boolean
     boardRealtime?: boolean
@@ -273,8 +295,8 @@ export function clampNonLiveLegTimes<
 ): Record<number, T> | null {
   if (!times) return null
   const floorMs =
-    Math.floor(nowMs / LIVE_TIME_CLAMP_GRANULARITY_MS) *
-    LIVE_TIME_CLAMP_GRANULARITY_MS
+    Math.floor(nowMs / LIVE_TIME_STALE_GRANULARITY_MS) *
+    LIVE_TIME_STALE_GRANULARITY_MS
   let changed = false
   const out: Record<number, T> = {}
   for (const key of Object.keys(times)) {
@@ -283,77 +305,27 @@ export function clampNonLiveLegTimes<
     let next = t
     if (
       !(t.alightRealtime ?? t.realtime) &&
+      !t.alightIsFloor &&
       t.alightEpoch != null &&
       t.alightEpoch < floorMs
     ) {
-      // Raised to the displayed minute: a bound, not a prediction. See
-      // LiveLegTime.alightIsFloor (backlog 17.6).
-      next = { ...next, alightEpoch: floorMs, alightIsFloor: true }
+      next = { ...next, alightIsFloor: true }
     }
-    let boardRaised = false
     if (
       !(t.boardRealtime ?? t.realtime) &&
-      !t.boardClamped &&
+      !t.boardIsFloor &&
       t.boardEpoch != null &&
       t.boardEpoch < floorMs
     ) {
-      next = {
-        ...next,
-        boardClamped: true,
-        boardEpoch: floorMs,
-        boardIsFloor: true
-      }
-      boardRaised = true
+      next = { ...next, boardIsFloor: true }
     }
-    // Raising the board time past a still-past alight time inverts the leg —
-    // the rider would be shown arriving before they got on. Scoped to the
-    // raise we just made: everywhere else board and alight are deliberately
-    // independent, and a merely-late live pair is honest data, not an
-    // inversion.
-    //
-    // WHICH end gives way depends on which one is evidence. A schedule-only
-    // alight is bookkeeping and moves with the board (8/2). A REALTIME alight
-    // is the feed's own statement about when this trip reaches the stop, and
-    // on 2026-09-01 moving it was trip-ending: the Orange Line's alight sat in
-    // the past at 13:50:00Z, flagged live and re-written by every 20 s poll,
-    // while the schedule-only board was raised to `now` on every 1 Hz tick and
-    // dragged the alight up with it. The trip's live end therefore became
-    // `now` once a second, so `timeRemaining` printed exactly 400.0 s — the
-    // trailing legs' duration — on every tick while `distanceToDestination`
-    // fell 1745 -> 1648 m, and `estimatedArrival` slid with the wall clock and
-    // could never arrive. Once per poll the real figure got through, and the
-    // rider saw 2.7 min / 13:51:41 and then 6.7 min / 13:55:38 one second
-    // apart. So when the alight is live, the BOARD gives way instead: a rider
-    // whose bus has already reached the alight stop boarded no later than
-    // that, and the leg stays the right way round either way.
-    if (
-      boardRaised &&
-      next.alightEpoch != null &&
-      next.boardEpoch != null &&
-      next.alightEpoch < next.boardEpoch
-    ) {
-      next =
-        next.alightRealtime ?? next.realtime
-          ? // Capped onto a live alight: still a bound, so boardIsFloor stays.
-            { ...next, boardEpoch: next.alightEpoch }
-          : // The alight now carries the floored board's value and inherits
-            // its provenance with it.
-            {
-              ...next,
-              alightEpoch: next.boardEpoch,
-              alightIsFloor: true
-            }
-    }
-    // Changed means the times MOVED, not that a raise was attempted. The
-    // inversion branch above routinely hands a raised board straight back to
-    // where it started (2026-09-04 11:22:29 → 11:22:38: ten consecutive
-    // dispatches of a byte-identical record, because the board was capped
-    // back onto a live alight that had not moved). Compare the answer, not
-    // the intent.
-    if (
-      next !== t &&
-      (next.alightEpoch !== t.alightEpoch || next.boardEpoch !== t.boardEpoch)
-    ) {
+    // No inversion repair here any more. The leg could only arrive before it
+    // departed because the board end was being raised past a still-past alight
+    // (the 2026-09-01 Orange Line trip-ender: a live alight dragged up to `now`
+    // once a second, `timeRemaining` printing exactly 400.0 s on every tick).
+    // Neither end moves now, so the two stay wherever the feed and the plan put
+    // them, which is the only honest place for them to be.
+    if (next !== t) {
       changed = true
       out[idx] = next
     } else {

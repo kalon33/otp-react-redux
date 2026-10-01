@@ -27,6 +27,48 @@ type ItineraryForAdvisory = {
 const ADVISORY_ERRORS = ['WALKING_BETTER_THAN_TRANSIT']
 
 /**
+ * Backlog 22.2. Not an OTP code — `util/state` raises it when a settled search
+ * that DID run OTP's transit search came back with options and no transit leg
+ * in any of them.
+ *
+ * It exists because of what the rider saw instead on 2026-09-21 09:25:58: one
+ * 25 km bike card under "No stops in range — Destination is not near any
+ * transit stops". That headline came from the walk-only call of the fan-out
+ * (`routingErrors [{NO_STOPS_IN_RANGE, TO}]` at index 0, the app's own debug
+ * log) and is honest about walking only; the panel shows it as a fact about
+ * the search. Nine serial probes against production the same morning found 249
+ * served stops within 15 km of that address, the nearest 5.2 km, and a
+ * bike -> Orange Line -> bike itinerary at 74 min. So the address claim is
+ * suppressed whenever this one is raised, and the line says only what is true:
+ * no transit option was found for THIS SEARCH.
+ */
+const NO_TRANSIT_OPTION_FOUND = 'NO_TRANSIT_OPTION_FOUND'
+
+/**
+ * Backlog 14.2 (rider's answer (b), 2026-09-26). Not an OTP code either —
+ * `util/state`'s `searchIsThinOnTransit` raises it when a settled search that
+ * asked for transit found some, but fewer than five, even after 14.2's wider
+ * top-up. It is what NO_TRANSIT_CONNECTION_IN_SEARCH_WINDOW (hidden below)
+ * means to a rider, said as a fact about the hour and not about a window
+ * setting they cannot change. No clock time: the app only learns when service
+ * resumes by asking a wider question, which the rider chose not to add.
+ */
+const FEW_TRANSIT_ROUTES = 'FEW_TRANSIT_ROUTES'
+
+/**
+ * Error codes that render as one advisory line. Literal ids, so the i18n check
+ * can see each key in use.
+ */
+const ADVISORY_LINES: Record<string, JSX.Element> = {
+  [FEW_TRANSIT_ROUTES]: (
+    <FormattedMessage id="components.OTP2ErrorRenderer.FEW_TRANSIT_ROUTES.advisory" />
+  ),
+  [NO_TRANSIT_OPTION_FOUND]: (
+    <FormattedMessage id="components.OTP2ErrorRenderer.NO_TRANSIT_OPTION_FOUND.advisory" />
+  )
+}
+
+/**
  * How many whole minutes faster the quickest street-only itinerary is than the
  * quickest itinerary with a transit leg. Returns null when the comparison
  * cannot be made (no transit options came back, no street options came back, or
@@ -156,6 +198,17 @@ const ErrorRenderer = ({
           // Don't show errors that have been muted in the config
           if (mutedErrors?.includes(error)) return false
 
+          // "not near any transit stops" is a claim about the address, and the
+          // fan-out raises it from whichever single combination could not
+          // reach a stop. When the search as a whole found no transit we say
+          // that instead — see NO_TRANSIT_OPTION_FOUND above.
+          if (
+            error === 'NO_STOPS_IN_RANGE' &&
+            NO_TRANSIT_OPTION_FOUND in errors
+          ) {
+            return false
+          }
+
           return true
         })
         .filter((err: string, _: any, array: string[]) => {
@@ -164,6 +217,18 @@ const ErrorRenderer = ({
           return true
         })
         .map((error: string) => {
+          // One line, never a headline: there IS a card below it, and the only
+          // thing each may say is what the search found (no transit, or few
+          // routes at this hour).
+          if (error in ADVISORY_LINES) {
+            return (
+              <Container className="advisory" key={error}>
+                <Icon Icon={InfoCircle} size="lg" />
+                <p>{ADVISORY_LINES[error]}</p>
+              </Container>
+            )
+          }
+
           // Advisory errors ride above the results as one line whenever there
           // is anything to ride above. Rendering the big warning here is what
           // made a 9-minute walk look like the only answer to a trip that had

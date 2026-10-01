@@ -450,9 +450,10 @@ describe('quietReplanAccessLeg (leg-scoped with full-trip fallback)', () => {
     }
   }
 
-  const makeStore = (trip: ReturnType<typeof makeTrip>) => {
+  const makeStore = (trip: ReturnType<typeof makeTrip>, extra: any = {}) => {
     let goModeState: any = {
       ...initial,
+      ...extra,
       activeItinerary: trip.itinerary,
       isActive: true,
       routeMatch: { legIndex: 0 },
@@ -569,6 +570,64 @@ describe('quietReplanAccessLeg (leg-scoped with full-trip fallback)', () => {
     expect(applied.legs[1]).toBe(trip.busLeg)
     expect(applied.legs[2]).toBe(trip.walkLeg)
     expect(applied.endTime).toBe(T + 1800000)
+  })
+
+  it('measures the access leg against the live board time the card shows (29.1)', async () => {
+    // 40 s past the plan-time board (T+660000): refused against startTime,
+    // accepted against a live prediction of T+900000 for the same run.
+    const lateBike = () => ({
+      distance: 2400,
+      endTime: T + 700000,
+      mode: 'BICYCLE',
+      startTime: T + 160000,
+      transitLeg: false
+    })
+    const respond = () =>
+      mockedFetch.mockReturnValue(() =>
+        Promise.resolve({
+          error: false,
+          itineraries: [
+            {
+              duration: 540,
+              endTime: T + 700000,
+              legs: [lateBike()],
+              startTime: T + 160000
+            }
+          ]
+        })
+      )
+    const liveRecord = (extra: any = {}) => ({
+      1: {
+        alightEpoch: null,
+        boardEpoch: T + 900000,
+        boardIsFloor: false,
+        boardRealtime: true,
+        realtime: true,
+        ...extra
+      }
+    })
+    const run = async (liveLegTimes: any) => {
+      const trip = makeTrip()
+      trip.busLeg.tripId = '1:777'
+      respond()
+      const store = makeStore(trip, { liveLegTimes })
+      await store.dispatch(quietReplanAccessLeg())
+      advanceClock(600000)
+      return store.actions.find((a) => a.type === 'AUTO_REPLAN')?.payload
+    }
+
+    expect(await run({})).toMatchObject({
+      accepted: false,
+      refusedBecause: 'access-misses-board'
+    })
+    expect(await run(liveRecord({ boardIsFloor: true }))).toMatchObject({
+      accepted: false,
+      refusedBecause: 'access-misses-board'
+    })
+    expect(await run(liveRecord())).toMatchObject({
+      accepted: true,
+      refusedBecause: null
+    })
   })
 
   it('falls back to the full-trip replan when the scoped plan is empty', async () => {

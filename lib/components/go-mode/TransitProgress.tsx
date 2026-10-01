@@ -1,6 +1,7 @@
 import { connect } from 'react-redux'
+import { humanizeDistanceStringImperial } from '@opentripplanner/humanize-distance'
 import { useIntl } from 'react-intl'
-import React from 'react'
+import React, { useRef } from 'react'
 import type { Leg } from '@opentripplanner/types'
 
 import * as goModeActions from '../../actions/go-mode'
@@ -9,12 +10,24 @@ import {
   displayVehicleLabel,
   NO_LIVE_VEHICLE_POLLS
 } from '../../util/go-mode/vehicle-matching'
+import { getLegRouteId } from '../../util/go-mode/departure-anchor'
 import { getModeIcon } from '../../util/go-mode/mode-icon'
+import {
+  isWaitingForDeparture,
+  waitingBusStatus
+} from '../../util/go-mode/waiting-at-stop'
 import { legBoard } from '../../util/go-mode/live-itinerary'
-import { VEHICLE_MATCH_FRESH_MS } from '../../util/go-mode/transit-trust'
+import {
+  tripStopIdsInOrder,
+  VEHICLE_MATCH_FRESH_MS,
+  VEHICLE_RECORD_STALE_SEC
+} from '../../util/go-mode/transit-trust'
 import type { LiveLegTime } from '../../util/go-mode/types'
 import type { TripProgress } from '../../util/go-mode/progress-calculator'
-import type { VehicleMatchResult } from '../../util/go-mode/vehicle-matching'
+import type {
+  VehicleMatchResult,
+  VehiclePosition
+} from '../../util/go-mode/vehicle-matching'
 
 import {
   AlertBanner,
@@ -44,7 +57,23 @@ interface Props {
   progress: TripProgress
   /** goMode.riding — the evidenced fact that the rider is aboard this leg. */
   riding?: { legIndex: number } | null
+  /** transitIndex.trips[tripId] — the trip's stop order, when fetched. */
+  tripRecord?: {
+    stopTimes?: Array<{ stop?: { gtfsId?: string; id?: string } }>
+  } | null
+  /**
+   * The planned trip's own vehicle, found by trip id in the route's vehicle
+   * feed — NOT the rider-proximity match below. See waitingBusStatus (26.4).
+   */
+  tripVehicle?: VehiclePosition | null
   vehicleMatch?: VehicleMatchResult | null
+}
+
+/** The leg's GTFS trip id, as the tick reads it (boardTripId). */
+function legTripId(leg: Leg | null | undefined): string | null {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const l = leg as any
+  return l?.trip?.gtfsId || l?.tripId || null
 }
 
 const TransitProgress = ({
@@ -55,9 +84,31 @@ const TransitProgress = ({
   onExit,
   progress,
   riding,
+  tripRecord,
+  tripVehicle,
   vehicleMatch
 }: Props) => {
   const intl = useIntl()
+
+  // A vehicle poll that comes back EMPTY $sets the route's list to nothing
+  // (15 of 124 polls on 2026-09-21), so the trip's bus vanishes for one poll.
+  // Carry its last record across the gap — same rule as the tick's
+  // session.lastBoardVehicle: same trip, bounded by VEHICLE_RECORD_STALE_SEC,
+  // and waitingBusStatus re-ages it from the feed's own timestamp.
+  const lastTripVehicle = useRef<{ at: number; v: VehiclePosition } | null>(
+    null
+  )
+  const nowMs = Date.now()
+  const tripId = legTripId(leg)
+  if (tripVehicle && tripVehicle.tripId === tripId) {
+    lastTripVehicle.current = { at: nowMs, v: tripVehicle }
+  } else if (
+    lastTripVehicle.current &&
+    (lastTripVehicle.current.v.tripId !== tripId ||
+      nowMs - lastTripVehicle.current.at > VEHICLE_RECORD_STALE_SEC * 1000)
+  ) {
+    lastTripVehicle.current = null
+  }
 
   /**
    * The rider is at the stop, not on the bus.
@@ -87,11 +138,15 @@ const TransitProgress = ({
   // may not be shown as a departure time — but it is still a fact that the
   // departure has not happened.
   const departureMs = Number.isFinite(boardMs) ? boardMs : null
-  const waiting =
-    !aboard &&
-    !!leg.transitLeg &&
-    departureMs != null &&
-    Date.now() < departureMs
+  // Lives in util/go-mode/waiting-at-stop since 2026-09-22: the backgrounded
+  // banner makes the same claim on a different surface (13.9's second half)
+  // and must not grow a second copy of this test.
+  const waiting = isWaitingForDeparture({
+    aboard,
+    departureMs,
+    leg,
+    nowMs: Date.now()
+  })
 
   // Only an assessed distrust suppresses (stopsTrusted is unset on legacy
   // trusted paths); a deviated route match means the count is being measured
@@ -115,6 +170,27 @@ const TransitProgress = ({
     (vehicleMatch?.confidence === 'confirmed' ||
       vehicleMatch?.confidence === 'high') &&
     Date.now() - (vehicleMatch?.lastSeen ?? 0) < VEHICLE_MATCH_FRESH_MS
+
+  /**
+   * On the platform the status line states the TRIP's bus, never the
+   * rider-proximity matcher (26.4). On 2026-09-22 08:21:57 the card said
+   * "Locating your bus..." — the matcher's `none`, correct for a bus 6 km
+   * away — while the tick held that bus's position. The rider: "Why are you
+   * locating my bus, I'm not on it".
+   */
+  const busStatus = waiting
+    ? waitingBusStatus({
+        boardStopId: leg.from?.stop?.gtfsId ?? null,
+        boardStopLatLon: leg.from ?? null,
+        nowMs,
+        record: tripVehicle ?? lastTripVehicle.current?.v ?? null,
+        tripStopIds: tripStopIdsInOrder(tripRecord ?? null)
+      })
+    : null
+  // "Before the bus leaves" is the same live board time the header prints —
+  // not the plan's leg.startTime, which on 09-22 was 08:16:11 and already
+  // past while the header said 8:24 (26.4).
+  const beforeDeparture = departureMs != null && departureMs > nowMs
 
   return (
     <TransitContainer>
@@ -177,8 +253,57 @@ const TransitProgress = ({
                 )}
               </RouteDirection>
             )}
+          {/* The trip's own bus, while the rider waits for it (26.4).
+              Same badge as "Tracking Bus #" — the claim is the same kind. */}
+          {busStatus && (
+            <VehicleTrackingBadge $confirmed={false}>
+              {busStatus.stopsAway === 0
+                ? intl.formatMessage(
+                    {
+                      defaultMessage: 'Bus #{label} is at the stop',
+                      id: 'components.GoMode.waitingBusAtStop'
+                    },
+                    { label: displayVehicleLabel(busStatus.label) }
+                  )
+                : busStatus.stopsAway != null
+                ? intl.formatMessage(
+                    {
+                      defaultMessage:
+                        'Bus #{label} · {count, plural, one {1 stop away} other {# stops away}}',
+                      id: 'components.GoMode.waitingBusStopsAway'
+                    },
+                    {
+                      count: busStatus.stopsAway,
+                      label: displayVehicleLabel(busStatus.label)
+                    }
+                  )
+                : !busStatus.passed && busStatus.distanceM != null
+                ? intl.formatMessage(
+                    {
+                      defaultMessage: 'Bus #{label} · {distance} away',
+                      id: 'components.GoMode.waitingBusDistanceAway'
+                    },
+                    {
+                      distance: humanizeDistanceStringImperial(
+                        busStatus.distanceM,
+                        true
+                      ),
+                      label: displayVehicleLabel(busStatus.label)
+                    }
+                  )
+                : // Past the stop by its own run: that is the missed-bus
+                  // classifier's call to make, not this line's. Name the bus.
+                  intl.formatMessage(
+                    {
+                      defaultMessage: 'Tracking Bus #{label}',
+                      id: 'components.GoMode.trackingBus'
+                    },
+                    { label: displayVehicleLabel(busStatus.label) }
+                  )}
+            </VehicleTrackingBadge>
+          )}
           {/* Vehicle tracking status */}
-          {isTracking && vehicleMatch?.label && (
+          {!busStatus && isTracking && vehicleMatch?.label && (
             <VehicleTrackingBadge
               $confirmed={vehicleMatch.confidence === 'confirmed' && !waiting}
             >
@@ -206,12 +331,20 @@ const TransitProgress = ({
           {/* A fresh confirmed/high match renders the badge above; anything
               else — including a confirmed match gone stale — gets the honest
               status line. */}
-          {!isTracking && leg.transitLeg && (
+          {!busStatus && !isTracking && leg.transitLeg && (
             <LocatingIndicator>
-              {typeof leg.startTime === 'number' && leg.startTime > Date.now()
-                ? // Before the leg's scheduled start the vehicle usually is
-                  // not broadcasting AT ALL yet — an endless "Locating…"
-                  // reads as a bug. Say what is actually happening.
+              {waiting && emptyPolls < NO_LIVE_VEHICLE_POLLS
+                ? // Waiting, and the feed has nothing for this trip: the bus
+                  // is not broadcasting yet. The header above already prints
+                  // the departure time, so this line does not repeat it.
+                  intl.formatMessage({
+                    defaultMessage: 'Bus not broadcasting yet',
+                    id: 'components.GoMode.busNotBroadcastingWaiting'
+                  })
+                : beforeDeparture && !boardTime.isFloor
+                ? // Before the bus leaves the vehicle usually is not
+                  // broadcasting AT ALL yet — an endless "Locating…" reads
+                  // as a bug. Say what is actually happening.
                   intl.formatMessage(
                     {
                       defaultMessage:
@@ -219,7 +352,7 @@ const TransitProgress = ({
                       id: 'components.GoMode.busNotBroadcasting'
                     },
                     {
-                      time: intl.formatTime(leg.startTime, {
+                      time: intl.formatTime(departureMs as number, {
                         hour: 'numeric',
                         minute: '2-digit'
                       })
@@ -287,12 +420,24 @@ const TransitProgress = ({
   )
 }
 
-const mapStateToProps = (state: any) => ({
-  emptyPolls: state.otp?.goMode?.vehicleMatch?.emptyPolls || 0,
-  liveLegTimes: state.otp?.goMode?.liveLegTimes || {},
-  riding: state.otp?.goMode?.riding || null,
-  vehicleMatch: state.otp?.goMode?.vehicleMatch?.match || null
-})
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mapStateToProps = (state: any, ownProps: { leg: Leg }) => {
+  const tripId = legTripId(ownProps.leg)
+  const transitIndex = state.otp?.transitIndex
+  const vehicles: VehiclePosition[] | undefined =
+    transitIndex?.routes?.[getLegRouteId(ownProps.leg) ?? '']?.vehicles
+  return {
+    emptyPolls: state.otp?.goMode?.vehicleMatch?.emptyPolls || 0,
+    liveLegTimes: state.otp?.goMode?.liveLegTimes || {},
+    riding: state.otp?.goMode?.riding || null,
+    tripRecord: tripId ? transitIndex?.trips?.[tripId] ?? null : null,
+    tripVehicle:
+      tripId && Array.isArray(vehicles)
+        ? vehicles.find((v) => v.tripId === tripId) ?? null
+        : null,
+    vehicleMatch: state.otp?.goMode?.vehicleMatch?.match || null
+  }
+}
 
 const mapDispatchToProps = {
   advanceToLeg: goModeActions.advanceToLeg
