@@ -179,8 +179,10 @@ import {
 import {
   acceptAutoReplan,
   accessBoardOverrunMs,
+  accessPlanDeadByDeviation,
   AUTO_REPLAN_ACCESS_BOARD_SLACK_MS,
   liveBoardForCandidate,
+  nextDeviatedSince,
   originGapMeters,
   pickHopFreeSibling,
   planRunLeftBeforeRider,
@@ -1291,6 +1293,8 @@ function autoReplanRejected(
   candidate: Itinerary,
   options: {
     currentPlanIsDead?: boolean
+    /** 35.2 — waives only the arrival test; see AutoReplanContext. */
+    currentPlanLeftByRider?: boolean
     /** What the origin was advanced by, when the caller projected it. */
     projected?: ProjectedOrigin | null
     reason?: string | null
@@ -1310,6 +1314,7 @@ function autoReplanRejected(
   )
   const verdict = acceptAutoReplan(candidate, goMode?.activeItinerary, {
     currentPlanIsDead: !!options.currentPlanIsDead,
+    currentPlanLeftByRider: !!options.currentPlanLeftByRider,
     headingDeg: coords?.heading ?? null,
     liveBoardEpochMs: liveBoard?.epochMs ?? null,
     liveBoardTripId: liveBoard?.tripId ?? null,
@@ -1326,6 +1331,8 @@ function autoReplanRejected(
       accepted: verdict.accept,
       autoApply: true,
       originGapM: position ? originGapMeters(candidate, position) : null,
+      // 35.2: the arrival test was waived because the rider had left the plan.
+      planLeftByRider: !!options.currentPlanLeftByRider,
       projectedAtMs: options.projected?.metres ? options.projected.atMs : null,
       projectedM: options.projected?.metres ?? 0,
       reason: options.reason || 'unknown',
@@ -1733,6 +1740,9 @@ export function startGoModeTracking(
     // rider's relationship to the route has genuinely just changed. It was
     // cleared only in endGoMode, so every swap carried a stale number across.
     session.prevDistanceFromRoute = null
+    // A deviated streak measured against the old geometry is not evidence
+    // against the new one (35.2).
+    session.deviatedSince = null
     // Damping ONE tick is not enough for the alert: on 2026-08-27 the off-route
     // push landed 0.9 s after this swap's START_GO_MODE (13:14:04) and 1.25 s
     // after a leg transition (13:16:20, "5464m from the planned route"). Give
@@ -3203,8 +3213,21 @@ export function quietReplanAccessLeg() {
       return
     }
 
+    // 35.2: a rider who has been off this plan's access leg for the whole
+    // deviation window AND has not closed on the destination meanwhile is not
+    // on the trip whose arrival `arrives-later` defends. Read at the answer,
+    // not the ask: the streak may have closed (rider rejoined) while the
+    // request was out.
+    const answeredGoMode = getState().otp?.goMode
+    const planLeftByRider = accessPlanDeadByDeviation({
+      destinationM: answeredGoMode?.progress?.distanceToDestination,
+      nowMs: getCurrentTime().getTime(),
+      riding: !!answeredGoMode?.riding?.tripId,
+      streak: session.deviatedSince
+    })
     if (
       autoReplanRejected(dispatch, getState(), best, {
+        currentPlanLeftByRider: planLeftByRider,
         projected: fullProjection,
         reason: 'quiet-replan-full'
       })
@@ -6294,6 +6317,7 @@ export function advanceToLeg(legIndex: number) {
     // Same reasoning for the deviation smoother: the previous leg's distance
     // says nothing about the new leg's geometry.
     session.prevDistanceFromRoute = null
+    session.deviatedSince = null
     // And the same reasoning, one step further out, for the off-route alert —
     // see the stamp in startGoModeTracking.
     session.geometryChangedAtMs = getCurrentTime().getTime()
@@ -7144,6 +7168,14 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     }
 
     dispatch(updateProgress(progress))
+    // The deviated streak's onset, from the status the rider was just shown —
+    // the quiet full re-plan below reads it (35.2, accessPlanDeadByDeviation).
+    session.deviatedSince = nextDeviatedSince(session.deviatedSince, {
+      destinationM: progress.distanceToDestination,
+      legIndex: progress.currentLegIndex,
+      nowMs: currentTime.getTime(),
+      status: progress.status
+    })
 
     // The lock screen, throttled to once a minute plus anything the rider can
     // actually see change (leg change, boarding, alighting). Read back from the
@@ -8343,24 +8375,41 @@ export function performVehicleMatching(routeId: string) {
       // was rejected 27 times in 28 minutes.
       80,
       riderSpeed,
-      expectedDirectionId
+      expectedDirectionId,
+      // The bus the rider is riding keeps the match unless it is truly gone
+      // (35.1, 12.11): held in range through a heading-less or turn-stale
+      // frame, and ranked by its corridor as well as its projected point.
+      { ridingVehicleId: goMode.riding?.vehicleId ?? null }
     )
 
-    // Track consecutive matches
+    // Track consecutive matches — per tick, and per distinct feed frame. The
+    // tick count drives the confidence promotion as before; the frame count
+    // is what the riding rebind gate also needs, because on 2026-09-28 nine
+    // ticks against ONE 8151 frame rebound the ride (35.1).
     const prevId = previousMatch?.vehicleId
     let consecutiveMatches = goMode.vehicleMatch?.consecutiveMatches || 0
+    let consecutiveFrames = goMode.vehicleMatch?.consecutiveFrames || 0
     if (matchResult.vehicleId && matchResult.vehicleId === prevId) {
       consecutiveMatches++
+      if (matchResult.frameKey !== previousMatch?.frameKey) {
+        consecutiveFrames++
+      }
       // Promote to 'high' after 2+ consecutive matches with same vehicle
       if (consecutiveMatches >= 2 && matchResult.confidence === 'medium') {
         matchResult.confidence = 'high'
       }
     } else {
       consecutiveMatches = matchResult.vehicleId ? 1 : 0
+      consecutiveFrames = matchResult.vehicleId ? 1 : 0
     }
 
     dispatch({
-      payload: { consecutiveMatches, emptyPolls: 0, match: matchResult },
+      payload: {
+        consecutiveFrames,
+        consecutiveMatches,
+        emptyPolls: 0,
+        match: matchResult
+      },
       type: UPDATE_VEHICLE_MATCH
     })
 

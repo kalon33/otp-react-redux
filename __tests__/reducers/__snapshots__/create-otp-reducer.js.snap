@@ -114,6 +114,7 @@ Object {
       "mapFollowUser": true,
     },
     "vehicleMatch": Object {
+      "consecutiveFrames": 0,
       "consecutiveMatches": 0,
       "emptyPolls": 0,
       "match": null,
