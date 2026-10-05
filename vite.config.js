@@ -119,10 +119,17 @@ export default defineConfig({
         ]
       },
       workbox: {
-        globDirectory: 'public/',
+        // Precache the built bundle (not just public/ assets) so the app shell
+        // AND its JS/CSS chunks work fully offline. The hashed filenames make
+        // each new build produce new precache entries; combined with
+        // registerType: 'autoUpdate', the SW picks up the new bundle in the
+        // background on the next online visit.
+        globDirectory: 'dist/',
         globPatterns: [
-          '**/*.{js,css,html,png,svg,woff2}'
+          '**/*.{js,css,html,png,svg,woff2,ttf,woff}'
         ],
+        // Keep the precache size sane; icons/fonts are a few hundred KB total.
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         cleanupOutdatedCaches: true,
         runtimeCaching: [
           {
