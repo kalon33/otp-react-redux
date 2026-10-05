@@ -1051,10 +1051,12 @@ components:
   Timetable:
     errorLoadingStopClosures: "Erreur lors du chargement des arr\xEAts ferm\xE9s"
     errorLoadingTimetable: Erreur lors du chargement des horaires
+    routeInformation: Informations sur la ligne
     showAllStops: "Afficher tous les arr\xEAts"
     showTimepointsOnly: "Afficher uniquement les points d'arr\xEAt"
     switchDirection: Changer de direction
     timetable: Horaires
+    timetableDate: "S\xE9lectionner la date"
   TransitVehicleOverlay:
     travelingAt: 'Vitesse : {milesPerHour}'
     vehicleName: "V\xE9hicule {vehicleNumber}"

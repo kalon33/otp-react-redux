@@ -1,8 +1,8 @@
 diff --git a/node_modules/@opentripplanner/transitive-overlay/esm/index.js b/node_modules/@opentripplanner/transitive-overlay/esm/index.js
-index 0d45537..0939165 100644
+index 0d45537..a919191 100644
 --- a/node_modules/@opentripplanner/transitive-overlay/esm/index.js
 +++ b/node_modules/@opentripplanner/transitive-overlay/esm/index.js
-@@ -133,7 +133,24 @@ var loadImages = function loadImages(map, images) {
+@@ -133,7 +133,44 @@ var loadImages = function loadImages(map, images) {
      if (!map.hasImage(img.id)) {
        // Only load if the image hasn't already been added
        map.loadImage(img.url).then(function (response) {
@@ -20,7 +20,27 @@ index 0d45537..0939165 100644
 +        var maybeDecode = response.data && typeof response.data.decode === "function" ? response.data.decode() : Promise.resolve();
 +        maybeDecode.then(function () {
 +          if (map.hasImage(img.id)) return;
-+          map.addImage(img.id, response.data, img.options);
++          // Even after decode(), an HTMLImageElement that failed to load
++          // (or an ImageBitmap without intrinsic dimensions) still reads
++          // 0x0 in maplibre's content validation, which fires
++          // 'Image "<id>" has invalid "content" value'. Re-encode through
++          // createImageBitmap when available so addImage always receives
++          // data with concrete width/height; skip the image otherwise.
++          var toBitmap = typeof createImageBitmap === "function" && response.data && (typeof HTMLImageElement === "undefined" || response.data instanceof HTMLImageElement) ? createImageBitmap(response.data) : Promise.resolve(response.data);
++          toBitmap.then(function (bitmap) {
++            if (map.hasImage(img.id)) return;
++            var w = bitmap && (bitmap.width || bitmap.naturalWidth);
++            var h = bitmap && (bitmap.height || bitmap.naturalHeight);
++            if (!w || !h) {
++              // eslint-disable-next-line no-console
++              console.error("Skipping image ".concat(img.id, ": no intrinsic dimensions"));
++              return;
++            }
++            map.addImage(img.id, bitmap !== response.data && bitmap ? bitmap : response.data, img.options);
++          })["catch"](function () {
++            if (map.hasImage(img.id)) return;
++            map.addImage(img.id, response.data, img.options);
++          });
 +        })["catch"](function (error) {
 +          // eslint-disable-next-line no-console
 +          console.error("Error loading image ".concat(img.id, ":"), error);
@@ -29,10 +49,10 @@ index 0d45537..0939165 100644
          // eslint-disable-next-line no-console
          console.error("Error loading image ".concat(img.id, ":"), error);
 diff --git a/node_modules/@opentripplanner/transitive-overlay/lib/index.js b/node_modules/@opentripplanner/transitive-overlay/lib/index.js
-index 5af2e61..d60cf17 100644
+index 5af2e61..a4be2f3 100644
 --- a/node_modules/@opentripplanner/transitive-overlay/lib/index.js
 +++ b/node_modules/@opentripplanner/transitive-overlay/lib/index.js
-@@ -145,7 +145,29 @@ const loadImages = (map, images) => {
+@@ -145,7 +145,65 @@ const loadImages = (map, images) => {
      if (!map.hasImage(img.id)) {
        // Only load if the image hasn't already been added
        map.loadImage(img.url).then(response => {
@@ -54,7 +74,43 @@ index 5af2e61..d60cf17 100644
 +        maybeDecode
 +          .then(() => {
 +            if (map.hasImage(img.id)) return;
-+            map.addImage(img.id, response.data, img.options);
++            // Even after decode(), an HTMLImageElement that failed to load
++            // (or an ImageBitmap without intrinsic dimensions) still reads
++            // 0x0 in maplibre's content validation, which fires
++            // 'Image "<id>" has invalid "content" value'. Re-encode through
++            // createImageBitmap when available so addImage always receives
++            // data with concrete width/height; skip the image otherwise.
++            const toBitmap =
++              typeof createImageBitmap === "function" &&
++              response.data &&
++              (typeof HTMLImageElement === "undefined" ||
++                response.data instanceof HTMLImageElement)
++                ? createImageBitmap(response.data)
++                : Promise.resolve(response.data);
++            toBitmap
++              .then(bitmap => {
++                if (map.hasImage(img.id)) return;
++                const w =
++                  bitmap && (bitmap.width || bitmap.naturalWidth);
++                const h =
++                  bitmap && (bitmap.height || bitmap.naturalHeight);
++                if (!w || !h) {
++                  // eslint-disable-next-line no-console
++                  console.error(
++                    `Skipping image ${img.id}: no intrinsic dimensions`
++                  );
++                  return;
++                }
++                map.addImage(
++                  img.id,
++                  bitmap !== response.data && bitmap ? bitmap : response.data,
++                  img.options
++                );
++              })
++              .catch(() => {
++                if (map.hasImage(img.id)) return;
++                map.addImage(img.id, response.data, img.options);
++              });
 +          })
 +          .catch(error => {
 +            // eslint-disable-next-line no-console
@@ -64,10 +120,10 @@ index 5af2e61..d60cf17 100644
          // eslint-disable-next-line no-console
          console.error(`Error loading image ${img.id}:`, error);
 diff --git a/node_modules/@opentripplanner/transitive-overlay/src/index.tsx b/node_modules/@opentripplanner/transitive-overlay/src/index.tsx
-index 5e3e06b..1260cdb 100644
+index 5e3e06b..49062a5 100644
 --- a/node_modules/@opentripplanner/transitive-overlay/src/index.tsx
 +++ b/node_modules/@opentripplanner/transitive-overlay/src/index.tsx
-@@ -193,7 +193,29 @@ const loadImages = (map: MapRef, images: MapImage[]) => {
+@@ -193,7 +193,65 @@ const loadImages = (map: MapRef, images: MapImage[]) => {
        map
          .loadImage(img.url)
          .then(response => {
@@ -89,7 +145,43 @@ index 5e3e06b..1260cdb 100644
 +          maybeDecode
 +            .then(() => {
 +              if (map.hasImage(img.id)) return;
-+              map.addImage(img.id, response.data, img.options);
++              // Even after decode(), an HTMLImageElement that failed to load
++              // (or an ImageBitmap without intrinsic dimensions) still reads
++              // 0x0 in maplibre's content validation, which fires
++              // 'Image "<id>" has invalid "content" value'. Re-encode through
++              // createImageBitmap when available so addImage always receives
++              // data with concrete width/height; skip the image otherwise.
++              const toBitmap =
++                typeof createImageBitmap === "function" &&
++                response.data &&
++                (typeof HTMLImageElement === "undefined" ||
++                  response.data instanceof HTMLImageElement)
++                  ? createImageBitmap(response.data)
++                  : Promise.resolve(response.data);
++              toBitmap
++                .then((bitmap) => {
++                  if (map.hasImage(img.id)) return;
++                  const w =
++                    bitmap && (bitmap.width || (bitmap as HTMLImageElement).naturalWidth);
++                  const h =
++                    bitmap && (bitmap.height || (bitmap as HTMLImageElement).naturalHeight);
++                  if (!w || !h) {
++                    // eslint-disable-next-line no-console
++                    console.error(
++                      `Skipping image ${img.id}: no intrinsic dimensions`
++                    );
++                    return;
++                  }
++                  map.addImage(
++                    img.id,
++                    bitmap !== response.data && bitmap ? bitmap : response.data,
++                    img.options
++                  );
++                })
++                .catch(() => {
++                  if (map.hasImage(img.id)) return;
++                  map.addImage(img.id, response.data, img.options);
++                });
 +            })
 +            .catch(error => {
 +              // eslint-disable-next-line no-console

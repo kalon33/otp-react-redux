@@ -1,7 +1,8 @@
 import { connect, useSelector } from 'react-redux'
+import { format } from 'date-fns'
 import { FormattedMessage } from 'react-intl'
 import { matchPath } from 'react-router'
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import TimeTable from '@opentripplanner/timetable'
 
 import * as apiActions from '../../actions/api'
@@ -11,14 +12,14 @@ import { TimetableDataParams } from '../util/types'
 import Loading from '../narrative/loading'
 
 interface TimeTableWrapperProps {
-  /** A map of closed stops. Keys are route gtfsIds, values are sets of gtfsIds for stops that are closed on that route */
-  closedStops?: Map<string, Set<string>>
+  closedStops?: Set<string>
   getStopClosures: () => void
   getTimetableData: (params: TimetableDataParams) => void
   routeId: string
   stopClosuresError?: string
 }
 
+// eslint-disable-next-line complexity
 const TimeTableWrapper = (props: TimeTableWrapperProps): JSX.Element => {
   const {
     closedStops,
@@ -32,23 +33,30 @@ const TimeTableWrapper = (props: TimeTableWrapperProps): JSX.Element => {
     (state: AppReduxState) => state.otp.ui.timetable
   )
 
+  const handleRouteUrlClick = useCallback(
+    (e) => {
+      e.preventDefault()
+      window.open(timetable?.route?.url, undefined, 'width=1000,height=800')
+    },
+    [timetable]
+  )
+
   const [directionId, setDirectionId] = useState<0 | 1>(0)
   const [timepointsOnly, setTimepointsOnly] = useState(true)
   const [loading, setLoading] = useState(true)
-
-  const closedStopsSet = useMemo(
-    () => closedStops?.get(routeId),
-    [closedStops, routeId]
-  )
+  const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'))
 
   useEffect(() => {
+    setLoading(true)
     getStopClosures()
 
     getTimetableData({
-      date: new Date(),
+      // The Date constructor has a quirk: passing in yyyy-MM-dd will create the date in UTC, causing
+      // issues with timezone offsets. Passing in yyyy/MM/dd will honor the local machine's timezone
+      date: new Date(date.replaceAll('-', '/')),
       routeGtfsId: routeId
     })
-  }, [getTimetableData, routeId, getStopClosures])
+  }, [date, getTimetableData, routeId, getStopClosures])
 
   const routeInformation = useMemo(() => timetable?.route, [timetable])
 
@@ -72,17 +80,9 @@ const TimeTableWrapper = (props: TimeTableWrapperProps): JSX.Element => {
     return invalid
   }, [routeInformation])
 
-  const directionNames = useMemo(() => {
-    const map = new Map<number, string[]>()
-
-    routeInformation?.patterns?.forEach((pattern: any) => {
-      const dirId = pattern.directionId
-      const names = (map.get(dirId) || []).concat([pattern.name])
-      map.set(dirId, names)
-    })
-
-    return map
-  }, [routeInformation])
+  const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.value.length) setDate(e.target.value)
+  }
 
   if (loading) {
     // TODO: add aria status region to the body
@@ -120,18 +120,32 @@ const TimeTableWrapper = (props: TimeTableWrapperProps): JSX.Element => {
         <button onClick={() => setDirectionId(directionId === 1 ? 0 : 1)}>
           <FormattedMessage id="components.Timetable.switchDirection" />
         </button>
-        {(directionNames.get(directionId) || []).map((dirName) => (
-          <span key={dirName}>{dirName}</span>
-        ))}
+        <span>{`${routeInformation.shortName}: ${routeInformation.desc}`}</span>
+        {routeInformation.url && (
+          <a href={routeInformation.url} onClick={handleRouteUrlClick}>
+            <FormattedMessage id="components.Timetable.routeInformation" />
+          </a>
+        )}
+        <label htmlFor="date-picker">
+          <FormattedMessage id="components.Timetable.timetableDate" />
+        </label>
+        <input
+          id="date-picker"
+          onChange={handleDateChange}
+          type="date"
+          value={date}
+        />
       </div>
       {routeInformation && (
         <div style={{ overflow: 'scroll' }}>
           <TimeTable
-            closedStops={closedStopsSet}
+            closedStops={closedStops}
             directionId={directionId}
             includeDwellStops
-            route={timetable.route}
+            route={routeInformation}
             showBlockId
+            showNotices
+            showTripShortName
             timepointsOnly={timepointsOnly}
           />
         </div>

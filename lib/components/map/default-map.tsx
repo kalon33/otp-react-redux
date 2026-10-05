@@ -31,7 +31,6 @@ import {
   rentalVehicleQuery
 } from '../../actions/api'
 import { ComponentContext } from '../../util/contexts'
-import { flattenStopClosures } from '../../util/itinerary'
 import { getActiveItinerary, getActiveSearch } from '../../util/state'
 import {
   getCurrentPosition,
@@ -204,7 +203,7 @@ interface DefaultMapProps {
   carRentalQuery: () => void
   carRentalStations: VehicleRentalStation[]
   children?: React.ReactNode
-  closedStops?: Map<string, Set<string>>
+  closedStops?: Set<string>
   config: AppConfig
   getCurrentPosition: GetCurrentPositionFunction
   /** See hidePlannerGeolocateControl: true only while Go Mode is foregrounded. */
@@ -453,12 +452,6 @@ export class DefaultMap extends Component<DefaultMapProps> {
       )
     ]
 
-    // Closed stops are stored as a map with route ID as the key; we just want a set
-    // of all the stop values
-    const closedStopIds = closedStops
-      ? flattenStopClosures(closedStops)
-      : new Set()
-
     const scooters = rentalVehicles.filter(
       (vehicle) => vehicle.vehicleType?.formFactor === 'SCOOTER'
     )
@@ -632,7 +625,7 @@ export class DefaultMap extends Component<DefaultMapProps> {
                   config.companies,
                   this.getEntityPrefix,
                   feeds,
-                  closedStopIds
+                  closedStops
                 ).map((layer: JSX.Element) => (
                   <MapLayerErrorBoundary
                     alwaysShow={layer.props?.alwaysShow}
