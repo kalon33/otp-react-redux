@@ -1,6 +1,7 @@
 import {
   addSettingsToButton,
   AdvancedModeSubsettingsContainer,
+  DropdownSelector,
   ModeSettingRenderer,
   populateSettingWithValue,
   Styled as TripFormStyled
@@ -9,6 +10,7 @@ import { Check } from '@styled-icons/boxicons-regular'
 import { connect } from 'react-redux'
 import { decodeQueryParams, DelimitedArrayParam } from 'serialize-query-params'
 import { FormattedMessage, IntlShape, useIntl } from 'react-intl'
+import { Lock } from '@styled-icons/fa-solid/Lock'
 import {
   ModeButtonDefinition,
   ModeSetting,
@@ -22,6 +24,8 @@ import React, {
   RefObject,
   useCallback,
   useContext,
+  useEffect,
+  useMemo,
   useState
 } from 'react'
 import styled from 'styled-components'
@@ -57,7 +61,11 @@ import {
   generateModeSettingValues,
   getDefaultNumItineraries
 } from '../../util/api'
+import { getAuth0Config } from '../../util/auth'
 import { getDependentName } from '../../util/user'
+import { IconWithText } from '../util/styledIcon'
+import { invisibleCss } from '../util/invisible-a11y-label'
+import { isModuleEnabled, Modules } from '../../util/config'
 import {
   LockableRoute,
   RouteLock,
@@ -65,10 +73,6 @@ import {
   routeLockLabel,
   RouteLockScope
 } from '../../util/route-lock'
-import { getAuth0Config } from '../../util/auth'
-import { IconWithText } from '../util/styledIcon'
-import { invisibleCss } from '../util/invisible-a11y-label'
-import { isModuleEnabled, Modules } from '../../util/config'
 import { PersistenceConfig } from '../../util/config-types'
 import { toastPromise } from '../util/toasts'
 import { User } from '../user/types'
@@ -93,6 +97,7 @@ import {
   VisibleSubheader
 } from './styled'
 import { setModeButtonEnabled } from './batch-settings'
+import { StyledTransparentButton } from './advanced-settings-button'
 import ArriveOnTimeSetting from './arrive-on-time-setting'
 import DateTimeModal from './date-time-modal'
 
@@ -197,16 +202,8 @@ const NlTextarea = styled.textarea`
   min-height: 60px;
   padding: 8px;
   resize: vertical;
-const UserSavedTripDefaultsButton = styled(StyledTransparentButton)`
-  color: ${getBaseColor()};
-  display: flex;
-  font-weight: bold;
-  justify-content: center;
-  margin: 1em 0;
-  text-decoration: underline;
   width: 100%;
 `
-
 const NlApplyButton = styled.button`
   background-color: var(--main-base-color, ${blue[900]});
   border: 0;
@@ -222,6 +219,15 @@ const NlApplyButton = styled.button`
   }
 `
 
+const UserSavedTripDefaultsButton = styled(StyledTransparentButton)`
+  color: ${getBaseColor()};
+  display: flex;
+  font-weight: bold;
+  justify-content: center;
+  margin: 1em 0;
+  text-decoration: underline;
+  width: 100%;
+`
 const NlStatus = styled.div`
   font-size: 13px;
   margin-top: 8px;
@@ -318,6 +324,7 @@ const AdvancedSettingsPanel = ({
   autoPlan,
   closeAdvancedSettings,
   configuredStopCap,
+  createOrUpdateUser,
   currentQuery,
   defaultNumItineraries,
   enableMaxStopCount,
@@ -328,12 +335,11 @@ const AdvancedSettingsPanel = ({
   innerRef,
   loggedInUser,
   lookupViaStops,
-  handlePlanTrip,
-  innerRef,
   mobilityProfile,
   modeButtonOptions,
   modeSettingDefinitions,
   modeSettingValues,
+  persistence,
   routes,
   saveAndReturnButton,
   setCloseAdvancedSettingsWithDelay,
@@ -341,13 +347,15 @@ const AdvancedSettingsPanel = ({
   setRouteLockScope,
   setRoutingPreferences,
   setSearchOptions,
-  toggleRouteLockRoute
+  toggleRouteLockRoute,
+  user
 }: {
   applyPreferencesFromText: (text: string) => Promise<any>
   applyRoutingProfile: (profileId: string) => void
   autoPlan: boolean
   closeAdvancedSettings: () => void
   configuredStopCap: number
+  createOrUpdateUser: (user: User, intl: IntlShape) => Promise<number>
   currentQuery: any
   defaultNumItineraries: number
   enableMaxStopCount: boolean
@@ -362,6 +370,7 @@ const AdvancedSettingsPanel = ({
   modeButtonOptions: ModeButtonDefinition[]
   modeSettingDefinitions: ModeSetting[]
   modeSettingValues: ModeSettingValues
+  persistence?: PersistenceConfig
   routes?: Record<string, LockableRoute>
   saveAndReturnButton?: boolean
   setCloseAdvancedSettingsWithDelay: () => void
@@ -379,6 +388,7 @@ const AdvancedSettingsPanel = ({
     viaStop?: ViaStop | null
   }) => void
   toggleRouteLockRoute: (routeId: string) => void
+  user: User
 }): JSX.Element => {
   const intl = useIntl()
   const [closingBySave, setClosingBySave] = useState(false)
@@ -477,6 +487,18 @@ const AdvancedSettingsPanel = ({
   )
 
   const usersCanSignIn = Boolean(getAuth0Config(persistence))
+  const updateUserDefaultTripSettings = () => {
+    const { getTripOptionsFromQuery } = coreUtils.query
+    const updatedUser = user
+    const tripOptions = getTripOptionsFromQuery(currentQuery)
+    // Because some of these settings are custom route mode overrides, we'll store these as a string.
+    updatedUser.userSavedTripDefaults = JSON.stringify(tripOptions)
+    toastPromise(
+      createOrUpdateUser(updatedUser, intl),
+      intl.formatMessage({ id: 'actions.user.preferencesSaved' }),
+      intl
+    )
+  }
 
   const baseColor = getBaseColor()
   const accentColor = baseColor || blue[900]
@@ -1078,6 +1100,20 @@ const AdvancedSettingsPanel = ({
           )}
         </ReturnToTripPlanButton>
       )}
+      {usersCanSignIn && (
+        <UserSavedTripDefaultsButton
+          disabled={!user}
+          onClick={updateUserDefaultTripSettings}
+        >
+          {user ? (
+            <FormattedMessage id="components.BatchSearchScreen.setAsDefault" />
+          ) : (
+            <IconWithText Icon={Lock}>
+              <FormattedMessage id="components.BatchSearchScreen.logInToSetDefault" />
+            </IconWithText>
+          )}
+        </UserSavedTripDefaultsButton>
+      )}
     </PanelOverlay>
   )
 }
@@ -1110,18 +1146,21 @@ const mapStateToProps = (state: AppReduxState) => {
 
     enableMaxStopCount: !!state.otp.config?.itinerary?.enableMaxStopCount,
     loggedInUser: state.user.loggedInUser,
-    mobilityProfile: state.otp.config?.mobilityProfile || false,
+    mobilityProfile: isModuleEnabled(state, Modules.MOBILITY_PROFILE),
     modeButtonOptions: modes?.modeButtons || [],
     modeSettingDefinitions: state.otp?.modeSettingDefinitions || [],
     modeSettingValues,
+    persistence: state.otp.config?.persistence,
     routes: state.otp.transitIndex?.routes,
-    saveAndReturnButton
+    saveAndReturnButton,
+    user: state.user.loggedInUser
   }
 }
 
 const mapDispatchToProps = {
   applyPreferencesFromText: routingProfileActions.applyPreferencesFromText,
   applyRoutingProfile: routingProfileActions.applyRoutingProfile,
+  createOrUpdateUser: userActions.createOrUpdateUser,
   findRoutesIfNeeded: apiActions.findRoutesIfNeeded,
   getDependentUserInfo: userActions.getDependentUserInfo,
   lookupViaStops: routingProfileActions.lookupViaStops,

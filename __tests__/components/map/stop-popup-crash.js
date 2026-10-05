@@ -127,7 +127,9 @@ describe('map > the tile overlay does not invent a rentalNetwork key', () => {
   it('leaves the key off a stop feature entirely', () => {
     // eslint-disable-next-line @typescript-eslint/no-var-requires, global-require
     const overlaySource = require('fs').readFileSync(
-      require.resolve('@opentripplanner/otp2-tile-overlay/lib/index.js'),
+      require.resolve(
+        '@opentripplanner/otp2-tile-overlay/lib/otp2-tile-layer-with-popup.js'
+      ),
       'utf-8'
     )
     // The unpatched form assigns `undefined`, which creates the key.

@@ -287,7 +287,9 @@ components:
     routingProfileLabel: "Optimiser l'itin\xE9raire pour"
     saveAndReturn: Enregistrer et fermer
     saved: "Enregistr\xE9"
+    logInToSetDefault: "Connectez-vous pour d\xE9finir par d\xE9faut"
     searchOptionsHeader: "Options affich\xE9es"
+    setAsDefault: "D\xE9finir par d\xE9faut"
     stopCapHelp: "Jusqu'o\xF9 chercher, autour du d\xE9part et de l'arriv\xE9e, un\
       \ arr\xEAt o\xF9 monter ou descendre. Une recherche plus large trouve plus d'options\
       \ v\xE9lo + transports depuis les zones \xE9loign\xE9es et prend quelques secondes\
