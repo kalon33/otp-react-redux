@@ -1,18 +1,31 @@
+import { AppReduxState } from './state-types'
+import { ModuleConfig } from './config-types'
+
 export const Modules = {
   CALL_TAKER: 'call',
   FIELD_TRIP: 'ft',
-  MAILABLES: 'mailables'
+  MAILABLES: 'mailables',
+  MOBILITY_PROFILE: 'mobilityProfile'
 }
 
-export function getModuleConfig(state, moduleName) {
+export function getModuleConfig(
+  state: AppReduxState,
+  moduleName: string
+): ModuleConfig | undefined {
   return state.otp.config?.modules?.find((m) => m.id === moduleName)
 }
 
-export function isModuleEnabled(state, moduleName) {
+export function isModuleEnabled(
+  state: AppReduxState,
+  moduleName: string
+): boolean {
   return Boolean(getModuleConfig(state, moduleName))
 }
 
-export function checkForRouteModeOverride(route, overrideConfig) {
+export function checkForRouteModeOverride(
+  route: { id: string; mode: string },
+  overrideConfig: Record<string, string>
+): string {
   return overrideConfig?.[route.id] || route.mode
 }
 
@@ -33,10 +46,13 @@ export function checkForRouteModeOverride(route, overrideConfig) {
  * `api.basePath` is honoured so a deployment proxied somewhere other than /otp
  * still resolves, and an explicitly configured `api.path` still wins.
  *
- * @param {object} api the `api` section of the app config
- * @return {string} a path with a leading slash and no trailing slash
+ * @param api the `api` section of the app config
+ * @return a path with a leading slash and no trailing slash
  */
-export function getVectorTilesPath(api) {
+export function getVectorTilesPath(api: {
+  path?: string
+  basePath?: string
+}): string {
   const routerPath = api?.path ?? `${api?.basePath ?? '/otp'}/routers/default`
   return `${routerPath}/vectorTiles`
 }

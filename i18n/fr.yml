@@ -350,8 +350,6 @@ components:
     clickDetails: "Cliquez pour afficher les d\xE9tails"
     multiModeSummary: '{accessMode} + {transitMode}'
     nonTransit: Alternatives
-  DeleteUser:
-    deleteMyAccount: Supprimer mon compte
   ErrorMessage:
     header: Impossible de planifier le trajet
     warning: Attention
@@ -856,6 +854,12 @@ components:
     locationTypePrompt: 'Type de lieu :'
     nameExample: "Mon caf\xE9 du coin"
     namePrompt: 'Nom du lieu :'
+  PlaceShortcut:
+    enterAlert: >
+      Entrez votre point de départ/destination dans le formulaire (ou cliquez
+      sur la carte), puis cliquez sur le marqueur qui apparaît afin de définir
+      votre {placeType}.
+    setAddressForPlaceType: Entrez l'adresse de votre {placeType}
   PlanFirstLastButtons:
     first: Premier
     last: Dernier

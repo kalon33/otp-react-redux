@@ -1,5 +1,6 @@
 _id: zh
 _name: Chinese (Simplified)
+
 actions:
   callTaker:
     callQuerySaveError: '存储通话查询时出现错误: {err}'
@@ -108,10 +109,6 @@ common:
     tram: 电车
     transit: 公共交通
     walk: 步行
-  notifications:
-    email: 电子邮件
-    push: 推送通知
-    sms: 短信
   places:
     custom: 习俗
     dining: 用餐
@@ -135,10 +132,6 @@ common:
       plural, =0 {} other {#秒}}'
   currentlySelected: ' (Currently selected)'
 components:
-  A11yPrefs:
-    accessibilityRoutingByDefault: 默认情况下优先选择无障碍旅行
-  AccountSetupFinishPane:
-    message: 你已经准备好开始计划你的旅行.
   AddPlaceButton:
     addPlace: 添加地点
     needOriginDestination: 定义出发地或目的地以增加中途地点
@@ -157,8 +150,6 @@ components:
     networkConnectionRestored: 网络连接已恢复
     openMenu: 打开菜单
     skipNavigation: 跳过导航
-  BackToTripPlanner:
-    backToTripPlanner: 返回到行程计划表
   BatchResultsScreen:
     expandMap: 扩大地图
     showResults: 显示结果
@@ -229,8 +220,6 @@ components:
     clickDetails: 点击查看详情
     multiModeSummary: '{accessMode} + {transitMode}'
     nonTransit: 备选方案
-  DeleteUser:
-    deleteMyAccount: 删除我的账户
   ErrorMessage:
     header: 无法计划行程
     warning: 警告
@@ -440,6 +429,10 @@ components:
     locationTypePrompt: 位置类型：
     nameExample: 我的咖啡店
     namePrompt: '地名:'
+  PlaceShortcut:
+    enterAlert: |
+      在表格中输入出发地/目的地(或通过地图点击设置)并点击产生的标记设置为 {placeType} 地点.
+    setAddressForPlaceType: 设置您的 {placeType} 地址
   PlanFirstLastButtons:
     first: 首先
     last: 最后一次
@@ -530,8 +523,6 @@ components:
     keepSession: 继续使用
   SimpleRealtimeAnnotation:
     usingRealtimeInfo: 这个行程使用实时交通和延迟信息
-  StackedPaneDisplay:
-    savePreferences: 保存偏好
   StatusBadge:
     invalid: Invalid
     pending: 待定
@@ -697,13 +688,6 @@ components:
     listOfRouteStops: 这条路线上的公车站列表
     startOfTrip: 行程从这里开始
     tripDescription: 在{boardAtStop}上车，在{disembarkAtStop}下车
-  UserAccountScreen:
-    confirmDelete: 您确定要删除你的用户账户吗?一旦您这样做, 它就无法恢复.
-    errorUpdatingProfile: 更新配置文件出错。
-    fieldUpdated: 此设置已更新。
-    fields:
-      add-companion-form: 出行伙伴
-      storeTripHistory: 存储行程历史记录
   UserSettings:
     confirmDeletion: 您有最近的搜索或地点存储.若停止存储最近的地点或搜索的功能，则这些项目将被删除.要继续吗?
     favoriteStops: 最喜爱的车站

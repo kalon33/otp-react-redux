@@ -43,6 +43,8 @@ export interface OtpState {
     errors: any
     highlightedLocation: Location | null
     highlightedStop: any
+    loadedModules: Set<string>
+    loadingMessages: boolean
     locale: string
     localizedMessages: any
     mainPanelContent: number
@@ -86,7 +88,7 @@ export interface UserState {
 }
 
 export interface AppReduxState {
-  calltaker?: any // TODO
+  callTaker?: any // TODO
   otp: OtpState
   router: RouterState
   user: UserState

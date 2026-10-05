@@ -176,6 +176,8 @@ Object {
     "errors": Object {
       "networkConnectionLost": false,
     },
+    "loadedModules": Set {},
+    "loadingMessages": false,
     "locale": null,
     "localizedMessages": null,
     "mainPanelContent": null,

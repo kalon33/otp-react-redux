@@ -1,5 +1,6 @@
 _id: zh-Hant
 _name: Chinese (Traditional)
+
 actions:
   callTaker:
     callQuerySaveError: 儲存通話查詢時發生錯誤：{err}
@@ -108,10 +109,6 @@ common:
     tram: 西雅圖街車
     transit: 公共交通
     walk: 步行
-  notifications:
-    email: 電子郵件
-    push: 推播通知
-    sms: 簡訊
   places:
     custom: 自訂
     dining: 餐廳
@@ -135,10 +132,6 @@ common:
       plural, =0 {} other {# 秒鐘}}'
   currentlySelected: ' (Currently selected)'
 components:
-  A11yPrefs:
-    accessibilityRoutingByDefault: 預設優先選擇無障礙行程
-  AccountSetupFinishPane:
-    message: 您已經準備好開始規劃行程。
   AddPlaceButton:
     addPlace: 新增地點
     needOriginDestination: 定義起點/目的地以新增中間地點
@@ -214,8 +207,6 @@ components:
     clickDetails: 按一下以檢視詳細資料
     multiModeSummary: '{accessMode} + {transitMode}'
     nonTransit: 替代選項
-  DeleteUser:
-    deleteMyAccount: 刪除我的帳戶
   ErrorMessage:
     header: 無法規劃行程
     warning: 警告
@@ -391,6 +382,10 @@ components:
     locationTypePrompt: 地點類型：
     nameExample: 我的咖啡館
     namePrompt: 定地名：
+  PlaceShortcut:
+    enterAlert: |
+      請在表單內輸入起點/目的地 (或按一下地圖來設定)，然後按一下產生的標記以設定為{placeType}位置。
+    setAddressForPlaceType: 設定您的{placeType}地址
   PlanFirstLastButtons:
     first: 第一個
     last: 最後一個
@@ -481,8 +476,6 @@ components:
     keepSession: 繼續工作階段
   SimpleRealtimeAnnotation:
     usingRealtimeInfo: 此行程使用即時交通和延誤資訊。
-  StackedPaneDisplay:
-    savePreferences: 儲存偏好
   StatusBadge:
     invalid: Invalid
     pending: 待處理

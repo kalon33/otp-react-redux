@@ -1,7 +1,6 @@
 import {
   addSettingsToButton,
   AdvancedModeSubsettingsContainer,
-  DropdownSelector,
   ModeSettingRenderer,
   populateSettingWithValue,
   Styled as TripFormStyled
@@ -17,12 +16,12 @@ import {
 } from '@opentripplanner/types'
 import { QueryParamChangeEvent } from '@opentripplanner/trip-form/lib/types'
 import { Times } from '@styled-icons/fa-solid/Times'
+import coreUtils from '@opentripplanner/core-utils'
 import React, {
+  lazy,
   RefObject,
   useCallback,
   useContext,
-  useEffect,
-  useMemo,
   useState
 } from 'react'
 import styled from 'styled-components'
@@ -59,7 +58,6 @@ import {
   getDefaultNumItineraries
 } from '../../util/api'
 import { getDependentName } from '../../util/user'
-import { invisibleCss } from '../util/invisible-a11y-label'
 import {
   LockableRoute,
   RouteLock,
@@ -67,8 +65,15 @@ import {
   routeLockLabel,
   RouteLockScope
 } from '../../util/route-lock'
+import { getAuth0Config } from '../../util/auth'
+import { IconWithText } from '../util/styledIcon'
+import { invisibleCss } from '../util/invisible-a11y-label'
+import { isModuleEnabled, Modules } from '../../util/config'
+import { PersistenceConfig } from '../../util/config-types'
+import { toastPromise } from '../util/toasts'
 import { User } from '../user/types'
 import BackButton from '../util/back-button'
+import withSuspense from '../util/with-suspense'
 
 import {
   addCustomSettingLabels,
@@ -90,6 +95,10 @@ import {
 import { setModeButtonEnabled } from './batch-settings'
 import ArriveOnTimeSetting from './arrive-on-time-setting'
 import DateTimeModal from './date-time-modal'
+
+const DependentSelector = withSuspense(
+  lazy(() => import('../user/mobility-profile/dependent-selector'))
+)
 
 const PanelOverlay = styled.div`
   height: 100%;
@@ -116,6 +125,7 @@ const HeaderContainer = styled.div`
 const InvisibleSubheader = styled.h2`
   ${invisibleCss}
 `
+
 const ReturnToTripPlanButton = styled.button`
   align-items: center;
   background-color: var(--main-base-color, ${blue[900]});
@@ -187,6 +197,13 @@ const NlTextarea = styled.textarea`
   min-height: 60px;
   padding: 8px;
   resize: vertical;
+const UserSavedTripDefaultsButton = styled(StyledTransparentButton)`
+  color: ${getBaseColor()};
+  display: flex;
+  font-weight: bold;
+  justify-content: center;
+  margin: 1em 0;
+  text-decoration: underline;
   width: 100%;
 `
 
@@ -311,6 +328,8 @@ const AdvancedSettingsPanel = ({
   innerRef,
   loggedInUser,
   lookupViaStops,
+  handlePlanTrip,
+  innerRef,
   mobilityProfile,
   modeButtonOptions,
   modeSettingDefinitions,
@@ -456,6 +475,8 @@ const AdvancedSettingsPanel = ({
     },
     [setRouteLockScope]
   )
+
+  const usersCanSignIn = Boolean(getAuth0Config(persistence))
 
   const baseColor = getBaseColor()
   const accentColor = baseColor || blue[900]
@@ -1026,34 +1047,7 @@ const AdvancedSettingsPanel = ({
           </GlobalSettingsContainer>
         </>
       )}
-      {loggedInUser?.dependentsInfo?.length && (
-        <MobilityProfileContainer>
-          <VisibleSubheader>
-            <FormattedMessage id="components.MobilityProfile.MobilityPane.header" />
-          </VisibleSubheader>
-          <FormattedMessage id="components.MobilityProfile.MobilityPane.planTripDescription" />
-          <MobilityProfileDropdown
-            label={intl.formatMessage({
-              id: 'components.MobilityProfile.dropdownLabel'
-            })}
-            name="forEmail"
-            onChange={onMobilityProfileChange}
-            options={[
-              {
-                text: intl.formatMessage({
-                  id: 'components.MobilityProfile.myself'
-                }),
-                value: loggedInUser?.email
-              },
-              ...(loggedInUser?.dependentsInfo?.map((user) => ({
-                text: getDependentName(user),
-                value: user.email
-              })) || [])
-            ]}
-            value={selectedMobilityProfile}
-          />
-        </MobilityProfileContainer>
-      )}
+      {mobilityProfile && user && <DependentSelector />}
 
       <AdvancedModeSubsettingsContainer
         accentColor={accentColor}
