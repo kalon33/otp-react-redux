@@ -10,6 +10,7 @@ import {
   asContinuation,
   formatCueDistance
 } from '../../util/go-mode/turn-by-turn'
+import { formatMinutes, hasElapsed } from '../../util/go-mode/countdown'
 import {
   getLegRouteId,
   getRouteDepartures,
@@ -38,14 +39,6 @@ import RealtimeTime from './RealtimeTime'
 
 /** Ties the toggle to the list it opens for assistive tech. */
 const LATER_DEPARTURES_ID = 'go-mode-later-departures'
-
-/**
- * How long past a departure time the card still counts down rather than
- * calling the bus gone. The epoch is a prediction and a bus dwells at the
- * kerb, so a few seconds either side is not evidence it has left; two minutes
- * in the past is (see formatMinutes / backlog 12.16).
- */
-const DEPARTED_GRACE_S = 30
 
 /** Verbatim the inline style the departure rows already used. */
 const ALTERNATIVE_TEXT_STYLE = {
@@ -129,26 +122,6 @@ const WalkingNavigation = ({
         return '🚌'
     }
   }
-
-  /**
-   * Minutes of an interval that is still AHEAD. `<1 min` is a floor, so a
-   * negative interval must never reach it: handed −109 s at 10:09:22 on
-   * 2026-09-08 it returned the floor string and the card said the bus
-   * "arrives in <1 min" about a departure nearly two minutes in the past —
-   * that sentence, not the wrong time, is what the rider answered with "Not
-   * true bus left" (backlog 12.16).
-   *
-   * `rideSecondsRemaining` is clamped at 0 where it is computed, so the bus
-   * countdown is the one input here that can go negative, and `hasElapsed`
-   * gates it at its own call site below.
-   */
-  const formatMinutes = (seconds: number): string => {
-    const mins = Math.round(seconds / 60)
-    return mins <= 0 ? '<1 min' : `${mins} min`
-  }
-
-  /** The interval has run out — see formatMinutes. */
-  const hasElapsed = (seconds: number): boolean => seconds < -DEPARTED_GRACE_S
 
   const formatClockTime = (epochMs: number): string =>
     new Date(epochMs).toLocaleTimeString([], {
