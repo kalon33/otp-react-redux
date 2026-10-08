@@ -770,6 +770,26 @@ export const ONBOARD_CANDIDATE_SNAPSHOT = 'ONBOARD_CANDIDATE_SNAPSHOT'
  * onboard panel instead (pinned by onboard-flow.ts; backlog 25.6).
  */
 export const AUTO_REPLAN = 'AUTO_REPLAN'
+/**
+ * Recording-only: one entry per `retargetPlanToDeparture` call, at EVERY exit,
+ * so a ride shows whether the card's bus and the itinerary's bus were
+ * reconciled (backlog 43.2, the evidence 23.3 is scored on). Its verdicts used
+ * to go to `console.log`, which the debug sink does not carry (it wraps only
+ * `warn` and `error`, `debug-log.js`), so on 2026-10-08 `muzyhpwb-smc0nt` the
+ * stream held no record of the two re-targets that did not happen.
+ *
+ * No reducer reads it — the debug-log middleware records every plain action
+ * before any reducer sees it, the same as AUTO_REPLAN. Scalars only. Its rate
+ * is bounded by its callers: the anchor's (inside the 20 s live-poll throttle,
+ * one per `SET_DEPARTURE_OVERRIDE {source: anchor}`) and the rider's tap.
+ *
+ * `verdict`: `reset` (no departure to follow), `inactive` (no live trip or no
+ * legs), `aboard` (23.2), `no-stop` (not walking into a boarding), `no-run`
+ * (the stop feed names no run for it), `no-candidate` (the splice declined —
+ * e.g. already on that run), `refused-overrun` (16.2, the access leg ends
+ * after the bus), `applied`.
+ */
+export const PLAN_RETARGET = 'PLAN_RETARGET'
 export const PAUSE_GPS_SIMULATION = 'PAUSE_GPS_SIMULATION'
 export const REROUTE_SNAPSHOT = 'REROUTE_SNAPSHOT'
 export const REPAIR_LEG_GEOMETRY = 'REPAIR_LEG_GEOMETRY'
@@ -1189,21 +1209,57 @@ export function retargetPlanToDeparture(
   runTripId: string | null = null
 ) {
   return async function (dispatch: any, getState: any) {
-    if (departureMs == null || !Number.isFinite(departureMs)) return
+    // 43.2: every exit says which one it was. `tripId` is the run's GTFS id
+    // once the feed has named it, before that the id the pick came with.
+    const record = (
+      verdict: string,
+      extra: {
+        boardLegIndex?: number
+        overrunMs?: number | null
+        runDepartureMs?: number
+        tripId?: string | null
+      } = {}
+    ) =>
+      dispatch({
+        payload: {
+          boardLegIndex: extra.boardLegIndex ?? null,
+          departureMs: Number.isFinite(departureMs) ? departureMs : null,
+          overrunMs: extra.overrunMs ?? null,
+          runDepartureMs: extra.runDepartureMs ?? null,
+          source,
+          tripId: extra.tripId ?? tripGtfsId(runTripId) ?? null,
+          verdict
+        },
+        type: PLAN_RETARGET
+      })
+
+    if (departureMs == null || !Number.isFinite(departureMs)) {
+      record('reset')
+      return
+    }
     const state = getState()
     const goMode = state.otp?.goMode
     const itinerary: Itinerary | null = goMode?.activeItinerary ?? null
-    if (!goMode?.isActive || !itinerary?.legs?.length) return
+    if (!goMode?.isActive || !itinerary?.legs?.length) {
+      record('inactive')
+      return
+    }
 
     // 23.2: a rider who is aboard is not re-targeted.
-    if (goMode.riding?.tripId) return
+    if (goMode.riding?.tripId) {
+      record('aboard')
+      return
+    }
 
     const legIndex = goMode.routeMatch?.legIndex ?? 0
     const boardLegIndex = legIndex + 1
     const accessLeg = itinerary.legs[legIndex]
     const boardLeg = itinerary.legs[boardLegIndex]
     const stopId = anchorBoardingStopId(accessLeg, boardLeg)
-    if (!stopId) return
+    if (!stopId) {
+      record('no-stop', { boardLegIndex })
+      return
+    }
 
     const routeId = getLegRouteId(boardLeg)
     const departures = getRouteDepartures(
@@ -1217,7 +1273,10 @@ export function retargetPlanToDeparture(
       ? departures.find((d) => tripIdsMatch(d.tripId, runTripId))
       : departures.find((d) => d.depMs === departureMs)
     const tripId = tripGtfsId(run?.tripId)
-    if (!run || !tripId) return
+    if (!run || !tripId) {
+      record('no-run', { boardLegIndex })
+      return
+    }
 
     const candidate = retargetTransitLegToRun(itinerary, boardLegIndex, {
       departureMs: run.depMs,
@@ -1225,10 +1284,24 @@ export function retargetPlanToDeparture(
       realtime: run.realtime,
       tripId
     })
-    if (!candidate) return
+    if (!candidate) {
+      record('no-candidate', {
+        boardLegIndex,
+        runDepartureMs: run.depMs,
+        tripId
+      })
+      return
+    }
 
     const overrun = accessBoardOverrunMs(candidate)
+    const facts = {
+      boardLegIndex,
+      overrunMs: overrun,
+      runDepartureMs: run.depMs,
+      tripId
+    }
     if (overrun != null && overrun > AUTO_REPLAN_ACCESS_BOARD_SLACK_MS) {
+      record('refused-overrun', facts)
       // eslint-disable-next-line no-console
       console.log(
         `[go-mode] plan re-target to ${tripId} refused: access leg ends ` +
@@ -1237,6 +1310,9 @@ export function retargetPlanToDeparture(
       return
     }
 
+    // Recorded BEFORE the START_GO_MODE it causes, so the stream reads cause
+    // then effect.
+    record('applied', facts)
     // eslint-disable-next-line no-console
     console.log(
       `[go-mode] plan follows the card (${source}): leg ${boardLegIndex} -> ` +
@@ -2358,8 +2434,10 @@ function armAutoEndTimer(dispatch: any, getState: any): void {
     const current = getState().otp?.goMode
     if (!current?.isActive || current.arrivedAt == null) return
     if (current.roundTrip) return
+    // `warn`, not `log`: the debug sink carries only warn and error, and a
+    // verify should not have to infer the auto-end from arithmetic (13.5).
     // eslint-disable-next-line no-console
-    console.log(
+    console.warn(
       '[go-mode] auto-end: arrived ' +
         `${Math.round((Date.now() - current.arrivedAt) / 1000)}s ago, ` +
         'ending the trip'
