@@ -922,6 +922,9 @@ components:
       Ce nom est déjà utilisé avec un autre trajet. Veuillez choisir un nom
       différent.
     tripNameRequired: Veuillez entrer un nom pour ce trajet.
+  SearchPendingLine:
+    bikeTransit: "Vélo + transport en commun : recherche en cours…"
+    more: "Autres résultats : recherche en cours…"
   SequentialPaneDisplay:
     stepNumber: Étape {step} sur {total}
   SettingsScreen:

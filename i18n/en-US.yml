@@ -916,6 +916,9 @@ components:
       unused trips from your saved trips, and try again.
     tripNameAlreadyUsed: Another saved trip already uses this name. Please choose a different name.
     tripNameRequired: Please enter a trip name.
+  SearchPendingLine:
+    bikeTransit: Bike + transit still searching…
+    more: More results still searching…
   SequentialPaneDisplay:
     stepNumber: Step {step} of {total}
   SessionTimeout:
