@@ -184,6 +184,15 @@ export interface TripSession {
   lastPacingCard: PacingCardState | null
 
   /**
+   * Wall clock of the last position handed to handlePositionUpdate. The live
+   * board timer reads it to stay out of the way while fixes are flowing — the
+   * tick owns the poll then, because it also runs the departure anchor
+   * (backlog 38.2). Unlike the GPS watchdog's `lastFixAtMs`, nothing but a
+   * real position moves it.
+   */
+  lastPositionTickAt: number
+
+  /**
    * When the last AUTOMATIC re-plan was installed, while its join window is
    * still open — see noteReplanFollowed (deviation.ts). Null once the window
    * has closed either way.
@@ -222,6 +231,16 @@ export interface TripSession {
    * started. See util/go-mode/live-activity.ts; backlog 8.10.
    */
   liveActivityTripId: string | null
+
+  /**
+   * The live board timer (backlog 38.2): polls the boarding stop, the trip and
+   * the board route's vehicles every LIVE_LEG_TIMES_INTERVAL_MS when no fix has
+   * come in to do it. ONE per trip — armed by startGoModeTracking (replaced,
+   * never stacked), cleared by endGoMode and by the arrival quiesce, and it
+   * clears itself on the first tick that finds the trip over or the session
+   * replaced.
+   */
+  liveBoardTimerId: ReturnType<typeof setInterval> | null
 
   /**
    * The rider's explicit departure pick must never be fought by the
@@ -397,12 +416,14 @@ export function createTripSession(): TripSession {
     lastDepartureBaseline: null,
     lastLiveLegTimesAt: 0,
     lastPacingCard: null,
+    lastPositionTickAt: 0,
     lastQuietReplanAppliedAt: null,
     lastQuietReplanAt: 0,
     lastRerouteSnapshotAt: 0,
     lastTransitionedLegIndex: null,
     lastTurnCardKey: null,
     liveActivityTripId: null,
+    liveBoardTimerId: null,
     manualDepartureLock: false,
     matchHeldSinceMs: null,
     missedBusNoticeKey: null,

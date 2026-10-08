@@ -128,6 +128,10 @@ import {
   resumedTransitionedLegIndex
 } from '../util/go-mode/session-persistence'
 import { createTripSession } from '../util/go-mode/trip-session'
+import {
+  LIVE_BOARD_TIMER_MS,
+  shouldTimerPollLiveBoard
+} from '../util/go-mode/live-board-timer'
 import type { TripSession } from '../util/go-mode/trip-session'
 import type {
   DepartureOverrideSource,
@@ -351,6 +355,162 @@ function stopGpsWatchdog() {
     clearInterval(session.gpsWatchdogIntervalId)
     session.gpsWatchdogIntervalId = null
   }
+}
+
+/**
+ * Poll the feeds the boarding board is built from: the trip query for every
+ * upcoming transit leg (refreshLiveLegTimes), the boarding route's vehicles
+ * while the rider is on foot or bike toward it, and the boarding stop's
+ * departures (backlog 38.2). The CALLER owns the throttle — the tick and the
+ * live board timer both claim `session.lastLiveLegTimesAt` before calling, so
+ * the two can never both poll inside one LIVE_LEG_TIMES_INTERVAL_MS.
+ *
+ * Reads only what it is handed plus `earlyAlight`, so the timer can run it off
+ * the store (the last tick's route match and progress) when no fix is coming.
+ */
+function pollBoardingFeeds(
+  dispatch: any,
+  getState: any,
+  {
+    itinerary,
+    legIndex,
+    nowMs,
+    waitingAtBoardingStop
+  }: {
+    itinerary: Itinerary
+    legIndex: number
+    /** The tick's clock (simulated in a simulation), for the service date. */
+    nowMs: number
+    waitingAtBoardingStop: boolean | undefined
+  }
+): void {
+  dispatch(refreshLiveLegTimes())
+
+  // While the rider is on an access leg nothing else polls the boarding
+  // route's vehicles — startVehicleTracking runs only on transit legs —
+  // so the board-vehicle alert would starve without its own poll.
+  // Same 20s cadence as the rest of this block; the api layer's URL
+  // throttle absorbs any overlap. Read-only: no vehicle MATCHING happens
+  // while walking, this only fills the store the alert reads from.
+  //
+  // A rider who got off EARLY at an on-route stop (8.11) is in exactly the
+  // position this poll was written for — on foot, heading for their next
+  // bus — but the matcher is still on the transit leg they stepped off, so
+  // neither the WALK/BICYCLE test nor findBoardLegIndex from that index
+  // would name the right leg. `goMode.earlyAlight` is how this path is
+  // entered from there, and it is why the search starts one leg on: the
+  // leg the matcher favours IS a transit leg, and it is the one they just
+  // left.
+  const accessLegNow: any = itinerary.legs[legIndex]
+  const alightedEarlyHere =
+    getState().otp?.goMode?.earlyAlight?.legIndex === legIndex
+  if (
+    accessLegNow?.mode === 'WALK' ||
+    accessLegNow?.mode === 'BICYCLE' ||
+    alightedEarlyHere
+  ) {
+    const pollBoardLegIndex = findBoardLegIndex(
+      itinerary.legs,
+      alightedEarlyHere ? legIndex + 1 : legIndex
+    )
+    const pollBoardRouteId =
+      pollBoardLegIndex >= 0
+        ? getLegRouteId(itinerary.legs[pollBoardLegIndex])
+        : null
+    if (pollBoardRouteId) {
+      dispatch(getVehiclePositionsForRoute(pollBoardRouteId))
+    }
+  }
+
+  // Re-poll the boarding stop's departures — the trip-start snapshot goes
+  // stale, and an earlier bus only ever shows up here. The poll runs through
+  // the platform wait as well, after the trip has stepped onto the bus leg
+  // (26.1: on 09-22 it stopped at 08:19:05 and the board time fell back to
+  // the trip query's schedule at 08:22:09). The departure ANCHOR keeps its
+  // own, narrower gate in the tick — see boardingStopToPoll.
+  const pollStopId = boardingStopToPoll(
+    itinerary.legs[legIndex],
+    itinerary.legs[legIndex + 1],
+    waitingAtBoardingStop
+  )
+  if (pollStopId) {
+    try {
+      dispatch(
+        findStopTimesForStop({
+          date: currentServiceDate(nowMs, getState().otp.config.homeTimezone),
+          forceFetch: true,
+          stopId: pollStopId
+        })
+      )
+    } catch {
+      // Best-effort; the anchor uses whatever is in the store.
+    }
+  }
+}
+
+function stopLiveBoardTimer() {
+  if (session.liveBoardTimerId) {
+    clearInterval(session.liveBoardTimerId)
+    session.liveBoardTimerId = null
+  }
+}
+
+/**
+ * The live board timer (backlog 38.2). The board polls above used to run only
+ * inside handlePositionUpdate, so on 2026-09-30 (`muomy26h-g1zujp`) the stop
+ * poll went from every ~20 s to 17:07:03 and 17:08:03 once fixes stopped
+ * under the station canopy — each riding a GPS watchdog restart's forced fix.
+ * This keeps the cadence when the fixes stop; while they flow it stands
+ * aside (shouldTimerPollLiveBoard), because the tick also runs the departure
+ * anchor off the same answer.
+ *
+ * ONE per trip, and it must not outlive it — 2026-08-28 burned 88 minutes
+ * past arrival on an interval that lived outside the tick. So: replaced
+ * (never stacked) on every startGoModeTracking, cleared by endGoMode and by
+ * the arrival quiesce, and on any tick that finds the trip inactive, arrived,
+ * or the session no longer holding THIS interval it clears itself.
+ */
+function startLiveBoardTimer(dispatch: any, getState: any) {
+  stopLiveBoardTimer()
+  const id: ReturnType<typeof setInterval> = setInterval(() => {
+    const goMode = getState().otp?.goMode
+    if (
+      session.liveBoardTimerId !== id ||
+      !goMode?.isActive ||
+      goMode.arrivedAt != null
+    ) {
+      clearInterval(id)
+      if (session.liveBoardTimerId === id) session.liveBoardTimerId = null
+      return
+    }
+    const itinerary = goMode.activeItinerary
+    const legIndex = goMode.routeMatch?.legIndex
+    const nowMs = Date.now()
+    if (
+      !shouldTimerPollLiveBoard({
+        arrived: false,
+        isActive: true,
+        lastPollAtMs: session.lastLiveLegTimesAt,
+        lastPositionAtMs: session.lastPositionTickAt,
+        legIndex,
+        legs: itinerary?.legs,
+        nowMs,
+        pollIntervalMs: LIVE_LEG_TIMES_INTERVAL_MS,
+        replay: isReplayActive(),
+        simulation: session.simulationActive
+      })
+    ) {
+      return
+    }
+    session.lastLiveLegTimesAt = nowMs
+    pollBoardingFeeds(dispatch, getState, {
+      itinerary,
+      legIndex: legIndex as number,
+      nowMs,
+      waitingAtBoardingStop: goMode.progress?.waitingAtBoardingStop
+    })
+  }, LIVE_BOARD_TIMER_MS)
+  session.liveBoardTimerId = id
 }
 
 // Reroute-snapshot capture interval (recording only). Periodically records the
@@ -1731,6 +1891,13 @@ export function startGoModeTracking(
     // per ARRIVED_TRACKING_INTERVAL_MS.
     const resumedArrived = getState().otp?.goMode?.arrivedAt != null
 
+    // The live board timer (38.2): the board keeps polling when fixes stop.
+    // This is every door into a live trip, so it is armed here — replaced,
+    // never stacked. Not for a trip that has already arrived (nothing left to
+    // board) and not under replay (it reproduces recorded polls).
+    if (resumedArrived || options.replay) stopLiveBoardTimer()
+    else startLiveBoardTimer(dispatch, getState)
+
     // A reroute or missed-bus auto-update swaps the itinerary without going
     // through endGoMode, so clear the per-leg transition guard here too.
     session.lastTransitionedLegIndex = null
@@ -2020,6 +2187,7 @@ export function endGoMode() {
     // (handleArrivedDone -> finishArrivedTrip -> endGoMode) and by the auto-end
     // itself, so a trip cannot be ended twice and no timer outlives it.
     clearAutoEndTimer()
+    stopLiveBoardTimer()
     if (session.visibilityChangeHandler) {
       document.removeEventListener(
         'visibilitychange',
@@ -6382,6 +6550,9 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     // budget after a run of fast retries.
     lastFixAtMs = Date.now()
     nativeGpsRestartsSinceLastFix = 0
+    // ...and for the live board timer, which stands aside while fixes flow.
+    // Not shared with lastFixAtMs: a watchdog restart resets that one.
+    session.lastPositionTickAt = Date.now()
 
     const state = getState()
     const goMode = state.otp?.goMode
@@ -7269,6 +7440,7 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       // 34,784 actions) was recorded in between.
       stopRerouteSnapshotCapture()
       stopVehiclePolling()
+      stopLiveBoardTimer()
       dispatch(
         updateTrackingInterval({ interval: ARRIVED_TRACKING_INTERVAL_MS })
       )
@@ -7317,79 +7489,22 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       nowMs - session.lastLiveLegTimesAt > LIVE_LEG_TIMES_INTERVAL_MS
     ) {
       session.lastLiveLegTimesAt = nowMs
-      dispatch(refreshLiveLegTimes())
-
-      // While the rider is on an access leg nothing else polls the boarding
-      // route's vehicles — startVehicleTracking runs only on transit legs —
-      // so the board-vehicle alert below would starve without its own poll.
-      // Same 20s cadence as the rest of this block; the api layer's URL
-      // throttle absorbs any overlap. Read-only: no vehicle MATCHING happens
-      // while walking, this only fills the store the alert reads from.
-      //
-      // A rider who got off EARLY at an on-route stop (8.11) is in exactly the
-      // position this poll was written for — on foot, heading for their next
-      // bus — but the matcher is still on the transit leg they stepped off, so
-      // neither the WALK/BICYCLE test nor findBoardLegIndex from that index
-      // would name the right leg. `goMode.earlyAlight` is how this path is
-      // entered from there, and it is why the search starts one leg on: the
-      // leg the matcher favours IS a transit leg, and it is the one they just
-      // left.
-      const accessLegNow: any = itinerary.legs[routeMatch.legIndex]
-      const alightedEarlyHere =
-        getState().otp?.goMode?.earlyAlight?.legIndex === routeMatch.legIndex
-      if (
-        accessLegNow?.mode === 'WALK' ||
-        accessLegNow?.mode === 'BICYCLE' ||
-        alightedEarlyHere
-      ) {
-        const pollBoardLegIndex = findBoardLegIndex(
-          itinerary.legs,
-          alightedEarlyHere ? routeMatch.legIndex + 1 : routeMatch.legIndex
-        )
-        const pollBoardRouteId =
-          pollBoardLegIndex >= 0
-            ? getLegRouteId(itinerary.legs[pollBoardLegIndex])
-            : null
-        if (pollBoardRouteId) {
-          dispatch(getVehiclePositionsForRoute(pollBoardRouteId))
-        }
-      }
+      pollBoardingFeeds(dispatch, getState, {
+        itinerary,
+        legIndex: routeMatch.legIndex,
+        nowMs: currentTime.getTime(),
+        waitingAtBoardingStop: progress.waitingAtBoardingStop
+      })
 
       // Auto-anchor: while walking/biking toward a transit boarding, target the
       // soonest same-route departure the rider can actually catch — the planned
       // itinerary may board a much later trip, and the wait/notification math
       // must track the real bus. Writing it into departureOverride is what makes
       // progress, the pacing card and missed-bus all agree on which bus that is.
-      // Every rule lives in util/go-mode/departure-anchor.ts.
+      // Every rule lives in util/go-mode/departure-anchor.ts. The stop poll it
+      // reads was just dispatched by pollBoardingFeeds.
       const anchorLeg = itinerary.legs[routeMatch.legIndex]
       const anchorNextLeg = itinerary.legs[routeMatch.legIndex + 1]
-      // Re-poll the boarding stop's departures first — the trip-start snapshot
-      // goes stale, and an earlier bus only ever shows up here. The poll runs
-      // through the platform wait as well, after the trip has stepped onto the
-      // bus leg (26.1: on 09-22 it stopped at 08:19:05 and the board time fell
-      // back to the trip query's schedule at 08:22:09). The ANCHOR below keeps
-      // its own, narrower gate — see boardingStopToPoll.
-      const pollStopId = boardingStopToPoll(
-        anchorLeg,
-        anchorNextLeg,
-        progress.waitingAtBoardingStop
-      )
-      if (pollStopId) {
-        try {
-          dispatch(
-            findStopTimesForStop({
-              date: currentServiceDate(
-                currentTime.getTime(),
-                getState().otp.config.homeTimezone
-              ),
-              forceFetch: true,
-              stopId: pollStopId
-            })
-          )
-        } catch {
-          // Best-effort; the decision below uses whatever is in the store.
-        }
-      }
       const boardingStopId = anchorBoardingStopId(anchorLeg, anchorNextLeg)
       if (boardingStopId) {
         const anchor = evaluateDepartureAnchor(session.lastAutoAnchorMs, {
