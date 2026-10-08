@@ -741,6 +741,8 @@ export const recordCardDepartureMismatch = (info: {
   heldTripId: string | null
   reason: string
   tickDepartureMs: number | null
+  /** The run the tick is on (38.1) — beside heldTripId. */
+  tickTripId?: string | null
 }) => ({
   payload: { ...info, tMs: getCurrentTime().getTime() },
   type: CARD_DEPARTURE_MISMATCH

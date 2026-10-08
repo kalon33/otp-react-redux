@@ -79,6 +79,8 @@ interface Props {
     heldTripId: string | null
     reason: string
     tickDepartureMs: number | null
+    /** The run the tick is on (38.1) — beside heldTripId. */
+    tickTripId?: string | null
   }) => void
   onExit?: () => void
   onSelectDeparture?: (epochMs: number | null, tripId?: string | null) => void
@@ -379,7 +381,8 @@ const WalkingNavigation = ({
       cardDepartureMs: effectiveDepartureMs ?? null,
       heldTripId: decision.held?.tripId ?? null,
       reason: decision.reason,
-      tickDepartureMs
+      tickDepartureMs,
+      tickTripId: departureInput.tickTripId
     })
     // The pair is the event: re-log when either side moves, not every tick.
     // eslint-disable-next-line react-hooks/exhaustive-deps
