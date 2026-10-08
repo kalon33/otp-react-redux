@@ -378,6 +378,9 @@ describe('go-mode > retargetPlanToDeparture, through the store', () => {
     return {
       actions,
       itinerary: () => goModeState.activeItinerary,
+      /** 43.2: the PLAN_RETARGET records, payloads only. */
+      retargets: () =>
+        actions.filter((a) => a.type === 'PLAN_RETARGET').map((a) => a.payload),
       run: (thunk: any) => thunk(dispatch, getState),
       types: () => actions.map((a) => a.type)
     }
@@ -484,5 +487,137 @@ describe('go-mode > retargetPlanToDeparture, through the store', () => {
     })
     expect(store.types()).toContain('START_GO_MODE')
     expect(store.itinerary().legs[1].trip.gtfsId).toBe(ADOPTED_TRIP)
+  })
+
+  describe('every exit is recorded as PLAN_RETARGET (43.2)', () => {
+    it('applied: one record, before the START_GO_MODE it causes', async () => {
+      store = makeStore()
+      await store.run(retargetPlanToDeparture(ANCHORED_MS, 'anchor'))
+      expect(store.retargets()).toEqual([
+        {
+          boardLegIndex: 1,
+          departureMs: ANCHORED_MS,
+          // Bike leg ends 09:09:36, the bus leaves 09:14:54.
+          overrunMs: -318000,
+          runDepartureMs: ANCHORED_MS,
+          source: 'anchor',
+          tripId: ADOPTED_TRIP,
+          verdict: 'applied'
+        }
+      ])
+      const types = store.types()
+      expect(types.indexOf('PLAN_RETARGET')).toBeLessThan(
+        types.indexOf('START_GO_MODE')
+      )
+    })
+
+    it("applied on the rider's pick carries source rider", async () => {
+      store = makeStore()
+      await store.run(selectDeparture(ANCHORED_MS))
+      expect(store.retargets()).toHaveLength(1)
+      expect(store.retargets()[0]).toMatchObject({
+        source: 'rider',
+        tripId: ADOPTED_TRIP,
+        verdict: 'applied'
+      })
+    })
+
+    it('refused-overrun: one record with the overrun, and no START_GO_MODE', async () => {
+      const legs = [...ITINERARY.legs]
+      legs[0] = { ...legs[0], endTime: ANCHORED_MS + 38000 }
+      store = makeStore({ itinerary: { ...ITINERARY, legs } })
+      await store.run(retargetPlanToDeparture(ANCHORED_MS, 'anchor'))
+      expect(store.types()).not.toContain('START_GO_MODE')
+      expect(store.retargets()).toEqual([
+        {
+          boardLegIndex: 1,
+          departureMs: ANCHORED_MS,
+          overrunMs: 38000,
+          runDepartureMs: ANCHORED_MS,
+          source: 'anchor',
+          tripId: ADOPTED_TRIP,
+          verdict: 'refused-overrun'
+        }
+      ])
+    })
+
+    it('aboard: recorded, nothing else looked up', async () => {
+      store = makeStore({
+        riding: {
+          boardedAt: ANCHOR_AT,
+          legIndex: 0,
+          offRouteSince: null,
+          routeId: ROUTE_ID,
+          tripId: ADOPTED_TRIP,
+          vehicleId: '1:8228'
+        }
+      })
+      await store.run(retargetPlanToDeparture(ANCHORED_MS, 'anchor'))
+      expect(store.retargets()).toEqual([
+        {
+          boardLegIndex: null,
+          departureMs: ANCHORED_MS,
+          overrunMs: null,
+          runDepartureMs: null,
+          source: 'anchor',
+          tripId: null,
+          verdict: 'aboard'
+        }
+      ])
+    })
+
+    it('no-run: the feed names no run at that epoch', async () => {
+      store = makeStore()
+      await store.run(retargetPlanToDeparture(ANCHORED_MS + 1234, 'anchor'))
+      expect(store.retargets()).toEqual([
+        expect.objectContaining({ boardLegIndex: 1, verdict: 'no-run' })
+      ])
+    })
+
+    it('no-stop: not walking into a boarding', async () => {
+      // Already on the bus leg: the "next" leg is the walk off it.
+      store = makeStore()
+      await store.run((dispatch: any, getState: any) => {
+        getState().otp.goMode.routeMatch = { legIndex: 1 }
+        return retargetPlanToDeparture(ANCHORED_MS, 'anchor')(
+          dispatch,
+          getState
+        )
+      })
+      expect(store.retargets()).toEqual([
+        expect.objectContaining({ boardLegIndex: 2, verdict: 'no-stop' })
+      ])
+    })
+
+    it('no-candidate: the plan is already on that run', async () => {
+      const onRun = retargetTransitLegToRun(ITINERARY, 1, anchoredRun())!
+      store = makeStore({ itinerary: onRun })
+      await store.run(retargetPlanToDeparture(ANCHORED_MS, 'anchor'))
+      expect(store.types()).not.toContain('START_GO_MODE')
+      expect(store.retargets()).toEqual([
+        expect.objectContaining({
+          tripId: ADOPTED_TRIP,
+          verdict: 'no-candidate'
+        })
+      ])
+    })
+
+    it('reset and inactive are recorded too', async () => {
+      store = makeStore()
+      await store.run(retargetPlanToDeparture(null, 'rider'))
+      expect(store.retargets()).toEqual([
+        expect.objectContaining({
+          departureMs: null,
+          source: 'rider',
+          verdict: 'reset'
+        })
+      ])
+      store.run(endGoMode())
+      await store.run(retargetPlanToDeparture(ANCHORED_MS, 'anchor'))
+      expect(store.retargets().map((r: any) => r.verdict)).toEqual([
+        'reset',
+        'inactive'
+      ])
+    })
   })
 })
