@@ -55,6 +55,8 @@ interface Props {
     heldTripId: string | null
     reason: string
     tickDepartureMs: number | null
+    /** The run the tick is on (38.1) — beside heldTripId. */
+    tickTripId?: string | null
   }) => void
   pauseGpsSimulation: () => void
   resumeGpsSimulation: () => void
