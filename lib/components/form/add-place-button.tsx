@@ -7,6 +7,8 @@ import { IconWithText } from '../util/styledIcon'
 type Props = {
   from: unknown
   intermediatePlaces: Array<unknown>
+  /** The enabled button's text; the call-taker's "Add place" by default. */
+  label?: React.ReactNode
   onClick: () => void
   to: unknown
 }
@@ -14,6 +16,7 @@ type Props = {
 const AddPlaceButton = ({
   from,
   intermediatePlaces,
+  label,
   onClick,
   to
 }: Props): JSX.Element => {
@@ -26,6 +29,7 @@ const AddPlaceButton = ({
       disabled={disabled}
       onClick={onClick}
       style={{ marginBottom: '5px', marginLeft: '10px' }}
+      type="button"
     >
       <IconWithText Icon={PlusCircle}>
         {maxPlacesDefined ? (
@@ -33,7 +37,7 @@ const AddPlaceButton = ({
         ) : disabled ? (
           <FormattedMessage id="components.AddPlaceButton.needOriginDestination" />
         ) : (
-          <FormattedMessage id="components.AddPlaceButton.addPlace" />
+          label || <FormattedMessage id="components.AddPlaceButton.addPlace" />
         )}
       </IconWithText>
     </button>

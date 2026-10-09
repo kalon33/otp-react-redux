@@ -20,6 +20,7 @@ import ActiveRoutingPreferences from '../form/active-routing-preferences'
 import AdvancedSettingsPanel from '../form/advanced-settings-panel'
 import BatchSettings from '../form/batch-settings'
 import DefaultMap from '../map/default-map'
+import IntermediateStops from '../form/intermediate-stops'
 import LocationField from '../form/connected-location-field'
 import SavePlaceButton from '../form/save-place-button'
 import SwitchButton from '../form/switch-button'
@@ -193,6 +194,7 @@ class BatchSearchScreen extends Component<Props> {
                           selfValidate={planTripClicked}
                           showClearButton={false}
                         />
+                        <IntermediateStops />
                         <LocationField
                           inputPlaceholder={intl.formatMessage({
                             id: 'components.LocationSearch.setDestination'

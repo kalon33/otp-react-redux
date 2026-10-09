@@ -671,6 +671,16 @@ components:
       trajets selon vos besoins et préférences.
     myself: Moi-même
     title: Spécifiez votre profil de mobilité
+  MultiStop:
+    addStop: Ajouter une étape
+    arrivedAtStop: "Vous êtes à l'étape {number} sur {total}"
+    continueTo: Continuer vers {destination}
+    endTrip: Terminer le trajet
+    finding: Recherche du prochain trajet…
+    headerStop: Vers {destination} · étape {number} sur {total}
+    stopPlaceholder: Entrez une étape
+    summary: Via {stops} · {distance} au total
+    via: Via {stops}
   NarrativeItinerariesHeader:
     changeSortDir: Changer l'ordre de tri
     howToFindResults: Pour afficher les résultats, utilisez l'en-tête Trajets 
