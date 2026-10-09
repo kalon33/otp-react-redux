@@ -688,6 +688,16 @@ components:
     intro: Please answer a few questions to customize the trip planning experience to your needs and preferences.
     myself: Myself
     title: Define Your Mobility Profile
+  MultiStop:
+    addStop: Add stop
+    arrivedAtStop: You're at stop {number} of {total}
+    continueTo: Continue to {destination}
+    endTrip: End trip
+    finding: Finding the next ride…
+    headerStop: To {destination} · stop {number} of {total}
+    stopPlaceholder: Enter a stop
+    summary: Via {stops} · {distance} in all
+    via: Via {stops}
   NarrativeItinerariesHeader:
     changeSortDir: Change sort direction
     howToFindResults: To view results, see the Itineraries Found heading below. To see itinerary details,
@@ -913,6 +923,9 @@ components:
       You already have reached the maximum of five saved trips. Please remove unused trips from your saved trips, and try again.
     tripNameAlreadyUsed: Another saved trip already uses this name. Please choose a different name.
     tripNameRequired: Please enter a trip name.
+  SearchPendingLine:
+    bikeTransit: Bike + transit still searching…
+    more: More results still searching…
   SequentialPaneDisplay:
     stepNumber: Step {step} of {total}
   SessionTimeout:

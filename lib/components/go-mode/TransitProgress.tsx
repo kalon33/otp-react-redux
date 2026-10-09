@@ -10,6 +10,7 @@ import {
   displayVehicleLabel,
   NO_LIVE_VEHICLE_POLLS
 } from '../../util/go-mode/vehicle-matching'
+import { formatMinutes } from '../../util/go-mode/countdown'
 import { getLegRouteId } from '../../util/go-mode/departure-anchor'
 import { getModeIcon } from '../../util/go-mode/mode-icon'
 import {
@@ -38,6 +39,7 @@ import {
   LocatingIndicator,
   ModeIcon,
   NavExtras,
+  NavHero,
   ResetButton,
   RouteDirection,
   RouteHeader,
@@ -47,6 +49,7 @@ import {
   TransitContainer,
   VehicleTrackingBadge
 } from './styled'
+import RealtimeTime from './RealtimeTime'
 
 interface Props {
   advanceToLeg: (legIndex: number) => void
@@ -192,6 +195,24 @@ const TransitProgress = ({
   // past while the header said 8:24 (26.4).
   const beforeDeparture = departureMs != null && departureMs > nowMs
 
+  /**
+   * Minutes until the bus, on the platform (37.3). The walking card counts the
+   * bus down right up to the leg change — and the gate allows that change 5
+   * minutes before the live board time — so the countdown used to vanish at
+   * the moment the rider needed it most: 2026-09-30 17:08:37, 2m32s before the
+   * 17:11:09 Orange Line, the card swapped to a clock time and the rider wrote
+   * "My bus time countdown went away! Right at the critical moment!".
+   *
+   * Same figure and the same live glyph as the walking card's departure. Only
+   * while waiting, and so only before the departure itself — past it the card
+   * is a ride card again, so there is no "departed" case here to state. A
+   * floored epoch is not a prediction (17.6), so it gets no minutes either.
+   */
+  const waitCountdown =
+    waiting && departureMs != null && !boardTime.isFloor
+      ? formatMinutes((departureMs - nowMs) / 1000)
+      : null
+
   return (
     <TransitContainer>
       {/* Route Header */}
@@ -208,6 +229,13 @@ const TransitProgress = ({
         <ModeIcon>{getModeIcon(leg.mode)}</ModeIcon>
         <div style={{ flex: 1, minWidth: 0 }}>
           <RouteName>{leg.routeShortName || leg.routeLongName}</RouteName>
+          {waitCountdown && (
+            <NavHero>
+              <RealtimeTime live={boardTime.realtime}>
+                {waitCountdown}
+              </RealtimeTime>
+            </NavHero>
+          )}
           {/* Standing at the stop: where the rider is and when the bus goes.
               The stop count below is a ride fact and says nothing true here —
               its "next stop" is the one after the boarding stop (13.9). */}

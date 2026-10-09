@@ -6,6 +6,7 @@ import * as goModeActions from '../../actions/go-mode'
 import * as uiActions from '../../actions/ui'
 import { formatPlaceName } from '../../util/format-place-name'
 import { aboardBeforeLegStart } from '../../util/go-mode/riding'
+import { hasNextSegment } from '../../util/multi-stop'
 import { MobileScreens } from '../../actions/ui-constants'
 import MobileNavigationBar from '../mobile/navigation-bar'
 import type { GoModeState } from '../../reducers/go-mode'
@@ -37,6 +38,7 @@ import CurrentLegPanel from './CurrentLegPanel'
 import GoModeMap from './GoModeMap'
 import GoModeNotifications from './GoModeNotifications'
 import GoModeStopViewer from './GoModeStopViewer'
+import MultiStopArrivalCard from './MultiStopArrivalCard'
 import ReturnCountdownCard from './ReturnCountdownCard'
 import TripSheet from './TripSheet'
 import useActiveTripGuards from './use-active-trip-guards'
@@ -56,6 +58,8 @@ interface Props {
     heldTripId: string | null
     reason: string
     tickDepartureMs: number | null
+    /** The run the tick is on (38.1) — beside heldTripId. */
+    tickTripId?: string | null
   }) => void
   pauseGpsSimulation: () => void
   resumeGpsSimulation: () => void
@@ -281,6 +285,8 @@ const GoModeScreen = ({
   const destinationName =
     goMode.activeItinerary.legs[goMode.activeItinerary.legs.length - 1]?.to
       ?.name || undefined
+  // This segment ends at one of the rider's stops, not the destination (43.1).
+  const atStopSegment = hasNextSegment(goMode.multiStop)
 
   return (
     <FullScreenWrapper>
@@ -290,13 +296,23 @@ const GoModeScreen = ({
       <MobileNavigationBar
         headerText={
           destinationName &&
-          intl.formatMessage(
-            {
-              defaultMessage: 'To {destination}',
-              id: 'components.GoMode.headerDestination'
-            },
-            { destination: destinationName }
-          )
+          (atStopSegment
+            ? // One segment of a multi-stop trip (43.1): say which.
+              intl.formatMessage(
+                { id: 'components.MultiStop.headerStop' },
+                {
+                  destination: destinationName,
+                  number: (goMode.multiStop?.index ?? 0) + 1,
+                  total: (goMode.multiStop?.segments.length ?? 1) - 1
+                }
+              )
+            : intl.formatMessage(
+                {
+                  defaultMessage: 'To {destination}',
+                  id: 'components.GoMode.headerDestination'
+                },
+                { destination: destinationName }
+              ))
         }
         showAppMenu
       />
@@ -338,11 +354,14 @@ const GoModeScreen = ({
                 : null
           })}
           activeLegIndex={goMode.ui.activeLeg}
+          arrived={goMode.arrivedAt != null}
           currentLegIndex={goMode.progress.currentLegIndex}
           currentLegMode={currentLeg?.mode ?? null}
           currentPosition={goMode.tracking.lastPosition}
+          distanceToNextTurn={goMode.progress.distanceToNextTurn ?? null}
           followUser={goMode.ui.mapFollowUser}
           itinerary={goMode.activeItinerary}
+          nextTurnCue={goMode.progress.nextTurnCue ?? null}
           onSetFollow={setMapFollow}
           onToggleFollow={toggleMapFollow}
           routeMatch={goMode.routeMatch}
@@ -360,11 +379,16 @@ const GoModeScreen = ({
         {/* Arrived on a ROUND TRIP: the countdown to the return replaces the
             plain arrival card. Same primitives, same place; see
             ReturnCountdownCard. */}
-        {goMode.arrivedAt != null && goMode.roundTrip && (
+        {/* Arrived at one of the rider's STOPS: the trip goes on (43.1). */}
+        {goMode.arrivedAt != null && atStopSegment && (
+          <MultiStopArrivalCard onDone={handleArrivedDone} />
+        )}
+
+        {goMode.arrivedAt != null && !atStopSegment && goMode.roundTrip && (
           <ReturnCountdownCard onDone={handleArrivedDone} />
         )}
 
-        {goMode.arrivedAt != null && !goMode.roundTrip && (
+        {goMode.arrivedAt != null && !atStopSegment && !goMode.roundTrip && (
           <RerouteBar>
             <RerouteCard role="status">
               <RerouteCardTitle>

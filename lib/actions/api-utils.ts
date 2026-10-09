@@ -87,6 +87,23 @@ export function combinationHasTransit<T extends { modes?: TransportMode[] }>(
 }
 
 /**
+ * Backlog 38.3: what the results list calls a fan-out combination while it is
+ * still out. Only the one the rider actually waits on gets a name — bike +
+ * transit (the cap-bearing BICYCLE plan, median 8.0 s against 0.1-2.8 s for
+ * the rest on the rider's phone) — everything else is "more results".
+ * Rented bikes carry a qualifier and are not the rider's own bike.
+ */
+export type PendingComboKind = 'BICYCLE_TRANSIT' | 'OTHER'
+
+export function pendingComboKind<T extends { modes?: TransportMode[] }>(
+  combo: T
+): PendingComboKind {
+  const modes = combo?.modes || []
+  const ownBike = modes.some((m) => m.mode === 'BICYCLE' && !m.qualifier)
+  return ownBike && modes.some(isTransitMode) ? 'BICYCLE_TRANSIT' : 'OTHER'
+}
+
+/**
  * Key-sorted JSON, so two searches asking the identical question produce the
  * identical string regardless of the order the variables were assembled in.
  */

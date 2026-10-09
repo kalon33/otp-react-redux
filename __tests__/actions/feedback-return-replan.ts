@@ -52,6 +52,32 @@ const SETTLED_RESULT = [
   { plan: { itineraries: [{ startTime: 1789999200000 }] } }
 ]
 
+/** The stored query of a search planned from the form, as on 2026-09-30. */
+function formBuiltQuery(): any {
+  return {
+    date: '2026-09-21',
+    departArrive: 'DEPART',
+    from: {
+      category: 'CURRENT_LOCATION',
+      lat: 44.942580484827246,
+      lon: -93.2639665716265,
+      name: '(Current Location)'
+    },
+    mode: 'WALK,TRANSIT',
+    time: '09:00',
+    to: {
+      address: '2345 Old Shakopee Road West, Bloomington, MN',
+      icon: 'clock-o',
+      id: 'recent-1789999000000',
+      lat: 44.816546,
+      lon: -93.30986,
+      name: '2345 Old Shakopee Road West, Bloomington, MN',
+      timestamp: 1789999000000,
+      type: 'recent'
+    }
+  }
+}
+
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0))
 
 async function run(otp: any) {
@@ -106,38 +132,84 @@ describe('backlog 23.4 > returning to / with ui_activeSearch in the URL', () => 
     expect(dispatched[1].payload.searchId).toBe('mmzc6wkfw')
   })
 
-  it('still plans when the stored query differs from the URL', async () => {
-    // The 09:12:07 return: the search on screen was planned from the form, and
-    // its `from` still carries the category setLocationToCurrent puts on it
-    // (map.js:94-103), which the URL round-trip drops.
+  it('does NOT re-plan when only category / recent-place fields differ (the FIRST return)', async () => {
+    // The 09:12:07 return, and 2026-09-30 17:08:33 (muomy26h-g1zujp): the
+    // search on screen was planned from the form, so its `from` carries the
+    // category setLocationToCurrent puts on it (actions/map.js) and its `to`
+    // a recent place's address/icon/id/timestamp/type. The URL round-trip
+    // keeps only name::lat,lon. Until cycle 13 this pinned "still plans" —
+    // and on 09-30 it re-ran a 1,244,124-char search under a live trip
+    // (backlog 23.4 / 37.1).
     const dispatched = await run(
       baseState(
         {
           mmzc6wkfw: {
             pending: 0,
-            query: {
-              date: '2026-09-21',
-              departArrive: 'DEPART',
-              from: {
-                category: 'CURRENT_LOCATION',
-                lat: 44.942580484827246,
-                lon: -93.2639665716265,
-                name: '(Current Location)'
-              },
-              mode: 'WALK,TRANSIT',
-              time: '09:00',
-              to: {
-                lat: 44.816546,
-                lon: -93.30986,
-                name: '2345 Old Shakopee Road West, Bloomington, MN'
-              }
-            },
+            query: formBuiltQuery(),
             response: SETTLED_RESULT
           }
         },
         'mmzc6wkfw'
       )
     )
+    expect(dispatched.map((a) => a.type)).toEqual(['SET_QUERY_PARAM'])
+  })
+
+  it('still plans when the stored origin is somewhere else (lat/lon differ)', async () => {
+    const query = formBuiltQuery()
+    query.from.lat += 0.001 // ~110 m: a different origin, a different plan
+    const dispatched = await run(
+      baseState(
+        { mmzc6wkfw: { pending: 0, query, response: SETTLED_RESULT } },
+        'mmzc6wkfw'
+      )
+    )
+    expect(dispatched.map((a) => a.type)).toContain('MOCK_ROUTING_QUERY')
+  })
+
+  it('still plans when the stored destination is somewhere else', async () => {
+    const query = formBuiltQuery()
+    query.to.lon -= 0.0005
+    const dispatched = await run(
+      baseState(
+        { mmzc6wkfw: { pending: 0, query, response: SETTLED_RESULT } },
+        'mmzc6wkfw'
+      )
+    )
+    expect(dispatched.map((a) => a.type)).toContain('MOCK_ROUTING_QUERY')
+  })
+
+  it('still plans when another key differs (time)', async () => {
+    const query: any = formBuiltQuery()
+    query.time = '09:15'
+    const dispatched = await run(
+      baseState(
+        { mmzc6wkfw: { pending: 0, query, response: SETTLED_RESULT } },
+        'mmzc6wkfw'
+      )
+    )
+    expect(dispatched.map((a) => a.type)).toContain('MOCK_ROUTING_QUERY')
+  })
+
+  it('does not re-plan while Go Mode is active and the search is in the store', async () => {
+    // Even when the stored query genuinely differs (here: a later time), the
+    // trip holds its own itinerary; a re-plan could only renumber the list
+    // under it (37.1's loop).
+    const query: any = formBuiltQuery()
+    query.time = '09:15'
+    const otp: any = baseState(
+      { mmzc6wkfw: { pending: 0, query, response: SETTLED_RESULT } },
+      'mmzc6wkfw'
+    )
+    otp.goMode = { isActive: true }
+    const dispatched = await run(otp)
+    expect(dispatched.map((a) => a.type)).toEqual(['SET_QUERY_PARAM'])
+  })
+
+  it('still plans in Go Mode when the URL search is not in the store', async () => {
+    const otp: any = baseState({}, null)
+    otp.goMode = { isActive: true }
+    const dispatched = await run(otp)
     expect(dispatched.map((a) => a.type)).toContain('MOCK_ROUTING_QUERY')
   })
 

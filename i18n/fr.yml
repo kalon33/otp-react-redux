@@ -712,18 +712,30 @@ components:
         none: Aucun
       visionPrompt: Avez-vous des handicaps visuels ?
     MobilityPane:
-      button: "Modifier votre profil mobilit\xE9"
-      header: "Profil mobilit\xE9"
-      mobilityDevices: 'Appareils d''aide : '
-      mobilityLimitations: 'Handicaps moteurs : '
-      planTripDescription: "Vous pouvez rechercher des trajets adapt\xE9s au profil\
-        \ mobilit\xE9 des personnes que vous accompagnez."
-      visionLimitations: 'Handicaps visuels : '
-    dropdownLabel: "Profil \xE0 utiliser :"
-    intro: "Veuillez r\xE9pondre a quelques questions pour personaliser vos recherches\
-      \ de trajets selon vos besoins et pr\xE9f\xE9rences."
-    myself: "Moi-m\xEAme"
-    title: "Sp\xE9cifiez votre profil de mobilit\xE9"
+      button: Modifier votre profil mobilité
+      header: Profil mobilité
+      mobilityDevices: "Appareils d'aide : "
+      mobilityLimitations: "Handicaps moteurs : "
+      planTripDescription: >-
+        Vous pouvez rechercher des trajets adaptés au profil mobilité des
+        personnes que vous accompagnez.
+      visionLimitations: "Handicaps visuels : "
+    dropdownLabel: "Profil à utiliser :"
+    intro: >-
+      Veuillez répondre a quelques questions pour personaliser vos recherches de
+      trajets selon vos besoins et préférences.
+    myself: Moi-même
+    title: Spécifiez votre profil de mobilité
+  MultiStop:
+    addStop: Ajouter une étape
+    arrivedAtStop: "Vous êtes à l'étape {number} sur {total}"
+    continueTo: Continuer vers {destination}
+    endTrip: Terminer le trajet
+    finding: Recherche du prochain trajet…
+    headerStop: Vers {destination} · étape {number} sur {total}
+    stopPlaceholder: Entrez une étape
+    summary: Via {stops} · {distance} au total
+    via: Via {stops}
   NarrativeItinerariesHeader:
     changeSortDir: Changer l'ordre de tri
     howToFindResults: "Pour afficher les r\xE9sultats, utilisez l'en-t\xEAte Trajets\
@@ -966,6 +978,9 @@ components:
     tripNameAlreadyUsed: "Ce nom est d\xE9j\xE0 utilis\xE9 avec un autre trajet. Veuillez\
       \ choisir un nom diff\xE9rent."
     tripNameRequired: Veuillez entrer un nom pour ce trajet.
+  SearchPendingLine:
+    bikeTransit: "Vélo + transport en commun : recherche en cours…"
+    more: "Autres résultats : recherche en cours…"
   SequentialPaneDisplay:
     stepNumber: "\xC9tape {step} sur {total}"
   SettingsScreen:

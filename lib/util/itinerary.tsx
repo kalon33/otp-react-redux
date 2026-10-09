@@ -440,6 +440,48 @@ function splitIdentityKey(key: string): [number, string] {
   if (at === -1) return [NaN, key]
   return [Number(key.slice(at + 1)), key.slice(0, at)]}
 
+/**
+ * Which itinerary the URL is asking the results list to select, or null to
+ * leave the selection alone. -1 means clear it.
+ *
+ * `ui_activeItinerary` is a POSITION, and every re-plan renumbers the list
+ * under it. On 2026-09-21 the rider chose index 38 (the 10:12 Orange Line,
+ * trip 1:1348464) at 09:02; the 09:12:07 re-plan made index 38 the 10:19 one
+ * (trip 1:1348091), and the list's restore then re-selected that trip four
+ * times — 09:12:36.764, 09:20:55.661, 09:22:27.887, 09:23:46.089 — each time a
+ * trip the rider had never picked (backlog 23.5). So `ui_activeItineraryKey`
+ * names the trips themselves (actions/narrative.js) and the position is only a
+ * fallback for a URL written before the key existed.
+ *
+ * A key that matches nothing is NOT immediately a wrong position to discard:
+ * a search's responses arrive one mode combination at a time, so while the
+ * search is still pending the answer is "not back yet" and the selection is
+ * left where it is. Once the search has settled and the trip is still absent,
+ * clearing beats pointing at a stranger's bus.
+ *
+ * Both URL restorers use this — the list's componentDidUpdate and the
+ * popstate handler (actions/ui.js handleBackButtonPress). On 2026-09-30 the
+ * popstate one still read the raw position ("42") while the list resolved the
+ * key to 44, and the two flipped the selection 94 times in 130 s (37.1).
+ */
+export function resolveUrlItineraryIndex({
+  itineraries,
+  key,
+  pending,
+  urlIndex
+}: {
+  itineraries: Itinerary[] | undefined | null
+  key?: string | null
+  pending?: boolean
+  urlIndex: number
+}): number | null {
+  if (!key) return Number.isNaN(urlIndex) ? null : urlIndex
+  const found = findItineraryIndexByKey(itineraries, key, urlIndex)
+  if (found !== -1) return found
+  if (pending || !itineraries?.length) return null
+  return -1
+}
+
 export function sortStartTimes(
   startTimes: ItineraryStartTime[]
 ): ItineraryStartTime[] {

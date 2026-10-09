@@ -138,22 +138,33 @@ async function main() {
     },${vehicle.lon} next: ${vehicle.stopRelationship?.stop?.name}`
   )
 
-  // Destination: near the trip's last stop, nudged ~500m off the line — far
-  // enough that different alight stops give genuinely different onward plans.
+  // Destination: beside a stop HALFWAY between the bus and the end of its run,
+  // nudged ~500m off the line, so stops on both sides of it stay worth getting
+  // off at and step 5 has a non-default row to tap.
+  //
+  // It used to sit ~560 m off the TERMINUS, and from 2026-09-21 to 10-08 that
+  // skipped step 5 on 17 of 18 nights (backlog 41.4): with the destination
+  // beside the last stop, every earlier alight meant a 29-87 min bike ride, so
+  // riding to the end won every row and all of them read "Off at Burnsville
+  // Heart of the City Station". MIN_DOWNSTREAM_STOPS (4) guarantees at least
+  // one stop after the target as well as the ones before it.
+  //
   // The stop times and the anchor index came back with the vehicle, from the
   // same query that screened it for remaining stops; fetching them twice let
   // the two disagree about which stop the bus was heading to.
   const { anchor, stopTimes } = picked
-  const last = stopTimes[stopTimes.length - 1].stop
+  const ahead = stopTimes.length - 1 - anchor
+  const targetIdx = anchor + Math.ceil(ahead / 2)
+  const targetStop = stopTimes[targetIdx].stop
   const dest = {
-    lat: last.lat + 0.004, // ~450m north
-    lon: last.lon + 0.004, // ~350m east
+    lat: targetStop.lat + 0.004, // ~450m north
+    lon: targetStop.lon + 0.004, // ~350m east
     name: 'Verification destination'
   }
   console.log(
     `[setup] anchor stop idx ${anchor}/${stopTimes.length - 1} ` +
-      `(${stopTimes.length - 1 - anchor} stop(s) still ahead), dest near ` +
-      `"${last.name}" -> ${dest.lat},${dest.lon}`
+      `(${ahead} stop(s) still ahead), dest near idx ${targetIdx} ` +
+      `"${targetStop.name}" -> ${dest.lat},${dest.lon}`
   )
 
   // ---- 2. drive the app ----
@@ -394,12 +405,13 @@ async function main() {
         names,
         // Not a defect and not drift: whether any alight stop other than the
         // default is on offer depends on where the destination sits relative
-        // to the route. This script places it at the anchor stop's own
-        // coordinates, and when the graph then folds every option onto that
-        // one station (2026-09-17 05:00: three options, all "Burnsville Heart
-        // of the City Station") there is no non-default choice to honour, so
-        // there is nothing for step 5 to verify. Reported as a SKIP rather
-        // than a red row.
+        // to the route and on the live plans. The destination sits beside a
+        // stop midway down the remaining run (see [setup]) so that stops on
+        // both sides of it compete; if the graph still folds every row onto
+        // one stop there is no non-default choice to honour and nothing for
+        // step 5 to verify. Reported as a SKIP rather than a red row. (Until
+        // backlog 41.4 the destination sat beside the terminus and every row
+        // read "Burnsville Heart of the City Station" on 17 of 18 nights.)
         skip: `every row offers the default stop "${defaultName}"`
       }
     }

@@ -129,6 +129,10 @@ import {
   resumedTransitionedLegIndex
 } from '../util/go-mode/session-persistence'
 import { createTripSession } from '../util/go-mode/trip-session'
+import {
+  LIVE_BOARD_TIMER_MS,
+  shouldTimerPollLiveBoard
+} from '../util/go-mode/live-board-timer'
 import type { TripSession } from '../util/go-mode/trip-session'
 import type {
   DepartureOverrideSource,
@@ -270,6 +274,12 @@ import type {
   ReturnCountdownState,
   RoundTripPlan
 } from '../util/go-mode/round-trip'
+import {
+  hasNextSegment,
+  pickNextSegment,
+  segmentStreetMode
+} from '../util/multi-stop'
+import type { MultiStopPlan } from '../util/multi-stop'
 import { evaluateTurnCard } from '../util/go-mode/turn-card'
 import { evaluateMissedBusRecovery } from '../util/go-mode/missed-bus-recovery'
 import {
@@ -357,6 +367,162 @@ function stopGpsWatchdog() {
     clearInterval(session.gpsWatchdogIntervalId)
     session.gpsWatchdogIntervalId = null
   }
+}
+
+/**
+ * Poll the feeds the boarding board is built from: the trip query for every
+ * upcoming transit leg (refreshLiveLegTimes), the boarding route's vehicles
+ * while the rider is on foot or bike toward it, and the boarding stop's
+ * departures (backlog 38.2). The CALLER owns the throttle — the tick and the
+ * live board timer both claim `session.lastLiveLegTimesAt` before calling, so
+ * the two can never both poll inside one LIVE_LEG_TIMES_INTERVAL_MS.
+ *
+ * Reads only what it is handed plus `earlyAlight`, so the timer can run it off
+ * the store (the last tick's route match and progress) when no fix is coming.
+ */
+function pollBoardingFeeds(
+  dispatch: any,
+  getState: any,
+  {
+    itinerary,
+    legIndex,
+    nowMs,
+    waitingAtBoardingStop
+  }: {
+    itinerary: Itinerary
+    legIndex: number
+    /** The tick's clock (simulated in a simulation), for the service date. */
+    nowMs: number
+    waitingAtBoardingStop: boolean | undefined
+  }
+): void {
+  dispatch(refreshLiveLegTimes())
+
+  // While the rider is on an access leg nothing else polls the boarding
+  // route's vehicles — startVehicleTracking runs only on transit legs —
+  // so the board-vehicle alert would starve without its own poll.
+  // Same 20s cadence as the rest of this block; the api layer's URL
+  // throttle absorbs any overlap. Read-only: no vehicle MATCHING happens
+  // while walking, this only fills the store the alert reads from.
+  //
+  // A rider who got off EARLY at an on-route stop (8.11) is in exactly the
+  // position this poll was written for — on foot, heading for their next
+  // bus — but the matcher is still on the transit leg they stepped off, so
+  // neither the WALK/BICYCLE test nor findBoardLegIndex from that index
+  // would name the right leg. `goMode.earlyAlight` is how this path is
+  // entered from there, and it is why the search starts one leg on: the
+  // leg the matcher favours IS a transit leg, and it is the one they just
+  // left.
+  const accessLegNow: any = itinerary.legs[legIndex]
+  const alightedEarlyHere =
+    getState().otp?.goMode?.earlyAlight?.legIndex === legIndex
+  if (
+    accessLegNow?.mode === 'WALK' ||
+    accessLegNow?.mode === 'BICYCLE' ||
+    alightedEarlyHere
+  ) {
+    const pollBoardLegIndex = findBoardLegIndex(
+      itinerary.legs,
+      alightedEarlyHere ? legIndex + 1 : legIndex
+    )
+    const pollBoardRouteId =
+      pollBoardLegIndex >= 0
+        ? getLegRouteId(itinerary.legs[pollBoardLegIndex])
+        : null
+    if (pollBoardRouteId) {
+      dispatch(getVehiclePositionsForRoute(pollBoardRouteId))
+    }
+  }
+
+  // Re-poll the boarding stop's departures — the trip-start snapshot goes
+  // stale, and an earlier bus only ever shows up here. The poll runs through
+  // the platform wait as well, after the trip has stepped onto the bus leg
+  // (26.1: on 09-22 it stopped at 08:19:05 and the board time fell back to
+  // the trip query's schedule at 08:22:09). The departure ANCHOR keeps its
+  // own, narrower gate in the tick — see boardingStopToPoll.
+  const pollStopId = boardingStopToPoll(
+    itinerary.legs[legIndex],
+    itinerary.legs[legIndex + 1],
+    waitingAtBoardingStop
+  )
+  if (pollStopId) {
+    try {
+      dispatch(
+        findStopTimesForStop({
+          date: currentServiceDate(nowMs, getState().otp.config.homeTimezone),
+          forceFetch: true,
+          stopId: pollStopId
+        })
+      )
+    } catch {
+      // Best-effort; the anchor uses whatever is in the store.
+    }
+  }
+}
+
+function stopLiveBoardTimer() {
+  if (session.liveBoardTimerId) {
+    clearInterval(session.liveBoardTimerId)
+    session.liveBoardTimerId = null
+  }
+}
+
+/**
+ * The live board timer (backlog 38.2). The board polls above used to run only
+ * inside handlePositionUpdate, so on 2026-09-30 (`muomy26h-g1zujp`) the stop
+ * poll went from every ~20 s to 17:07:03 and 17:08:03 once fixes stopped
+ * under the station canopy — each riding a GPS watchdog restart's forced fix.
+ * This keeps the cadence when the fixes stop; while they flow it stands
+ * aside (shouldTimerPollLiveBoard), because the tick also runs the departure
+ * anchor off the same answer.
+ *
+ * ONE per trip, and it must not outlive it — 2026-08-28 burned 88 minutes
+ * past arrival on an interval that lived outside the tick. So: replaced
+ * (never stacked) on every startGoModeTracking, cleared by endGoMode and by
+ * the arrival quiesce, and on any tick that finds the trip inactive, arrived,
+ * or the session no longer holding THIS interval it clears itself.
+ */
+function startLiveBoardTimer(dispatch: any, getState: any) {
+  stopLiveBoardTimer()
+  const id: ReturnType<typeof setInterval> = setInterval(() => {
+    const goMode = getState().otp?.goMode
+    if (
+      session.liveBoardTimerId !== id ||
+      !goMode?.isActive ||
+      goMode.arrivedAt != null
+    ) {
+      clearInterval(id)
+      if (session.liveBoardTimerId === id) session.liveBoardTimerId = null
+      return
+    }
+    const itinerary = goMode.activeItinerary
+    const legIndex = goMode.routeMatch?.legIndex
+    const nowMs = Date.now()
+    if (
+      !shouldTimerPollLiveBoard({
+        arrived: false,
+        isActive: true,
+        lastPollAtMs: session.lastLiveLegTimesAt,
+        lastPositionAtMs: session.lastPositionTickAt,
+        legIndex,
+        legs: itinerary?.legs,
+        nowMs,
+        pollIntervalMs: LIVE_LEG_TIMES_INTERVAL_MS,
+        replay: isReplayActive(),
+        simulation: session.simulationActive
+      })
+    ) {
+      return
+    }
+    session.lastLiveLegTimesAt = nowMs
+    pollBoardingFeeds(dispatch, getState, {
+      itinerary,
+      legIndex: legIndex as number,
+      nowMs,
+      waitingAtBoardingStop: goMode.progress?.waitingAtBoardingStop
+    })
+  }, LIVE_BOARD_TIMER_MS)
+  session.liveBoardTimerId = id
 }
 
 // Reroute-snapshot capture interval (recording only). Periodically records the
@@ -616,6 +782,26 @@ export const ONBOARD_CANDIDATE_SNAPSHOT = 'ONBOARD_CANDIDATE_SNAPSHOT'
  * onboard panel instead (pinned by onboard-flow.ts; backlog 25.6).
  */
 export const AUTO_REPLAN = 'AUTO_REPLAN'
+/**
+ * Recording-only: one entry per `retargetPlanToDeparture` call, at EVERY exit,
+ * so a ride shows whether the card's bus and the itinerary's bus were
+ * reconciled (backlog 43.2, the evidence 23.3 is scored on). Its verdicts used
+ * to go to `console.log`, which the debug sink does not carry (it wraps only
+ * `warn` and `error`, `debug-log.js`), so on 2026-10-08 `muzyhpwb-smc0nt` the
+ * stream held no record of the two re-targets that did not happen.
+ *
+ * No reducer reads it — the debug-log middleware records every plain action
+ * before any reducer sees it, the same as AUTO_REPLAN. Scalars only. Its rate
+ * is bounded by its callers: the anchor's (inside the 20 s live-poll throttle,
+ * one per `SET_DEPARTURE_OVERRIDE {source: anchor}`) and the rider's tap.
+ *
+ * `verdict`: `reset` (no departure to follow), `inactive` (no live trip or no
+ * legs), `aboard` (23.2), `no-stop` (not walking into a boarding), `no-run`
+ * (the stop feed names no run for it), `no-candidate` (the splice declined —
+ * e.g. already on that run), `refused-overrun` (16.2, the access leg ends
+ * after the bus), `applied`.
+ */
+export const PLAN_RETARGET = 'PLAN_RETARGET'
 export const PAUSE_GPS_SIMULATION = 'PAUSE_GPS_SIMULATION'
 export const REROUTE_SNAPSHOT = 'REROUTE_SNAPSHOT'
 export const REPAIR_LEG_GEOMETRY = 'REPAIR_LEG_GEOMETRY'
@@ -697,6 +883,8 @@ export const setBoardingSearchFailed = createAction<boolean>(
 export const showBoardingPromptAction = createAction(SHOW_BOARDING_PROMPT)
 export const startGoMode = createAction<{
   itinerary: Itinerary
+  /** The rider's stops, when this is one segment of a multi-stop trip (43.1). */
+  multiStop?: MultiStopPlan | null
   originalFrom?: any
   /** The return half, when this trip is the outbound leg of a round trip. */
   roundTrip?: RoundTripPlan | null
@@ -748,6 +936,8 @@ export const recordCardDepartureMismatch = (info: {
   heldTripId: string | null
   reason: string
   tickDepartureMs: number | null
+  /** The run the tick is on (38.1) — beside heldTripId. */
+  tickTripId?: string | null
 }) => ({
   payload: { ...info, tMs: getCurrentTime().getTime() },
   type: CARD_DEPARTURE_MISMATCH
@@ -1034,21 +1224,57 @@ export function retargetPlanToDeparture(
   runTripId: string | null = null
 ) {
   return async function (dispatch: any, getState: any) {
-    if (departureMs == null || !Number.isFinite(departureMs)) return
+    // 43.2: every exit says which one it was. `tripId` is the run's GTFS id
+    // once the feed has named it, before that the id the pick came with.
+    const record = (
+      verdict: string,
+      extra: {
+        boardLegIndex?: number
+        overrunMs?: number | null
+        runDepartureMs?: number
+        tripId?: string | null
+      } = {}
+    ) =>
+      dispatch({
+        payload: {
+          boardLegIndex: extra.boardLegIndex ?? null,
+          departureMs: Number.isFinite(departureMs) ? departureMs : null,
+          overrunMs: extra.overrunMs ?? null,
+          runDepartureMs: extra.runDepartureMs ?? null,
+          source,
+          tripId: extra.tripId ?? tripGtfsId(runTripId) ?? null,
+          verdict
+        },
+        type: PLAN_RETARGET
+      })
+
+    if (departureMs == null || !Number.isFinite(departureMs)) {
+      record('reset')
+      return
+    }
     const state = getState()
     const goMode = state.otp?.goMode
     const itinerary: Itinerary | null = goMode?.activeItinerary ?? null
-    if (!goMode?.isActive || !itinerary?.legs?.length) return
+    if (!goMode?.isActive || !itinerary?.legs?.length) {
+      record('inactive')
+      return
+    }
 
     // 23.2: a rider who is aboard is not re-targeted.
-    if (goMode.riding?.tripId) return
+    if (goMode.riding?.tripId) {
+      record('aboard')
+      return
+    }
 
     const legIndex = goMode.routeMatch?.legIndex ?? 0
     const boardLegIndex = legIndex + 1
     const accessLeg = itinerary.legs[legIndex]
     const boardLeg = itinerary.legs[boardLegIndex]
     const stopId = anchorBoardingStopId(accessLeg, boardLeg)
-    if (!stopId) return
+    if (!stopId) {
+      record('no-stop', { boardLegIndex })
+      return
+    }
 
     const routeId = getLegRouteId(boardLeg)
     const departures = getRouteDepartures(
@@ -1062,7 +1288,10 @@ export function retargetPlanToDeparture(
       ? departures.find((d) => tripIdsMatch(d.tripId, runTripId))
       : departures.find((d) => d.depMs === departureMs)
     const tripId = tripGtfsId(run?.tripId)
-    if (!run || !tripId) return
+    if (!run || !tripId) {
+      record('no-run', { boardLegIndex })
+      return
+    }
 
     const candidate = retargetTransitLegToRun(itinerary, boardLegIndex, {
       departureMs: run.depMs,
@@ -1070,10 +1299,24 @@ export function retargetPlanToDeparture(
       realtime: run.realtime,
       tripId
     })
-    if (!candidate) return
+    if (!candidate) {
+      record('no-candidate', {
+        boardLegIndex,
+        runDepartureMs: run.depMs,
+        tripId
+      })
+      return
+    }
 
     const overrun = accessBoardOverrunMs(candidate)
+    const facts = {
+      boardLegIndex,
+      overrunMs: overrun,
+      runDepartureMs: run.depMs,
+      tripId
+    }
     if (overrun != null && overrun > AUTO_REPLAN_ACCESS_BOARD_SLACK_MS) {
+      record('refused-overrun', facts)
       // eslint-disable-next-line no-console
       console.log(
         `[go-mode] plan re-target to ${tripId} refused: access leg ends ` +
@@ -1082,6 +1325,9 @@ export function retargetPlanToDeparture(
       return
     }
 
+    // Recorded BEFORE the START_GO_MODE it causes, so the stream reads cause
+    // then effect.
+    record('applied', facts)
     // eslint-disable-next-line no-console
     console.log(
       `[go-mode] plan follows the card (${source}): leg ${boardLegIndex} -> ` +
@@ -1416,6 +1662,13 @@ export function beginGoMode(
   rawItinerary: Itinerary,
   options: {
     /**
+     * A trip through the rider's stops (43.1): `itinerary` is the segment
+     * `multiStop.index`. Sticky the same way `roundTrip` is — absent keeps the
+     * live trip's plan (every internal re-plan of the segment calls with no
+     * options), an explicit null clears it.
+     */
+    multiStop?: MultiStopPlan | null
+    /**
      * This plan re-uses the access legs the trip is already running on, so its
      * origin is exactly as old as it was a tick ago and the 12.13 stale-origin
      * question has already been answered for it. Set by the 23.3 re-target,
@@ -1457,7 +1710,13 @@ export function beginGoMode(
         ? options.roundTrip
         : (priorGoMode?.isActive && priorGoMode?.roundTrip) || null
     const units = getState().otp.config?.units || 'imperial'
-    dispatch(startGoMode({ itinerary, originalFrom, roundTrip, units }))
+    const multiStop =
+      options.multiStop !== undefined
+        ? options.multiStop
+        : (priorGoMode?.isActive && priorGoMode?.multiStop) || null
+    dispatch(
+      startGoMode({ itinerary, multiStop, originalFrom, roundTrip, units })
+    )
     // A plan has been installed, so its origin is owed a look (12.13). Armed
     // here rather than asked on every tick because "the plan starts somewhere
     // the rider is not" is only a defect at INSTALLATION: a rider three
@@ -1738,6 +1997,13 @@ export function startGoModeTracking(
     // and handlePositionUpdate's post-arrival funnel holds the work to one fix
     // per ARRIVED_TRACKING_INTERVAL_MS.
     const resumedArrived = getState().otp?.goMode?.arrivedAt != null
+
+    // The live board timer (38.2): the board keeps polling when fixes stop.
+    // This is every door into a live trip, so it is armed here — replaced,
+    // never stacked. Not for a trip that has already arrived (nothing left to
+    // board) and not under replay (it reproduces recorded polls).
+    if (resumedArrived || options.replay) stopLiveBoardTimer()
+    else startLiveBoardTimer(dispatch, getState)
 
     // A reroute or missed-bus auto-update swaps the itinerary without going
     // through endGoMode, so clear the per-leg transition guard here too.
@@ -2028,6 +2294,7 @@ export function endGoMode() {
     // (handleArrivedDone -> finishArrivedTrip -> endGoMode) and by the auto-end
     // itself, so a trip cannot be ended twice and no timer outlives it.
     clearAutoEndTimer()
+    stopLiveBoardTimer()
     if (session.visibilityChangeHandler) {
       document.removeEventListener(
         'visibilitychange',
@@ -2176,6 +2443,9 @@ function armAutoEndTimer(dispatch: any, getState: any): void {
   const goMode = getState().otp?.goMode
   if (!goMode?.isActive || goMode.arrivedAt == null) return
   if (goMode.roundTrip) return
+  // At a STOP of a multi-stop trip the rider is running an errand; the trip
+  // goes on when they continue (43.1). Only the destination auto-ends.
+  if (hasNextSegment(goMode.multiStop)) return
 
   const arrivedAt: number = goMode.arrivedAt
   // A trip resumed inside the dwell window (session-persistence refuses a
@@ -2196,8 +2466,11 @@ function armAutoEndTimer(dispatch: any, getState: any): void {
     const current = getState().otp?.goMode
     if (!current?.isActive || current.arrivedAt == null) return
     if (current.roundTrip) return
+    if (hasNextSegment(current.multiStop)) return
+    // `warn`, not `log`: the debug sink carries only warn and error, and a
+    // verify should not have to infer the auto-end from arithmetic (13.5).
     // eslint-disable-next-line no-console
-    console.log(
+    console.warn(
       '[go-mode] auto-end: arrived ' +
         `${Math.round((Date.now() - current.arrivedAt) / 1000)}s ago, ` +
         'ending the trip'
@@ -2327,6 +2600,10 @@ export function browseFromCurrentPosition(
           // into "leave from here, now".
           departArrive: 'DEPART',
           from: origin.from,
+          // The destination below is the end of the segment being guided — a
+          // multi-stop trip's next stop — so the planner's stops must not be
+          // routed through on the way to it (43.1).
+          intermediatePlaces: [],
           routingPreferences,
           time: origin.time,
           to: {
@@ -2390,6 +2667,7 @@ export function showRerouteCandidates(candidates: Itinerary[]) {
         // arrive-by search must not carry into "leave from here, now".
         departArrive: 'DEPART',
         from: origin.from,
+        intermediatePlaces: [],
         time: origin.time,
         to: {
           lat: destLeg.to.lat,
@@ -6066,6 +6344,116 @@ export function startReturnTrip() {
 }
 
 /**
+ * The rider tapped "Continue to <next stop>" on the arrival card at a stop of a
+ * multi-stop trip (backlog 43.1, "go mode does each leg at a time").
+ *
+ * The next segment is started the way a round trip's return is
+ * (startReturnTrip): the segment just finished is ended outright — its timers,
+ * wrist cards and session go with it, and the record shows one trip per
+ * segment — and the next one enters Go Mode through the one choke point with
+ * the plan carried forward. The stored segment was planned for a zero-minute
+ * stay, so it is re-asked once, departing NOW from the stop, and the fresh
+ * answer is taken only when it is still the rider's trip — same routes, same
+ * way of riding (pickNextSegment); otherwise the stored segment stands and the
+ * missed-bus handling moves it to the next departure. The button always does
+ * something. The last segment carries the round trip's return, if
+ * the rider asked for one.
+ */
+export function continueMultiStop() {
+  return async function (dispatch: any, getState: any) {
+    const state = getState()
+    const plan: MultiStopPlan | null = state.otp?.goMode?.multiStop ?? null
+    if (!hasNextSegment(plan)) return
+    const nextIndex = (plan as MultiStopPlan).index + 1
+    const segments = (plan as MultiStopPlan).segments
+    const stored = segments[nextIndex]
+    const legs = stored?.legs || []
+    const fromPlace = legs[0]?.from
+    const toPlace = legs[legs.length - 1]?.to
+    if (!fromPlace || !toPlace) return
+
+    const { homeTimezone } = state.otp.config
+    const zoned = utcToZonedTime(getCurrentTime().getTime(), homeTimezone)
+    const { modes, modeSettings, numItineraries } = getBasePlanParts(state)
+    // A street-only segment (a bike or a walk to the stop) is asked as that
+    // mode alone, so the answer has one to keep; a transit segment is asked
+    // with the rider's modes and must come back on the same routes.
+    const streetMode = segmentStreetMode(stored)
+    let fresh: Itinerary[] = []
+    try {
+      const result = await dispatch(
+        fetchOnboardCandidatePlan({
+          arriveBy: false,
+          date: format(zoned, coreUtils.time.OTP_API_DATE_FORMAT),
+          from: {
+            lat: fromPlace.lat,
+            lon: fromPlace.lon,
+            name: fromPlace.name
+          },
+          modes: streetMode ? [{ mode: streetMode }] : modes,
+          modeSettings,
+          numItineraries,
+          routingPreferences: state.otp.currentQuery?.routingPreferences,
+          // Departing NOW (18.4).
+          time: format(zoned, GO_MODE_API_TIME_FORMAT),
+          to: { lat: toPlace.lat, lon: toPlace.lon, name: toPlace.name }
+        })
+      )
+      fresh = result?.itineraries || []
+    } catch {
+      fresh = []
+    }
+    // The rider may have ended the trip while the plan was in flight.
+    if (getState().otp?.goMode?.multiStop !== plan) return
+
+    const picked = pickNextSegment(fresh, stored)
+    // Keep the rider's own label on the places OTP names by coordinate.
+    const itinerary = picked
+      ? withSegmentEndNames(picked, fromPlace.name, toPlace.name)
+      : stored
+    const isLast = nextIndex === segments.length - 1
+    const next: MultiStopPlan = {
+      ...(plan as MultiStopPlan),
+      index: nextIndex,
+      roundTrip: isLast ? null : (plan as MultiStopPlan).roundTrip ?? null
+    }
+
+    dispatch(endGoMode())
+    await dispatch(
+      beginGoMode(itinerary, {
+        multiStop: next,
+        roundTrip: isLast ? (plan as MultiStopPlan).roundTrip ?? null : null
+      })
+    )
+    dispatch(setMobileScreen(MobileScreens.GO_MODE))
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[go-mode] multi-stop: segment ${nextIndex + 1} of ${segments.length} ` +
+        `started fresh=${!!picked} route=${
+          routeSequence(itinerary) || 'street'
+        }`
+    )
+  }
+}
+
+/** A fresh segment plan with the stops' own names on its two ends. */
+function withSegmentEndNames(
+  itinerary: Itinerary,
+  fromName?: string,
+  toName?: string
+): Itinerary {
+  const legs = [...(itinerary.legs || [])]
+  if (!legs.length) return itinerary
+  if (fromName)
+    legs[0] = { ...legs[0], from: { ...legs[0].from, name: fromName } }
+  const last = legs.length - 1
+  if (toName) {
+    legs[last] = { ...legs[last], to: { ...legs[last].to, name: toName } }
+  }
+  return { ...itinerary, legs }
+}
+
+/**
  * Re-poll GTFS-realtime for the trip's upcoming transit legs so the trip
  * overview shows LIVE board/alight times mid-ride — not just the plan's
  * realtime-as-of-planning snapshot. For each transit leg from the current one
@@ -6389,6 +6777,9 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     // budget after a run of fast retries.
     lastFixAtMs = Date.now()
     nativeGpsRestartsSinceLastFix = 0
+    // ...and for the live board timer, which stands aside while fixes flow.
+    // Not shared with lastFixAtMs: a watchdog restart resets that one.
+    session.lastPositionTickAt = Date.now()
 
     const state = getState()
     const goMode = state.otp?.goMode
@@ -7254,6 +7645,18 @@ export function handlePositionUpdate(position: GeolocationPosition) {
           }`
       )
       dispatch(setArrived(currentTime.getTime()))
+      if (hasNextSegment(goMode.multiStop)) {
+        // `warn` so the debug sink carries it: the daemon has to be able to
+        // tell a pause at a stop from a trip that never ended (13.5).
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[go-mode] multi-stop: arrived at stop ${
+            goMode.multiStop.index + 1
+          } of ${goMode.multiStop.segments.length - 1} ` +
+            `(${goMode.multiStop.stopNames[goMode.multiStop.index] || '?'}); ` +
+            'no auto-end, waiting for the rider to continue'
+        )
+      }
       // ...and the dwell starts ticking on the wall clock from here, whether or
       // not another fix ever arrives (backlog 13.5). A round trip is refused
       // inside armAutoEndTimer — its arrival is a pause.
@@ -7285,6 +7688,7 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       // 34,784 actions) was recorded in between.
       stopRerouteSnapshotCapture()
       stopVehiclePolling()
+      stopLiveBoardTimer()
       dispatch(
         updateTrackingInterval({ interval: ARRIVED_TRACKING_INTERVAL_MS })
       )
@@ -7333,79 +7737,22 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       nowMs - session.lastLiveLegTimesAt > LIVE_LEG_TIMES_INTERVAL_MS
     ) {
       session.lastLiveLegTimesAt = nowMs
-      dispatch(refreshLiveLegTimes())
-
-      // While the rider is on an access leg nothing else polls the boarding
-      // route's vehicles — startVehicleTracking runs only on transit legs —
-      // so the board-vehicle alert below would starve without its own poll.
-      // Same 20s cadence as the rest of this block; the api layer's URL
-      // throttle absorbs any overlap. Read-only: no vehicle MATCHING happens
-      // while walking, this only fills the store the alert reads from.
-      //
-      // A rider who got off EARLY at an on-route stop (8.11) is in exactly the
-      // position this poll was written for — on foot, heading for their next
-      // bus — but the matcher is still on the transit leg they stepped off, so
-      // neither the WALK/BICYCLE test nor findBoardLegIndex from that index
-      // would name the right leg. `goMode.earlyAlight` is how this path is
-      // entered from there, and it is why the search starts one leg on: the
-      // leg the matcher favours IS a transit leg, and it is the one they just
-      // left.
-      const accessLegNow: any = itinerary.legs[routeMatch.legIndex]
-      const alightedEarlyHere =
-        getState().otp?.goMode?.earlyAlight?.legIndex === routeMatch.legIndex
-      if (
-        accessLegNow?.mode === 'WALK' ||
-        accessLegNow?.mode === 'BICYCLE' ||
-        alightedEarlyHere
-      ) {
-        const pollBoardLegIndex = findBoardLegIndex(
-          itinerary.legs,
-          alightedEarlyHere ? routeMatch.legIndex + 1 : routeMatch.legIndex
-        )
-        const pollBoardRouteId =
-          pollBoardLegIndex >= 0
-            ? getLegRouteId(itinerary.legs[pollBoardLegIndex])
-            : null
-        if (pollBoardRouteId) {
-          dispatch(getVehiclePositionsForRoute(pollBoardRouteId))
-        }
-      }
+      pollBoardingFeeds(dispatch, getState, {
+        itinerary,
+        legIndex: routeMatch.legIndex,
+        nowMs: currentTime.getTime(),
+        waitingAtBoardingStop: progress.waitingAtBoardingStop
+      })
 
       // Auto-anchor: while walking/biking toward a transit boarding, target the
       // soonest same-route departure the rider can actually catch — the planned
       // itinerary may board a much later trip, and the wait/notification math
       // must track the real bus. Writing it into departureOverride is what makes
       // progress, the pacing card and missed-bus all agree on which bus that is.
-      // Every rule lives in util/go-mode/departure-anchor.ts.
+      // Every rule lives in util/go-mode/departure-anchor.ts. The stop poll it
+      // reads was just dispatched by pollBoardingFeeds.
       const anchorLeg = itinerary.legs[routeMatch.legIndex]
       const anchorNextLeg = itinerary.legs[routeMatch.legIndex + 1]
-      // Re-poll the boarding stop's departures first — the trip-start snapshot
-      // goes stale, and an earlier bus only ever shows up here. The poll runs
-      // through the platform wait as well, after the trip has stepped onto the
-      // bus leg (26.1: on 09-22 it stopped at 08:19:05 and the board time fell
-      // back to the trip query's schedule at 08:22:09). The ANCHOR below keeps
-      // its own, narrower gate — see boardingStopToPoll.
-      const pollStopId = boardingStopToPoll(
-        anchorLeg,
-        anchorNextLeg,
-        progress.waitingAtBoardingStop
-      )
-      if (pollStopId) {
-        try {
-          dispatch(
-            findStopTimesForStop({
-              date: currentServiceDate(
-                currentTime.getTime(),
-                getState().otp.config.homeTimezone
-              ),
-              forceFetch: true,
-              stopId: pollStopId
-            })
-          )
-        } catch {
-          // Best-effort; the decision below uses whatever is in the store.
-        }
-      }
       const boardingStopId = anchorBoardingStopId(anchorLeg, anchorNextLeg)
       if (boardingStopId) {
         const anchor = evaluateDepartureAnchor(session.lastAutoAnchorMs, {
