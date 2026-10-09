@@ -350,11 +350,14 @@ const GoModeScreen = ({
                 : null
           })}
           activeLegIndex={goMode.ui.activeLeg}
+          arrived={goMode.arrivedAt != null}
           currentLegIndex={goMode.progress.currentLegIndex}
           currentLegMode={currentLeg?.mode ?? null}
           currentPosition={goMode.tracking.lastPosition}
+          distanceToNextTurn={goMode.progress.distanceToNextTurn ?? null}
           followUser={goMode.ui.mapFollowUser}
           itinerary={goMode.activeItinerary}
+          nextTurnCue={goMode.progress.nextTurnCue ?? null}
           onSetFollow={setMapFollow}
           onToggleFollow={toggleMapFollow}
           routeMatch={goMode.routeMatch}

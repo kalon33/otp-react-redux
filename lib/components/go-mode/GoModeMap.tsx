@@ -10,16 +10,30 @@ import polyline from '@mapbox/polyline'
 import React, { useEffect, useMemo, useRef } from 'react'
 import styled, { keyframes } from 'styled-components'
 import type { IControl } from 'maplibre-gl'
-import type { Itinerary } from '@opentripplanner/types'
+import type { Itinerary, Leg } from '@opentripplanner/types'
 
+import {
+  buildTurnGeometry,
+  clampTurnZoom,
+  shouldShowTurnView,
+  TURN_ARROW_CASING,
+  TURN_ARROW_COLOR,
+  TURN_VIEW_MAX_ZOOM,
+  TURN_VIEW_PADDING_PX,
+  turnGeoJson,
+  turnViewBounds
+} from '../../util/go-mode/turn-view'
 import {
   decideFollowCamera,
   FOLLOW_EASE_MS,
   FOLLOW_ENGAGE_DELAY_MS,
+  FOLLOW_ZOOM_ACCESS,
+  FOLLOW_ZOOM_TRANSIT,
   isTransitLegMode
 } from '../../util/go-mode/follow-camera'
 import DefaultMap from '../map/default-map'
 import type { RouteMatchResult } from '../../util/go-mode/position-matching'
+import type { StepCue } from '../../util/go-mode/turn-by-turn'
 
 import { DeviationWarning, MapContainer } from './styled'
 
@@ -58,11 +72,17 @@ interface Props {
    */
   aboardBeforeLeg?: boolean
   activeLegIndex: number | null
+  /** Trip over (goMode.arrivedAt set): no turn to show (44.3). */
+  arrived?: boolean
   currentLegIndex: number
   currentLegMode: string | null
   currentPosition: GeolocationPosition | null
+  /** Metres to `nextTurnCue` (progress.distanceToNextTurn). */
+  distanceToNextTurn?: number | null
   followUser: boolean
   itinerary: Itinerary
+  /** The turn the card is announcing (progress.nextTurnCue), 44.3. */
+  nextTurnCue?: StepCue | null
   onSetFollow: (value: boolean) => void
   onToggleFollow: () => void
   routeMatch: RouteMatchResult | null
@@ -247,19 +267,27 @@ export const FollowToggleControl = ({
  * Uses useMap() hook to access the map for panning and renders
  * Source/Layer/Marker as map children via the react-map-gl context.
  */
-const GoModeMapOverlay = ({
+export const GoModeMapOverlay = ({
   activeLegIndex,
+  arrived = false,
+  currentLeg,
   currentLegMode,
   currentPosition,
+  distanceToNextTurn,
   followUser,
+  nextTurnCue,
   onSetFollow,
   onToggleFollow,
   routeGeoJson
 }: {
   activeLegIndex: number | null
+  arrived?: boolean
+  currentLeg?: Leg | null
   currentLegMode: string | null
   currentPosition: GeolocationPosition | null
+  distanceToNextTurn?: number | null
   followUser: boolean
+  nextTurnCue?: StepCue | null
   onSetFollow: (value: boolean) => void
   onToggleFollow: () => void
   routeGeoJson: GeoJSON.FeatureCollection | null
@@ -278,6 +306,33 @@ const GoModeMapOverlay = ({
   } | null>(null)
   const prevRejectedSpike = useRef<{ lat: number; lng: number } | null>(null)
   const prevLegTransit = useRef<boolean | null>(null)
+  // Turn view (44.3): the cue the camera is turned to (null = north-up
+  // follow), and whether the map was left rotated so release knows to undo it.
+  const turnViewCueIndex = useRef<number | null>(null)
+  const turnViewRotated = useRef(false)
+
+  // The next corner as something to draw, cut from the leg's own polyline.
+  // Drawn whenever the card has a turn on a walk/bike leg — the camera only
+  // turns to it when it is close (shouldShowTurnView).
+  const showTurn =
+    !arrived &&
+    !!nextTurnCue &&
+    (currentLegMode === 'WALK' || currentLegMode === 'BICYCLE')
+  const cueOffset = nextTurnCue?.offsetMeters
+  const cueLat = nextTurnCue?.lat
+  const cueLon = nextTurnCue?.lon
+  const turnGeometry = useMemo(
+    () =>
+      showTurn && cueOffset != null && cueLat != null && cueLon != null
+        ? buildTurnGeometry(currentLeg, {
+            lat: cueLat,
+            lon: cueLon,
+            offsetMeters: cueOffset
+          })
+        : null,
+    [showTurn, currentLeg, cueOffset, cueLat, cueLon]
+  )
+  const turnData = useMemo(() => turnGeoJson(turnGeometry), [turnGeometry])
 
   // Fit map to itinerary bounds on initial load
   useEffect(() => {
@@ -373,6 +428,83 @@ const GoModeMapOverlay = ({
       prevLegTransit: prevLegTransit.current,
       prevRejectedSpike: prevRejectedSpike.current
     })
+    const acceptFix = () => {
+      prevAccepted.current = {
+        lat: coords.latitude,
+        lng: coords.longitude,
+        timestampMs: timestamp
+      }
+      prevRejectedSpike.current = null
+      prevLegTransit.current = isTransitLegMode(currentLegMode)
+    }
+    if (decision.reason === 'spike-rejected') {
+      prevRejectedSpike.current = {
+        lat: coords.latitude,
+        lng: coords.longitude
+      }
+    }
+
+    // Turn view (44.3, rider "Both", 2026-10-08): with the next corner close,
+    // the camera frames the rider and the drawn turn, rotated so the street
+    // into the corner points up the screen. One bearing per turn (the
+    // route's, not the fix's heading), so the map turns once per corner.
+    const turnView =
+      !!turnGeometry &&
+      shouldShowTurnView({
+        arrived,
+        cue: nextTurnCue,
+        distanceToNextTurn,
+        engagedCueIndex: turnViewCueIndex.current,
+        legMode: currentLegMode
+      })
+    if (turnView && turnGeometry && nextTurnCue) {
+      const cueChanged = turnViewCueIndex.current !== nextTurnCue.index
+      // A stationary rider (dead-band) keeps the frame it has; a rejected
+      // fix frames from the last good one.
+      if (!cueChanged && !decision.move) return
+      const rider = decision.move
+        ? { lat: coords.latitude, lng: coords.longitude }
+        : prevAccepted.current
+      const camera = map.cameraForBounds(turnViewBounds(turnGeometry, rider), {
+        bearing: turnGeometry.approachBearing,
+        maxZoom: TURN_VIEW_MAX_ZOOM,
+        padding: TURN_VIEW_PADDING_PX
+      })
+      if (!camera) return
+      map.easeTo({
+        bearing: turnGeometry.approachBearing,
+        center: camera.center,
+        duration: FOLLOW_EASE_MS,
+        zoom: clampTurnZoom(camera.zoom)
+      })
+      turnViewCueIndex.current = nextTurnCue.index
+      turnViewRotated.current = true
+      if (decision.move) acceptFix()
+      return
+    }
+    turnViewCueIndex.current = null
+
+    // Leaving the turn view: back to plain north-up follow at the leg's
+    // zoom, in one ease, even if the rider has not moved since.
+    if (turnViewRotated.current) {
+      const rider = decision.move
+        ? { lat: coords.latitude, lng: coords.longitude }
+        : prevAccepted.current
+      if (rider) {
+        map.easeTo({
+          bearing: 0,
+          center: [rider.lng, rider.lat],
+          duration: FOLLOW_EASE_MS,
+          zoom: isTransitLegMode(currentLegMode)
+            ? FOLLOW_ZOOM_TRANSIT
+            : FOLLOW_ZOOM_ACCESS
+        })
+        turnViewRotated.current = false
+        if (decision.move) acceptFix()
+        return
+      }
+    }
+
     if (decision.move && decision.center) {
       // No `essential: true` — prefers-reduced-motion degrades the ease to a
       // jump, which is the right call for a camera that moves every second.
@@ -381,20 +513,19 @@ const GoModeMapOverlay = ({
         duration: FOLLOW_EASE_MS,
         ...(decision.zoom != null && { zoom: decision.zoom })
       })
-      prevAccepted.current = {
-        lat: coords.latitude,
-        lng: coords.longitude,
-        timestampMs: timestamp
-      }
-      prevRejectedSpike.current = null
-      prevLegTransit.current = isTransitLegMode(currentLegMode)
-    } else if (decision.reason === 'spike-rejected') {
-      prevRejectedSpike.current = {
-        lat: coords.latitude,
-        lng: coords.longitude
-      }
+      acceptFix()
     }
-  }, [currentPosition, followUser, activeLegIndex, map, currentLegMode])
+  }, [
+    currentPosition,
+    followUser,
+    activeLegIndex,
+    map,
+    currentLegMode,
+    arrived,
+    nextTurnCue,
+    distanceToNextTurn,
+    turnGeometry
+  ])
 
   return (
     <>
@@ -453,6 +584,41 @@ const GoModeMapOverlay = ({
         </Source>
       )}
 
+      {/* The next turn, drawn on the route (44.3): a white-cased blue
+          stretch through the corner with an arrowhead on the exit. Above the
+          route, below the rider's dot. */}
+      {turnGeometry && (
+        <Source data={turnData} id="go-mode-turn" type="geojson">
+          <Layer
+            filter={['==', ['get', 'part'], 'shaft']}
+            id="go-mode-turn-casing"
+            layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+            paint={{ 'line-color': TURN_ARROW_CASING, 'line-width': 13 }}
+            type="line"
+          />
+          <Layer
+            filter={['==', ['get', 'part'], 'head']}
+            id="go-mode-turn-head-casing"
+            layout={{ 'line-join': 'round' }}
+            paint={{ 'line-color': TURN_ARROW_CASING, 'line-width': 4 }}
+            type="line"
+          />
+          <Layer
+            filter={['==', ['get', 'part'], 'shaft']}
+            id="go-mode-turn-shaft"
+            layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+            paint={{ 'line-color': TURN_ARROW_COLOR, 'line-width': 8 }}
+            type="line"
+          />
+          <Layer
+            filter={['==', ['get', 'part'], 'head']}
+            id="go-mode-turn-head"
+            paint={{ 'fill-color': TURN_ARROW_COLOR }}
+            type="fill"
+          />
+        </Source>
+      )}
+
       {/* User Position Marker */}
       {currentPosition && (
         <Marker
@@ -469,11 +635,14 @@ const GoModeMapOverlay = ({
 const GoModeMap = ({
   aboardBeforeLeg = false,
   activeLegIndex,
+  arrived = false,
   currentLegIndex,
   currentLegMode,
   currentPosition,
+  distanceToNextTurn,
   followUser,
   itinerary,
+  nextTurnCue,
   onSetFollow,
   onToggleFollow,
   routeMatch
@@ -550,9 +719,13 @@ const GoModeMap = ({
         {/* Map overlays rendered inside BaseMap's react-map-gl context */}
         <GoModeMapOverlay
           activeLegIndex={activeLegIndex}
+          arrived={arrived}
+          currentLeg={itinerary?.legs?.[currentLegIndex] ?? null}
           currentLegMode={currentLegMode}
           currentPosition={currentPosition}
+          distanceToNextTurn={distanceToNextTurn}
           followUser={followUser}
+          nextTurnCue={nextTurnCue}
           onSetFollow={onSetFollow}
           onToggleFollow={onToggleFollow}
           routeGeoJson={routeGeoJson}

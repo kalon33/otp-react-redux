@@ -31,11 +31,15 @@ import {
   NavFoot,
   NavHero,
   NavSub,
+  NavTurnRow,
   ResetButton,
+  TurnDistance,
+  TurnWords,
   UseNextButton,
   WalkingContainer
 } from './styled'
 import RealtimeTime from './RealtimeTime'
+import TurnArrow, { ARRIVE_DIRECTION } from './TurnArrow'
 
 /** Ties the toggle to the list it opens for assistive tech. */
 const LATER_DEPARTURES_ID = 'go-mode-later-departures'
@@ -198,12 +202,39 @@ const WalkingNavigation = ({
   // 2026-09-09 that put "<1 min · Turn right on alley · 39 ft" directly above
   // "🎉 You've arrived!". Nothing here is a notification, so there is no copy
   // to replace it with: the lines simply go.
-  const turnLine =
+  const turnDistance =
     !arrived && progress.nextTurnCue && progress.distanceToNextTurn != null
-      ? `${progress.nextTurnCue.instruction} · ${formatCueDistance(
-          progress.distanceToNextTurn
-        )}${progress.turnDistanceIsDirect ? ' direct' : ''}`
+      ? `· ${formatCueDistance(progress.distanceToNextTurn)}${
+          progress.turnDistanceIsDirect ? ' direct' : ''
+        }`
       : null
+  const turnLine =
+    turnDistance && progress.nextTurnCue
+      ? `${progress.nextTurnCue.instruction} ${turnDistance}`
+      : null
+  // Beside the arrow the line is two pieces, so the distance survives a long
+  // street name (44.3 design review).
+  const turnWords = (text: string, distance: string | null) => (
+    <>
+      <TurnWords>{text}</TurnWords>
+      {/* A flex item drops this space from the layout (TurnDistance pads
+          instead) but keeps it in the text a screen reader reads. */}
+      {distance && ' '}
+      {distance && <TurnDistance>{distance}</TurnDistance>}
+    </>
+  )
+  // The same turn as a picture (44.3): the cue's own direction while there is
+  // a turn ahead, and for the walk-only card's fallback line — which carries
+  // no cue — a straight arrow for "Continue to …" and a pin for "Arriving at
+  // …", split at the same 90 % `getWalkingInstruction` splits those two at.
+  const turnDirection = arrived
+    ? null
+    : progress.nextTurnCue?.relativeDirection ??
+      (progress.nextInstruction
+        ? progress.currentLegProgress >= 90
+          ? ARRIVE_DIRECTION
+          : 'CONTINUE'
+        : null)
   const thenLine =
     !arrived && progress.followingTurnCue
       ? intl.formatMessage(
@@ -534,13 +565,32 @@ const WalkingNavigation = ({
             )}
           </NavHero>
         )}
-        {sub && <NavSub>{sub}</NavSub>}
+        {sub &&
+          (!isNextLegTransit && turnDirection ? (
+            <NavTurnRow>
+              <TurnArrow direction={turnDirection} />
+              <NavSub>
+                {turnLine && progress.nextTurnCue
+                  ? turnWords(progress.nextTurnCue.instruction, turnDistance)
+                  : turnWords(sub, null)}
+              </NavSub>
+            </NavTurnRow>
+          ) : (
+            <NavSub>{sub}</NavSub>
+          ))}
         {/* Riding to a bus: the departure stays the headline, but the rider's
             next physical action is the turn — so it renders first, directly
             under "arrives in", ahead of the ride-to-stop line. As the trailing
             line it read as more bus info (7/29). While deviated there is no
             turnLine and the card gracefully shows bus facts only. */}
-        {isNextLegTransit && turnLine && <NavFoot>{turnLine}</NavFoot>}
+        {isNextLegTransit && turnLine && (
+          <NavTurnRow $foot>
+            <TurnArrow direction={turnDirection} />
+            <NavFoot>
+              {turnWords(progress.nextTurnCue?.instruction ?? '', turnDistance)}
+            </NavFoot>
+          </NavTurnRow>
+        )}
         {foot && <NavFoot>{foot}</NavFoot>}
 
         {showExtras && (
