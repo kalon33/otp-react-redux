@@ -6,7 +6,11 @@ import {
   captureNotificationLatches,
   NotificationLatches
 } from './notification-service'
+import { hasNextSegment } from '../multi-stop'
 import type { DepartureOverrideSource } from './types'
+
+import type { MultiStopPlan } from '../multi-stop'
+
 import type { ReturnCountdownState, RoundTripPlan } from './round-trip'
 
 const { getItem, removeItem, storeItem } = coreUtils.storage
@@ -47,6 +51,14 @@ const END_TIME_GRACE_MS = 45 * 60 * 1000
  * five minutes the rider has walked away from it.
  */
 const ARRIVED_RESUME_GRACE_MS = 5 * 60 * 1000
+
+/**
+ * How long a trip paused at one of the rider's stops (43.1) stays resumable.
+ * The stop is an errand of unknown length, and iOS will have suspended the
+ * WebView long before it is over; the rider must come back to "Continue to
+ * <next stop>", not to an empty planner. Past this they are planning afresh.
+ */
+const MULTI_STOP_PAUSE_MAX_MS = 4 * 60 * 60 * 1000
 
 /**
  * The durable parts of a Go Mode trip — enough to drop the rider back into live
@@ -112,6 +124,8 @@ export interface GoModeSession {
   // is the only place `startVehicleTracking` runs for a mid-trip transit leg,
   // so `resumeGoModeTrip` restores this AND re-arms vehicle tracking itself.
   lastTransitionedLegIndex?: number | null
+  // The rider's stops and which segment is being guided (43.1).
+  multiStop?: MultiStopPlan | null
   // What the notifier has already said, re-keyed onto leg indexes so it can be
   // rebuilt on the other side of a re-mount. Its three latches live on the leg
   // OBJECT and so die with the page; see notification-service.
@@ -223,6 +237,7 @@ export function saveGoModeSession(
     departureOverrideSource: goMode.departureOverrideSource ?? null,
     departureOverrideTripId: goMode.departureOverrideTripId ?? null,
     lastTransitionedLegIndex: savedTransitionedLegIndex,
+    multiStop: goMode.multiStop ?? null,
     notificationLatches: captureNotificationLatches(
       goMode.activeItinerary?.legs
     ),
@@ -276,7 +291,14 @@ export function loadGoModeSession(): GoModeSession | null {
   const isRoundTrip =
     typeof returnLeaveByMs === 'number' && Number.isFinite(returnLeaveByMs)
 
-  const stale = isRoundTrip
+  // Paused at a stop of a multi-stop trip: the arrival there is a pause, not
+  // the end, and the segment's own end time is long gone by design.
+  const pausedAtStop =
+    hasNextSegment(session.multiStop) && typeof session.arrivedAt === 'number'
+
+  const stale = pausedAtStop
+    ? now - (session.arrivedAt as number) > MULTI_STOP_PAUSE_MAX_MS
+    : isRoundTrip
     ? now > (returnLeaveByMs as number) + END_TIME_GRACE_MS
     : (() => {
         const tooOld =

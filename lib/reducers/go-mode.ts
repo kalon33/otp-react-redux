@@ -65,6 +65,7 @@ import type {
   RidingState
 } from '../util/go-mode/types'
 import type { EarlyAlightRecord } from '../util/go-mode/riding'
+import type { MultiStopPlan } from '../util/multi-stop'
 import type {
   NearbyVehicleOption,
   VehicleMatchResult
@@ -303,6 +304,15 @@ export interface GoModeState {
    * fresh mid-ride by refreshLiveLegTimes; consumed by the trip overview. */
   liveLegTimes: Record<number, LiveLegTime>
 
+  /**
+   * A trip through the rider's stops (backlog 43.1), guided one segment at a
+   * time: `activeItinerary` is `segments[index]`, and arriving at the end of
+   * any segment but the last is a pause at a stop, not the end of the trip —
+   * no auto-end; the arrival card offers the next segment. Null for every
+   * ordinary trip. See util/multi-stop.ts.
+   */
+  multiStop: MultiStopPlan | null
+
   notifications: {
     enabled: boolean
     recentNotifications: NotificationEvent[]
@@ -466,6 +476,7 @@ const defaultState: GoModeState = {
 
   isActive: false,
   liveLegTimes: {},
+  multiStop: null,
   notifications: {
     enabled: true,
     recentNotifications: [],
@@ -1062,7 +1073,7 @@ const goMode = handleActions<GoModeState, any>(
     }),
 
     [START_GO_MODE]: (state, action) => {
-      const { itinerary, originalFrom, roundTrip } = action.payload
+      const { itinerary, multiStop, originalFrom, roundTrip } = action.payload
 
       // `ui` is deliberately preserved: a background auto-update (missed bus,
       // quiet access replan) swaps the itinerary via this action while the
@@ -1092,6 +1103,9 @@ const goMode = handleActions<GoModeState, any>(
         departureOverrideTripId: null,
         isActive: true,
         liveLegTimes: {},
+        // Same rule as roundTrip below: beginGoMode passes the plan back in
+        // for a swap within the same segment; absent clears it.
+        multiStop: multiStop ?? null,
         notifications: {
           ...state.notifications,
           recentNotifications: [],

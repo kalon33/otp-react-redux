@@ -12,6 +12,8 @@
  * nonsensical value to the routing engine.
  */
 
+import { queryStops, viaVisitLocations } from './multi-stop'
+
 export interface RoutingPreferences {
   bikeReluctance?: number
   // m/s
@@ -542,6 +544,8 @@ export const NO_TRANSFERS_MAX_TRANSFERS = 0
 
 /** The hard constraints the panel can put on a search, as they sit on the query. */
 export interface PlanConstraints {
+  /** The rider's stops (backlog 43.1) — see util/multi-stop.ts. */
+  intermediatePlaces?: unknown[]
   noTransfers?: boolean
   viaStop?: ViaStop | null
 }
@@ -564,10 +568,15 @@ export function planConstraintVariables(
 ): Record<string, unknown> {
   const out: Record<string, unknown> = {}
   if (query?.noTransfers) out.maxTransfers = NO_TRANSFERS_MAX_TRANSFERS
+  // The rider's stops first, in the order they visit them (backlog 43.1):
+  // OTP's via list is ordered, and a pass-through stop is a constraint on the
+  // ride, not a place the rider is going.
+  const via: unknown[] = viaVisitLocations(queryStops(query))
   const stopIds = query?.viaStop?.ids?.filter(Boolean)
   if (stopIds?.length) {
-    out.via = [{ passThrough: { stopLocationIds: stopIds } }]
+    via.push({ passThrough: { stopLocationIds: stopIds } })
   }
+  if (via.length) out.via = via
   return out
 }
 
@@ -583,6 +592,9 @@ export const NON_OTP_QUERY_KEYS = [
   'arriveOnTimeAccess',
   // Shapes the mode fan-out in routingQuery, not a plan() argument.
   'hideWalkTransitOptions',
+  // The rider's stops become `via` visits in planConstraintVariables; the raw
+  // array is otp-ui's URL shape, not a plan() argument (backlog 43.1).
+  'intermediatePlaces',
   // Both become real plan() arguments via planConstraintVariables, but not
   // under these names — the raw keys would be undeclared variables.
   'noTransfers',

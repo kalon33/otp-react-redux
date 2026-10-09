@@ -8,6 +8,7 @@ import {
   injectIntl,
   IntlShape
 } from 'react-intl'
+import { humanizeDistanceString } from '@opentripplanner/humanize-distance'
 import { Leaf } from '@styled-icons/fa-solid/Leaf'
 import coreUtils from '@opentripplanner/core-utils'
 import React from 'react'
@@ -16,6 +17,12 @@ import styled, { keyframes } from 'styled-components'
 import * as goModeActions from '../../../actions/go-mode'
 import * as uiActions from '../../../actions/ui'
 import { AppReduxState } from '../../../util/state-types'
+import {
+  buildMultiStopPlan,
+  itineraryDistanceM,
+  itineraryStopNames,
+  MultiStopPlan
+} from '../../../util/multi-stop'
 import {
   buildRoundTripPlan,
   RoundTripPlan
@@ -203,6 +210,33 @@ const VariantsRow = styled(SameShapeVariants)`
   grid-column: 1 / span 2;
 `
 
+/**
+ * A multi-stop trip's overall line (backlog 43.1, "just want overall trip
+ * stats"): where it stops and how far it goes in all. The duration, the fare
+ * and the final arrival above are already the whole trip's. Full width for the
+ * same reason as VariantsRow.
+ */
+const StopsRow = styled.span`
+  color: #090909cc;
+  font-size: 13px;
+  grid-column: 1 / span 2;
+`
+
+/**
+ * The same line on the small street-only tile (a bike or a walk through the
+ * stops), which is too narrow for the distance: just where it stops. Placed
+ * on rows the tile adds for it (MULTI_STOP_MINI_ROWS).
+ */
+const MiniStopsRow = styled.span`
+  color: #090909cc;
+  font-size: 12px;
+  grid-column: 1 / span 2;
+  grid-row: 10 / span 4;
+  line-height: 1.2;
+  text-align: left;
+`
+const MULTI_STOP_MINI_ROWS = { gridTemplateRows: 'repeat(14, 8px)' }
+
 const BLUR_AMOUNT = 3
 const blurAnimation = keyframes`
  0% { filter: blur(${BLUR_AMOUNT}px); }
@@ -245,7 +279,10 @@ type Props = {
   active: boolean
   beginGoMode?: (
     itinerary: Itinerary,
-    options?: { roundTrip?: RoundTripPlan | null }
+    options?: {
+      multiStop?: MultiStopPlan | null
+      roundTrip?: RoundTripPlan | null
+    }
   ) => void
   defaultFareType: FareProductSelector
   /** This is true when there is only one itinerary being shown and the itinerary-body is visible */
@@ -369,6 +406,14 @@ export class MetroItinerary extends NarrativeItinerary {
     if (!beginGoMode) return
     if (!this._confirmLaterDeparture()) return
     const roundTripPlan = this._roundTripPlan()
+    // A trip through the rider's stops runs one segment at a time (43.1): Go
+    // Mode starts on the way to the first stop, and the return of a round trip
+    // waits for the last segment.
+    const multiStop = buildMultiStopPlan(itinerary, roundTripPlan)
+    const startItinerary = multiStop ? multiStop.segments[0] : itinerary
+    const startOptions = multiStop
+      ? { multiStop, roundTrip: null }
+      : { multiStop: null, roundTrip: roundTripPlan }
     if (tripActive) {
       // A trip is already running (backgrounded behind the planner):
       // adopting an alternate is an explicit switch, so confirm — the current
@@ -384,11 +429,11 @@ export class MetroItinerary extends NarrativeItinerary {
       ) {
         return
       }
-      beginGoMode(itinerary, { roundTrip: roundTripPlan })
+      beginGoMode(startItinerary, startOptions)
       returnToGoMode?.()
       return
     }
-    beginGoMode(itinerary, { roundTrip: roundTripPlan })
+    beginGoMode(startItinerary, startOptions)
   }
 
   _renderMainRouteBlock = (legs: Leg[]) => {
@@ -441,6 +486,7 @@ export class MetroItinerary extends NarrativeItinerary {
       tripActive
     } = this.props
     const { ItineraryPreviewSupplement, RouteRenderer, SvgIcon } = this.context
+    const stopNames = itineraryStopNames(itinerary)
     const Route = RouteRenderer || DefaultRouteRenderer
 
     const { isCallAhead, isContinuousDropoff, isFlexItinerary, phone } =
@@ -710,6 +756,21 @@ export class MetroItinerary extends NarrativeItinerary {
                   Its own full-width row under the summary is the only place on
                   this card a thumb finds without hunting (backlog 16.6).
                 */}
+                {stopNames.length > 0 && (
+                  <StopsRow className="multi-stop-summary">
+                    <FormattedMessage
+                      id="components.MultiStop.summary"
+                      values={{
+                        distance: humanizeDistanceString(
+                          itineraryDistanceM(itinerary),
+                          false,
+                          intl
+                        ),
+                        stops: stopNames.join(' › ')
+                      }}
+                    />
+                  </StopsRow>
+                )}
                 <VariantsRow
                   itinerary={itinerary}
                   lookupStatus={this.props.otherStopsLookupStatus}
@@ -723,7 +784,10 @@ export class MetroItinerary extends NarrativeItinerary {
               </ItineraryGrid>
             )}
             {mini && (
-              <ItineraryGridSmall className="other-itin">
+              <ItineraryGridSmall
+                className="other-itin"
+                style={stopNames.length ? MULTI_STOP_MINI_ROWS : undefined}
+              >
                 <PrimaryInfo as="span">
                   <FormattedDuration
                     duration={ensureAtLeastOneMinute(itinerary.duration)}
@@ -734,6 +798,14 @@ export class MetroItinerary extends NarrativeItinerary {
                   <ItineraryDescription itinerary={itinerary} />
                 </SecondaryInfo>
                 {this._renderMainRouteBlock(itinerary.legs)}
+                {stopNames.length > 0 && (
+                  <MiniStopsRow className="multi-stop-summary">
+                    <FormattedMessage
+                      id="components.MultiStop.via"
+                      values={{ stops: stopNames.join(' › ') }}
+                    />
+                  </MiniStopsRow>
+                )}
               </ItineraryGridSmall>
             )}
           </ItineraryWrapper>

@@ -56,6 +56,7 @@ Object {
     "earlyAlight": null,
     "isActive": false,
     "liveLegTimes": Object {},
+    "multiStop": null,
     "notifications": Object {
       "enabled": true,
       "recentNotifications": Array [],

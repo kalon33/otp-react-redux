@@ -273,6 +273,12 @@ import type {
   ReturnCountdownState,
   RoundTripPlan
 } from '../util/go-mode/round-trip'
+import {
+  hasNextSegment,
+  pickNextSegment,
+  segmentStreetMode
+} from '../util/multi-stop'
+import type { MultiStopPlan } from '../util/multi-stop'
 import { evaluateTurnCard } from '../util/go-mode/turn-card'
 import { evaluateMissedBusRecovery } from '../util/go-mode/missed-bus-recovery'
 import {
@@ -871,6 +877,8 @@ export const setBoardingSearchFailed = createAction<boolean>(
 export const showBoardingPromptAction = createAction(SHOW_BOARDING_PROMPT)
 export const startGoMode = createAction<{
   itinerary: Itinerary
+  /** The rider's stops, when this is one segment of a multi-stop trip (43.1). */
+  multiStop?: MultiStopPlan | null
   originalFrom?: any
   /** The return half, when this trip is the outbound leg of a round trip. */
   roundTrip?: RoundTripPlan | null
@@ -1647,6 +1655,13 @@ export function beginGoMode(
   rawItinerary: Itinerary,
   options: {
     /**
+     * A trip through the rider's stops (43.1): `itinerary` is the segment
+     * `multiStop.index`. Sticky the same way `roundTrip` is — absent keeps the
+     * live trip's plan (every internal re-plan of the segment calls with no
+     * options), an explicit null clears it.
+     */
+    multiStop?: MultiStopPlan | null
+    /**
      * This plan re-uses the access legs the trip is already running on, so its
      * origin is exactly as old as it was a tick ago and the 12.13 stale-origin
      * question has already been answered for it. Set by the 23.3 re-target,
@@ -1687,7 +1702,11 @@ export function beginGoMode(
       options.roundTrip !== undefined
         ? options.roundTrip
         : (priorGoMode?.isActive && priorGoMode?.roundTrip) || null
-    dispatch(startGoMode({ itinerary, originalFrom, roundTrip }))
+    const multiStop =
+      options.multiStop !== undefined
+        ? options.multiStop
+        : (priorGoMode?.isActive && priorGoMode?.multiStop) || null
+    dispatch(startGoMode({ itinerary, multiStop, originalFrom, roundTrip }))
     // A plan has been installed, so its origin is owed a look (12.13). Armed
     // here rather than asked on every tick because "the plan starts somewhere
     // the rider is not" is only a defect at INSTALLATION: a rider three
@@ -2414,6 +2433,9 @@ function armAutoEndTimer(dispatch: any, getState: any): void {
   const goMode = getState().otp?.goMode
   if (!goMode?.isActive || goMode.arrivedAt == null) return
   if (goMode.roundTrip) return
+  // At a STOP of a multi-stop trip the rider is running an errand; the trip
+  // goes on when they continue (43.1). Only the destination auto-ends.
+  if (hasNextSegment(goMode.multiStop)) return
 
   const arrivedAt: number = goMode.arrivedAt
   // A trip resumed inside the dwell window (session-persistence refuses a
@@ -2434,6 +2456,7 @@ function armAutoEndTimer(dispatch: any, getState: any): void {
     const current = getState().otp?.goMode
     if (!current?.isActive || current.arrivedAt == null) return
     if (current.roundTrip) return
+    if (hasNextSegment(current.multiStop)) return
     // `warn`, not `log`: the debug sink carries only warn and error, and a
     // verify should not have to infer the auto-end from arithmetic (13.5).
     // eslint-disable-next-line no-console
@@ -2567,6 +2590,10 @@ export function browseFromCurrentPosition(
           // into "leave from here, now".
           departArrive: 'DEPART',
           from: origin.from,
+          // The destination below is the end of the segment being guided — a
+          // multi-stop trip's next stop — so the planner's stops must not be
+          // routed through on the way to it (43.1).
+          intermediatePlaces: [],
           routingPreferences,
           time: origin.time,
           to: {
@@ -2630,6 +2657,7 @@ export function showRerouteCandidates(candidates: Itinerary[]) {
         // arrive-by search must not carry into "leave from here, now".
         departArrive: 'DEPART',
         from: origin.from,
+        intermediatePlaces: [],
         time: origin.time,
         to: {
           lat: destLeg.to.lat,
@@ -6307,6 +6335,116 @@ export function startReturnTrip() {
 }
 
 /**
+ * The rider tapped "Continue to <next stop>" on the arrival card at a stop of a
+ * multi-stop trip (backlog 43.1, "go mode does each leg at a time").
+ *
+ * The next segment is started the way a round trip's return is
+ * (startReturnTrip): the segment just finished is ended outright — its timers,
+ * wrist cards and session go with it, and the record shows one trip per
+ * segment — and the next one enters Go Mode through the one choke point with
+ * the plan carried forward. The stored segment was planned for a zero-minute
+ * stay, so it is re-asked once, departing NOW from the stop, and the fresh
+ * answer is taken only when it is still the rider's trip — same routes, same
+ * way of riding (pickNextSegment); otherwise the stored segment stands and the
+ * missed-bus handling moves it to the next departure. The button always does
+ * something. The last segment carries the round trip's return, if
+ * the rider asked for one.
+ */
+export function continueMultiStop() {
+  return async function (dispatch: any, getState: any) {
+    const state = getState()
+    const plan: MultiStopPlan | null = state.otp?.goMode?.multiStop ?? null
+    if (!hasNextSegment(plan)) return
+    const nextIndex = (plan as MultiStopPlan).index + 1
+    const segments = (plan as MultiStopPlan).segments
+    const stored = segments[nextIndex]
+    const legs = stored?.legs || []
+    const fromPlace = legs[0]?.from
+    const toPlace = legs[legs.length - 1]?.to
+    if (!fromPlace || !toPlace) return
+
+    const { homeTimezone } = state.otp.config
+    const zoned = utcToZonedTime(getCurrentTime().getTime(), homeTimezone)
+    const { modes, modeSettings, numItineraries } = getBasePlanParts(state)
+    // A street-only segment (a bike or a walk to the stop) is asked as that
+    // mode alone, so the answer has one to keep; a transit segment is asked
+    // with the rider's modes and must come back on the same routes.
+    const streetMode = segmentStreetMode(stored)
+    let fresh: Itinerary[] = []
+    try {
+      const result = await dispatch(
+        fetchOnboardCandidatePlan({
+          arriveBy: false,
+          date: format(zoned, coreUtils.time.OTP_API_DATE_FORMAT),
+          from: {
+            lat: fromPlace.lat,
+            lon: fromPlace.lon,
+            name: fromPlace.name
+          },
+          modes: streetMode ? [{ mode: streetMode }] : modes,
+          modeSettings,
+          numItineraries,
+          routingPreferences: state.otp.currentQuery?.routingPreferences,
+          // Departing NOW (18.4).
+          time: format(zoned, GO_MODE_API_TIME_FORMAT),
+          to: { lat: toPlace.lat, lon: toPlace.lon, name: toPlace.name }
+        })
+      )
+      fresh = result?.itineraries || []
+    } catch {
+      fresh = []
+    }
+    // The rider may have ended the trip while the plan was in flight.
+    if (getState().otp?.goMode?.multiStop !== plan) return
+
+    const picked = pickNextSegment(fresh, stored)
+    // Keep the rider's own label on the places OTP names by coordinate.
+    const itinerary = picked
+      ? withSegmentEndNames(picked, fromPlace.name, toPlace.name)
+      : stored
+    const isLast = nextIndex === segments.length - 1
+    const next: MultiStopPlan = {
+      ...(plan as MultiStopPlan),
+      index: nextIndex,
+      roundTrip: isLast ? null : (plan as MultiStopPlan).roundTrip ?? null
+    }
+
+    dispatch(endGoMode())
+    await dispatch(
+      beginGoMode(itinerary, {
+        multiStop: next,
+        roundTrip: isLast ? (plan as MultiStopPlan).roundTrip ?? null : null
+      })
+    )
+    dispatch(setMobileScreen(MobileScreens.GO_MODE))
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[go-mode] multi-stop: segment ${nextIndex + 1} of ${segments.length} ` +
+        `started fresh=${!!picked} route=${
+          routeSequence(itinerary) || 'street'
+        }`
+    )
+  }
+}
+
+/** A fresh segment plan with the stops' own names on its two ends. */
+function withSegmentEndNames(
+  itinerary: Itinerary,
+  fromName?: string,
+  toName?: string
+): Itinerary {
+  const legs = [...(itinerary.legs || [])]
+  if (!legs.length) return itinerary
+  if (fromName)
+    legs[0] = { ...legs[0], from: { ...legs[0].from, name: fromName } }
+  const last = legs.length - 1
+  if (toName) {
+    legs[last] = { ...legs[last], to: { ...legs[last].to, name: toName } }
+  }
+  return { ...itinerary, legs }
+}
+
+/**
  * Re-poll GTFS-realtime for the trip's upcoming transit legs so the trip
  * overview shows LIVE board/alight times mid-ride — not just the plan's
  * realtime-as-of-planning snapshot. For each transit leg from the current one
@@ -7489,6 +7627,18 @@ export function handlePositionUpdate(position: GeolocationPosition) {
           }`
       )
       dispatch(setArrived(currentTime.getTime()))
+      if (hasNextSegment(goMode.multiStop)) {
+        // `warn` so the debug sink carries it: the daemon has to be able to
+        // tell a pause at a stop from a trip that never ended (13.5).
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[go-mode] multi-stop: arrived at stop ${
+            goMode.multiStop.index + 1
+          } of ${goMode.multiStop.segments.length - 1} ` +
+            `(${goMode.multiStop.stopNames[goMode.multiStop.index] || '?'}); ` +
+            'no auto-end, waiting for the rider to continue'
+        )
+      }
       // ...and the dwell starts ticking on the wall clock from here, whether or
       // not another fix ever arrives (backlog 13.5). A round trip is refused
       // inside armAutoEndTimer — its arrival is a pause.
