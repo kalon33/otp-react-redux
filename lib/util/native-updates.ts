@@ -155,7 +155,7 @@ function defaultHasRendered(): boolean {
  */
 export type BundleHealthVerdict = {
   confirmed: boolean
-  reason: 'boot-error' | 'confirmed' | 'not-rendered'
+  reason: 'boot-error' | 'confirmed' | 'confirmed-on-pause' | 'not-rendered'
 }
 
 /**
@@ -206,6 +206,22 @@ export function recordedBundleHealth(): BundleHealthVerdict | null {
  * both of them before this function is reached at all. When a reader is given,
  * no second pair of listeners is installed; the fallback pair below only
  * covers a caller that has none (and the tests).
+ *
+ * The app going to the background before the grace is up settles a HEALTHY
+ * verdict at once (`reason: 'confirmed-on-pause'`). The plugin arms its
+ * `appReadyTimeout` (20 s) natively at boot, and with `UIBackgroundModes
+ * location` the native side keeps running while a backgrounded WKWebView's JS
+ * timers are frozen — so a phone locked within 5 s of booting never ran the
+ * grace timer, the native deadline passed in the background, and the bundle was
+ * rolled back (backlog 44.4: dev 2026.1008.2 at 18:54:30 and 19:41:46 on
+ * 2026-10-08, each with a `confirmed` verdict and a rollback in the same
+ * millisecond, both flushed on resume). Hidden is the last moment JS is sure to
+ * run. Only a healthy boot settles early: a boot error or an empty `#main` at
+ * that moment leaves the timer to decide exactly as before, so the pause can
+ * never confirm what the timer would have withheld. Both signals are heard —
+ * `visibilitychange` to hidden and Capacitor's document `pause` (fired from
+ * `didEnterBackgroundNotification`, CapacitorBridge.swift) — whichever is
+ * first; the verdict is reached once per boot.
  */
 export function confirmBundleHealthyWhenStable(
   options: {
@@ -235,16 +251,18 @@ export function confirmBundleHealthyWhenStable(
     window.addEventListener('unhandledrejection', noteFailure)
   }
 
-  setTimeout(() => {
+  let settled = false
+  let timer: ReturnType<typeof setTimeout> | null = null
+  const settle = (verdict: BundleHealthVerdict) => {
+    if (settled) return
+    settled = true
+    if (timer !== null) clearTimeout(timer)
     if (!injected) {
       window.removeEventListener('error', noteFailure)
       window.removeEventListener('unhandledrejection', noteFailure)
     }
-    const verdict: BundleHealthVerdict = broke()
-      ? { confirmed: false, reason: 'boot-error' }
-      : hasRendered()
-      ? { confirmed: true, reason: 'confirmed' }
-      : { confirmed: false, reason: 'not-rendered' }
+    document.removeEventListener('visibilitychange', onHidden)
+    document.removeEventListener('pause', onHidden)
     // Kept where anything else on this boot can read it. The bundle-apply gate
     // below will not hop off a bundle that has not proven itself, and this is
     // the only record that it did.
@@ -259,6 +277,30 @@ export function confirmBundleHealthyWhenStable(
     }
     if (!verdict.confirmed) return
     confirm()
+  }
+
+  // Backgrounded before the grace is up: confirm now if the boot is already
+  // healthy, because the grace timer will not run again until the phone wakes,
+  // and by then the native deadline has rolled the bundle back. Anything less
+  // than healthy is left to the timer, as before.
+  function onHidden(event: Event) {
+    if (settled) return
+    if (event.type === 'visibilitychange' && !document.hidden) return
+    if (broke() || !hasRendered()) return
+    settle({ confirmed: true, reason: 'confirmed-on-pause' })
+  }
+  document.addEventListener('visibilitychange', onHidden)
+  document.addEventListener('pause', onHidden)
+
+  timer = setTimeout(() => {
+    timer = null
+    settle(
+      broke()
+        ? { confirmed: false, reason: 'boot-error' }
+        : hasRendered()
+        ? { confirmed: true, reason: 'confirmed' }
+        : { confirmed: false, reason: 'not-rendered' }
+    )
   }, graceMs)
 }
 
