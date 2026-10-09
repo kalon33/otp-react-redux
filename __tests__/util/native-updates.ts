@@ -188,6 +188,157 @@ describe('confirmBundleHealthyWhenStable', () => {
 
     document.body.removeChild(main)
   })
+  // Backlog 44.4 (dev 2026.1008.2, 2026-10-08 18:54:30 and 19:41:46): a phone
+  // locked within 5 s of booting froze the grace timer, the plugin's
+  // boot-armed 20 s native deadline passed in the background, and a bundle
+  // that was perfectly healthy was rolled back. Going hidden settles a healthy
+  // verdict on the spot; anything less is still the timer's call.
+  describe('when the app goes to the background during the grace', () => {
+    let hidden = false
+    beforeEach(() => {
+      hidden = false
+      Object.defineProperty(document, 'hidden', {
+        configurable: true,
+        get: () => hidden
+      })
+    })
+    afterEach(() => {
+      // Back to jsdom's own getter on Document.prototype.
+      delete (document as unknown as { hidden?: boolean }).hidden
+    })
+    const goHidden = () => {
+      hidden = true
+      document.dispatchEvent(new Event('visibilitychange'))
+    }
+
+    it('confirms a healthy boot at once, not after the grace', () => {
+      const confirm = jest.fn()
+      const onVerdict = jest.fn()
+      confirmBundleHealthyWhenStable({
+        confirm,
+        hasRendered: () => true,
+        onVerdict
+      })
+      jest.advanceTimersByTime(2000)
+      expect(confirm).not.toHaveBeenCalled()
+
+      goHidden()
+
+      expect(confirm).toHaveBeenCalledTimes(1)
+      expect(onVerdict).toHaveBeenCalledWith({
+        confirmed: true,
+        reason: 'confirmed-on-pause'
+      })
+      // One verdict per boot: the grace timer, when it finally runs, adds
+      // nothing — and neither does a second background.
+      jest.advanceTimersByTime(BUNDLE_HEALTH_GRACE_MS)
+      document.dispatchEvent(new Event('pause'))
+      goHidden()
+      expect(confirm).toHaveBeenCalledTimes(1)
+      expect(onVerdict).toHaveBeenCalledTimes(1)
+    })
+
+    it("hears Capacitor's document pause as well", () => {
+      const confirm = jest.fn()
+      confirmBundleHealthyWhenStable({ confirm, hasRendered: () => true })
+      jest.advanceTimersByTime(1000)
+      document.dispatchEvent(new Event('pause'))
+      expect(confirm).toHaveBeenCalledTimes(1)
+    })
+
+    it('ignores a visibilitychange that is not a hide', () => {
+      const confirm = jest.fn()
+      confirmBundleHealthyWhenStable({ confirm, hasRendered: () => true })
+      document.dispatchEvent(new Event('visibilitychange'))
+      expect(confirm).not.toHaveBeenCalled()
+      jest.advanceTimersByTime(BUNDLE_HEALTH_GRACE_MS)
+      expect(confirm).toHaveBeenCalledTimes(1)
+    })
+
+    it('a hide after the grace changes nothing', () => {
+      const confirm = jest.fn()
+      const onVerdict = jest.fn()
+      confirmBundleHealthyWhenStable({
+        confirm,
+        hasRendered: () => true,
+        onVerdict
+      })
+      jest.advanceTimersByTime(BUNDLE_HEALTH_GRACE_MS)
+      expect(onVerdict).toHaveBeenCalledWith({
+        confirmed: true,
+        reason: 'confirmed'
+      })
+      goHidden()
+      document.dispatchEvent(new Event('pause'))
+      expect(confirm).toHaveBeenCalledTimes(1)
+      expect(onVerdict).toHaveBeenCalledTimes(1)
+    })
+
+    it('never confirms a boot that has crashed, hidden or not', () => {
+      const confirm = jest.fn()
+      const onVerdict = jest.fn()
+      confirmBundleHealthyWhenStable({
+        confirm,
+        hasRendered: () => true,
+        onVerdict
+      })
+      window.dispatchEvent(new ErrorEvent('error', { message: 'boom' }))
+      goHidden()
+      expect(confirm).not.toHaveBeenCalled()
+      expect(onVerdict).not.toHaveBeenCalled()
+
+      jest.advanceTimersByTime(BUNDLE_HEALTH_GRACE_MS)
+      expect(confirm).not.toHaveBeenCalled()
+      expect(onVerdict).toHaveBeenCalledWith({
+        confirmed: false,
+        reason: 'boot-error'
+      })
+    })
+
+    it('never confirms a blank screen on a hide; the timer still decides', () => {
+      const confirm = jest.fn()
+      const onVerdict = jest.fn()
+      let rendered = false
+      confirmBundleHealthyWhenStable({
+        confirm,
+        hasRendered: () => rendered,
+        onVerdict
+      })
+      goHidden()
+      expect(confirm).not.toHaveBeenCalled()
+
+      // Still blank when the grace ends: withheld, exactly as before.
+      jest.advanceTimersByTime(BUNDLE_HEALTH_GRACE_MS)
+      expect(confirm).not.toHaveBeenCalled()
+      expect(onVerdict).toHaveBeenCalledWith({
+        confirmed: false,
+        reason: 'not-rendered'
+      })
+
+      // And one that renders after a hide is confirmed by the timer.
+      const confirm2 = jest.fn()
+      confirmBundleHealthyWhenStable({
+        confirm: confirm2,
+        hasRendered: () => rendered
+      })
+      goHidden()
+      rendered = true
+      jest.advanceTimersByTime(BUNDLE_HEALTH_GRACE_MS)
+      expect(confirm2).toHaveBeenCalledTimes(1)
+    })
+
+    it('respects an injected boot reader on a hide', () => {
+      const confirm = jest.fn()
+      confirmBundleHealthyWhenStable({
+        brokeDuringBoot: () => true,
+        confirm,
+        hasRendered: () => true
+      })
+      goHidden()
+      jest.advanceTimersByTime(BUNDLE_HEALTH_GRACE_MS)
+      expect(confirm).not.toHaveBeenCalled()
+    })
+  })
 })
 
 // -------------------------------------------------------------------------

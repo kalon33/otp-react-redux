@@ -17,6 +17,7 @@ import { getPersistenceMode } from '../../util/user'
 import ActiveRoutingPreferences from '../form/active-routing-preferences'
 import AdvancedSettingsPanel from '../form/advanced-settings-panel'
 import BatchSettings from '../form/batch-settings'
+import IntermediateStops from '../form/intermediate-stops'
 import InvisibleA11yLabel from '../util/invisible-a11y-label'
 import LocationField from '../form/connected-location-field'
 import NarrativeItineraries from '../narrative/narrative-itineraries'
@@ -178,6 +179,7 @@ class BatchRoutingPanel extends Component<Props> {
                         selfValidate={planTripClicked}
                         showClearButton={!mobile}
                       />
+                      <IntermediateStops />
                       <LocationField
                         inputPlaceholder={intl.formatMessage(
                           { id: 'common.searchForms.enterDestination' },

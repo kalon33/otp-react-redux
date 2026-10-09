@@ -231,6 +231,10 @@ describe('a one-way trip ends itself after the arrival dwell (13.5)', () => {
     // phone goes quiet — rider indoors, `POSITION_FETCHING` unanswered — and
     // the check is never reached again. This test delivers exactly one fix,
     // the arriving one, and then nothing.
+    // The auto-end says so at `warn`, the level the debug sink carries — at
+    // `log` it never reached a ride's stream (13.5's verifies rested on
+    // arithmetic).
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
     const store = makeStore()
     fakeNow = BASE
     store.run(handlePositionUpdate(fixAt(DEST, BASE)))
@@ -249,6 +253,12 @@ describe('a one-way trip ends itself after the arrival dwell (13.5)', () => {
     expect(store.screens()).toEqual([3])
     expect(store.getGoMode().isActive).toBe(false)
     expect(store.getGoMode().arrivedAt).toBe(null)
+    expect(
+      warn.mock.calls.filter((c) =>
+        String(c[0]).startsWith('[go-mode] auto-end: arrived 480s ago')
+      )
+    ).toHaveLength(1)
+    warn.mockRestore()
   })
 
   it('ends the trip and lands on the search form once the dwell is up', () => {

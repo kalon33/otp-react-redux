@@ -516,12 +516,33 @@ function findHeld(
   return departures.find((d) => d.depMs === held.departureMs) ?? null
 }
 
+/**
+ * The run at `tickTripId` in this poll, when the leg names one and the poll
+ * lists it (38.1). Null otherwise — and then nothing below changes.
+ */
+function tripRun(
+  departures: RouteDeparture[],
+  tickTripId: string | null | undefined
+): RouteDeparture | null {
+  if (!tickTripId) return null
+  return departures.find((d) => tripIdsMatch(d.tripId, tickTripId)) ?? null
+}
+
+/**
+ * Commit to `departureMs`, naming its run: the row at that exact epoch, else
+ * (38.1) the trip's own run when the poll lists it. Without the fallback a
+ * seed one second off every row — the plan's 17:06:44 against the poll's
+ * 17:06:43 — was held with no trip id and could never follow its bus.
+ */
 function holdFor(
   departureMs: number,
-  departures: RouteDeparture[]
+  departures: RouteDeparture[],
+  tickTripId?: string | null
 ): HeldDeparture {
   const match = departures.find((d) => d.depMs === departureMs)
-  return { departureMs, tripId: match?.tripId ?? null }
+  if (match?.tripId) return { departureMs, tripId: match.tripId }
+  const onTrip = tripRun(departures, tickTripId)
+  return { departureMs, tripId: onTrip?.tripId ?? match?.tripId ?? null }
 }
 
 /**
@@ -659,11 +680,12 @@ export function resolveCardDeparture(input: {
     departureOverrideTripId,
     departures,
     graceMs = CARD_HOLD_RELEASE_GRACE_MS,
-    held,
+    held: heldIn,
     nowMs,
     plannedDepartureMs,
     tickTripId
   } = input
+  let held = heldIn
 
   // The rider's own choice is not a projection and is never held against.
   //
@@ -710,6 +732,17 @@ export function resolveCardDeparture(input: {
   }
 
   if (held != null && Number.isFinite(held.departureMs)) {
+    // 38.1: a hold that never learned its run adopts the trip's. On
+    // 2026-09-30 the first render seeded on the plan's 17:06:44, one second
+    // off the poll's 17:06:43 for trip 1:1273254, so the hold carried no trip
+    // id; findHeld then matched by exact epoch only and the card sat on
+    // 17:06:44 for 9m40s while the same bus moved to 17:08:55 — no live mark,
+    // and neither the 19.1 split test nor leftTheFeed could ever fire. With
+    // the trip's run in the poll the hold now names it and follows it.
+    const adopt = held.tripId == null ? tripRun(departures, tickTripId) : null
+    if (adopt?.tripId) {
+      held = { departureMs: held.departureMs, tripId: adopt.tripId }
+    }
     const current = findHeld(departures, held)
     // The same run at whatever time the feed publishes for it now. This is the
     // realtime<->schedule flip: it moves the NUMBER, never the bus — except
@@ -780,11 +813,14 @@ export function resolveCardDeparture(input: {
     }
   }
 
-  const seeded = candidateMs ?? plannedDepartureMs ?? null
+  // 38.1: with no projection yet, seed on the trip's own run when the poll
+  // lists it — its live time, not the plan's board time.
+  const seedRun = candidateMs == null ? tripRun(departures, tickTripId) : null
+  const seeded = candidateMs ?? seedRun?.depMs ?? plannedDepartureMs ?? null
   if (seeded == null) return { departureMs: null, held: null, reason: 'none' }
   return {
     departureMs: seeded,
-    held: holdFor(seeded, departures),
+    held: holdFor(seeded, departures, tickTripId),
     reason: 'seeded'
   }
 }
