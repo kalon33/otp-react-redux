@@ -355,6 +355,63 @@ export const NavFoot = styled.div`
   white-space: nowrap;
 `
 
+// A turn line with its arrow (44.3): the arrow sits left of the words, and
+// the words keep their own NavSub / NavFoot type. The row takes over the
+// line's top margin so the arrow and the text share one baseline box.
+export const NavTurnRow = styled.div<{ $foot?: boolean }>`
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  margin-top: ${(props) => (props.$foot ? '8px' : '4px')};
+  min-width: 0;
+
+  & > ${NavSub}, & > ${NavFoot} {
+    align-items: baseline;
+    display: flex;
+    flex: 1;
+    margin-top: 0;
+    min-width: 0;
+    white-space: normal;
+  }
+`
+
+// The words of a turn line beside its arrow: up to two lines, so a long
+// street name wraps instead of pushing the distance off the card (the 360 and
+// 390 px review shots cut "· 295 ft" to "· 2…" when it was one line).
+export const TurnWords = styled.span`
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  display: -webkit-box;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+`
+
+// …and the distance, which never shrinks or truncates: it is the number the
+// rider acts on.
+export const TurnDistance = styled.span`
+  flex: none;
+  padding-left: 4px;
+  white-space: nowrap;
+`
+
+// The arrow itself: big enough to read at a glance from the handlebars, in
+// the follow toggle's blue. The icon set's SVGs carry no fill of their own,
+// so they take this colour.
+export const TurnArrowBox = styled.span`
+  color: #1565c0;
+  display: inline-flex;
+  flex: none;
+  height: 40px;
+  width: 40px;
+
+  svg {
+    fill: currentColor;
+    height: 100%;
+    width: 100%;
+  }
+`
+
 // Secondary strip at the card bottom for rare controls (alternate departures,
 // reset-to-planned). Only rendered when relevant.
 export const NavExtras = styled.div`
