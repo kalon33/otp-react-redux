@@ -934,6 +934,7 @@ components:
     tripNameRequired: Veuillez entrer un nom pour ce trajet.
   SearchPendingLine:
     bikeTransit: "Vélo + transport en commun : recherche en cours…"
+    bikeTransitMore: "Recherche d’autres trajets vélo + transport en commun…"
     more: "Autres résultats : recherche en cours…"
   SequentialPaneDisplay:
     stepNumber: Étape {step} sur {total}

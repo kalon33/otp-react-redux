@@ -165,9 +165,11 @@ describe('actions > apiV2 > routingQuery fan-out', () => {
       ])
     )
     expect(byModes[JSON.stringify([{ mode: 'TRANSIT' }])]).toBe(10000)
+    // Backlog 38.3: bike + transit goes first at the quick cap; the rider's
+    // own cap follows once the fan-out has settled (progressive-bike-transit.ts).
     expect(
       byModes[JSON.stringify([{ mode: 'TRANSIT' }, { mode: 'BICYCLE' }])]
-    ).toBe(10000)
+    ).toBe(2000)
     expect(byModes[JSON.stringify([{ mode: 'BICYCLE' }])]).toBeUndefined()
     await settleAll()
   })
@@ -199,8 +201,10 @@ describe('actions > apiV2 > routingQuery fan-out', () => {
     dispatch(routingQuery())
     await flush()
 
+    // Cap-bearing = carries a cap at all: bike + transit's quick pass (38.3)
+    // carries 2000, the rest the rider's 10000.
     const capped = () =>
-      sent.filter((req) => req.variables.maxStopCount === 10000)
+      sent.filter((req) => req.variables.maxStopCount !== undefined)
     const street = () =>
       sent.filter((req) => req.variables.maxStopCount === undefined)
     // Before this fix all four went out at once.
@@ -267,8 +271,11 @@ describe('actions > apiV2 > routingQuery fan-out', () => {
     dispatch(routingQuery())
     await settleAll()
 
-    expect(sent).toHaveLength(4)
-    const topUp = sent[3]
+    // The fan-out (3), 38.3's full bike + transit pass, then the top-up.
+    expect(sent).toHaveLength(5)
+    expect(sent[3].variables.maxStopCount).toBe(10000)
+    expect(sent[3].variables.searchWindow).toBe(7200)
+    const topUp = sent[4]
     expect(topUp.variables.searchWindow).toBe(14400)
     expect(topUp.variables.maxStopCount).toBe(2000)
     // The rider's own modes, not a wider set: only the window and the cap
@@ -281,13 +288,13 @@ describe('actions > apiV2 > routingQuery fan-out', () => {
     expect(
       sent.filter((req) => req.variables.searchWindow === 14400)
     ).toHaveLength(1)
-    // And the first three asked for the default window.
+    // And the first four asked for the default window.
     sent
-      .slice(0, 3)
+      .slice(0, 4)
       .forEach((req) => expect(req.variables.searchWindow).toBe(7200))
     // The search is not left looking pending forever.
     expect(otpState.searches[otpState.activeSearchId].pending).toBe(0)
-    expect(otpState.searches[otpState.activeSearchId].response).toHaveLength(4)
+    expect(otpState.searches[otpState.activeSearchId].response).toHaveLength(5)
   })
 
   it('does not widen a window that is already wider', async () => {
@@ -306,7 +313,8 @@ describe('actions > apiV2 > routingQuery fan-out', () => {
     anyGlobal.fetch = controllableServer()
     dispatch(routingQuery())
     await settleAll()
-    expect(sent).toHaveLength(3)
+    // The fan-out and 38.3's full bike + transit pass; no top-up.
+    expect(sent).toHaveLength(4)
     sent.forEach((req) => expect(req.variables.searchWindow).toBe(21600))
   })
 

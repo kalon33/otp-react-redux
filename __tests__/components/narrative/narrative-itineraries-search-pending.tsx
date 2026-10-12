@@ -235,6 +235,50 @@ describe('backlog 38.3 > the results list', () => {
     expect(lineText(wrapper)).toBeNull()
   })
 
+  // Backlog 38.3 (cycle 18): the full-limit bike + transit pass, after the
+  // quick one has already put its trips on the list.
+  const fullPassOut = () => {
+    let otp = requested()
+    ;[0, 1, 2].forEach((i) => {
+      otp = reducer(otp, responseAction(i))
+    })
+    return reducer(otp, {
+      payload: {
+        index: 3,
+        pendingCombo: 'BICYCLE_TRANSIT_FULL',
+        searchId: SEARCH_ID
+      },
+      type: 'ROUTING_EXTRA_REQUEST'
+    })
+  }
+
+  it('full bike + transit pass out: "Looking for more bike + transit trips…" over the trips', () => {
+    const otp = fullPassOut()
+    expect(otp.searches[SEARCH_ID].pending).toBe(1)
+    expect(kindOf(otp)).toBe('BICYCLE_TRANSIT_MORE')
+    const { wrapper } = mountList(otp)
+    expect(lineText(wrapper)).toBe('Looking for more bike + transit trips…')
+    expect(wrapper.find('li').length).toBeGreaterThan(0)
+  })
+
+  it('full pass failed silently: no line, and no error for the list to show', () => {
+    const otp = reducer(fullPassOut(), {
+      payload: { index: 3, pass: 'full', searchId: SEARCH_ID },
+      type: 'ROUTING_SILENT_ERROR'
+    })
+    expect(otp.searches[SEARCH_ID].pending).toBe(0)
+    expect(otp.searches[SEARCH_ID].response.some((r: any) => r?.error)).toBe(
+      false
+    )
+    const { wrapper } = mountList(otp)
+    expect(lineText(wrapper)).toBeNull()
+    const renderer = wrapper.find('ErrorRenderer')
+    expect(renderer.length).toBeGreaterThan(0)
+    expect(Object.keys(renderer.first().prop('errors'))).not.toContain(
+      'SYSTEM_ERROR'
+    )
+  })
+
   if (process.env.SEARCH_PENDING_DUMP) {
     it('dumps the in-flight list for the screenshot', () => {
       let otp = requested()
