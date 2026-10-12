@@ -185,4 +185,110 @@ describe('actions > form', () => {
       expect(types).toContain('SET_MOBILE_SCREEN')
     })
   })
+  /**
+   * 45.1. The Search tap on the phone moves a "(Current Location)" origin to
+   * the newest fix (syncCurrentLocationOrigin) and THEN plans, so the search
+   * is planned for exactly the query formChanged is about to look at. Under
+   * the mobile BOTH_LOCATIONS_CHANGED rule a from-only change used to clear
+   * that search and send the rider back to the form (27 hits, 09-04 to 10-12).
+   */
+  describe('formChanged after the Search tap (45.1)', () => {
+    const to = { lat: 44.97, lon: -93.26, name: 'Dest' }
+    const oldFrom = {
+      category: 'CURRENT_LOCATION',
+      lat: 44.94258,
+      lon: -93.2641,
+      name: '(Current Location)'
+    }
+    const newFrom = { ...oldFrom, lat: 44.9418, lon: -93.26388 }
+
+    const run = (
+      oldQuery: any,
+      newQuery: any,
+      searchQuery: any | null,
+      autoPlan: any = {}
+    ) => {
+      const dispatched: any[] = []
+      const getState = () => ({
+        otp: {
+          activeSearchId: searchQuery ? 'abc' : null,
+          config: { autoPlan },
+          currentQuery: { departArrive: 'DEPART' },
+          goMode: { isActive: false, ui: {} },
+          location: { currentPosition: {} },
+          searches: searchQuery ? { abc: { query: searchQuery } } : {},
+          ui: { mobileScreen: MobileScreens.RESULTS_SUMMARY }
+        }
+      })
+      const dispatch = (action: any): any => {
+        if (typeof action === 'function') return action(dispatch, getState)
+        dispatched.push(action)
+        return action
+      }
+      formChanged(oldQuery, newQuery)(dispatch, getState)
+      return dispatched.map((a) => a.type)
+    }
+
+    let isMobileSpy: jest.SpyInstance
+    beforeEach(() => {
+      isMobileSpy = jest
+        .spyOn(coreUtils.ui, 'isMobile')
+        .mockReturnValue(true) as unknown as jest.SpyInstance
+    })
+    afterEach(() => isMobileSpy.mockRestore())
+
+    it('keeps a search planned for the refreshed Current Location origin', () => {
+      const types = run(
+        { from: oldFrom, to },
+        { from: newFrom, to },
+        {
+          from: newFrom,
+          to
+        }
+      )
+      expect(types).not.toContain('CLEAR_ACTIVE_SEARCH')
+      expect(types).not.toContain('SET_MOBILE_SCREEN')
+    })
+
+    it('still clears when the rider edits the origin to something else', () => {
+      const other = { lat: 44.9, lon: -93.2, name: 'Elsewhere' }
+      const types = run(
+        { from: oldFrom, to },
+        { from: other, to },
+        {
+          from: oldFrom,
+          to
+        }
+      )
+      expect(types).toContain('CLEAR_ACTIVE_SEARCH')
+      expect(types).toContain('SET_MOBILE_SCREEN')
+    })
+
+    it('still clears when no search was planned for the new query', () => {
+      const types = run({ from: oldFrom, to }, { from: newFrom, to }, null)
+      expect(types).toContain('CLEAR_ACTIVE_SEARCH')
+    })
+
+    it('still clears a search planned for a different destination', () => {
+      const types = run(
+        { from: oldFrom, to },
+        { from: newFrom, to },
+        {
+          from: oldFrom,
+          to: { lat: 1, lon: 2 }
+        }
+      )
+      expect(types).toContain('CLEAR_ACTIVE_SEARCH')
+    })
+
+    it('still auto-plans a swap (both locations changed) without clearing', () => {
+      const types = run(
+        { from: oldFrom, to },
+        { from: to, to: oldFrom },
+        { from: oldFrom, to },
+        { mobile: 'BOTH_LOCATIONS_CHANGED' }
+      )
+      expect(types).not.toContain('CLEAR_ACTIVE_SEARCH')
+    })
+  })
 })
