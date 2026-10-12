@@ -341,6 +341,7 @@ components:
     deleteMyAccount: Supprimer mon compte
   ErrorMessage:
     header: Impossible de planifier le trajet
+    noConnectionHeader: Pas de connexion
     warning: Attention
   ExistingAccountDisplay:
     a11y: Accessibilité
@@ -1236,6 +1237,7 @@ util:
       trajet.
     networkUnavailable: Le système {network} n'est pas disponible pour le 
       moment.
+    noConnection: "Impossible de joindre TransitNav. Vérifiez votre signal ou votre Wi-Fi et réessayez."
     noTripFound: Aucun trajet trouvé.
     noTripFoundForMode: Aucun trajet {modes} n'a été trouvé.
     noTripFoundReason: >-
