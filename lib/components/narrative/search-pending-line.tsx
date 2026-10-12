@@ -13,7 +13,10 @@ import { InlineLoading } from './loading'
  * Bike + transit is the slow one (median 8.0 s, n = 24, on the rider's phone),
  * so when it is all that is left the line names it.
  */
-export type SearchPendingKind = 'BICYCLE_TRANSIT' | 'MORE'
+export type SearchPendingKind =
+  | 'BICYCLE_TRANSIT'
+  | 'BICYCLE_TRANSIT_MORE'
+  | 'MORE'
 
 type SearchLike = {
   pending?: number
@@ -31,6 +34,14 @@ export function getSearchPendingKind(
 ): SearchPendingKind | null {
   if (!search || !((search.pending ?? 0) > 0)) return null
   const outstanding = Object.values(search.pendingCombos || {})
+  // The full-limit bike + transit pass (38.3): the quick answer is already on
+  // the list, and this one only adds to it.
+  if (
+    outstanding.length > 0 &&
+    outstanding.every((kind) => kind === 'BICYCLE_TRANSIT_FULL')
+  ) {
+    return 'BICYCLE_TRANSIT_MORE'
+  }
   if (
     outstanding.length > 0 &&
     outstanding.every((kind) => kind === 'BICYCLE_TRANSIT')
@@ -61,6 +72,8 @@ const SearchPendingLine = ({
       <span>
         {kind === 'BICYCLE_TRANSIT' ? (
           <FormattedMessage id="components.SearchPendingLine.bikeTransit" />
+        ) : kind === 'BICYCLE_TRANSIT_MORE' ? (
+          <FormattedMessage id="components.SearchPendingLine.bikeTransitMore" />
         ) : (
           <FormattedMessage id="components.SearchPendingLine.more" />
         )}
