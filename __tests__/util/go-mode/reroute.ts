@@ -514,7 +514,13 @@ describe('quietReplanAccessLeg (leg-scoped with full-trip fallback)', () => {
     const store = makeStore(trip)
     await store.dispatch(quietReplanAccessLeg())
 
-    expect(mockedFetch).toHaveBeenCalledTimes(1)
+    // This answer ends 40 s after the T+660000 bus, so the 16.2 gate refuses
+    // the splice and (46.1) the full-trip fallback asks for the same route's
+    // next departure: two fetches, the scoped one first.
+    expect(mockedFetch).toHaveBeenCalledTimes(2)
+    expect(mockedFetch.mock.calls[1][0].modes).not.toEqual([
+      { mode: 'BICYCLE' }
+    ])
     const payload = mockedFetch.mock.calls[0][0]
     // To the BOARDING STOP, not the destination — the bus legs are not up for
     // re-planning ("only reroute the bike leg, don't switch my bus routes").
