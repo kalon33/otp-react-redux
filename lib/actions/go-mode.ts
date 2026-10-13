@@ -129,6 +129,11 @@ import {
 } from '../util/go-mode/session-persistence'
 import { createTripSession } from '../util/go-mode/trip-session'
 import {
+  pushRiderFix,
+  ridingHeldByVehicle,
+  trackVehicleCompany
+} from '../util/go-mode/vehicle-company'
+import {
   LIVE_BOARD_TIMER_MS,
   shouldTimerPollLiveBoard
 } from '../util/go-mode/live-board-timer'
@@ -731,6 +736,14 @@ export const CARD_DEPARTURE_MISMATCH = 'CARD_DEPARTURE_MISMATCH'
 // of inferred from a screenshot.
 export const BOARD_TIME_SOURCE_DISAGREEMENT = 'BOARD_TIME_SOURCE_DISAGREEMENT'
 export const CLEAR_RIDING = 'CLEAR_RIDING'
+/**
+ * Recording only, like BOARD_TIME_SOURCE_DISAGREEMENT: no reducer consumes it.
+ * The riding fact started (`on: true`) or stopped being held by its bus while
+ * the rider was off the leg's shape — a road detour with the rider aboard
+ * (backlog 47.1). Emitted on the edge only, so the stream shows when the hold
+ * engaged, what the time-aligned distance was, and why it let go.
+ */
+export const RIDING_VEHICLE_HOLD = 'RIDING_VEHICLE_HOLD'
 export const CLEAR_VEHICLE_MATCH = 'CLEAR_VEHICLE_MATCH'
 export const CONFIRM_VEHICLE = 'CONFIRM_VEHICLE'
 export const DISMISS_BOARDING_PROMPT = 'DISMISS_BOARDING_PROMPT'
@@ -7221,6 +7234,9 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     // itself is a pure function (util/go-mode/riding.ts) so it can be tested —
     // this is the seam every riding bug of 2026-08-27 lived in, and it had no
     // coverage at all.
+    //
+    // A finished trip holds nothing (47.1); the block keeps it current.
+    if (alreadyArrived) session.ridingHeldByVehicle = false
     if (!alreadyArrived) {
       // "Has the rider waited at this stop?" is not a function of one fix, so
       // it is accumulated here and handed to the decision. See
@@ -7309,11 +7325,32 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         session.earlyAlightWatch = null
       }
 
+      // Is the bus the fact names still WITH the rider (47.1)? Judged per
+      // feed frame against the rider's own fix at that frame's moment — see
+      // vehicle-company.ts for why `match.distanceMeters` cannot say.
+      session.riderFixRing = pushRiderFix(session.riderFixRing, {
+        lat: position.coords.latitude,
+        lon: position.coords.longitude,
+        tMs: position.timestamp
+      })
+      session.vehicleCompany = trackVehicleCompany(
+        session.vehicleCompany,
+        ridingMatch,
+        session.riderFixRing
+      )
+      const heldByVehicle = ridingHeldByVehicle({
+        company: session.vehicleCompany,
+        match: ridingMatch,
+        nowMs: nowForRiding,
+        riding: ridingNow
+      })
+
       const decision = decideRiding({
         boardStopDwellMs:
           session.boardStopDwell?.legIndex === routeMatch.legIndex
             ? session.boardStopDwell.dwellMs
             : null,
+        clearedRiding: session.clearedRiding,
         earlyAlight: session.earlyAlightWatch,
         earlyAlightedFrom: goMode.earlyAlight
           ? {
@@ -7323,6 +7360,7 @@ export function handlePositionUpdate(position: GeolocationPosition) {
             }
           : null,
         fixAccuracyM: position.coords.accuracy ?? null,
+        heldByVehicle,
         matchedLeg,
         nowMs: nowForRiding,
         offRouteClearMs: RIDING_OFFROUTE_CLEAR_MS,
@@ -7348,6 +7386,8 @@ export function handlePositionUpdate(position: GeolocationPosition) {
           dispatch(setRiding(decision.riding))
         }
       } else if (decision.kind === 'clear') {
+        // Kept so the same trip, bus and leg coming back is the same boarding.
+        session.clearedRiding = ridingNow
         dispatch(clearRiding())
       } else if (decision.kind === 'alightedEarly') {
         // Off the bus, at a stop that is still on its route (8.11). Three
@@ -7366,6 +7406,40 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         dispatch(setEarlyAlight(decision.record))
         dispatch(clearVehicleMatch())
         session.earlyAlightWatch = null
+      }
+
+      // The hold as the status and the deviation card see it (47.1): the
+      // fact survived this tick, its bus is with the rider, and the matcher is
+      // OFF the shape of that bus's own leg. Anywhere else there is no detour
+      // for it to explain. Recorded on the edge only.
+      const ridingAfter = getState().otp?.goMode?.riding ?? null
+      const heldLegIndex = ridingTransitLegIndex(itinerary.legs, ridingAfter)
+      const holdEngaged =
+        heldByVehicle &&
+        ridingAfter != null &&
+        heldLegIndex >= 0 &&
+        heldLegIndex === routeMatch.legIndex &&
+        !routeMatch.isOnRoute
+      if (holdEngaged !== session.ridingHeldByVehicle) {
+        dispatch({
+          payload: {
+            distanceFromRouteM: Math.round(routeMatch.distanceFromRoute),
+            frameSeconds: session.vehicleCompany?.lastFrameSeconds ?? null,
+            legIndex: routeMatch.legIndex,
+            on: holdEngaged,
+            riding: ridingAfter != null,
+            tMs: nowForRiding,
+            togetherAtMs: session.vehicleCompany?.lastTogetherAtMs ?? null,
+            vehicleDistanceM:
+              session.vehicleCompany?.lastDistanceM != null
+                ? Math.round(session.vehicleCompany.lastDistanceM)
+                : null,
+            vehicleId: ridingAfter?.vehicleId ?? null,
+            verdict: session.vehicleCompany?.verdict ?? null
+          },
+          type: RIDING_VEHICLE_HOLD
+        })
+        session.ridingHeldByVehicle = holdEngaged
       }
 
       // ── The app noticing a boarding BY ITSELF, on an access leg (23.6) ────
@@ -7610,7 +7684,10 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       aboardBeforeLeg,
       // ...and the evidenced riding fact, which ends the platform wait: a
       // rider the feed has confirmed aboard is riding, not standing (18.6).
-      goMode.riding?.legIndex ?? null
+      goMode.riding?.legIndex ?? null,
+      // ...and a bus on a road detour with the rider in it is not the rider
+      // off route (47.1): the clock decides, as for 22.1.
+      session.ridingHeldByVehicle
     )
 
     // The rider's MEASURED pace, and the missed-bus classifier's last verdict.
@@ -8073,7 +8150,9 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         geometryChangedAtMs: session.geometryChangedAtMs,
         handledAtMs: session.deviationHandledAtMs,
         nowMs: currentTime.getTime(),
-        replanImminent: quietReplanImminent
+        replanImminent: quietReplanImminent,
+        // Still told — the rider asked for that — but at medium (47.1, Q1 "C").
+        ridingHeldByVehicle: session.ridingHeldByVehicle
       },
       // The rider's turn-by-turn switch for the leg they are actually on: off
       // globally unless they said otherwise on the Settings screen, and

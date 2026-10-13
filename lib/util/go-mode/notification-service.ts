@@ -1586,6 +1586,17 @@ export interface DeviationAlertGate {
    * about a problem the app is about to fix without them.
    */
   replanImminent?: boolean
+  /**
+   * The rider is held aboard a confirmed bus that is itself off the leg's
+   * shape — a road detour, not the rider leaving their route
+   * (`ridingHeldByVehicle`, util/go-mode/vehicle-company; backlog 47.1). The
+   * card still goes out, on every rule above, but at MEDIUM priority: the
+   * rider's own choice for this case (2026-10-13, "C" — keep the "Off route"
+   * card, not urgent). Medium is the blue toast with no vibration
+   * (`showNotification` buzzes for high only); ROUTE_DEVIATION is not a phone
+   * push type in either case.
+   */
+  ridingHeldByVehicle?: boolean
 }
 
 /** Is `stampMs` inside `windowMs` of `nowMs`? Unknown stamps never suppress. */
@@ -1651,7 +1662,7 @@ export function checkRouteDeviation(
       },
       { metres: Math.round(distanceFromRoute) }
     ),
-    priority: 'high',
+    priority: gate?.ridingHeldByVehicle ? 'medium' : 'high',
     timestamp: new Date(),
     title: intl.formatMessage({
       defaultMessage: 'Off route',
