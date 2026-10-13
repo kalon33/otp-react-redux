@@ -582,7 +582,13 @@ export function determineTripStatus(
    * `waitingAtBoardingStop`. Defaults false, which is the behaviour this
    * function had before backlog 18.6.
    */
-  waitingAtStop = false
+  waitingAtStop = false,
+  /**
+   * The rider is held aboard a confirmed bus that is off this leg's shape —
+   * see `ridingHeldByVehicle` in util/go-mode/vehicle-company. Defaults
+   * false, which is the behaviour this function had before backlog 47.1.
+   */
+  ridingHeldByVehicle = false
 ): TripStatus {
   // Arrival is tested FIRST, ahead of the deviation checks. It used to run
   // last, which meant a rider standing at their destination could never be
@@ -621,7 +627,13 @@ export function determineTripStatus(
   // exemption is narrow by construction — see the four gates on
   // `aboardBeforeLegStart` — and ends the moment the projection moves off the
   // leg's start, so a genuine detour mid-leg is still `deviated`.
-  if (!routeMatch.isOnRoute && !aboardBeforeLeg) {
+  //
+  // The same holds for a bus on a road detour with the rider in it (47.1):
+  // on 2026-10-12 8143 ran ~750 m east of the Orange Line 16:22:58-16:32:02
+  // and this read `deviated` the whole way, which is what the ride daemon's
+  // deviated-streak pages on. Off the shape, progress is genuinely unknown,
+  // so the clock decides, exactly as for 22.1.
+  if (!routeMatch.isOnRoute && !aboardBeforeLeg && !ridingHeldByVehicle) {
     return 'deviated'
   }
 
@@ -1078,7 +1090,9 @@ export function calculateTripProgress(
    * function had before 18.6.
    */
   ridingLegIndex: number | null = null,
-  intl?: IntlShape
+  intl?: IntlShape,
+  /** See {@link determineTripStatus}. Defaults false. */
+  ridingHeldByVehicle = false
 ): TripProgress {
   const legs = itinerary.legs
   const currentLegIndex = routeMatch?.legIndex || 0
@@ -1164,7 +1178,8 @@ export function calculateTripProgress(
     distanceToDestination,
     aboardBeforeLeg,
     finalLegProgress,
-    waitingAtStop
+    waitingAtStop,
+    ridingHeldByVehicle
   )
 
   const currentLeg = legs[currentLegIndex]

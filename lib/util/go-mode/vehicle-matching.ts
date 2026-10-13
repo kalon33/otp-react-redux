@@ -72,6 +72,17 @@ export interface VehicleMatchResult {
    */
   frameKey?: string | null
   /**
+   * The matched record's own position and `seconds` — WHERE the bus was and
+   * WHEN — so the rider can be compared with it at that same moment
+   * (vehicle-company.ts, backlog 47.1). `distanceMeters` is the rider NOW
+   * against this frame, which on a feed whose frames are 21-68 s old swings by
+   * a kilometre at speed with the rider aboard. Filled by
+   * refreshConfirmedMatch; absent on a frame with no usable `seconds`.
+   */
+  frameLat?: number | null
+  frameLon?: number | null
+  frameSeconds?: number | null
+  /**
    * The last USABLE heading of the matched vehicle: the frame's own when it has
    * one, otherwise the one carried from the previous match of the same
    * vehicle. This feed publishes `heading: null` at a standstill, and while

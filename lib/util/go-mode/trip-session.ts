@@ -30,7 +30,9 @@ import type { DestinationProgressState } from './destination-progress'
 import type { DeviatedStreak } from './replan-acceptance'
 import type { MissedBusAttempt } from './missed-bus-recovery'
 import type { PacingCardState } from './pacing-card'
+import type { RiderFix, VehicleCompany } from './vehicle-company'
 import type { RiderSpeedAnchorBucket, RiderSpeedSample } from './rider-speed'
+import type { RidingState } from './types'
 import type { TimedSimulationPoint } from './geometry'
 import type { TransitPaceRun } from './deviation'
 
@@ -64,6 +66,12 @@ export interface TripSession {
    * BOARD_STOP_DWELL_MIN_MS in riding.ts.
    */
   boardStopDwell: BoardStopDwell | null
+
+  /**
+   * The riding fact the off-route clock dropped last, so a re-establishment
+   * of the same trip, bus and leg keeps its board time (backlog 47.1).
+   */
+  clearedRiding: RidingState | null
 
   /**
    * Closest approach to the destination so far, and how many re-plans have gone
@@ -336,6 +344,9 @@ export interface TripSession {
    */
   riderDeniedBoardingAtMs: number | null
 
+  /** The rider's last ~120 s of fixes, for vehicle-company.ts (47.1). */
+  riderFixRing: RiderFix[]
+
   /**
    * The sparse ride-level companion to riderSpeedSamples: one peak moving fix
    * per minute of riding, fed from the same gate. It is what puts a floor under
@@ -351,6 +362,9 @@ export interface TripSession {
    * instantaneous sample is worse than no sample at all.
    */
   riderSpeedSamples: RiderSpeedSample[]
+
+  /** Whether the last tick's riding fact was held by its bus (47.1). */
+  ridingHeldByVehicle: boolean
 
   /** Epoch ms — the "current time" in simulation-land. */
   simulatedTimeMs: number
@@ -388,6 +402,9 @@ export interface TripSession {
    */
   transitPace: TransitPaceRun | null
 
+  /** The ridden bus's time-aligned company verdict (47.1). */
+  vehicleCompany: VehicleCompany | null
+
   /** Vehicle-position polling interval. */
   vehiclePositionIntervalId: ReturnType<typeof setInterval> | null
 
@@ -401,6 +418,7 @@ export function createTripSession(): TripSession {
     accessBoard: null,
     autoEndTimeoutId: null,
     boardStopDwell: null,
+    clearedRiding: null,
     destinationProgress: null,
     deviatedSince: null,
     deviationHandledAtMs: null,
@@ -440,8 +458,10 @@ export function createTripSession(): TripSession {
     returnRefreshInFlight: false,
     riderBoardingMiss: null,
     riderDeniedBoardingAtMs: null,
+    riderFixRing: [],
     riderSpeedAnchor: [],
     riderSpeedSamples: [],
+    ridingHeldByVehicle: false,
     simulatedTimeMs: 0,
     simulationActive: false,
     simulationCoords: [],
@@ -449,6 +469,7 @@ export function createTripSession(): TripSession {
     staleStartOriginPending: null,
     stopCountLatch: null,
     transitPace: null,
+    vehicleCompany: null,
     vehiclePositionIntervalId: null,
     visibilityChangeHandler: null
   }
