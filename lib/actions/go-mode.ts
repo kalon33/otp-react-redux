@@ -190,7 +190,9 @@ import {
   nextDeviatedSince,
   originGapMeters,
   pickHopFreeSibling,
+  firstBoardStopMeasure,
   planRunLeftBeforeRider,
+  riderAtFirstBoardStop,
   startOriginIsStale
 } from '../util/go-mode/replan-acceptance'
 import { accessArriveByTarget } from '../util/go-mode/arrive-on-time'
@@ -1905,6 +1907,37 @@ export function recoverStaleStartOrigin() {
         riding: !!goMode.riding
       })
     ) {
+      return
+    }
+
+    // 47.2: a stale ACCESS leg is not a stale plan when the rider is already
+    // standing at the first board stop in time for its run — re-planning there
+    // threw away the bus at the platform (2026-10-12 16:17:15). Keep the plan;
+    // the matcher's leg transition moves them onto the transit leg. The latch
+    // is already spent above, exactly as on the re-plan path.
+    const nowMs = Date.now()
+    if (
+      riderAtFirstBoardStop({
+        accuracyM: coords.accuracy ?? null,
+        itinerary,
+        liveLegTimes: goMode.liveLegTimes,
+        nowMs,
+        position
+      })
+    ) {
+      const at = firstBoardStopMeasure({
+        itinerary,
+        liveLegTimes: goMode.liveLegTimes,
+        position
+      })
+      // eslint-disable-next-line no-console
+      console.log(
+        `[go-mode] plan origin stale but rider ${Math.round(
+          at?.distanceM ?? 0
+        )}m from the first board stop, board in ${Math.round(
+          ((at?.boardMs ?? nowMs) - nowMs) / 1000
+        )}s — keeping the plan (47.2)`
+      )
       return
     }
 
