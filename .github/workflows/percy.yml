@@ -39,15 +39,17 @@ jobs:
         env:
           YAML_CONFIG: ./percy/har-mock-config${{ matrix.suffix }}.yml
           JS_CONFIG: ./percy/har-mock-config${{ matrix.suffix }}.js
+      # Percy snapshots are skipped (not failed) when the token is not
+      # configured for this fork — otherwise the job fails on every push.
+      # The token is read at run time, not in the `if`, because GitHub does not
+      # allow dynamic `secrets[...]` lookups inside step conditionals.
       - name: Take Percy Snapshots
-        # Percy snapshots are skipped (not failed) when the token is not
-        # configured for this fork — the percy CLI exits 0 on a missing token
-        # only with this guard, otherwise the job fails on every push.
-        if: ${{ secrets[matrix.token] != '' }}
-        run: npx percy exec -- npx jest percy/percy.test.js --force-exit
+        run: |
+          if [ -z "$PERCY_TOKEN" ]; then
+            echo "Percy token not configured; skipping visual snapshots."
+            exit 0
+          fi
+          npx percy exec -- npx jest percy/percy.test.js --force-exit
         env:
           PERCY_TOKEN: ${{ secrets[matrix.token] }}
           OTP_RR_UI_MODE: ${{ matrix.mode }}
-      - name: Skip Percy Snapshots (no token)
-        if: ${{ secrets[matrix.token] == '' }}
-        run: echo "Percy token not configured; skipping visual snapshots."
