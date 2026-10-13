@@ -1679,6 +1679,12 @@ export function beginGoMode(
      */
     originUnchanged?: boolean
     roundTrip?: RoundTripPlan | null
+    /**
+     * Distance units for turn-by-turn cue distances. Absent reads the
+     * config (imperial by default), as internal re-plan callers pass no
+     * options.
+     */
+    units?: 'imperial' | 'metric'
   } = {}
 ) {
   return async function (dispatch: any, getState: any) {
