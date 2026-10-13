@@ -13,7 +13,10 @@ import {
   bearingDegrees,
   PROJECTION_MIN_SPEED_MPS
 } from './replan-origin'
-import { calculateDistance } from './position-matching'
+import {
+  calculateDistance,
+  TRANSIT_BOARD_STOP_RADIUS_M
+} from './position-matching'
 import { legTripId } from './leg-merge'
 import type { LiveLegTime } from './types'
 
@@ -360,6 +363,107 @@ export function startOriginIsStale({
       ? Math.max(START_ORIGIN_MAX_M, accuracyM * 2)
       : START_ORIGIN_MAX_M
   return gap > floor
+}
+
+/**
+ * How far in the past the first transit leg's board time may sit and the
+ * rider, standing at that stop, still count as in time for it (backlog 47.2).
+ *
+ * A board time is a prediction, and the stop is where the rider finds out how
+ * good it was: on 2026-10-12 the plan's own scheduled 16:15:00 run for the
+ * Orange Line sat at the platform at 16:16:43 and the rider boarded it at
+ * 16:17:26. Two minutes is `PLAN_RUN_LEFT_SLACK_MS`'s own figure for "a run due
+ * within this of the rider is not proof they missed it". Past that, the run is
+ * gone and today's re-plan (12.13) is the right answer.
+ */
+export const START_AT_BOARD_STOP_PAST_MS = 120000
+
+/**
+ * Where the rider stands relative to the plan's first board stop, or null when
+ * the plan has no access leg before a transit leg (backlog 47.2).
+ *
+ * `boardMs` is the LATER of the leg's `startTime` and the live board epoch for
+ * that leg when one is known: either is evidence the run has not left yet, and
+ * a "no earlier than" floor is still that.
+ */
+export function firstBoardStopMeasure({
+  itinerary,
+  liveLegTimes,
+  position
+}: {
+  itinerary: Itinerary | null | undefined
+  /** goMode.liveLegTimes, keyed by this itinerary's leg index. */
+  liveLegTimes?: Record<number, LiveLegTime> | null
+  position: [number, number] | null | undefined
+}): { boardMs: number; distanceM: number; legIndex: number } | null {
+  if (!itinerary || !position) return null
+  const legs = (itinerary.legs || []) as Leg[]
+  const legIndex = legs.findIndex((leg) => leg.transitLeg)
+  // A plan that STARTS on transit has no access leg to be stale about — the
+  // onboard flow's shape, which startOriginIsStale already leaves alone.
+  if (legIndex <= 0) return null
+  const leg = legs[legIndex]
+  const from = leg.from
+  if (from?.lat == null || from?.lon == null) return null
+  const distanceM = calculateDistance(
+    position[0],
+    position[1],
+    Number(from.lat),
+    Number(from.lon)
+  )
+  const planned = Number(leg.startTime)
+  const live = Number(liveLegTimes?.[legIndex]?.boardEpoch)
+  const boardMs = Math.max(
+    Number.isFinite(planned) && planned > 0 ? planned : -Infinity,
+    Number.isFinite(live) && live > 0 ? live : -Infinity
+  )
+  if (!Number.isFinite(boardMs)) return null
+  return { boardMs, distanceM, legIndex }
+}
+
+/**
+ * Is the rider already standing at the plan's first board stop, in time for
+ * its run (backlog 47.2)?
+ *
+ * The stale-start check (12.13) measures only the plan's FIRST leg: on
+ * 2026-10-12 16:17:15 that was a 2,141 m bike leg from the 15:50 search's
+ * origin, so the plan read as stale and was re-planned — but the rider was 63 m
+ * from I-35W & 98th St Station (fix accurate to 13.8 m) with bus 8143, the
+ * plan's own trip 1:1364433, at the platform. The re-plan dropped that trip for
+ * one 14 minutes later and pushed "Trip updated"; boarding 8143 then pushed a
+ * second, contradicting one. A rider at the board stop in time for its bus is
+ * not on a stale plan: only the access leg they have already travelled is, and
+ * the matcher's leg transition handles that.
+ *
+ * True only when:
+ * - the plan has a non-transit leg before its first transit leg;
+ * - the rider is within `TRANSIT_BOARD_STOP_RADIUS_M` (120 m) of that leg's
+ *   `from` stop, widened by a poor fix exactly as startOriginIsStale widens
+ *   (twice the accuracy radius when that is larger);
+ * - its board time (see firstBoardStopMeasure) is no more than
+ *   `START_AT_BOARD_STOP_PAST_MS` in the past.
+ */
+export function riderAtFirstBoardStop({
+  accuracyM,
+  itinerary,
+  liveLegTimes,
+  nowMs,
+  position
+}: {
+  accuracyM?: number | null
+  itinerary: Itinerary | null | undefined
+  liveLegTimes?: Record<number, LiveLegTime> | null
+  nowMs: number
+  position: [number, number] | null | undefined
+}): boolean {
+  const measure = firstBoardStopMeasure({ itinerary, liveLegTimes, position })
+  if (!measure) return false
+  const radius =
+    accuracyM != null && Number.isFinite(accuracyM) && accuracyM > 0
+      ? Math.max(TRANSIT_BOARD_STOP_RADIUS_M, accuracyM * 2)
+      : TRANSIT_BOARD_STOP_RADIUS_M
+  if (measure.distanceM > radius) return false
+  return measure.boardMs >= nowMs - START_AT_BOARD_STOP_PAST_MS
 }
 
 /**
