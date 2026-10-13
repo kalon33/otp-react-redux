@@ -48,7 +48,7 @@ describe('actions > apiV2 > routingQuery progressive bike + transit (38.3)', () 
   const baseConfig = {
     api: { host: 'http://mock-host.com', path: '/api', port: 80 },
     homeTimezone: 'America/Chicago',
-    itinerary: {},
+    itinerary: { enableMaxStopCount: true },
     modes: {
       initialState: { enabledModeButtons: ['transit', 'bicycle'] },
       modeButtons: [
@@ -459,7 +459,10 @@ describe('actions > apiV2 > routingQuery progressive bike + transit (38.3)', () 
   })
 
   it('no second pass when the rider’s cap is already 2000', async () => {
-    init({ ...baseConfig, itinerary: { maxStopCount: 2000 } })
+    init({
+      ...baseConfig,
+      itinerary: { maxStopCount: 2000, enableMaxStopCount: true }
+    })
     anyGlobal.fetch = server(happy)
     dispatch(routingQuery())
     await settleAll()
