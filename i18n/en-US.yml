@@ -330,6 +330,7 @@ components:
     deleteMyAccount: Delete my account
   ErrorMessage:
     header: Could Not Plan Trip
+    noConnectionHeader: No connection
     warning: Warning
   ExistingAccountDisplay:
     a11y: Accessibility
@@ -925,6 +926,7 @@ components:
     tripNameRequired: Please enter a trip name.
   SearchPendingLine:
     bikeTransit: Bike + transit still searching…
+    bikeTransitMore: Looking for more bike + transit trips…
     more: More results still searching…
   SequentialPaneDisplay:
     stepNumber: Step {step} of {total}
@@ -1195,6 +1197,7 @@ util:
   state:
     errorPlanningTrip: An error occurred while planning a trip.
     networkUnavailable: The {network} network is unavailable at this moment.
+    noConnection: Couldn't reach TransitNav. Check your signal or Wi-Fi and try again.
     noTripFound: No trip found.
     noTripFoundForMode: No trip found for {modes}.
     noTripFoundReason: There may be no transit service within the maximum specified distance or at the
