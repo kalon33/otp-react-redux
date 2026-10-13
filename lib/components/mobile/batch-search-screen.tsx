@@ -16,6 +16,7 @@ import {
 } from '../form/styled'
 import { alertUserTripPlan } from '../form/util'
 import { MobileScreens } from '../../actions/ui-constants'
+import { RoutingQueryCallResult } from '../../actions/api-constants'
 import ActiveRoutingPreferences from '../form/active-routing-preferences'
 import AdvancedSettingsPanel from '../form/advanced-settings-panel'
 import BatchSettings from '../form/batch-settings'
@@ -108,6 +109,7 @@ class BatchSearchScreen extends Component<Props> {
       currentQuery,
       intl,
       routingQuery,
+      setMobileScreen,
       syncCurrentLocationOrigin,
       updateQueryTimeIfLeavingNow
     } = this.props
@@ -122,7 +124,16 @@ class BatchSearchScreen extends Component<Props> {
       intl,
       currentQuery,
       () => this.setState({ planTripClicked: true }),
-      routingQuery
+      () => {
+        const result = routingQuery()
+        // Open the results ourselves: componentDidUpdate only does it on a
+        // null -> set change of activeSearch, which a cleared-and-replaced
+        // search never produces (backlog 45.1).
+        if (result === RoutingQueryCallResult.SUCCESS) {
+          setMobileScreen(MobileScreens.RESULTS_SUMMARY)
+        }
+        return result
+      }
     )
   }
 

@@ -355,6 +355,18 @@ export const STOP_CAP_RANGE: readonly [number, number] = [2000, 20000]
 /** What a rider-initiated plan asks for unless the rider or config says otherwise. */
 export const DEFAULT_MAX_STOP_COUNT = 10000
 
+/**
+ * Backlog 38.3: the cap bike + transit is asked at FIRST, so its answer lands
+ * in ~2 s; a second pass at the rider's own cap follows and is merged in
+ * (`routingQuery`, actions/apiV2.js). 2000 is the server's own default and the
+ * shape 14.2's widen and Go Mode's background plans already use, so it adds no
+ * new transfer-cache shape. Measured 2026-10-12 on the Linode, the app's own
+ * query, six of the rider's trips: 1.5-3.4 s at 2000 against 7.0-11.4 s at
+ * 10000 on the city trips, same best arrival at every cap; 5000 was 5.3-12.9 s
+ * and built a fresh transfer cache each time, so it was ruled out.
+ */
+export const FIRST_PASS_STOP_CAP = 2000
+
 /** Steps offered by the panel's "how far to look for a stop" control. */
 export const STOP_CAP_OPTIONS = [2000, 10000, 20000]
 

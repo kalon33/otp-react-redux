@@ -35,6 +35,8 @@ const ErrorMessage = ({
         <IconWithText Icon={ExclamationCircle}>
           {warning ? (
             <FormattedMessage id="components.ErrorMessage.warning" />
+          ) : error?.noConnection ? (
+            <FormattedMessage id="components.ErrorMessage.noConnectionHeader" />
           ) : (
             <FormattedMessage id="components.ErrorMessage.header" />
           )}
