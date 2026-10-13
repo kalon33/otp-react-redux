@@ -798,6 +798,10 @@ components:
       body: "{inputFieldsCount, plural, =0 {} one {Votre {inputFields} est trop loin}\
         \ other {Vos {inputFields} sont trop loins}} du r\xE9seau routier."
       header: Lieu inaccessible
+    NO_DIRECT_MODE_CONNECTION:
+      body: "L'origine et la destination sont peut-être trop éloignées ou non
+        reliées directement par le mode de transport demandé."
+      header: "Aucun trajet direct trouvé."
     NO_STOPS_IN_RANGE:
       body: '{inputFieldsCount, plural, =0 {} one {Votre {inputFields} est trop loin}
         other {Vos {inputFields} sont trop loins}} des transports.'
@@ -1081,6 +1085,9 @@ components:
     timetable: Horaires
     timetableDate: "S\xE9lectionner la date"
   TransitVehicleOverlay:
+    in_transit_to: 'Prochain arrêt : {stop}'
+    incoming_at: 'Approche de : {stop}'
+    stopped_at: "Portes ouvertes à {stop}"
     travelingAt: 'Vitesse : {milesPerHour}'
     vehicleName: "V\xE9hicule {vehicleNumber}"
   TripBasicsPane:
