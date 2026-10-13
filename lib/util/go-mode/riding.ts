@@ -737,6 +737,14 @@ export interface RidingDecisionInput {
    */
   boardStopDwellMs?: number | null
   /**
+   * The riding fact the off-route clock dropped last on this trip, if any.
+   * Re-establishing the SAME trip, bus and leg is the same boarding, so its
+   * board time is kept rather than re-stamped (backlog 47.1: the 2026-10-12
+   * detour re-stamped 16:17:26 as 16:31:43). Omitted (or null) is today's
+   * behaviour exactly.
+   */
+  clearedRiding?: RidingState | null
+  /**
    * The rider-versus-vehicle divergence watch for this leg, per
    * {@link trackEarlyAlight}. Omitted (or null) reads as "no divergence
    * observed", which is today's behaviour exactly.
@@ -756,6 +764,13 @@ export interface RidingDecisionInput {
   } | null
   /** Reported accuracy of the fix behind this tick, in metres. */
   fixAccuracyM?: number | null
+  /**
+   * The bus the fact names is verifiably still with the rider — see
+   * `ridingHeldByVehicle` (util/go-mode/vehicle-company). While true, being off
+   * the leg's shape is the BUS's detour, not the rider leaving it, and the
+   * off-route clock does not run. Omitted (or false) is today's behaviour.
+   */
+  heldByVehicle?: boolean
   /** The leg the matcher currently favours. */
   matchedLeg: Leg | null | undefined
   nowMs: number
@@ -1002,9 +1017,11 @@ export function firstEstablishmentIsCorroborated(input: {
 export function decideRiding(input: RidingDecisionInput): RidingDecision {
   const {
     boardStopDwellMs,
+    clearedRiding,
     earlyAlight,
     earlyAlightedFrom,
     fixAccuracyM,
+    heldByVehicle,
     matchedLeg,
     nowMs,
     offRouteClearMs,
@@ -1036,6 +1053,26 @@ export function decideRiding(input: RidingDecisionInput): RidingDecision {
     // fact with no trip, or one no real bus stands behind) nothing changes.
     if (
       ridingCorridor?.isOnRoute === true &&
+      prevRiding.tripId != null &&
+      ridingFactIsEvidenced(prevRiding)
+    ) {
+      return prevRiding.offRouteSince == null
+        ? { kind: 'none' }
+        : { kind: 'set', riding: { ...prevRiding, offRouteSince: null } }
+    }
+    // The bus itself is off its shape, with the rider in it (47.1).
+    //
+    // On 2026-10-12 bus 8143 detoured ~750 m east of the Orange Line for nine
+    // minutes with the rider aboard. The corridor above cannot see that — the
+    // ridden trip's shape is the very one the bus had left — so the clock
+    // stamped 16:23:00 and dropped the fact at 16:24:31, while every frame of
+    // 8143, read against the rider at that frame's own moment, was within
+    // 30 m. When the caller can say the named bus is still WITH the rider
+    // (confirmed match, time-aligned company, not silent past the cap), the
+    // fact refreshes exactly as on the corridor; the moment that evidence
+    // lapses or turns apart, the clock runs as before.
+    if (
+      heldByVehicle === true &&
       prevRiding.tripId != null &&
       ridingFactIsEvidenced(prevRiding)
     ) {
@@ -1224,12 +1261,25 @@ export function decideRiding(input: RidingDecisionInput): RidingDecision {
   // even once a real bus (1:8216, 127.9 m) had been identified. When
   // unevidenced state first gains a real vehicle id, the confirmation IS the
   // boarding moment.
-  const boardedAt =
-    prevRiding != null &&
-    (ridingFactIsEvidenced(prevRiding) ||
-      !ridingFactIsEvidenced({ vehicleId: nextVehicleId }))
-      ? prevRiding.boardedAt
-      : nowMs
+  //
+  // And a fact the off-route clock dropped, coming back on the SAME trip, bus
+  // and leg, is the same boarding: the 2026-10-12 detour lost 16:17:26 to a
+  // re-stamp at 16:31:43 (47.1).
+  const resumesClearedFact =
+    prevRiding == null &&
+    clearedRiding != null &&
+    clearedRiding.tripId != null &&
+    clearedRiding.tripId === nextTripId &&
+    ridingFactIsEvidenced(clearedRiding) &&
+    clearedRiding.vehicleId === nextVehicleId &&
+    clearedRiding.legIndex === routeMatch.legIndex
+  const boardedAt = resumesClearedFact
+    ? clearedRiding.boardedAt
+    : prevRiding != null &&
+      (ridingFactIsEvidenced(prevRiding) ||
+        !ridingFactIsEvidenced({ vehicleId: nextVehicleId }))
+    ? prevRiding.boardedAt
+    : nowMs
 
   return {
     kind: 'set',

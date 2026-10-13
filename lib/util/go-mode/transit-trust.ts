@@ -274,6 +274,12 @@ export function refreshConfirmedMatch(
     // Sub-metre precision on a GTFS-RT position is noise; this value is only
     // ever displayed or threshold-compared.
     distanceMeters,
+    frameLat: vehicle.lat,
+    frameLon: vehicle.lon,
+    frameSeconds:
+      typeof vehicle.seconds === 'number' && Number.isFinite(vehicle.seconds)
+        ? vehicle.seconds
+        : null,
     lastSeen: observedMs,
     nextStopId: vehicle.nextStopId ?? previousMatch.nextStopId,
     // Headsign travels WITH the trip id. shouldReplanBoardedEarlier's
