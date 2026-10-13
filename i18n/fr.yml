@@ -354,6 +354,7 @@ components:
     nonTransit: Alternatives
   ErrorMessage:
     header: Impossible de planifier le trajet
+    noConnectionHeader: Pas de connexion
     warning: Attention
   ExistingAccountDisplay:
     a11y: "Accessibilit\xE9"
@@ -980,6 +981,7 @@ components:
     tripNameRequired: Veuillez entrer un nom pour ce trajet.
   SearchPendingLine:
     bikeTransit: "Vélo + transport en commun : recherche en cours…"
+    bikeTransitMore: "Recherche d’autres trajets vélo + transport en commun…"
     more: "Autres résultats : recherche en cours…"
   SequentialPaneDisplay:
     stepNumber: "\xC9tape {step} sur {total}"
@@ -1277,6 +1279,7 @@ util:
   state:
     errorPlanningTrip: Une erreur s'est produite lors de la planification du trajet.
     networkUnavailable: "Le syst\xE8me {network} n'est pas disponible pour le moment."
+    noConnection: "Impossible de joindre TransitNav. V\xE9rifiez votre signal ou votre Wi-Fi et r\xE9essayez."
     noTripFound: "Aucun trajet trouv\xE9."
     noTripFoundForMode: "Aucun trajet {modes} n'a \xE9t\xE9 trouv\xE9."
     noTripFoundReason: "Vos points de d\xE9part et d'arriv\xE9e ne sont peut-\xEA\

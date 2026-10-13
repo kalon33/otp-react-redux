@@ -438,7 +438,8 @@ export function findItineraryIndexByKey(
 function splitIdentityKey(key: string): [number, string] {
   const at = key.lastIndexOf('@')
   if (at === -1) return [NaN, key]
-  return [Number(key.slice(at + 1)), key.slice(0, at)]}
+  return [Number(key.slice(at + 1)), key.slice(0, at)]
+}
 
 /**
  * Which itinerary the URL is asking the results list to select, or null to

@@ -190,7 +190,9 @@ import {
   nextDeviatedSince,
   originGapMeters,
   pickHopFreeSibling,
+  firstBoardStopMeasure,
   planRunLeftBeforeRider,
+  riderAtFirstBoardStop,
   startOriginIsStale
 } from '../util/go-mode/replan-acceptance'
 import { accessArriveByTarget } from '../util/go-mode/arrive-on-time'
@@ -1540,19 +1542,42 @@ function recordQuietReplanPlan(
  * do when a plan comes back empty, so retry semantics are unchanged: refusing a
  * worse plan is the same outcome as finding no plan, not an error.
  */
+type AutoReplanOptions = {
+  currentPlanIsDead?: boolean
+  /** 35.2 — waives only the arrival test; see AutoReplanContext. */
+  currentPlanLeftByRider?: boolean
+  /**
+   * 46.1 — the scoped answer for the held plan was just refused
+   * `access-misses-board`: from where the rider is, the held bus is gone.
+   * Waives only the arrival test, exactly as 35.2 does; the candidate's own
+   * access leg is still held to its own bus (16.2).
+   */
+  heldBoardMissed?: boolean
+  /** What the origin was advanced by, when the caller projected it. */
+  projected?: ProjectedOrigin | null
+  reason?: string | null
+}
+
 function autoReplanRejected(
   dispatch: any,
   state: any,
   candidate: Itinerary,
-  options: {
-    currentPlanIsDead?: boolean
-    /** 35.2 — waives only the arrival test; see AutoReplanContext. */
-    currentPlanLeftByRider?: boolean
-    /** What the origin was advanced by, when the caller projected it. */
-    projected?: ProjectedOrigin | null
-    reason?: string | null
-  } = {}
+  options: AutoReplanOptions = {}
 ): boolean {
+  return autoReplanRefusal(dispatch, state, candidate, options) != null
+}
+
+/**
+ * `autoReplanRejected`, naming the refusal: null when the swap may happen,
+ * otherwise the verdict's reason. For the caller whose next move depends on
+ * WHY (the scoped quiet re-plan, 46.1).
+ */
+function autoReplanRefusal(
+  dispatch: any,
+  state: any,
+  candidate: Itinerary,
+  options: AutoReplanOptions = {}
+): string | null {
   const goMode = state?.otp?.goMode
   const coords = goMode?.tracking?.lastPosition?.coords
   const position = coords
@@ -1567,7 +1592,8 @@ function autoReplanRejected(
   )
   const verdict = acceptAutoReplan(candidate, goMode?.activeItinerary, {
     currentPlanIsDead: !!options.currentPlanIsDead,
-    currentPlanLeftByRider: !!options.currentPlanLeftByRider,
+    currentPlanLeftByRider:
+      !!options.currentPlanLeftByRider || !!options.heldBoardMissed,
     headingDeg: coords?.heading ?? null,
     liveBoardEpochMs: liveBoard?.epochMs ?? null,
     liveBoardTripId: liveBoard?.tripId ?? null,
@@ -1583,6 +1609,9 @@ function autoReplanRejected(
     payload: {
       accepted: verdict.accept,
       autoApply: true,
+      // 46.1: the arrival test was waived because the held bus was missed.
+      heldBoardMissed: !!options.heldBoardMissed,
+
       originGapM: position ? originGapMeters(candidate, position) : null,
       // 35.2: the arrival test was waived because the rider had left the plan.
       planLeftByRider: !!options.currentPlanLeftByRider,
@@ -1594,7 +1623,7 @@ function autoReplanRejected(
     },
     type: AUTO_REPLAN
   })
-  if (verdict.accept) return false
+  if (verdict.accept) return null
   // A plan refused for beginning where the rider ISN'T is the same evidence as
   // one they rode away from: the planner is answering slower than they are
   // moving. Both arm the same backoff, so the app stops asking a question it
@@ -1615,7 +1644,7 @@ function autoReplanRejected(
       verdict.reason
     }`
   )
-  return true
+  return verdict.reason || 'refused'
 }
 
 /**
@@ -1679,6 +1708,12 @@ export function beginGoMode(
      */
     originUnchanged?: boolean
     roundTrip?: RoundTripPlan | null
+    /**
+     * Distance units for turn-by-turn cue distances. Absent reads the
+     * config (imperial by default), as internal re-plan callers pass no
+     * options.
+     */
+    units?: 'imperial' | 'metric'
   } = {}
 ) {
   return async function (dispatch: any, getState: any) {
@@ -1709,7 +1744,10 @@ export function beginGoMode(
       options.roundTrip !== undefined
         ? options.roundTrip
         : (priorGoMode?.isActive && priorGoMode?.roundTrip) || null
-    const units = getState().otp.config?.units || 'imperial'
+    const units =
+      (options.units as 'imperial' | 'metric') ||
+      getState().otp.config?.units ||
+      'imperial'
     const multiStop =
       options.multiStop !== undefined
         ? options.multiStop
@@ -1869,6 +1907,37 @@ export function recoverStaleStartOrigin() {
         riding: !!goMode.riding
       })
     ) {
+      return
+    }
+
+    // 47.2: a stale ACCESS leg is not a stale plan when the rider is already
+    // standing at the first board stop in time for its run — re-planning there
+    // threw away the bus at the platform (2026-10-12 16:17:15). Keep the plan;
+    // the matcher's leg transition moves them onto the transit leg. The latch
+    // is already spent above, exactly as on the re-plan path.
+    const nowMs = Date.now()
+    if (
+      riderAtFirstBoardStop({
+        accuracyM: coords.accuracy ?? null,
+        itinerary,
+        liveLegTimes: goMode.liveLegTimes,
+        nowMs,
+        position
+      })
+    ) {
+      const at = firstBoardStopMeasure({
+        itinerary,
+        liveLegTimes: goMode.liveLegTimes,
+        position
+      })
+      // eslint-disable-next-line no-console
+      console.log(
+        `[go-mode] plan origin stale but rider ${Math.round(
+          at?.distanceM ?? 0
+        )}m from the first board stop, board in ${Math.round(
+          ((at?.boardMs ?? nowMs) - nowMs) / 1000
+        )}s — keeping the plan (47.2)`
+      )
       return
     }
 
@@ -3318,6 +3387,10 @@ export function quietReplanAccessLeg() {
       }
     }
 
+    // 46.1: set when the scoped answer for the held plan misses its bus — the
+    // full-trip fallback then looks for the same route's next departure.
+    let heldBoardMissed = false
+
     // Rider exited Go Mode / a reroute started while a request was in flight?
     const stillReplannable = () => {
       const after = getState().otp?.goMode
@@ -3389,14 +3462,21 @@ export function quietReplanAccessLeg() {
           response,
           variables
         })
-        recordReplanAttempt(!error)
-        if (!stillReplannable()) return undefined
-        return error || !itineraries?.length
-          ? null
-          : pickAccessReplanCandidate(itineraries, {
-              accessMode,
-              nextTransitRouteId: null
-            })
+        if (!stillReplannable()) {
+          recordReplanAttempt(!error)
+          return undefined
+        }
+        const pick =
+          error || !itineraries?.length
+            ? null
+            : pickAccessReplanCandidate(itineraries, {
+                accessMode,
+                nextTransitRouteId: null
+              })
+        // A usable answer is recorded once the gate below has judged it
+        // (46.1): what it proves depends on whether it reaches the bus.
+        if (!pick) recordReplanAttempt(!error)
+        return pick
       }
       let best = await runScoped(arriveTarget)
       if (best === undefined) return
@@ -3415,24 +3495,52 @@ export function quietReplanAccessLeg() {
           best,
           boardLegIndex
         )
-        if (
-          autoReplanRejected(dispatch, getState(), spliced, {
+        const refusedBecause = autoReplanRefusal(
+          dispatch,
+          getState(),
+          spliced,
+          {
             projected: scopedProjection,
             reason: 'quiet-replan-scoped'
-          })
-        ) {
+          }
+        )
+        if (refusedBecause === 'access-misses-board') {
+          // 46.1 (2026-10-12, `mv5buy9q-g8hr46`): the quickest way from where
+          // the rider is to the boarding stop gets there after the held bus
+          // leaves — 09:33:51 and 09:33:41 for a 09:25:53 departure. That is
+          // evidence the held BUS is gone, not that the DESTINATION is out of
+          // reach, so it is no strike against the destination; both refusals
+          // counted on the day, and with the accepted 09:14:18 re-plan they
+          // made the three that posted "Routing stops here" at 09:18:20 while
+          // the next Orange Line (09:43:32) still reached the door at 10:18.
+          // Ask the full-trip question instead: its picker keeps the rider's
+          // route (keepRouteId), so the answer is the same route's next
+          // departure — the rider's rule — or nothing, never another route.
+          // Without a route id to pin, that picker would take any bike-only
+          // answer, so then the trip settles here instead.
+          if (getLegRouteId(nextTransitLeg as Leg) == null) {
+            recordReplanAttempt(false)
+            session.quietReplanMissStreak += 1
+            return
+          }
+          heldBoardMissed = true
+        } else if (refusedBecause != null) {
+          recordReplanAttempt(true)
           session.quietReplanMissStreak += 1
           return
+        } else {
+          recordReplanAttempt(true)
+          session.quietReplanMissStreak = 0
+          // Opens the join window: the next 30 s of ticks decide whether this
+          // plan was ridden or ridden away from (noteReplanFollowed).
+          session.lastQuietReplanAppliedAt = getCurrentTime().getTime()
+          dispatch(beginGoMode(spliced))
+          return
         }
-        session.quietReplanMissStreak = 0
-        // Opens the join window: the next 30 s of ticks decide whether this
-        // plan was ridden or ridden away from (noteReplanFollowed).
-        session.lastQuietReplanAppliedAt = getCurrentTime().getTime()
-        dispatch(beginGoMode(spliced))
-        return
       }
-      // Scoped plan found nothing usable — fall through to the full-trip
-      // replan below (fallback, not default).
+      // Scoped plan found nothing usable, or nothing that still makes the
+      // held bus — fall through to the full-trip replan below (fallback, not
+      // default).
     }
 
     const fullWhen = originWhen(fullProjection)
@@ -3462,11 +3570,17 @@ export function quietReplanAccessLeg() {
       response,
       variables
     })
-    recordReplanAttempt(!error)
+    // After a missed-bus refusal (46.1) the attempt is recorded by what this
+    // answer turns out to be: the same route's next departure is no strike,
+    // nothing usable is one, as any returned re-plan is.
+    if (!heldBoardMissed) recordReplanAttempt(!error)
 
     // Re-check state after the async plan: the rider may have exited Go Mode
     // or a reroute may have started while the request was in flight.
-    if (!stillReplannable()) return
+    if (!stillReplannable()) {
+      recordReplanAttempt(false)
+      return
+    }
 
     const keepRouteId = nextTransitLeg
       ? getLegRouteId(nextTransitLeg as Leg)
@@ -3494,6 +3608,7 @@ export function quietReplanAccessLeg() {
       // reroute whose Switch/Keep card no UI has rendered since eb74a9d8, so
       // it only burned a fetch and blocked later auto-updates. The streak
       // stays as bookkeeping.
+      recordReplanAttempt(!error)
       session.quietReplanMissStreak += 1
       return
     }
@@ -3513,6 +3628,9 @@ export function quietReplanAccessLeg() {
     if (
       autoReplanRejected(dispatch, getState(), best, {
         currentPlanLeftByRider: planLeftByRider,
+        // 46.1: the held plan's arrival is not the rider's to lose once its
+        // bus is out of reach, so a later departure is not "arrives later".
+        heldBoardMissed,
         projected: fullProjection,
         reason: 'quiet-replan-full'
       })
@@ -3520,10 +3638,12 @@ export function quietReplanAccessLeg() {
       // Same settle as an empty fetch: the rider keeps the plan they have, the
       // TripSheet is still their escape hatch, and the streak records that this
       // attempt changed nothing.
+      recordReplanAttempt(true)
       session.quietReplanMissStreak += 1
       return
     }
 
+    recordReplanAttempt(false)
     session.quietReplanMissStreak = 0
     session.lastQuietReplanAppliedAt = getCurrentTime().getTime()
     dispatch(beginGoMode(best))

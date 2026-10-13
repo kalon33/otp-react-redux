@@ -93,7 +93,10 @@ export function combinationHasTransit<T extends { modes?: TransportMode[] }>(
  * the rest on the rider's phone) — everything else is "more results".
  * Rented bikes carry a qualifier and are not the rider's own bike.
  */
-export type PendingComboKind = 'BICYCLE_TRANSIT' | 'OTHER'
+export type PendingComboKind =
+  | 'BICYCLE_TRANSIT'
+  | 'BICYCLE_TRANSIT_FULL'
+  | 'OTHER'
 
 export function pendingComboKind<T extends { modes?: TransportMode[] }>(
   combo: T
@@ -301,4 +304,151 @@ export function pickWidenTarget<
       a.plan.index - b.plan.index
   )
   return scored[0].plan
+}
+
+/**
+ * Did every sub-query of a settled search fail, with not one plan answered?
+ *
+ * One predicate for "the whole search failed" (backlog 38.3 / 20.1): the full
+ * bike + transit pass stays home when it is true — a phone with no connection
+ * gets the failure card, not a 45 s wait for a second failure. A response with
+ * a plan in it, even an empty one, is an answer.
+ */
+export function everySubQueryFailed(
+  responses: Array<PlanResponseLike | null | undefined> | null | undefined
+): boolean {
+  const settled = (responses || []).filter(Boolean) as PlanResponseLike[]
+  return settled.length > 0 && settled.every((res) => !!res.error && !res.plan)
+}
+
+/**
+ * Backlog 38.3 — the rider's ask, 2026-09-30 and again 2026-10-12: "a
+ * progressive search … lower limit, show results and continue looking with a
+ * higher limit". Is this search one that asks bike + transit twice — first at
+ * `firstPassCap`, shown at once, then at the rider's full cap, merged in?
+ *
+ * Measured on the Linode 2026-10-12 (six of the rider's real trips, the app's
+ * own plan query): cap 2000 answered in 1.5-3.4 s on the city trips, cap 10000
+ * in 7.0-11.4 s, with the same best arrival at every cap on all six. So the
+ * first answer is nearly always the right one, and the full pass is the
+ * insurance for the sparse origin (Lake Elmo: 10 trips at 2000, 33 at 10000).
+ *
+ * Every "no" is deliberate:
+ *  - `effectiveCap <= firstPassCap`: the rider already asked for the cheap
+ *    search; there is no second limit to look at.
+ *  - `goModeActive`: Go Mode's re-plans are a live trip's machinery, not the
+ *    rider planning one (and they keep their own cap).
+ *  - `updateSearchInReducer`: field trip's multi-request path appends to one
+ *    search on purpose and counts its own responses.
+ *  - `routingType` other than ITINERARY: a profile/batch search is not a list
+ *    the rider watches fill.
+ */
+export function isProgressiveBikeTransitSearch({
+  effectiveCap,
+  firstPassCap,
+  goModeActive,
+  routingType,
+  updateSearchInReducer
+}: {
+  effectiveCap: number
+  firstPassCap: number
+  goModeActive?: boolean
+  routingType?: string | null
+  updateSearchInReducer?: boolean
+}): boolean {
+  if (!(effectiveCap > firstPassCap)) return false
+  if (goModeActive) return false
+  if (updateSearchInReducer) return false
+  if (routingType && routingType !== 'ITINERARY') return false
+  return true
+}
+
+/**
+ * Once the quick fan-out has settled: does the full-limit pass still go out?
+ * Not for a search the rider has left, not once Go Mode has started, and not
+ * when every sub-query failed (offline — the failure card says so instead).
+ */
+export function shouldRunFullBikeTransitPass({
+  allFailed,
+  goModeActive,
+  isActiveSearch
+}: {
+  allFailed?: boolean
+  goModeActive?: boolean
+  isActiveSearch?: boolean
+}): boolean {
+  if (allFailed) return false
+  if (goModeActive) return false
+  if (!isActiveSearch) return false
+  return true
+}
+
+interface RideLegLike {
+  from?: RidePlaceLike | null
+  mode?: string
+  route?: { shortName?: string | null } | null
+  routeShortName?: string | null
+  startTime?: number | string | null
+  to?: RidePlaceLike | null
+  transitLeg?: boolean | null
+  trip?: { gtfsId?: string | null } | null
+  tripId?: string | null
+}
+
+interface RidePlaceLike {
+  name?: string | null
+  stop?: { gtfsId?: string | null; id?: string | null } | null
+  stopId?: string | null
+}
+
+const placeKey = (place?: RidePlaceLike | null): string =>
+  place?.stop?.gtfsId || place?.stopId || place?.stop?.id || place?.name || ''
+
+const transitLegKey = (leg: RideLegLike): string =>
+  `${
+    leg.trip?.gtfsId ||
+    leg.tripId ||
+    `${leg.routeShortName || leg.route?.shortName || leg.mode}@${
+      leg.startTime ?? ''
+    }`
+  }:${placeKey(leg.from)}>${placeKey(leg.to)}`
+
+/**
+ * The ride an itinerary is, independent of its clock: the same vehicle trips,
+ * boarded and left at the same stops. A street-only itinerary is its mode
+ * chain (the direct bike).
+ *
+ * Backlog 38.3: the full bike + transit pass answers ~8 s after the quick one,
+ * and realtime moves the times in between, so the list's object-hash dedupe
+ * (`collectItinerariesWithoutDuplicates`) would show the same bus twice.
+ */
+export function rideSignature(itin: { legs?: RideLegLike[] | null }): string {
+  const legs = itin?.legs || []
+  const transit = legs.filter((leg) => leg?.transitLeg)
+  if (transit.length === 0) {
+    return `street|${legs.map((leg) => leg?.mode || '').join('>')}`
+  }
+  return transit.map(transitLegKey).join('|')
+}
+
+/**
+ * The full pass's itineraries minus every ride the search already lists, so a
+ * merged-in trip is only ever a new one and nothing already on screen moves or
+ * repeats (rider, 2026-10-12, Q1: "they slot into their sorted place with no
+ * marker").
+ */
+export function dropRidesAlreadyListed<
+  I extends { legs?: RideLegLike[] | null }
+>(
+  itineraries: I[],
+  responses:
+    | Array<{ plan?: { itineraries?: I[] | null } | null } | null | undefined>
+    | null
+    | undefined
+): I[] {
+  const listed = new Set<string>()
+  responses?.forEach((res) =>
+    res?.plan?.itineraries?.forEach((itin) => listed.add(rideSignature(itin)))
+  )
+  return itineraries.filter((itin) => !listed.has(rideSignature(itin)))
 }
