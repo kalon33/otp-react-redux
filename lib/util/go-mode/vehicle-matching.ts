@@ -622,7 +622,10 @@ export function matchUserToVehicle(
     confidence: 'none',
     distanceMeters: null,
     label: null,
-    lastSeen: Date.now(),
+    // The caller's clock, not Date.now(): the matching pass is replayed with a
+    // fixed nowMs in tests, and a wall-clock read here made the no-match result
+    // differ by a millisecond from the run that matched.
+    lastSeen: nowMs,
     vehicleId: null
   }
 
@@ -842,7 +845,7 @@ export function matchUserToVehicle(
         ? previousMatch?.heading ?? null
         : null,
     label: bestVehicle.label,
-    lastSeen: Date.now(),
+    lastSeen: nowMs,
     nextStopId: bestVehicle.nextStopId ?? null,
     routeId: bestVehicle.routeId ?? null,
     stopStatus: bestVehicle.stopStatus ?? null,
