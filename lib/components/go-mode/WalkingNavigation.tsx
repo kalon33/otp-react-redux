@@ -206,10 +206,9 @@ const WalkingNavigation = ({
   // to replace it with: the lines simply go.
   const turnDistance =
     !arrived && progress.nextTurnCue && progress.distanceToNextTurn != null
-      ? `${progress.nextTurnCue.instruction} · ${formatCueDistance(
-          progress.distanceToNextTurn,
-          units
-        )}${progress.turnDistanceIsDirect ? ' direct' : ''}`
+      ? `· ${formatCueDistance(progress.distanceToNextTurn, units)}${
+          progress.turnDistanceIsDirect ? ' direct' : ''
+        }`
       : null
   const turnLine =
     turnDistance && progress.nextTurnCue

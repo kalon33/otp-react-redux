@@ -1709,7 +1709,10 @@ export function beginGoMode(
       options.roundTrip !== undefined
         ? options.roundTrip
         : (priorGoMode?.isActive && priorGoMode?.roundTrip) || null
-    const units = getState().otp.config?.units || 'imperial'
+    const units =
+      (options.units as 'imperial' | 'metric') ||
+      getState().otp.config?.units ||
+      'imperial'
     const multiStop =
       options.multiStop !== undefined
         ? options.multiStop
