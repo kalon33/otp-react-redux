@@ -21,6 +21,8 @@ interface Props {
   departureOverrideTripId?: string | null
   leg: Leg
   nextLeg?: Leg
+  /** "On a different bus?" (51.1) — see WalkingNavigation / TransitProgress. */
+  onChooseBus?: () => void
   /** Recording hook — see WalkingNavigation. */
   onDepartureMismatch?: (info: {
     cardDepartureMs: number | null
@@ -44,6 +46,7 @@ const CurrentLegPanel = ({
   departureOverrideTripId,
   leg,
   nextLeg,
+  onChooseBus,
   onDepartureMismatch,
   onExit,
   onSelectDeparture,
@@ -55,7 +58,12 @@ const CurrentLegPanel = ({
   return (
     <LegPanelContainer>
       {isTransit && (
-        <TransitProgress leg={leg} onExit={onExit} progress={progress} />
+        <TransitProgress
+          leg={leg}
+          onChooseBus={onChooseBus}
+          onExit={onExit}
+          progress={progress}
+        />
       )}
       {isWalking && (
         <WalkingNavigation
@@ -65,6 +73,7 @@ const CurrentLegPanel = ({
           departureOverrideTripId={departureOverrideTripId}
           leg={leg}
           nextLeg={nextLeg}
+          onChooseBus={onChooseBus}
           onDepartureMismatch={onDepartureMismatch}
           onExit={onExit}
           onSelectDeparture={onSelectDeparture}
@@ -80,6 +89,7 @@ const CurrentLegPanel = ({
           departureOverrideTripId={departureOverrideTripId}
           leg={leg}
           nextLeg={nextLeg}
+          onChooseBus={onChooseBus}
           onDepartureMismatch={onDepartureMismatch}
           onExit={onExit}
           onSelectDeparture={onSelectDeparture}

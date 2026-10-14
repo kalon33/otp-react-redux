@@ -61,6 +61,8 @@ interface Props {
     /** The run the tick is on (38.1) — beside heldTripId. */
     tickTripId?: string | null
   }) => void
+  /** "On a different bus?" on the waiting and access cards (51.1). */
+  openChooseBusSheet: () => void
   pauseGpsSimulation: () => void
   recordMapFollowGesture: (gesture: MapFollowGesture) => void
   resumeGpsSimulation: () => void
@@ -83,6 +85,7 @@ const GoModeScreen = ({
   finishArrivedTrip,
   goMode,
   onDepartureMismatch,
+  openChooseBusSheet,
   pauseGpsSimulation,
   recordMapFollowGesture,
   resumeGpsSimulation,
@@ -329,6 +332,7 @@ const GoModeScreen = ({
               ? goMode.activeItinerary.legs[goMode.progress.currentLegIndex + 1]
               : undefined
           }
+          onChooseBus={openChooseBusSheet}
           onDepartureMismatch={onDepartureMismatch}
           onExit={handleExit}
           onSelectDeparture={setDepartureOverride}
@@ -576,6 +580,7 @@ const mapDispatchToProps = {
   endGoMode: goModeActions.endGoMode,
   finishArrivedTrip: goModeActions.finishArrivedTrip,
   onDepartureMismatch: goModeActions.recordCardDepartureMismatch,
+  openChooseBusSheet: goModeActions.openChooseBusSheet,
   pauseGpsSimulation: goModeActions.pauseGpsSimulation,
   recordMapFollowGesture: goModeActions.recordMapFollowGesture,
   resumeGpsSimulation: goModeActions.resumeGpsSimulation,

@@ -419,6 +419,19 @@ components:
     busNotBroadcasting: Bus not broadcasting yet — scheduled {time}
     busNotBroadcastingWaiting: Bus not broadcasting yet
     changeBus: Choose bus
+    chooseBusCancel: Cancel
+    chooseBusDistance: "{distance} m"
+    chooseBusFleetNumber: "#{label}"
+    chooseBusLink: On a different bus?
+    chooseBusNextStop: "Next stop: {stop} · #{label}"
+    chooseBusNoRoute: No route {route} found.
+    chooseBusNoTrip: Couldn't find a {route} bus near you.
+    chooseBusPickRoute: No live bus? Pick your route
+    chooseBusRouteNumber: Route number
+    chooseBusRoutePlaceholder: e.g. 546
+    chooseBusSubtitle: Pick the bus you're on
+    chooseBusTitle: On a different bus?
+    chooseBusTypeRoute: Type a route number
     confirmExit: Are you sure you want to stop tracking this trip?
     departureGone: departed
     directionEB: Eastbound
