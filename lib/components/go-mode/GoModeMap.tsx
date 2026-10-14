@@ -83,6 +83,8 @@ interface Props {
   itinerary: Itinerary
   /** The turn the card is announcing (progress.nextTurnCue), 44.3. */
   nextTurnCue?: StepCue | null
+  /** Recording only (MAP_FOLLOW_GESTURE), 48.1. */
+  onFollowGesture?: (gesture: MapFollowGesture) => void
   onSetFollow: (value: boolean) => void
   onToggleFollow: () => void
   routeMatch: RouteMatchResult | null
@@ -116,6 +118,55 @@ function bboxOf(
     [minLng, minLat],
     [maxLng, maxLat]
   ]
+}
+
+type GestureHandler = 'drag' | 'rotate' | 'zoom'
+
+/** One touch gesture on the Go Mode map while it is being judged (48.1). */
+interface TouchGesture {
+  /** The last finger is up; the verdict waits GESTURE_SETTLE_MS. */
+  ended: boolean
+  /** The camera handler credited to it (a drag or rotate outranks a zoom). */
+  handler: GestureHandler | null
+  lastTouchAt: number
+  /** Most fingers down at once, over the whole gesture. */
+  maxTouches: number
+  /** Fingers down when `handler` started. */
+  touches: number
+  zoomStart: number
+}
+
+/**
+ * How a touch gesture that moved the camera was judged, recorded as
+ * MAP_FOLLOW_GESTURE so a ride can tell a pinch from a drag (48.1). Only
+ * gestures made while following are recorded.
+ */
+export interface MapFollowGesture {
+  /** Following was on and the gesture left it on. */
+  followKept: boolean
+  /** The camera handler the gesture fired — a drag or rotate outranks a zoom. */
+  handler: GestureHandler
+  /** Most fingers on the map at once during the gesture. */
+  maxTouches: number
+  /** Fingers on the map when that handler started. */
+  touches: number
+  /** Map zoom after the gesture minus before, to 0.01. */
+  zoomDelta: number
+}
+
+// MapLibre fires a gesture's camera events from its next animation frame, so
+// the verdict waits a little past the last touchend for them.
+export const GESTURE_SETTLE_MS = 100
+// A gesture whose touchend never arrived stops holding the follow eases.
+export const GESTURE_STALE_MS = 10_000
+
+/**
+ * Whether a touch gesture leaves following on. Any gesture that ever had two
+ * or more fingers down is a pinch or twist and keeps it; a one-finger drag
+ * drops it (rider's Q4 default A, cycle 20: the arrow brings it back).
+ */
+export function followSurvivesGesture(maxTouches: number): boolean {
+  return maxTouches >= 2
 }
 
 /**
@@ -276,6 +327,7 @@ export const GoModeMapOverlay = ({
   distanceToNextTurn,
   followUser,
   nextTurnCue,
+  onFollowGesture,
   onSetFollow,
   onToggleFollow,
   routeGeoJson
@@ -288,6 +340,8 @@ export const GoModeMapOverlay = ({
   distanceToNextTurn?: number | null
   followUser: boolean
   nextTurnCue?: StepCue | null
+  /** Recording only (MAP_FOLLOW_GESTURE): how a touch gesture was judged. */
+  onFollowGesture?: (gesture: MapFollowGesture) => void
   onSetFollow: (value: boolean) => void
   onToggleFollow: () => void
   routeGeoJson: GeoJSON.FeatureCollection | null
@@ -310,6 +364,13 @@ export const GoModeMapOverlay = ({
   // follow), and whether the map was left rotated so release knows to undo it.
   const turnViewCueIndex = useRef<number | null>(null)
   const turnViewRotated = useRef(false)
+  // The touch gesture in progress, shared by the gesture listeners and the
+  // follow effect (which holds its eases while fingers are down), 48.1.
+  const gestureRef = useRef<TouchGesture | null>(null)
+  const followUserRef = useRef(followUser)
+  followUserRef.current = followUser
+  const onFollowGestureRef = useRef(onFollowGesture)
+  onFollowGestureRef.current = onFollowGesture
 
   // The next corner as something to draw, cut from the leg's own polyline.
   // Drawn whenever the card has a turn on a walk/bike leg — the camera only
@@ -366,29 +427,166 @@ export const GoModeMapOverlay = ({
     }
   }, [activeLegIndex, map, routeGeoJson, onSetFollow])
 
-  // A user gesture that moves the camera means the rider wants to look at
-  // something — stop following (idempotent SET, so a drag never races the
-  // button's toggle). Zoom is deliberately NOT wired: Google behavior is that
-  // pinching adjusts zoom while still following, and per-fix eases omit zoom
-  // so the chosen level sticks. Programmatic moves (fitBounds/easeTo) fire
-  // neither handler.
+  // What a rider's hand on the map does to follow (48.1). A one-finger drag
+  // means the rider wants to look at something else — stop following
+  // (idempotent SET, so a drag never races the button's toggle). A pinch only
+  // changes the zoom and must keep following: per-fix eases omit zoom, so the
+  // chosen level sticks and the camera stays on the rider.
+  //
+  // MapLibre cannot tell those apart for us. Measured in headless Chrome on
+  // maplibre-gl 5.6.1 with CDP touch events: a lopsided pinch (one finger
+  // still, one moving — the usual thumb-and-finger zoom) moves the touch
+  // centroid, so it fires `dragstart` with 2 touches next to `zoomstart`; and
+  // when the first finger slides before the second lands, `dragstart` fires
+  // with ONE touch. An even pinch fires only `zoomstart`; a twist fires
+  // `rotatestart`, and its inertia fires a second `rotatestart` after the
+  // fingers are up. So the decision is made once per gesture, when the last
+  // finger lifts, from the most fingers that were ever down: 2+ keeps follow
+  // (and re-centres on the rider at the new zoom), 1 drops it. Mouse drags
+  // and rotations (desktop) still drop follow at once; programmatic moves
+  // (fitBounds/easeTo, rotations without an originalEvent) do nothing.
   useEffect(() => {
     if (!map) return
-    // dragstart fires only for user gestures (1- and 2-finger pan).
-    const handleDragStart = () => onSetFollow(false)
-    // rotatestart also fires for programmatic rotations; originalEvent marks
-    // a real gesture.
-    const handleRotateStart = (e: { originalEvent?: Event }) => {
-      if (e.originalEvent) onSetFollow(false)
+    // Optional so a stand-in map without a DOM (unit tests) still mounts;
+    // without it every touch drag falls back to the one-finger rule below.
+    const container = map.getCanvasContainer?.()
+    let settleTimer: ReturnType<typeof setTimeout> | null = null
+
+    const recentre = () => {
+      const rider = prevAccepted.current
+      // The turn view frames rider + corner itself on its next tick.
+      if (!rider || !followUserRef.current || turnViewRotated.current) return
+      map.easeTo({ center: [rider.lng, rider.lat], duration: FOLLOW_EASE_MS })
     }
+
+    const settle = () => {
+      settleTimer = null
+      const gesture = gestureRef.current
+      gestureRef.current = null
+      if (!gesture?.handler || !followUserRef.current) return
+      const followKept = followSurvivesGesture(gesture.maxTouches)
+      onFollowGestureRef.current?.({
+        followKept,
+        handler: gesture.handler,
+        maxTouches: gesture.maxTouches,
+        touches: gesture.touches,
+        zoomDelta: Math.round((map.getZoom() - gesture.zoomStart) * 100) / 100
+      })
+      if (!followKept) {
+        onSetFollow(false)
+        return
+      }
+      // Let a pinch's inertia finish before easing, or the ease cuts it off
+      // and the zoom the rider chose snaps short.
+      if (map.isMoving()) map.once('moveend', recentre)
+      else recentre()
+    }
+
+    const handleTouchStart = (e: TouchEvent) => {
+      const touches = e.touches.length
+      let gesture = gestureRef.current
+      // A lifted gesture still settling, or one whose touchend never came
+      // (one finger down now means none were before), is judged first.
+      if (gesture && (gesture.ended || touches === 1)) {
+        if (settleTimer) clearTimeout(settleTimer)
+        settle()
+        gesture = null
+      }
+      if (!gesture) {
+        gesture = {
+          ended: false,
+          handler: null,
+          lastTouchAt: Date.now(),
+          maxTouches: touches,
+          touches: 0,
+          zoomStart: map.getZoom()
+        }
+        gestureRef.current = gesture
+      }
+      gesture.maxTouches = Math.max(gesture.maxTouches, touches)
+      gesture.lastTouchAt = Date.now()
+    }
+    const handleTouchMove = () => {
+      if (gestureRef.current) gestureRef.current.lastTouchAt = Date.now()
+    }
+    const handleTouchEnd = (e: TouchEvent) => {
+      const gesture = gestureRef.current
+      if (!gesture) return
+      gesture.lastTouchAt = Date.now()
+      if (e.touches.length > 0 || gesture.ended) return
+      gesture.ended = true
+      // MapLibre emits a gesture's events from its next animation frame, so
+      // a flick's dragstart can land just after the last touchend.
+      settleTimer = setTimeout(settle, GESTURE_SETTLE_MS)
+    }
+
+    const isTouch = (ev?: Event): ev is TouchEvent =>
+      !!ev && typeof ev.type === 'string' && ev.type.startsWith('touch')
+    // Credit a camera handler to the gesture in progress. The first drag or
+    // rotate wins over a zoom, so the record names what used to drop follow.
+    const noteHandler = (handler: GestureHandler, ev: TouchEvent) => {
+      const gesture = gestureRef.current
+      if (!gesture) return false
+      const outranks = gesture.handler === 'zoom' && handler !== 'zoom'
+      if (!gesture.handler || outranks) {
+        gesture.handler = handler
+        gesture.touches = ev.touches?.length ?? 0
+      }
+      return true
+    }
+
+    const handleDragStart = (e: { originalEvent?: Event }) => {
+      const ev = e.originalEvent
+      if (!isTouch(ev)) {
+        // Mouse (desktop): unchanged, a drag drops follow at once.
+        onSetFollow(false)
+        return
+      }
+      if (noteHandler('drag', ev)) return
+      // No gesture seen (no touch listeners on this map): the plain
+      // one-finger rule.
+      if (ev.type === 'touchmove' && (ev.touches?.length ?? 0) <= 1) {
+        onSetFollow(false)
+      }
+    }
+    // rotatestart also fires for programmatic rotations; originalEvent marks
+    // a real gesture. A touch rotation is always two fingers (plus its
+    // inertia after the lift), so it never drops follow by itself.
+    const handleRotateStart = (e: { originalEvent?: Event }) => {
+      const ev = e.originalEvent
+      if (!ev) return
+      if (isTouch(ev)) noteHandler('rotate', ev)
+      else onSetFollow(false)
+    }
+    const handleZoomStart = (e: { originalEvent?: Event }) => {
+      if (isTouch(e.originalEvent)) noteHandler('zoom', e.originalEvent)
+    }
+
     map.on('dragstart', handleDragStart)
     map.on('rotatestart', handleRotateStart)
+    map.on('zoomstart', handleZoomStart)
+    container?.addEventListener('touchstart', handleTouchStart, {
+      passive: true
+    })
+    container?.addEventListener('touchmove', handleTouchMove, {
+      passive: true
+    })
+    container?.addEventListener('touchend', handleTouchEnd)
+    container?.addEventListener('touchcancel', handleTouchEnd)
     // reuseMaps (default-map.tsx) keeps this map instance alive across
     // remounts — without the symmetric off(), every background/return cycle
     // would stack another listener.
     return () => {
       map.off('dragstart', handleDragStart)
       map.off('rotatestart', handleRotateStart)
+      map.off('zoomstart', handleZoomStart)
+      map.off('moveend', recentre)
+      container?.removeEventListener('touchstart', handleTouchStart)
+      container?.removeEventListener('touchmove', handleTouchMove)
+      container?.removeEventListener('touchend', handleTouchEnd)
+      container?.removeEventListener('touchcancel', handleTouchEnd)
+      if (settleTimer) clearTimeout(settleTimer)
+      gestureRef.current = null
     }
   }, [map, onSetFollow])
 
@@ -405,6 +603,14 @@ export const GoModeMapOverlay = ({
       prevRejectedSpike.current = null
     }
     if (!followUser || !map || !currentPosition) return
+    // Fingers on the map (48.1): an ease now would fight the pinch. The
+    // gesture's own end re-centres; a gesture whose touchend never arrived
+    // stops blocking after GESTURE_STALE_MS.
+    const gesture = gestureRef.current
+    if (gesture) {
+      if (Date.now() - gesture.lastTouchAt < GESTURE_STALE_MS) return
+      gestureRef.current = null
+    }
     // Belt-and-braces on top of the leg-tap disengage: while a tapped leg is
     // selected its fitBounds owns the camera.
     if (activeLegIndex != null) return
@@ -643,6 +849,7 @@ const GoModeMap = ({
   followUser,
   itinerary,
   nextTurnCue,
+  onFollowGesture,
   onSetFollow,
   onToggleFollow,
   routeMatch
@@ -727,6 +934,7 @@ const GoModeMap = ({
           distanceToNextTurn={distanceToNextTurn}
           followUser={followUser}
           nextTurnCue={nextTurnCue}
+          onFollowGesture={onFollowGesture}
           onSetFollow={onSetFollow}
           onToggleFollow={onToggleFollow}
           routeGeoJson={routeGeoJson}

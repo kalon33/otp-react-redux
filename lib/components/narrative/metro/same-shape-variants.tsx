@@ -199,6 +199,29 @@ const StopCaption = styled.span`
   }
 `
 
+/** A group's heading in the planner's list, as small and muted as "Looking…". */
+const GroupHeading = styled.h4`
+  color: #555;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  margin: 12px 0 0 0;
+  padding: 0 10px;
+  text-transform: uppercase;
+`
+
+/** The planner's two groups, in order (49.1, rider's answer Q2 = B). */
+const GROUPS: Array<{ group: PairGroup; heading: JSX.Element }> = [
+  {
+    group: 'on',
+    heading: <FormattedMessage id="components.MetroUI.otherStopsGetOn" />
+  },
+  {
+    group: 'off',
+    heading: <FormattedMessage id="components.MetroUI.otherStopsGetOff" />
+  }
+]
+
 /** Metres of a given mode across the whole itinerary. */
 function distanceByMode(itinerary: ItineraryWithIndex, mode: string): number {
   return itinerary.legs
@@ -211,8 +234,18 @@ function stopIdentity(place: Place | undefined): string {
   return place?.stop?.gtfsId || place?.stopId || place?.name || ''
 }
 
+/**
+ * Which heading a pair sits under in the planner's list (backlog 49.1): the
+ * row's own pair, a different place to get ON (the row's get-off stop, or —
+ * only when OTP itself returned such a run — another one too), or the same
+ * get-on stop and a different place to get OFF.
+ */
+export type PairGroup = 'own' | 'on' | 'off'
+
 /** One place to get on and one to get off, and every run that uses them. */
 export type StopPair = {
+  /** Where this pair differs from the row's own (set by `stopPairs`). */
+  group?: PairGroup
   /** Identity of the pair: boarding stop id, then alight stop id or name. */
   key: string
   /** The earliest-leaving run of this pair; tapping the entry selects it. */
@@ -230,7 +263,9 @@ export type StopPair = {
  */
 export function stopPairOf(variant: VariantItinerary): {
   key: string
+  offKey: string
   offName?: string
+  onKey: string
   onName?: string
 } {
   const transitLegs = (variant.legs || []).filter((leg) => leg.transitLeg)
@@ -240,32 +275,55 @@ export function stopPairOf(variant: VariantItinerary): {
   const offKey = variant.offStopName
     ? `name:${variant.offStopName}`
     : stopIdentity(last?.to)
+  const onKey = stopIdentity(first?.from)
   return {
-    key: `${stopIdentity(first?.from)}|${offKey}`,
+    key: `${onKey}|${offKey}`,
+    offKey,
     offName,
+    onKey,
     onName: first?.from?.name
   }
 }
 
 /**
+ * Least biking first, then least walking, then the earliest arrival (backlog
+ * 49.1, Q3 = A: "in order of minimized biking").
+ */
+function byLeastBiking(a: StopPair, b: StopPair): number {
+  return (
+    distanceByMode(a.next, 'BICYCLE') - distanceByMode(b.next, 'BICYCLE') ||
+    distanceByMode(a.next, 'WALK') - distanceByMode(b.next, 'WALK') ||
+    a.next.endTime - b.next.endTime ||
+    a.next.startTime - b.next.startTime
+  )
+}
+
+/**
  * Every distinct get-on / get-off pair among the runs folded into this row,
- * the row's own pair first and the rest by their next departure. Empty when
- * there is nothing to choose: no folded runs, or every run gets on and off
- * where the row already does.
+ * the row's own pair first. Empty when there is nothing to choose: no folded
+ * runs, or every run gets on and off where the row already does.
+ *
+ * `grouped` (the planner's list, backlog 49.1): after the row's own pair,
+ * the "get on somewhere else" pairs, then the "get off somewhere else" ones,
+ * each group least biking first. Without it (Go Mode's onboard list) the
+ * rest follow by their next departure, as before 49.1.
  */
 export function stopPairs(
-  itinerary: ItineraryWithIndex & { sameShapeVariants?: VariantItinerary[] }
+  itinerary: ItineraryWithIndex & { sameShapeVariants?: VariantItinerary[] },
+  { grouped = false }: { grouped?: boolean } = {}
 ): StopPair[] {
   const variants = itinerary.sameShapeVariants || []
-  const byKey = new Map<string, StopPair>()
+  const byKey = new Map<string, StopPair & { offKey: string; onKey: string }>()
   variants.forEach((variant) => {
-    const { key, offName, onName } = stopPairOf(variant)
+    const { key, offKey, offName, onKey, onName } = stopPairOf(variant)
     const pair = byKey.get(key)
     if (!pair) {
       byKey.set(key, {
         key,
         next: variant,
+        offKey,
         offName,
+        onKey,
         onName,
         variants: [variant]
       })
@@ -282,10 +340,31 @@ export function stopPairs(
   )
   const own = byKey.get(stopPairOf(ownVariant || itinerary).key)
   if (!own || byKey.size < 2) return []
-  const others = Array.from(byKey.values())
-    .filter((pair) => pair !== own)
-    .sort((a, b) => a.next.startTime - b.next.startTime)
-  return [own, ...others]
+  const strip = ({
+    offKey,
+    onKey,
+    ...pair
+  }: StopPair & { offKey: string; onKey: string }): StopPair => pair
+  const others = Array.from(byKey.values()).filter((pair) => pair !== own)
+  if (!grouped) {
+    return [
+      strip(own),
+      ...others.sort((a, b) => a.next.startTime - b.next.startTime).map(strip)
+    ]
+  }
+  // A pair that boards elsewhere is a "get on" choice even when OTP's run
+  // also gets off elsewhere (the lookup never makes such a pair; OTP can).
+  const on = others.filter((pair) => pair.onKey !== own.onKey)
+  const off = others.filter((pair) => pair.onKey === own.onKey)
+  return [
+    { ...strip(own), group: 'own' as const },
+    ...on
+      .map((p) => ({ ...strip(p), group: 'on' as const }))
+      .sort(byLeastBiking),
+    ...off
+      .map((p) => ({ ...strip(p), group: 'off' as const }))
+      .sort(byLeastBiking)
+  ]
 }
 
 const SameShapeVariants = ({
@@ -297,7 +376,14 @@ const SameShapeVariants = ({
 }: Props): JSX.Element | null => {
   const intl = useIntl()
   const [open, setOpen] = useState(false)
-  const pairs = useMemo(() => stopPairs(itinerary), [itinerary])
+  // The planner's list (the one that can look stops up) groups its pairs under
+  // "Get on somewhere else" / "Get off somewhere else" (49.1); Go Mode's
+  // onboard list, where every choice is a get-off stop, keeps one list.
+  const grouped = !!onLookup
+  const pairs = useMemo(
+    () => stopPairs(itinerary, { grouped }),
+    [grouped, itinerary]
+  )
   // 2026-09-23 15:37 (21.5, third sighting): OTP answers one alight stop per
   // connection, so "every run gets on and off here" said nothing about the
   // other stops the bus serves. A row with a transit leg can always look.
@@ -324,6 +410,81 @@ const SameShapeVariants = ({
     [pairs, setActiveItinerary]
   )
 
+  const renderPair = (pair: StopPair, i: number) => {
+    const shown = i === 0
+    const bike = distanceByMode(pair.next, 'BICYCLE')
+    const walk = distanceByMode(pair.next, 'WALK')
+    const distance =
+      bike > 0
+        ? intl.formatMessage(
+            { id: 'components.MetroUI.variantBiking' },
+            { distance: humanizeDistanceString(bike, false, intl) }
+          )
+        : walk > 0
+        ? intl.formatMessage(
+            { id: 'components.MetroUI.variantWalking' },
+            { distance: humanizeDistanceString(walk, false, intl) }
+          )
+        : null
+    // The time that tells the pairs apart. Get-off alternatives all
+    // board the same bus, so "next <departure>" said the same thing on
+    // every line (seen on the 2026-09-23 build); what differs is when
+    // the rider ARRIVES. A get-on alternative leaves at another time
+    // and arrives with the row, so it names its departure as well.
+    const own = pairs[0].next
+    const leaves =
+      i > 0 && pair.next.startTime !== own.startTime
+        ? intl.formatMessage(
+            { id: 'components.MetroUI.variantLeaves' },
+            { time: intl.formatTime(pair.next.startTime) }
+          )
+        : null
+    const next = [
+      leaves,
+      intl.formatMessage(
+        { id: 'components.MetroUI.variantArrives' },
+        { time: intl.formatTime(pair.next.endTime) }
+      )
+    ]
+      .filter(Boolean)
+      .join(' · ')
+    return (
+      <li key={pair.key}>
+        <button
+          className={shown ? 'active' : undefined}
+          data-pair={pair.key}
+          onClick={choose}
+        >
+          <StopCaption>
+            <span className="stop-line">
+              <span className="stop-role">
+                <FormattedMessage id="components.MetroUI.variantOn" />
+              </span>
+              <span className="stop-name">{pair.onName}</span>
+            </span>
+            <span className="stop-line">
+              <span className="stop-role">
+                <FormattedMessage id="components.MetroUI.variantOff" />
+              </span>
+              <span className="stop-name">{pair.offName}</span>
+            </span>
+          </StopCaption>
+          <span className="variant-detail">
+            {[distance, next].filter(Boolean).join(' · ')}
+            {/* Inside the detail line: after a block it would open a
+                line box of its own and push the next entry down. */}
+            {shown && (
+              <InvisibleA11yLabel>
+                {' '}
+                <FormattedMessage id="components.MetroUI.variantShown" />
+              </InvisibleA11yLabel>
+            )}
+          </span>
+        </button>
+      </li>
+    )
+  }
+
   // Every run gets on and off where this row does and there is no way to ask
   // for more: nothing to offer, and no button saying so.
   if (pairs.length < 2 && !canLookUp) return null
@@ -347,83 +508,29 @@ const SameShapeVariants = ({
           ▶
         </Chevron>
       </Toggle>
-      {open && pairs.length >= 2 && (
-        <VariantList>
-          {pairs.map((pair, i) => {
-            const shown = i === 0
-            const bike = distanceByMode(pair.next, 'BICYCLE')
-            const walk = distanceByMode(pair.next, 'WALK')
-            const distance =
-              bike > 0
-                ? intl.formatMessage(
-                    { id: 'components.MetroUI.variantBiking' },
-                    { distance: humanizeDistanceString(bike, false, intl) }
-                  )
-                : walk > 0
-                ? intl.formatMessage(
-                    { id: 'components.MetroUI.variantWalking' },
-                    { distance: humanizeDistanceString(walk, false, intl) }
-                  )
-                : null
-            // The time that tells the pairs apart. Get-off alternatives all
-            // board the same bus, so "next <departure>" said the same thing on
-            // every line (seen on the 2026-09-23 build); what differs is when
-            // the rider ARRIVES. A get-on alternative leaves at another time
-            // and arrives with the row, so it names its departure as well.
-            const own = pairs[0].next
-            const leaves =
-              i > 0 && pair.next.startTime !== own.startTime
-                ? intl.formatMessage(
-                    { id: 'components.MetroUI.variantLeaves' },
-                    { time: intl.formatTime(pair.next.startTime) }
-                  )
-                : null
-            const next = [
-              leaves,
-              intl.formatMessage(
-                { id: 'components.MetroUI.variantArrives' },
-                { time: intl.formatTime(pair.next.endTime) }
-              )
-            ]
-              .filter(Boolean)
-              .join(' · ')
+      {open && pairs.length >= 2 && !grouped && (
+        <VariantList>{pairs.map(renderPair)}</VariantList>
+      )}
+      {open && pairs.length >= 2 && grouped && (
+        <>
+          <VariantList>{renderPair(pairs[0], 0)}</VariantList>
+          {GROUPS.map(({ group, heading }) => {
+            const members = pairs
+              .map((pair, i) => ({ i, pair }))
+              .filter(({ pair }) => pair.group === group)
+            if (!members.length) return null
             return (
-              <li key={pair.key}>
-                <button
-                  className={shown ? 'active' : undefined}
-                  data-pair={pair.key}
-                  onClick={choose}
-                >
-                  <StopCaption>
-                    <span className="stop-line">
-                      <span className="stop-role">
-                        <FormattedMessage id="components.MetroUI.variantOn" />
-                      </span>
-                      <span className="stop-name">{pair.onName}</span>
-                    </span>
-                    <span className="stop-line">
-                      <span className="stop-role">
-                        <FormattedMessage id="components.MetroUI.variantOff" />
-                      </span>
-                      <span className="stop-name">{pair.offName}</span>
-                    </span>
-                  </StopCaption>
-                  <span className="variant-detail">
-                    {[distance, next].filter(Boolean).join(' · ')}
-                    {/* Inside the detail line: after a block it would open a
-                        line box of its own and push the next entry down. */}
-                    {shown && (
-                      <InvisibleA11yLabel>
-                        {' '}
-                        <FormattedMessage id="components.MetroUI.variantShown" />
-                      </InvisibleA11yLabel>
-                    )}
-                  </span>
-                </button>
-              </li>
+              <div className="variant-group" key={group}>
+                <GroupHeading className="variant-group-heading">
+                  {heading}
+                </GroupHeading>
+                <VariantList>
+                  {members.map(({ i, pair }) => renderPair(pair, i))}
+                </VariantList>
+              </div>
             )
           })}
-        </VariantList>
+        </>
       )}
       {open && canLookUp && lookupStatus === 'pending' && (
         <LookupLine className="other-stops-looking">

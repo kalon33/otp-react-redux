@@ -42,6 +42,7 @@ import MultiStopArrivalCard from './MultiStopArrivalCard'
 import ReturnCountdownCard from './ReturnCountdownCard'
 import TripSheet from './TripSheet'
 import useActiveTripGuards from './use-active-trip-guards'
+import type { MapFollowGesture } from './GoModeMap'
 
 interface Props {
   beginGoMode: (itinerary: any) => void
@@ -62,6 +63,7 @@ interface Props {
     tickTripId?: string | null
   }) => void
   pauseGpsSimulation: () => void
+  recordMapFollowGesture: (gesture: MapFollowGesture) => void
   resumeGpsSimulation: () => void
   setDepartureOverride: (epochMs: number | null, tripId?: string | null) => void
   setMapFollow: (value: boolean) => void
@@ -84,6 +86,7 @@ const GoModeScreen = ({
   goMode,
   onDepartureMismatch,
   pauseGpsSimulation,
+  recordMapFollowGesture,
   resumeGpsSimulation,
   setDepartureOverride,
   setMapFollow,
@@ -362,6 +365,7 @@ const GoModeScreen = ({
           followUser={goMode.ui.mapFollowUser}
           itinerary={goMode.activeItinerary}
           nextTurnCue={goMode.progress.nextTurnCue ?? null}
+          onFollowGesture={recordMapFollowGesture}
           onSetFollow={setMapFollow}
           onToggleFollow={toggleMapFollow}
           routeMatch={goMode.routeMatch}
@@ -589,6 +593,7 @@ const mapDispatchToProps = {
   finishArrivedTrip: goModeActions.finishArrivedTrip,
   onDepartureMismatch: goModeActions.recordCardDepartureMismatch,
   pauseGpsSimulation: goModeActions.pauseGpsSimulation,
+  recordMapFollowGesture: goModeActions.recordMapFollowGesture,
   resumeGpsSimulation: goModeActions.resumeGpsSimulation,
   setDepartureOverride: goModeActions.selectDeparture,
   setMapFollow: goModeActions.setMapFollow,
