@@ -640,6 +640,8 @@ components:
     orAlternatives: or other routes in the same direction
     originallyScheduledTime: (originally {originalTime})
     otherStops: Other stops
+    otherStopsGetOff: Get off somewhere else
+    otherStopsGetOn: Get on somewhere else
     otherStopsLooking: Looking…
     otherStopsNone: No other stops
     singleModeItineraryDescription: '{time} {mode} itinerary'

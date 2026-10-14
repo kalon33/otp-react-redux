@@ -47,6 +47,13 @@ export interface OtherStopsLookupEntry {
   candidates?: number
   /** Itineraries appended to the results. */
   found?: number
+  /** Of those, other stops to get off at (at most 5). */
+  offCandidates?: number
+  /**
+   * Of those, other stops to get on at, earlier and later on the run (at most
+   * 3 + 3; backlog 49.1: this was 0 on every 2026-10-13 lookup).
+   */
+  onCandidates?: number
   status: OtherStopsLookupStatus
 }
 
@@ -189,8 +196,14 @@ export function lookupOtherStops(
             }).map((candidate) => ({ candidate, trip: firstTrip }))
           : [])
       ]
+      const counts = {
+        candidates: candidates.length,
+        offCandidates: candidates.filter((c) => c.candidate.side === 'off')
+          .length,
+        onCandidates: candidates.filter((c) => c.candidate.side === 'on').length
+      }
       if (!candidates.length) {
-        setStatus({ candidates: 0, found: 0, status: 'done' })
+        setStatus({ ...counts, found: 0, status: 'done' })
         return
       }
 
@@ -285,7 +298,7 @@ export function lookupOtherStops(
         )
       }
       setStatus({
-        candidates: candidates.length,
+        ...counts,
         found: found.length,
         // Every plan failed: say so the same way as nothing found, but keep
         // the difference in the record.

@@ -448,3 +448,159 @@ describe('21.5 > "Other stops" looks the other stops up', () => {
     expect(looking(wrapper).length).toBe(0)
   })
 })
+
+/**
+ * Backlog 49.1, 2026-10-13: "We need different boarding stops not just
+ * different egress stops! Maybe group by boarding change stop, egress changed
+ * stop, in order of minimized biking". Rider's answers: two groups with
+ * headings, "Get on somewhere else" and "Get off somewhere else", the row's
+ * own pair at the top (Q2 = B); least biking first within a group (Q3 = A).
+ * The planner's list groups (it passes `onLookup`); Go Mode's onboard list
+ * does not, and keeps one list by departure (tests above).
+ */
+describe('49.1 > "Other stops" in two groups, least biking first', () => {
+  // The row: Lake St -> 98th St, 1.5 km of biking. Two other places to get on
+  // and two to get off, entered in an order that is neither biking nor
+  // departure order, plus a run OTP returned that changes both ends.
+  const GROUPED: VariantSpec[] = [
+    { bikeMeters: 1500, index: 0, stop: 'Lake St' },
+    {
+      alight: 'Knox Ave & 76th St Station',
+      bikeMeters: 8000,
+      index: 1,
+      stop: 'Lake St'
+    },
+    { bikeMeters: 4200, departOffsetMin: 6, index: 2, stop: '66th St' },
+    { bikeMeters: 2600, departOffsetMin: 3, index: 3, stop: '46th St' },
+    {
+      alight: 'Knox Ave & American Blvd Station',
+      bikeMeters: 7000,
+      index: 4,
+      stop: 'Lake St'
+    },
+    {
+      alight: 'Knox Ave & American Blvd Station',
+      bikeMeters: 3000,
+      departOffsetMin: 3,
+      index: 5,
+      stop: '46th St'
+    }
+  ]
+  const label = (p: { offName?: string; onName?: string }) =>
+    `${p.onName} > ${p.offName}`
+
+  it('stopPairs: own pair, then get-on pairs, then get-off pairs, least biking first', () => {
+    const pairs = stopPairs(rowOf(GROUPED), { grouped: true })
+    expect(pairs.map((p) => [p.group, label(p)])).toEqual([
+      ['own', 'Lake St > I-35W & 98th St Station'],
+      ['on', '46th St > I-35W & 98th St Station'],
+      // OTP's run that changes both ends boards elsewhere: a get-on choice.
+      ['on', '46th St > Knox Ave & American Blvd Station'],
+      ['on', '66th St > I-35W & 98th St Station'],
+      ['off', 'Lake St > Knox Ave & American Blvd Station'],
+      ['off', 'Lake St > Knox Ave & 76th St Station']
+    ])
+  })
+
+  it('stopPairs without grouping keeps the old order (Go Mode onboard list)', () => {
+    const pairs = stopPairs(rowOf(GROUPED))
+    expect(pairs[0].group).toBeUndefined()
+    // Own first, the rest by next departure (ties keep insertion order).
+    expect(pairs.map(label)).toEqual([
+      'Lake St > I-35W & 98th St Station',
+      'Lake St > Knox Ave & 76th St Station',
+      'Lake St > Knox Ave & American Blvd Station',
+      '46th St > I-35W & 98th St Station',
+      '46th St > Knox Ave & American Blvd Station',
+      '66th St > I-35W & 98th St Station'
+    ])
+  })
+
+  it('renders the two headings under the own pair, in the planner list only', () => {
+    const { wrapper } = mockWithProvider(
+      SameShapeVariants,
+      {
+        itinerary: rowOf(GROUPED),
+        lookupStatus: 'done',
+        onLookup: jest.fn(),
+        setActiveItinerary: jest.fn()
+      },
+      undefined,
+      messages
+    )
+    open(wrapper)
+    const headings = wrapper.find('h4.variant-group-heading')
+    expect(headings.map((h: any) => h.text())).toEqual([
+      'Get on somewhere else',
+      'Get off somewhere else'
+    ])
+    const groups = wrapper.find('div.variant-group')
+    expect(groups.length).toBe(2)
+    expect(groups.at(0).find('button[data-pair]').length).toBe(3)
+    expect(groups.at(1).find('button[data-pair]').length).toBe(2)
+    const buttons = pairButtons(wrapper)
+    expect(buttons.length).toBe(6)
+    // The row's own pair is first, marked, and above both headings.
+    expect(buttons.at(0).prop('className')).toBe('active')
+    expect(buttons.at(0).text()).toContain('currently shown')
+    expect(
+      groups
+        .at(0)
+        .find('button[data-pair]')
+        .map((b: any) => b.find('.variant-detail').text())
+    ).toEqual([
+      expect.stringMatching(/^1\.6 miles? biking · leaves 8:03 AM/),
+      expect.stringMatching(/^1\.9 miles? biking · leaves 8:03 AM/),
+      expect.stringMatching(/^2\.6 miles? biking · leaves 8:06 AM/)
+    ])
+    // Tapping an entry under a heading still selects its run.
+    const setActive = jest.fn()
+    const { wrapper: w2 } = mockWithProvider(
+      SameShapeVariants,
+      {
+        itinerary: rowOf(GROUPED),
+        lookupStatus: 'done',
+        onLookup: jest.fn(),
+        setActiveItinerary: setActive
+      },
+      undefined,
+      messages
+    )
+    open(w2)
+    w2.find('div.variant-group')
+      .at(1)
+      .find('button[data-pair]')
+      .at(0)
+      .simulate('click')
+    expect(setActive.mock.calls[0][0].index).toBe(4)
+  })
+
+  it('shows only the heading that has entries', () => {
+    const offOnly: VariantSpec[] = [
+      { index: 0, stop: 'Lake St' },
+      { alight: 'Knox Ave & 76th St Station', index: 1, stop: 'Lake St' }
+    ]
+    const { wrapper } = mockWithProvider(
+      SameShapeVariants,
+      {
+        itinerary: rowOf(offOnly),
+        lookupStatus: 'done',
+        onLookup: jest.fn(),
+        setActiveItinerary: jest.fn()
+      },
+      undefined,
+      messages
+    )
+    open(wrapper)
+    expect(
+      wrapper.find('h4.variant-group-heading').map((h: any) => h.text())
+    ).toEqual(['Get off somewhere else'])
+  })
+
+  it('shows no headings in the onboard list', () => {
+    const { wrapper } = render(rowOf(GROUPED))
+    open(wrapper)
+    expect(wrapper.find('h4.variant-group-heading').length).toBe(0)
+    expect(pairButtons(wrapper).length).toBe(6)
+  })
+})
