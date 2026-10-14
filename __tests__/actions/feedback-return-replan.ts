@@ -1,5 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { parseUrlQueryString } from '../../lib/actions/form'
+import isEqual from 'lodash.isequal'
+
+import { formChanged, parseUrlQueryString } from '../../lib/actions/form'
 
 jest.mock('../../lib/actions/api', () => ({
   routingQuery: (searchId: string) => ({
@@ -316,5 +318,104 @@ describe('backlog 23.4 > returning to / with ui_activeSearch in the URL', () => 
       )
     )
     expect(dispatched.map((a) => a.type)).toContain('MOCK_ROUTING_QUERY')
+  })
+})
+
+/**
+ * Cycle 20 / backlog 23.4 — the componentDidUpdate path. Setting the query
+ * from the URL's `name::lat,lon` places rewrote currentQuery.from/to (the
+ * Current Location category, a recent place's id/type, and a NOW departArrive
+ * are lost), and ResponsiveWebapp.componentDidUpdate
+ * (responsive-webapp.js:113-121) hands that change to formChanged, which under
+ * BOTH_LOCATIONS_CHANGED (form.js:246-247) planned again under a new id
+ * (2026-10-12 17:14:13, Go active) or cleared the search (10-13). The harness
+ * applies SET_QUERY_PARAM the way the reducer does ($merge into currentQuery)
+ * and then calls formChanged(prev, next) exactly as componentDidUpdate does.
+ */
+describe('backlog 23.4 > the form change that follows the URL restore', () => {
+  const makeStore = (otp: any) => {
+    const state: any = { otp, router: { location: { pathname: '/' } } }
+    const dispatched: any[] = []
+    const getState = () => state
+    const dispatch = (action: any): any => {
+      if (typeof action === 'function') return action(dispatch, getState)
+      dispatched.push(action)
+      if (action.type === 'SET_QUERY_PARAM') {
+        state.otp = {
+          ...state.otp,
+          currentQuery: { ...state.otp.currentQuery, ...action.payload }
+        }
+      }
+      return action
+    }
+    return { dispatch, dispatched, state }
+  }
+
+  async function returnFromFeedback(otp: any) {
+    const store = makeStore(otp)
+    const prev = store.state.otp.currentQuery
+    store.dispatch(parseUrlQueryString(URL_PARAMS))
+    await flush()
+    const next = store.state.otp.currentQuery
+    // componentDidUpdate only calls formChanged when the query differs.
+    if (!isEqual(prev, next)) store.dispatch(formChanged(prev, next))
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    return { ...store, next, types: store.dispatched.map((a) => a.type) }
+  }
+
+  const goOtp = (stored: any, current: any = stored): any => ({
+    activeSearchId: 'mmzc6wkfw',
+    config: {
+      autoPlan: { default: 'BOTH_LOCATIONS_CHANGED' },
+      debouncePlanTimeMs: 0
+    },
+    currentQuery: current,
+    goMode: { isActive: true },
+    location: { currentPosition: {} },
+    searches: {
+      mmzc6wkfw: { pending: 0, query: stored, response: SETTLED_RESULT }
+    },
+    ui: { mainPanelContent: null }
+  })
+
+  it('(a) Go active, stored Current Location origin: no request, no clear, category kept', async () => {
+    const out = await returnFromFeedback(goOtp(formBuiltQuery()))
+    expect(out.types).not.toContain('MOCK_ROUTING_QUERY')
+    expect(out.types).not.toContain('ROUTING_REQUEST')
+    expect(out.types).not.toContain('CLEAR_ACTIVE_SEARCH')
+    expect(out.state.otp.activeSearchId).toBe('mmzc6wkfw')
+    expect(out.next.from.category).toBe('CURRENT_LOCATION')
+    expect(out.next.to.type).toBe('recent')
+  })
+
+  it('(b) stored NOW vs URL DEPART: no re-plan, still NOW', async () => {
+    const stored: any = formBuiltQuery()
+    stored.departArrive = 'NOW'
+    const out = await returnFromFeedback(goOtp(stored))
+    expect(out.types).not.toContain('MOCK_ROUTING_QUERY')
+    expect(out.types).not.toContain('CLEAR_ACTIVE_SEARCH')
+    expect(out.next.departArrive).toBe('NOW')
+  })
+
+  it('(c) form origin moved to a fresh fix: no clear, no re-plan', async () => {
+    const stored = formBuiltQuery()
+    const current = {
+      ...formBuiltQuery(),
+      from: { ...stored.from, lat: stored.from.lat + 0.01 }
+    }
+    const out = await returnFromFeedback(goOtp(stored, current))
+    expect(out.types).not.toContain('MOCK_ROUTING_QUERY')
+    expect(out.types).not.toContain('CLEAR_ACTIVE_SEARCH')
+    expect(out.state.otp.activeSearchId).toBe('mmzc6wkfw')
+  })
+
+  it('(d) cold URL with no stored search still plans', async () => {
+    const otp = goOtp(formBuiltQuery())
+    otp.goMode = { isActive: false }
+    otp.activeSearchId = null
+    otp.searches = {}
+    otp.currentQuery = {}
+    const out = await returnFromFeedback(otp)
+    expect(out.types).toContain('MOCK_ROUTING_QUERY')
   })
 })
