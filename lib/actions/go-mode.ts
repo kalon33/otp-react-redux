@@ -856,6 +856,12 @@ export const SET_BOARDING_SEARCHING = 'SET_BOARDING_SEARCHING'
 // honestly finding nothing. Must also appear in create-otp-reducer's explicit
 // goMode case list or it is silently dropped.
 export const SET_BOARDING_SEARCH_FAILED = 'SET_BOARDING_SEARCH_FAILED'
+// "On a different bus?" (51.1): the boarding sheet opened from the waiting or
+// access card to name a bus the plan does not hold, and the sheet's own error
+// line. Both MUST also appear in create-otp-reducer's explicit goMode case
+// list or they are silently dropped.
+export const OPEN_CHOOSE_BUS = 'OPEN_CHOOSE_BUS'
+export const SET_CHOOSE_BUS_ERROR = 'SET_CHOOSE_BUS_ERROR'
 export const SET_RIDING = 'SET_RIDING'
 export const SET_LIVE_LEG_TIMES = 'SET_LIVE_LEG_TIMES'
 export const SET_NOTIFICATION_CONFIG = 'SET_NOTIFICATION_CONFIG'
@@ -919,6 +925,13 @@ export const setBoardingSearchFailed = createAction<boolean>(
   SET_BOARDING_SEARCH_FAILED
 )
 export const showBoardingPromptAction = createAction(SHOW_BOARDING_PROMPT)
+export const openChooseBusAction = createAction(OPEN_CHOOSE_BUS)
+/** Why the last "On a different bus?" pick could not be resolved, and for
+ * which route the rider named; null clears it. */
+export const setChooseBusError = createAction<{
+  kind: 'no-route' | 'no-trip'
+  route: string
+} | null>(SET_CHOOSE_BUS_ERROR)
 export const startGoMode = createAction<{
   itinerary: Itinerary
   /** The rider's stops, when this is one segment of a multi-stop trip (43.1). */
@@ -1011,6 +1024,8 @@ export const recordBoardTimeDisagreement = (info: {
  * behind 17.11) matches on these names, so they must not be free-form.
  */
 export type GoModeControl =
+  | 'choose-bus-open'
+  | 'choose-bus-pick'
   | 'onboard-option-row'
   | 'onboard-preview-back'
   | 'onboard-preview-confirm'
@@ -4179,6 +4194,25 @@ export function discoverNearbyVehicles(attempt = 0) {
       return
     }
 
+    await dispatch(discoverVehiclesOnNearbyRoutes(pos))
+    dispatch(setOnboardStatus('awaiting-selection'))
+    dispatch(showBoardingPromptAction())
+  }
+}
+
+/**
+ * Live vehicles near the rider from EVERY route around them, not only the
+ * plan's: the onboard flow's discovery (step 1-3 below), shared since 51.1 with
+ * "On a different bus?" on the waiting and access cards, which has to find a
+ * bus the itinerary does not hold. On 2026-10-13 the app polled only route
+ * 1:539 for ten minutes while the rider sat on a 546.
+ *
+ * Writes `transitIndex.nearbyRoutes` (the sheet's route badges),
+ * `vehicleMatch.nearbyVehicles` and the search-failed flag; changes no flow
+ * status, so each caller decides what the sheet is for.
+ */
+export function discoverVehiclesOnNearbyRoutes(pos: GeolocationPosition) {
+  return async function (dispatch: any, getState: any) {
     const lat = pos.coords.latitude
     const lon = pos.coords.longitude
 
@@ -4272,8 +4306,7 @@ export function discoverNearbyVehicles(attempt = 0) {
     ).map((v) => ({ ...v, ...(vehicleDetails[v.vehicleId] || {}) }))
 
     dispatch({ payload: nearby, type: UPDATE_NEARBY_VEHICLES })
-    dispatch(setOnboardStatus('awaiting-selection'))
-    dispatch(showBoardingPromptAction())
+    return nearby
   }
 }
 
@@ -5667,11 +5700,27 @@ export function replanFromAboard(
             getLegRouteId(l) === riding.routeId
         )
       : -1
+    // The rider named this bus themselves from "On a different bus?" (51.1),
+    // on the automatic path. Its route need not be in the plan at all — on
+    // 2026-10-13 it was a 546 against a planned 539 — and then the leg the
+    // splice replaces is the planned transit leg the rider walked away from,
+    // not the bike leg before it: alighting where THAT leg alights keeps the
+    // rest of the plan when the picked bus serves the stop.
+    const riderPicked =
+      !!options.autoApply && options.reason === 'rider-picked-bus'
+    const abandonedTransitLegIndex =
+      riderPicked && ridingLegIsAccess
+        ? legs.findIndex(
+            (l: any, i: number) => i > ridingLegIndex && l?.transitLeg
+          )
+        : -1
     const aboardLegIndex =
       boardedLegIndex >= 0
         ? boardedLegIndex
         : nextRiddenRouteLegIndex >= 0
         ? nextRiddenRouteLegIndex
+        : abandonedTransitLegIndex >= 0
+        ? abandonedTransitLegIndex
         : ridingLegIndex
 
     // The route to preserve is the one the rider has NOT boarded yet — the leg
@@ -5693,10 +5742,16 @@ export function replanFromAboard(
     // 23.6). Only where the splice ALIGHTS moved in 26.6.
     const keepRouteAfterIndex =
       boardedLegIndex >= 0 ? boardedLegIndex : ridingLegIndex
-    const keepRouteId = onwardTransitRouteId(itinerary, {
-      afterLegIndex: keepRouteAfterIndex,
-      boardedRouteId: keepRouteAfterIndex >= 0 ? null : riding.routeId ?? null
-    })
+    // A bus the rider picked is the route change, made by the rider: there
+    // is no "their route" left for an automatic update to keep (51.1). Held
+    // to the planned 539 here, the 546 splice could only have been refused.
+    const keepRouteId = riderPicked
+      ? null
+      : onwardTransitRouteId(itinerary, {
+          afterLegIndex: keepRouteAfterIndex,
+          boardedRouteId:
+            keepRouteAfterIndex >= 0 ? null : riding.routeId ?? null
+        })
 
     // Single-flight bookkeeping: same token/stuck-detection contract as
     // reRouteFromCurrentPosition.
@@ -5792,7 +5847,7 @@ export function replanFromAboard(
         ridingLegForAlight?.to?.stop?.gtfsId ??
         ridingLegForAlight?.to?.stopId ??
         null
-      const plannedArrival =
+      const plannedArrivalAny =
         plannedAlightStopId != null
           ? liveStopArrival(
               trip.stopTimes || [],
@@ -5800,6 +5855,14 @@ export function replanFromAboard(
               ridingLegForAlight?.to?.name
             )
           : null
+      // A picked bus on another route can serve the plan's stop BEHIND the
+      // rider (51.1); only a stop still ahead is somewhere to get off.
+      const plannedArrival =
+        riderPicked &&
+        plannedArrivalAny &&
+        plannedArrivalAny.epoch <= getCurrentTime().getTime()
+          ? null
+          : plannedArrivalAny
       let best: any = null
       if (plannedArrival) {
         best = {
@@ -5908,7 +5971,10 @@ export function replanFromAboard(
           // A missed connection makes the plan in hand unachievable, so there
           // is no arrival left to defend — only the boarded-earlier case is
           // asked to be no worse than what it replaces.
-          currentPlanIsDead: options.reason === 'missed-bus' || planRunLeft,
+          // The rider's own pick (51.1) is the same: they are on another bus,
+          // so the plan in hand is not one they can still take.
+          currentPlanIsDead:
+            options.reason === 'missed-bus' || planRunLeft || riderPicked,
           reason: options.reason ?? 'boarded-earlier'
         })
       ) {
@@ -9299,6 +9365,137 @@ export function searchBoardingVehicles() {
 }
 
 /**
+ * "On a different bus?" — the link under the waiting card and the access
+ * (bike/walk) card (51.1, rider's design answer B, 2026-10-13).
+ *
+ * Ride mv6ret6s-h5he2i: the rider waited at I-35W & 98th St Gate C for the
+ * planned 539, then boarded a 546 at 09:52. The plan did not hold the 546 and
+ * the app polled only route 1:539, so there was no vehicle match, no riding
+ * fact and nothing the rider could tap to say which bus they were on — and the
+ * quiet re-plans kept routing them back to Gate C by bike. Their note at
+ * 09:52:16: "Add a button to change which bus I get on if I choose a
+ * different one mid trip. This triggers a re route".
+ *
+ * Opens the boarding sheet in its choose-bus mode: live buses near the rider
+ * from every route first, then the nearby routes as badges, then a box for a
+ * route number that is not listed. Never opens by itself — only this tap.
+ */
+export function openChooseBusSheet() {
+  return function (dispatch: any, getState: any) {
+    const goMode = getState().otp?.goMode
+    dispatch(
+      recordGoModeControlTap('choose-bus-open', {
+        legIndex: goMode?.routeMatch?.legIndex ?? null
+      })
+    )
+    return dispatch(searchAnyNearbyBus())
+  }
+}
+
+/**
+ * The choose-bus sheet's search: the onboard flow's discovery across every
+ * nearby route (discoverVehiclesOnNearbyRoutes), without entering that flow —
+ * its status would put the onboard screen over the live trip.
+ */
+export function searchAnyNearbyBus() {
+  return async function (dispatch: any, getState: any) {
+    dispatch(openChooseBusAction())
+    const pos = getState().otp?.goMode?.tracking?.lastPosition
+    if (!pos) {
+      // No fix to compare a feed against: the route badges and the route
+      // number box still work (the schedule resolver needs a fix too, and
+      // says so through the sheet's error line).
+      dispatch(setBoardingSearching(false))
+      return
+    }
+    try {
+      await dispatch(discoverVehiclesOnNearbyRoutes(pos))
+    } catch {
+      dispatch(setBoardingSearchFailed(true))
+    } finally {
+      dispatch(setBoardingSearching(false))
+    }
+  }
+}
+
+/** True while the boarding sheet is the choose-bus one and no onboard flow is
+ * running underneath it (the flow's own picker keeps its old behaviour). */
+function choosingBus(goMode: any): boolean {
+  const status = goMode?.onboard?.status
+  return !!goMode?.boardingPrompt?.chooseBus && (!status || status === 'idle')
+}
+
+/**
+ * After a choose-bus pick has stamped the riding fact: record the pick and
+ * re-plan from that bus. Automatic and quiet — the rider has already said
+ * which bus they are on, and asking where to get off before showing anything
+ * is the redundant prompt their standing rule forbids. The riding trip id is
+ * what holds the quiet access re-plan off from here on (quietReplanAccessLeg).
+ */
+function replanFromRiderPickedBus(
+  dispatch: any,
+  pick: {
+    how: 'route' | 'typed' | 'vehicle'
+    routeId: string | null
+    tripId: string | null
+    vehicleId: string | null
+  }
+) {
+  dispatch(recordGoModeControlTap('choose-bus-pick', pick))
+  return dispatch(
+    replanFromAboard({ autoApply: true, reason: 'rider-picked-bus' })
+  )
+}
+
+/**
+ * The choose-bus sheet's "Type a route number" box (51.1): for a bus the feed
+ * shows nothing for and whose route is not among the nearby badges. The
+ * short name the rider typed is resolved through the route index the app
+ * already holds, then the nearby routes, then OTP itself; the trip comes from
+ * the same static-schedule resolver a route badge uses.
+ */
+export function confirmTypedRoute(typed: string) {
+  return async function (dispatch: any, getState: any) {
+    const wanted = (typed || '').trim()
+    if (!wanted) return
+    const same = (name?: string | null) =>
+      !!name && name.trim().toLowerCase() === wanted.toLowerCase()
+    const state = getState()
+    const indexed: any[] = Object.entries(
+      state.otp?.transitIndex?.routes || {}
+    ).map(([id, r]: [string, any]) => ({ ...r, id: r?.id ?? id }))
+    const nearby: any[] = state.otp?.transitIndex?.nearbyRoutes || []
+    let route: any =
+      indexed.find((r) => same(r?.shortName)) ||
+      nearby.find((r) => same(r?.shortName))
+    if (!route) {
+      dispatch(setBoardingSearching(true))
+      const resp: any = await dispatch(
+        onboardGraphQLQuery(
+          `{ routes(name: ${JSON.stringify(
+            wanted
+          )}) { gtfsId shortName longName } }`
+        )
+      )
+      const found = (resp?.data?.routes || []).find((r: any) =>
+        same(r?.shortName)
+      )
+      route = found ? { ...found, id: found.gtfsId } : null
+    }
+    if (!route?.id) {
+      dispatch(setChooseBusError({ kind: 'no-route', route: wanted }))
+      return
+    }
+    return dispatch(
+      confirmOnboardRoute(route.id, {
+        how: 'typed',
+        shortName: route.shortName ?? wanted
+      })
+    )
+  }
+}
+
+/**
  * The rider says they ARE on the bus (trip-sheet button, 6.10c).
  *
  * Deliberately not a new way to write `riding`: it routes through
@@ -9340,6 +9537,10 @@ export function confirmBoardingByRider() {
  */
 export function retryBoardingSearch() {
   return function (dispatch: any, getState: any) {
+    // "On a different bus?" (51.1) searches every nearby route, not the plan's.
+    if (getState().otp?.goMode?.boardingPrompt?.chooseBus) {
+      return dispatch(searchAnyNearbyBus())
+    }
     const onboardStatus = getState().otp?.goMode?.onboard?.status
     // Inside the onboard flow, discovery is what fills the list — and never
     // as a denial: the rider asked for a re-search, not to be taken off the
@@ -9437,6 +9638,19 @@ export function confirmVehicleSelection(vehicleId: string) {
       if (known?.vehicleId === vehicleId) selected = { ...selected, ...known }
     }
 
+    // "On a different bus?" (51.1). A feed record with no trip id still names
+    // its route, and a route is enough for the schedule resolver — the same
+    // fallback a route badge takes.
+    const choosing = choosingBus(goMode)
+    if (choosing && !selected?.tripId && selected?.routeId) {
+      return dispatch(
+        confirmOnboardRoute(selected.routeId, {
+          how: 'vehicle',
+          shortName: selected.routeName ?? null
+        })
+      )
+    }
+
     dispatch({
       payload: {
         confidence: 'confirmed' as const,
@@ -9470,11 +9684,20 @@ export function confirmVehicleSelection(vehicleId: string) {
           legIndex: goMode?.routeMatch?.legIndex ?? -1,
           offRouteSince: null,
           routeId: selected.routeId ?? null,
-          routeShortName: null,
+          // The choose-bus rows carry the route's rider-facing name (51.1).
+          routeShortName: choosing ? selected.routeName ?? null : null,
           tripId: selected.tripId ?? null,
           vehicleId
         })
       )
+      if (choosing) {
+        return replanFromRiderPickedBus(dispatch, {
+          how: 'vehicle',
+          routeId: selected.routeId ?? null,
+          tripId: selected.tripId ?? null,
+          vehicleId
+        })
+      }
     }
 
     // In the "I'm on the bus" onboard flow, use the selected vehicle's trip to
@@ -9548,7 +9771,14 @@ export function resolveOnboardTripFromSchedule(routeId: string) {
     if (!pos) return null
     const userLat = pos.coords.latitude
     const userLon = pos.coords.longitude
-    const to = state.otp.currentQuery?.to
+    // Mid-trip the destination is the ACTIVE ITINERARY's, not the query's: a
+    // mid-trip browse rewrites currentQuery (replanFromAboard's own warning),
+    // and the choose-bus pick (51.1) is always mid-trip. Pre-trip there is no
+    // itinerary and the query is what the rider asked for.
+    const legsNow: any[] = state.otp?.goMode?.activeItinerary?.legs || []
+    const to = legsNow.length
+      ? legsNow[legsNow.length - 1]?.to
+      : state.otp.currentQuery?.to
 
     // 1. Route directions (patterns) with their ordered stops.
     const routeResp: any = await dispatch(
@@ -9604,8 +9834,11 @@ export function resolveOnboardTripFromSchedule(routeId: string) {
 
     // 2. Today's departures at that stop; pick the trip on the chosen direction
     // whose departure is closest to now — the bus the rider just boarded.
+    // The Go Mode clock, so a replayed ride resolves against its own moment
+    // (getCurrentTime is wall time on a live ride).
+    const nowDate = getCurrentTime()
     const startOfToday = (() => {
-      const d = new Date()
+      const d = new Date(nowDate.getTime())
       d.setHours(0, 0, 0, 0)
       return Math.floor(d.getTime() / 1000)
     })()
@@ -9626,7 +9859,7 @@ export function resolveOnboardTripFromSchedule(routeId: string) {
       )
     )
     const groups = schedResp?.data?.stop?.stoptimesForPatterns || []
-    const now = Date.now()
+    const now = nowDate.getTime()
     let chosen: { headsign?: string; tripId: string } | null = null
     let bestDelta = Infinity
     groups.forEach((g: any) => {
@@ -9659,11 +9892,30 @@ export function resolveOnboardTripFromSchedule(routeId: string) {
  * otherwise infer the trip from the static schedule. Then run the same schedule
  * fetch + alight optimization as a direct vehicle pick.
  */
-export function confirmOnboardRoute(routeId: string) {
+export function confirmOnboardRoute(
+  routeId: string,
+  /** How a choose-bus pick named the route, and its rider-facing name (51.1). */
+  pickedVia: {
+    how?: 'route' | 'typed' | 'vehicle'
+    shortName?: string | null
+  } = {}
+) {
   return async function (dispatch: any, getState: any) {
     const state = getState()
     const goMode = state.otp?.goMode
     const onboardStatus = goMode?.onboard?.status
+    // "On a different bus?" (51.1): mid-trip, outside the onboard flow, which
+    // this used to refuse outright (the `onboardStatus === 'idle'` exit below).
+    const choosing = choosingBus(goMode)
+    const nearbyRoute = (state.otp?.transitIndex?.nearbyRoutes || []).find(
+      (r: { id: string }) => r.id === routeId
+    )
+    const routeShortName =
+      pickedVia.shortName ??
+      nearbyRoute?.shortName ??
+      state.otp?.transitIndex?.routes?.[routeId]?.shortName ??
+      null
+    if (choosing) dispatch(setBoardingSearching(true))
     const pos = goMode?.tracking?.lastPosition
     const routesIndex = state.otp?.transitIndex?.routes || {}
     const vehicles = (routesIndex[routeId]?.vehicles || []).filter(
@@ -9676,10 +9928,16 @@ export function confirmOnboardRoute(routeId: string) {
         pos.coords.latitude,
         pos.coords.longitude,
         vehicles,
-        Infinity,
+        // A choose-bus pick (51.1) comes from a sheet that has already listed
+        // every live bus within the picker's radius; a route badge tapped
+        // there means none of them was the rider's, and the nearest run of
+        // that route kilometres away is not either. The schedule decides.
+        choosing
+          ? speedAdjustedRadius(PICKER_RADIUS_METERS, pos.coords.speed)
+          : Infinity,
         { userSpeedMps: pos.coords.speed }
       )[0]
-    } else if (vehicles.length) {
+    } else if (vehicles.length && !choosing) {
       chosen = vehicles[0]
     }
 
@@ -9696,6 +9954,57 @@ export function confirmOnboardRoute(routeId: string) {
         tripId = resolved.tripId
         label = resolved.headsign || label
       }
+    }
+
+    if (choosing) {
+      if (!tripId) {
+        // Said on the sheet, which stays open: the onboard error card would
+        // put the onboard screen over a trip that is still running.
+        dispatch(
+          setChooseBusError({
+            kind: 'no-trip',
+            route: routeShortName || routeId
+          })
+        )
+        return
+      }
+      const vehicleId = chosen?.vehicleId || `route:${routeId}`
+      dispatch({
+        payload: {
+          confidence: 'confirmed' as const,
+          distanceMeters: chosen?.distanceMeters ?? null,
+          // The bus's own number when the feed has it, else the route: the
+          // schedule resolver's headsign is not something a badge can say.
+          label:
+            chosen?.label || chosen?.vehicleId || routeShortName || routeId,
+          lastSeen: Date.now(),
+          routeId,
+          tripId,
+          vehicleId
+        },
+        type: CONFIRM_VEHICLE
+      })
+      // A new boarding: the bus the rider names is not the one any earlier
+      // riding fact described, so its board time is now.
+      dispatch(
+        setRiding({
+          boardedAt: Date.now(),
+          // With no live bus, `label` is the schedule resolver's headsign.
+          headsign: chosen ? chosen.tripHeadsign ?? null : label ?? null,
+          legIndex: goMode?.routeMatch?.legIndex ?? -1,
+          offRouteSince: null,
+          routeId,
+          routeShortName,
+          tripId,
+          vehicleId
+        })
+      )
+      return replanFromRiderPickedBus(dispatch, {
+        how: pickedVia.how ?? 'route',
+        routeId,
+        tripId,
+        vehicleId: chosen?.vehicleId ?? null
+      })
     }
 
     if (!tripId || !onboardStatus || onboardStatus === 'idle') {

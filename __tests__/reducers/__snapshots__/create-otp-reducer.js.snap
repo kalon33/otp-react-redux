@@ -44,6 +44,8 @@ Object {
     "arrivedAt": null,
     "arrivedDelay": null,
     "boardingPrompt": Object {
+      "chooseBus": false,
+      "chooseBusError": null,
       "lastDismissedAt": null,
       "searchFailed": false,
       "searching": false,

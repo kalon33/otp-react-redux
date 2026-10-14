@@ -24,6 +24,7 @@ import { tripIdsMatch } from '../../util/go-mode/trip-id'
 import {
   AlternativeDeparture,
   CardBackButton,
+  ChooseBusLink,
   NavCard,
   NavExtras,
   NavEyebrow,
@@ -66,6 +67,11 @@ interface Props {
   leg: Leg
   nextLeg?: Leg
   /**
+   * "On a different bus?" (51.1): opens the bus picker for a bus the plan
+   * does not hold. Offered while this card leads to a boarding.
+   */
+  onChooseBus?: () => void
+  /**
    * Told when the departure this card headlines is NOT the one the tick
    * pipeline is running its wait math on. Recording only — see 16.3: on
    * 2026-09-15 the card said 10:09 while UPDATE_PROGRESS counted down to
@@ -102,6 +108,7 @@ const WalkingNavigation = ({
   departureOverrideTripId,
   leg,
   nextLeg,
+  onChooseBus,
   onDepartureMismatch,
   onExit,
   onSelectDeparture,
@@ -462,6 +469,10 @@ const WalkingNavigation = ({
     !!onSelectDeparture &&
     !resetWouldShowSameTime
   const showExtras = (showAlternatives || showReset) && !!onSelectDeparture
+  // Riding or walking to a bus (51.1): the rider may board a different one —
+  // on 2026-10-13 a 546 instead of the planned 539 — and this is where they
+  // say so. Never once the trip is over.
+  const showChooseBus = !!onChooseBus && isNextLegTransit && !arrived
 
   // Rider ask 2026-09-04 15:08:30, with a screenshot: three `Next: … / Use
   // this` rows took about a third of the card while the rider's actual next
@@ -593,7 +604,7 @@ const WalkingNavigation = ({
         )}
         {foot && <NavFoot>{foot}</NavFoot>}
 
-        {showExtras && (
+        {(showExtras || showChooseBus) && (
           <NavExtras>
             {showReset && (
               <ResetButton
@@ -670,6 +681,20 @@ const WalkingNavigation = ({
                   </div>
                 )}
               </>
+            )}
+            {showChooseBus && (
+              <div>
+                <ChooseBusLink
+                  data-testid="choose-bus-link"
+                  onClick={onChooseBus}
+                  type="button"
+                >
+                  {intl.formatMessage({
+                    defaultMessage: 'On a different bus?',
+                    id: 'components.GoMode.chooseBusLink'
+                  })}
+                </ChooseBusLink>
+              </div>
             )}
           </NavExtras>
         )}

@@ -11,6 +11,7 @@ import {
   CLOSE_ONBOARD_PREVIEW,
   CONFIRM_VEHICLE,
   DISMISS_BOARDING_PROMPT,
+  OPEN_CHOOSE_BUS,
   OPEN_ONBOARD_PREVIEW,
   PAUSE_GPS_SIMULATION,
   REPAIR_LEG_GEOMETRY,
@@ -18,6 +19,7 @@ import {
   SET_ARRIVED,
   SET_BOARDING_SEARCH_FAILED,
   SET_BOARDING_SEARCHING,
+  SET_CHOOSE_BUS_ERROR,
   SET_DEPARTURE_OVERRIDE,
   SET_EARLY_ALIGHT,
   SET_GO_MODE_ACTIVE_LEG,
@@ -245,6 +247,16 @@ export interface GoModeState {
   arrivedDelay: number | null
 
   boardingPrompt: {
+    /**
+     * The sheet was opened from "On a different bus?" on the waiting or
+     * access card (51.1), not by the boarding flow: it lists live buses from
+     * every nearby route plus route badges and a route-number box, and a pick
+     * sets the riding fact and re-plans from that bus. On 2026-10-13 the rider
+     * boarded a 546 the plan did not hold and the app had no way to be told.
+     */
+    chooseBus?: boolean
+    /** Why the last pick in that mode could not be resolved (51.1). */
+    chooseBusError?: { kind: 'no-route' | 'no-trip'; route: string } | null
     lastDismissedAt: number | null
     /**
      * The last vehicle search for this prompt FAILED — the feed reads did not
@@ -467,6 +479,8 @@ const defaultState: GoModeState = {
   arrivedDelay: null,
 
   boardingPrompt: {
+    chooseBus: false,
+    chooseBusError: null,
     lastDismissedAt: null,
     searchFailed: false,
     searching: false,
@@ -702,6 +716,8 @@ const goMode = handleActions<GoModeState, any>(
       ...state,
       boardingPrompt: {
         ...state.boardingPrompt,
+        chooseBus: false,
+        chooseBusError: null,
         searching: false,
         shown: false,
         transitLegEnteredAt: null
@@ -730,6 +746,8 @@ const goMode = handleActions<GoModeState, any>(
       alightedFrom: null,
       boardingPrompt: {
         ...state.boardingPrompt,
+        chooseBus: false,
+        chooseBusError: null,
         searching: false,
         shown: false
       },
@@ -746,6 +764,8 @@ const goMode = handleActions<GoModeState, any>(
       ...state,
       boardingPrompt: {
         ...state.boardingPrompt,
+        chooseBus: false,
+        chooseBusError: null,
         lastDismissedAt: Date.now(),
         searching: false,
         shown: false
@@ -765,6 +785,20 @@ const goMode = handleActions<GoModeState, any>(
      * (the tap is stale) rather than previewing something the rider did not
      * choose.
      */
+    // "On a different bus?" (51.1): the sheet opens already searching, so the
+    // empty list is never read as an answer before a poll has been compared.
+    [OPEN_CHOOSE_BUS]: (state) => ({
+      ...state,
+      boardingPrompt: {
+        ...state.boardingPrompt,
+        chooseBus: true,
+        chooseBusError: null,
+        searchFailed: false,
+        searching: true,
+        shown: true
+      }
+    }),
+
     [OPEN_ONBOARD_PREVIEW]: (state, action) => {
       const list = state.onboard.alightOptions || []
       const { control, index, stopId } = action.payload || {}
@@ -850,6 +884,15 @@ const goMode = handleActions<GoModeState, any>(
     // own voice and the shape every caller used before 12.15, or
     // `{ ms, source }` when the writer knows whose pick it is. Normalized here
     // rather than at the call sites so the two fields can never disagree.
+    [SET_CHOOSE_BUS_ERROR]: (state, action: any) => ({
+      ...state,
+      boardingPrompt: {
+        ...state.boardingPrompt,
+        chooseBusError: action.payload ?? null,
+        searching: false
+      }
+    }),
+
     [SET_DEPARTURE_OVERRIDE]: (state, action) => {
       const { payload } = action
       const ms =
@@ -1077,6 +1120,9 @@ const goMode = handleActions<GoModeState, any>(
       ...state,
       boardingPrompt: {
         ...state.boardingPrompt,
+        // The boarding flow's own sheet is never the choose-bus one (51.1).
+        chooseBus: false,
+        chooseBusError: null,
         shown: true
       }
     }),

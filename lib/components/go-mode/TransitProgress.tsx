@@ -33,6 +33,7 @@ import type {
 import {
   AlertBanner,
   CardBackButton,
+  ChooseBusLink,
   InfoCard,
   InfoCardLabel,
   InfoCardValue,
@@ -56,6 +57,8 @@ interface Props {
   emptyPolls: number
   leg: Leg
   liveLegTimes?: Record<number, LiveLegTime>
+  /** "On a different bus?" (51.1) — offered only while waiting at the stop. */
+  onChooseBus?: () => void
   onExit?: () => void
   progress: TripProgress
   /** goMode.riding — the evidenced fact that the rider is aboard this leg. */
@@ -84,6 +87,7 @@ const TransitProgress = ({
   emptyPolls,
   leg,
   liveLegTimes,
+  onChooseBus,
   onExit,
   progress,
   riding,
@@ -431,6 +435,25 @@ const TransitProgress = ({
           away the very bus they are standing there for (13.9). It returns the
           moment the departure time passes, so a rider aboard a bus the feed
           never confirmed still has it. */}
+      {/* Waiting at the stop, the rider can still board a different bus than
+          the one this card is about (51.1: a 546 at 98th St Station while
+          the card waited for the 539). The other half of the "I got off here"
+          slot below, which is hidden for exactly this stretch. */}
+      {waiting && onChooseBus && (
+        <NavExtras>
+          <ChooseBusLink
+            data-testid="choose-bus-link"
+            onClick={onChooseBus}
+            type="button"
+          >
+            {intl.formatMessage({
+              defaultMessage: 'On a different bus?',
+              id: 'components.GoMode.chooseBusLink'
+            })}
+          </ChooseBusLink>
+        </NavExtras>
+      )}
+
       {!waiting && (
         <NavExtras>
           <ResetButton
