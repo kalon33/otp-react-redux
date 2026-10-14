@@ -58,6 +58,7 @@ import {
   DEFAULT_TURN_CUE_SETTINGS,
   TurnCueSettings
 } from '../util/go-mode/turn-cue-settings'
+import { FIX_ACCURACY_MAX_M } from '../util/go-mode/transit-trust'
 import { ridingFactIsEvidenced } from '../util/go-mode/riding'
 import type {
   DepartureOverrideSource,
@@ -400,6 +401,13 @@ export interface GoModeState {
     interval: number
     isTracking: boolean
     lastPosition: GeolocationPosition | null
+    /**
+     * The latest Go Mode fix whose accuracy was within `FIX_ACCURACY_MAX_M`
+     * (51.3). `lastPosition` is the latest fix of any quality; an automatic
+     * re-plan takes its origin from the freshest trusted fix instead — see
+     * `pickReplanOriginFix` (util/go-mode/replan-origin).
+     */
+    lastTrustedPosition: GeolocationPosition | null
   }
 
   /**
@@ -533,7 +541,8 @@ const defaultState: GoModeState = {
     error: null,
     interval: 8000,
     isTracking: false,
-    lastPosition: null
+    lastPosition: null,
+    lastTrustedPosition: null
   },
 
   turnCues: { ...DEFAULT_TURN_CUE_SETTINGS },
@@ -1381,12 +1390,20 @@ const goMode = handleActions<GoModeState, any>(
     }),
 
     [UPDATE_POSITION]: (state: GoModeState, action: any) => {
+      const accuracy = action.payload?.coords?.accuracy
+      const trusted =
+        accuracy != null &&
+        Number.isFinite(accuracy) &&
+        accuracy <= FIX_ACCURACY_MAX_M
       return {
         ...state,
         tracking: {
           ...state.tracking,
           error: null,
-          lastPosition: action.payload
+          lastPosition: action.payload,
+          lastTrustedPosition: trusted
+            ? action.payload
+            : state.tracking.lastTrustedPosition ?? null
         }
       }
     },

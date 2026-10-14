@@ -104,6 +104,7 @@ Object {
       "interval": 8000,
       "isTracking": false,
       "lastPosition": null,
+      "lastTrustedPosition": null,
     },
     "turnCues": Object {
       "enabledByDefault": false,

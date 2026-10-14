@@ -315,6 +315,15 @@ export interface TripSession {
    * replan-origin.ts and blended with each observed answer.
    */
   replanLatencyMs: { full: number; scoped: number }
+
+  /**
+   * Automatic re-plans waiting for a fix good enough to start from (51.3),
+   * keyed by re-plan reason, valued by when the wait began. One
+   * `REPLAN_ORIGIN_WAIT` record is written when a wait begins and one when it
+   * ends, not one per tick.
+   */
+  replanOriginWaitSince: Record<string, number>
+
   /** Reroute-snapshot capture interval (recording sessions only). */
   rerouteSnapshotIntervalId: ReturnType<typeof setInterval> | null
 
@@ -454,6 +463,7 @@ export function createTripSession(): TripSession {
       full: REPLAN_LATENCY_SEED_FULL_MS,
       scoped: REPLAN_LATENCY_SEED_SCOPED_MS
     },
+    replanOriginWaitSince: {},
     rerouteSnapshotIntervalId: null,
     returnRefreshInFlight: false,
     riderBoardingMiss: null,

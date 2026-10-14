@@ -301,9 +301,14 @@ import {
 } from '../util/go-mode/deviation'
 import {
   blendReplanLatencyMs,
-  projectReplanOrigin
+  pickReplanOriginFix,
+  projectReplanOrigin,
+  REPLAN_ORIGIN_MAX_AGE_MS
 } from '../util/go-mode/replan-origin'
-import type { ProjectedOrigin } from '../util/go-mode/replan-origin'
+import type {
+  ProjectedOrigin,
+  ReplanOriginPick
+} from '../util/go-mode/replan-origin'
 import { evaluateDepartureDrift } from '../util/go-mode/departure-drift'
 import type { DepartureBaselineState } from '../util/go-mode/departure-drift'
 import type { PacingCardState } from '../util/go-mode/pacing-card'
@@ -811,6 +816,19 @@ export const AUTO_REPLAN = 'AUTO_REPLAN'
  * after the bus), `applied`.
  */
 export const PLAN_RETARGET = 'PLAN_RETARGET'
+/**
+ * Recording only, like AUTO_REPLAN: no reducer consumes it, so it is
+ * deliberately absent from create-otp-reducer's goMode delegation list, and
+ * its payload is scalars. An automatic re-plan that had no fix good enough to
+ * start from (51.3: within `FIX_ACCURACY_MAX_M` and `REPLAN_ORIGIN_MAX_AGE_MS`)
+ * waits instead of planning from a bad one. One record when the wait begins
+ * (`phase: 'wait'`, with the accuracy of the fix it refused) and one when a
+ * usable fix ends it (`phase: 'resume'`, with how long it waited and the fix
+ * it took) — never one per tick. For `missed-bus` and `quiet-replan` the
+ * resume is the re-plan going out; for `stale-plan-origin` it is the start
+ * check being answered, which may well find the plan is fine.
+ */
+export const REPLAN_ORIGIN_WAIT = 'REPLAN_ORIGIN_WAIT'
 export const PAUSE_GPS_SIMULATION = 'PAUSE_GPS_SIMULATION'
 export const REROUTE_SNAPSHOT = 'REROUTE_SNAPSHOT'
 export const REPAIR_LEG_GEOMETRY = 'REPAIR_LEG_GEOMETRY'
@@ -1604,7 +1622,13 @@ function autoReplanRefusal(
   options: AutoReplanOptions = {}
 ): string | null {
   const goMode = state?.otp?.goMode
-  const coords = goMode?.tracking?.lastPosition?.coords
+  // Judged against the fix the re-plan was asked from (51.3): the freshest one
+  // good enough to plan from, else the latest. Measuring a plan drawn from the
+  // 14 m fix against a 1,414 m one would refuse it for starting "behind" a
+  // rider who is not where that fix says.
+  const coords = (
+    replanOriginPick(state)?.position ?? goMode?.tracking?.lastPosition
+  )?.coords
   const position = coords
     ? ([coords.latitude, coords.longitude] as [number, number])
     : null
@@ -1897,20 +1921,47 @@ export function recoverStaleStartOrigin() {
     if (session.staleStartOriginPending !== itinerarySignature(itinerary))
       return
 
-    // Only the tracking fix will do, because it is the one
-    // `reRouteFromCurrentPosition` itself reads: recovering off a fix it cannot
-    // see would announce a re-plan it then declines to make. On a brand-new
-    // trip it can still be null when beginGoMode reaches here (the first fix
+    // Only the fix `reRouteFromCurrentPosition` itself would start from will
+    // do: recovering off a fix it cannot see would announce a re-plan it then
+    // declines to make. Since 51.3 that is the freshest fix within
+    // FIX_ACCURACY_MAX_M (pickReplanOriginFix), never a kilometre-wide one: on
+    // 2026-10-13 09:30:42 this re-plan ran from a 1,414 m fix. On a brand-new
+    // trip there can be none yet when beginGoMode reaches here (the first fix
     // landed 69 ms after START_GO_MODE on the 09-08 ride, but nothing awaits
-    // it), so the question is left UNANSWERED — no latch — and the first
-    // position tick, which calls this too, answers it.
-    const fix: GeolocationPosition | null =
+    // it), or only a poor one, so the question is left UNANSWERED — no latch —
+    // and the first position tick with a usable fix, which calls this too,
+    // answers it.
+    const tracked: GeolocationPosition | null =
       goMode?.tracking?.lastPosition ?? null
-    const coords: any = fix?.coords
+    const fix: GeolocationPosition | null =
+      replanOriginPick(getState())?.position ?? null
+    if (!fix) {
+      if (tracked?.coords) {
+        noteReplanOriginWait(dispatch, getState(), 'stale-plan-origin')
+        // ...but not for ever. The question is about the plan as it was
+        // installed; a rider who has been moving for a minute since may have
+        // ridden its access leg, and asking then would re-plan a trip that is
+        // going fine (the false positive the latch exists to prevent). So a
+        // wait past REPLAN_ORIGIN_MAX_AGE_MS spends the latch unanswered.
+        const since = session.replanOriginWaitSince['stale-plan-origin']
+        if (since != null && Date.now() - since > REPLAN_ORIGIN_MAX_AGE_MS) {
+          session.staleStartOriginPending = null
+          noteReplanOriginResume(
+            dispatch,
+            getState(),
+            'stale-plan-origin',
+            true
+          )
+        }
+      }
+      return
+    }
+    const coords: any = fix.coords
     if (coords?.latitude == null || coords?.longitude == null) return
     const position: [number, number] = [coords.latitude, coords.longitude]
 
     session.staleStartOriginPending = null
+    noteReplanOriginResume(dispatch, getState(), 'stale-plan-origin')
 
     if (
       !startOriginIsStale({
@@ -2564,13 +2615,98 @@ function armAutoEndTimer(dispatch: any, getState: any): void {
 }
 
 /**
+ * The fix an automatic re-plan may start from (51.3) — see
+ * `pickReplanOriginFix`. Simulation and replay fixes carry the simulated clock
+ * in `timestamp`, so there the newest fix's own time is "now" (the same
+ * forcing transit trust's fix age uses) and recorded rides replay the same.
+ */
+function replanOriginPick(state: any): ReplanOriginPick | null {
+  const goMode = state?.otp?.goMode
+  const lastPosition: GeolocationPosition | null =
+    goMode?.tracking?.lastPosition ?? null
+  const simulated = session.simulationActive || isReplayActive()
+  const nowMs =
+    simulated && lastPosition?.timestamp != null
+      ? Number(lastPosition.timestamp)
+      : Date.now()
+  return pickReplanOriginFix({
+    goModeFix: lastPosition,
+    lastTrustedFix: goMode?.tracking?.lastTrustedPosition ?? null,
+    nowMs,
+    plannerFix: state?.otp?.location?.currentPosition ?? null
+  })
+}
+
+/**
+ * Record that an automatic re-plan is waiting for a usable origin fix (51.3).
+ * Writes `REPLAN_ORIGIN_WAIT {phase: 'wait'}` once per wait, not per tick.
+ */
+function noteReplanOriginWait(dispatch: any, state: any, reason: string) {
+  if (session.replanOriginWaitSince[reason] != null) return
+  const nowMs = Date.now()
+  session.replanOriginWaitSince = {
+    ...session.replanOriginWaitSince,
+    [reason]: nowMs
+  }
+  const coords = state?.otp?.goMode?.tracking?.lastPosition?.coords
+  dispatch({
+    payload: {
+      fixAccuracyM:
+        coords?.accuracy != null ? Math.round(coords.accuracy) : null,
+      phase: 'wait',
+      reason,
+      tMs: getCurrentTime().getTime()
+    },
+    type: REPLAN_ORIGIN_WAIT
+  })
+}
+
+/**
+ * The other end of `noteReplanOriginWait`: a usable fix has ended the wait for
+ * `reason` (see REPLAN_ORIGIN_WAIT). Silent when it never waited.
+ */
+function noteReplanOriginResume(
+  dispatch: any,
+  state: any,
+  reason: string,
+  gaveUp = false
+) {
+  const since = session.replanOriginWaitSince[reason]
+  if (since == null) return
+  const rest = { ...session.replanOriginWaitSince }
+  delete rest[reason]
+  session.replanOriginWaitSince = rest
+  const pick = replanOriginPick(state)
+  dispatch({
+    payload: {
+      fixAccuracyM:
+        pick?.position?.coords?.accuracy != null
+          ? Math.round(pick.position.coords.accuracy)
+          : null,
+      fixAgeMs: pick ? Math.round(pick.ageMs) : null,
+      fixSource: pick?.source ?? null,
+      // The wait ended without a usable fix (stale-plan-origin only).
+      gaveUp,
+      phase: 'resume',
+      reason,
+      tMs: getCurrentTime().getTime(),
+      waitedMs: Date.now() - since
+    },
+    type: REPLAN_ORIGIN_WAIT
+  })
+}
+
+/**
  * Where a mid-trip search should start FROM. Aboard a bus, "current position"
  * is a moving mid-street point the rider can't act on, so plan from the next
  * stop ahead on their line, anchored to when the bus gets there. Otherwise plan
  * from the GPS fix, now. Shared by the isolated auto-reroute and the rider's
  * own "Search from here" so the two never disagree about where they are.
  */
-function currentPositionOrigin(state: any): {
+function currentPositionOrigin(
+  state: any,
+  options: { trustedOnly?: boolean } = {}
+): {
   date: string
   from: any
   time: string
@@ -2591,6 +2727,15 @@ function currentPositionOrigin(state: any): {
       time: format(zoned, coreUtils.time.OTP_API_TIME_FORMAT)
     }
   }
+  // Off a bus, the freshest fix good enough to plan from (51.3) — never a
+  // kilometre-wide one. An automatic re-plan (`trustedOnly`) gets null when
+  // there is none, and its caller waits for one; the rider's own search falls
+  // back to the latest fix, because they asked and a plan from roughly here
+  // beats no plan.
+  const fix =
+    replanOriginPick(state)?.position ??
+    (options.trustedOnly ? null : lastPosition)
+  if (!fix) return null
   // Anchored to NOW, so it asks for the second it is actually at (18.4).
   // `coreUtils.time.getCurrentTime` is `format(now, OTP_API_TIME_FORMAT)` and
   // would floor this request to the minute it started in.
@@ -2599,8 +2744,8 @@ function currentPositionOrigin(state: any): {
     date: coreUtils.time.getCurrentDate(homeTimezone),
     from: {
       category: 'CURRENT_LOCATION',
-      lat: lastPosition.coords.latitude,
-      lon: lastPosition.coords.longitude,
+      lat: fix.coords.latitude,
+      lon: fix.coords.longitude,
       name: 'Current location'
     },
     time: format(nowZoned, GO_MODE_API_TIME_FORMAT)
@@ -2834,8 +2979,10 @@ export function reRouteFromCurrentPosition(
     const legs = itinerary?.legs || []
     const destLeg = legs[legs.length - 1]
     // Aboard a bus this resolves to the next stop ahead at the time the bus
-    // gets there, else the GPS fix now — see currentPositionOrigin.
-    const origin = currentPositionOrigin(state)
+    // gets there, else the freshest trustworthy GPS fix — see
+    // currentPositionOrigin. Every caller is automatic, and each waits before
+    // calling when there is no such fix (51.3); this is the backstop.
+    const origin = currentPositionOrigin(state, { trustedOnly: true })
 
     // Need a real position and destination — never fabricate either.
     if (!itinerary || !lastPosition || !destLeg || !origin) {
@@ -3281,6 +3428,16 @@ export function quietReplanAccessLeg() {
       return
     }
 
+    // 51.3: never re-plan from a fix too poor to say where the rider is. The
+    // freshest fix within FIX_ACCURACY_MAX_M and a minute old is the origin;
+    // with none, wait — before admission, so the wait spends no cooldown.
+    const originPick = replanOriginPick(state)
+    if (!originPick) {
+      noteReplanOriginWait(dispatch, state, 'quiet-replan')
+      return
+    }
+    const originFix = originPick.position
+
     if (
       !quietReplanAdmitted({
         // A re-plan the rider rode away from buys a long silence — see
@@ -3305,6 +3462,7 @@ export function quietReplanAccessLeg() {
     ) {
       return
     }
+    noteReplanOriginResume(dispatch, state, 'quiet-replan')
     session.lastQuietReplanAt = nowMs
     session.quietReplanHistory = [
       ...trimQuietReplanHistory(session.quietReplanHistory, nowMs),
@@ -3319,8 +3477,8 @@ export function quietReplanAccessLeg() {
     // back. So: remember where the rider was when the question went out, and
     // record the attempt once, when a fetch resolves.
     const attemptPoint: [number, number] = [
-      lastPosition.coords.latitude,
-      lastPosition.coords.longitude
+      originFix.coords.latitude,
+      originFix.coords.longitude
     ]
     let attemptRecorded = false
     const recordReplanAttempt = (returned: boolean) => {
@@ -3361,13 +3519,13 @@ export function quietReplanAccessLeg() {
     // still opened 41.1 s and 42.7 s `behind` with only the projection in.
     const projectAt = (latencyMs: number): ProjectedOrigin =>
       projectReplanOrigin({
-        accuracyM: lastPosition.coords.accuracy,
-        headingDeg: lastPosition.coords.heading,
-        lat: lastPosition.coords.latitude,
+        accuracyM: originFix.coords.accuracy,
+        headingDeg: originFix.coords.heading,
+        lat: originFix.coords.latitude,
         latencyMs,
-        lon: lastPosition.coords.longitude,
+        lon: originFix.coords.longitude,
         nowMs,
-        speedMps: lastPosition.coords.speed
+        speedMps: originFix.coords.speed
       })
     const originFrom = (projected: ProjectedOrigin) => ({
       category: 'CURRENT_LOCATION',
@@ -8624,15 +8782,32 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       // "Aboard already?"), so a missed-bus re-plan can only ever run for a
       // rider who is not on a bus. That is what makes this path's
       // currentPositionOrigin anchor — the next stop ahead — safe.
-      dispatch(
-        reRouteFromCurrentPosition({
-          autoApply: recovery.autoApply,
-          keepRouteId: getLegRouteId(
-            itinerary.legs[missedCtx.boardLegIndex] as Leg
-          ),
-          reason: 'missed-bus'
-        })
-      )
+      //
+      // 51.3: and never from a fix too poor to say where the rider is. On
+      // 2026-10-13 09:31:25 this re-plan went out from a 1,414 m fix 1,247 m
+      // south of a rider standing at I-35W & 46th St, and installed a 2 km
+      // bike loop back to the same station. With no usable fix it waits, and
+      // the attempt is handed back unspent with its clock at zero, so the
+      // first tick that has a usable fix re-plans (retryDue in
+      // missed-bus-recovery) — at 09:31:48 on that ride, the 90 m fix.
+      if (!currentPositionOrigin(getState(), { trustedOnly: true })) {
+        const next = session.missedBusRerouteAttempt
+        session.missedBusRerouteAttempt = next
+          ? { ...next, attempts: Math.max(0, next.attempts - 1), lastAtMs: 0 }
+          : next
+        noteReplanOriginWait(dispatch, getState(), 'missed-bus')
+      } else {
+        noteReplanOriginResume(dispatch, getState(), 'missed-bus')
+        dispatch(
+          reRouteFromCurrentPosition({
+            autoApply: recovery.autoApply,
+            keepRouteId: getLegRouteId(
+              itinerary.legs[missedCtx.boardLegIndex] as Leg
+            ),
+            reason: 'missed-bus'
+          })
+        )
+      }
     } else if (
       // Boarded an EARLIER same-route trip than the itinerary planned (the
       // auto-anchor targets it while walking; this fixes the legs once the
