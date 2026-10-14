@@ -7491,8 +7491,15 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         accessBoardLegIndex > 0 &&
         // Asked before the projection below, which costs a decode-and-scan of
         // the bus leg's shape: under transit pace the run cannot start
-        // whatever the geometry says, so there is nothing to pay for.
-        (position.coords.speed ?? 0) >= ACCESS_BOARD_MIN_SPEED_MPS
+        // whatever the geometry says, so there is nothing to pay for...
+        ((position.coords.speed ?? 0) >= ACCESS_BOARD_MIN_SPEED_MPS ||
+          // ...unless a transit-pace run is already open. A bus slows for its
+          // stops; dropping the run on the first fix under 12 m/s is what let
+          // the quiet re-plan send a rider on the bus back to Gate C by bike
+          // on 2026-10-13 (09:54:14, 11.8 m/s, 42 fast fixes just counted).
+          // trackTransitPace decides whether a slow fix keeps the run; the
+          // access-board run is unaffected — it refuses any fix under pace.
+          session.transitPace != null)
       ) {
         const accessBoardSample = {
           boardLeg: itinerary.legs[accessBoardLegIndex],
