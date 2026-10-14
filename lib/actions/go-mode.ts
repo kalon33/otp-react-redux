@@ -822,6 +822,17 @@ export const SET_EARLY_ALIGHT = 'SET_EARLY_ALIGHT'
 export const SET_GO_MODE_ACTIVE_LEG = 'SET_GO_MODE_ACTIVE_LEG'
 export const SET_GO_MODE_BACKGROUNDED = 'SET_GO_MODE_BACKGROUNDED'
 export const SET_MAP_FOLLOW = 'SET_MAP_FOLLOW'
+/**
+ * Recording only, like GO_MODE_CONTROL_TAP: no reducer consumes it, so it is
+ * deliberately absent from create-otp-reducer's goMode delegation list, and
+ * its payload is scalars so the debug-log middleware keeps it verbatim on
+ * every ride. One entry per touch gesture that moved the Go Mode map while it
+ * was following: which camera handler fired (drag / rotate / zoom), the
+ * fingers down then and at most, the zoom change, and whether following
+ * survived. It exists because a pinch that cancelled follow (48.1) could not
+ * be told from a drag in the stream.
+ */
+export const MAP_FOLLOW_GESTURE = 'MAP_FOLLOW_GESTURE'
 export const SET_BOARDING_SEARCHING = 'SET_BOARDING_SEARCHING'
 // Whether the last vehicle search for the picker FAILED, as opposed to
 // honestly finding nothing. Must also appear in create-otp-reducer's explicit
@@ -1104,6 +1115,14 @@ export const toggleMapFollow = createAction(TOGGLE_MAP_FOLLOW)
 // Idempotent "set" alongside the toggle: auto-disengage (map drag/rotate)
 // must never race the follow button — dispatching false twice stays false.
 export const setMapFollow = createAction<boolean>(SET_MAP_FOLLOW)
+// Recording only (MAP_FOLLOW_GESTURE), 48.1.
+export const recordMapFollowGesture = createAction<{
+  followKept: boolean
+  handler: 'drag' | 'rotate' | 'zoom'
+  maxTouches: number
+  touches: number
+  zoomDelta: number
+}>(MAP_FOLLOW_GESTURE)
 export const setGoModeBackgrounded = createAction<boolean>(
   SET_GO_MODE_BACKGROUNDED
 )

@@ -697,6 +697,13 @@ export function matchUserToVehicle(
   // the match by 5m). Only judged while both sides are moving fast enough for
   // headings to mean anything; when the gate empties the list, no match beats
   // binding the rider to a bus going the other way.
+  //
+  // The riding vehicle is exempt (12.11, 2026-10-13): Phase 1's reach disc has
+  // already decided it can be where the rider is, and its heading is a stale
+  // frame's — on a station loop the rider turns while the frame does not
+  // (10-12 17:18:12, rider 271° vs 8227's 34 s-old 130°; 09-30 17:26:18 and
+  // 17:27:07 on 8230), so this gate threw out the right bus. Every other bus
+  // keeps the gate — that is the 7/29 hijack it exists for.
   if (
     userHeading != null &&
     userSpeedMps != null &&
@@ -704,6 +711,7 @@ export function matchUserToVehicle(
   ) {
     nearby = nearby.filter(
       (c) =>
+        (ridingVehicleId != null && c.vehicle.vehicleId === ridingVehicleId) ||
         !(
           c.vehicle.heading != null &&
           c.vehicle.speed != null &&
