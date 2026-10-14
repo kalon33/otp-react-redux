@@ -15,9 +15,11 @@
  *    `selectCandidateStops`, and for each one a street plan from that stop to
  *    the destination at the bus's arrival there;
  *  - get ON elsewhere: the FIRST transit leg's trip, up to three stops it
- *    serves BEFORE the boarding stop that are closer to the origin than the
- *    boarding stop is, and for each a street plan from the origin arriving by
- *    the bus's departure there.
+ *    serves before the boarding stop and up to three it serves after it (but
+ *    before the stop the leg gets off at), nearest to the origin first, and
+ *    for each a street plan from the origin arriving by the bus's departure
+ *    there (backlog 49.1: "We need different boarding stops not just
+ *    different egress stops!").
  *
  * Each answer is spliced into a whole itinerary — the representative's own
  * legs, the transit leg cut at the other stop, the street plan — and appended
@@ -64,7 +66,10 @@ import { sliceTripGeometryForLeg } from './go-mode/geometry'
 
 /** Get-off stops asked about per tap: `selectCandidateStops`' own default. */
 export const OTHER_STOPS_MAX_GET_OFF = 5
-/** Get-on stops asked about per tap. 5 + 3 = the 8 plans one tap may cost. */
+/**
+ * Get-on stops asked about per tap, in EACH direction along the run (49.1):
+ * 5 off + 3 earlier + 3 later = the 11 plans one tap may cost.
+ */
 export const OTHER_STOPS_MAX_GET_ON = 3
 
 interface LatLon {
@@ -230,11 +235,23 @@ export function getOffCandidates(
 }
 
 /**
- * Up to three stops before the boarding stop to get on at instead: only those
- * closer (straight line) to the origin than the boarding stop, nearest first.
- * A stop farther from the rider than the one they have is a longer ride to an
- * earlier bus, and is not worth a request. Timed by the timetable's running
- * time back from the leg's own departure.
+ * Other stops to get on the same bus at, in both directions along its run
+ * (backlog 49.1, rider's answer Q1 = B, 2026-10-13):
+ *
+ *  - EARLIER: up to three stops the bus serves before the boarding stop,
+ *    nearest to the origin first, whether or not they are nearer than the
+ *    boarding stop. Until 49.1 only nearer ones were asked about, which left
+ *    a rider whose boarding stop is the nearest on the line (Powderhorn,
+ *    I-35W & Lake St southbound: every earlier stop is downtown) with none;
+ *  - LATER: up to three stops it serves after the boarding stop and BEFORE the
+ *    stop the leg gets off at, nearest to the origin first: bike farther and
+ *    catch the same bus further down the line (46th St instead of Lake St).
+ *    A later stop at or past the get-off stop is no ride at all, and a "get
+ *    on somewhere else" entry keeps the row's own get-off stop (Q2 = B: no
+ *    entries that change both ends), so those are never asked about.
+ *
+ * Earlier ones first, then later ones, each in trip order. Each is timed by
+ * the timetable's running time from the leg's own departure.
  */
 export function getOnCandidates(
   trip: TripSchedule,
@@ -243,33 +260,40 @@ export function getOnCandidates(
   max = OTHER_STOPS_MAX_GET_ON
 ): OtherStopCandidate[] {
   const stopTimes = trip?.stopTimes || []
-  const { boardIdx } = legStopIndexes(trip, leg)
+  const { alightIdx, boardIdx } = legStopIndexes(trip, leg)
   const legStart = Number(leg?.startTime)
-  if (boardIdx <= 0 || !Number.isFinite(legStart)) return []
+  if (boardIdx < 0 || !Number.isFinite(legStart)) return []
   const boardSt = stopTimes[boardIdx]
+  const boardStopId = boardSt.stop?.id
   const distTo = (stop: TripStop) =>
     calculateDistance(stop.lat, stop.lon, origin.lat, origin.lon)
-  const boardDist = distTo(boardSt.stop)
-  const upstream: Array<OtherStopCandidate & { dist: number }> = []
-  for (let i = 0; i < boardIdx; i++) {
-    const st = stopTimes[i]
-    if (!st?.stop || st.stop.lat == null || st.stop.lon == null) continue
-    const dist = distTo(st.stop)
-    if (dist >= boardDist) continue
-    upstream.push({
-      busEpoch:
-        legStart - (boardSt.scheduledDeparture - st.scheduledDeparture) * 1000,
-      dist,
-      side: 'on',
-      stop: st.stop,
-      stopIndexInTrip: i
-    })
+  const collect = (from: number, to: number) => {
+    const out: Array<OtherStopCandidate & { dist: number }> = []
+    for (let i = from; i < to; i++) {
+      const st = stopTimes[i]
+      if (!st?.stop || st.stop.lat == null || st.stop.lon == null) continue
+      // A loop route can serve the boarding stop twice.
+      if (st.stop.id === boardStopId) continue
+      out.push({
+        busEpoch:
+          legStart +
+          (st.scheduledDeparture - boardSt.scheduledDeparture) * 1000,
+        dist: distTo(st.stop),
+        side: 'on',
+        stop: st.stop,
+        stopIndexInTrip: i
+      })
+    }
+    return out
+      .sort((a, b) => a.dist - b.dist)
+      .slice(0, max)
+      .sort((a, b) => a.stopIndexInTrip - b.stopIndexInTrip)
+      .map(({ dist, ...candidate }) => candidate)
   }
-  return upstream
-    .sort((a, b) => a.dist - b.dist)
-    .slice(0, max)
-    .sort((a, b) => a.stopIndexInTrip - b.stopIndexInTrip)
-    .map(({ dist, ...candidate }) => candidate)
+  const earlier = collect(0, boardIdx)
+  // Unknown get-off stop: no later stop can be shown to come before it.
+  const later = alightIdx > boardIdx ? collect(boardIdx + 1, alightIdx) : []
+  return [...earlier, ...later]
 }
 
 function placeOf(stop: TripStop, extra: Record<string, unknown> = {}): any {
@@ -481,7 +505,10 @@ export function spliceGetOff(
 
 /**
  * The representative with its FIRST transit leg starting at another stop, and
- * the street plan from the origin arriving there in time for it.
+ * the street plan from the origin arriving there in time for it. The stop may
+ * lie before the boarding stop or after it (49.1); either way the leg keeps
+ * its own get-off stop, so a stop at or past that one cuts to nothing
+ * (`cutTransitLeg` refuses it) and gives null.
  */
 export function spliceGetOn(
   representative: Itinerary,

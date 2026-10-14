@@ -1,5 +1,13 @@
 import '../test-utils/mock-window-url'
 import {
+  bikeLeg,
+  metresBetween,
+  OLD_SHAKOPEE,
+  POWDERHORN,
+  southboundRepresentative,
+  southboundTrip
+} from '../test-utils/orange-southbound'
+import {
   collectItinerariesWithoutDuplicates,
   itinerariesAreEqual
 } from '../../lib/util/itinerary'
@@ -73,13 +81,23 @@ describe('21.5 lookup > which stops are asked about', () => {
     expect(getOffCandidates(trip, busLeg, atBoarding)).toEqual([])
   })
 
-  it('asks about no get-on stop when every earlier stop is farther from the origin', () => {
+  it('asks about earlier get-on stops even when they are farther from the origin (49.1)', () => {
     // The Orange Line's two stops before 98th St are in Burnsville, farther
-    // from Bloomington than 98th St is.
-    expect(getOnCandidates(trip, busLeg, rec.from)).toEqual([])
+    // from Bloomington than 98th St is. Until 49.1 that meant none were asked
+    // about; the rider's answer (Q1 = B) asks about them anyway. The two
+    // stops after 98th St and before the row's 66th St alight are asked
+    // about as later get-on stops.
+    const on = getOnCandidates(trip, busLeg, rec.from)
+    expect(on.map((c) => c.stop.name)).toEqual([
+      'Burnsville Heart of the City Station',
+      'I-35W & Burnsville Pkwy Station',
+      'Knox Ave & American Blvd Station',
+      'Knox Ave & 76th St Station'
+    ])
+    on.forEach((c) => expect(c.side).toBe('on'))
   })
 
-  it('asks about earlier stops nearer the origin, nearest three, in trip order', () => {
+  it('asks about earlier and later stops, nearest three each, in trip order', () => {
     // An origin at Burnsville Heart of the City.
     const origin = {
       lat: trip.stopTimes[0].stop.lat,
@@ -88,12 +106,24 @@ describe('21.5 lookup > which stops are asked about', () => {
     const on = getOnCandidates(trip, busLeg, origin)
     expect(on.map((c) => c.stop.name)).toEqual([
       'Burnsville Heart of the City Station',
-      'I-35W & Burnsville Pkwy Station'
+      'I-35W & Burnsville Pkwy Station',
+      'Knox Ave & American Blvd Station',
+      'Knox Ave & 76th St Station'
     ])
-    // Running time back from the 98th St departure: 7 min and 5 min.
+    // Running time back from the 98th St departure: 7 min and 5 min; and on
+    // from it to American Blvd and 76th St: 5 min and 7 min.
     expect(busLeg.startTime - on[0].busEpoch).toBe(420000)
     expect(busLeg.startTime - on[1].busEpoch).toBe(300000)
-    expect(getOnCandidates(trip, busLeg, origin, 1)).toHaveLength(1)
+    expect(on[2].busEpoch - busLeg.startTime).toBe(300000)
+    expect(on[3].busEpoch - busLeg.startTime).toBe(420000)
+    // The cap is per direction: one earlier (the nearest, Heart of the City)
+    // and one later (American Blvd).
+    expect(
+      getOnCandidates(trip, busLeg, origin, 1).map((c) => c.stop.name)
+    ).toEqual([
+      'Burnsville Heart of the City Station',
+      'Knox Ave & American Blvd Station'
+    ])
   })
 
   it('reads no live prediction from a trip instance on another day', () => {
@@ -364,5 +394,159 @@ describe('21.5 lookup > appended to the results', () => {
     // Other stops are never offered as other TIMES on the row's sentence:
     // its one "You leave" time is its own.
     expect(row.allStartTimes.map((t: any) => t.itinerary.index)).toEqual([0])
+  })
+})
+
+/**
+ * Backlog 49.1, 2026-10-13 09:12, Powderhorn -> 2345 Old Shakopee Rd W: "We
+ * need different boarding stops not just different egress stops!" Every one
+ * of the five "Other stops" entries got on at Lake St. The lookup asked about
+ * five get-off stops and NO get-on stop on every tap (`candidates: 5`): the
+ * stops before Lake St on a southbound run are downtown and farther, and the
+ * stops after it were never considered. Rider's answers: other boarding stops
+ * both ways along the run, up to 3 each (Q1 = B); a "get on somewhere else"
+ * entry keeps the row's get-off stop (Q2 = B).
+ */
+describe('49.1 > other places to get on, both ways along the run', () => {
+  const sbTrip = southboundTrip
+  const sbRep: any = { ...southboundRepresentative(), index: 0 }
+  const sbBus = sbRep.legs[1]
+  const names = (cs: any[]) => cs.map((c) => c.stop.name)
+
+  it('from Powderhorn offers 46th St, after Lake St and before the get-off stop', () => {
+    const on = getOnCandidates(sbTrip, sbBus, POWDERHORN)
+    expect(names(on)).toContain('I-35W & 46th St Station')
+    const fortySixth = on.find(
+      (c) => c.stop.name === 'I-35W & 46th St Station'
+    )!
+    // Three minutes down the line from Lake St (57840 - 57660 s, reversed).
+    expect(fortySixth.busEpoch - sbBus.startTime).toBe(180000)
+    expect(fortySixth.side).toBe('on')
+  })
+
+  it('offers earlier stops that are FARTHER from the rider than Lake St', () => {
+    // The pre-49.1 filter (`dist >= boardDist` -> skip) dropped all of them.
+    const on = getOnCandidates(sbTrip, sbBus, POWDERHORN)
+    const board = sbTrip.stopTimes.findIndex(
+      (st: any) => st.stop.name === 'I-35W & Lake St Station'
+    )
+    const earlier = on.filter((c) => c.stopIndexInTrip < board)
+    expect(names(earlier)).toEqual([
+      '2nd Ave S & 5th St - Stop Group F',
+      '2nd Ave S & 7th St - Stop Group F',
+      '2nd Ave S & 11th St - Stop Group F'
+    ])
+    const lakeSt = metresBetween(POWDERHORN, sbBus.from)
+    earlier.forEach((c) =>
+      expect(metresBetween(POWDERHORN, c.stop)).toBeGreaterThan(lakeSt)
+    )
+    // Timed back from Lake St: the bus is there earlier.
+    earlier.forEach((c) => expect(c.busEpoch).toBeLessThan(sbBus.startTime))
+  })
+
+  it('caps each direction at three, nearest to the rider first', () => {
+    // Four stops between Lake St and 98th St (46th, 66th, 76th, American
+    // Blvd); the three nearest Powderhorn are kept. Four downtown stops
+    // before Lake St; Washington Ave, the farthest, is dropped.
+    const on = getOnCandidates(sbTrip, sbBus, POWDERHORN)
+    expect(on).toHaveLength(6)
+    expect(names(on)).toEqual([
+      '2nd Ave S & 5th St - Stop Group F',
+      '2nd Ave S & 7th St - Stop Group F',
+      '2nd Ave S & 11th St - Stop Group F',
+      'I-35W & 46th St Station',
+      'I-35W & 66th St Station',
+      'Knox Ave & 76th St Station'
+    ])
+    expect(names(on)).not.toContain('2nd Ave S & Washington Ave S')
+    expect(names(on)).not.toContain('Knox Ave & American Blvd Station')
+    // Five get-off stops + six get-on stops: the eleven plans one tap may
+    // cost.
+    const off = getOffCandidates(sbTrip, sbBus, OLD_SHAKOPEE)
+    expect(off).toHaveLength(5)
+    expect(on.length + off.length).toBe(11)
+  })
+
+  it('never offers a later stop at or past where the row gets off', () => {
+    // The rider's own 09:08 row: Lake St -> 46th St. Nothing lies between.
+    const toFortySixth = southboundRepresentative('I-35W & 46th St Station')
+    const on = getOnCandidates(sbTrip, toFortySixth.legs[1], POWDERHORN)
+    expect(names(on)).not.toContain('I-35W & 46th St Station')
+    expect(names(on)).not.toContain('I-35W & 66th St Station')
+    expect(on).toHaveLength(3)
+  })
+
+  it('splices the later stop in: bike to 46th St, same bus, same get-off stop', () => {
+    const fortySixth = getOnCandidates(sbTrip, sbBus, POWDERHORN).find(
+      (c) => c.stop.name === 'I-35W & 46th St Station'
+    )!
+    const stopPlace = {
+      lat: fortySixth.stop.lat,
+      lon: fortySixth.stop.lon,
+      name: fortySixth.stop.name
+    }
+    const template = bikeLeg(POWDERHORN, stopPlace, 0)
+    const access = {
+      legs: [
+        bikeLeg(
+          POWDERHORN,
+          stopPlace,
+          fortySixth.busEpoch - 60000 - template.duration * 1000
+        )
+      ]
+    }
+    const on: any = spliceGetOn(sbRep, sbTrip, fortySixth, access as any)
+    expect(on).not.toBeNull()
+    expect(on.legs.map((l: any) => l.mode)).toEqual([
+      'BICYCLE',
+      'BUS',
+      'BICYCLE'
+    ])
+    const bus = on.legs[1]
+    expect(bus.from.name).toBe('I-35W & 46th St Station')
+    expect(bus.to.name).toBe('I-35W & 98th St Station')
+    expect(bus.startTime).toBe(fortySixth.busEpoch)
+    expect(bus.endTime).toBe(sbBus.endTime)
+    // The bus no longer passes 46th St: it starts there.
+    expect(bus.intermediatePlaces.map((p: any) => p.name)).toEqual([
+      'I-35W & 66th St Station',
+      'Knox Ave & 76th St Station',
+      'Knox Ave & American Blvd Station'
+    ])
+    expect(bus.distance).toBeLessThan(metresBetween(sbBus.from, sbBus.to) * 3)
+    // Times run forwards, end to end.
+    on.legs.forEach((l: any) =>
+      expect(l.endTime).toBeGreaterThanOrEqual(l.startTime)
+    )
+    on.legs
+      .slice(1)
+      .forEach((l: any, i: number) =>
+        expect(l.startTime).toBeGreaterThanOrEqual(on.legs[i].endTime)
+      )
+    // The rest of the trip is the representative's own.
+    expect(on.legs[2]).toBe(sbRep.legs[2])
+    expect(on.endTime).toBe(sbRep.endTime)
+    expect(on.otherStopsLookup).toEqual({ side: 'on', stopId: '1:53542' })
+    // It folds into the same row, as a "get on somewhere else" pair.
+    expect(itinerariesAreEqual(sbRep, on, FARE, true)).toBe(true)
+    expect(stopPairOf(on)).toMatchObject({
+      offName: 'I-35W & 98th St Station',
+      onName: 'I-35W & 46th St Station'
+    })
+    // More biking than the row's own pair: 46th St is farther from home.
+    expect(on.legs[0].distance).toBeGreaterThan(sbRep.legs[0].distance)
+  })
+
+  it('refuses a later stop past the get-off stop, whatever the plan says', () => {
+    const past = {
+      busEpoch: sbBus.endTime + 600000,
+      side: 'on' as const,
+      stop: sbTrip.stopTimes[sbTrip.stopTimes.length - 1].stop,
+      stopIndexInTrip: sbTrip.stopTimes.length - 1
+    }
+    const access = {
+      legs: [bikeLeg(POWDERHORN, past.stop, past.busEpoch - 3600000)]
+    }
+    expect(spliceGetOn(sbRep, sbTrip, past, access as any)).toBeNull()
   })
 })
