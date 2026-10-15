@@ -279,6 +279,57 @@ describe('util > multi-stop (43.1)', () => {
       expect(stitchSegments([null, null])).toBeNull()
     })
   })
+
+  describe('the transit chain keeps scheduled times (52.1)', () => {
+    // Segment 1 arrives at the stop 10:25; the next bus out leaves 10:33, so
+    // the rider waits 8 minutes there. Shifting it back would put the rider
+    // on a bus that does not run then.
+    const a: any = {
+      legs: [
+        leg('WALK', '10:00:00', '10:05:00', HOME, { name: 'Stop A' }, 300),
+        leg('BUS', '10:08:00', '10:25:00', { name: 'Stop A' }, PERENNIAL, 5000)
+      ],
+      startTime: T('10:00:00'),
+      waitingTime: 180
+    }
+    const b: any = {
+      legs: [leg('BUS', '10:33:00', '10:50:00', PERENNIAL, MICRO_CENTER, 4000)],
+      startTime: T('10:33:00'),
+      waitingTime: 0
+    }
+
+    it('leaves every leg at its scheduled time', () => {
+      const stitched = stitchSegments([a, b], { keepTimes: true }) as any
+      expect(stitched.legs.map((l: any) => l.startTime)).toEqual([
+        T('10:00:00'),
+        T('10:08:00'),
+        T('10:33:00')
+      ])
+      expect(stitched.startTime).toBe(T('10:00:00'))
+      expect(stitched.endTime).toBe(T('10:50:00'))
+      expect(stitched.duration).toBe(50 * 60)
+    })
+
+    it('counts the gap at the stop as waiting', () => {
+      const stitched = stitchSegments([a, b], { keepTimes: true }) as any
+      // 3 min inside segment 1, 8 min at the stop.
+      expect(stitched.waitingTime).toBe(11 * 60)
+      expect(stitched.transfers).toBe(1)
+    })
+
+    it('marks the same joins as the street chain', () => {
+      expect(
+        (stitchSegments([a, b], { keepTimes: true }) as any).stopLegIndexes
+      ).toEqual((stitchSegments([a, b]) as any).stopLegIndexes)
+      expect(
+        (stitchSegments([a, b], { keepTimes: true }) as any).stopLegIndexes
+      ).toEqual([1])
+    })
+
+    it('still gives up when a segment has no answer', () => {
+      expect(stitchSegments([a, null], { keepTimes: true })).toBeNull()
+    })
+  })
 })
 
 describe('util > multi-stop > pickNextSegment (43.1)', () => {

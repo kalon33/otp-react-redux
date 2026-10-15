@@ -324,22 +324,36 @@ export function pickNextSegment(
 }
 
 /**
- * Stitch per-segment street-only itineraries into one trip (the chain used
- * where OTP's via does not apply). Each segment's legs are shifted so it starts
- * when the previous one ends. Null if any segment is missing.
+ * Stitch per-segment itineraries into one trip (the chain used where OTP's via
+ * does not apply). Null if any segment is missing.
+ *
+ * By default each segment's legs are shifted so it starts when the previous
+ * one ends — right for street-only segments, which leave whenever the rider
+ * does. `keepTimes` leaves every leg at the time it was planned: a transit
+ * segment's bus runs on its schedule, so the time between one segment's
+ * arrival and the next one's departure is the rider waiting at the stop
+ * (backlog 52.1). `stopLegIndexes` are the same either way.
  */
 export function stitchSegments(
-  segments: Array<Itinerary | null | undefined>
+  segments: Array<Itinerary | null | undefined>,
+  { keepTimes = false }: { keepTimes?: boolean } = {}
 ): MultiStopItinerary | null {
   if (!segments.length || segments.some((s) => !s?.legs?.length)) return null
   const legs: Leg[] = []
   const stopLegIndexes: number[] = []
   let cursor = epochMs((segments[0] as Itinerary).startTime as any)
+  let waitingS = 0
   segments.forEach((segment, n) => {
     const seg = segment as Itinerary
     const segStart = epochMs(seg.startTime as any)
+    if (keepTimes) {
+      if (n > 0 && Number.isFinite(cursor) && Number.isFinite(segStart)) {
+        waitingS += Math.max(0, Math.round((segStart - cursor) / 1000))
+      }
+      waitingS += Number((seg as any).waitingTime) || 0
+    }
     const shift =
-      Number.isFinite(cursor) && Number.isFinite(segStart)
+      !keepTimes && Number.isFinite(cursor) && Number.isFinite(segStart)
         ? cursor - segStart
         : 0
     seg.legs.forEach((leg) => {
@@ -354,6 +368,7 @@ export function stitchSegments(
   })
   return {
     ...itineraryOf(segments[0], legs),
+    ...(keepTimes ? { waitingTime: waitingS } : null),
     stopLegIndexes
   }
 }
