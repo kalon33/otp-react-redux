@@ -60,6 +60,20 @@ export const LEVER_RANGES: Record<LeverKey, readonly [number, number]> = {
  * makes long bike legs expensive, never forbidden.
  */
 export const SERVER_BIKE_RELUCTANCE = 0.5
+
+/**
+ * Backlog 55.1 — the bike reluctance of the one extra "less biking" bike +
+ * transit plan a rider's search asks (rider, 2026-10-16, cycle 23 Q1 A). At
+ * the server's 0.5 OTP prices 8 km of biking below a 13-minute wait, so a
+ * low-bike chain that arrives a few minutes later is dropped as dominated
+ * inside the router. Measured serial on production OTP 2026-10-16, the
+ * 2026-10-15 21:16 O/D (44.92008,-93.21954 -> 44.816546,-93.30986), bike +
+ * transit, 40 itineraries, cap 2000: Blue Line -> 539 (21:21 -> 22:17, 1.5 km
+ * of bike) is absent at 0.5 and 0.8, present at 0.9, 1.0 and 2.0. 1.0 is the
+ * lowest round value past that edge; warm answers took 1.6-2.4 s at every
+ * reluctance.
+ */
+export const LOW_BIKE_RELUCTANCE = 1
 export const SERVER_BIKE_SPEED_MPS = 5
 export const BIKE_ACCESS_CEILING_MINUTES = 120
 

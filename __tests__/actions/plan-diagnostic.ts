@@ -182,7 +182,12 @@ describe('actions > apiV2 > missing-transit diagnostic', () => {
     warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
     reducer = createOtpReducer(config)
     otpState = reducer(undefined, { type: '@@INIT' })
-    otpState = { ...otpState, config, currentQuery, modeSettingDefinitions: [] }
+    otpState = {
+      ...otpState,
+      config,
+      currentQuery,
+      modeSettingDefinitions: []
+    }
   })
   afterEach(() => {
     anyGlobal.fetch = realFetch
@@ -240,10 +245,11 @@ describe('actions > apiV2 > missing-transit diagnostic', () => {
       'transit-vs-street-filter': 1
     })
     // Nothing it learned reached the rider's list: the fan-out (3), 38.3's
-    // full bike + transit pass and 14.2's top-up, and no more.
+    // full bike + transit pass, 55.1's low-bike plan and 14.2's top-up, and
+    // no more.
     expect(
       otpState.searches[otpState.activeSearchId].response.length
-    ).toBeLessThanOrEqual(5)
+    ).toBeLessThanOrEqual(6)
   })
 
   it('asks nothing when the search did find transit', async () => {
