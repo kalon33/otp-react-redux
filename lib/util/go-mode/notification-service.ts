@@ -283,6 +283,8 @@ export function checkAlightAlerts(
 // that as "still coming", which is what it means, and never as "here".
 export const BOARD_APPROACH_SECONDS = 240
 export const BOARD_APPROACH_METRES = 1500
+// A bus at the stop with a live board time further out than this is laying over.
+export const BOARD_LAYOVER_SECONDS = 120
 export const BOARD_ARRIVE_METRES = VEHICLE_AT_BOARD_STOP_M
 // One firing per stage per boarding; longer than any plausible approach.
 const BOARD_DEDUP_MS = 30 * 60 * 1000
@@ -510,9 +512,19 @@ export function checkBoardVehicleApproach(
   // (`comingSoon` below), judged against the prediction's real seconds rather
   // than a forced zero. The guard above already silences a bus whose next stop
   // is BEYOND the boarding.
-  const atStop =
+  const nearStop =
     vehicle.distanceToBoardStopM != null &&
     vehicle.distanceToBoardStopM <= BOARD_ARRIVE_METRES
+  // A bus parked at the stop whose live board time is still well ahead is
+  // laying over at the start of its trip (54.3: 'Bus here' at 21:39:31 for a
+  // 21:53:00 departure, bus 24 m away). It is not here for the rider: no
+  // 'Bus here', and no proximity-driven heads-up either — 'approaching' waits
+  // for the live board time to come inside BOARD_APPROACH_SECONDS.
+  const layover =
+    nearStop &&
+    liveBoardEpochMs != null &&
+    liveBoardEpochMs - nowMs > BOARD_LAYOVER_SECONDS * 1000
+  const atStop = nearStop && !layover
   // A live prediction already in the past with a fresh not-yet-arrived vehicle
   // record means "late but coming" — still worth the heads-up, but only while
   // the bus's own position agrees it is close. A past prediction for a bus
@@ -526,7 +538,8 @@ export function checkBoardVehicleApproach(
     (liveBoardEpochMs != null &&
       liveBoardEpochMs - nowMs <= BOARD_APPROACH_SECONDS * 1000 &&
       !(liveBoardEpochMs <= nowMs && busIsFar)) ||
-    (vehicle.distanceToBoardStopM != null &&
+    (!layover &&
+      vehicle.distanceToBoardStopM != null &&
       vehicle.distanceToBoardStopM <= BOARD_APPROACH_METRES)
   if (!atStop && !comingSoon) return null
 
