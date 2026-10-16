@@ -36,6 +36,7 @@ import {
   decideRiding,
   riderStopOnLeg,
   ridingFactIsEvidenced,
+  ridingFactStaleReason,
   ridingTransitLegIndex,
   trackAccessBoard,
   trackBoardStopDwell,
@@ -863,6 +864,7 @@ export const SET_BOARDING_SEARCH_FAILED = 'SET_BOARDING_SEARCH_FAILED'
 export const OPEN_CHOOSE_BUS = 'OPEN_CHOOSE_BUS'
 export const SET_CHOOSE_BUS_ERROR = 'SET_CHOOSE_BUS_ERROR'
 export const SET_RIDING = 'SET_RIDING'
+export const SET_PLAN_STOP_OFFER = 'SET_PLAN_STOP_OFFER'
 export const SET_LIVE_LEG_TIMES = 'SET_LIVE_LEG_TIMES'
 export const SET_NOTIFICATION_CONFIG = 'SET_NOTIFICATION_CONFIG'
 export const SET_TRACKING_ERROR = 'SET_TRACKING_ERROR'
@@ -936,6 +938,8 @@ export const startGoMode = createAction<{
   itinerary: Itinerary
   /** The rider's stops, when this is one segment of a multi-stop trip (43.1). */
   multiStop?: MultiStopPlan | null
+  /** Clock for the reducer's riding-fact age check (tests); Date.now otherwise. */
+  nowMs?: number
   originalFrom?: any
   /** The return half, when this trip is the outbound leg of a round trip. */
   roundTrip?: RoundTripPlan | null
@@ -1030,6 +1034,7 @@ export type GoModeControl =
   | 'onboard-preview-back'
   | 'onboard-preview-confirm'
   | 'onboard-variant-open'
+  | 'pick-another-stop'
 
 /**
  * "The rider touched this." Recording only (GO_MODE_CONTROL_TAP); the payload
@@ -1134,6 +1139,9 @@ export const setReturnCountdown = createAction<ReturnCountdownState | null>(
 
 export const setRiding = createAction<RidingState>(SET_RIDING)
 export const clearRiding = createAction(CLEAR_RIDING)
+export const setPlanStopOffer = createAction<{ tripId: string } | null>(
+  SET_PLAN_STOP_OFFER
+)
 /**
  * The rider got off early, at a stop still on the route (8.11). Drops the
  * riding fact AND records where they stepped off, which is what re-anchors the
@@ -1806,6 +1814,11 @@ export function beginGoMode(
       options.multiStop !== undefined
         ? options.multiStop
         : (priorGoMode?.isActive && priorGoMode?.multiStop) || null
+    // A RESTART carries a kept riding fact only while it is current (54.1).
+    // The reducer checks its age itself; the feed and trip-end checks need
+    // the transit index, so they are asked here, before the fact can be
+    // re-anchored and re-confirmed below.
+    if (!priorGoMode?.isActive) dropStaleRidingFact(dispatch, getState)
     dispatch(startGoMode({ itinerary, multiStop, originalFrom, roundTrip }))
     // A plan has been installed, so its origin is owed a look (12.13). Armed
     // here rather than asked on every tick because "the plan starts somewhere
@@ -4025,12 +4038,53 @@ function gtfsTypeToMode(type: number | undefined): string {
 }
 
 /**
+ * Drop a kept riding fact that is no longer about now (54.1, 15.3), together
+ * with the confirmed vehicle match it would otherwise re-assert. Returns true
+ * when it dropped one. See ridingFactIsCurrent for the rules and the
+ * 2026-10-15 ride they come from.
+ */
+function dropStaleRidingFact(dispatch: any, getState: any): boolean {
+  const state = getState()
+  const riding: RidingState | null = state.otp?.goMode?.riding ?? null
+  if (!riding) return false
+  const transitIndex = state.otp?.transitIndex
+  const reason = ridingFactStaleReason({
+    nowMs: Date.now(),
+    riding,
+    trip: riding.tripId ? transitIndex?.trips?.[riding.tripId] ?? null : null,
+    vehicles: transitIndex?.routes?.[riding.routeId ?? '']?.vehicles ?? null
+  })
+  if (!reason) return false
+  // eslint-disable-next-line no-console
+  console.log(
+    `[go-mode] dropped kept riding fact ${riding.vehicleId ?? '-'} / ` +
+      `${riding.tripId ?? '-'}: ${reason}`
+  )
+  dispatch(clearRiding())
+  const match: any = state.otp?.goMode?.vehicleMatch?.match
+  if (
+    match?.confidence === 'confirmed' &&
+    ((riding.vehicleId != null && match.vehicleId === riding.vehicleId) ||
+      (riding.tripId != null && match.tripId === riding.tripId))
+  ) {
+    dispatch(clearVehicleMatch())
+  }
+  return true
+}
+
+/**
  * "I'm already on the bus" — entry point. Captures the rider's trip origin,
  * navigates to the Go Mode screen, starts GPS, and kicks off discovery of the
  * live vehicle they are aboard. A destination must already be set on the query.
  */
 export function beginOnboardFlow() {
   return function (dispatch: any, getState: any) {
+    // A remembered train is only re-adopted while it is current (54.1, 15.3):
+    // on 2026-10-15 this branch silently re-adopted a 3-hour-old northbound
+    // Blue Line fact for a rider going south, and the get-off list offered
+    // stations behind them. Dropped first, so nothing below — the kept route,
+    // the silent re-adopt, the confirmed-match branch — can read it.
+    dropStaleRidingFact(dispatch, getState)
     const before = getState()
     const originalFrom = before.otp.currentQuery?.from || null
     // Read the rider's plan BEFORE dispatching: BEGIN_ONBOARD_FLOW nulls
@@ -4097,7 +4151,13 @@ export function beginOnboardFlow() {
           vehicleId
         })
       )
-      dispatch(loadOnboardScheduleAndOptimize(riding.tripId))
+      // A real vehicle (not a route-only guess) on the plan's own train goes
+      // straight to guidance for the plan's stop (54.1, rider's Q4 = A).
+      dispatch(
+        loadOnboardScheduleAndOptimize(riding.tripId, {
+          planned: ridingFactIsEvidenced(riding) ? planned : null
+        })
+      )
       return
     }
     if (riding?.routeId) {
@@ -4140,7 +4200,7 @@ export function beginOnboardFlow() {
           vehicleId: match.vehicleId
         })
       )
-      dispatch(loadOnboardScheduleAndOptimize(match.tripId))
+      dispatch(loadOnboardScheduleAndOptimize(match.tripId, { planned }))
       return
     }
 
@@ -4435,7 +4495,17 @@ function hasOnboardAnchorEvidence(getState: any): boolean {
  * not know — which is recoverable, unlike a confident list from the wrong end
  * of the line.
  */
-export function loadOnboardScheduleAndOptimize(tripId: string) {
+export function loadOnboardScheduleAndOptimize(
+  tripId: string,
+  options: {
+    /**
+     * The rider's plan, when the vehicle was CONFIRMED rather than picked just
+     * now: if it is the plan's own train (or line), the trip goes straight to
+     * guidance for the plan's stop instead of the get-off list (54.1).
+     */
+    planned?: Itinerary | null
+  } = {}
+) {
   return async function (dispatch: any, getState: any) {
     await dispatch(findTrip({ tripId }))
     const trip = getState().otp?.transitIndex?.trips?.[tripId]
@@ -4453,7 +4523,129 @@ export function loadOnboardScheduleAndOptimize(tripId: string) {
         setTimeout(resolve, ONBOARD_ANCHOR_POLL_MS)
       )
     }
+    if (options.planned && dispatch(goStraightToPlannedStop(options.planned))) {
+      return
+    }
     dispatch(planFromOnboardBus())
+  }
+}
+
+/**
+ * Where the rider's plan gets off the train they are confirmed aboard, or null
+ * when it does not (54.1). The plan's leg on the ridden TRIP wins; failing
+ * that, its first leg on the same LINE whose alight stop the ridden trip still
+ * reaches ahead of now — the rider's words are "the train in your plan", and
+ * the next run of the planned line is that train to them. A stop the ridden
+ * trip passed already (or never serves — the other direction) is no answer.
+ */
+export function plannedAlightOnTrip(
+  planned: Itinerary | null | undefined,
+  trip: any,
+  nowMs: number
+): {
+  arrivalEpoch: number
+  legIndex: number
+  stopId: string
+  stopName: string | null
+} | null {
+  const legs: any[] = planned?.legs || []
+  const tripId = trip?.id ?? trip?.gtfsId ?? null
+  const routeId = trip?.route?.id ?? trip?.route?.gtfsId ?? null
+  const onTrip = (l: any) =>
+    l?.transitLeg &&
+    tripId != null &&
+    (l.trip?.gtfsId === tripId || l.tripId === tripId)
+  const onRoute = (l: any) =>
+    l?.transitLeg && routeId != null && getLegRouteId(l) === routeId
+  const order = [
+    ...legs.map((l, i) => (onTrip(l) ? i : -1)),
+    ...legs.map((l, i) => (!onTrip(l) && onRoute(l) ? i : -1))
+  ].filter((i) => i >= 0)
+  for (const legIndex of order) {
+    const leg = legs[legIndex]
+    const stopId = leg?.to?.stop?.gtfsId ?? leg?.to?.stopId ?? null
+    if (!stopId) continue
+    const arrival = liveStopArrival(
+      trip?.stopTimes || [],
+      stopId,
+      leg?.to?.name
+    )
+    if (!arrival || arrival.epoch <= nowMs) continue
+    return {
+      arrivalEpoch: arrival.epoch,
+      legIndex,
+      stopId,
+      stopName: leg?.to?.name ?? null
+    }
+  }
+  return null
+}
+
+/**
+ * "I'm on the bus" on the plan's own train: straight to guidance for the
+ * plan's stop, keeping the rest of the plan (54.1, the rider 2026-10-16: "If
+ * it's the train in your plan: go straight to directions for your plan's stop,
+ * with a 'Pick another stop' button. A different train: show the list.").
+ *
+ * The splice is the one replanFromAboard's automatic branch makes —
+ * buildOnboardItinerary with the plan's alight stop and the plan's legs after
+ * it — with the same "a stop still ahead" rule. Returns false (and changes
+ * nothing) when the plan does not ride this train, so the caller shows the
+ * list exactly as before.
+ */
+function goStraightToPlannedStop(planned: Itinerary) {
+  return function (dispatch: any, getState: any): boolean {
+    const goMode = getState().otp?.goMode
+    const trip = goMode?.onboard?.trip
+    const vehicle = goMode?.onboard?.vehicle
+    if (!trip || !vehicle || goMode?.onboard?.status === 'idle') return false
+    const alight = plannedAlightOnTrip(
+      planned,
+      trip,
+      getCurrentTime().getTime()
+    )
+    if (!alight) return false
+    const legs: any[] = planned.legs || []
+    const spliced = buildOnboardItinerary(
+      trip,
+      vehicle,
+      {
+        busArrivalEpoch: alight.arrivalEpoch,
+        itinerary: { ...planned, legs: legs.slice(alight.legIndex + 1) },
+        stopId: alight.stopId,
+        stopName: alight.stopName
+      },
+      goMode.tracking?.lastPosition || null
+    )
+    // eslint-disable-next-line no-console
+    console.log(
+      `[go-mode] onboard: plan's train ${vehicle.vehicleId ?? '-'} — ` +
+        `straight to ${alight.stopName ?? alight.stopId}`
+    )
+    dispatch(clearOnboard())
+    dispatch(beginGoMode(spliced))
+    reconfirmBoardedVehicle(dispatch, vehicle)
+    // After beginGoMode's START_GO_MODE, which clears the offer.
+    const tripId = trip.id ?? trip.gtfsId ?? vehicle.tripId ?? null
+    if (tripId) dispatch(setPlanStopOffer({ tripId }))
+    if (!isReplayActive()) {
+      dispatch(refreshLiveLegTimes())
+    }
+    return true
+  }
+}
+
+/**
+ * "Pick another stop": the escape from goStraightToPlannedStop — the existing
+ * get-off list over the live trip (replanFromAboard's explicit path; the trip
+ * keeps running underneath, and Back returns to it).
+ */
+export function pickAnotherAlightStop() {
+  return function (dispatch: any) {
+    dispatch(recordGoModeControlTap('pick-another-stop'))
+    dispatch(
+      replanFromAboard({ autoApply: false, reason: 'pick-another-stop' })
+    )
   }
 }
 

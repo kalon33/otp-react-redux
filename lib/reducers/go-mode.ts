@@ -32,6 +32,7 @@ import {
   SET_ONBOARD_STATUS,
   SET_ONBOARD_TRIP,
   SET_ONBOARD_VEHICLE,
+  SET_PLAN_STOP_OFFER,
   SET_REROUTE_RESULT,
   SET_RETURN_COUNTDOWN,
   SET_RIDING,
@@ -61,7 +62,10 @@ import {
   TurnCueSettings
 } from '../util/go-mode/turn-cue-settings'
 import { FIX_ACCURACY_MAX_M } from '../util/go-mode/transit-trust'
-import { ridingFactIsEvidenced } from '../util/go-mode/riding'
+import {
+  ridingFactIsEvidenced,
+  ridingKeptTooLong
+} from '../util/go-mode/riding'
 import type {
   DepartureOverrideSource,
   LiveLegTime,
@@ -343,6 +347,15 @@ export interface GoModeState {
    */
   originalFrom: any
 
+  /**
+   * "Pick another stop" (54.1, rider's Q4 = A). Set when "I'm on the bus" met
+   * a current riding fact on the plan's own train and went straight to
+   * guidance for the plan's stop instead of the get-off list; names the trip
+   * so the button shows only while the rider is on that ride. START_GO_MODE
+   * clears it (a new plan has not made that choice).
+   */
+  planStopOffer: { tripId: string } | null
+
   progress: TripProgress | null
 
   reRoute: {
@@ -524,6 +537,8 @@ const defaultState: GoModeState = {
 
   originalFrom: null,
 
+  planStopOffer: null,
+
   progress: null,
 
   reRoute: {
@@ -599,7 +614,8 @@ function legRouteId(leg: any): string | null {
  */
 function reanchorRiding(
   riding: RidingState | null,
-  itinerary: Itinerary | null
+  itinerary: Itinerary | null,
+  options: { routeFallback?: boolean } = {}
 ): RidingState | null {
   if (!riding || !itinerary?.legs) return riding
   const legs: any[] = itinerary.legs
@@ -611,7 +627,13 @@ function reanchorRiding(
         (l.trip?.gtfsId === riding.tripId || l.tripId === riding.tripId)
     )
   }
-  if (legIndex < 0 && riding.routeId) {
+  // The route-only fallback is for a fact that never named its trip. On a
+  // RESTART it must not stand in for a trip miss (54.1): on 2026-10-15 at
+  // 21:21:07 it anchored the 18:14 Blue Line fact (trip 1:892049) onto the new
+  // plan's tram leg (trip 1:983182) — same route, another train — and the
+  // vehicle match it carried forced TRANSITION_LEG 1 five seconds later.
+  const routeFallback = options.routeFallback ?? true
+  if (legIndex < 0 && riding.routeId && (routeFallback || !riding.tripId)) {
     legIndex = legs.findIndex(
       (l) => l?.transitLeg && legRouteId(l) === riding.routeId
     )
@@ -1044,6 +1066,11 @@ const goMode = handleActions<GoModeState, any>(
       }
     }),
 
+    [SET_PLAN_STOP_OFFER]: (state, action) => ({
+      ...state,
+      planStopOffer: action.payload ?? null
+    }),
+
     [SET_REROUTE_RESULT]: (state, action) => {
       // Payload is the full list of alternatives (or null/[] for "none"), or a
       // single itinerary — the original one-result shape, still used by tests
@@ -1129,6 +1156,19 @@ const goMode = handleActions<GoModeState, any>(
 
     [START_GO_MODE]: (state, action) => {
       const { itinerary, multiStop, originalFrom, roundTrip } = action.payload
+      const nowMs: number = action.payload?.nowMs ?? Date.now()
+      const restart = !state.isActive
+      const carried =
+        !restart ||
+        (ridingFactIsEvidenced(state.riding) &&
+          !ridingKeptTooLong(state.riding, nowMs))
+          ? state.riding
+          : null
+      const restartedRiding = reanchorRiding(
+        carried ? { ...carried, keptAtMs: null } : null,
+        itinerary,
+        { routeFallback: !restart }
+      )
 
       // `ui` is deliberately preserved: a background auto-update (missed bus,
       // quiet access replan) swaps the itinerary via this action while the
@@ -1203,8 +1243,11 @@ const goMode = handleActions<GoModeState, any>(
           )
         },
         originalFrom: originalFrom ?? null,
+        planStopOffer: null,
         progress: null,
+
         reRoute: { ...defaultState.reRoute },
+
         // The countdown belongs to the plan, and the plan has just been
         // (re)stated: a mid-trip itinerary swap on a round trip re-enters here
         // with the SAME roundTrip, and re-arming from null is correct — the
@@ -1223,12 +1266,14 @@ const goMode = handleActions<GoModeState, any>(
         // and TRANSITION_LEG stepped straight onto the bus leg one second
         // later. An unevidenced fact has to be re-earned; an evidenced one
         // (a real, non-synthetic vehicle id) is a physical fact and stays.
-        riding: reanchorRiding(
-          state.isActive || ridingFactIsEvidenced(state.riding)
-            ? state.riding
-            : null,
-          itinerary
-        ),
+        //
+        // ...and an evidenced fact is only physical while it is CURRENT
+        // (54.1): a fact kept across STOP_GO_MODE for longer than the 7/12
+        // back-out-and-reopen needs is dropped here. The feed and trip-end
+        // checks need the transit index and are applied by beginGoMode before
+        // it dispatches this; the age check is here so no caller can skip it.
+        // A fact resumed by a restart is in use again, so its keep stamp goes.
+        riding: restartedRiding,
         // Absent means one-way, explicitly: an auto-update that swaps the
         // outbound itinerary mid-trip goes through beginGoMode with no
         // options, and a round trip must not silently survive a re-plan the
@@ -1268,7 +1313,10 @@ const goMode = handleActions<GoModeState, any>(
         // itinerary for the SAME bus the rider is sitting on, and making them
         // re-confirm it would be a regression. reanchorRiding above decides
         // that, so key off its result rather than the pre-swap state.
-        vehicleMatch: reanchorRiding(state.riding, itinerary)
+        //
+        // Keyed off the CARRIED fact: a dropped (stale or unevidenced) fact
+        // must not leave its confirmed match behind to be re-asserted.
+        vehicleMatch: restartedRiding
           ? state.vehicleMatch
           : { ...defaultState.vehicleMatch }
       }
@@ -1317,7 +1365,7 @@ const goMode = handleActions<GoModeState, any>(
       }
     }),
 
-    [STOP_GO_MODE]: (state) => ({
+    [STOP_GO_MODE]: (state, action) => ({
       ...defaultState,
       // Getting OFF a bus is just as physical, and it has to survive alongside
       // the confirmed match below — otherwise exiting Go Mode after an alight
@@ -1329,7 +1377,22 @@ const goMode = handleActions<GoModeState, any>(
       // reopened "I'm on the bus" — with riding wiped here, the flow forgot
       // the confirmed vehicle and re-ran (failing) discovery. Alight and
       // sustained off-route remain the only physical invalidators.
-      riding: state.riding,
+      //
+      // Stamped with WHEN (54.1): nothing re-evidences the fact while Go Mode
+      // is off, so the next start / "I'm on the bus" asks how long it has been
+      // kept (ridingFactIsCurrent). An earlier stamp stands — an onboard flow
+      // that re-adopted the fact and was backed out of again has not made it
+      // any fresher.
+      riding: state.riding
+        ? {
+            ...state.riding,
+            keptAtMs:
+              state.riding.keptAtMs ??
+              (typeof action.payload?.nowMs === 'number'
+                ? action.payload.nowMs
+                : Date.now())
+          }
+        : null,
       // The rider's global turn-by-turn choice is a SETTING, not trip state:
       // ending a trip must not silently return it to the shipped default. The
       // per-leg overrides go with the trip they belonged to (defaultState).

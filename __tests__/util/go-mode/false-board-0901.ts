@@ -459,7 +459,11 @@ describe('util > go-mode > the 2026-09-01 false boards', () => {
         { type: 'STOP_GO_MODE' }
       )
       expect(stopped.isActive).toBe(false)
-      expect(stopped.riding).toEqual(riding)
+      // Kept, and stamped with when (54.1).
+      expect(stopped.riding).toEqual({
+        ...riding,
+        keptAtMs: expect.any(Number)
+      })
       return goMode(stopped, {
         payload: { itinerary: (ride3 as any).itinerary, originalFrom: null },
         type: 'START_GO_MODE'
