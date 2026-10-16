@@ -383,6 +383,57 @@ export function shouldRunFullBikeTransitPass({
   return true
 }
 
+/**
+ * Backlog 55.1 — once the fan-out (and 38.3's full pass) has settled, does the
+ * one extra "less biking" bike + transit plan go out? Only when the search
+ * asked bike + transit at all, and only for the rider's own live list:
+ *  - no bike + transit plan in the fan-out: nothing to ask again;
+ *  - the rider's own bike reluctance is already at or past the low-bike value:
+ *    the same question twice;
+ *  - Go Mode (a live trip's re-plans), field trip's batches, a non-ITINERARY
+ *    search, a search the rider has left: as 38.3's full pass;
+ *  - any stored error (offline, a failure card on screen): new trips under a
+ *    card would read as a contradiction — the same rule 14.2's widen uses;
+ *  - OTP refused the rider's stops (52.1's per-segment chain): it would refuse
+ *    this plan too.
+ */
+export function shouldRunLowBikePass({
+  bikeTransitRequested,
+  goModeActive,
+  hadError,
+  isActiveSearch,
+  lowBikeReluctance,
+  riderBikeReluctance,
+  routingType,
+  transitChainUsed,
+  updateSearchInReducer
+}: {
+  bikeTransitRequested: boolean
+  goModeActive?: boolean
+  hadError?: boolean
+  isActiveSearch?: boolean
+  lowBikeReluctance: number
+  riderBikeReluctance?: number | null
+  routingType?: string | null
+  transitChainUsed?: boolean
+  updateSearchInReducer?: boolean
+}): boolean {
+  if (!bikeTransitRequested) return false
+  if (
+    typeof riderBikeReluctance === 'number' &&
+    riderBikeReluctance >= lowBikeReluctance
+  ) {
+    return false
+  }
+  if (goModeActive) return false
+  if (updateSearchInReducer) return false
+  if (routingType && routingType !== 'ITINERARY') return false
+  if (!isActiveSearch) return false
+  if (hadError) return false
+  if (transitChainUsed) return false
+  return true
+}
+
 interface RideLegLike {
   from?: RidePlaceLike | null
   mode?: string

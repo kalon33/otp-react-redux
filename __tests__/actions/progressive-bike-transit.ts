@@ -6,7 +6,8 @@ import {
   everySubQueryFailed,
   isProgressiveBikeTransitSearch,
   rideSignature,
-  shouldRunFullBikeTransitPass
+  shouldRunFullBikeTransitPass,
+  shouldRunLowBikePass
 } from '../../lib/actions/api-utils'
 import { FULL_PASS_TIMEOUT_MS, routingQuery } from '../../lib/actions/apiV2'
 import {
@@ -15,6 +16,7 @@ import {
   getActiveSearchErrors
 } from '../../lib/util/state'
 import { getSearchPendingKind } from '../../lib/components/narrative/search-pending-line'
+import { LOW_BIKE_RELUCTANCE } from '../../lib/util/routing-profiles'
 import { resetPlanQueryGate } from '../../lib/util/plan-concurrency'
 import createOtpReducer from '../../lib/reducers/create-otp-reducer'
 
@@ -219,7 +221,12 @@ describe('actions > apiV2 > routingQuery progressive bike + transit (38.3)', () 
   const init = (config: any = baseConfig) => {
     reducer = createOtpReducer(config)
     otpState = reducer(undefined, { type: '@@INIT' })
-    otpState = { ...otpState, config, currentQuery, modeSettingDefinitions: [] }
+    otpState = {
+      ...otpState,
+      config,
+      currentQuery,
+      modeSettingDefinitions: []
+    }
   }
 
   beforeEach(() => {
@@ -257,13 +264,18 @@ describe('actions > apiV2 > routingQuery progressive bike + transit (38.3)', () 
     dispatch(routingQuery())
     await settleAll()
 
-    // Quick + full, nothing else: plenty of transit, so no widen either.
-    expect(sent).toHaveLength(4)
-    expect(bikeTransitSent().map((v) => v.maxStopCount)).toEqual([2000, 10000])
+    // Quick + full + 55.1's low-bike plan, nothing else: plenty of transit,
+    // so no widen either.
+    expect(sent).toHaveLength(5)
+    expect(bikeTransitSent().map((v) => v.maxStopCount)).toEqual([
+      2000, 10000, 2000
+    ])
     const full = sent[3]
     expect(full.modes).toEqual([{ mode: 'TRANSIT' }, { mode: 'BICYCLE' }])
     expect(full.searchWindow).toBe(7200)
-    expect(types().filter((t) => t === 'ROUTING_EXTRA_REQUEST')).toHaveLength(1)
+    expect(full.bikeReluctance).toBeUndefined()
+    expect(sent[4].bikeReluctance).toBe(1)
+    expect(types().filter((t) => t === 'ROUTING_EXTRA_REQUEST')).toHaveLength(2)
 
     expect(search().pending).toBe(0)
     const listed = getActiveItineraries(getState())
@@ -329,7 +341,9 @@ describe('actions > apiV2 > routingQuery progressive bike + transit (38.3)', () 
     )
     dispatch(routingQuery())
     await settleAll()
-    expect(bikeTransitSent().map((v) => v.maxStopCount)).toEqual([2000, 10000])
+    expect(bikeTransitSent().map((v) => v.maxStopCount)).toEqual([
+      2000, 10000, 2000
+    ])
     expect(types()).not.toContain('ROUTING_ERROR')
     const silent = actions.filter((a) => a.type === 'ROUTING_SILENT_ERROR')
     expect(silent).toHaveLength(1)
@@ -353,9 +367,10 @@ describe('actions > apiV2 > routingQuery progressive bike + transit (38.3)', () 
     })
     dispatch(routingQuery())
     await settleAll()
-    // quick fan-out (3) + full pass + widen.
-    expect(sent).toHaveLength(5)
-    expect(sent[4].searchWindow).toBe(14400)
+    // quick fan-out (3) + full pass + 55.1's low-bike plan + widen.
+    expect(sent).toHaveLength(6)
+    expect(sent[4].bikeReluctance).toBe(1)
+    expect(sent[5].searchWindow).toBe(14400)
     expect(types()).not.toContain('ROUTING_ERROR')
     expect(search().pending).toBe(0)
   })
@@ -424,7 +439,10 @@ describe('actions > apiV2 > routingQuery progressive bike + transit (38.3)', () 
     )
     dispatch(routingQuery())
     await settleAll()
-    expect(bikeTransitSent().map((v) => v.maxStopCount)).toEqual([2000, 10000])
+    // 55.1's low-bike plan asks at 2000 too and fails the same way — silently.
+    expect(bikeTransitSent().map((v) => v.maxStopCount)).toEqual([
+      2000, 10000, 2000
+    ])
     expect(types()).not.toContain('ROUTING_ERROR')
     expect(search().pending).toBe(0)
     expect(getActiveError(getState())).toBeUndefined()
@@ -463,8 +481,14 @@ describe('actions > apiV2 > routingQuery progressive bike + transit (38.3)', () 
     anyGlobal.fetch = server(happy)
     dispatch(routingQuery())
     await settleAll()
-    expect(sent).toHaveLength(3)
-    expect(bikeTransitSent().map((v) => v.maxStopCount)).toEqual([2000])
+    // No full pass; 55.1's low-bike plan still goes, at the same cap.
+    expect(sent).toHaveLength(4)
+    expect(
+      bikeTransitSent().map((v) => [v.maxStopCount, v.bikeReluctance])
+    ).toEqual([
+      [2000, undefined],
+      [2000, 1]
+    ])
   })
 
   it('no staging in Go Mode: bike + transit goes once, at the rider’s cap', async () => {
@@ -502,6 +526,162 @@ describe('actions > apiV2 > routingQuery progressive bike + transit (38.3)', () 
     // It was the rider leaving that stopped it, not a failure.
     expect(types()).not.toContain('ROUTING_ERROR')
   })
+
+  /**
+   * Backlog 55.1 — the rider's "less biking" plan (cycle 23 Q1 A). One more
+   * bike + transit plan at bike reluctance 1 (server: 0.5); measured
+   * 2026-10-16 on production, the 2026-10-15 21:16 O/D only offers Blue Line
+   * -> 539 from 0.9 up.
+   */
+  describe('the low-bike plan (55.1)', () => {
+    const isLowBike = (v: Record<string, any>) =>
+      kindOf(v) === 'bikeTransit' && v.bikeReluctance === LOW_BIKE_RELUCTANCE
+    const lowBikeSent = () => sent.filter(isLowBike)
+    // The low-bike answer: both quick-pass rides again (one 90 s later, as
+    // realtime would move it), and one ride the 0.5 search dropped.
+    const lowBike: Handler = (v) =>
+      isLowBike(v)
+        ? plan([
+            bikeBus('21', 't-21-a', '17:35', 90),
+            bikeBus('2', 't-2-a', '17:40'),
+            bikeBus('539', 't-539-a', '17:50')
+          ])
+        : happy(v)
+    const rideNames = () =>
+      getActiveItineraries(getState()).map(
+        (itin: any) =>
+          itin.legs
+            .filter((l: any) => l.transitLeg)
+            .map((l: any) => l.routeShortName)
+            .join('>') || 'bike'
+      )
+
+    it('asks bike + transit once more at the measured reluctance, same question otherwise', async () => {
+      expect(LOW_BIKE_RELUCTANCE).toBe(1)
+      anyGlobal.fetch = server(lowBike)
+      dispatch(routingQuery())
+      await settleAll()
+      expect(lowBikeSent()).toHaveLength(1)
+      const quick = bikeTransitSent()[0]
+      const low = lowBikeSent()[0]
+      // Only the reluctance differs from the fan-out's bike + transit plan.
+      expect({ ...low, bikeReluctance: quick.bikeReluctance }).toEqual(quick)
+      expect(quick.bikeReluctance).toBeUndefined()
+      expect(low.maxStopCount).toBe(2000)
+      expect(search().pending).toBe(0)
+    })
+
+    it('adds only the ride the list lacks; nothing listed goes or repeats', async () => {
+      let releaseLow: (() => void) | null = null
+      anyGlobal.fetch = jest.fn((_url: string, options: { body?: string }) => {
+        const { variables } = JSON.parse(options?.body || '{}')
+        sent.push(variables)
+        const respond = () =>
+          Promise.resolve({
+            json: () => Promise.resolve({ data: lowBike(variables).data }),
+            status: 200
+          })
+        if (isLowBike(variables)) {
+          return new Promise((resolve) => {
+            releaseLow = () => resolve(respond())
+          })
+        }
+        return respond()
+      })
+      dispatch(routingQuery())
+      await settleAll()
+      expect(releaseLow).not.toBeNull()
+      // Pending says "more bike + transit trips" while it is out.
+      expect(getSearchPendingKind(search())).toBe('BICYCLE_TRANSIT_MORE')
+      const before = getActiveItineraries(getState()).map((itin: any) => ({
+        routes: itin.legs.map((l: any) => l.routeShortName || l.mode).join(),
+        startTime: itin.startTime
+      }))
+      ;(releaseLow as unknown as () => void)()
+      await settleAll()
+      const afterList = getActiveItineraries(getState())
+      const after = afterList.map((itin: any) => ({
+        routes: itin.legs.map((l: any) => l.routeShortName || l.mode).join(),
+        startTime: itin.startTime
+      }))
+      // Every option the rider already had is still there, unchanged.
+      before.forEach((entry: any) => expect(after).toContainEqual(entry))
+      // Exactly one more: the 539 the 0.5 search could not offer.
+      expect(after).toHaveLength(before.length + 1)
+      const names = rideNames()
+      expect(names.filter((r: string) => r === '539')).toHaveLength(1)
+      expect(names.filter((r: string) => r === '21')).toHaveLength(1)
+      expect(names.filter((r: string) => r === '2')).toHaveLength(1)
+      // The 21 kept is the one first listed, not the low-bike copy.
+      const r21 = afterList.find(
+        (itin: any) => itin.legs[1]?.routeShortName === '21'
+      )
+      expect(r21.startTime).toBe(T('17:35'))
+      expect(search().pending).toBe(0)
+      expect(getActiveError(getState())).toBeUndefined()
+    })
+
+    it('is not asked when the search has no bike + transit', async () => {
+      init({
+        ...baseConfig,
+        modes: {
+          ...baseConfig.modes,
+          initialState: { enabledModeButtons: ['transit'] }
+        }
+      })
+      anyGlobal.fetch = server(lowBike)
+      dispatch(routingQuery())
+      await settleAll()
+      expect(sent.length).toBeGreaterThan(0)
+      expect(bikeTransitSent()).toHaveLength(0)
+      expect(sent.some((v) => v.bikeReluctance === LOW_BIKE_RELUCTANCE)).toBe(
+        false
+      )
+    })
+
+    it('is not asked in Go Mode', async () => {
+      otpState = {
+        ...otpState,
+        goMode: { ...otpState.goMode, isActive: true }
+      }
+      anyGlobal.fetch = server(lowBike)
+      dispatch(routingQuery())
+      await settleAll()
+      expect(lowBikeSent()).toHaveLength(0)
+    })
+
+    it('is not asked when the rider already asked to bike less', async () => {
+      otpState = {
+        ...otpState,
+        currentQuery: {
+          ...currentQuery,
+          routingPreferences: { bikeReluctance: 5 }
+        }
+      }
+      anyGlobal.fetch = server(lowBike)
+      dispatch(routingQuery())
+      await settleAll()
+      expect(bikeTransitSent().map((v) => v.bikeReluctance)).toEqual([5, 5])
+      expect(lowBikeSent()).toHaveLength(0)
+    })
+
+    it('fails silently and leaves the list as it was', async () => {
+      anyGlobal.fetch = server((v) =>
+        isLowBike(v) ? { fail: true } : happy(v)
+      )
+      dispatch(routingQuery())
+      await settleAll()
+      expect(lowBikeSent()).toHaveLength(1)
+      expect(types()).not.toContain('ROUTING_ERROR')
+      const silent = actions.filter((a) => a.type === 'ROUTING_SILENT_ERROR')
+      expect(silent).toHaveLength(1)
+      expect(silent[0].payload.pass).toBe('lowBike')
+      expect(search().pending).toBe(0)
+      expect(getActiveError(getState())).toBeUndefined()
+      // Quick + full trips, as without it.
+      expect(getActiveItineraries(getState()).length).toBe(plenty.length + 4)
+    })
+  })
 })
 
 describe('actions > api-utils > progressive bike + transit helpers (38.3)', () => {
@@ -535,6 +715,37 @@ describe('actions > api-utils > progressive bike + transit helpers (38.3)', () =
       shouldRunFullBikeTransitPass({ goModeActive: true, isActiveSearch: true })
     ).toBe(false)
     expect(shouldRunFullBikeTransitPass({ isActiveSearch: false })).toBe(false)
+  })
+
+  it('asks the low-bike plan only for a live bike + transit list (55.1)', () => {
+    const base = {
+      bikeTransitRequested: true,
+      isActiveSearch: true,
+      lowBikeReluctance: 1,
+      routingType: 'ITINERARY'
+    }
+    expect(shouldRunLowBikePass(base)).toBe(true)
+    expect(shouldRunLowBikePass({ ...base, riderBikeReluctance: 0.6 })).toBe(
+      true
+    )
+    expect(shouldRunLowBikePass({ ...base, bikeTransitRequested: false })).toBe(
+      false
+    )
+    expect(shouldRunLowBikePass({ ...base, riderBikeReluctance: 1 })).toBe(
+      false
+    )
+    expect(shouldRunLowBikePass({ ...base, goModeActive: true })).toBe(false)
+    expect(shouldRunLowBikePass({ ...base, updateSearchInReducer: true })).toBe(
+      false
+    )
+    expect(shouldRunLowBikePass({ ...base, routingType: 'PROFILE' })).toBe(
+      false
+    )
+    expect(shouldRunLowBikePass({ ...base, isActiveSearch: false })).toBe(false)
+    expect(shouldRunLowBikePass({ ...base, hadError: true })).toBe(false)
+    expect(shouldRunLowBikePass({ ...base, transitChainUsed: true })).toBe(
+      false
+    )
   })
 
   it('every sub-query failed = errors only, at least one', () => {
