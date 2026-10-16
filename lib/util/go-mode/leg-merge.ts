@@ -592,3 +592,69 @@ export function retargetTransitLegToRun(
   }
   return next as Itinerary
 }
+
+/**
+ * Re-time the street legs `[fromIndex, toIndex)` so they run from `startMs`
+ * to `endMs`, each keeping its share of the chain's time (backlog 23.3).
+ *
+ * OTP answers a depart-now street plan to a bus that is not due for a while
+ * with the street legs moved up against the bus: on 2026-10-15 the 18:18 plan
+ * fetched at 17:51:04 carried a bike leg 18:14:14 -> 18:18:24. Kept by
+ * reference through `retargetTransitLegToRun` onto a 17:52:30 run, that leg
+ * ended 25 min 54 s after the bus — the 1,554,000 ms overrun PLAN_RETARGET
+ * refused at 17:52:42 — and would have painted the sheet backwards had it been
+ * applied. The legs here are the rider's from now: they start when the rider
+ * is (`startMs`, now) and end when the rider is measured to get there.
+ *
+ * Geometry, distance and everything else on the legs are kept. Returns the
+ * itinerary unchanged when the span is empty, a leg is transit, or the times
+ * do not arithmetic.
+ */
+export function reanchorAccessChain(
+  itinerary: Itinerary,
+  fromIndex: number,
+  toIndex: number,
+  startMs: number,
+  endMs: number
+): Itinerary {
+  const legs = (itinerary?.legs || []) as any[]
+  const span = legs.slice(fromIndex, toIndex)
+  if (!span.length || span.some((l) => l?.transitLeg)) return itinerary
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) return itinerary
+  if (endMs < startMs) return itinerary
+  const weights = span.map((l) => {
+    const d = Number(l.endTime) - Number(l.startTime)
+    return Number.isFinite(d) && d > 0 ? d : 0
+  })
+  const total = weights.reduce((a, b) => a + b, 0)
+  let cursor = startMs
+  const retimed = span.map((l, i) => {
+    const share = total > 0 ? weights[i] / total : 1 / Math.max(1, span.length)
+    const legEnd =
+      i === span.length - 1
+        ? endMs
+        : Math.round(cursor + share * (endMs - startMs))
+    const next: any = {
+      ...l,
+      duration: (legEnd - cursor) / 1000,
+      endTime: legEnd,
+      startTime: cursor
+    }
+    if (l.from?.departure != null) next.from = { ...l.from, departure: cursor }
+    if (l.to?.arrival != null) next.to = { ...l.to, arrival: legEnd }
+    cursor = legEnd
+    return next
+  })
+  const nextLegs = [
+    ...legs.slice(0, fromIndex),
+    ...retimed,
+    ...legs.slice(toIndex)
+  ]
+  const next: any = { ...itinerary, legs: nextLegs }
+  if (fromIndex === 0) next.startTime = startMs
+  if (toIndex >= legs.length) next.endTime = endMs
+  const s = Number(next.startTime)
+  const e = Number(next.endTime)
+  if (Number.isFinite(s) && Number.isFinite(e)) next.duration = (e - s) / 1000
+  return next as Itinerary
+}
