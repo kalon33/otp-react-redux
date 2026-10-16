@@ -81,6 +81,7 @@ Object {
       "vehicle": null,
     },
     "originalFrom": null,
+    "planStopOffer": null,
     "progress": null,
     "reRoute": Object {
       "autoApply": false,

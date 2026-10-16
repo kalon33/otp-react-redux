@@ -547,6 +547,7 @@ components:
     onboardPreviewWait: "{mins} min wait"
     onboardTitle: On the bus
     openTripSheet: Open trip overview
+    pickAnotherStop: Pick another stop
     pickYourBus: Which bus are you on? Pick it below.
     pickYourRoute: "No live bus detected — pick your route:"
     rerouteNlError: Couldn't read that — try again.

@@ -60,6 +60,11 @@ interface Props {
   /** "On a different bus?" (51.1) — offered only while waiting at the stop. */
   onChooseBus?: () => void
   onExit?: () => void
+  /** "Pick another stop" (54.1) — the get-off list over the live trip. */
+  pickAnotherAlightStop?: () => void
+  /** goMode.planStopOffer — set when "I'm on the bus" went straight to the
+   * plan's stop; names the trip it is about. */
+  planStopOffer?: { tripId: string } | null
   progress: TripProgress
   /** goMode.riding — the evidenced fact that the rider is aboard this leg. */
   riding?: { legIndex: number } | null
@@ -89,6 +94,8 @@ const TransitProgress = ({
   liveLegTimes,
   onChooseBus,
   onExit,
+  pickAnotherAlightStop,
+  planStopOffer,
   progress,
   riding,
   tripRecord,
@@ -456,6 +463,26 @@ const TransitProgress = ({
 
       {!waiting && (
         <NavExtras>
+          {/* 54.1: "I'm on the bus" on the plan's own train went straight to
+              this card for the plan's stop instead of the get-off list; this
+              is the rider's way to that list (their Q4 answer, 2026-10-16).
+              Only on the ride it was offered for, and only aboard. */}
+          {aboard &&
+            pickAnotherAlightStop &&
+            planStopOffer != null &&
+            planStopOffer.tripId === tripId && (
+              <ChooseBusLink
+                data-testid="pick-another-stop"
+                onClick={pickAnotherAlightStop}
+                style={{ marginRight: 16 }}
+                type="button"
+              >
+                {intl.formatMessage({
+                  defaultMessage: 'Pick another stop',
+                  id: 'components.GoMode.pickAnotherStop'
+                })}
+              </ChooseBusLink>
+            )}
           <ResetButton
             onClick={() => advanceToLeg((progress.currentLegIndex ?? 0) + 1)}
             type="button"
@@ -480,6 +507,7 @@ const mapStateToProps = (state: any, ownProps: { leg: Leg }) => {
   return {
     emptyPolls: state.otp?.goMode?.vehicleMatch?.emptyPolls || 0,
     liveLegTimes: state.otp?.goMode?.liveLegTimes || {},
+    planStopOffer: state.otp?.goMode?.planStopOffer ?? null,
     riding: state.otp?.goMode?.riding || null,
     tripRecord: tripId ? transitIndex?.trips?.[tripId] ?? null : null,
     tripVehicle:
@@ -491,7 +519,8 @@ const mapStateToProps = (state: any, ownProps: { leg: Leg }) => {
 }
 
 const mapDispatchToProps = {
-  advanceToLeg: goModeActions.advanceToLeg
+  advanceToLeg: goModeActions.advanceToLeg,
+  pickAnotherAlightStop: goModeActions.pickAnotherAlightStop
 }
 
 export default connect(mapStateToProps, mapDispatchToProps)(TransitProgress)

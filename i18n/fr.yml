@@ -540,6 +540,7 @@ components:
     onboardPreviewWait: "{mins} min d'attente"
     onboardTitle: "Dans le bus"
     openTripSheet: "Ouvrir l'aperçu du trajet"
+    pickAnotherStop: "Choisir un autre arrêt"
     pickYourBus: "Dans quel bus êtes-vous ? Choisissez-le ci-dessous."
     pickYourRoute: "Aucun bus détecté en temps réel — choisissez votre ligne :"
     rerouteNlError: "Impossible de comprendre — réessayez."
