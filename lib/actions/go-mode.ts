@@ -19,6 +19,7 @@ import {
   ONBOARD_CANDIDATE_SETTLE_MS,
   pickSameRouteAlight,
   rankAlightOptions,
+  scoreAlightOption,
   selectCandidateStops,
   settleCandidatePlans
 } from '../util/go-mode/alight-optimizer'
@@ -4965,6 +4966,13 @@ export function planFromOnboardBus() {
  */
 function optimizeAlightFromTrip(options: {
   /**
+   * Stops to plan from on top of the sampled five, when the bus still serves
+   * them (53.1). The even sample across a long run can step over the one stop
+   * that makes a connection; a caller that knows where the plan alights can
+   * name the stops around it.
+   */
+  alsoAskStopIds?: string[]
+  /**
    * The route the rider already chose for the leg AFTER this bus. Never
    * filters; it wins ties and holds a slot so the cap cannot cut it. Defaults
    * to the id captured when the onboard flow opened.
@@ -5016,7 +5024,11 @@ function optimizeAlightFromTrip(options: {
       { lat: to.lat, lon: to.lon },
       nowMs
     )
-    const candidates = selectCandidateStops(downstream, 5)
+    const sampled = selectCandidateStops(downstream, 5)
+    const alsoAsk = new Set(options.alsoAskStopIds || [])
+    const candidates = alsoAsk.size
+      ? downstream.filter((d) => sampled.includes(d) || alsoAsk.has(d.stop.id))
+      : sampled
     if (candidates.length === 0) {
       if (updateOnboardState) dispatch(setOnboardResult(null))
       return null
@@ -6056,7 +6068,81 @@ export function replanFromAboard(
           ? null
           : plannedArrivalAny
       let best: any = null
-      if (plannedArrival) {
+      // 53.1 — an EARLIER (or later) run of the planned route, not the plan's
+      // own trip. The plan's tail was timed for the run the plan named: on
+      // 2026-10-15 the held plan was the 18:18 539 into the 18:43 Blue Line,
+      // the rider caught the 18:01, and the same-stop shortcut below kept the
+      // 18:43 train behind an 18:11 alight — a 32-minute layover, pushed as
+      // "arriving in 60 min", while the 18:13 train was makeable from an
+      // earlier stop. Grafting cannot see that: anchorGraftedTail never moves
+      // a transit leg (by design), and re-planning from the SAME stop still
+      // misses the 18:13 by 41 s. So ask the optimizer, held to the plan's
+      // ONWARD route (the 901 — not the ridden 539, which pickSameRouteAlight
+      // would never find onward), and keep the planned stop when it does as
+      // well as the best. Only with a timed transit leg onward: a street-only
+      // tail moves with the bus already (anchorGraftedTail). A bus the rider
+      // picked (51.1) keeps its own path below.
+      const boardedOtherRun =
+        boardedLegIndex < 0 && !riderPicked && !!ridingLegForAlight?.transitLeg
+      const onwardRouteId = boardedOtherRun
+        ? onwardTransitRouteId(itinerary, { afterLegIndex: aboardLegIndex })
+        : null
+      if (plannedArrival && onwardRouteId) {
+        // The stop that made the 18:13 was Old Shakopee & 86th, two stops
+        // before the planned one (the 539 loops past it first); the even
+        // five-stop sample from 98th St stepped over it. Always ask from the
+        // planned stop and the three just before it.
+        const STOPS_BEFORE = 3
+        const stopTimes = trip.stopTimes || []
+        const plannedIdx = findStopTimeIndex(
+          stopTimes,
+          plannedAlightStopId,
+          ridingLegForAlight?.to?.name
+        )
+        const alsoAskStopIds =
+          plannedIdx >= 0
+            ? stopTimes
+                .slice(Math.max(0, plannedIdx - STOPS_BEFORE), plannedIdx + 1)
+                .map((st: any) => st?.stop?.id ?? st?.stop?.gtfsId)
+                .filter(Boolean)
+            : []
+        const ranked = await dispatch(
+          optimizeAlightFromTrip({
+            alsoAskStopIds,
+            keepRouteId: onwardRouteId,
+            limit: 50,
+            prefsOverride,
+            to,
+            trip,
+            vehicle
+          })
+        )
+        if (!stillCurrent()) return
+        const arrivalOf = (o: any) =>
+          scoreAlightOption(o.busArrivalEpoch, o.itinerary, {
+            arrivalIsFloor: o.arrivalIsFloor
+          })
+        const top = pickSameRouteAlight(ranked, onwardRouteId)
+        const atPlanned = pickSameRouteAlight(
+          (ranked || []).filter((r: any) => r.stopId === plannedAlightStopId),
+          onwardRouteId
+        )
+        const pick =
+          atPlanned && top && arrivalOf(atPlanned) <= arrivalOf(top)
+            ? atPlanned
+            : top
+        // The graft below arrives when the held plan does; an optimizer
+        // answer has to beat that to be worth a different stop. No answer
+        // at all (timeouts) leaves the graft — the boarded bus still goes in.
+        const graftArrival = Number(legs[legs.length - 1]?.endTime)
+        if (
+          pick &&
+          (!Number.isFinite(graftArrival) || arrivalOf(pick) < graftArrival)
+        ) {
+          best = pick
+        }
+      }
+      if (!best && plannedArrival) {
         best = {
           busArrivalEpoch: plannedArrival.epoch,
           itinerary: {
@@ -6069,7 +6155,7 @@ export function replanFromAboard(
           // falls back to boardIdx + 1.
           stopName: ridingLegForAlight?.to?.name ?? null
         }
-      } else {
+      } else if (!best) {
         const ranked = await dispatch(
           optimizeAlightFromTrip({
             keepRouteId,
