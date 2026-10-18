@@ -57,6 +57,7 @@ Object {
     "departureOverrideSource": null,
     "departureOverrideTripId": null,
     "earlyAlight": null,
+    "fasterRoute": null,
     "isActive": false,
     "liveLegTimes": Object {},
     "multiStop": null,

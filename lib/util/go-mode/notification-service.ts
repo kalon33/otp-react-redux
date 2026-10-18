@@ -1,5 +1,11 @@
+import type { IntlShape } from 'react-intl'
 import type { Itinerary, Leg } from '@opentripplanner/types'
 
+import {
+  ADDED_BIKE_SHOW_M,
+  FASTER_ROUTE_NOTICE_ID,
+  offerSubKind
+} from './faster-route-offer'
 import { asContinuation, formatCueDistance } from './turn-by-turn'
 import {
   calculateDistance,
@@ -16,6 +22,8 @@ import {
   vehicleShortOfBoardStop
 } from './transit-trust'
 import type { BoardVehicleEvidence } from './transit-trust'
+import type { FasterRouteOffer } from './faster-route-offer'
+import type { PushPayload } from './native-notify'
 import type { TripProgress } from './progress-calculator'
 
 export type NotificationType =
@@ -2491,4 +2499,137 @@ export function restoreNotificationLatches(
       }
     }
   )
+}
+
+/* ------------------------------------------------------------------------ */
+/* Faster route available (backlog 56.1, cycle 25 B2)                        */
+/* ------------------------------------------------------------------------ */
+
+const km = (intl: IntlShape, metres: number): string =>
+  intl.formatNumber(metres / 1000, {
+    maximumFractionDigits: 1,
+    minimumFractionDigits: 1
+  })
+
+/**
+ * The words of one faster-route offer, shared by the card and the push so the
+ * two can never say different things. Numbers only (the rider's standing rule
+ * for notification copy): the headline is the saving, the detail is the route
+ * and, only when they apply, the biking it adds or the minutes it costs.
+ *
+ *   faster:    "6 min faster"        · "14"   (· "+1.8 km bike" from 0.5 km)
+ *   lessBike:  "1.4 km less biking"  · "14"   (· "+1 min" only when later)
+ *   bike all the way: the route reads "bike".
+ *   aboard (B4): the stop to get off at takes the route's place —
+ *              "4 min faster" · "off at 30th Ave" (· "+1.8 km bike"),
+ *              "1.4 km less biking" · "off at 30th Ave" (· "+1 min").
+ */
+export function fasterRouteCopy(
+  offer: Pick<
+    FasterRouteOffer,
+    | 'aboard'
+    | 'addedBikeM'
+    | 'bikeSavedM'
+    | 'kind'
+    | 'laterMs'
+    | 'routeLabel'
+    | 'savingMs'
+    | 'stopName'
+  >,
+  intl: IntlShape = notifyIntl()
+): { detail: string; title: string } {
+  const kind = offerSubKind(offer)
+  const title =
+    kind === 'lessBike'
+      ? intl.formatMessage(
+          {
+            defaultMessage: '{distance} km less biking',
+            id: 'components.GoMode.fasterRoute.lessBike'
+          },
+          { distance: km(intl, offer.bikeSavedM) }
+        )
+      : intl.formatMessage(
+          {
+            defaultMessage: '{minutes} min faster',
+            id: 'components.GoMode.fasterRoute.faster'
+          },
+          { minutes: Math.max(1, Math.round(offer.savingMs / 60000)) }
+        )
+  const parts: string[] = [
+    offer.kind === 'aboard'
+      ? intl.formatMessage(
+          {
+            defaultMessage: 'off at {stopName}',
+            id: 'components.GoMode.fasterRoute.offAt'
+          },
+          {
+            stopName:
+              offer.stopName ||
+              offer.aboard?.stopName ||
+              intl.formatMessage({
+                defaultMessage: 'your stop',
+                id: 'components.GoMode.notify.yourStop'
+              })
+          }
+        )
+      : offer.routeLabel ||
+        intl.formatMessage({
+          defaultMessage: 'bike',
+          id: 'components.GoMode.fasterRoute.bikeAllTheWay'
+        })
+  ]
+  if (kind !== 'lessBike' && offer.addedBikeM >= ADDED_BIKE_SHOW_M) {
+    parts.push(
+      intl.formatMessage(
+        {
+          defaultMessage: '+{distance} km bike',
+          id: 'components.GoMode.fasterRoute.addedBike'
+        },
+        { distance: km(intl, offer.addedBikeM) }
+      )
+    )
+  }
+  const laterMin = Math.round(offer.laterMs / 60000)
+  if (kind === 'lessBike' && laterMin >= 1) {
+    parts.push(
+      intl.formatMessage(
+        {
+          defaultMessage: '+{minutes} min',
+          id: 'components.GoMode.fasterRoute.later'
+        },
+        { minutes: laterMin }
+      )
+    )
+  }
+  return { detail: parts.join(' · '), title }
+}
+
+/**
+ * The one push for a faster-route offer, sent only when the phone is not
+ * showing the app (the card is the on-screen surface). ONE stable id
+ * (FASTER_ROUTE_NOTICE_ID), so a later offer replaces it and a lapsed one can
+ * be taken back. No action buttons: Switch is a tap on the card.
+ *
+ *   "Faster route" / "6 min faster · 14"
+ */
+export function buildFasterRouteNotice(
+  offer: Parameters<typeof fasterRouteCopy>[0]
+): PushPayload & { id: number } {
+  const intl = notifyIntl()
+  const { detail, title } = fasterRouteCopy(offer, intl)
+  return {
+    id: FASTER_ROUTE_NOTICE_ID,
+    message: `${title} · ${detail}`,
+    priority: 1,
+    title:
+      offerSubKind(offer) === 'lessBike'
+        ? intl.formatMessage({
+            defaultMessage: 'Less biking',
+            id: 'components.GoMode.fasterRoute.pushTitleLessBike'
+          })
+        : intl.formatMessage({
+            defaultMessage: 'Faster route',
+            id: 'components.GoMode.fasterRoute.pushTitle'
+          })
+  }
 }
