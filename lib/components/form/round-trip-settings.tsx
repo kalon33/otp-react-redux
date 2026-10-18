@@ -1,7 +1,7 @@
 import { connect } from 'react-redux'
 import { useIntl } from 'react-intl'
 import AnimateHeight from 'react-animate-height'
-import React, { useCallback, useState } from 'react'
+import React, { useCallback } from 'react'
 import styled from 'styled-components'
 
 import {
@@ -11,7 +11,7 @@ import {
 } from '../../actions/round-trip'
 import { STAY_OPTIONS_MINUTES } from '../../util/go-mode/round-trip'
 
-import { commonButtonCss, commonInputCss } from './styled'
+import StayChips, { SmallButton, useStayLabel } from './stay-chips'
 
 /**
  * The round-trip question, asked on the search form: "plan the way back too,
@@ -35,32 +35,6 @@ const Row = styled.div`
   gap: 8px;
 `
 
-const SmallButton = styled.button`
-  ${commonButtonCss}
-  font-size: 13px;
-  padding: 4px 10px;
-`
-
-const ChipRow = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  padding-top: 6px;
-`
-
-const UnitLabel = styled.span`
-  color: #666;
-  font-size: 13px;
-`
-
-const CustomInput = styled.input`
-  ${commonInputCss}
-  border-radius: 3px;
-  font-size: 13px;
-  padding: 4px 6px;
-  width: 5.5em;
-`
-
 type Props = {
   roundTrip: boolean
   setRoundTripOptions: (options: {
@@ -76,58 +50,16 @@ function RoundTripSettings({
   stayMinutes
 }: Props): JSX.Element {
   const intl = useIntl()
-  // While the rider is typing in the custom box, the box shows what they typed
-  // (including a half-finished "1" on the way to "120"); the store still holds
-  // the last usable value. Null means "not typing" and the box follows state.
-  const [draft, setDraft] = useState<string | null>(null)
-
-  const isCustom = !STAY_OPTIONS_MINUTES.includes(stayMinutes)
-
-  const stayLabel = useCallback(
-    (minutes: number) =>
-      intl
-        .formatMessage(
-          {
-            defaultMessage:
-              '{hours, plural, =0 {} other {# h }}{minutes, plural, =0 {} other {# min}}',
-            id: 'components.RoundTrip.stayOption'
-          },
-          { hours: Math.floor(minutes / 60), minutes: minutes % 60 }
-        )
-        .trim(),
-    [intl]
-  )
+  const stayLabel = useStayLabel()
 
   const onToggle = useCallback(() => {
-    setDraft(null)
     setOptions({ roundTrip: !roundTrip })
   }, [roundTrip, setOptions])
 
-  const onChipClick = useCallback(
-    (minutes: number) => () => {
-      setDraft(null)
-      setOptions({ stayMinutes: minutes })
-    },
+  const onStayChange = useCallback(
+    (minutes: number) => setOptions({ stayMinutes: minutes }),
     [setOptions]
   )
-
-  const onCustomChange = useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) => {
-      const text = event.target.value
-      setDraft(text)
-      const minutes = Number(text)
-      if (
-        Number.isInteger(minutes) &&
-        minutes >= MIN_STAY_MINUTES &&
-        minutes <= MAX_STAY_MINUTES
-      ) {
-        setOptions({ stayMinutes: minutes })
-      }
-    },
-    [setOptions]
-  )
-
-  const onCustomBlur = useCallback(() => setDraft(null), [])
 
   return (
     <div>
@@ -160,50 +92,17 @@ function RoundTripSettings({
         height={roundTrip ? 'auto' : 0}
         style={{ transition: 'ease all 200ms' }}
       >
-        <ChipRow
-          aria-label={intl.formatMessage({
+        <StayChips
+          groupLabel={intl.formatMessage({
             defaultMessage: 'Minimum time at the destination',
             id: 'components.RoundTrip.stayGroupLabel'
           })}
-          role="group"
-        >
-          {STAY_OPTIONS_MINUTES.map((minutes) => (
-            <SmallButton
-              aria-pressed={!isCustom && stayMinutes === minutes}
-              className={!isCustom && stayMinutes === minutes ? 'active' : ''}
-              key={minutes}
-              onClick={onChipClick(minutes)}
-              type="button"
-            >
-              {stayLabel(minutes)}
-            </SmallButton>
-          ))}
-          <CustomInput
-            aria-label={intl.formatMessage({
-              defaultMessage: 'Custom stay, in minutes',
-              id: 'components.RoundTrip.customStayLabel'
-            })}
-            max={MAX_STAY_MINUTES}
-            min={MIN_STAY_MINUTES}
-            onBlur={onCustomBlur}
-            onChange={onCustomChange}
-            placeholder={intl.formatMessage({
-              defaultMessage: 'Custom',
-              id: 'components.RoundTrip.customStayPlaceholder'
-            })}
-            step={5}
-            type="number"
-            value={draft ?? (isCustom ? String(stayMinutes) : '')}
-          />
-          {/* The unit the box wants, on screen. The input's own aria-label
-              already says "in minutes", so this is decoration for readers. */}
-          <UnitLabel aria-hidden>
-            {intl.formatMessage({
-              defaultMessage: 'min',
-              id: 'components.RoundTrip.customStayUnit'
-            })}
-          </UnitLabel>
-        </ChipRow>
+          max={MAX_STAY_MINUTES}
+          min={MIN_STAY_MINUTES}
+          onChange={onStayChange}
+          options={STAY_OPTIONS_MINUTES}
+          value={stayMinutes}
+        />
       </AnimateHeight>
     </div>
   )

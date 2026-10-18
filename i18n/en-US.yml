@@ -700,7 +700,13 @@ components:
     endTrip: End trip
     finding: Finding the next ride…
     headerStop: To {destination} · stop {number} of {total}
+    leaveAt: leave {time}
+    noStay: No stay
+    plannedStay: Planned stay until {time}
+    stayGroupLabel: Minimum time at {stop}
     stopPlaceholder: Enter a stop
+    stopTime: "{stop} {time}"
+    stopTimeStay: "{stop} {time} ({stay}+)"
     summary: Via {stops} · {distance} in all
     via: Via {stops}
   NarrativeItinerariesHeader:

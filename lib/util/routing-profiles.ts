@@ -12,7 +12,7 @@
  * nonsensical value to the routing engine.
  */
 
-import { queryStops, viaVisitLocations } from './multi-stop'
+import { queryStops, queryStopStays, viaVisitLocations } from './multi-stop'
 
 export interface RoutingPreferences {
   bikeReluctance?: number
@@ -573,6 +573,8 @@ export interface PlanConstraints {
   /** The rider's stops (backlog 43.1) — see util/multi-stop.ts. */
   intermediatePlaces?: unknown[]
   noTransfers?: boolean
+  /** Minutes at each of those stops (backlog 58.3). */
+  stopStays?: unknown[]
   viaStop?: ViaStop | null
 }
 
@@ -597,7 +599,11 @@ export function planConstraintVariables(
   // The rider's stops first, in the order they visit them (backlog 43.1):
   // OTP's via list is ordered, and a pass-through stop is a constraint on the
   // ride, not a place the rider is going.
-  const via: unknown[] = viaVisitLocations(queryStops(query))
+  // Each with the rider's minimum stay there (backlog 58.3).
+  const via: unknown[] = viaVisitLocations(
+    queryStops(query),
+    queryStopStays(query)
+  )
   const stopIds = query?.viaStop?.ids?.filter(Boolean)
   if (stopIds?.length) {
     via.push({ passThrough: { stopLocationIds: stopIds } })
@@ -630,6 +636,9 @@ export const NON_OTP_QUERY_KEYS = [
   // for the way back — actions/round-trip.ts), never of the outbound query.
   'roundTrip',
   'stayMinutes',
+  // The stay at each of the rider's stops: it rides in `via` as each visit's
+  // minimumWaitTime, never under this name (backlog 58.3).
+  'stopStays',
   'viaStop'
 ]
 

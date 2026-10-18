@@ -695,7 +695,13 @@ components:
     endTrip: Terminer le trajet
     finding: Recherche du prochain trajet…
     headerStop: Vers {destination} · étape {number} sur {total}
+    leaveAt: départ {time}
+    noStay: Sans pause
+    plannedStay: Séjour prévu jusqu'à {time}
+    stayGroupLabel: Temps minimum à {stop}
     stopPlaceholder: Entrez une étape
+    stopTime: "{stop} {time}"
+    stopTimeStay: "{stop} {time} ({stay}+)"
     summary: Via {stops} · {distance} au total
     via: Via {stops}
   NarrativeItinerariesHeader:
