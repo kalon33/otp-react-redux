@@ -22,6 +22,7 @@ Object {
     "favoriteStops": Array [],
     "recentPlaces": Array [],
     "recentSearches": Array [],
+    "routeSets": Array [],
     "savedLocations": Array [],
     "storeTripHistory": false,
   },

@@ -313,3 +313,40 @@ export const PanelTextInput = styled.input`
   padding: 8px;
   width: 100%;
 `
+
+/**
+ * A saved route set to put back (58.2): the route chip's pill, but a tap
+ * applies rather than removes — so no red hover — and thumb-sized.
+ */
+export const SavedSetChip = styled(RouteChip)`
+  font-size: 14px;
+  min-height: 44px;
+  padding: 6px 14px;
+
+  &:hover {
+    border-color: var(--main-base-color, ${blue[900]});
+    color: var(--main-base-color, ${blue[900]});
+  }
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.5;
+  }
+`
+
+/** The panel's outlined button, beside a PanelPrimaryButton. */
+export const PanelSecondaryButton = styled.button`
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  color: #333;
+  cursor: pointer;
+  font-weight: 600;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 8px 12px;
+
+  &:disabled {
+    opacity: 0.6;
+  }
+`

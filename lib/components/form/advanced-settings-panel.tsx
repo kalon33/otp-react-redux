@@ -30,6 +30,7 @@ import styled from 'styled-components'
 import * as apiActions from '../../actions/api'
 import * as formActions from '../../actions/form'
 import * as routeLockActions from '../../actions/route-lock'
+import * as routeSetActions from '../../actions/route-sets'
 import * as routingProfileActions from '../../actions/routing-profiles'
 import * as userActions from '../../actions/user'
 import {
@@ -98,6 +99,8 @@ import {
   SettingDropdown,
   VisibleSubheader
 } from './styled'
+import { matchSavedSet, RouteSet, RouteSetWrite } from '../../util/route-sets'
+import { SavedRouteSetList } from './saved-route-sets'
 import { setModeButtonEnabled } from './batch-settings'
 import ArriveOnTimeSetting from './arrive-on-time-setting'
 import DateTimeModal from './date-time-modal'
@@ -254,11 +257,13 @@ const AdvancedSettingsPanel = ({
   applyPreferencesFromText,
   applyRouteSet,
   applyRoutingProfile,
+  applySavedRouteSet,
   autoPlan,
   closeAdvancedSettings,
   configuredStopCap,
   currentQuery,
   defaultNumItineraries,
+  deleteRouteSet,
   enabledModeButtons,
   findRoutesIfNeeded,
   getDependentUserInfo,
@@ -270,8 +275,11 @@ const AdvancedSettingsPanel = ({
   modeButtonOptions,
   modeSettingDefinitions,
   modeSettingValues,
+  renameRouteSet,
   routes,
+  routeSets,
   saveAndReturnButton,
+  saveRouteSet,
   searches,
   setCloseAdvancedSettingsWithDelay,
   setQueryParam,
@@ -288,11 +296,16 @@ const AdvancedSettingsPanel = ({
     options?: RouteLockWriteOptions
   ) => Promise<unknown>
   applyRoutingProfile: (profileId: string) => void
+  applySavedRouteSet: (
+    setId: string,
+    options?: RouteLockWriteOptions
+  ) => Promise<unknown>
   autoPlan: boolean
   closeAdvancedSettings: () => void
   configuredStopCap: number
   currentQuery: any
   defaultNumItineraries: number
+  deleteRouteSet: (setId: string) => void
   enabledModeButtons: string[]
   findRoutesIfNeeded: () => void
   getDependentUserInfo: (userIds: string[], intl: IntlShape) => void
@@ -304,8 +317,16 @@ const AdvancedSettingsPanel = ({
   modeButtonOptions: ModeButtonDefinition[]
   modeSettingDefinitions: ModeSetting[]
   modeSettingValues: ModeSettingValues
+  renameRouteSet: (setId: string, name: string) => RouteSetWrite
+  routeSets?: RouteSet[]
   routes?: Record<string, LockableRoute>
   saveAndReturnButton?: boolean
+  saveRouteSet: (
+    name: string,
+    routeIds: string[],
+    scope: RouteLockScope,
+    options?: { replace?: boolean }
+  ) => RouteSetWrite
   searches?: Record<string, SearchLike>
   setCloseAdvancedSettingsWithDelay: () => void
   setQueryParam: (evt: any) => void
@@ -363,6 +384,11 @@ const AdvancedSettingsPanel = ({
   const routeLock: AnyRouteLock | undefined = currentQuery.routeLock
   const lockedRoutes = useMemo(() => routeLockRoutes(routeLock), [routeLock])
   const lockScope = routeLockScope(routeLock)
+  const savedSets = useMemo(() => routeSets || [], [routeSets])
+  const activeSavedSet = useMemo(
+    () => matchSavedSet(routeLock, savedSets),
+    [routeLock, savedSets]
+  )
   // "In your last results": the latest search between these two places, from
   // the history — on the phone the active search is already cleared by now.
   const lastResultRouteIds = useMemo(
@@ -476,6 +502,24 @@ const AdvancedSettingsPanel = ({
       closePanel(true)
     },
     [applyRouteSet, closePanel]
+  )
+
+  // Saved sets (58.2). The sheet's Save writes the ticked draft; nothing
+  // searches. Use in the Settings list puts the set on the query without a
+  // search — closing Settings runs the one search, as for every other change
+  // made here.
+  const onSaveRouteSet = useCallback(
+    (
+      name: string,
+      routeIds: string[],
+      scope: RouteLockScope,
+      replace: boolean
+    ) => saveRouteSet(name, routeIds, scope, { replace }),
+    [saveRouteSet]
+  )
+  const onUseSavedSet = useCallback(
+    (setId: string) => applySavedRouteSet(setId, { replan: false }),
+    [applySavedRouteSet]
   )
 
   const handleModeButtonToggle = setModeButton(
@@ -730,7 +774,9 @@ const AdvancedSettingsPanel = ({
           lastResultRouteIds={lastResultRouteIds}
           lock={routeLock}
           onApply={onRouteSetApply}
+          onSaveSet={onSaveRouteSet}
           routes={routes}
+          savedSets={savedSets}
         />
         {lockedRoutes.length > 0 && (
           <>
@@ -773,6 +819,14 @@ const AdvancedSettingsPanel = ({
             </HelperText>
           </>
         )}
+        <SavedRouteSetList
+          activeSetId={activeSavedSet?.id}
+          graphRoutes={routes}
+          onDelete={deleteRouteSet}
+          onRename={renameRouteSet}
+          onUse={onUseSavedSet}
+          sets={savedSets}
+        />
       </RouteLockContainer>
       <LeverContainer>
         <VisibleSubheader>
@@ -1096,6 +1150,7 @@ const mapStateToProps = (state: AppReduxState) => {
     modeSettingDefinitions: state.otp?.modeSettingDefinitions || [],
     modeSettingValues,
     routes: state.otp.transitIndex?.routes,
+    routeSets: state.user?.localUser?.routeSets,
     saveAndReturnButton,
     searches: state.otp.searches as Record<string, SearchLike> | undefined
   }
@@ -1105,9 +1160,13 @@ const mapDispatchToProps = {
   applyPreferencesFromText: routingProfileActions.applyPreferencesFromText,
   applyRouteSet: routeLockActions.applyRouteSet,
   applyRoutingProfile: routingProfileActions.applyRoutingProfile,
+  applySavedRouteSet: routeSetActions.applySavedRouteSet,
+  deleteRouteSet: routeSetActions.deleteRouteSet,
   findRoutesIfNeeded: apiActions.findRoutesIfNeeded,
   getDependentUserInfo: userActions.getDependentUserInfo,
   lookupViaStops: routingProfileActions.lookupViaStops,
+  renameRouteSet: routeSetActions.renameRouteSet,
+  saveRouteSet: routeSetActions.saveRouteSet,
   setQueryParam: formActions.setQueryParam,
   setRouteLockScope: routeLockActions.setRouteLockScope,
   setRoutingPreferences: routingProfileActions.setRoutingPreferences,

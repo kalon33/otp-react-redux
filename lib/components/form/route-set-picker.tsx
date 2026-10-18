@@ -21,6 +21,7 @@ import {
   SheetSectionTitle
 } from '../go-mode/styled'
 import { isFilterMatch } from '../../util/state'
+import type { RouteSet, RouteSetWrite } from '../../util/route-sets'
 import type { RouteSetSource } from '../../actions/route-lock'
 
 import {
@@ -29,6 +30,7 @@ import {
   PanelTextInput,
   SettingDropdown
 } from './styled'
+import { SavedSetChips, SaveSetForm } from './saved-route-sets'
 
 /**
  * Rider ask 58.2: "whitelist a certain set of routes … can only pick one".
@@ -203,7 +205,19 @@ interface SheetProps {
     source: RouteSetSource
   ) => Promise<void> | void
   onCancel: () => void
+  /**
+   * Save the ticked routes under a name (58.2 saved sets). Refused with
+   * `exists` until called again with `replace`. Absent: no save control.
+   */
+  onSaveSet?: (
+    name: string,
+    routeIds: string[],
+    scope: RouteLockScope,
+    replace: boolean
+  ) => RouteSetWrite
   routes?: Record<string, LockableRoute>
+  /** The rider's saved sets, shown as one-tap chips on top. */
+  savedSets?: RouteSet[]
 }
 
 /** The sheet itself: the draft set, its filter, and Done. */
@@ -212,7 +226,9 @@ export function RouteSetSheet({
   lock,
   onApply,
   onCancel,
-  routes
+  onSaveSet,
+  routes,
+  savedSets = []
 }: SheetProps): JSX.Element {
   const intl = useIntl()
   const [picked, setPicked] = useState<string[]>(() => routeLockIds(lock))
@@ -342,6 +358,14 @@ export function RouteSetSheet({
               values={{ count: picked.length }}
             />
           </BoardingSubtitle>
+          {/* One tap = that set's routes AND scope, Settings closes, one
+              search (source 'saved'). Replaces the ticks, not adds to them. */}
+          <SavedSetChips
+            disabled={applying}
+            graphRoutes={routes}
+            onUse={(set, runningIds) => apply(runningIds, set.scope, 'saved')}
+            sets={savedSets}
+          />
           <PanelTextInput
             aria-label={intl.formatMessage({
               id: 'components.BatchSearchScreen.routeSetFilter'
@@ -399,6 +423,14 @@ export function RouteSetSheet({
             options={scopeOptions}
             value={scope}
           />
+          {onSaveSet && (
+            <SaveSetForm
+              count={picked.length}
+              onSave={(name, replace) => {
+                return onSaveSet(name, picked, scope, replace)
+              }}
+            />
+          )}
           <DoneButton
             className="route-set-done"
             disabled={applying}
@@ -426,7 +458,9 @@ export default function RouteSetPicker({
   lastResultRouteIds,
   lock,
   onApply,
-  routes
+  onSaveSet,
+  routes,
+  savedSets
 }: PickerProps): JSX.Element {
   const [open, setOpen] = useState(false)
   // Done closes Settings too, which unmounts this row before onApply settles.
@@ -469,7 +503,9 @@ export default function RouteSetPicker({
           lock={lock}
           onApply={applyAndClose}
           onCancel={close}
+          onSaveSet={onSaveSet}
           routes={routes}
+          savedSets={savedSets}
         />
       )}
     </>

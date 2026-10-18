@@ -15,6 +15,7 @@ import {
   ViaStop
 } from '../../util/routing-profiles'
 import { getDefaultNumItineraries } from '../../util/api'
+import { matchSavedSet, RouteSet } from '../../util/route-sets'
 import { routeLockRoutes, routeLockScope } from '../../util/route-lock'
 import type { AnyRouteLock, RouteLockScope } from '../../util/route-lock'
 
@@ -131,6 +132,7 @@ const ActiveRoutingPreferences = ({
   numItineraries,
   preferences,
   routeLock,
+  routeSets,
   viaStop
 }: {
   clearPreferences: () => void
@@ -142,6 +144,7 @@ const ActiveRoutingPreferences = ({
   numItineraries?: number
   preferences?: RoutingPreferences
   routeLock?: AnyRouteLock | null
+  routeSets?: RouteSet[]
   viaStop?: ViaStop | null
 }): JSX.Element | null => {
   const intl = useIntl()
@@ -176,9 +179,14 @@ const ActiveRoutingPreferences = ({
   // One chip per named route (#46) rather than one chip listing them all: the
   // rider reads this row at a glance to check what is in effect, and a single
   // chip reading "Only 18, 21, METRO Orange Line" stops being glanceable at two.
-  const { chipId: lockChipId, detailId: lockDetailId } = routeLockMessageIds(
-    routeLockScope(routeLock)
-  )
+  const lockScope = routeLockScope(routeLock)
+  const { chipId: lockChipId, detailId: lockDetailId } =
+    routeLockMessageIds(lockScope)
+  // A lock that IS one of the rider's saved sets reads as the set: one chip,
+  // "Only: Commute (18, 21, Orange)" (58.2).
+  const savedSet = matchSavedSet(routeLock, routeSets)
+  const lockedRoutes = routeLockRoutes(routeLock)
+  const lockedText = lockedRoutes.map((route) => route.label).join(', ')
 
   return (
     <Container
@@ -190,17 +198,39 @@ const ActiveRoutingPreferences = ({
       <LabelText>
         <FormattedMessage id="components.ActiveRoutingPreferences.label" />
       </LabelText>
-      {routeLockRoutes(routeLock).map((route) => (
+      {savedSet ? (
         <Chip
-          key={route.id}
+          className="route-set-saved-summary"
           title={intl.formatMessage(
             { id: lockDetailId },
-            { route: route.label }
+            { route: lockedText }
           )}
         >
-          <FormattedMessage id={lockChipId} values={{ route: route.label }} />
+          {lockScope === 'starting' ? (
+            <FormattedMessage
+              id="components.BatchSearchScreen.routeSetSavedStartSummary"
+              values={{ name: savedSet.name, routes: lockedText }}
+            />
+          ) : (
+            <FormattedMessage
+              id="components.BatchSearchScreen.routeSetSavedSummary"
+              values={{ name: savedSet.name, routes: lockedText }}
+            />
+          )}
         </Chip>
-      ))}
+      ) : (
+        lockedRoutes.map((route) => (
+          <Chip
+            key={route.id}
+            title={intl.formatMessage(
+              { id: lockDetailId },
+              { route: route.label }
+            )}
+          >
+            <FormattedMessage id={lockChipId} values={{ route: route.label }} />
+          </Chip>
+        ))
+      )}
       {summary.map((item) => (
         <Chip key={item.phrase} title={item.detail}>
           {item.phrase}
@@ -274,6 +304,7 @@ const mapStateToProps = (state: AppReduxState) => ({
   numItineraries: state.otp.currentQuery?.numItineraries,
   preferences: state.otp.currentQuery?.routingPreferences,
   routeLock: state.otp.currentQuery?.routeLock,
+  routeSets: state.user?.localUser?.routeSets,
   viaStop: state.otp.currentQuery?.viaStop
 })
 

@@ -266,16 +266,39 @@ components:
       Trips whose first bus or train is {route}; the rest of the trip is up to
       the planner.
     routeSetAll: All routes
+    routeSetDelete: Delete
+    routeSetDeleteConfirm: Tap again to delete
     routeSetDone: Done — search
     routeSetFilter: Filter routes
+    routeSetFull: You have {max} saved sets — delete one in Settings first.
+    routeSetInUse: In use
     routeSetLastResults: In your last results
     routeSetLoading: Loading routes…
+    routeSetNameLabel: Name this set
+    routeSetNamePlaceholder: Commute
+    routeSetNameTaken: Another set is already called {name}.
     routeSetNoMatch: No route matches “{filter}”
+    routeSetNoneRunning: None of the routes in {name} is running.
+    routeSetNotRunning: >-
+      {count, plural, one {Route {routes} in {name} isn’t running} other {Routes
+      {routes} in {name} aren’t running}}
     routeSetOpen: "{count, plural, =0 {Choose routes} other {Choose routes (# picked)}}"
     routeSetPartial: Couldn’t find {missing} — held to {routes}.
     routeSetPicked: "{count, plural, =0 {Tick every route you’ll ride} other {# picked}}"
+    routeSetRename: Rename
+    routeSetReplace: Replace
+    routeSetReplaceAsk: Replace {name}?
+    routeSetSave: Save
+    routeSetSaveOpen: Save this set…
+    routeSetSavedAs: Saved as {name}.
+    routeSetSavedChip: "{name} · {count}"
+    routeSetSavedHeader: Saved sets
+    routeSetSavedStartSummary: "Start on: {name} ({routes})"
+    routeSetSavedSummary: "Only: {name} ({routes})"
     routeSetSummary: "Only: {routes}"
     routeSetTitle: Choose routes
+    routeSetUse: Use
+    routeSetUseLabel: Use {name}
     routingProfileHeader: Routing profile
     routingProfileLabel: Optimize routing for
     saveAndReturn: Save and return
