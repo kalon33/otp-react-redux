@@ -129,6 +129,7 @@ Object {
   },
   "initialUrl": "/",
   "lastActionMillis": 0,
+  "legFrequency": Object {},
   "location": Object {
     "currentPosition": Object {
       "coords": null,

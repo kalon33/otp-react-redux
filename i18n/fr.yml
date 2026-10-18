@@ -595,6 +595,11 @@ components:
     whereToAlight: "Où voulez-vous descendre ?"
   ItinerarySummary:
     itineraryDetails: Détails du trajet
+  LegFrequency:
+    every: "Toutes les {minutes} min, prochain {time}"
+    nextOne: "Prochain {time}"
+    nextTwo: "Prochains {first}, {second}"
+    noneBefore: "Aucun autre passage avant {time}"
   LocationSearch:
     chooseOnMap: Choisir sur la carte
     enterLocation: Entrez le lieu

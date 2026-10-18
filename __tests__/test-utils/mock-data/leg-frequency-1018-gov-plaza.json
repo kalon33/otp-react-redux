@@ -1,0 +1,615 @@
+{
+ "_note": "Production answer to the leg-frequency query (backlog 58.1), Government Plaza 1:51409 Blue Line toward 1:51405, sent 2026-10-18 13:24:28 CDT to api.transit-nav.com:9966/otp/gtfs/v1 (6754 bytes, 0.13 s). Its stoptimes come newest first; the Blue Line is split across 1:901:1:01, :rt#23 and :rt#53. The query carried numberOfDepartures 100 and omitCanceled false.",
+ "request": {
+  "stopId": "1:51409",
+  "startTime": 1792344268,
+  "timeRange": 10800
+ },
+ "answer": {
+  "stop": {
+   "gtfsId": "1:51409",
+   "stoptimesForPatterns": [
+    {
+     "pattern": {
+      "code": "1:902:0:01",
+      "route": {
+       "gtfsId": "1:902"
+      },
+      "stops": [
+       {
+        "gtfsId": "1:56334"
+       },
+       {
+        "gtfsId": "1:56335"
+       },
+       {
+        "gtfsId": "1:56336"
+       },
+       {
+        "gtfsId": "1:51408"
+       },
+       {
+        "gtfsId": "1:51409"
+       },
+       {
+        "gtfsId": "1:56338"
+       },
+       {
+        "gtfsId": "1:56001"
+       },
+       {
+        "gtfsId": "1:56002"
+       },
+       {
+        "gtfsId": "1:56003"
+       },
+       {
+        "gtfsId": "1:56004"
+       },
+       {
+        "gtfsId": "1:56005"
+       },
+       {
+        "gtfsId": "1:56006"
+       },
+       {
+        "gtfsId": "1:56007"
+       },
+       {
+        "gtfsId": "1:56008"
+       },
+       {
+        "gtfsId": "1:56009"
+       },
+       {
+        "gtfsId": "1:56010"
+       },
+       {
+        "gtfsId": "1:56011"
+       },
+       {
+        "gtfsId": "1:56012"
+       },
+       {
+        "gtfsId": "1:56013"
+       },
+       {
+        "gtfsId": "1:56014"
+       },
+       {
+        "gtfsId": "1:56015"
+       },
+       {
+        "gtfsId": "1:56016"
+       },
+       {
+        "gtfsId": "1:56017"
+       },
+       {
+        "gtfsId": "1:56018"
+       }
+      ]
+     },
+     "stoptimes": [
+      {
+       "realtime": false,
+       "realtimeDeparture": 55380,
+       "realtimeState": "SCHEDULED",
+       "scheduledDeparture": 55380,
+       "serviceDay": 1792299600,
+       "trip": {
+        "gtfsId": "1:879250"
+       }
+      },
+      {
+       "realtime": false,
+       "realtimeDeparture": 54660,
+       "realtimeState": "SCHEDULED",
+       "scheduledDeparture": 54660,
+       "serviceDay": 1792299600,
+       "trip": {
+        "gtfsId": "1:905507"
+       }
+      },
+      {
+       "realtime": false,
+       "realtimeDeparture": 53940,
+       "realtimeState": "SCHEDULED",
+       "scheduledDeparture": 53940,
+       "serviceDay": 1792299600,
+       "trip": {
+        "gtfsId": "1:904006"
+       }
+      },
+      {
+       "realtime": false,
+       "realtimeDeparture": 53220,
+       "realtimeState": "SCHEDULED",
+       "scheduledDeparture": 53220,
+       "serviceDay": 1792299600,
+       "trip": {
+        "gtfsId": "1:893718"
+       }
+      },
+      {
+       "realtime": false,
+       "realtimeDeparture": 52500,
+       "realtimeState": "SCHEDULED",
+       "scheduledDeparture": 52500,
+       "serviceDay": 1792299600,
+       "trip": {
+        "gtfsId": "1:899394"
+       }
+      },
+      {
+       "realtime": false,
+       "realtimeDeparture": 51780,
+       "realtimeState": "SCHEDULED",
+       "scheduledDeparture": 51780,
+       "serviceDay": 1792299600,
+       "trip": {
+        "gtfsId": "1:899693"
+       }
+      },
+      {
+       "realtime": false,
+       "realtimeDeparture": 51060,
+       "realtimeState": "SCHEDULED",
+       "scheduledDeparture": 51060,
+       "serviceDay": 1792299600,
+       "trip": {
+        "gtfsId": "1:893657"
+       }
+      },
+      {
+       "realtime": false,
+       "realtimeDeparture": 50340,
+       "realtimeState": "SCHEDULED",
+       "scheduledDeparture": 50340,
+       "serviceDay": 1792299600,
+       "trip": {
+        "gtfsId": "1:903494"
+       }
+      },
+      {
+       "realtime": false,
+       "realtimeDeparture": 49620,
+       "realtimeState": "SCHEDULED",
+       "scheduledDeparture": 49620,
+       "serviceDay": 1792299600,
+       "trip": {
+        "gtfsId": "1:895699"
+       }
+      },
+      {
+       "realtime": true,
+       "realtimeDeparture": 48900,
+       "realtimeState": "UPDATED",
+       "scheduledDeparture": 48900,
+       "serviceDay": 1792299600,
+       "trip": {
+        "gtfsId": "1:891050"
+       }
+      },
+      {
+       "realtime": false,
+       "realtimeDeparture": 48180,
+       "realtimeState": "SCHEDULED",
+       "scheduledDeparture": 48180,
+       "serviceDay": 1792299600,
+       "trip": {
+        "gtfsId": "1:895593"
+       }
+      },
+      {
+       "realtime": false,
+       "realtimeDeparture": 47460,
+       "realtimeState": "SCHEDULED",
+       "scheduledDeparture": 47460,
+       "serviceDay": 1792299600,
+       "trip": {
+        "gtfsId": "1:891783"
+       }
+      },
+      {
+       "realtime": false,
+       "realtimeDeparture": 46740,
+       "realtimeState": "SCHEDULED",
+       "scheduledDeparture": 46740,
+       "serviceDay": 1792299600,
+       "trip": {
+        "gtfsId": "1:901327"
+       }
+      },
+      {
+       "realtime": false,
+       "realtimeDeparture": 46020,
+       "realtimeState": "SCHEDULED",
+       "scheduledDeparture": 46020,
+       "serviceDay": 1792299600,
+       "trip": {
+        "gtfsId": "1:900911"
+       }
+      },
+      {
+       "realtime": false,
+       "realtimeDeparture": 45300,
+       "realtimeState": "SCHEDULED",
+       "scheduledDeparture": 45300,
+       "serviceDay": 1792299600,
+       "trip": {
+        "gtfsId": "1:887829"
+       }
+      }
+     ]
+    },
+    {
+     "pattern": {
+      "code": "1:901:1:rt#53",
+      "route": {
+       "gtfsId": "1:901"
+      },
+      "stops": [
+       {
+        "gtfsId": "1:56334"
+       },
+       {
+        "gtfsId": "1:56335"
+       },
+       {
+        "gtfsId": "1:56336"
+       },
+       {
+        "gtfsId": "1:51408"
+       },
+       {
+        "gtfsId": "1:51409"
+       },
+       {
+        "gtfsId": "1:56338"
+       },
+       {
+        "gtfsId": "1:51411"
+       },
+       {
+        "gtfsId": "1:51412"
+       },
+       {
+        "gtfsId": "1:51413"
+       },
+       {
+        "gtfsId": "1:51414"
+       },
+       {
+        "gtfsId": "1:51415"
+       },
+       {
+        "gtfsId": "1:51416"
+       },
+       {
+        "gtfsId": "1:51417"
+       },
+       {
+        "gtfsId": "1:51418"
+       },
+       {
+        "gtfsId": "1:51419"
+       },
+       {
+        "gtfsId": "1:51420"
+       },
+       {
+        "gtfsId": "1:53279"
+       },
+       {
+        "gtfsId": "1:51421"
+       },
+       {
+        "gtfsId": "1:51422"
+       },
+       {
+        "gtfsId": "1:51405"
+       }
+      ]
+     },
+     "stoptimes": [
+      {
+       "realtime": true,
+       "realtimeDeparture": 49200,
+       "realtimeState": "UPDATED",
+       "scheduledDeparture": 49200,
+       "serviceDay": 1792299600,
+       "trip": {
+        "gtfsId": "1:896224"
+       }
+      }
+     ]
+    },
+    {
+     "pattern": {
+      "code": "1:901:1:rt#23",
+      "route": {
+       "gtfsId": "1:901"
+      },
+      "stops": [
+       {
+        "gtfsId": "1:56334"
+       },
+       {
+        "gtfsId": "1:56335"
+       },
+       {
+        "gtfsId": "1:56336"
+       },
+       {
+        "gtfsId": "1:51408"
+       },
+       {
+        "gtfsId": "1:51409"
+       },
+       {
+        "gtfsId": "1:56338"
+       },
+       {
+        "gtfsId": "1:51411"
+       },
+       {
+        "gtfsId": "1:51412"
+       },
+       {
+        "gtfsId": "1:51413"
+       },
+       {
+        "gtfsId": "1:51414"
+       },
+       {
+        "gtfsId": "1:51415"
+       },
+       {
+        "gtfsId": "1:51416"
+       },
+       {
+        "gtfsId": "1:51417"
+       },
+       {
+        "gtfsId": "1:51418"
+       },
+       {
+        "gtfsId": "1:51419"
+       },
+       {
+        "gtfsId": "1:51420"
+       },
+       {
+        "gtfsId": "1:53279"
+       },
+       {
+        "gtfsId": "1:51421"
+       },
+       {
+        "gtfsId": "1:51422"
+       },
+       {
+        "gtfsId": "1:51405"
+       }
+      ]
+     },
+     "stoptimes": [
+      {
+       "realtime": false,
+       "realtimeDeparture": 54960,
+       "realtimeState": "SCHEDULED",
+       "scheduledDeparture": 54960,
+       "serviceDay": 1792299600,
+       "trip": {
+        "gtfsId": "1:899847"
+       }
+      },
+      {
+       "realtime": false,
+       "realtimeDeparture": 54240,
+       "realtimeState": "SCHEDULED",
+       "scheduledDeparture": 54240,
+       "serviceDay": 1792299600,
+       "trip": {
+        "gtfsId": "1:892405"
+       }
+      },
+      {
+       "realtime": false,
+       "realtimeDeparture": 53520,
+       "realtimeState": "SCHEDULED",
+       "scheduledDeparture": 53520,
+       "serviceDay": 1792299600,
+       "trip": {
+        "gtfsId": "1:891215"
+       }
+      },
+      {
+       "realtime": false,
+       "realtimeDeparture": 52800,
+       "realtimeState": "SCHEDULED",
+       "scheduledDeparture": 52800,
+       "serviceDay": 1792299600,
+       "trip": {
+        "gtfsId": "1:887814"
+       }
+      },
+      {
+       "realtime": false,
+       "realtimeDeparture": 52080,
+       "realtimeState": "SCHEDULED",
+       "scheduledDeparture": 52080,
+       "serviceDay": 1792299600,
+       "trip": {
+        "gtfsId": "1:888509"
+       }
+      },
+      {
+       "realtime": false,
+       "realtimeDeparture": 51360,
+       "realtimeState": "SCHEDULED",
+       "scheduledDeparture": 51360,
+       "serviceDay": 1792299600,
+       "trip": {
+        "gtfsId": "1:880105"
+       }
+      },
+      {
+       "realtime": false,
+       "realtimeDeparture": 50640,
+       "realtimeState": "SCHEDULED",
+       "scheduledDeparture": 50640,
+       "serviceDay": 1792299600,
+       "trip": {
+        "gtfsId": "1:899091"
+       }
+      },
+      {
+       "realtime": false,
+       "realtimeDeparture": 49920,
+       "realtimeState": "SCHEDULED",
+       "scheduledDeparture": 49920,
+       "serviceDay": 1792299600,
+       "trip": {
+        "gtfsId": "1:895877"
+       }
+      },
+      {
+       "realtime": true,
+       "realtimeDeparture": 48480,
+       "realtimeState": "UPDATED",
+       "scheduledDeparture": 48480,
+       "serviceDay": 1792299600,
+       "trip": {
+        "gtfsId": "1:903504"
+       }
+      },
+      {
+       "realtime": false,
+       "realtimeDeparture": 47760,
+       "realtimeState": "SCHEDULED",
+       "scheduledDeparture": 47760,
+       "serviceDay": 1792299600,
+       "trip": {
+        "gtfsId": "1:887868"
+       }
+      },
+      {
+       "realtime": false,
+       "realtimeDeparture": 47040,
+       "realtimeState": "SCHEDULED",
+       "scheduledDeparture": 47040,
+       "serviceDay": 1792299600,
+       "trip": {
+        "gtfsId": "1:896804"
+       }
+      },
+      {
+       "realtime": false,
+       "realtimeDeparture": 46320,
+       "realtimeState": "SCHEDULED",
+       "scheduledDeparture": 46320,
+       "serviceDay": 1792299600,
+       "trip": {
+        "gtfsId": "1:878782"
+       }
+      }
+     ]
+    },
+    {
+     "pattern": {
+      "code": "1:901:1:01",
+      "route": {
+       "gtfsId": "1:901"
+      },
+      "stops": [
+       {
+        "gtfsId": "1:56334"
+       },
+       {
+        "gtfsId": "1:56335"
+       },
+       {
+        "gtfsId": "1:56336"
+       },
+       {
+        "gtfsId": "1:51408"
+       },
+       {
+        "gtfsId": "1:51409"
+       },
+       {
+        "gtfsId": "1:56338"
+       },
+       {
+        "gtfsId": "1:51411"
+       },
+       {
+        "gtfsId": "1:51412"
+       },
+       {
+        "gtfsId": "1:51413"
+       },
+       {
+        "gtfsId": "1:51414"
+       },
+       {
+        "gtfsId": "1:51415"
+       },
+       {
+        "gtfsId": "1:51416"
+       },
+       {
+        "gtfsId": "1:51417"
+       },
+       {
+        "gtfsId": "1:51418"
+       },
+       {
+        "gtfsId": "1:51419"
+       },
+       {
+        "gtfsId": "1:51420"
+       },
+       {
+        "gtfsId": "1:53279"
+       },
+       {
+        "gtfsId": "1:51421"
+       },
+       {
+        "gtfsId": "1:51422"
+       },
+       {
+        "gtfsId": "1:51405"
+       }
+      ]
+     },
+     "stoptimes": [
+      {
+       "realtime": false,
+       "realtimeDeparture": 45600,
+       "realtimeState": "SCHEDULED",
+       "scheduledDeparture": 45600,
+       "serviceDay": 1792299600,
+       "trip": {
+        "gtfsId": "1:877014"
+       }
+      },
+      {
+       "realtime": false,
+       "realtimeDeparture": 44880,
+       "realtimeState": "SCHEDULED",
+       "scheduledDeparture": 44880,
+       "serviceDay": 1792299600,
+       "trip": {
+        "gtfsId": "1:878150"
+       }
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

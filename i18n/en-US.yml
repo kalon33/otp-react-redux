@@ -602,6 +602,11 @@ components:
     whereToAlight: Where do you want to get off?
   ItinerarySummary:
     itineraryDetails: Itinerary details
+  LegFrequency:
+    every: Every {minutes} min, next {time}
+    nextOne: Next {time}
+    nextTwo: Next {first}, {second}
+    noneBefore: No later run before {time}
   LocationSearch:
     chooseOnMap: Choose on map
     enterLocation: Enter location
