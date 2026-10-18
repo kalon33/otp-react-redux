@@ -30,6 +30,7 @@ Object {
     "roundTrip": false,
     "routingType": "ITINERARY",
     "stayMinutes": 60,
+    "stopStays": Array [],
     "time": "19:34",
   },
   "filter": Object {

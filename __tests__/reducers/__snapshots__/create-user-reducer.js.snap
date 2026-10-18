@@ -17,6 +17,7 @@ Object {
       "roundTrip": false,
       "routingType": "ITINERARY",
       "stayMinutes": 60,
+      "stopStays": Array [],
     },
     "favoriteStops": Array [],
     "recentPlaces": Array [],

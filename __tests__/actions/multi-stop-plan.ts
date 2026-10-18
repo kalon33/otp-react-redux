@@ -2,6 +2,7 @@
 import '../test-utils/mock-window-url'
 import { resetPlanQueryGate } from '../../lib/util/plan-concurrency'
 import { routingQuery } from '../../lib/actions/apiV2'
+import { RoutingQueryCallResult } from '../../lib/actions/api-constants'
 import { viaVisitLocations } from '../../lib/util/multi-stop'
 import createOtpReducer from '../../lib/reducers/create-otp-reducer'
 
@@ -104,7 +105,10 @@ describe('actions > apiV2 > routingQuery with the rider’s stops (43.1)', () =>
       const to = place(variables.toPlace)
       let itineraries: any[] = []
       if (streetOnly && !variables.via) {
-        const start = T(variables.time)
+        // Arrive-by: the ride ends at the time asked (58.3's backward chain).
+        const start = variables.arriveBy
+          ? T(variables.time) - 1200000
+          : T(variables.time)
         itineraries = [
           {
             duration: 1200,
@@ -536,6 +540,105 @@ describe('actions > apiV2 > routingQuery with the rider’s stops (43.1)', () =>
         )
       ).toBe(true)
       expect(walkTransitSent()).toHaveLength(1)
+    })
+  })
+
+  /**
+   * Backlog 58.3 — a stay at each of the rider's stops. A transit plan asks
+   * OTP for it (`minimumWaitTime`); the street-only chain asks each segment
+   * from the end of the stay, forward and arrive-by.
+   */
+  describe('with a stay at the stop (58.3)', () => {
+    const withStay = (extra: Record<string, unknown> = {}) => {
+      otpState = {
+        ...otpState,
+        currentQuery: { ...currentQuery, stopStays: [20], ...extra }
+      }
+    }
+    const street = () =>
+      sent.filter((v) => !v.modes.some((m: any) => m.mode === 'TRANSIT'))
+    const bikeItinerary = () =>
+      otpState.searches[otpState.activeSearchId].response
+        .flatMap((r: any) => r?.plan?.itineraries || [])
+        .find((it: any) => it.legs.every((l: any) => l.mode === 'BICYCLE'))
+
+    it('asks OTP for the stay on every transit plan', async () => {
+      withStay()
+      dispatch(routingQuery())
+      await settle()
+      const transit = sent.filter((v) =>
+        v.modes.some((m: any) => m.mode === 'TRANSIT')
+      )
+      expect(transit.length).toBeGreaterThanOrEqual(2)
+      transit.forEach((v) => {
+        expect(v.via[0].visit.minimumWaitTime).toBe('PT20M')
+        expect(v.stopStays).toBeUndefined()
+      })
+    })
+
+    it('forward chain: the second segment leaves after the stay', async () => {
+      withStay()
+      dispatch(routingQuery())
+      await settle()
+      // 10:00-10:20 to the stop, 20 min there, then from 10:40.
+      expect(street().map((v) => v.time)).toEqual(['10:00', '10:40'])
+      const bike = bikeItinerary()
+      expect(bike.stopLegIndexes).toEqual([0])
+      expect(bike.stopStayMinutes).toEqual([20])
+      expect(bike.legs[0].endTime).toBe(T('10:20'))
+      expect(bike.legs[1].startTime).toBe(T('10:40'))
+      expect(bike.endTime).toBe(T('11:00'))
+      expect(bike.legs[1].from.riderStop).toEqual({
+        arrivalTime: T('10:20'),
+        stayMinutes: 20
+      })
+    })
+
+    it('arrive-by chain: the first segment arrives a stay before the second leaves', async () => {
+      withStay({ departArrive: 'ARRIVE', time: '11:00' })
+      dispatch(routingQuery())
+      await settle()
+      // Planned backwards: Perennial -> Micro Center to arrive by 11:00
+      // (leaves 10:40), then home -> Perennial to arrive by 10:20.
+      expect(street().map((v) => [v.toPlace.split('::')[0], v.time])).toEqual([
+        ['Micro Center', '11:00'],
+        ['Perennial Cycle', '10:20']
+      ])
+      expect(street().every((v) => v.arriveBy === true)).toBe(true)
+      const bike = bikeItinerary()
+      expect(bike.startTime).toBe(T('10:00'))
+      expect(bike.legs[0].endTime).toBe(T('10:20'))
+      expect(bike.legs[1].startTime).toBe(T('10:40'))
+      expect(bike.endTime).toBe(T('11:00'))
+    })
+
+    it('without a stay the chain is exactly as before', async () => {
+      withStay({ stopStays: [] })
+      dispatch(routingQuery())
+      await settle()
+      expect(street().map((v) => v.time)).toEqual(['10:00', '10:20'])
+    })
+
+    it('carries the stay in the URL beside the stop', async () => {
+      withStay()
+      dispatch(routingQuery())
+      await settle()
+      const pushed = actions
+        .filter((a) => a.type === '@@router/CALL_HISTORY_METHOD')
+        .map((a) => String(a.payload?.args?.[0]))
+      expect(pushed.some((url) => /[?&]stopStays=20(&|$)/.test(url))).toBe(true)
+    })
+
+    it('a changed stay is a new question, not a duplicate of the one in flight', () => {
+      withStay()
+      expect(dispatch(routingQuery())).toBe(RoutingQueryCallResult.SUCCESS)
+      // The same question again while the first is out is refused …
+      expect(dispatch(routingQuery())).toBe(
+        RoutingQueryCallResult.DUPLICATE_SEARCH_IN_FLIGHT
+      )
+      // … but with a different stay it goes.
+      withStay({ stopStays: [30] })
+      expect(dispatch(routingQuery())).toBe(RoutingQueryCallResult.SUCCESS)
     })
   })
 })
