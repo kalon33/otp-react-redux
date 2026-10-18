@@ -29,7 +29,10 @@ import {
  * planner. The rider's current route is never hidden.
  *
  * Copy comes from fasterRouteCopy, the same words the locked-phone push uses.
- * The aboard get-off offer (`kind: 'aboard'`, B4) is not drawn here yet.
+ * The aboard get-off offer (`kind: 'aboard'`, B4) is the same card with the
+ * stop in the route's place — "4 min faster" / "off at 30th Ave" — and words
+ * that are not a button: there is no planner view of a ride spliced onto the
+ * bus the rider is on, and Switch is the whole of the choice.
  */
 
 interface OwnProps {
@@ -50,30 +53,38 @@ function FasterRouteCard({
   viewFasterRoute
 }: Props): JSX.Element | null {
   const intl = useIntl()
-  if (!offer || offer.kind === 'aboard') return null
+  if (!offer) return null
   const { detail, title } = fasterRouteCopy(offer, intl)
+  const aboard = offer.kind === 'aboard'
 
   return (
     <FasterRouteBar>
       <RerouteCard className="faster-route-offer" role="status">
-        <FasterRouteText
-          aria-label={intl.formatMessage(
-            {
-              defaultMessage: 'See this route: {title}, {detail}',
-              id: 'components.GoMode.fasterRoute.viewLabel'
-            },
-            { detail, title }
-          )}
-          onClick={() => viewFasterRoute()}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') viewFasterRoute()
-          }}
-          role="button"
-          tabIndex={0}
-        >
-          <RerouteCardTitle>{title}</RerouteCardTitle>
-          <FasterRouteDetail>{detail}</FasterRouteDetail>
-        </FasterRouteText>
+        {aboard ? (
+          <div>
+            <RerouteCardTitle>{title}</RerouteCardTitle>
+            <FasterRouteDetail>{detail}</FasterRouteDetail>
+          </div>
+        ) : (
+          <FasterRouteText
+            aria-label={intl.formatMessage(
+              {
+                defaultMessage: 'See this route: {title}, {detail}',
+                id: 'components.GoMode.fasterRoute.viewLabel'
+              },
+              { detail, title }
+            )}
+            onClick={() => viewFasterRoute()}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') viewFasterRoute()
+            }}
+            role="button"
+            tabIndex={0}
+          >
+            <RerouteCardTitle>{title}</RerouteCardTitle>
+            <FasterRouteDetail>{detail}</FasterRouteDetail>
+          </FasterRouteText>
+        )}
         <RerouteActions>
           <RerouteSwitchButton
             onClick={() => acceptFasterRoute()}

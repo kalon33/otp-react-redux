@@ -40,6 +40,16 @@ import type { TransitPaceRun } from './deviation'
 
 export interface TripSession {
   /**
+   * The aboard get-off check (56.1 B4): its request is out (one at a time),
+   * when it last asked, and about which bus — a new bus is asked about as soon
+   * as its window opens, not 6 minutes after the last bus's check.
+   */
+  aboardCheckInFlight: boolean
+
+  aboardCheckLastAtMs: number
+
+  aboardCheckTripId: string | null
+  /**
    * The run of access-leg ticks on which the rider looked like someone being
    * carried by a bus the plan has not put them on yet — see
    * ACCESS_BOARD_MIN_MS in riding.ts (backlog 23.6). Held here, like
@@ -47,7 +57,6 @@ export interface TripSession {
    * twenty seconds" is not a question one fix can answer.
    */
   accessBoard: AccessBoardWatch | null
-
   /**
    * The one-way arrival dwell, armed from the WALL CLOCK rather than from the
    * position tick. `AUTO_END_AFTER_ARRIVAL_MS` used to be checked in the
@@ -456,6 +465,9 @@ export interface TripSession {
 /** A trip's state at its first GPS fix. */
 export function createTripSession(): TripSession {
   return {
+    aboardCheckInFlight: false,
+    aboardCheckLastAtMs: 0,
+    aboardCheckTripId: null,
     accessBoard: null,
     autoEndTimeoutId: null,
     backgroundCheckInFlight: false,

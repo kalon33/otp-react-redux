@@ -1,7 +1,11 @@
 import type { IntlShape } from 'react-intl'
 import type { Itinerary, Leg } from '@opentripplanner/types'
 
-import { ADDED_BIKE_SHOW_M, FASTER_ROUTE_NOTICE_ID } from './faster-route-offer'
+import {
+  ADDED_BIKE_SHOW_M,
+  FASTER_ROUTE_NOTICE_ID,
+  offerSubKind
+} from './faster-route-offer'
 import { asContinuation, formatCueDistance } from './turn-by-turn'
 import {
   calculateDistance,
@@ -2516,10 +2520,14 @@ const km = (intl: IntlShape, metres: number): string =>
  *   faster:    "6 min faster"        · "14"   (· "+1.8 km bike" from 0.5 km)
  *   lessBike:  "1.4 km less biking"  · "14"   (· "+1 min" only when later)
  *   bike all the way: the route reads "bike".
+ *   aboard (B4): the stop to get off at takes the route's place —
+ *              "4 min faster" · "off at 30th Ave" (· "+1.8 km bike"),
+ *              "1.4 km less biking" · "off at 30th Ave" (· "+1 min").
  */
 export function fasterRouteCopy(
   offer: Pick<
     FasterRouteOffer,
+    | 'aboard'
     | 'addedBikeM'
     | 'bikeSavedM'
     | 'kind'
@@ -2530,8 +2538,9 @@ export function fasterRouteCopy(
   >,
   intl: IntlShape = notifyIntl()
 ): { detail: string; title: string } {
+  const kind = offerSubKind(offer)
   const title =
-    offer.kind === 'lessBike'
+    kind === 'lessBike'
       ? intl.formatMessage(
           {
             defaultMessage: '{distance} km less biking',
@@ -2547,13 +2556,29 @@ export function fasterRouteCopy(
           { minutes: Math.max(1, Math.round(offer.savingMs / 60000)) }
         )
   const parts: string[] = [
-    offer.routeLabel ||
-      intl.formatMessage({
-        defaultMessage: 'bike',
-        id: 'components.GoMode.fasterRoute.bikeAllTheWay'
-      })
+    offer.kind === 'aboard'
+      ? intl.formatMessage(
+          {
+            defaultMessage: 'off at {stopName}',
+            id: 'components.GoMode.fasterRoute.offAt'
+          },
+          {
+            stopName:
+              offer.stopName ||
+              offer.aboard?.stopName ||
+              intl.formatMessage({
+                defaultMessage: 'your stop',
+                id: 'components.GoMode.notify.yourStop'
+              })
+          }
+        )
+      : offer.routeLabel ||
+        intl.formatMessage({
+          defaultMessage: 'bike',
+          id: 'components.GoMode.fasterRoute.bikeAllTheWay'
+        })
   ]
-  if (offer.kind !== 'lessBike' && offer.addedBikeM >= ADDED_BIKE_SHOW_M) {
+  if (kind !== 'lessBike' && offer.addedBikeM >= ADDED_BIKE_SHOW_M) {
     parts.push(
       intl.formatMessage(
         {
@@ -2565,7 +2590,7 @@ export function fasterRouteCopy(
     )
   }
   const laterMin = Math.round(offer.laterMs / 60000)
-  if (offer.kind === 'lessBike' && laterMin >= 1) {
+  if (kind === 'lessBike' && laterMin >= 1) {
     parts.push(
       intl.formatMessage(
         {
@@ -2597,7 +2622,7 @@ export function buildFasterRouteNotice(
     message: `${title} · ${detail}`,
     priority: 1,
     title:
-      offer.kind === 'lessBike'
+      offerSubKind(offer) === 'lessBike'
         ? intl.formatMessage({
             defaultMessage: 'Less biking',
             id: 'components.GoMode.fasterRoute.pushTitleLessBike'

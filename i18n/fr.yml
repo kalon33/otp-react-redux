@@ -443,6 +443,7 @@ components:
       keep: "Garder le mien"
       later: "+{minutes} min"
       lessBike: "{distance} km de vélo en moins"
+      offAt: "descendre à {stopName}"
       pushTitle: "Itinéraire plus rapide"
       pushTitleLessBike: "Moins de vélo"
       switch: "Changer"

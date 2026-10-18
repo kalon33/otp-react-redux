@@ -902,6 +902,62 @@ const GoModeDemo = (): JSX.Element => (
       </Frame>
 
       <Frame
+        note="Aboard, every 6 min from two stops in (56.1 B4): a better stop to get off this bus and continue. Switch splices the ride onto the same bus; the words are not a button."
+        title="On the bus: get off sooner"
+      >
+        <FasterRouteFrame
+          offer={demoOffer({
+            aboard: { kind: 'faster', stopId: '1:30th', stopName: '30th Ave' },
+            kind: 'aboard',
+            routeSet: '1:30th|1:539',
+            savingMs: 4 * 60000,
+            stopName: '30th Ave'
+          })}
+        />
+      </Frame>
+
+      <Frame
+        note="Aboard, about the same arrival with ≥ 1 km less biking."
+        title="On the bus: less biking"
+      >
+        <FasterRouteFrame
+          offer={demoOffer({
+            aboard: {
+              kind: 'lessBike',
+              stopId: '1:moa',
+              stopName: 'Mall of America Station'
+            },
+            bikeSavedM: 1400,
+            kind: 'aboard',
+            laterMs: 60000,
+            routeSet: '1:moa|1:539',
+            savingMs: -60000,
+            stopName: 'Mall of America Station'
+          })}
+        />
+      </Frame>
+
+      <Frame
+        note="Aboard, faster but with ≥ 0.5 km more biking: it says so."
+        title="On the bus: faster, more biking"
+      >
+        <FasterRouteFrame
+          offer={demoOffer({
+            aboard: {
+              kind: 'faster',
+              stopId: '1:american',
+              stopName: 'American Blvd'
+            },
+            addedBikeM: 1800,
+            kind: 'aboard',
+            routeSet: '1:american|1:534',
+            savingMs: 5 * 60000,
+            stopName: 'American Blvd'
+          })}
+        />
+      </Frame>
+
+      <Frame
         minHeight={220}
         note="Round trip, arrived: the countdown to the return departure replaces the plain arrival card, in the same RerouteCard primitives and the same place."
         title="Return countdown"

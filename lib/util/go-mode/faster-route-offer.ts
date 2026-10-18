@@ -1,7 +1,8 @@
 import type { Itinerary, Leg } from '@opentripplanner/types'
 
-import { bikeMetersOf } from './faster-route'
+import { bikeMetersOf, routeSetOf } from './faster-route'
 import type {
+  AlightOfferVerdict,
   FasterRouteKind,
   FasterRouteOfferKey,
   FasterRouteVerdict
@@ -50,6 +51,14 @@ export const FASTER_ROUTE_NOTICE_ID = 6
 export type FasterRouteOfferKind = FasterRouteKind | 'aboard'
 
 export interface FasterRouteOffer {
+  /**
+   * Aboard (B4) only: what Switch needs to splice the ride — the stop, the
+   * bus's arrival there and the onward plan from it (the optimizer option
+   * buildOnboardItinerary takes), the bus it is about, and whether the offer
+   * is the faster or the less-biking kind. The trip's stop times are not
+   * copied in: Switch reads them from the transit index, fresher.
+   */
+  aboard?: AboardOfferDetail | null
   /** Metres of biking the offer ADDS (0 when it bikes the same or less). */
   addedBikeM: number
   /** The rider's own route as the same answer times it — for "view". */
@@ -77,6 +86,17 @@ export interface FasterRouteOffer {
   source: 'low-bike' | 'ordinary'
   /** Aboard (B4): the stop to get off at. */
   stopName?: string | null
+}
+
+export interface AboardOfferDetail {
+  arrivalIsFloor: boolean
+  busArrivalEpoch: number
+  /** The onward plan from `stopId`. */
+  itinerary: Itinerary
+  kind: FasterRouteKind
+  stopId: string
+  stopName: string | null
+  tripId: string
 }
 
 export type BackgroundCheckSkip =
@@ -239,11 +259,19 @@ export function offerFromVerdict(
   }
 }
 
+/** faster | lessBike, whichever surface the offer is on. */
+export function offerSubKind(
+  offer: Pick<FasterRouteOffer, 'aboard' | 'kind'>
+): FasterRouteKind {
+  if (offer.kind === 'aboard') return offer.aboard?.kind ?? 'faster'
+  return offer.kind
+}
+
 /** What the latch remembers of an offer. */
 export function offerKeyOf(offer: FasterRouteOffer): FasterRouteOfferKey {
   return {
     bikeSavedM: offer.bikeSavedM,
-    kind: offer.kind === 'aboard' ? 'faster' : offer.kind,
+    kind: offerSubKind(offer),
     routeSet: offer.routeSet,
     savingMs: offer.savingMs
   }
@@ -255,4 +283,145 @@ export function offerExpired(
   nowMs: number
 ): boolean {
   return !!offer && offer.expiresAtMs != null && nowMs >= offer.expiresAtMs
+}
+
+/* ------------------------------------------------------------------------ */
+/* Aboard: "4 min faster · off at 30th Ave" (rider Q4, cycle 25 B4)          */
+/* ------------------------------------------------------------------------ */
+
+/**
+ * Aboard, the get-off check asks every 6 minutes — not the off-bus 90 s. Each
+ * check is one trip read plus the optimizer's onward plan from every candidate
+ * stop (the sampled five plus the planned stop and the three before it, so
+ * 6-9 plans), which is the heaviest question Go Mode asks. 56.2's recorder
+ * slows to the same 360 s aboard.
+ */
+export const ABOARD_CHECK_INTERVAL_MS = 360000
+
+/** Not until the bus is this many stops beyond the boarding stop. */
+export const ABOARD_MIN_STOPS_AFTER_BOARD = 2
+
+/** No more checks with this many stops or fewer left to the planned stop... */
+export const ABOARD_STOP_STOPS_LEFT = 2
+
+/** ...or with the planned stop less than this far away. */
+export const ABOARD_STOP_MS_LEFT = 240000
+
+/**
+ * Fallback when the boarding stop is not on the trip read (the rider caught a
+ * run the plan did not name, boarding somewhere else): this long aboard stands
+ * in for "two stops in".
+ */
+export const ABOARD_MIN_RIDDEN_MS = 240000
+
+/**
+ * An offer whose stop is closer than this is not raised — there is no time to
+ * ring the bell — and an offer up lapses this long before the bus reaches its
+ * stop.
+ */
+export const ABOARD_OFFER_LEAD_MS = 60000
+
+export type AboardWindowWhy =
+  | 'just-boarded'
+  | 'near-planned-stop'
+  | 'no-position'
+  | 'planned-stop-not-ahead'
+  | null
+
+/**
+ * May the aboard check ask now? From the stop indexes on the boarded trip's
+ * stop times: the stop the plan boarded at, the bus's next stop (the
+ * optimizer's own anchor — the first downstream stop) and the planned alight
+ * stop, plus the bus's arrival at that stop. Null = yes.
+ *
+ * "Two stops after boarding": the anchor (the bus's next stop, or the stop
+ * nearest the rider when the feed gives none) is board+2 or later. Before that
+ * the onboard flow and the boarded-earlier re-plan have only just had their
+ * say. "Two stops away" counts the planned stop itself, as the stop counter
+ * does: next stop = planned stop is one. Read stricter ("two stops PASSED"),
+ * the window was EMPTY on every four-stop Orange Line leg in the recorded
+ * rides (board 6 -> planned 10 on 2026-09-30 16:48 and 07-29); read this way
+ * such a leg gets its one check, at the middle stop.
+ */
+export function aboardCheckWindow(input: {
+  anchorIdx: number | null
+  boardIdx: number | null
+  boardedAtMs?: number | null
+  nowMs: number
+  plannedArrivalMs: number | null
+  plannedIdx: number | null
+}): AboardWindowWhy {
+  const { anchorIdx, boardIdx, nowMs, plannedIdx } = input
+  if (anchorIdx == null || anchorIdx < 0) return 'no-position'
+  if (plannedIdx == null || plannedIdx < 0 || plannedIdx < anchorIdx) {
+    return 'planned-stop-not-ahead'
+  }
+  if (boardIdx != null && boardIdx >= 0 && boardIdx <= anchorIdx) {
+    if (anchorIdx - boardIdx < ABOARD_MIN_STOPS_AFTER_BOARD) {
+      return 'just-boarded'
+    }
+  } else if (
+    input.boardedAtMs == null ||
+    nowMs - input.boardedAtMs < ABOARD_MIN_RIDDEN_MS
+  ) {
+    return 'just-boarded'
+  }
+  if (plannedIdx - anchorIdx + 1 <= ABOARD_STOP_STOPS_LEFT) {
+    return 'near-planned-stop'
+  }
+  if (
+    input.plannedArrivalMs != null &&
+    input.plannedArrivalMs - nowMs < ABOARD_STOP_MS_LEFT
+  ) {
+    return 'near-planned-stop'
+  }
+  return null
+}
+
+/**
+ * The card's content for an aboard verdict that offers, or null. `candidate`
+ * is the spliced ride (on this bus to the stop, then the onward plan) so the
+ * record and any later reader see a whole itinerary; Switch splices again at
+ * the tap with fresher stop times.
+ */
+export function aboardOfferFromVerdict(
+  v: AlightOfferVerdict,
+  ctx: {
+    nowMs: number
+    offerId: string
+    spliced: Itinerary
+    tripId: string
+  }
+): FasterRouteOffer | null {
+  if (v.why !== 'offer' || !v.kind || !v.candidate) return null
+  const top = v.candidate
+  const onwardSet = routeSetOf(top.itinerary)
+  const savedM = v.bikeSavedM
+  return {
+    aboard: {
+      arrivalIsFloor: !!top.arrivalIsFloor,
+      busArrivalEpoch: top.busArrivalEpoch,
+      itinerary: top.itinerary,
+      kind: v.kind,
+      stopId: top.stopId,
+      stopName: top.stopName ?? null,
+      tripId: ctx.tripId
+    },
+    addedBikeM: Math.max(0, -savedM),
+    baseline: null,
+    bikeSavedM: Math.max(0, savedM),
+    candidate: ctx.spliced,
+    expiresAtMs: top.busArrivalEpoch - ABOARD_OFFER_LEAD_MS,
+    kind: 'aboard',
+    laterMs: v.kind === 'lessBike' ? Math.max(0, -v.savingMs) : 0,
+    offerId: ctx.offerId,
+    raisedAtMs: ctx.nowMs,
+    routeLabel: routeLabelOf(top.itinerary),
+    // Stop AND onward routes: "off at 30th Ave for the 14" and "off at 30th
+    // Ave, bike home" are different offers to the latch.
+    routeSet: `${top.stopId}|${onwardSet}`,
+    savingMs: v.savingMs,
+    source: 'ordinary',
+    stopName: top.stopName ?? null
+  }
 }

@@ -450,6 +450,7 @@ components:
       keep: Keep mine
       later: +{minutes} min
       lessBike: "{distance} km less biking"
+      offAt: off at {stopName}
       pushTitle: Faster route
       pushTitleLessBike: Less biking
       switch: Switch

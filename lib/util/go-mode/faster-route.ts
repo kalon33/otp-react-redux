@@ -628,6 +628,86 @@ export function compareAlightOffer(
   return none('not-better', extra)
 }
 
+/**
+ * Why the plan's own continuation from the planned stop is already lost, aboard
+ * (cycle 25 B4) — or null when it still stands. compareAlightOffer measures
+ * every candidate against "off at the planned stop, onto the planned onward
+ * trip"; if that connection cannot be made, the saving is measured against a
+ * trip the rider is not going to get, and putting it on a card as "4 min
+ * faster" misstates it. That is the missed-bus path's question, not this one's.
+ *
+ * - missed-bus recovery is running;
+ * - `connection-lost`: the bus reaches the planned stop (live, from the same
+ *   optimizer run) too late to make the planned onward boarding — the plan's
+ *   own transfer legs between them still have to be walked or biked — by more
+ *   than PLAN_DEAD_BOARD_PAST_MS;
+ * - `board-stop-unreachable`: the only way the answer from the planned stop
+ *   still catches the onward trip is at a DIFFERENT stop, later than planned
+ *   (OTP chasing the bus down the line), the aboard twin of planDeadWhy's.
+ *
+ * A street-only onward has no connection to lose: only missed-bus recovery.
+ */
+export type AboardPlanDeadWhy =
+  | 'board-stop-unreachable'
+  | 'connection-lost'
+  | 'missed-bus-recovery'
+
+export function aboardPlanDeadWhy(input: {
+  /** The held plan's legs AFTER the leg the rider is riding. */
+  heldTail: Leg[]
+  missedBusRecoveryActive?: boolean
+  nowMs: number
+  /** The planned onward leg's live board time, when the card has one. */
+  onwardLiveBoardMs?: number | null
+  /** The bus's arrival at the planned alight stop (the optimizer's own). */
+  plannedStopArrivalMs: number | null
+  plannedStopId: string
+  results: AlightCandidateResult[]
+}): AboardPlanDeadWhy | null {
+  if (input.missedBusRecoveryActive) return 'missed-bus-recovery'
+  const onwardIdx = (input.heldTail || []).findIndex((l) => l?.transitLeg)
+  if (onwardIdx < 0) return null
+  const onward = input.heldTail[onwardIdx]
+  const board =
+    input.onwardLiveBoardMs != null && Number.isFinite(input.onwardLiveBoardMs)
+      ? Number(input.onwardLiveBoardMs)
+      : Number(onward.startTime)
+  if (!Number.isFinite(board)) return null
+  const transferMs = input.heldTail
+    .slice(0, onwardIdx)
+    .reduce((sum, leg) => sum + (Number(leg.duration) || 0) * 1000, 0)
+  const reach =
+    input.plannedStopArrivalMs != null &&
+    Number.isFinite(input.plannedStopArrivalMs)
+      ? Number(input.plannedStopArrivalMs) + transferMs
+      : input.nowMs
+  if (reach > board + PLAN_DEAD_BOARD_PAST_MS) return 'connection-lost'
+  const onwardTrip = legTripId(onward)
+  const onwardStop = boardStopId(onward)
+  const chased: Leg[] = []
+  for (const r of input.results || []) {
+    if (!r || r.error || r.stopId !== input.plannedStopId) continue
+    for (const itin of r.itineraries || []) {
+      const first = transitLegs(itin)[0]
+      if (first && tripIdsMatch(legTripId(first), onwardTrip))
+        chased.push(first)
+    }
+  }
+  if (
+    chased.length &&
+    onwardStop &&
+    chased.every(
+      (leg) =>
+        boardStopId(leg) != null &&
+        boardStopId(leg) !== onwardStop &&
+        Number(leg.startTime) > board
+    )
+  ) {
+    return 'board-stop-unreachable'
+  }
+  return null
+}
+
 /* ------------------------------------------------------------------------ */
 /* Latch                                                                    */
 /* ------------------------------------------------------------------------ */
