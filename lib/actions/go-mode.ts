@@ -45,6 +45,7 @@ import {
   vehiclePassedRiderStop,
   vehicleReachedBoardStop
 } from '../util/go-mode/riding'
+import { stopOriginAboard } from '../util/go-mode/stop-origin'
 import type { EarlyAlightRecord } from '../util/go-mode/riding'
 import {
   estimateBikeSpeedMps,
@@ -2811,6 +2812,9 @@ export function endGoMode() {
     const { currentQuery, goMode } = getState().otp
     const originalFrom = goMode?.originalFrom
     const currentFrom = currentQuery?.from
+    // ...and decide where a Current Location start goes, while the riding
+    // fact, the route match and the session's simulation flag still exist.
+    const stopFrom = stopOriginFor(getState(), originalFrom)
 
     // Everything the session HOLDS ON TO outside itself has to be released
     // before the session goes: timers keep firing, the listener keeps the
@@ -2899,6 +2903,15 @@ export function endGoMode() {
 
     dispatch(stopGoMode())
 
+    // A Current Location start never comes back by the coordinates it was
+    // captured at (51.2): on 2026-10-17 Stop at 17:50:57 restored the 17:25
+    // start point, 5.4 km behind a rider on the Orange Line. It comes back
+    // where the rider is now — or, clearly aboard, as the bus's next stop.
+    if (stopFrom) {
+      dispatch(setQueryParam({ from: stopFrom }))
+      return
+    }
+
     // If a mid-trip search replaced the origin with the rider's GPS position,
     // restore the origin they started with so the trip planner isn't left
     // showing "Current location". Automatic re-routes are isolated plans and
@@ -2913,6 +2926,52 @@ export function endGoMode() {
       dispatch(setQueryParam({ from: originalFrom }))
     }
   }
+}
+
+/**
+ * The search origin Stop leaves behind when the trip started from "Current
+ * Location" (51.2, cycle 24 Q1 = C: "GPS, but the next stop if I'm clearly
+ * riding"). Null for a typed address or saved place — those are restored as
+ * they always were.
+ *
+ * - Clearly riding (`stopOriginAboard`) → the bus's next stop, as a plain
+ *   named place WITHOUT the CURRENT_LOCATION category: with it, the Plan tap's
+ *   syncCurrentLocationOrigin would move the point back to raw GPS under the
+ *   stop's name.
+ * - Otherwise → the start's own label and category at the freshest fix:
+ *   the re-plan origin pick, else Go Mode's latest fix, else the planner's.
+ *   The label comes from `originalFrom`, not the current `from`, which a
+ *   remount may have renamed after a stop.
+ * - No fix at all → the start as it was; it keeps its category, so the next
+ *   search's sync still moves it to GPS.
+ *
+ * Must run before stopGoMode() and before the trip session is replaced.
+ */
+function stopOriginFor(state: any, originalFrom: any): any | null {
+  if (originalFrom?.category !== 'CURRENT_LOCATION') return null
+  const goMode = state?.otp?.goMode
+  const lastPosition: GeolocationPosition | null =
+    goMode?.tracking?.lastPosition ?? null
+  const simulated = session.simulationActive || isReplayActive()
+  const nowMs =
+    simulated && lastPosition?.timestamp != null
+      ? Number(lastPosition.timestamp)
+      : Date.now()
+  const aboard = stopOriginAboard(state, nowMs)
+  if (aboard) return aboard
+  const coords =
+    replanOriginPick(state)?.position?.coords ??
+    lastPosition?.coords ??
+    state?.otp?.location?.currentPosition?.coords ??
+    null
+  if (
+    coords &&
+    Number.isFinite(coords.latitude) &&
+    Number.isFinite(coords.longitude)
+  ) {
+    return { ...originalFrom, lat: coords.latitude, lon: coords.longitude }
+  }
+  return { ...originalFrom }
 }
 
 /**
