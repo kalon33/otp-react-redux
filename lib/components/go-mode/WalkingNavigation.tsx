@@ -10,6 +10,12 @@ import {
   asContinuation,
   formatCueDistance
 } from '../../util/go-mode/turn-by-turn'
+import {
+  describeLegFrequency,
+  LegFrequencyEntry,
+  legTripId,
+  overlayLiveRuns
+} from '../../util/leg-frequency'
 import { formatMinutes, hasElapsed } from '../../util/go-mode/countdown'
 import {
   getLegRouteId,
@@ -19,6 +25,7 @@ import {
   legBoardingDirection,
   resolveCardDeparture
 } from '../../util/go-mode/departure-anchor'
+import { LegFrequencyText } from '../narrative/line-itin/leg-frequency-footer'
 import { tripIdsMatch } from '../../util/go-mode/trip-id'
 
 import {
@@ -88,6 +95,12 @@ interface Props {
   onExit?: () => void
   onSelectDeparture?: (epochMs: number | null, tripId?: string | null) => void
   progress: TripProgress
+  /**
+   * How often the transit leg this card walks to runs (58.1, cycle 26 Q1 C):
+   * the leg-frequency cache entry, handed over only on a real transfer (an
+   * earlier leg was transit). Absent on the walk to the first boarding.
+   */
+  transferFrequency?: LegFrequencyEntry | null
 }
 
 /**
@@ -112,7 +125,8 @@ const WalkingNavigation = ({
   onDepartureMismatch,
   onExit,
   onSelectDeparture,
-  progress
+  progress,
+  transferFrequency
 }: Props) => {
   const intl = useIntl()
 
@@ -442,6 +456,40 @@ const WalkingNavigation = ({
   const showAlternatives = laterDepartures.length > 0 && waitAtStopSeconds < 120
 
   /**
+   * How often this transfer's route runs after the run the card is on (58.1,
+   * cycle 26 Q1 C), in the trip details' own wording. Only on a transfer (the
+   * screen hands `transferFrequency` over for nothing else), never once the
+   * tight list above is showing — that list already names the next runs, and
+   * two lists of the same buses would read as different buses — and never the
+   * run the card is on (29.3). The cached runs are re-timed from this card's
+   * own stop poll, by trip.
+   */
+  const transferLine = useMemo(() => {
+    if (!transferFrequency || transferFrequency.status !== 'done') return null
+    if (!isNextLegTransit || arrived || showAlternatives) return null
+    if (!effectiveDepartureMs) return null
+    const onRun =
+      heldTripId ??
+      routeDepartures.find((d) => d.depMs === effectiveDepartureMs)?.tripId ??
+      legTripId(nextLeg)
+    return describeLegFrequency({
+      baseMs: effectiveDepartureMs,
+      excludeTripId: onRun,
+      runs: overlayLiveRuns(transferFrequency.runs, routeDepartures),
+      windowEndMs: transferFrequency.windowEndMs
+    })
+  }, [
+    arrived,
+    effectiveDepartureMs,
+    heldTripId,
+    isNextLegTransit,
+    nextLeg,
+    routeDepartures,
+    showAlternatives,
+    transferFrequency
+  ])
+
+  /**
    * The departure "Reset to planned" gives back, named on the control itself.
    *
    * 2026-09-17 17:57:39, with a screenshot: *"Reset to planned? What's the
@@ -603,6 +651,16 @@ const WalkingNavigation = ({
           </NavTurnRow>
         )}
         {foot && <NavFoot>{foot}</NavFoot>}
+        {transferLine && (
+          <NavFoot data-testid="transfer-frequency">
+            <LegFrequencyText
+              line={transferLine}
+              renderTime={(ms, live) => (
+                <RealtimeTime live={live}>{formatClockTime(ms)}</RealtimeTime>
+              )}
+            />
+          </NavFoot>
+        )}
 
         {(showExtras || showChooseBus) && (
           <NavExtras>

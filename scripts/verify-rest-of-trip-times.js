@@ -473,6 +473,24 @@ async function main() {
     return !!b
   })
   await new Promise((resolve) => setTimeout(resolve, 1500))
+  // 58.1: the sheet's transit legs carry a "how often it runs" line once the
+  // stop answers. Logged, and its wording checked when present; its absence
+  // is not this script's failure (a late-night leg may have no later run in
+  // the window, and the request is lazy).
+  const frequencyLines = await page
+    .waitForFunction(
+      () => document.querySelectorAll('.leg-frequency').length > 0,
+      { polling: 500, timeout: 12000 }
+    )
+    .catch(() => null)
+    .then(() =>
+      page.evaluate(() =>
+        Array.from(document.querySelectorAll('.leg-frequency')).map(
+          (n) => n.textContent
+        )
+      )
+    )
+  console.log(`[frequency] ${JSON.stringify(frequencyLines)}`)
   await page.screenshot({ path: path.join(OUT, 'rest-of-trip-times.png') })
   console.log(
     `\n[screenshot] trip sheet ${
@@ -503,6 +521,15 @@ async function main() {
   )
 
   const failures = []
+
+  frequencyLines.forEach((line) => {
+    if (
+      !/^(Every \d+ min, next |Next |No later run before )/.test(line) ||
+      /miss|\+/i.test(line)
+    ) {
+      failures.push(`frequency line not in the rider's wording: "${line}"`)
+    }
+  })
 
   if (liveAlight == null) {
     failures.push('liveLegTimes carried no alight time at all')
