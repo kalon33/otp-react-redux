@@ -13,6 +13,8 @@
  * (4) tapping a leg sets goMode.ui.activeLeg and collapses the sheet so the
  *     map zoom is visible; tapping the same leg again clears it;
  * (5) the expand/collapse toggle switches between list-tall and map-tall.
+ * (6) each transit leg carries at most one "how often it runs" line (58.1),
+ *     in the rider's wording, and at least one shows once the stop answers.
  *
  * Screenshots land in scripts/ for visual sign-off.
  *
@@ -160,6 +162,54 @@ async function main() {
       )}`
     )
   }
+  // ---- (6) how often each transit leg runs (58.1) ----
+  // Asked lazily when the leg renders, so give the stop a moment to answer.
+  const frequency = await page
+    .waitForFunction(
+      (sel) =>
+        document.querySelector(sel).querySelectorAll('.leg-frequency').length >
+        0,
+      { polling: 500, timeout: 15000 },
+      SHEET
+    )
+    .then(() => null)
+    .catch(() => 'timeout')
+    .then((waited) =>
+      page.evaluate(
+        (sel, timedOut) => {
+          const sheet = document.querySelector(sel)
+          return {
+            lines: Array.from(sheet.querySelectorAll('.leg-frequency')).map(
+              (n) => n.textContent
+            ),
+            timedOut,
+            transitLegs: sheet.querySelectorAll('.transit-leg-button').length
+          }
+        },
+        SHEET,
+        waited
+      )
+    )
+  console.log(
+    `[frequency] ${frequency.lines.length} line(s) under ` +
+      `${frequency.transitLegs} transit leg(s): ${JSON.stringify(
+        frequency.lines
+      )}`
+  )
+  if (!frequency.lines.length) {
+    throw new Error('no "how often it runs" line under any transit leg (58.1)')
+  }
+  if (frequency.lines.length > frequency.transitLegs) {
+    throw new Error('more frequency lines than transit legs (58.1)')
+  }
+  const COPY =
+    /^(Every \d+ min, next \S+(\s[AP]M)?|Next \S+(\s[AP]M)?(, \S+(\s[AP]M)?)?|No later run before \S+(\s[AP]M)?)$/
+  frequency.lines.forEach((line) => {
+    if (!COPY.test(line) || /miss|\+/i.test(line)) {
+      throw new Error(`frequency line not in the rider's wording: "${line}"`)
+    }
+  })
+
   await shot(page, 'trip-sheet-expanded.png')
 
   // ---- (4) tap a leg -> activeLeg set + sheet collapses ----

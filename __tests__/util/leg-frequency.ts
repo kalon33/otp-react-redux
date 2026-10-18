@@ -4,7 +4,9 @@ import {
   LEG_FREQUENCY_MAX_PER_PATTERN,
   legFrequencyNeedsFetch,
   legFrequencyQuestion,
-  legFrequencyRuns
+  legFrequencyRuns,
+  overlayLiveRuns,
+  shouldFetchTransferFrequency
 } from '../../lib/util/leg-frequency'
 import recorded from '../test-utils/mock-data/leg-frequency-1018-gov-plaza.json'
 
@@ -224,5 +226,73 @@ describe('legFrequencyNeedsFetch', () => {
     expect(
       legFrequencyNeedsFetch({ fetchedAt: 0, status: 'failed' }, 2 * MIN)
     ).toBe(true)
+  })
+})
+
+describe('overlayLiveRuns (Go Mode transfer card)', () => {
+  const runs = [
+    { live: false, ms: 10 * MIN, tripId: '1:a' },
+    { live: false, ms: 22 * MIN, tripId: '1:b' }
+  ]
+  it('re-times a run from the stop poll by trip, either id spelling, and never adds one', () => {
+    // The stop poll spells trip ids as relay global ids: base64 of Trip:1:b.
+    const relayB = Buffer.from('Trip:1:b').toString('base64').replace(/=+$/, '')
+    const out = overlayLiveRuns(runs, [
+      { depMs: 25 * MIN, realtime: true, tripId: relayB },
+      { depMs: 30 * MIN, realtime: true, tripId: '1:short-turn' }
+    ])
+    expect(out).toEqual([
+      { live: false, ms: 10 * MIN, tripId: '1:a' },
+      { live: true, ms: 25 * MIN, tripId: '1:b' }
+    ])
+  })
+  it('no poll leaves the cached runs; no cache stays nothing', () => {
+    expect(overlayLiveRuns(runs, [])).toBe(runs)
+    expect(overlayLiveRuns(null, [])).toBeNull()
+  })
+})
+
+describe('shouldFetchTransferFrequency', () => {
+  const bus1: any = { ...blueLeg(T.t1316), mode: 'BUS' }
+  const walk: any = { mode: 'WALK' }
+  const blue = blueLeg(T.t1352)
+  const legs = [walk, bus1, walk, blue, walk]
+  it('asks for the second transit leg while walking to it', () => {
+    const q = shouldFetchTransferFrequency({
+      cache: {},
+      currentLegIndex: 2,
+      legs,
+      nowMs: 0
+    })
+    expect(q?.key).toBe(legFrequencyQuestion(blue)?.key)
+  })
+  it('not on the walk to the first boarding, not aboard, not in a replay', () => {
+    const base = { cache: {}, legs, nowMs: 0 }
+    expect(
+      shouldFetchTransferFrequency({ ...base, currentLegIndex: 0 })
+    ).toBeNull()
+    expect(
+      shouldFetchTransferFrequency({ ...base, currentLegIndex: 1 })
+    ).toBeNull()
+    expect(
+      shouldFetchTransferFrequency({
+        ...base,
+        currentLegIndex: 2,
+        replay: true
+      })
+    ).toBeNull()
+  })
+  it('not when cached or in flight', () => {
+    const key = legFrequencyQuestion(blue)?.key as string
+    ;['done', 'pending'].forEach((status) =>
+      expect(
+        shouldFetchTransferFrequency({
+          cache: { [key]: { fetchedAt: 0, status } as any },
+          currentLegIndex: 2,
+          legs,
+          nowMs: 1e12
+        })
+      ).toBeNull()
+    )
   })
 })

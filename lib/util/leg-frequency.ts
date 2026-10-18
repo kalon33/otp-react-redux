@@ -282,3 +282,84 @@ export function legFrequencyNeedsFetch(
   }
   return false
 }
+
+/**
+ * The cached runs with each run's time replaced by the card's own fresher
+ * stop poll where that poll has the same trip (Go Mode transfer card). The
+ * poll carries no pattern stops, so it can't tell a short turn on its own;
+ * that is why it only re-times runs the cache already vouched for and never
+ * adds one.
+ */
+export function overlayLiveRuns(
+  runs: LegFrequencyRun[] | null | undefined,
+  departures:
+    | Array<{ depMs: number; realtime: boolean; tripId?: string | null }>
+    | null
+    | undefined
+): LegFrequencyRun[] | null {
+  if (!runs) return null
+  if (!departures?.length) return runs
+  return runs
+    .map((run) => {
+      const fresh = departures.find((d) => tripIdsMatch(d.tripId, run.tripId))
+      return fresh
+        ? { live: fresh.realtime, ms: fresh.depMs, tripId: run.tripId }
+        : run
+    })
+    .sort((a, b) => a.ms - b.ms)
+}
+
+const TRANSIT_MODES = new Set(['BUS', 'FERRY', 'RAIL', 'SUBWAY', 'TRAM'])
+
+function isTransit(leg: any): boolean {
+  return !!leg?.transitLeg || TRANSIT_MODES.has(leg?.mode)
+}
+
+/**
+ * The Go Mode transfer card's leg (cycle 26 Q1 C): the transit leg the rider
+ * is walking or biking to, when an earlier leg of the trip was transit too —
+ * a real transfer, not the first boarding. Null otherwise, or during a
+ * replay. Pure, so the screen's effect and the card agree on it.
+ */
+export function transferFrequencyLeg({
+  currentLegIndex,
+  legs,
+  replay
+}: {
+  currentLegIndex: number | null | undefined
+  legs: Leg[] | null | undefined
+  replay?: boolean
+}): Leg | null {
+  if (replay || !legs || typeof currentLegIndex !== 'number') return null
+  const current: any = legs[currentLegIndex]
+  const next: any = legs[currentLegIndex + 1]
+  if (!current || !next) return null
+  if (current.mode !== 'WALK' && current.mode !== 'BICYCLE') return null
+  if (!isTransit(next)) return null
+  if (!legs.slice(0, currentLegIndex).some(isTransit)) return null
+  return next
+}
+
+/**
+ * Whether the Go Mode screen should ask for the transfer leg's runs now:
+ * there is a transfer leg (see above), it has a question, and the cache
+ * holds no answer and no request in flight for it.
+ */
+export function shouldFetchTransferFrequency({
+  cache,
+  currentLegIndex,
+  legs,
+  nowMs,
+  replay
+}: {
+  cache: Record<string, LegFrequencyEntry> | null | undefined
+  currentLegIndex: number | null | undefined
+  legs: Leg[] | null | undefined
+  nowMs: number
+  replay?: boolean
+}): LegFrequencyQuestion | null {
+  const leg = transferFrequencyLeg({ currentLegIndex, legs, replay })
+  const question = legFrequencyQuestion(leg)
+  if (!question) return null
+  return legFrequencyNeedsFetch(cache?.[question.key], nowMs) ? question : null
+}

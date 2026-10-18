@@ -68,6 +68,39 @@ const makeBoardingStopData = (live: boolean) => ({
   ]
 })
 
+// A transfer (58.1): the rider is walking to their SECOND bus, with room to
+// spare (first run 14 min out), so the tight "Next:" list stays closed and the
+// "how often it runs" line shows instead. Each run carries a trip id, so the
+// cached runs are re-timed from this stop poll by trip.
+const TRANSFER_RUN_MINUTES = [14, 26, 38, 50]
+const makeTransferStopData = () => ({
+  ...makeBoardingStopData(true),
+  stoptimesForPatterns: [
+    {
+      pattern: {
+        desc: '21 to Downtown',
+        id: '1:21:0',
+        route: { gtfsId: '1:21' }
+      },
+      stoptimes: TRANSFER_RUN_MINUTES.map((min, i) => {
+        const st = stoptime(min * 60000, i < 2)
+        return { ...st, trip: { ...st.trip, gtfsId: `1:demo-${min}` } }
+      })
+    }
+  ]
+})
+const transferFrequency = (minutes: number[]) =>
+  ({
+    fetchedAt: NOW,
+    runs: minutes.map((min, i) => ({
+      live: i < 2,
+      ms: NOW + min * 60000,
+      tripId: `1:demo-${min}`
+    })),
+    status: 'done',
+    windowEndMs: NOW + 120 * 60000
+  } as const)
+
 const baseProgress: TripProgress = {
   currentLegIndex: 0,
   currentLegProgress: 0,
@@ -589,6 +622,10 @@ const GoModeDemo = (): JSX.Element => (
       'components.GoMode.returnPlanNow': 'Plan return now',
       'components.GoMode.returnRouteDeparts': '{route} departs {time}',
       'components.GoMode.returnStart': 'Start return trip',
+      'components.LegFrequency.every': 'Every {minutes} min, next {time}',
+      'components.LegFrequency.nextOne': 'Next {time}',
+      'components.LegFrequency.nextTwo': 'Next {first}, {second}',
+      'components.LegFrequency.noneBefore': 'No later run before {time}',
       'components.MetroUI.otherStops': 'Other stops',
       'components.MetroUI.variantArrives': 'arrives {time}',
       'components.MetroUI.variantBiking': '{distance} biking',
@@ -667,6 +704,36 @@ const GoModeDemo = (): JSX.Element => (
               streetName: 'E Lake Nokomis Pkwy'
             }
           }}
+        />
+      </Frame>
+
+      <Frame
+        note="Walking to a SECOND bus with time to spare: one line says how often the route runs after the run the card is on (58.1). Hidden on the first boarding and whenever the tight 'Next:' list shows."
+        title="Transfer (walk → bus), regular runs"
+      >
+        <WalkingNavigation
+          boardingStopData={makeTransferStopData()}
+          leg={walkLeg}
+          nextLeg={busNextLeg}
+          onExit={() => undefined}
+          onSelectDeparture={() => undefined}
+          progress={{ ...baseProgress, plannedDepartureTime: NOW + 14 * 60000 }}
+          transferFrequency={transferFrequency(TRANSFER_RUN_MINUTES)}
+        />
+      </Frame>
+
+      <Frame
+        note="Uneven gaps after the run the card is on: the next two times instead of 'every' (cycle 26 Q4)."
+        title="Transfer (walk → bus), irregular runs"
+      >
+        <WalkingNavigation
+          boardingStopData={makeTransferStopData()}
+          leg={walkLeg}
+          nextLeg={busNextLeg}
+          onExit={() => undefined}
+          onSelectDeparture={() => undefined}
+          progress={{ ...baseProgress, plannedDepartureTime: NOW + 14 * 60000 }}
+          transferFrequency={transferFrequency([14, 26, 53, 61])}
         />
       </Frame>
 
