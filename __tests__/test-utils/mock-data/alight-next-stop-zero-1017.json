@@ -1,0 +1,477 @@
+{
+ "source": "~/otp-debug-logs/debug-2026-10-17.jsonl, session mvcx52b7-anqred, FIND_TRIP_RESPONSE payload.stopTimes copied verbatim",
+ "snapshots": [
+  {
+   "label": "17:49:22",
+   "tMs": 1792277362142,
+   "recordId": "mvcx52b7-anqred-8zl",
+   "tripId": "1:1368267",
+   "stopTimes": [
+    {
+     "arrivalDelay": 0,
+     "realtimeArrival": 63060,
+     "realtimeState": "SCHEDULED",
+     "scheduledArrival": 63060,
+     "scheduledDeparture": 63060,
+     "serviceDay": 1792213200,
+     "stop": {
+      "code": "56800",
+      "id": "1:56800",
+      "lat": 44.978319,
+      "locationType": "STOP",
+      "lon": -93.262771,
+      "name": "Gateway Ramp Layover",
+      "stopId": "1:56800",
+      "wheelchairBoarding": "POSSIBLE",
+      "zoneId": null
+     }
+    },
+    {
+     "arrivalDelay": 0,
+     "realtimeArrival": 63180,
+     "realtimeState": "SCHEDULED",
+     "scheduledArrival": 63180,
+     "scheduledDeparture": 63180,
+     "serviceDay": 1792213200,
+     "stop": {
+      "code": "53297",
+      "id": "1:53297",
+      "lat": 44.9798,
+      "locationType": "STOP",
+      "lon": -93.268058,
+      "name": "Marquette Ave & 3rd St - Stop Group C",
+      "stopId": "1:53297",
+      "wheelchairBoarding": "POSSIBLE",
+      "zoneId": null
+     }
+    },
+    {
+     "arrivalDelay": 0,
+     "realtimeArrival": 63240,
+     "realtimeState": "SCHEDULED",
+     "scheduledArrival": 63240,
+     "scheduledDeparture": 63240,
+     "serviceDay": 1792213200,
+     "stop": {
+      "code": "53298",
+      "id": "1:53298",
+      "lat": 44.977824,
+      "locationType": "STOP",
+      "lon": -93.269698,
+      "name": "Marquette Ave & 5th St - Stop Group C",
+      "stopId": "1:53298",
+      "wheelchairBoarding": "POSSIBLE",
+      "zoneId": null
+     }
+    },
+    {
+     "arrivalDelay": 0,
+     "realtimeArrival": 63300,
+     "realtimeState": "SCHEDULED",
+     "scheduledArrival": 63300,
+     "scheduledDeparture": 63300,
+     "serviceDay": 1792213200,
+     "stop": {
+      "code": "53299",
+      "id": "1:53299",
+      "lat": 44.975929,
+      "locationType": "STOP",
+      "lon": -93.271325,
+      "name": "Marquette Ave & 7th St - Stop Group C",
+      "stopId": "1:53299",
+      "wheelchairBoarding": "POSSIBLE",
+      "zoneId": null
+     }
+    },
+    {
+     "arrivalDelay": 0,
+     "realtimeArrival": 63480,
+     "realtimeState": "SCHEDULED",
+     "scheduledArrival": 63480,
+     "scheduledDeparture": 63480,
+     "serviceDay": 1792213200,
+     "stop": {
+      "code": "53301",
+      "id": "1:53301",
+      "lat": 44.972032,
+      "locationType": "STOP",
+      "lon": -93.274496,
+      "name": "Marquette Ave & 11th St - Stop Group C",
+      "stopId": "1:53301",
+      "wheelchairBoarding": "POSSIBLE",
+      "zoneId": null
+     }
+    },
+    {
+     "arrivalDelay": 0,
+     "realtimeArrival": 63720,
+     "realtimeState": "SCHEDULED",
+     "scheduledArrival": 63720,
+     "scheduledDeparture": 63720,
+     "serviceDay": 1792213200,
+     "stop": {
+      "code": "17781",
+      "id": "1:17781",
+      "lat": 44.948118,
+      "locationType": "STOP",
+      "lon": -93.274824,
+      "name": "I-35W & Lake St Station",
+      "stopId": "1:17781",
+      "wheelchairBoarding": "POSSIBLE",
+      "zoneId": null
+     }
+    },
+    {
+     "arrivalDelay": 0,
+     "realtimeArrival": 63900,
+     "realtimeState": "UPDATED",
+     "scheduledArrival": 63900,
+     "scheduledDeparture": 63900,
+     "serviceDay": 1792213200,
+     "stop": {
+      "code": "53543",
+      "id": "1:53543",
+      "lat": 44.919417,
+      "locationType": "STOP",
+      "lon": -93.274754,
+      "name": "I-35W & 46th St Station",
+      "stopId": "1:53543",
+      "wheelchairBoarding": "POSSIBLE",
+      "zoneId": null
+     }
+    },
+    {
+     "arrivalDelay": 242,
+     "realtimeArrival": 64442,
+     "realtimeState": "UPDATED",
+     "scheduledArrival": 64200,
+     "scheduledDeparture": 64200,
+     "serviceDay": 1792213200,
+     "stop": {
+      "code": "52719",
+      "id": "1:52719",
+      "lat": 44.883158,
+      "locationType": "STOP",
+      "lon": -93.296483,
+      "name": "I-35W & 66th St Station",
+      "stopId": "1:52719",
+      "wheelchairBoarding": "POSSIBLE",
+      "zoneId": null
+     }
+    },
+    {
+     "arrivalDelay": 247,
+     "realtimeArrival": 64627,
+     "realtimeState": "UPDATED",
+     "scheduledArrival": 64380,
+     "scheduledDeparture": 64380,
+     "serviceDay": 1792213200,
+     "stop": {
+      "code": "56832",
+      "id": "1:56832",
+      "lat": 44.86405,
+      "locationType": "STOP",
+      "lon": -93.302427,
+      "name": "Knox Ave & 76th St Station",
+      "stopId": "1:56832",
+      "wheelchairBoarding": "POSSIBLE",
+      "zoneId": null
+     }
+    },
+    {
+     "arrivalDelay": 248,
+     "realtimeArrival": 64748,
+     "realtimeState": "UPDATED",
+     "scheduledArrival": 64500,
+     "scheduledDeparture": 64500,
+     "serviceDay": 1792213200,
+     "stop": {
+      "code": "56884",
+      "id": "1:56884",
+      "lat": 44.857921,
+      "locationType": "STOP",
+      "lon": -93.301933,
+      "name": "Knox Ave & American Blvd Station",
+      "stopId": "1:56884",
+      "wheelchairBoarding": "POSSIBLE",
+      "zoneId": null
+     }
+    },
+    {
+     "arrivalDelay": 269,
+     "realtimeArrival": 65129,
+     "realtimeState": "UPDATED",
+     "scheduledArrival": 64860,
+     "scheduledDeparture": 64860,
+     "serviceDay": 1792213200,
+     "stop": {
+      "code": "56833",
+      "id": "1:56833",
+      "lat": 44.82517,
+      "locationType": "STOP",
+      "lon": -93.290862,
+      "name": "I-35W & 98th St Station",
+      "stopId": "1:56833",
+      "wheelchairBoarding": "POSSIBLE",
+      "zoneId": null
+     }
+    },
+    {
+     "arrivalDelay": 487,
+     "realtimeArrival": 65767,
+     "realtimeState": "UPDATED",
+     "scheduledArrival": 65280,
+     "scheduledDeparture": 65280,
+     "serviceDay": 1792213200,
+     "stop": {
+      "code": "56830",
+      "id": "1:56830",
+      "lat": 44.776176,
+      "locationType": "STOP",
+      "lon": -93.278552,
+      "name": "Burnsville Heart of the City Station",
+      "stopId": "1:56830",
+      "wheelchairBoarding": "POSSIBLE",
+      "zoneId": null
+     }
+    }
+   ]
+  },
+  {
+   "label": "17:49:53",
+   "tMs": 1792277393747,
+   "recordId": "mvcx52b7-anqred.mvczonca-4menml-q",
+   "tripId": "1:1368267",
+   "stopTimes": [
+    {
+     "arrivalDelay": 0,
+     "realtimeArrival": 63060,
+     "realtimeState": "SCHEDULED",
+     "scheduledArrival": 63060,
+     "scheduledDeparture": 63060,
+     "serviceDay": 1792213200,
+     "stop": {
+      "code": "56800",
+      "id": "1:56800",
+      "lat": 44.978319,
+      "locationType": "STOP",
+      "lon": -93.262771,
+      "name": "Gateway Ramp Layover",
+      "stopId": "1:56800",
+      "wheelchairBoarding": "POSSIBLE",
+      "zoneId": null
+     }
+    },
+    {
+     "arrivalDelay": 0,
+     "realtimeArrival": 63180,
+     "realtimeState": "SCHEDULED",
+     "scheduledArrival": 63180,
+     "scheduledDeparture": 63180,
+     "serviceDay": 1792213200,
+     "stop": {
+      "code": "53297",
+      "id": "1:53297",
+      "lat": 44.9798,
+      "locationType": "STOP",
+      "lon": -93.268058,
+      "name": "Marquette Ave & 3rd St - Stop Group C",
+      "stopId": "1:53297",
+      "wheelchairBoarding": "POSSIBLE",
+      "zoneId": null
+     }
+    },
+    {
+     "arrivalDelay": 0,
+     "realtimeArrival": 63240,
+     "realtimeState": "SCHEDULED",
+     "scheduledArrival": 63240,
+     "scheduledDeparture": 63240,
+     "serviceDay": 1792213200,
+     "stop": {
+      "code": "53298",
+      "id": "1:53298",
+      "lat": 44.977824,
+      "locationType": "STOP",
+      "lon": -93.269698,
+      "name": "Marquette Ave & 5th St - Stop Group C",
+      "stopId": "1:53298",
+      "wheelchairBoarding": "POSSIBLE",
+      "zoneId": null
+     }
+    },
+    {
+     "arrivalDelay": 0,
+     "realtimeArrival": 63300,
+     "realtimeState": "SCHEDULED",
+     "scheduledArrival": 63300,
+     "scheduledDeparture": 63300,
+     "serviceDay": 1792213200,
+     "stop": {
+      "code": "53299",
+      "id": "1:53299",
+      "lat": 44.975929,
+      "locationType": "STOP",
+      "lon": -93.271325,
+      "name": "Marquette Ave & 7th St - Stop Group C",
+      "stopId": "1:53299",
+      "wheelchairBoarding": "POSSIBLE",
+      "zoneId": null
+     }
+    },
+    {
+     "arrivalDelay": 0,
+     "realtimeArrival": 63480,
+     "realtimeState": "SCHEDULED",
+     "scheduledArrival": 63480,
+     "scheduledDeparture": 63480,
+     "serviceDay": 1792213200,
+     "stop": {
+      "code": "53301",
+      "id": "1:53301",
+      "lat": 44.972032,
+      "locationType": "STOP",
+      "lon": -93.274496,
+      "name": "Marquette Ave & 11th St - Stop Group C",
+      "stopId": "1:53301",
+      "wheelchairBoarding": "POSSIBLE",
+      "zoneId": null
+     }
+    },
+    {
+     "arrivalDelay": 0,
+     "realtimeArrival": 63720,
+     "realtimeState": "SCHEDULED",
+     "scheduledArrival": 63720,
+     "scheduledDeparture": 63720,
+     "serviceDay": 1792213200,
+     "stop": {
+      "code": "17781",
+      "id": "1:17781",
+      "lat": 44.948118,
+      "locationType": "STOP",
+      "lon": -93.274824,
+      "name": "I-35W & Lake St Station",
+      "stopId": "1:17781",
+      "wheelchairBoarding": "POSSIBLE",
+      "zoneId": null
+     }
+    },
+    {
+     "arrivalDelay": 0,
+     "realtimeArrival": 63900,
+     "realtimeState": "SCHEDULED",
+     "scheduledArrival": 63900,
+     "scheduledDeparture": 63900,
+     "serviceDay": 1792213200,
+     "stop": {
+      "code": "53543",
+      "id": "1:53543",
+      "lat": 44.919417,
+      "locationType": "STOP",
+      "lon": -93.274754,
+      "name": "I-35W & 46th St Station",
+      "stopId": "1:53543",
+      "wheelchairBoarding": "POSSIBLE",
+      "zoneId": null
+     }
+    },
+    {
+     "arrivalDelay": 0,
+     "realtimeArrival": 64200,
+     "realtimeState": "UPDATED",
+     "scheduledArrival": 64200,
+     "scheduledDeparture": 64200,
+     "serviceDay": 1792213200,
+     "stop": {
+      "code": "52719",
+      "id": "1:52719",
+      "lat": 44.883158,
+      "locationType": "STOP",
+      "lon": -93.296483,
+      "name": "I-35W & 66th St Station",
+      "stopId": "1:52719",
+      "wheelchairBoarding": "POSSIBLE",
+      "zoneId": null
+     }
+    },
+    {
+     "arrivalDelay": 260,
+     "realtimeArrival": 64640,
+     "realtimeState": "UPDATED",
+     "scheduledArrival": 64380,
+     "scheduledDeparture": 64380,
+     "serviceDay": 1792213200,
+     "stop": {
+      "code": "56832",
+      "id": "1:56832",
+      "lat": 44.86405,
+      "locationType": "STOP",
+      "lon": -93.302427,
+      "name": "Knox Ave & 76th St Station",
+      "stopId": "1:56832",
+      "wheelchairBoarding": "POSSIBLE",
+      "zoneId": null
+     }
+    },
+    {
+     "arrivalDelay": 261,
+     "realtimeArrival": 64761,
+     "realtimeState": "UPDATED",
+     "scheduledArrival": 64500,
+     "scheduledDeparture": 64500,
+     "serviceDay": 1792213200,
+     "stop": {
+      "code": "56884",
+      "id": "1:56884",
+      "lat": 44.857921,
+      "locationType": "STOP",
+      "lon": -93.301933,
+      "name": "Knox Ave & American Blvd Station",
+      "stopId": "1:56884",
+      "wheelchairBoarding": "POSSIBLE",
+      "zoneId": null
+     }
+    },
+    {
+     "arrivalDelay": 282,
+     "realtimeArrival": 65142,
+     "realtimeState": "UPDATED",
+     "scheduledArrival": 64860,
+     "scheduledDeparture": 64860,
+     "serviceDay": 1792213200,
+     "stop": {
+      "code": "56833",
+      "id": "1:56833",
+      "lat": 44.82517,
+      "locationType": "STOP",
+      "lon": -93.290862,
+      "name": "I-35W & 98th St Station",
+      "stopId": "1:56833",
+      "wheelchairBoarding": "POSSIBLE",
+      "zoneId": null
+     }
+    },
+    {
+     "arrivalDelay": 500,
+     "realtimeArrival": 65780,
+     "realtimeState": "UPDATED",
+     "scheduledArrival": 65280,
+     "scheduledDeparture": 65280,
+     "serviceDay": 1792213200,
+     "stop": {
+      "code": "56830",
+      "id": "1:56830",
+      "lat": 44.776176,
+      "locationType": "STOP",
+      "lon": -93.278552,
+      "name": "Burnsville Heart of the City Station",
+      "stopId": "1:56830",
+      "wheelchairBoarding": "POSSIBLE",
+      "zoneId": null
+     }
+    }
+   ]
+  }
+ ]
+}

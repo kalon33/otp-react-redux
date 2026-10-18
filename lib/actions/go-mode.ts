@@ -13,7 +13,6 @@ import {
   getDownstreamStops,
   hasLiveArrival,
   journeySignature,
-  liveStopArrival,
   markStaleLegTimes,
   mergeLiveTimePoint,
   ONBOARD_CANDIDATE_SETTLE_MS,
@@ -264,6 +263,7 @@ import {
   publishedBoardSource,
   realtimeBoardIsSpent,
   resolveBoardDeparture,
+  tripQueryAlightPoint,
   tripQueryBoardPoint
 } from '../util/go-mode/board-departure'
 import { tripGtfsId, tripIdsMatch } from '../util/go-mode/trip-id'
@@ -5011,7 +5011,8 @@ export function plannedAlightOnTrip(
     const leg = legs[legIndex]
     const stopId = leg?.to?.stop?.gtfsId ?? leg?.to?.stopId ?? null
     if (!stopId) continue
-    const arrival = liveStopArrival(
+    // The bus leg's shown arrival; read past the next-stop zero (57.1).
+    const arrival = tripQueryAlightPoint(
       trip?.stopTimes || [],
       stopId,
       leg?.to?.name
@@ -6498,7 +6499,8 @@ export function replanFromAboard(
         null
       const plannedArrivalAny =
         plannedAlightStopId != null
-          ? liveStopArrival(
+          ? // becomes the spliced bus leg's shown arrival (57.1)
+            tripQueryAlightPoint(
               trip.stopTimes || [],
               plannedAlightStopId,
               ridingLegForAlight?.to?.name
@@ -7627,7 +7629,14 @@ export function refreshLiveLegTimes() {
               realtime: prev.alightRealtime ?? prev.realtime
             }
           : null,
-        liveStopArrival(stopTimes, leg.to?.stop?.gtfsId, leg.to?.name, anchor),
+        // The feed reads the bus's NEXT stop as the timetable under an
+        // UPDATED flag while later stops keep the delay (57.1).
+        tripQueryAlightPoint(
+          stopTimes,
+          leg.to?.stop?.gtfsId,
+          leg.to?.name,
+          anchor
+        ),
         nowMs
       )
       // "Always prio the real times" (rider, 2026-09-21). The boarding stop is

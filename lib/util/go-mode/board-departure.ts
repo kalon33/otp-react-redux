@@ -154,7 +154,8 @@ export function stopLevelBoardDeparture(
  * and `mergeLiveTimePoint` keeps the previous value rather than walk a
  * displayed time backwards. What it stops is 08:22:09 on 09-22 — 08:15:00
  * published `boardRealtime: true` for 17 minutes after the stop poll went
- * stale. Board only: the ALIGHT side still reads `liveStopArrival` unchanged.
+ * stale. The ALIGHT side reads the same shape through `tripQueryAlightPoint`
+ * (57.1).
  */
 export function tripQueryBoardPoint(
   stopTimes: TripStopTime[],
@@ -171,6 +172,76 @@ export function tripQueryBoardPoint(
     st.realtimeArrival === st.scheduledArrival
   ) {
     return { ...point, realtime: false }
+  }
+  return point
+}
+
+/**
+ * How large a later stop's delay must be before the alight stop's timetable
+ * answer is read as the feed's next-stop zero rather than an on-time bus.
+ * The feed's own jitter between polls is a few seconds; 2026-10-17's was 260 s.
+ */
+export const ALIGHT_NEXT_STOP_ZERO_MIN_DELAY_S = 60
+
+/**
+ * The trip query's ALIGHT point, with the feed's next-stop timetable zero
+ * replaced by the delay the rest of the run still carries.
+ *
+ * Same feed shape `tripQueryBoardPoint` handles, on the other end of the ride:
+ * the bus's NEXT stop is published `UPDATED, arrivalDelay 0`, realtime ==
+ * scheduled, while every stop after it keeps the real delay. Measured
+ * 2026-10-17 (backlog 57.1, ride `mvcx52b7-anqred`, trip `1:1368267`, alight
+ * `1:52719` I-35W & 66th St), every FIND_TRIP_RESPONSE in the day file:
+ *   17:47:18-17:49:23  46th St (next) UPDATED 0  · 66th St +234..+242 s
+ *   17:49:56-17:50:40  66th St (next) UPDATED 0  · Knox Ave & 76th +259..+260 s
+ * The moment the rider's stop became the bus's next stop, `liveStopArrival`
+ * read 17:50:00 under `realtime: true`, `mergeLiveTimePoint` passes any
+ * realtime value, and the arrival walked back four minutes (into the past by
+ * the time the bus got there, 17:54).
+ *
+ * So: when the alight stop is UPDATED with realtime == scheduled and the
+ * nearest LATER stop with a live state has |delay| >= 60 s, the answer is the
+ * alight stop's schedule plus that delay, still `realtime: true` — it IS the
+ * live prediction, read one stop on. Anything else is `liveStopArrival`
+ * unchanged: a later stop that also reads ~0 is an on-time bus, and the last
+ * stop of the trip has no later stop to read.
+ */
+export function tripQueryAlightPoint(
+  stopTimes: TripStopTime[],
+  stopGtfsId: string | null | undefined,
+  stopName?: string | null,
+  anchor?: TripAnchor | null
+): LiveTimePoint | null {
+  const point = liveStopArrival(stopTimes, stopGtfsId, stopName, anchor)
+  if (!point?.realtime) return point
+  const idx = findStopTimeIndex(stopTimes, stopGtfsId, stopName)
+  const st = stopTimes[idx]
+  if (
+    !st ||
+    st.realtimeState !== 'UPDATED' ||
+    st.scheduledArrival == null ||
+    st.realtimeArrival !== st.scheduledArrival ||
+    st.serviceDay == null
+  ) {
+    return point
+  }
+  for (let j = idx + 1; j < stopTimes.length; j++) {
+    const later = stopTimes[j]
+    if (!later || !LIVE_REALTIME_STATES.has(later.realtimeState as string)) {
+      continue
+    }
+    const delay =
+      later.arrivalDelay ??
+      (later.realtimeArrival != null && later.scheduledArrival != null
+        ? later.realtimeArrival - later.scheduledArrival
+        : null)
+    if (delay == null) continue
+    if (Math.abs(delay) < ALIGHT_NEXT_STOP_ZERO_MIN_DELAY_S) return point
+    return {
+      epoch: (st.serviceDay + st.scheduledArrival + delay) * 1000,
+      projected: false,
+      realtime: true
+    }
   }
   return point
 }
