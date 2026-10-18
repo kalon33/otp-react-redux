@@ -281,3 +281,282 @@ describe('the sheet inside Settings: three ticks + Done = ONE search (Q2)', () =
     expect(closeAdvancedSettings).toHaveBeenCalledTimes(1)
   })
 })
+
+// ---------------------------------------------------------------------------
+// Saved sets (58.2, cycle 27 Q3 = B)
+// ---------------------------------------------------------------------------
+
+const COMMUTE = {
+  id: 'set-commute',
+  name: 'Commute',
+  routes: [
+    { id: '1:18', label: '18' },
+    { id: '1:21', label: '21' },
+    { id: '1:904', label: 'Orange' }
+  ],
+  savedAt: 1,
+  scope: 'only'
+}
+const OLD = {
+  id: 'set-old',
+  name: 'Old run',
+  routes: [
+    { id: '1:5', label: '5' },
+    { id: '1:99', label: '99' }
+  ],
+  savedAt: 1,
+  scope: 'starting'
+}
+
+describe('the sheet: saved-set chips and "Save this set…"', () => {
+  beforeEach(setDefaultTestTime)
+
+  it('shows no saved row or save button until there is something to show', () => {
+    const wrapper = open(mountPicker({ onSaveSet: jest.fn() }).wrapper)
+    expect(wrapper.find('.route-set-saved')).toHaveLength(0)
+    expect(wrapper.find('button.route-set-save-open')).toHaveLength(0)
+  })
+
+  it('one tap on a saved chip hands Done its routes and scope, source saved', async () => {
+    const { onApply, wrapper } = mountPicker({ savedSets: [COMMUTE, OLD] })
+    open(wrapper)
+    const chips = wrapper.find('button.route-set-saved-chip')
+    expect(chips.map((c: any) => c.text())).toEqual([
+      'Commute · 3',
+      'Old run · 2'
+    ])
+    // The 99 is not in the graph any more: named back, left out.
+    expect(wrapper.find('.route-set-missing').hostNodes().text()).toBe(
+      'Route 99 in Old run isn’t running'
+    )
+    await act(async () => {
+      chips.at(1).simulate('click')
+      await flush()
+    })
+    expect(onApply).toHaveBeenCalledTimes(1)
+    expect(onApply).toHaveBeenCalledWith(['1:5'], 'starting', 'saved')
+  })
+
+  it('a set none of whose routes runs cannot be tapped', () => {
+    const gone = { ...OLD, routes: [{ id: '1:99', label: '99' }] }
+    const wrapper = open(mountPicker({ savedSets: [gone] }).wrapper)
+    expect(wrapper.find('button.route-set-saved-chip').prop('disabled')).toBe(
+      true
+    )
+    expect(wrapper.find('.route-set-missing').hostNodes().text()).toBe(
+      'None of the routes in Old run is running.'
+    )
+  })
+
+  it('saves the ticked set under a name, and asks before replacing one', () => {
+    const onSaveSet = jest
+      .fn()
+      .mockReturnValueOnce({ error: 'exists', existing: COMMUTE, ok: false })
+      .mockReturnValueOnce({
+        ok: true,
+        replaced: true,
+        set: COMMUTE,
+        sets: [COMMUTE]
+      })
+    const { onApply, wrapper } = mountPicker({ onSaveSet })
+    open(wrapper)
+    ;['1:18', '1:21'].forEach((id) =>
+      wrapper
+        .find(`input[type="checkbox"][value="${id}"]`)
+        .simulate('change', { target: { checked: true } })
+    )
+    wrapper.find('button.route-set-save-open').simulate('click')
+    expect(wrapper.find('button.route-set-save').prop('disabled')).toBe(true)
+    wrapper
+      .find('input.route-set-name')
+      .simulate('change', { target: { value: 'commute' } })
+    wrapper.find('form.route-set-save-form').simulate('submit')
+    expect(onSaveSet).toHaveBeenLastCalledWith(
+      'commute',
+      ['1:18', '1:21'],
+      'only',
+      false
+    )
+    expect(wrapper.find('.route-set-replace').hostNodes().text()).toContain(
+      'Replace Commute?'
+    )
+    wrapper.find('button.route-set-replace-yes').simulate('click')
+    expect(onSaveSet).toHaveBeenLastCalledWith(
+      'commute',
+      ['1:18', '1:21'],
+      'only',
+      true
+    )
+    expect(wrapper.find('.route-set-save-note').hostNodes().text()).toBe(
+      'Saved as Commute.'
+    )
+    // Saving is not choosing: nothing was applied and the sheet stays open.
+    expect(onApply).not.toHaveBeenCalled()
+    expect(wrapper.find('.route-set-sheet').hostNodes()).toHaveLength(1)
+  })
+
+  it('says so when 20 sets are already saved', () => {
+    const onSaveSet = jest.fn(() => ({ error: 'full', ok: false }))
+    const { wrapper } = mountPicker({ onSaveSet })
+    open(wrapper)
+    wrapper
+      .find('input[type="checkbox"][value="1:18"]')
+      .simulate('change', { target: { checked: true } })
+    wrapper.find('button.route-set-save-open').simulate('click')
+    wrapper
+      .find('input.route-set-name')
+      .simulate('change', { target: { value: 'One more' } })
+    wrapper.find('form.route-set-save-form').simulate('submit')
+    expect(wrapper.text()).toContain(
+      'You have 20 saved sets — delete one in Settings first.'
+    )
+  })
+})
+
+function panelState(routeSets: any[], currentQuery: any = {}) {
+  const state = getMockInitialState()
+  state.router = { location: { search: '' } }
+  state.otp.config = {
+    ...state.otp.config,
+    modes: { ...(state.otp.config.modes || {}), modeButtons: [] }
+  }
+  state.otp.currentQuery = {
+    ...state.otp.currentQuery,
+    from: { lat: 44.8168, lon: -93.3102, name: 'Home' },
+    numItineraries: 40,
+    to: { lat: 45.0, lon: -92.9489, name: 'Oakdale' },
+    ...currentQuery
+  }
+  state.otp.transitIndex = {
+    ...(state.otp.transitIndex || {}),
+    routes: ROUTES,
+    routesFetchStatus: FETCH_STATUS.FETCHED
+  }
+  state.user.localUser.routeSets = routeSets
+  return state
+}
+
+function mountPanel(routeSets: any[], currentQuery?: any) {
+  const handlePlanTrip = jest.fn()
+  const closeAdvancedSettings = jest.fn()
+  const { store, wrapper } = mockWithProvider(
+    AdvancedSettingsPanel,
+    { closeAdvancedSettings, handlePlanTrip, innerRef: React.createRef() },
+    panelState(routeSets, currentQuery),
+    messages
+  )
+  const writes = () =>
+    store
+      .getActions()
+      .filter(
+        (a: any) => a.type === 'SET_QUERY_PARAM' && 'routeLock' in a.payload
+      )
+  const searches = () =>
+    store.getActions().filter((a: any) => a.type === 'TEST_ROUTING_QUERY')
+  const of = (type: string) =>
+    store.getActions().filter((a: any) => a.type === type)
+  return {
+    closeAdvancedSettings,
+    handlePlanTrip,
+    of,
+    searches,
+    store,
+    wrapper,
+    writes
+  }
+}
+
+describe('saved sets inside Settings', () => {
+  beforeEach(setDefaultTestTime)
+
+  it('a saved chip in the sheet = one write, Settings closes, ONE search', async () => {
+    const { closeAdvancedSettings, handlePlanTrip, searches, wrapper, writes } =
+      mountPanel([COMMUTE])
+    wrapper.find('button.route-set-open').simulate('click')
+    await act(async () => {
+      wrapper.find('button.route-set-saved-chip').simulate('click')
+      await flush()
+    })
+    expect(writes()).toHaveLength(1)
+    expect(writes()[0].payload.routeLock.routes.map((r: any) => r.id)).toEqual([
+      '1:18',
+      '1:21',
+      '1:904'
+    ])
+    expect(searches()).toHaveLength(0)
+    expect(handlePlanTrip).toHaveBeenCalledTimes(1)
+    expect(closeAdvancedSettings).toHaveBeenCalledTimes(1)
+  })
+
+  it('lists each set with its routes; Use writes without a search, closing Settings runs it', async () => {
+    const { handlePlanTrip, searches, wrapper, writes } = mountPanel([
+      COMMUTE,
+      OLD
+    ])
+    const items = wrapper.find('li.route-set-item')
+    expect(items).toHaveLength(2)
+    expect(items.at(0).find('.route-set-item-name').hostNodes().text()).toBe(
+      'Commute'
+    )
+    expect(items.at(0).find('.route-set-item-routes').hostNodes().text()).toBe(
+      '18, 21, Orange'
+    )
+    expect(items.at(1).find('.route-set-missing').hostNodes().text()).toBe(
+      'Route 99 in Old run isn’t running'
+    )
+    await act(async () => {
+      items.at(0).find('button.route-set-use').simulate('click')
+      await flush()
+    })
+    expect(writes()).toHaveLength(1)
+    expect(searches()).toHaveLength(0)
+    expect(handlePlanTrip).not.toHaveBeenCalled()
+
+    wrapper.find('button#close-advanced-settings-button').simulate('click')
+    expect(handlePlanTrip).toHaveBeenCalledTimes(1)
+    expect(searches()).toHaveLength(0)
+  })
+
+  it('marks the set in use when the lock is that set (any order)', () => {
+    const { wrapper } = mountPanel([COMMUTE], {
+      routeLock: {
+        routes: [
+          { id: '1:904', label: 'METRO Orange Line' },
+          { id: '1:21', label: '21' },
+          { id: '1:18', label: '18' }
+        ],
+        scope: 'only'
+      }
+    })
+    const use = wrapper.find('button.route-set-use')
+    expect(use.text()).toBe('In use')
+    expect(use.prop('disabled')).toBe(true)
+  })
+
+  it('renames inline', () => {
+    const { of, wrapper } = mountPanel([COMMUTE])
+    wrapper.find('button.route-set-rename').simulate('click')
+    wrapper
+      .find('input.route-set-rename-input')
+      .simulate('change', { target: { value: 'Work run' } })
+    wrapper.find('li.route-set-item form').simulate('submit')
+    expect(of('RENAME_ROUTE_SET')).toHaveLength(1)
+    expect(of('RENAME_ROUTE_SET')[0].payload).toMatchObject({
+      id: 'set-commute',
+      name: 'Work run'
+    })
+  })
+
+  it('deletes only on the second tap', () => {
+    const { of, wrapper } = mountPanel([COMMUTE])
+    wrapper.find('button.route-set-delete').simulate('click')
+    expect(of('DELETE_ROUTE_SET')).toHaveLength(0)
+    expect(wrapper.find('button.route-set-delete').text()).toBe(
+      'Tap again to delete'
+    )
+    wrapper.find('button.route-set-delete').simulate('click')
+    expect(of('DELETE_ROUTE_SET')).toEqual([
+      { payload: { id: 'set-commute' }, type: 'DELETE_ROUTE_SET' }
+    ])
+  })
+})

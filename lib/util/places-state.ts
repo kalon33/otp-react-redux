@@ -7,6 +7,7 @@ import {
   loadCustomPlaces,
   SAVED_PLACES_KEY
 } from './saved-places'
+import { loadRouteSets, parseRouteSets, RouteSet } from './route-sets'
 
 const { getItem } = coreUtils.storage
 
@@ -73,10 +74,19 @@ export function readPlacesState(): PlacesState {
   }
 }
 
-/** What is synced: the custom list plus the two legacy slots (not recents). */
+/**
+ * What is synced: the custom list plus the two legacy slots (not recents),
+ * and the saved route sets (58.2, cycle 27 Q6 = B: "phone plus a server
+ * backup with your places").
+ *
+ * `routeSets` is absent — not [] — when a server answer has no such key: a
+ * sidecar older than 58.2 knows nothing about sets, and its silence must not
+ * read as "this device has none".
+ */
 export interface PlacesSnapshot {
   home: UserSavedLocation | null
   places: UserSavedLocation[]
+  routeSets?: RouteSet[]
   work: UserSavedLocation | null
 }
 
@@ -112,27 +122,42 @@ export function readPlacesSnapshot(): PlacesSnapshot {
   return {
     home: getItem('home') as UserSavedLocation | null,
     places: loadCustomPlaces(),
+    routeSets: loadRouteSets(),
     work: getItem('work') as UserSavedLocation | null
   }
 }
 
 /** Server JSON → a snapshot, dropping anything malformed. */
 export function parsePlacesSnapshot(data: any): PlacesSnapshot {
-  return {
+  const snapshot: PlacesSnapshot = {
     home: isSlotLocation(data?.home) ? data.home : null,
     places: Array.isArray(data?.places)
       ? data.places.filter(isLoadablePlace)
       : [],
     work: isSlotLocation(data?.work) ? data.work : null
   }
+  // Only a server that sent the key has said anything about sets.
+  if (data && typeof data === 'object' && 'routeSets' in data) {
+    snapshot.routeSets = parseRouteSets(data.routeSets)
+  }
+  return snapshot
 }
 
 export interface PlacesMerge {
   /** Whether the server lacks something the merged result holds (push it). */
   aheadOfServer: boolean
   merged: PlacesSnapshot
-  /** What came BACK from the server, as counts (for the beacon). */
-  restored: { home: boolean; places: number; work: boolean }
+  /**
+   * What came BACK from the server, as counts (for the beacon). `routeSets`
+   * only when the server gave back at least one saved set.
+   */
+  restored: { home: boolean; places: number; routeSets?: number; work: boolean }
+}
+
+/** Without the sets — what a server that predates them can be compared on. */
+function withoutSets(snapshot: PlacesSnapshot): PlacesSnapshot {
+  const { routeSets, ...rest } = snapshot // eslint-disable-line @typescript-eslint/no-unused-vars
+  return rest
 }
 
 /**
@@ -148,12 +173,18 @@ export interface PlacesMerge {
  * - `localAuthoritative` (a local write that the server has not yet
  *   acknowledged) disables the fill entirely: the difference is then a delete
  *   the server has not heard about, and filling it would resurrect the place.
+ * - Saved route sets follow the same rules, by id: a set only the server has
+ *   is appended (up to the 20-set cap), a set on both keeps the local copy.
+ *   A server answer with no `routeSets` key (a sidecar older than 58.2) fills
+ *   nothing and is not counted as behind on sets — the phone's sets are
+ *   simply kept.
  */
 export function mergePlaces(
   local: PlacesSnapshot,
   server: PlacesSnapshot,
   localAuthoritative = false
 ): PlacesMerge {
+  const hasSets = !!local.routeSets || !!server.routeSets
   if (localAuthoritative) {
     return {
       aheadOfServer: true,
@@ -165,16 +196,33 @@ export function mergePlaces(
   const fromServer = server.places.filter((p) => !localIds.has(p.id))
   const home = local.home || server.home
   const work = local.work || server.work
-  const merged = { home, places: [...local.places, ...fromServer], work }
+  const merged: PlacesSnapshot = {
+    home,
+    places: [...local.places, ...fromServer],
+    work
+  }
+  let setsFromServer = 0
+  if (hasSets) {
+    const localSets = local.routeSets || []
+    // parseRouteSets re-applies the caps and the unique-name rule to the
+    // union: a server set whose name a local set already took is dropped,
+    // never renamed or merged into it.
+    const union = parseRouteSets([...localSets, ...(server.routeSets || [])])
+    setsFromServer = union.length - localSets.length
+    merged.routeSets = union
+  }
+  // Push only when the server would not already hold the merged result
+  // (a place added or edited here). A spurious difference in key order
+  // costs one redundant POST, never a loss. An old server holds no sets
+  // and never will, so it is compared on places alone.
+  const comparable = server.routeSets ? merged : withoutSets(merged)
   return {
-    // Push only when the server would not already hold the merged result
-    // (a place added or edited here). A spurious difference in key order
-    // costs one redundant POST, never a loss.
-    aheadOfServer: JSON.stringify(merged) !== JSON.stringify(server),
+    aheadOfServer: JSON.stringify(comparable) !== JSON.stringify(server),
     merged,
     restored: {
       home: !local.home && !!server.home,
       places: fromServer.length,
+      ...(setsFromServer > 0 ? { routeSets: setsFromServer } : {}),
       work: !local.work && !!server.work
     }
   }

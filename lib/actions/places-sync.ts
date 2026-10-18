@@ -10,6 +10,7 @@ import {
   readPlacesState
 } from '../util/places-state'
 import { persistCustomPlaces, PLACES_API_PATH } from '../util/saved-places'
+import { persistRouteSets } from '../util/route-sets'
 import { recordSessionEvent } from '../util/debug-log'
 
 const { getItem, removeItem, storeItem } = coreUtils.storage
@@ -181,10 +182,17 @@ function pull(dispatch: any, getState: () => any): Promise<boolean> {
         server,
         pending
       )
-      if (restored.places > 0 || restored.home || restored.work) {
+      const restoredSets = (restored.routeSets || 0) > 0
+      if (
+        restored.places > 0 ||
+        restored.home ||
+        restored.work ||
+        restoredSets
+      ) {
         persistCustomPlaces(merged.places)
         if (restored.home) storeItem('home', merged.home)
         if (restored.work) storeItem('work', merged.work)
+        if (restoredSets) persistRouteSets(merged.routeSets || [])
         restoring = true
         try {
           dispatch({ type: 'RESTORE_LOCAL_USER_PLACES' })
@@ -218,7 +226,8 @@ export function startPlacesSync() {
 /**
  * After any change to the rider's places (main.js watches the user slice).
  * `places` is false for a recents-only change: beaconed, but recents are not
- * part of the server copy.
+ * part of the server copy. A change to the saved route sets (58.2) is a
+ * places write: they ride in the same copy.
  */
 export function notePlacesWrite({ places }: { places: boolean }) {
   return function (dispatch: any, getState: () => any): void {
@@ -235,4 +244,35 @@ export function notePlacesWrite({ places }: { places: boolean }) {
     }
     markWritten(getState)
   }
+}
+
+/**
+ * main.js's watcher: every change to the rider's places — a save, an edit, a
+ * delete, a recent, a saved route set — is beaconed and, for all but recents,
+ * copied to the server. Watched from outside the reducer, which must stay
+ * pure of network; the user slice's arrays are replaced on every write
+ * (immutability-helper), so a reference check is the whole test.
+ */
+export function watchPlacesWrites(store: {
+  dispatch: (action: any) => any
+  getState: () => any
+  subscribe: (listener: () => void) => () => void
+}): () => void {
+  const slice = () => store.getState().user?.localUser || {}
+  let last = slice()
+  return store.subscribe(() => {
+    const now = slice()
+    if (
+      now.savedLocations === last.savedLocations &&
+      now.recentPlaces === last.recentPlaces &&
+      now.routeSets === last.routeSets
+    ) {
+      return
+    }
+    const places =
+      now.savedLocations !== last.savedLocations ||
+      now.routeSets !== last.routeSets
+    last = now
+    store.dispatch(notePlacesWrite({ places }))
+  })
 }

@@ -40,7 +40,7 @@ const routeIndex = (getState: any): Record<string, LockableRoute> =>
  * the store when the fetch lands, times out, or fails — callers must cope with
  * an empty index rather than assume one.
  */
-async function fetchedRoutes(
+export async function fetchedRoutes(
   dispatch: any,
   getState: any
 ): Promise<Record<string, LockableRoute>> {
