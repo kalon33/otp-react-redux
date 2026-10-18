@@ -712,9 +712,16 @@ export const PREFERENCES_API_PATH = '/api/preferences'
 export interface PreferencesAnswer {
   preferences: RoutingPreferences
   /**
-   * A transit route the rider asked to ride and nothing else, in their own
-   * words ("18", "Orange Line"). Not an id — the caller resolves it against the
-   * OTP route index. Absent when they named no route.
+   * The transit routes the rider asked to ride and nothing else, in their own
+   * words and in the order they said them ("18", "Orange Line"). Not ids — the
+   * caller resolves them against the OTP route index. Empty when they named no
+   * route. A sidecar from before cycle 27 sends only a single `routeQuery`;
+   * that arrives here as a list of one.
+   */
+  routeQueries: string[]
+  /**
+   * The first of `routeQueries`, kept for callers that only ever held one
+   * route. Absent when they named no route.
    */
   routeQuery?: string
 }
@@ -723,6 +730,8 @@ export interface PreferencesAnswer {
 // nothing that could be markup or an injected id.
 const ROUTE_QUERY_RE = /^[A-Za-z0-9][A-Za-z0-9 .-]*$/
 const MAX_ROUTE_QUERY_CHARS = 40
+// Mirrors MAX_ROUTE_QUERIES in transitnav/preferences_api.py.
+export const MAX_ROUTE_QUERIES = 6
 
 /** Keep a route name only if it still looks like one on this side too. */
 function cleanRouteQuery(value: unknown): string | undefined {
@@ -733,8 +742,29 @@ function cleanRouteQuery(value: unknown): string | undefined {
 }
 
 /**
+ * The route names in an answer: the `routeQueries` list when the sidecar sends
+ * one, else its lone `routeQuery` (the shape every sidecar before cycle 27
+ * sends). Each name is re-checked; bad entries are dropped, not fatal; the
+ * same name twice ("18", "18 ") counts once; at most MAX_ROUTE_QUERIES.
+ */
+function cleanRouteQueries(data: any): string[] {
+  const raw: unknown[] = Array.isArray(data?.routeQueries)
+    ? data.routeQueries
+    : [data?.routeQuery]
+  const seen = new Set<string>()
+  const names: string[] = []
+  raw.forEach((value) => {
+    const name = cleanRouteQuery(value)
+    if (!name || seen.has(name.toLowerCase())) return
+    seen.add(name.toLowerCase())
+    names.push(name)
+  })
+  return names.slice(0, MAX_ROUTE_QUERIES)
+}
+
+/**
  * POST a plain-language description to the (login-gated) preferences endpoint
- * and return the clamped routing levers, plus any route the rider asked to be
+ * and return the clamped routing levers, plus any routes the rider asked to be
  * held to. Same-origin fetch, so the nginx Basic Auth credential rides along
  * automatically; both halves are re-validated client-side (defense in depth).
  * Throws when the answer is empty on both counts. Shared by the search-form box
@@ -754,9 +784,9 @@ export async function postPreferences(
   }
   const data = await response.json()
   const preferences = clampPreferences(data?.preferences)
-  const routeQuery = cleanRouteQuery(data?.routeQuery)
-  if (Object.keys(preferences).length === 0 && !routeQuery) {
+  const routeQueries = cleanRouteQueries(data)
+  if (Object.keys(preferences).length === 0 && routeQueries.length === 0) {
     throw new Error('No usable preferences returned')
   }
-  return { preferences, routeQuery }
+  return { preferences, routeQueries, routeQuery: routeQueries[0] }
 }

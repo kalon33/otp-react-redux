@@ -5,6 +5,7 @@ import {
   itineraryMatchesLock,
   itineraryStartsOnRoute,
   itineraryUsesRoute,
+  lastResultsRouteIds,
   resolveRouteLock,
   ROUTE_LOCK_MIN_BIKE_RELUCTANCE,
   routeLockIds,
@@ -12,6 +13,7 @@ import {
   routeLockRoutes,
   routeLockScope,
   routeLockText,
+  routesInItineraries,
   withRouteLockPrefs
 } from '../../lib/util/route-lock'
 import type { RouteLock } from '../../lib/util/route-lock'
@@ -366,5 +368,109 @@ describe('a lock saved by a build before the route list (#46)', () => {
   it('is empty for no lock at all', () => {
     expect(routeLockRoutes(null)).toEqual([])
     expect(routeLockRoutes(undefined)).toEqual([])
+  })
+})
+
+describe('routesInItineraries (58.2 route sheet)', () => {
+  const bus = (id: string) => ({ mode: 'BUS', route: { id } })
+  it('lists each ridden route once, best trip first', () => {
+    expect(
+      routesInItineraries([
+        { legs: [{ mode: 'BICYCLE' }, bus('1:904'), bus('1:94')] },
+        { legs: [bus('1:18'), bus('1:904')] },
+        { legs: [{ mode: 'BICYCLE' }] }
+      ])
+    ).toEqual(['1:904', '1:94', '1:18'])
+  })
+
+  it('copes with nothing at all', () => {
+    expect(routesInItineraries(undefined)).toEqual([])
+    expect(routesInItineraries([null, { legs: undefined }])).toEqual([])
+  })
+})
+
+describe('lastResultsRouteIds (58.2, cycle 27 Q1)', () => {
+  // The 10-16 home -> Oakdale searches: the Current Location origin comes
+  // back a few metres off on every search.
+  const home = { lat: 44.81681756, lon: -93.31020116 }
+  const homeAgain = { lat: 44.816775456, lon: -93.310242638 }
+  const oakdale = { lat: 45.000028, lon: -92.948892 }
+  const work = { lat: 44.97, lon: -93.26 }
+  const rides = (...ids: string[]) => [
+    {
+      plan: {
+        itineraries: ids.map((id) => ({
+          legs: [{ mode: 'BUS', route: { id } }]
+        }))
+      }
+    }
+  ]
+
+  it('takes the latest search between the same two places', () => {
+    const searches = {
+      a: {
+        query: { from: home, to: oakdale },
+        response: rides('1:18'),
+        timestamp: '2026-10-16T08:00:00'
+      },
+      b: {
+        query: { from: home, to: oakdale },
+        response: rides('1:904', '1:905'),
+        timestamp: '2026-10-16T09:00:00'
+      },
+      c: {
+        // Later, but a different trip: never offered here.
+        query: { from: home, to: work },
+        response: rides('1:5'),
+        timestamp: '2026-10-16T10:00:00'
+      }
+    }
+    expect(
+      lastResultsRouteIds(searches, { from: homeAgain, to: oakdale })
+    ).toEqual(['1:904', '1:905'])
+  })
+
+  it('skips a search that came back empty', () => {
+    const searches = {
+      a: {
+        query: { from: home, to: oakdale },
+        response: rides('1:18'),
+        timestamp: '2026-10-16T08:00:00'
+      },
+      b: {
+        query: { from: home, to: oakdale },
+        response: [{ plan: { itineraries: [] } }],
+        timestamp: '2026-10-16T09:00:00'
+      }
+    }
+    expect(lastResultsRouteIds(searches, { from: home, to: oakdale })).toEqual([
+      '1:18'
+    ])
+  })
+
+  it('gathers every batch of a fanned-out search', () => {
+    const searches = {
+      a: {
+        query: { from: home, to: oakdale },
+        response: [...rides('1:18'), null, ...rides('1:94')],
+        timestamp: '2026-10-16T08:00:00'
+      }
+    }
+    expect(lastResultsRouteIds(searches, { from: home, to: oakdale })).toEqual([
+      '1:18',
+      '1:94'
+    ])
+  })
+
+  it('is empty with no history or no places', () => {
+    expect(lastResultsRouteIds(undefined, { from: home, to: oakdale })).toEqual(
+      []
+    )
+    expect(
+      lastResultsRouteIds(
+        { a: { query: { from: home, to: oakdale }, response: rides('1:18') } },
+        { from: null, to: oakdale }
+      )
+    ).toEqual([])
   })
 })

@@ -75,6 +75,8 @@
     "components.BatchSearchScreen.routeLockChip",
     "components.BatchSearchScreen.routeLockDetail",
     "components.BatchSearchScreen.routeLockLabel",
+    "components.BatchSearchScreen.routeLockNoneStarted",
+    "components.BatchSearchScreen.routeLockNoneUsed",
     "components.BatchSearchScreen.routeLockNotFound",
     "components.BatchSearchScreen.routeLockNotStarted",
     "components.BatchSearchScreen.routeLockNotUsed",

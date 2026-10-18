@@ -248,11 +248,12 @@ components:
     noTransfersLabel: No transfers
     numItinerariesLabel: How many options to look for
     numItinerariesOption: "{count} options"
-    routeLockAdd: Add a route…
     routeLockChip: Only {route}
     routeLockDetail: Only trips on {route}, biking to and from it
     routeLockHeader: Routes
     routeLockLabel: Name a route
+    routeLockNoneStarted: No trip here starts on {route} — showing every trip.
+    routeLockNoneUsed: No trip here uses {route}, so these are the bike options.
     routeLockNotFound: No route called “{route}” — nothing was locked.
     routeLockNotStarted: Doesn’t start on {route}
     routeLockNotUsed: Doesn’t use {route}
@@ -264,6 +265,17 @@ components:
     routeLockStartDetail: >-
       Trips whose first bus or train is {route}; the rest of the trip is up to
       the planner.
+    routeSetAll: All routes
+    routeSetDone: Done — search
+    routeSetFilter: Filter routes
+    routeSetLastResults: In your last results
+    routeSetLoading: Loading routes…
+    routeSetNoMatch: No route matches “{filter}”
+    routeSetOpen: "{count, plural, =0 {Choose routes} other {Choose routes (# picked)}}"
+    routeSetPartial: Couldn’t find {missing} — held to {routes}.
+    routeSetPicked: "{count, plural, =0 {Tick every route you’ll ride} other {# picked}}"
+    routeSetSummary: "Only: {routes}"
+    routeSetTitle: Choose routes
     routingProfileHeader: Routing profile
     routingProfileLabel: Optimize routing for
     saveAndReturn: Save and return
