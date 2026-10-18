@@ -34,6 +34,7 @@ import {
 import AlightRecommendation from './AlightRecommendation'
 import BoardingPrompt from './BoardingPrompt'
 import CurrentLegPanel from './CurrentLegPanel'
+import FasterRouteCard from './FasterRouteCard'
 import GoModeMap from './GoModeMap'
 import GoModeNotifications from './GoModeNotifications'
 import GoModeStopViewer from './GoModeStopViewer'
@@ -417,6 +418,9 @@ const GoModeScreen = ({
             </RerouteCard>
           </RerouteBar>
         )}
+
+        {/* "6 min faster · 14" (56.1): only an offer, above the handle. */}
+        {!sheetOpen && goMode.arrivedAt == null && <FasterRouteCard />}
 
         {!sheetOpen && goMode.arrivedAt == null && (
           <SheetHandle

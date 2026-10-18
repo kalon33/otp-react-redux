@@ -8,7 +8,9 @@ import { ComponentContext } from '../../util/contexts'
 import DefaultItinerary from '../narrative/default/default-itinerary'
 import type { TripProgress } from '../../util/go-mode/progress-calculator'
 
+import { SheetHandle, SheetHandleLabel } from './styled'
 import AlightRecommendation from './AlightRecommendation'
+import FasterRouteCard from './FasterRouteCard'
 import ReturnCountdownCard from './ReturnCountdownCard'
 import TransitProgress from './TransitProgress'
 import TripSheet from './TripSheet'
@@ -523,6 +525,43 @@ const roundTripStore = {
   subscribe: () => () => undefined
 } as any
 
+// The faster-route card (56.1): the offer itself is injected, so the store
+// only has to satisfy connect(). Itineraries are not drawn by the card.
+const fasterRouteStore = {
+  dispatch: () => undefined,
+  getState: () => ({ otp: { goMode: { fasterRoute: null } } }),
+  subscribe: () => () => undefined
+} as any
+
+const demoOffer = (extra: Record<string, unknown>): any => ({
+  addedBikeM: 0,
+  baseline: null,
+  bikeSavedM: 0,
+  candidate: { legs: [] },
+  expiresAtMs: NOW + 6 * 60000,
+  kind: 'faster',
+  laterMs: 0,
+  offerId: 'demo',
+  raisedAtMs: NOW,
+  routeLabel: '14',
+  routeSet: '1:14',
+  savingMs: 6 * 60000,
+  source: 'ordinary',
+  ...extra
+})
+
+/** The card above the "View trip & other ways" handle, as on the screen. */
+const FasterRouteFrame = ({ offer }: { offer: any }) => (
+  <Provider store={fasterRouteStore}>
+    <div style={{ background: '#e8ecef', height: 230, position: 'relative' }}>
+      <FasterRouteCard offer={offer} />
+      <SheetHandle type="button">
+        <SheetHandleLabel>View trip &amp; other ways</SheetHandleLabel>
+      </SheetHandle>
+    </div>
+  </Provider>
+)
+
 const Frame = ({
   children,
   minHeight = 150,
@@ -825,6 +864,41 @@ const GoModeDemo = (): JSX.Element => (
             </ComponentContext.Provider>
           </Provider>
         </div>
+      </Frame>
+
+      <Frame
+        note="Background check found a route ≥ 3 min sooner (56.1). Only an offer: Switch is the one way it changes the trip; Keep mine latches; a tap on the words opens it beside the rider's own route."
+        title="Faster route available"
+      >
+        <FasterRouteFrame offer={demoOffer({})} />
+      </Frame>
+
+      <Frame
+        note="A faster route that adds ≥ 0.5 km of biking says so."
+        title="Faster route, more biking"
+      >
+        <FasterRouteFrame
+          offer={demoOffer({
+            addedBikeM: 1800,
+            routeLabel: 'METRO Blue Line → 539',
+            routeSet: '1:901+1:539',
+            savingMs: 9 * 60000
+          })}
+        />
+      </Frame>
+
+      <Frame
+        note="Same arrival ±2 min with ≥ 1 km less biking; '+1 min' only when it lands later."
+        title="Less biking"
+      >
+        <FasterRouteFrame
+          offer={demoOffer({
+            bikeSavedM: 1400,
+            kind: 'lessBike',
+            laterMs: 60000,
+            savingMs: -60000
+          })}
+        />
       </Frame>
 
       <Frame

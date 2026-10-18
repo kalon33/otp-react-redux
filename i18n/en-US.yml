@@ -443,6 +443,17 @@ components:
       settings.
     errorTimeout: GPS signal timed out. Please ensure you are in an area with GPS coverage.
     errorUnavailable: Unable to determine your location. Please check your device settings.
+    fasterRoute:
+      addedBike: +{distance} km bike
+      bikeAllTheWay: bike
+      faster: "{minutes} min faster"
+      keep: Keep mine
+      later: +{minutes} min
+      lessBike: "{distance} km less biking"
+      pushTitle: Faster route
+      pushTitleLessBike: Less biking
+      switch: Switch
+      viewLabel: "See this route: {title}, {detail}"
     findAnotherWay: Find another way
     findingBestStop: Finding the best stop to get off…
     findingYourBus: Finding your bus…

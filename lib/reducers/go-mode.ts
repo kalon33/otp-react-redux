@@ -4,6 +4,7 @@ import type { Itinerary } from '@opentripplanner/types'
 import {
   ADD_NOTIFICATION,
   BEGIN_ONBOARD_FLOW,
+  CLEAR_FASTER_ROUTE_OFFER,
   CLEAR_ONBOARD,
   CLEAR_REROUTE,
   CLEAR_RIDING,
@@ -22,6 +23,7 @@ import {
   SET_CHOOSE_BUS_ERROR,
   SET_DEPARTURE_OVERRIDE,
   SET_EARLY_ALIGHT,
+  SET_FASTER_ROUTE_OFFER,
   SET_GO_MODE_ACTIVE_LEG,
   SET_GO_MODE_BACKGROUNDED,
   SET_LEG_TURN_CUES,
@@ -72,6 +74,7 @@ import type {
   RidingState
 } from '../util/go-mode/types'
 import type { EarlyAlightRecord } from '../util/go-mode/riding'
+import type { FasterRouteOffer } from '../util/go-mode/faster-route-offer'
 import type { MultiStopPlan } from '../util/multi-stop'
 import type {
   NearbyVehicleOption,
@@ -315,12 +318,6 @@ export interface GoModeState {
    */
   earlyAlight: EarlyAlightRecord | null
 
-  isActive: boolean
-
-  /** Live (or schedule-fallback) transit-leg times, keyed by leg index. Kept
-   * fresh mid-ride by refreshLiveLegTimes; consumed by the trip overview. */
-  liveLegTimes: Record<number, LiveLegTime>
-
   /**
    * A trip through the rider's stops (backlog 43.1), guided one segment at a
    * time: `activeItinerary` is `segments[index]`, and arriving at the end of
@@ -328,6 +325,23 @@ export interface GoModeState {
    * no auto-end; the arrival card offers the next segment. Null for every
    * ordinary trip. See util/multi-stop.ts.
    */
+  /**
+   * The background "faster route available" offer on screen (56.1, cycle 25
+   * B2), or null. ONE card, updated in place while later checks still see the
+   * same route, replaced by a better one, and gone when its boarding passes,
+   * when a later check no longer sees it, or when the rider answers it.
+   * `kind` is `faster` | `lessBike` off the bus; `aboard` is the get-off
+   * offer's (B4). START_GO_MODE and STOP_GO_MODE clear it: a new plan has not
+   * been compared with anything yet. Never applied without the rider's tap.
+   */
+  fasterRoute: FasterRouteOffer | null
+
+  isActive: boolean
+
+  /** Live (or schedule-fallback) transit-leg times, keyed by leg index. Kept
+   * fresh mid-ride by refreshLiveLegTimes; consumed by the trip overview. */
+  liveLegTimes: Record<number, LiveLegTime>
+
   multiStop: MultiStopPlan | null
 
   notifications: {
@@ -508,6 +522,8 @@ const defaultState: GoModeState = {
   departureOverrideTripId: null,
 
   earlyAlight: null,
+
+  fasterRoute: null,
 
   isActive: false,
   liveLegTimes: {},
@@ -718,6 +734,14 @@ const goMode = handleActions<GoModeState, any>(
           ? state.vehicleMatch
           : { ...defaultState.vehicleMatch }
     }),
+
+    [CLEAR_FASTER_ROUTE_OFFER]: (state, action) =>
+      // Only the offer it names, when it names one: a clear for an offer that
+      // has already been replaced must not take the new one with it.
+      action.payload?.offerId &&
+      state.fasterRoute?.offerId !== action.payload.offerId
+        ? state
+        : { ...state, fasterRoute: null },
 
     [CLEAR_ONBOARD]: (state) => ({
       ...state,
@@ -952,6 +976,11 @@ const goMode = handleActions<GoModeState, any>(
       departureOverrideTripId: null,
       earlyAlight: action.payload,
       riding: null
+    }),
+
+    [SET_FASTER_ROUTE_OFFER]: (state, action) => ({
+      ...state,
+      fasterRoute: action.payload ?? null
     }),
 
     [SET_GO_MODE_ACTIVE_LEG]: (state, action) => ({
@@ -1196,6 +1225,8 @@ const goMode = handleActions<GoModeState, any>(
         departureOverride: null,
         departureOverrideSource: null,
         departureOverrideTripId: null,
+        // Compared with the plan that has just been replaced (56.1).
+        fasterRoute: null,
         isActive: true,
         liveLegTimes: {},
         // Same rule as roundTrip below: beginGoMode passes the plan back in

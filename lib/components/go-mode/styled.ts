@@ -696,6 +696,29 @@ export const RerouteKeepButton = styled.button`
   padding: 10px;
 `
 
+// The faster-route card (56.1): the Reroute* card, lifted clear of the
+// "View trip & other ways" handle it sits above (~42 px tall), with the
+// secondary button drawn in RerouteButton's outline rather than grey, so
+// "Keep mine" reads as a choice and not as a disabled Switch.
+export const FasterRouteBar = styled(RerouteBar)`
+  bottom: 54px;
+`
+
+export const FasterRouteText = styled.div`
+  cursor: pointer;
+`
+
+export const FasterRouteDetail = styled(RerouteSummary)`
+  overflow-wrap: break-word;
+`
+
+export const FasterRouteKeepButton = styled(RerouteKeepButton)`
+  background: #fff;
+  border: 1px solid #2196f3;
+  color: #2196f3;
+  font-weight: 600;
+`
+
 // Dev simulation toolbar styles
 export const SimToolbar = styled.div`
   background: #263238;

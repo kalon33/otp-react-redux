@@ -67,6 +67,7 @@ import {
   turnCuesEnabledForLeg
 } from '../util/go-mode/turn-cue-settings'
 import {
+  buildFasterRouteNotice,
   buildMissedBusOutcomeNotice,
   checkBoardVehicleApproach,
   checkDestinationUnreachable,
@@ -75,13 +76,13 @@ import {
   classifyMissedBus,
   deviationThresholdM,
   findBoardLegIndex,
+  generateNotificationId,
   itineraryArrivalMs,
   lastBoardMinutesPushAtMs,
   liveBoardEpochFor,
   nextDeviationHandledAtMs,
   resetDelayAlerts,
   resetLegAnnouncements,
-  generateNotificationId,
   resetTurnAnnouncements,
   showNotification
 } from '../util/go-mode/notification-service'
@@ -108,7 +109,10 @@ import {
   vehiclePassedStopOnTrip,
   vehicleProgressOnLeg
 } from '../util/go-mode/transit-trust'
-import { getRoutingProfile } from '../util/routing-profiles'
+import {
+  getRoutingProfile,
+  LOW_BIKE_RELUCTANCE
+} from '../util/routing-profiles'
 import {
   calculateDistance,
   matchPositionToRoute,
@@ -222,6 +226,29 @@ import {
 } from '../util/go-mode/boarding-confirmation'
 import { isTripRecordingEnabled, recordSessionEvent } from '../util/debug-log'
 import {
+  backgroundCheckSkip,
+  FASTER_ROUTE_NOTICE_ID,
+  offerExpired,
+  offerFromVerdict,
+  offerKeyOf,
+  recorderSettledAboard,
+  remainingBikeMeters,
+  shouldAskLowBike
+} from '../util/go-mode/faster-route-offer'
+import {
+  bikeSpeedOf,
+  classifyFasterRoute,
+  latchAllows,
+  latchRecordOffer,
+  remainingTransitLegs,
+  routeSetOf
+} from '../util/go-mode/faster-route'
+import type {
+  FasterRouteInput,
+  FasterRouteVerdict
+} from '../util/go-mode/faster-route'
+import type { FasterRouteOffer } from '../util/go-mode/faster-route-offer'
+import {
   beginGoModeQuietPeriod,
   noteGoModeActivity
 } from '../util/native-updates'
@@ -330,6 +357,7 @@ import type { PacingCardState } from '../util/go-mode/pacing-card'
 
 import {
   fetchOnboardCandidatePlan,
+  convertPlanResponseItineraries,
   fetchRerouteSnapshotPlan,
   findRoutesNearby,
   findStopTimesForStop,
@@ -850,6 +878,32 @@ export const HELD_RUN_LATER_STOP = 'HELD_RUN_LATER_STOP'
 export const REPLAN_ORIGIN_WAIT = 'REPLAN_ORIGIN_WAIT'
 export const PAUSE_GPS_SIMULATION = 'PAUSE_GPS_SIMULATION'
 export const REROUTE_SNAPSHOT = 'REROUTE_SNAPSHOT'
+/**
+ * The faster-route card (56.1, cycle 25 B2): SET puts an offer up (or updates
+ * the one up in place, same `offerId`), CLEAR takes it down. Both are handled
+ * by the goMode reducer and so are in create-otp-reducer's delegation list.
+ */
+export const SET_FASTER_ROUTE_OFFER = 'SET_FASTER_ROUTE_OFFER'
+export const CLEAR_FASTER_ROUTE_OFFER = 'CLEAR_FASTER_ROUTE_OFFER'
+/**
+ * Recording only, like AUTO_REPLAN: no reducer consumes it, so it is
+ * deliberately absent from create-otp-reducer's goMode delegation list, and
+ * its payload is scalars so the debug-log middleware keeps it on every ride,
+ * recorded or not. One entry per change in an offer's life:
+ *
+ *   outcome   offered | switched | kept | expired
+ *   why       (expired) board-time | not-seen | replaced | plan-changed |
+ *             arrived | trip-ended
+ *   kind      faster | lessBike | aboard
+ *   savingMin, bikeSavedKm, addedBikeKm, laterMin, route, routeSet, source
+ *   push      (offered) sent | replaced | none — `replaced` is a push sent
+ *             over an earlier one on the same native id
+ *   offers, pushes   the ride's running totals after this entry
+ *
+ * The ride-watch report reads these (B3); a switch that then arrives later is
+ * what its storm rule looks for.
+ */
+export const FASTER_ROUTE_OFFER = 'FASTER_ROUTE_OFFER'
 export const REPAIR_LEG_GEOMETRY = 'REPAIR_LEG_GEOMETRY'
 export const RESUME_GO_MODE = 'RESUME_GO_MODE'
 export const RESUME_GPS_SIMULATION = 'RESUME_GPS_SIMULATION'
@@ -1048,6 +1102,9 @@ export const recordBoardTimeDisagreement = (info: {
 export type GoModeControl =
   | 'choose-bus-open'
   | 'choose-bus-pick'
+  | 'faster-route-keep'
+  | 'faster-route-switch'
+  | 'faster-route-view'
   | 'onboard-option-row'
   | 'onboard-preview-back'
   | 'onboard-preview-confirm'
@@ -2193,6 +2250,17 @@ export function beginGoMode(
     // the transit index, so they are asked here, before the fact can be
     // re-anchored and re-confirmed below.
     if (!priorGoMode?.isActive) dropStaleRidingFact(dispatch, getState)
+    // A faster-route card compares against the plan being replaced (56.1):
+    // it goes with it, push and all. The rider's own Switch has already taken
+    // it down as `switched`, so this is only ever another path's swap.
+    if (priorGoMode?.isActive && priorGoMode?.fasterRoute) {
+      endFasterRouteOffer(
+        dispatch,
+        priorGoMode.fasterRoute,
+        'expired',
+        'plan-changed'
+      )
+    }
     dispatch(startGoMode({ itinerary, multiStop, originalFrom, roundTrip }))
     // A plan has been installed, so its origin is owed a look (12.13). Armed
     // here rather than asked on every tick because "the plan starts somewhere
@@ -2558,6 +2626,10 @@ export function startGoModeTracking(
     // the rider the convergence window before accusing them of drifting off a
     // line they have only just been handed.
     session.geometryChangedAtMs = getCurrentTime().getTime()
+    // ...and the faster-route check's quiet minute (56.1): a plan that has
+    // just been made from the rider's position is not compared with anything
+    // until FASTER_ROUTE_SWAP_QUIET_MS has passed.
+    session.planInstalledAtMs = getCurrentTime().getTime()
 
     // Pre-fetch stop times for all transit boarding stops
     const today = currentServiceDate(
@@ -2635,14 +2707,17 @@ export function startGoModeTracking(
       return
     }
 
-    // Recording sessions only: periodically capture the "alternatives to finish
-    // the trip" as request/response pairs for later replay/debugging.
-    // ...but never for a trip that has already arrived: an "alternatives to
-    // finish the trip" probe on a finished trip is a real plan() call with
-    // nothing to plan toward. captureRerouteSnapshot stops the interval on its
-    // first tick, which bounds the damage at one probe and 90 s; not arming it
-    // is the honest version, and it is what the ×4 in the 18:52 session was.
-    if (isTripRecordingEnabled() && !resumedArrived) {
+    // The background route interval (56.1): ONE timer, ONE plan() per tick,
+    // serving two consumers. Off the bus it is the faster-route check, on every
+    // ride, recording or not; with trip recording on, the same answer is also
+    // recorded as a REROUTE_SNAPSHOT ("alternatives to finish the trip") for
+    // replay. backgroundRouteCheck decides per tick whether either wants it.
+    // Never for a trip that has already arrived: a probe on a finished trip is
+    // a real plan() call with nothing to plan toward. The tick stops the
+    // interval on arrival, which bounds the damage at one probe and 90 s; not
+    // arming it is the honest version, and it is what the ×4 in the 18:52
+    // session was.
+    if (!resumedArrived) {
       startRerouteSnapshotCapture(dispatch)
     }
 
@@ -2841,6 +2916,15 @@ export function endGoMode() {
     }
     stopGpsWatchdog()
     stopRerouteSnapshotCapture()
+    // The faster-route card (56.1): its lapse timer, and the push if one went
+    // out — an offer for a trip the rider has ended is not one.
+    clearFasterRouteExpiry()
+    if (session.fasterRouteLatch.pushes > 0) cancelPush(FASTER_ROUTE_NOTICE_ID)
+    if (goMode?.fasterRoute) {
+      recordFasterRouteOffer(dispatch, goMode.fasterRoute, 'expired', {
+        why: 'trip-ended'
+      })
+    }
     // ...and the updater's clock starts. NOT a release: "Stop" is routinely a
     // step inside a ride — the rider taps it to re-run "I'm on the bus" — and
     // releasing here installed a queued bundle 18 ms later on 2026-09-13,
@@ -4357,15 +4441,56 @@ export function quietReplanAccessLeg() {
 
 /**
  * Record the current "alternatives to finish the trip" as a self-contained
- * request/response pair (recording only). Fires an ISOLATED plan from the rider's
- * current position → final destination — no UI/currentQuery side effects, like
- * the onboard alight optimizer — and dispatches REROUTE_SNAPSHOT, which the
- * debug-log captures in full. On replay these are served by nearest timestamp, so
- * "Find another way" at any moment yields the alternatives real at that moment.
- * The recorded `request` (query+variables) is also what a future primed-OTP
- * re-issues to reproduce the response. Best-effort; never disrupts the trip.
+ * request/response pair, on demand (the dev console's
+ * `__captureRerouteSnapshot`, and tests). The same tick the interval runs,
+ * with the recorder forced on and the faster-route check off — see
+ * backgroundRouteTick.
  */
 export function captureRerouteSnapshot() {
+  return backgroundRouteTick({ manual: true })
+}
+
+/**
+ * The background route interval's tick (backlog 56.1, cycle 25 B2): ONE
+ * isolated plan() from the rider's position to the destination, serving two
+ * consumers.
+ *
+ * - The faster-route CHECK, off the bus, on every ride whether or not it is
+ *   recorded: the answer goes through `classifyFasterRoute` (B1) and may put
+ *   up the "6 min faster · 14" card, and — phone locked — one push. Never an
+ *   automatic change of route: the rider taps Switch or nothing changes.
+ * - The RECORDER, with trip recording on: the same answer is dispatched as
+ *   REROUTE_SNAPSHOT so a replay can serve it by timestamp, as before.
+ *
+ * Before 56.1 the request existed only while recording and nothing read its
+ * answer. The two consumers do not ask different questions, so they share the
+ * request rather than doubling the load; a tick neither wants sends nothing.
+ */
+export function backgroundRouteCheck() {
+  return backgroundRouteTick({ manual: false })
+}
+
+/** Raw OTP2 plan payload -> the app's itinerary shape, never throwing. */
+function backgroundAnswerItineraries(
+  state: any,
+  response: any,
+  combo: any
+): Itinerary[] | null {
+  if (!response?.data?.plan) return null
+  try {
+    return convertPlanResponseItineraries(response, {
+      combo,
+      config: state.otp?.config || {},
+      query: {},
+      strictModes: false,
+      validModeCombinations: null
+    }) as Itinerary[]
+  } catch {
+    return (response.data.plan.itineraries || []) as Itinerary[]
+  }
+}
+
+function backgroundRouteTick(options: { manual: boolean }) {
   return async function (dispatch: any, getState: any) {
     const state = getState()
     const goMode = state.otp?.goMode
@@ -4384,40 +4509,72 @@ export function captureRerouteSnapshot() {
     // parked phone, the last at 23:35:52.
     if (goMode?.arrivedAt != null) {
       stopRerouteSnapshotCapture()
+      if (goMode?.fasterRoute) {
+        endFasterRouteOffer(dispatch, goMode.fasterRoute, 'expired', 'arrived')
+      }
       return
     }
+    const nowMs = getCurrentTime().getTime()
+    // The card's boarding has gone: it lapses whatever this tick does next.
+    if (offerExpired(goMode?.fasterRoute, nowMs)) {
+      endFasterRouteOffer(dispatch, goMode.fasterRoute, 'expired', 'board-time')
+    }
+    // One request at a time: a tick that lands while the last answer (and its
+    // less-biking follow-up) is still out does nothing.
+    if (session.backgroundCheckInFlight) return
 
-    // Settled aboard: stretch the cadence (see
-    // REROUTE_SNAPSHOT_RIDING_INTERVAL_MS). "Settled" is all three facts
-    // together — the sticky riding fact names a trip, the vehicle match is
-    // confirmed, and the route match still has the rider on the shape — so a
-    // rider whose bus has diverted, or who never really boarded, keeps the
-    // full-rate record that a diagnosis of exactly that would need.
-    const settledAboard =
-      goMode?.riding?.tripId != null &&
-      goMode?.vehicleMatch?.match?.confidence === 'confirmed' &&
-      goMode?.routeMatch?.isOnRoute === true
-    const sinceLastMs =
-      getCurrentTime().getTime() - session.lastRerouteSnapshotAt
-    if (
+    // The RECORDER's question. Settled aboard, it stretches its cadence to
+    // REROUTE_SNAPSHOT_RIDING_INTERVAL_MS. "Settled" (56.2) is the sticky
+    // riding fact naming a trip, the route match keeping the rider on the
+    // shape, and a vehicle match of `high` or `confirmed` — `confirmed` alone
+    // never engaged on 2026-10-17, whose match stayed `high` all ride. A rider
+    // whose bus has diverted, or who never really boarded, keeps the
+    // full-rate record a diagnosis of exactly that would need.
+    const settledAboard = recorderSettledAboard({
+      confidence: goMode?.vehicleMatch?.match?.confidence,
+      isOnRoute: goMode?.routeMatch?.isOnRoute,
+      ridingTripId: goMode?.riding?.tripId
+    })
+    const sinceLastMs = nowMs - session.lastRerouteSnapshotAt
+    const recorderDue = !(
       settledAboard &&
       session.lastRerouteSnapshotAt > 0 &&
       sinceLastMs < REROUTE_SNAPSHOT_RIDING_INTERVAL_MS
-    ) {
-      return
-    }
-    session.lastRerouteSnapshotAt = getCurrentTime().getTime()
+    )
+    const record = (options.manual || isTripRecordingEnabled()) && recorderDue
+
+    // The CHECK's question: off the bus, nothing else in charge of the trip.
+    const currentLegIndex: number | null =
+      goMode?.progress?.currentLegIndex ?? null
+    const skip = options.manual
+      ? 'manual'
+      : backgroundCheckSkip({
+          arrived: false,
+          backgrounded: !!goMode?.ui?.backgrounded,
+          hasPlan:
+            remainingTransitLegs(itinerary, nowMs, currentLegIndex).length > 0,
+          isActive: !!goMode?.isActive,
+          nowMs,
+          onboardOpen: (goMode?.onboard?.status ?? 'idle') !== 'idle',
+          planInstalledAtMs: session.planInstalledAtMs,
+          rerouteSearching: goMode?.reRoute?.status === 'searching',
+          riding: goMode?.riding?.tripId != null
+        })
+    const check = skip == null
+    if (!record && !check) return
+    if (record) session.lastRerouteSnapshotAt = nowMs
 
     const { homeTimezone } = state.otp.config
     const { modes, modeSettings, numItineraries } = getBasePlanParts(state)
     // Same levers a real re-plan would carry, observed bike speed included —
     // a snapshot that queries differently from the path it exists to reproduce
-    // is not a recording of anything.
+    // is not a recording of anything. (The check corrects for the observed
+    // pace itself: referenceBikeSpeedMps below.)
     const routingPreferences = withObservedBikeSpeed(
       state.otp.currentQuery?.routingPreferences,
       observedBikeSpeedMps()
     )
-    const zoned = utcToZonedTime(getCurrentTime().getTime(), homeTimezone)
+    const zoned = utcToZonedTime(nowMs, homeTimezone)
     const from = {
       category: 'CURRENT_LOCATION',
       lat: lastPosition.coords.latitude,
@@ -4444,35 +4601,461 @@ export function captureRerouteSnapshot() {
       time: format(zoned, GO_MODE_API_TIME_FORMAT),
       to
     }
+    // What the check judges feasibility against: the fix the request was
+    // planned FROM, not the one the rider has reached when the answer lands
+    // 3-12 s later (B1, 2026-10-18).
+    const sent = {
+      fix: lastPosition,
+      nowMs,
+      planSig: itinerarySignature(itinerary)
+    }
 
+    session.backgroundCheckInFlight = true
     try {
-      const { query, response, variables } = await dispatch(
-        fetchRerouteSnapshotPlan(combo)
-      )
-      dispatch({
-        payload: {
-          // Says what this record IS, because the row that asked for the field
-          // read one of these as the request behind a swap. It is not: the
-          // capture is periodic (REROUTE_SNAPSHOT_INTERVAL_MS), nothing
-          // consumes it, and it never changes the trip. Automatic re-plans
-          // announce themselves with AUTO_REPLAN instead.
-          reason: 'periodic',
-          request: { departArrive: 'NOW', from, modes, query, to, variables },
-          response,
-          tMs: getCurrentTime().getTime()
-        },
-        type: REROUTE_SNAPSHOT
+      let answer: Itinerary[] | null = null
+      try {
+        const { query, response, variables } = await dispatch(
+          fetchRerouteSnapshotPlan(combo)
+        )
+        if (record) {
+          dispatch({
+            payload: {
+              // Whether this same answer also fed the faster-route check.
+              fasterRouteCheck: check,
+              // Says what this record IS, because the row that asked for the
+              // field read one of these as the request behind a swap. It is
+              // not: the capture is periodic (REROUTE_SNAPSHOT_INTERVAL_MS) and
+              // it never changes the trip. Automatic re-plans announce
+              // themselves with AUTO_REPLAN; a faster-route offer with
+              // FASTER_ROUTE_OFFER.
+              reason: 'periodic',
+              request: {
+                departArrive: 'NOW',
+                from,
+                modes,
+                query,
+                to,
+                variables
+              },
+              response,
+              tMs: getCurrentTime().getTime()
+            },
+            type: REROUTE_SNAPSHOT
+          })
+        }
+        answer = backgroundAnswerItineraries(getState(), response, combo)
+      } catch {
+        // best-effort — never disrupt the trip
+      }
+      if (!check || !answer) return
+
+      // The less-biking question (55.1's second query at LOW_BIKE_RELUCTANCE):
+      // once per leg, and only with a kilometre of biking left (B1: 0 new
+      // offers in 20 real re-issued requests, so not every 90 s).
+      const legKey = `${sent.planSig}#${currentLegIndex ?? -1}`
+      let lowBike: Itinerary[] = []
+      if (
+        shouldAskLowBike({
+          bikeInModes: (modes || []).some((m: any) => m?.mode === 'BICYCLE'),
+          lastLegKey: session.fasterRouteLowBikeLegKey,
+          legKey,
+          lowBikeReluctance: LOW_BIKE_RELUCTANCE,
+          remainingBikeM: remainingBikeMeters(itinerary, currentLegIndex),
+          riderBikeReluctance: routingPreferences?.bikeReluctance
+        })
+      ) {
+        session.fasterRouteLowBikeLegKey = legKey
+        try {
+          const lowCombo = {
+            ...combo,
+            routingPreferences: {
+              ...(routingPreferences || {}),
+              bikeReluctance: LOW_BIKE_RELUCTANCE
+            }
+          }
+          const { response } = await dispatch(
+            fetchRerouteSnapshotPlan(lowCombo)
+          )
+          lowBike =
+            backgroundAnswerItineraries(getState(), response, lowCombo) || []
+        } catch {
+          // best-effort
+        }
+      }
+      settleFasterRouteCheck(dispatch, getState, {
+        answer,
+        lowBike,
+        sent
       })
-    } catch {
-      // best-effort — never disrupt the trip
+    } finally {
+      session.backgroundCheckInFlight = false
     }
   }
 }
 
+/** The held plan's next boarding as the card times it (live, when it is). */
+function heldLiveBoard(
+  goMode: any,
+  currentLegIndex: number | null
+): { epochMs: number; tripId: string } | null {
+  const held: Itinerary | null = goMode?.activeItinerary ?? null
+  if (!held) return null
+  const from =
+    currentLegIndex != null && currentLegIndex >= 0 ? currentLegIndex : 0
+  return liveBoardForCandidate(
+    { ...held, legs: (held.legs || []).slice(from) } as Itinerary,
+    held,
+    goMode?.liveLegTimes
+  )
+}
+
 /**
- * Start periodic reroute-snapshot capture (recording sessions only). Cadence is
- * the knob (each tick is a real plan() call); overridable via
- * localStorage.otpRerouteSnapshotMs for testing.
+ * Judge one background answer and put the card up, update it in place, or
+ * take it down. Runs at the ANSWER, against the trip as it is now — a swap,
+ * an arrival, the onboard flow or a planner browse that happened while the
+ * request was out makes the answer moot — but with feasibility measured at
+ * the fix the request was sent from.
+ */
+function settleFasterRouteCheck(
+  dispatch: any,
+  getState: any,
+  ctx: {
+    answer: Itinerary[]
+    lowBike: Itinerary[]
+    sent: { fix: GeolocationPosition; nowMs: number; planSig: string }
+  }
+): void {
+  const goMode = getState().otp?.goMode
+  const held: Itinerary | null = goMode?.activeItinerary ?? null
+  const nowMs = getCurrentTime().getTime()
+  if (!held || itinerarySignature(held) !== ctx.sent.planSig) return
+  const currentLegIndex: number | null =
+    goMode?.progress?.currentLegIndex ?? null
+  if (
+    backgroundCheckSkip({
+      arrived: goMode?.arrivedAt != null,
+      backgrounded: !!goMode?.ui?.backgrounded,
+      hasPlan: true,
+      isActive: !!goMode?.isActive,
+      nowMs,
+      onboardOpen: (goMode?.onboard?.status ?? 'idle') !== 'idle',
+      planInstalledAtMs: null,
+      rerouteSearching: goMode?.reRoute?.status === 'searching',
+      riding: goMode?.riding?.tripId != null
+    })
+  ) {
+    return
+  }
+  const coords: any = ctx.sent.fix?.coords
+  const liveBoard = heldLiveBoard(goMode, currentLegIndex)
+  const input: FasterRouteInput = {
+    answer: ctx.answer.concat(ctx.lowBike),
+    current: held,
+    currentLegIndex,
+    headingDeg: coords?.heading ?? null,
+    liveBoardEpochMs: liveBoard?.epochMs ?? null,
+    liveBoardTripId: liveBoard?.tripId ?? null,
+    // Plan-dead suppression (B1): an offer measured against a bus the rider
+    // is not going to catch is the missed-bus path's business, not this one's.
+    missedBusRecoveryActive:
+      session.missedBusRerouteAttempt != null ||
+      (goMode?.reRoute?.reason === 'missed-bus' &&
+        goMode?.reRoute?.status !== 'idle'),
+    nowMs,
+    position:
+      coords?.latitude != null && coords?.longitude != null
+        ? [coords.latitude, coords.longitude]
+        : null,
+    // The held plan's own bike pace (B1): the query rides at the OBSERVED
+    // pace, which a stop-and-wait leg drags down — without this, 7 of B1's
+    // fixture offers were fake savings on the rider's own closing bike leg.
+    referenceBikeSpeedMps: bikeSpeedOf(held),
+    riding: goMode?.riding?.tripId != null,
+    speedMps: coords?.speed ?? null
+  }
+  const verdict = classifyFasterRoute(input)
+  const lowSet = new Set(ctx.lowBike)
+  const offerOf = (v: FasterRouteVerdict, offerId: string) =>
+    offerFromVerdict(v, {
+      nowMs,
+      offerId,
+      source: v.candidate && lowSet.has(v.candidate) ? 'low-bike' : 'ordinary'
+    })
+  const shown: FasterRouteOffer | null = goMode?.fasterRoute ?? null
+
+  if (verdict.why === 'offer') {
+    // The card up already names this route: update it in place.
+    if (shown && shown.routeSet === verdict.routeSet) {
+      updateFasterRouteOffer(
+        dispatch,
+        getState,
+        offerOf(verdict, shown.offerId),
+        shown
+      )
+      return
+    }
+    const fresh = offerOf(verdict, `fr-${++session.fasterRouteOfferSeq}`)
+    if (fresh) {
+      const gate = latchAllows(session.fasterRouteLatch, offerKeyOf(fresh))
+      if (gate.allow) {
+        raiseFasterRouteOffer(dispatch, getState, fresh, gate.push, shown)
+        return
+      }
+    }
+    // A different route wins this answer but may not be raised (the latch).
+    // The card up stands if the answer still offers ITS route.
+    if (shown) {
+      const without = (input.answer || []).filter(
+        (it) => routeSetOf(it) !== verdict.routeSet
+      )
+      const again = classifyFasterRoute({ ...input, answer: without })
+      if (again.why === 'offer' && again.routeSet === shown.routeSet) {
+        updateFasterRouteOffer(
+          dispatch,
+          getState,
+          offerOf(again, shown.offerId),
+          shown
+        )
+        return
+      }
+    }
+  }
+  // A later check no longer sees the offer on screen.
+  if (shown && shown.kind !== 'aboard') {
+    endFasterRouteOffer(dispatch, shown, 'expired', 'not-seen')
+  }
+}
+
+/** The scalar record of one step in an offer's life (FASTER_ROUTE_OFFER). */
+function recordFasterRouteOffer(
+  dispatch: any,
+  offer: FasterRouteOffer,
+  outcome: 'expired' | 'kept' | 'offered' | 'switched',
+  extra: { push?: 'none' | 'replaced' | 'sent'; why?: string } = {}
+): void {
+  const latch = session.fasterRouteLatch
+  dispatch({
+    payload: {
+      addedBikeKm: Math.round(offer.addedBikeM / 100) / 10,
+      bikeSavedKm: Math.round(offer.bikeSavedM / 100) / 10,
+      kind: offer.kind,
+      laterMin: Math.round(offer.laterMs / 6000) / 10,
+      offerId: offer.offerId,
+      offers: latch.offers,
+      outcome,
+      push: extra.push ?? null,
+      pushes: latch.pushes,
+      route: offer.routeLabel || 'bike',
+      routeSet: offer.routeSet,
+      savingMin: Math.round(offer.savingMs / 6000) / 10,
+      source: offer.source,
+      tMs: getCurrentTime().getTime(),
+      why: extra.why ?? null
+    },
+    type: FASTER_ROUTE_OFFER
+  })
+}
+
+function clearFasterRouteExpiry(): void {
+  if (session.fasterRouteExpiryTimerId) {
+    clearTimeout(session.fasterRouteExpiryTimerId)
+    session.fasterRouteExpiryTimerId = null
+  }
+}
+
+/** Lapse the card at its boarding time, to the second, between checks. */
+function armFasterRouteExpiry(
+  dispatch: any,
+  getState: any,
+  offer: FasterRouteOffer
+): void {
+  clearFasterRouteExpiry()
+  if (offer.expiresAtMs == null) return
+  const delay = Math.max(0, offer.expiresAtMs - getCurrentTime().getTime())
+  session.fasterRouteExpiryTimerId = setTimeout(() => {
+    session.fasterRouteExpiryTimerId = null
+    const cur: FasterRouteOffer | null =
+      getState().otp?.goMode?.fasterRoute ?? null
+    if (
+      cur?.offerId === offer.offerId &&
+      offerExpired(cur, getCurrentTime().getTime())
+    ) {
+      endFasterRouteOffer(dispatch, cur, 'expired', 'board-time')
+    }
+  }, delay)
+}
+
+/** Put a NEW offer up (replacing any card already up). */
+function raiseFasterRouteOffer(
+  dispatch: any,
+  getState: any,
+  offer: FasterRouteOffer,
+  pushAllowed: boolean,
+  shown: FasterRouteOffer | null
+): void {
+  // The push is for a phone that is not showing the app; on screen, the card
+  // is the whole of it.
+  const hidden =
+    typeof document !== 'undefined' && document.visibilityState !== 'visible'
+  const push = pushAllowed && hidden && !isReplayActive()
+  const pushedBefore = session.fasterRouteLatch.pushes > 0
+  if (shown) endFasterRouteOffer(dispatch, shown, 'expired', 'replaced', true)
+  session.fasterRouteLatch = latchRecordOffer(
+    session.fasterRouteLatch,
+    offerKeyOf(offer),
+    push
+  )
+  dispatch({ payload: offer, type: SET_FASTER_ROUTE_OFFER })
+  armFasterRouteExpiry(dispatch, getState, offer)
+  if (push) sendPush(buildFasterRouteNotice(offer))
+  recordFasterRouteOffer(dispatch, offer, 'offered', {
+    push: push ? (pushedBefore ? 'replaced' : 'sent') : 'none'
+  })
+}
+
+/** Refresh the card up in place: same offer, this answer's numbers. */
+function updateFasterRouteOffer(
+  dispatch: any,
+  getState: any,
+  offer: FasterRouteOffer | null,
+  shown: FasterRouteOffer
+): void {
+  if (!offer) return
+  const next = {
+    ...offer,
+    offerId: shown.offerId,
+    raisedAtMs: shown.raisedAtMs
+  }
+  dispatch({ payload: next, type: SET_FASTER_ROUTE_OFFER })
+  armFasterRouteExpiry(dispatch, getState, next)
+}
+
+/**
+ * Take the card down — the rider answered it, or it lapsed — and the push
+ * with it. `keepPush` when a new offer is about to replace both on the same id.
+ */
+function endFasterRouteOffer(
+  dispatch: any,
+  offer: FasterRouteOffer,
+  outcome: 'expired' | 'kept' | 'switched',
+  why: string | null = null,
+  keepPush = false
+): void {
+  clearFasterRouteExpiry()
+  dispatch({
+    payload: { offerId: offer.offerId },
+    type: CLEAR_FASTER_ROUTE_OFFER
+  })
+  if (!keepPush && session.fasterRouteLatch.pushes > 0) {
+    cancelPush(FASTER_ROUTE_NOTICE_ID)
+  }
+  recordFasterRouteOffer(dispatch, offer, outcome, why ? { why } : {})
+}
+
+/**
+ * The rider's "Switch" on the faster-route card: start Go Mode on the offered
+ * itinerary. The ONLY way an offer changes the trip. Recorded as an
+ * AUTO_REPLAN with `autoApply: false` — the rider's choice, not the app's —
+ * so the stream shows the swap and why, and the storm counter (which counts
+ * `autoApply: true`) does not.
+ */
+export function acceptFasterRoute() {
+  return async function (dispatch: any, getState: any) {
+    const goMode = getState().otp?.goMode
+    const offer: FasterRouteOffer | null = goMode?.fasterRoute ?? null
+    if (!goMode?.isActive || !offer) return
+    dispatch(
+      recordGoModeControlTap('faster-route-switch', {
+        kind: offer.kind,
+        routeSet: offer.routeSet
+      })
+    )
+    // The aboard get-off offer switches differently (B4).
+    if (offer.kind === 'aboard') return
+    // Its boarding has gone while the card was up: nothing to switch to.
+    if (offerExpired(offer, getCurrentTime().getTime())) {
+      endFasterRouteOffer(dispatch, offer, 'expired', 'board-time')
+      return
+    }
+    const coords = goMode?.tracking?.lastPosition?.coords
+    dispatch({
+      payload: {
+        accepted: true,
+        autoApply: false,
+        heldBoardMissed: false,
+        originGapM: coords
+          ? originGapMeters(offer.candidate, [
+              coords.latitude,
+              coords.longitude
+            ])
+          : null,
+        planLeftByRider: false,
+        projectedAtMs: null,
+        projectedM: 0,
+        reason: 'faster-route',
+        refusedBecause: null,
+        tMs: getCurrentTime().getTime()
+      },
+      type: AUTO_REPLAN
+    })
+    endFasterRouteOffer(dispatch, offer, 'switched')
+    await dispatch(beginGoMode(offer.candidate))
+  }
+}
+
+/**
+ * The rider's "Keep mine": the card goes, the rider's route stays, and the
+ * latch holds the offer they turned down — nothing is raised again this ride
+ * unless it beats it by another 3 min or 1 km (B1's latch).
+ */
+export function keepCurrentRoute() {
+  return function (dispatch: any, getState: any) {
+    const offer: FasterRouteOffer | null =
+      getState().otp?.goMode?.fasterRoute ?? null
+    if (!offer) return
+    dispatch(
+      recordGoModeControlTap('faster-route-keep', {
+        kind: offer.kind,
+        routeSet: offer.routeSet
+      })
+    )
+    session.fasterRouteLatch = {
+      ...session.fasterRouteLatch,
+      held: offerKeyOf(offer)
+    }
+    endFasterRouteOffer(dispatch, offer, 'kept')
+  }
+}
+
+/**
+ * A tap on the card's words: look at the offer next to the rider's own route
+ * in the planner (showRerouteCandidates), the trip running underneath. The
+ * card stays up — looking is not answering.
+ */
+export function viewFasterRoute() {
+  return function (dispatch: any, getState: any): boolean {
+    const offer: FasterRouteOffer | null =
+      getState().otp?.goMode?.fasterRoute ?? null
+    if (!offer || offer.kind === 'aboard') return false
+    dispatch(
+      recordGoModeControlTap('faster-route-view', {
+        kind: offer.kind,
+        routeSet: offer.routeSet
+      })
+    )
+    return dispatch(
+      showRerouteCandidates(
+        [offer.candidate, offer.baseline].filter(Boolean) as Itinerary[]
+      )
+    )
+  }
+}
+
+/**
+ * Start the background route interval (56.1: every Go Mode trip, recording or
+ * not — see backgroundRouteCheck). Cadence is the knob (each tick that sends is
+ * a real plan() call); overridable via localStorage.otpRerouteSnapshotMs for
+ * testing.
  */
 function startRerouteSnapshotCapture(dispatch: any) {
   if (session.rerouteSnapshotIntervalId) return
@@ -4486,7 +5069,7 @@ function startRerouteSnapshotCapture(dispatch: any) {
     // ignore
   }
   session.rerouteSnapshotIntervalId = setInterval(() => {
-    dispatch(captureRerouteSnapshot())
+    dispatch(backgroundRouteCheck())
   }, intervalMs)
 }
 
