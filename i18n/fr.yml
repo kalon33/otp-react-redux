@@ -261,8 +261,9 @@ components:
     noTransfersLabel: "Sans correspondance"
     numItinerariesLabel: "Nombre d'options à rechercher"
     numItinerariesOption: "{count} options"
-    routeLockAdd: "Ajouter une ligne…"
     routeLockHeader: "Lignes"
+    routeLockNoneStarted: "Aucun trajet ici ne commence par {route} — tous les trajets sont affichés."
+    routeLockNoneUsed: "Aucun trajet ici n'emprunte {route} : voici les options à vélo."
     routeLockNotStarted: "Ne commence pas par {route}"
     routeLockRemove: "Retirer {route}"
     routeLockScopeLabel: "Comment utiliser ces lignes"
@@ -270,6 +271,38 @@ components:
     routeLockScopeStarting: "Utiliser comme ligne de départ"
     routeLockStartChip: "Départ sur {route}"
     routeLockStartDetail: "Trajets dont le premier bus ou train est {route} ; le reste du trajet est laissé au planificateur."
+    routeSetAll: "Toutes les lignes"
+    routeSetDelete: "Supprimer"
+    routeSetDeleteConfirm: "Touchez encore pour supprimer"
+    routeSetDone: "Terminé — rechercher"
+    routeSetFilter: "Filtrer les lignes"
+    routeSetFull: "Vous avez {max} ensembles enregistrés — supprimez-en un dans les réglages d'abord."
+    routeSetInUse: "En cours"
+    routeSetLastResults: "Dans vos derniers résultats"
+    routeSetLoading: "Chargement des lignes…"
+    routeSetNameLabel: "Nommer cet ensemble"
+    routeSetNamePlaceholder: "Trajet quotidien"
+    routeSetNameTaken: "Un autre ensemble s'appelle déjà {name}."
+    routeSetNoMatch: "Aucune ligne ne correspond à « {filter} »"
+    routeSetNoneRunning: "Aucune ligne de {name} ne circule."
+    routeSetNotRunning: "{count, plural, one {La ligne {routes} de {name} ne circule pas} other {Les lignes {routes} de {name} ne circulent pas}}"
+    routeSetOpen: "{count, plural, =0 {Choisir des lignes} other {Choisir des lignes ({count} choisies)}}"
+    routeSetPartial: "{missing} introuvable — limité à {routes}."
+    routeSetPicked: "{count, plural, =0 {Cochez chaque ligne que vous prendrez} one {# choisie} other {# choisies}}"
+    routeSetRename: "Renommer"
+    routeSetReplace: "Remplacer"
+    routeSetReplaceAsk: "Remplacer {name} ?"
+    routeSetSave: "Enregistrer"
+    routeSetSaveOpen: "Enregistrer cet ensemble…"
+    routeSetSavedAs: "Enregistré sous {name}."
+    routeSetSavedChip: "{name} · {count}"
+    routeSetSavedHeader: "Ensembles enregistrés"
+    routeSetSavedStartSummary: "Départ sur : {name} ({routes})"
+    routeSetSavedSummary: "Uniquement : {name} ({routes})"
+    routeSetSummary: "Uniquement : {routes}"
+    routeSetTitle: "Choisir des lignes"
+    routeSetUse: "Utiliser"
+    routeSetUseLabel: "Utiliser {name}"
     routingProfileHeader: "Profil d'itinéraire"
     routingProfileLabel: "Optimiser l'itinéraire pour"
     saveAndReturn: Enregistrer et fermer
@@ -414,6 +447,19 @@ components:
     busNotBroadcasting: "Bus pas encore localisé — prévu à {time}"
     busNotBroadcastingWaiting: "Le bus n'émet pas encore sa position"
     changeBus: "Choisir le bus"
+    chooseBusCancel: "Annuler"
+    chooseBusDistance: "{distance} m"
+    chooseBusFleetNumber: "n° {label}"
+    chooseBusLink: "Dans un autre bus ?"
+    chooseBusNextStop: "Prochain arrêt : {stop} · n° {label}"
+    chooseBusNoRoute: "Aucune ligne {route} trouvée."
+    chooseBusNoTrip: "Aucun bus de la ligne {route} trouvé près de vous."
+    chooseBusPickRoute: "Pas de bus en temps réel ? Choisissez votre ligne"
+    chooseBusRouteNumber: "Numéro de ligne"
+    chooseBusRoutePlaceholder: "ex. 546"
+    chooseBusSubtitle: "Choisissez le bus dans lequel vous êtes"
+    chooseBusTitle: "Dans un autre bus ?"
+    chooseBusTypeRoute: "Saisissez un numéro de ligne"
     confirmExit: "Voulez-vous vraiment arrêter le suivi de ce trajet ?"
     departureGone: "parti"
     directionEB: "Direction est"
@@ -423,6 +469,18 @@ components:
     errorPermissionDenied: "Accès à la position refusé. Autorisez la localisation dans les réglages de votre navigateur."
     errorTimeout: "Signal GPS expiré. Vérifiez que vous êtes dans une zone couverte par le GPS."
     errorUnavailable: "Impossible de déterminer votre position. Vérifiez les réglages de votre appareil."
+    fasterRoute:
+      addedBike: "+{distance} km de vélo"
+      bikeAllTheWay: "vélo"
+      faster: "{minutes} min plus rapide"
+      keep: "Garder le mien"
+      later: "+{minutes} min"
+      lessBike: "{distance} km de vélo en moins"
+      offAt: "descendre à {stopName}"
+      pushTitle: "Itinéraire plus rapide"
+      pushTitleLessBike: "Moins de vélo"
+      switch: "Changer"
+      viewLabel: "Voir cet itinéraire : {title}, {detail}"
     findAnotherWay: "Trouver un autre chemin"
     findingBestStop: "Recherche du meilleur arrêt pour descendre…"
     findingYourBus: "Recherche de votre bus…"
@@ -527,6 +585,7 @@ components:
     onboardPreviewWait: "{mins} min d'attente"
     onboardTitle: "Dans le bus"
     openTripSheet: "Ouvrir l'aperçu du trajet"
+    pickAnotherStop: "Choisir un autre arrêt"
     pickYourBus: "Dans quel bus êtes-vous ? Choisissez-le ci-dessous."
     pickYourRoute: "Aucun bus détecté en temps réel — choisissez votre ligne :"
     rerouteNlError: "Impossible de comprendre — réessayez."
@@ -581,6 +640,11 @@ components:
     whereToAlight: "Où voulez-vous descendre ?"
   ItinerarySummary:
     itineraryDetails: Détails du trajet
+  LegFrequency:
+    every: "Toutes les {minutes} min, prochain {time}"
+    nextOne: "Prochain {time}"
+    nextTwo: "Prochains {first}, {second}"
+    noneBefore: "Aucun autre passage avant {time}"
   LocationSearch:
     chooseOnMap: Choisir sur la carte
     enterLocation: Entrez le lieu
@@ -681,7 +745,13 @@ components:
     endTrip: Terminer le trajet
     finding: Recherche du prochain trajet…
     headerStop: Vers {destination} · étape {number} sur {total}
+    leaveAt: départ {time}
+    noStay: Sans pause
+    plannedStay: Séjour prévu jusqu'à {time}
+    stayGroupLabel: Temps minimum à {stop}
     stopPlaceholder: Entrez une étape
+    stopTime: "{stop} {time}"
+    stopTimeStay: "{stop} {time} ({stay}+)"
     summary: Via {stops} · {distance} au total
     via: Via {stops}
   NarrativeItinerariesHeader:

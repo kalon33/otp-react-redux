@@ -70,7 +70,12 @@ async function main() {
     text: document.body.innerText,
 
     toggles: document.querySelectorAll('button.same-shape-variants-toggle')
-      .length
+      .length,
+
+    // 58.1: one "how often it runs" line per transfer frame.
+    transferLines: Array.from(
+      document.querySelectorAll('[data-testid="transfer-frequency"]')
+    ).map((n) => n.textContent)
   }))
 
   const problems = []
@@ -81,7 +86,10 @@ async function main() {
   const requiredFrames = [
     'Go Mode — card gallery',
     'Alight recommendation, LIVE',
-    'Trip sheet (overview + search from here)'
+    'Trip sheet (overview + search from here)',
+    // 58.1: the Go Mode transfer card's "how often it runs" line.
+    'Transfer (walk → bus), regular runs',
+    'Transfer (walk → bus), irregular runs'
   ]
   requiredFrames.forEach((title) => {
     if (!seen.text.includes(title)) problems.push(`missing frame: ${title}`)
@@ -93,6 +101,16 @@ async function main() {
   }
   if (seen.toggles !== 2) {
     problems.push(`expected 2 same-shape drill-downs, got ${seen.toggles}`)
+  }
+  if (
+    seen.transferLines.length !== 2 ||
+    !/^Every 12 min, next /.test(seen.transferLines[0] || '')
+  ) {
+    problems.push(
+      `expected 2 transfer frequency lines, got ${JSON.stringify(
+        seen.transferLines
+      )}`
+    )
   }
   if (seen.rawIds.length) {
     problems.push(

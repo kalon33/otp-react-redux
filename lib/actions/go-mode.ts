@@ -13,16 +13,19 @@ import {
   getDownstreamStops,
   hasLiveArrival,
   journeySignature,
-  liveStopArrival,
   markStaleLegTimes,
   mergeLiveTimePoint,
   ONBOARD_CANDIDATE_SETTLE_MS,
   pickSameRouteAlight,
   rankAlightOptions,
+  scoreAlightOption,
   selectCandidateStops,
   settleCandidatePlans
 } from '../util/go-mode/alight-optimizer'
-import type { AlightCandidateResult } from '../util/go-mode/alight-optimizer'
+import type {
+  AlightCandidateResult,
+  DownstreamStop
+} from '../util/go-mode/alight-optimizer'
 import {
   accessSecondsToBoardStop,
   calculateTripProgress,
@@ -36,6 +39,7 @@ import {
   decideRiding,
   riderStopOnLeg,
   ridingFactIsEvidenced,
+  ridingFactStaleReason,
   ridingTransitLegIndex,
   trackAccessBoard,
   trackBoardStopDwell,
@@ -43,6 +47,7 @@ import {
   vehiclePassedRiderStop,
   vehicleReachedBoardStop
 } from '../util/go-mode/riding'
+import { stopOriginAboard } from '../util/go-mode/stop-origin'
 import type { EarlyAlightRecord } from '../util/go-mode/riding'
 import {
   estimateBikeSpeedMps,
@@ -65,6 +70,7 @@ import {
   turnCuesEnabledForLeg
 } from '../util/go-mode/turn-cue-settings'
 import {
+  buildFasterRouteNotice,
   buildMissedBusOutcomeNotice,
   checkBoardVehicleApproach,
   checkDestinationUnreachable,
@@ -73,13 +79,13 @@ import {
   classifyMissedBus,
   deviationThresholdM,
   findBoardLegIndex,
+  generateNotificationId,
   itineraryArrivalMs,
   lastBoardMinutesPushAtMs,
   liveBoardEpochFor,
   nextDeviationHandledAtMs,
   resetDelayAlerts,
   resetLegAnnouncements,
-  generateNotificationId,
   resetTurnAnnouncements,
   showNotification
 } from '../util/go-mode/notification-service'
@@ -106,7 +112,10 @@ import {
   vehiclePassedStopOnTrip,
   vehicleProgressOnLeg
 } from '../util/go-mode/transit-trust'
-import { getRoutingProfile } from '../util/routing-profiles'
+import {
+  getRoutingProfile,
+  LOW_BIKE_RELUCTANCE
+} from '../util/routing-profiles'
 import {
   calculateDistance,
   matchPositionToRoute,
@@ -156,12 +165,19 @@ import {
 } from '../util/route-lock'
 import {
   anchorGraftedTail,
+  legTripId,
   mergeAdjacentSameTripLegs,
   normalizeGoModeItinerary,
   polylineLength,
+  reanchorAccessChain,
   repairLegTimeInversions,
   retargetTransitLegToRun
 } from '../util/go-mode/leg-merge'
+import {
+  getOnCandidates,
+  legStopIndexes,
+  spliceGetOn
+} from '../util/other-stops-lookup'
 import {
   collectRerouteCandidates,
   itinerarySignature,
@@ -197,7 +213,13 @@ import {
   firstBoardStopMeasure,
   planRunLeftBeforeRider,
   riderAtFirstBoardStop,
+  riderMakesRun,
+  riderSecondsToBoard,
   startOriginIsStale
+} from '../util/go-mode/replan-acceptance'
+import type {
+  HeldRunVehicle,
+  HeldRunVerdict
 } from '../util/go-mode/replan-acceptance'
 import { accessArriveByTarget } from '../util/go-mode/arrive-on-time'
 import { notifyIntl } from '../util/go-mode/notify-i18n'
@@ -207,6 +229,36 @@ import {
   ridingSuppressedByRider
 } from '../util/go-mode/boarding-confirmation'
 import { isTripRecordingEnabled, recordSessionEvent } from '../util/debug-log'
+import {
+  ABOARD_CHECK_INTERVAL_MS,
+  ABOARD_OFFER_LEAD_MS,
+  aboardCheckWindow,
+  aboardOfferFromVerdict,
+  backgroundCheckSkip,
+  FASTER_ROUTE_NOTICE_ID,
+  offerExpired,
+  offerFromVerdict,
+  offerKeyOf,
+  offerSubKind,
+  recorderSettledAboard,
+  remainingBikeMeters,
+  shouldAskLowBike
+} from '../util/go-mode/faster-route-offer'
+import {
+  aboardPlanDeadWhy,
+  bikeSpeedOf,
+  classifyFasterRoute,
+  compareAlightOffer,
+  latchAllows,
+  latchRecordOffer,
+  remainingTransitLegs,
+  routeSetOf
+} from '../util/go-mode/faster-route'
+import type {
+  FasterRouteInput,
+  FasterRouteVerdict
+} from '../util/go-mode/faster-route'
+import type { FasterRouteOffer } from '../util/go-mode/faster-route-offer'
 import {
   beginGoModeQuietPeriod,
   noteGoModeActivity
@@ -250,6 +302,7 @@ import {
   publishedBoardSource,
   realtimeBoardIsSpent,
   resolveBoardDeparture,
+  tripQueryAlightPoint,
   tripQueryBoardPoint
 } from '../util/go-mode/board-departure'
 import { tripGtfsId, tripIdsMatch } from '../util/go-mode/trip-id'
@@ -301,15 +354,21 @@ import {
 } from '../util/go-mode/deviation'
 import {
   blendReplanLatencyMs,
-  projectReplanOrigin
+  pickReplanOriginFix,
+  projectReplanOrigin,
+  REPLAN_ORIGIN_MAX_AGE_MS
 } from '../util/go-mode/replan-origin'
-import type { ProjectedOrigin } from '../util/go-mode/replan-origin'
+import type {
+  ProjectedOrigin,
+  ReplanOriginPick
+} from '../util/go-mode/replan-origin'
 import { evaluateDepartureDrift } from '../util/go-mode/departure-drift'
 import type { DepartureBaselineState } from '../util/go-mode/departure-drift'
 import type { PacingCardState } from '../util/go-mode/pacing-card'
 
 import {
   fetchOnboardCandidatePlan,
+  convertPlanResponseItineraries,
   fetchRerouteSnapshotPlan,
   findRoutesNearby,
   findStopTimesForStop,
@@ -811,8 +870,51 @@ export const AUTO_REPLAN = 'AUTO_REPLAN'
  * after the bus), `applied`.
  */
 export const PLAN_RETARGET = 'PLAN_RETARGET'
+// Recording only, like PLAN_RETARGET: whether the rider makes the held run
+// (riderMakesRun, 23.3 + 53.2a) and each later stop of it tried (53.2b).
+export const HELD_RUN_VERDICT = 'HELD_RUN_VERDICT'
+export const HELD_RUN_LATER_STOP = 'HELD_RUN_LATER_STOP'
+/**
+ * Recording only, like AUTO_REPLAN: no reducer consumes it, so it is
+ * deliberately absent from create-otp-reducer's goMode delegation list, and
+ * its payload is scalars. An automatic re-plan that had no fix good enough to
+ * start from (51.3: within `FIX_ACCURACY_MAX_M` and `REPLAN_ORIGIN_MAX_AGE_MS`)
+ * waits instead of planning from a bad one. One record when the wait begins
+ * (`phase: 'wait'`, with the accuracy of the fix it refused) and one when a
+ * usable fix ends it (`phase: 'resume'`, with how long it waited and the fix
+ * it took) — never one per tick. For `missed-bus` and `quiet-replan` the
+ * resume is the re-plan going out; for `stale-plan-origin` it is the start
+ * check being answered, which may well find the plan is fine.
+ */
+export const REPLAN_ORIGIN_WAIT = 'REPLAN_ORIGIN_WAIT'
 export const PAUSE_GPS_SIMULATION = 'PAUSE_GPS_SIMULATION'
 export const REROUTE_SNAPSHOT = 'REROUTE_SNAPSHOT'
+/**
+ * The faster-route card (56.1, cycle 25 B2): SET puts an offer up (or updates
+ * the one up in place, same `offerId`), CLEAR takes it down. Both are handled
+ * by the goMode reducer and so are in create-otp-reducer's delegation list.
+ */
+export const SET_FASTER_ROUTE_OFFER = 'SET_FASTER_ROUTE_OFFER'
+export const CLEAR_FASTER_ROUTE_OFFER = 'CLEAR_FASTER_ROUTE_OFFER'
+/**
+ * Recording only, like AUTO_REPLAN: no reducer consumes it, so it is
+ * deliberately absent from create-otp-reducer's goMode delegation list, and
+ * its payload is scalars so the debug-log middleware keeps it on every ride,
+ * recorded or not. One entry per change in an offer's life:
+ *
+ *   outcome   offered | switched | kept | expired
+ *   why       (expired) board-time | not-seen | replaced | plan-changed |
+ *             arrived | trip-ended
+ *   kind      faster | lessBike | aboard
+ *   savingMin, bikeSavedKm, addedBikeKm, laterMin, route, routeSet, source
+ *   push      (offered) sent | replaced | none — `replaced` is a push sent
+ *             over an earlier one on the same native id
+ *   offers, pushes   the ride's running totals after this entry
+ *
+ * The ride-watch report reads these (B3); a switch that then arrives later is
+ * what its storm rule looks for.
+ */
+export const FASTER_ROUTE_OFFER = 'FASTER_ROUTE_OFFER'
 export const REPAIR_LEG_GEOMETRY = 'REPAIR_LEG_GEOMETRY'
 export const RESUME_GO_MODE = 'RESUME_GO_MODE'
 export const RESUME_GPS_SIMULATION = 'RESUME_GPS_SIMULATION'
@@ -838,7 +940,14 @@ export const SET_BOARDING_SEARCHING = 'SET_BOARDING_SEARCHING'
 // honestly finding nothing. Must also appear in create-otp-reducer's explicit
 // goMode case list or it is silently dropped.
 export const SET_BOARDING_SEARCH_FAILED = 'SET_BOARDING_SEARCH_FAILED'
+// "On a different bus?" (51.1): the boarding sheet opened from the waiting or
+// access card to name a bus the plan does not hold, and the sheet's own error
+// line. Both MUST also appear in create-otp-reducer's explicit goMode case
+// list or they are silently dropped.
+export const OPEN_CHOOSE_BUS = 'OPEN_CHOOSE_BUS'
+export const SET_CHOOSE_BUS_ERROR = 'SET_CHOOSE_BUS_ERROR'
 export const SET_RIDING = 'SET_RIDING'
+export const SET_PLAN_STOP_OFFER = 'SET_PLAN_STOP_OFFER'
 export const SET_LIVE_LEG_TIMES = 'SET_LIVE_LEG_TIMES'
 export const SET_NOTIFICATION_CONFIG = 'SET_NOTIFICATION_CONFIG'
 export const SET_TRACKING_ERROR = 'SET_TRACKING_ERROR'
@@ -901,10 +1010,19 @@ export const setBoardingSearchFailed = createAction<boolean>(
   SET_BOARDING_SEARCH_FAILED
 )
 export const showBoardingPromptAction = createAction(SHOW_BOARDING_PROMPT)
+export const openChooseBusAction = createAction(OPEN_CHOOSE_BUS)
+/** Why the last "On a different bus?" pick could not be resolved, and for
+ * which route the rider named; null clears it. */
+export const setChooseBusError = createAction<{
+  kind: 'no-route' | 'no-trip'
+  route: string
+} | null>(SET_CHOOSE_BUS_ERROR)
 export const startGoMode = createAction<{
   itinerary: Itinerary
   /** The rider's stops, when this is one segment of a multi-stop trip (43.1). */
   multiStop?: MultiStopPlan | null
+  /** Clock for the reducer's riding-fact age check (tests); Date.now otherwise. */
+  nowMs?: number
   originalFrom?: any
   /** The return half, when this trip is the outbound leg of a round trip. */
   roundTrip?: RoundTripPlan | null
@@ -993,10 +1111,16 @@ export const recordBoardTimeDisagreement = (info: {
  * behind 17.11) matches on these names, so they must not be free-form.
  */
 export type GoModeControl =
+  | 'choose-bus-open'
+  | 'choose-bus-pick'
+  | 'faster-route-keep'
+  | 'faster-route-switch'
+  | 'faster-route-view'
   | 'onboard-option-row'
   | 'onboard-preview-back'
   | 'onboard-preview-confirm'
   | 'onboard-variant-open'
+  | 'pick-another-stop'
 
 /**
  * "The rider touched this." Recording only (GO_MODE_CONTROL_TAP); the payload
@@ -1101,6 +1225,9 @@ export const setReturnCountdown = createAction<ReturnCountdownState | null>(
 
 export const setRiding = createAction<RidingState>(SET_RIDING)
 export const clearRiding = createAction(CLEAR_RIDING)
+export const setPlanStopOffer = createAction<{ tripId: string } | null>(
+  SET_PLAN_STOP_OFFER
+)
 /**
  * The rider got off early, at a stop still on the route (8.11). Drops the
  * riding fact AND records where they stepped off, which is what re-anchors the
@@ -1216,6 +1343,276 @@ export function selectDeparture(
 }
 
 /**
+ * The run's own vehicle, read the way `riderMakesRun` wants it (23.3, 53.2a):
+ * the polled record of THIS trip (tripId-exact, never another bus of the
+ * route), its distance to the boarding stop, whether its own run has it past
+ * that stop, and the time the position was taken. Null when the feed has no
+ * record of the trip.
+ */
+function heldRunVehicle(
+  state: any,
+  tripId: string | null,
+  routeId: string | null,
+  boardPlace: any,
+  nowMs: number
+): HeldRunVehicle | null {
+  if (!tripId) return null
+  const record = findVehicleForTrip(
+    state.otp?.transitIndex?.routes?.[routeId ?? '']?.vehicles,
+    tripId,
+    nowMs
+  )
+  if (!record) return null
+  const v: any = record.vehicle
+  const seconds = Number(v.seconds)
+  return {
+    ageSec: record.ageSec,
+    distanceToBoardStopM:
+      boardPlace?.lat != null &&
+      boardPlace?.lon != null &&
+      v.lat != null &&
+      v.lon != null
+        ? calculateDistance(v.lat, v.lon, boardPlace.lat, boardPlace.lon)
+        : null,
+    passedBoardStop: vehiclePassedStopOnTrip(
+      tripStopIdsInOrder(state.otp?.transitIndex?.trips?.[tripId] ?? null),
+      boardPlace?.stop?.gtfsId ?? boardPlace?.stopId ?? null,
+      v.nextStopId ?? null
+    ),
+    recordMs: Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : null
+  }
+}
+
+/** The rider's fix as [lat, lon], or null. */
+function riderLatLon(state: any): [number, number] | null {
+  const coords = state.otp?.goMode?.tracking?.lastPosition?.coords
+  return coords?.latitude != null && coords?.longitude != null
+    ? [coords.latitude, coords.longitude]
+    : null
+}
+
+/** Recording only, like PLAN_RETARGET: what `riderMakesRun` said, and why. */
+function recordHeldRunVerdict(
+  dispatch: any,
+  at: string,
+  tripId: string | null,
+  verdict: HeldRunVerdict,
+  vehicle: HeldRunVehicle | null,
+  extra: Record<string, unknown> = {}
+): void {
+  dispatch({
+    payload: {
+      at,
+      busMs: verdict.busMs,
+      makes: verdict.makes,
+      overrunMs: verdict.overrunMs,
+      riderEtaMs: verdict.riderEtaMs,
+      tMs: getCurrentTime().getTime(),
+      tripId,
+      vehicleAgeSec: vehicle?.ageSec ?? null,
+      vehicleDistanceM:
+        vehicle?.distanceToBoardStopM != null
+          ? Math.round(vehicle.distanceToBoardStopM)
+          : null,
+      vehiclePassed: vehicle?.passedBoardStop ?? null,
+      why: verdict.why,
+      ...extra
+    },
+    type: HELD_RUN_VERDICT
+  })
+}
+
+/**
+ * How much earlier than the bus a rider has to be measured reaching a LATER
+ * stop of the held run before it is offered (53.2b). The bus's time there is
+ * the timetable's running time from where its own record last put it, which
+ * is an estimate: on 2026-10-15 it said 17:58:36 for I-35W & 98th St Gate C,
+ * and SL-60152 was there at about 17:57:58.
+ */
+const LATER_STOP_MARGIN_MS = 60000
+/**
+ * An unmeasured re-target moves the access chain back to now only when OTP
+ * had it starting more than this far ahead — the 18:14:14 leg fetched at
+ * 17:51:04 was 21.5 min ahead; a plan fetched a second before the anchor ran
+ * (09:03:00 for 09:02:59, 0921) is not "moved up".
+ */
+const RETARGET_ACCESS_SHIFT_MIN_MS = 60000
+/** Later stops asked about per miss: the "Other stops" get-on count (49.1). */
+const LATER_STOP_MAX = 3
+
+/**
+ * The held run, caught further along its line (backlog 53.2b).
+ *
+ * Called once the held bus is really out of reach at the boarding stop. On
+ * 2026-10-15 the rider was told nothing and re-planned three times onto the
+ * NEXT run from the same stop (18:18 from Penn, 1162 m back west at 17:57:03)
+ * while they rode on east, waited at Fremont/Dupont and caught the same
+ * `1:897704` there at about 17:57. 49.1 already builds "same run, another
+ * stop" itineraries for the result list (`getOnCandidates` / `spliceGetOn`);
+ * this asks the same question automatically:
+ *
+ *  - where the bus is: past the boarding stop, its own record's next stop at
+ *    the record's time; otherwise the boarding stop at the run's bus time;
+ *  - which stops: the trip's stops after that and before the get-off stop
+ *    whose bus time is at least LATER_STOP_MARGIN_MS away, the
+ *    LATER_STOP_MAX nearest the rider;
+ *  - for each, a scoped street plan from the rider (the access re-plan's own
+ *    question, to that stop), measured at the rider's own pace
+ *    (`riderSecondsToBoard`) and re-anchored to now;
+ *  - the first stop in trip order the rider reaches LATER_STOP_MARGIN_MS
+ *    before the bus.
+ *
+ * Returns the spliced itinerary, null when no stop works or the trip record is
+ * not loaded, undefined when the trip stopped being re-plannable while the
+ * plans were out.
+ */
+async function catchHeldRunAtLaterStop(
+  dispatch: any,
+  getState: any,
+  ctx: {
+    accessMode: string
+    boardLegIndex: number
+    busAtBoardMs: number | null
+    comboTo: (to: { lat: number; lon: number; name: string }) => any
+    itinerary: Itinerary
+    stillReplannable: () => boolean
+  }
+): Promise<Itinerary | null | undefined> {
+  const state = getState()
+  const nowMs = getCurrentTime().getTime()
+  const leg: any = ctx.itinerary.legs[ctx.boardLegIndex]
+  const tripId = tripGtfsId(leg?.trip?.gtfsId ?? leg?.tripId ?? null)
+  const trip: any = tripId ? state.otp?.transitIndex?.trips?.[tripId] : null
+  const rider = riderLatLon(state)
+  if (!leg || !tripId || !(trip?.stopTimes?.length > 0) || !rider) return null
+  const { boardIdx } = legStopIndexes(trip, leg)
+  if (boardIdx < 0) return null
+  const stopIds = tripStopIdsInOrder(trip) || []
+
+  // Where the bus is, as an index on its run and a time it is there by.
+  let anchorIdx = boardIdx
+  let anchorMs = ctx.busAtBoardMs ?? Number(leg.startTime)
+  const record = findVehicleForTrip(
+    state.otp?.transitIndex?.routes?.[getLegRouteId(leg) ?? '']?.vehicles,
+    tripId,
+    nowMs
+  )
+  const nextIdx = record?.vehicle?.nextStopId
+    ? stopIds.indexOf(record.vehicle.nextStopId)
+    : -1
+  const seconds = Number(record?.vehicle?.seconds)
+  if (isVehicleRecordFresh(record) && nextIdx > boardIdx) {
+    anchorIdx = nextIdx
+    anchorMs = Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : nowMs
+  }
+  if (!Number.isFinite(anchorMs)) return null
+  const anchorStop = trip.stopTimes[anchorIdx]?.stop
+  const anchoredLeg = {
+    ...leg,
+    from: {
+      lat: anchorStop?.lat,
+      lon: anchorStop?.lon,
+      name: anchorStop?.name,
+      stop: { gtfsId: anchorStop?.id },
+      stopId: anchorStop?.id
+    },
+    startTime: anchorMs
+  }
+  const near = (c: any) =>
+    calculateDistance(rider[0], rider[1], c.stop.lat, c.stop.lon)
+  const candidates = getOnCandidates(
+    trip,
+    anchoredLeg,
+    { lat: rider[0], lon: rider[1] },
+    trip.stopTimes.length
+  )
+    .filter(
+      (c) =>
+        c.stopIndexInTrip > anchorIdx &&
+        c.busEpoch >= nowMs + LATER_STOP_MARGIN_MS
+    )
+    .sort((a, b) => near(a) - near(b))
+    .slice(0, LATER_STOP_MAX)
+    .sort((a, b) => a.stopIndexInTrip - b.stopIndexInTrip)
+  if (!candidates.length) return null
+
+  const answers = await Promise.all(
+    candidates.map(async (c) => {
+      const combo = ctx.comboTo({
+        lat: c.stop.lat,
+        lon: c.stop.lon,
+        name: c.stop.name
+      })
+      const { error, itineraries, query, response, variables } = await dispatch(
+        fetchOnboardCandidatePlan(combo)
+      )
+      recordQuietReplanPlan(dispatch, 'quiet-replan-later-stop', combo, {
+        query,
+        response,
+        variables
+      })
+      return error || !itineraries?.length
+        ? null
+        : pickAccessReplanCandidate(itineraries, {
+            accessMode: ctx.accessMode,
+            nextTransitRouteId: null
+          })
+    })
+  )
+  if (!ctx.stillReplannable()) return undefined
+
+  const at = getCurrentTime().getTime()
+  const observed = observedBikeSpeedMps()
+  const representative = {
+    ...ctx.itinerary,
+    legs: ctx.itinerary.legs.slice(ctx.boardLegIndex)
+  } as Itinerary
+  for (let i = 0; i < candidates.length; i++) {
+    const access = answers[i]
+    const c = candidates[i]
+    if (!access?.legs?.length) continue
+    const seconds = riderSecondsToBoard(
+      access.legs,
+      0,
+      0,
+      observed,
+      riderLatLon(getState()),
+      c.stop
+    )
+    if (seconds == null) continue
+    const arriveMs = at + seconds * 1000
+    const verdict = {
+      busMs: c.busEpoch,
+      riderEtaMs: arriveMs,
+      stopId: c.stop.id
+    }
+    if (arriveMs + LATER_STOP_MARGIN_MS > c.busEpoch) {
+      dispatch({
+        payload: { ...verdict, accepted: false, tMs: at, tripId },
+        type: HELD_RUN_LATER_STOP
+      })
+      continue
+    }
+    const spliced: any = spliceGetOn(
+      representative,
+      trip,
+      c,
+      reanchorAccessChain(access, 0, access.legs.length, at, arriveMs)
+    )
+    if (!spliced) continue
+    // Not an "Other stops" row: drop that marker, keep our own.
+    delete spliced.otherStopsLookup
+    spliced.heldRunLaterStop = { stopId: c.stop.id, tripId }
+    dispatch({
+      payload: { ...verdict, accepted: true, tMs: at, tripId },
+      type: HELD_RUN_LATER_STOP
+    })
+    return spliced as Itinerary
+  }
+  return null
+}
+
+/**
  * Put the ITINERARY on the run the card has moved to.
  *
  * Backlog 23.3. Rider, 2026-09-21 16:03 (board Q4): *"Yes override? Why are we
@@ -1257,20 +1654,27 @@ export function retargetPlanToDeparture(
       verdict: string,
       extra: {
         boardLegIndex?: number
+        busMs?: number | null
         overrunMs?: number | null
+        riderEtaMs?: number | null
         runDepartureMs?: number
         tripId?: string | null
+        why?: string | null
       } = {}
     ) =>
       dispatch({
         payload: {
           boardLegIndex: extra.boardLegIndex ?? null,
+          // 23.3: what the rider test measured — null when it did not run.
+          busMs: extra.busMs ?? null,
           departureMs: Number.isFinite(departureMs) ? departureMs : null,
           overrunMs: extra.overrunMs ?? null,
+          riderEtaMs: extra.riderEtaMs ?? null,
           runDepartureMs: extra.runDepartureMs ?? null,
           source,
           tripId: extra.tripId ?? tripGtfsId(runTripId) ?? null,
-          verdict
+          verdict,
+          why: extra.why ?? null
         },
         type: PLAN_RETARGET
       })
@@ -1320,8 +1724,43 @@ export function retargetPlanToDeparture(
       return
     }
 
-    const candidate = retargetTransitLegToRun(itinerary, boardLegIndex, {
-      departureMs: run.depMs,
+    // 23.3 (failed in production 2026-10-15 17:52:42): does the RIDER make
+    // this run? Measured from the rider — where the matcher has them on the
+    // access chain, at their own pace, never nearer than the straight line —
+    // against the bus's own time (the feed's, floored by its fresh record).
+    // The old test read the kept access leg's endTime, and that leg was OTP's
+    // time-shifted 18:14:14 -> 18:18:24 for an 18:18 bus: 1,554,000 ms "late"
+    // for a 17:52:30 run the rider caught. Only once the matcher has measured
+    // them on this chain (progress is set by a tick): before that there is
+    // nothing of the rider's to measure, and the plan's own times stand.
+    const nowMs = getCurrentTime().getTime()
+    const progressPct = goMode.progress?.currentLegProgress
+    const measured = Number.isFinite(progressPct as number)
+    const vehicle = measured
+      ? heldRunVehicle(state, tripId, routeId, boardLeg?.from, nowMs)
+      : null
+    const verdict: HeldRunVerdict | null = measured
+      ? riderMakesRun({
+          boardMs: run.depMs,
+          nowMs,
+          riderSecondsToStop: riderSecondsToBoard(
+            itinerary.legs,
+            legIndex,
+            progressPct,
+            observedBikeSpeedMps(),
+            riderLatLon(state),
+            boardLeg?.from
+          ),
+          vehicle
+        })
+      : null
+    // The bus leg goes on at the bus's own time: a frozen prediction already
+    // in the past (17:52:30 read at 17:52:42) gives way to the record's floor.
+    const legDepartureMs =
+      verdict?.busMs != null ? Math.max(run.depMs, verdict.busMs) : run.depMs
+
+    let candidate = retargetTransitLegToRun(itinerary, boardLegIndex, {
+      departureMs: legDepartureMs,
       headsign: run.headsign ?? null,
       realtime: run.realtime,
       tripId
@@ -1335,19 +1774,60 @@ export function retargetPlanToDeparture(
       return
     }
 
-    const overrun = accessBoardOverrunMs(candidate)
+    // The access legs are the rider's from NOW (no time inversion): measured,
+    // they end when the rider is measured to get there (no later than the
+    // bus, which is the deadline they are riding to); unmeasured, a chain OTP
+    // moved up against a later bus is moved back to start now.
+    const accessStart = Number(itinerary.legs[legIndex]?.startTime)
+    const accessEnd = Number(itinerary.legs[boardLegIndex - 1]?.endTime)
+    if (verdict?.makes === true && verdict.riderEtaMs != null) {
+      candidate = reanchorAccessChain(
+        candidate,
+        legIndex,
+        boardLegIndex,
+        nowMs,
+        Math.max(nowMs, Math.min(verdict.riderEtaMs, legDepartureMs))
+      )
+    } else if (
+      !verdict &&
+      Number.isFinite(accessStart) &&
+      Number.isFinite(accessEnd) &&
+      accessStart > nowMs + RETARGET_ACCESS_SHIFT_MIN_MS
+    ) {
+      candidate = reanchorAccessChain(
+        candidate,
+        legIndex,
+        boardLegIndex,
+        nowMs,
+        nowMs + (accessEnd - accessStart)
+      )
+    }
+
+    const overrun =
+      verdict?.makes != null
+        ? verdict.overrunMs
+        : accessBoardOverrunMs(candidate)
     const facts = {
       boardLegIndex,
+      busMs: verdict?.busMs ?? null,
       overrunMs: overrun,
+      riderEtaMs: verdict?.riderEtaMs ?? null,
       runDepartureMs: run.depMs,
-      tripId
+      tripId,
+      why: verdict?.why ?? null
     }
-    if (overrun != null && overrun > AUTO_REPLAN_ACCESS_BOARD_SLACK_MS) {
+    if (
+      verdict?.makes === false ||
+      (verdict?.makes == null &&
+        overrun != null &&
+        overrun > AUTO_REPLAN_ACCESS_BOARD_SLACK_MS)
+    ) {
       record('refused-overrun', facts)
       // eslint-disable-next-line no-console
       console.log(
-        `[go-mode] plan re-target to ${tripId} refused: access leg ends ` +
-          `${Math.round(overrun / 1000)}s after it (23.3)`
+        `[go-mode] plan re-target to ${tripId} refused: rider reaches the ` +
+          `stop ${Math.round((overrun ?? 0) / 1000)}s after it ` +
+          `(${verdict?.why ?? 'access leg'}, 23.3)`
       )
       return
     }
@@ -1533,7 +2013,10 @@ function tokenHopToleranceMs(state: any): number | undefined {
  */
 function recordQuietReplanPlan(
   dispatch: any,
-  reason: 'quiet-replan-full' | 'quiet-replan-scoped',
+  reason:
+    | 'quiet-replan-full'
+    | 'quiet-replan-later-stop'
+    | 'quiet-replan-scoped',
   combo: any,
   result: { query?: any; response?: any; variables?: any }
 ): void {
@@ -1604,7 +2087,13 @@ function autoReplanRefusal(
   options: AutoReplanOptions = {}
 ): string | null {
   const goMode = state?.otp?.goMode
-  const coords = goMode?.tracking?.lastPosition?.coords
+  // Judged against the fix the re-plan was asked from (51.3): the freshest one
+  // good enough to plan from, else the latest. Measuring a plan drawn from the
+  // 14 m fix against a 1,414 m one would refuse it for starting "behind" a
+  // rider who is not where that fix says.
+  const coords = (
+    replanOriginPick(state)?.position ?? goMode?.tracking?.lastPosition
+  )?.coords
   const position = coords
     ? ([coords.latitude, coords.longitude] as [number, number])
     : null
@@ -1767,6 +2256,22 @@ export function beginGoMode(
       options.multiStop !== undefined
         ? options.multiStop
         : (priorGoMode?.isActive && priorGoMode?.multiStop) || null
+    // A RESTART carries a kept riding fact only while it is current (54.1).
+    // The reducer checks its age itself; the feed and trip-end checks need
+    // the transit index, so they are asked here, before the fact can be
+    // re-anchored and re-confirmed below.
+    if (!priorGoMode?.isActive) dropStaleRidingFact(dispatch, getState)
+    // A faster-route card compares against the plan being replaced (56.1):
+    // it goes with it, push and all. The rider's own Switch has already taken
+    // it down as `switched`, so this is only ever another path's swap.
+    if (priorGoMode?.isActive && priorGoMode?.fasterRoute) {
+      endFasterRouteOffer(
+        dispatch,
+        priorGoMode.fasterRoute,
+        'expired',
+        'plan-changed'
+      )
+    }
     dispatch(startGoMode({ itinerary, multiStop, originalFrom, roundTrip }))
     // A plan has been installed, so its origin is owed a look (12.13). Armed
     // here rather than asked on every tick because "the plan starts somewhere
@@ -1897,20 +2402,47 @@ export function recoverStaleStartOrigin() {
     if (session.staleStartOriginPending !== itinerarySignature(itinerary))
       return
 
-    // Only the tracking fix will do, because it is the one
-    // `reRouteFromCurrentPosition` itself reads: recovering off a fix it cannot
-    // see would announce a re-plan it then declines to make. On a brand-new
-    // trip it can still be null when beginGoMode reaches here (the first fix
+    // Only the fix `reRouteFromCurrentPosition` itself would start from will
+    // do: recovering off a fix it cannot see would announce a re-plan it then
+    // declines to make. Since 51.3 that is the freshest fix within
+    // FIX_ACCURACY_MAX_M (pickReplanOriginFix), never a kilometre-wide one: on
+    // 2026-10-13 09:30:42 this re-plan ran from a 1,414 m fix. On a brand-new
+    // trip there can be none yet when beginGoMode reaches here (the first fix
     // landed 69 ms after START_GO_MODE on the 09-08 ride, but nothing awaits
-    // it), so the question is left UNANSWERED — no latch — and the first
-    // position tick, which calls this too, answers it.
-    const fix: GeolocationPosition | null =
+    // it), or only a poor one, so the question is left UNANSWERED — no latch —
+    // and the first position tick with a usable fix, which calls this too,
+    // answers it.
+    const tracked: GeolocationPosition | null =
       goMode?.tracking?.lastPosition ?? null
-    const coords: any = fix?.coords
+    const fix: GeolocationPosition | null =
+      replanOriginPick(getState())?.position ?? null
+    if (!fix) {
+      if (tracked?.coords) {
+        noteReplanOriginWait(dispatch, getState(), 'stale-plan-origin')
+        // ...but not for ever. The question is about the plan as it was
+        // installed; a rider who has been moving for a minute since may have
+        // ridden its access leg, and asking then would re-plan a trip that is
+        // going fine (the false positive the latch exists to prevent). So a
+        // wait past REPLAN_ORIGIN_MAX_AGE_MS spends the latch unanswered.
+        const since = session.replanOriginWaitSince['stale-plan-origin']
+        if (since != null && Date.now() - since > REPLAN_ORIGIN_MAX_AGE_MS) {
+          session.staleStartOriginPending = null
+          noteReplanOriginResume(
+            dispatch,
+            getState(),
+            'stale-plan-origin',
+            true
+          )
+        }
+      }
+      return
+    }
+    const coords: any = fix.coords
     if (coords?.latitude == null || coords?.longitude == null) return
     const position: [number, number] = [coords.latitude, coords.longitude]
 
     session.staleStartOriginPending = null
+    noteReplanOriginResume(dispatch, getState(), 'stale-plan-origin')
 
     if (
       !startOriginIsStale({
@@ -2105,6 +2637,10 @@ export function startGoModeTracking(
     // the rider the convergence window before accusing them of drifting off a
     // line they have only just been handed.
     session.geometryChangedAtMs = getCurrentTime().getTime()
+    // ...and the faster-route check's quiet minute (56.1): a plan that has
+    // just been made from the rider's position is not compared with anything
+    // until FASTER_ROUTE_SWAP_QUIET_MS has passed.
+    session.planInstalledAtMs = getCurrentTime().getTime()
 
     // Pre-fetch stop times for all transit boarding stops
     const today = currentServiceDate(
@@ -2182,14 +2718,17 @@ export function startGoModeTracking(
       return
     }
 
-    // Recording sessions only: periodically capture the "alternatives to finish
-    // the trip" as request/response pairs for later replay/debugging.
-    // ...but never for a trip that has already arrived: an "alternatives to
-    // finish the trip" probe on a finished trip is a real plan() call with
-    // nothing to plan toward. captureRerouteSnapshot stops the interval on its
-    // first tick, which bounds the damage at one probe and 90 s; not arming it
-    // is the honest version, and it is what the ×4 in the 18:52 session was.
-    if (isTripRecordingEnabled() && !resumedArrived) {
+    // The background route interval (56.1): ONE timer, ONE plan() per tick,
+    // serving two consumers. Off the bus it is the faster-route check, on every
+    // ride, recording or not; with trip recording on, the same answer is also
+    // recorded as a REROUTE_SNAPSHOT ("alternatives to finish the trip") for
+    // replay. backgroundRouteCheck decides per tick whether either wants it.
+    // Never for a trip that has already arrived: a probe on a finished trip is
+    // a real plan() call with nothing to plan toward. The tick stops the
+    // interval on arrival, which bounds the damage at one probe and 90 s; not
+    // arming it is the honest version, and it is what the ×4 in the 18:52
+    // session was.
+    if (!resumedArrived) {
       startRerouteSnapshotCapture(dispatch)
     }
 
@@ -2359,6 +2898,9 @@ export function endGoMode() {
     const { currentQuery, goMode } = getState().otp
     const originalFrom = goMode?.originalFrom
     const currentFrom = currentQuery?.from
+    // ...and decide where a Current Location start goes, while the riding
+    // fact, the route match and the session's simulation flag still exist.
+    const stopFrom = stopOriginFor(getState(), originalFrom)
 
     // Everything the session HOLDS ON TO outside itself has to be released
     // before the session goes: timers keep firing, the listener keeps the
@@ -2385,6 +2927,15 @@ export function endGoMode() {
     }
     stopGpsWatchdog()
     stopRerouteSnapshotCapture()
+    // The faster-route card (56.1): its lapse timer, and the push if one went
+    // out — an offer for a trip the rider has ended is not one.
+    clearFasterRouteExpiry()
+    if (session.fasterRouteLatch.pushes > 0) cancelPush(FASTER_ROUTE_NOTICE_ID)
+    if (goMode?.fasterRoute) {
+      recordFasterRouteOffer(dispatch, goMode.fasterRoute, 'expired', {
+        why: 'trip-ended'
+      })
+    }
     // ...and the updater's clock starts. NOT a release: "Stop" is routinely a
     // step inside a ride — the rider taps it to re-run "I'm on the bus" — and
     // releasing here installed a queued bundle 18 ms later on 2026-09-13,
@@ -2447,6 +2998,15 @@ export function endGoMode() {
 
     dispatch(stopGoMode())
 
+    // A Current Location start never comes back by the coordinates it was
+    // captured at (51.2): on 2026-10-17 Stop at 17:50:57 restored the 17:25
+    // start point, 5.4 km behind a rider on the Orange Line. It comes back
+    // where the rider is now — or, clearly aboard, as the bus's next stop.
+    if (stopFrom) {
+      dispatch(setQueryParam({ from: stopFrom }))
+      return
+    }
+
     // If a mid-trip search replaced the origin with the rider's GPS position,
     // restore the origin they started with so the trip planner isn't left
     // showing "Current location". Automatic re-routes are isolated plans and
@@ -2461,6 +3021,52 @@ export function endGoMode() {
       dispatch(setQueryParam({ from: originalFrom }))
     }
   }
+}
+
+/**
+ * The search origin Stop leaves behind when the trip started from "Current
+ * Location" (51.2, cycle 24 Q1 = C: "GPS, but the next stop if I'm clearly
+ * riding"). Null for a typed address or saved place — those are restored as
+ * they always were.
+ *
+ * - Clearly riding (`stopOriginAboard`) → the bus's next stop, as a plain
+ *   named place WITHOUT the CURRENT_LOCATION category: with it, the Plan tap's
+ *   syncCurrentLocationOrigin would move the point back to raw GPS under the
+ *   stop's name.
+ * - Otherwise → the start's own label and category at the freshest fix:
+ *   the re-plan origin pick, else Go Mode's latest fix, else the planner's.
+ *   The label comes from `originalFrom`, not the current `from`, which a
+ *   remount may have renamed after a stop.
+ * - No fix at all → the start as it was; it keeps its category, so the next
+ *   search's sync still moves it to GPS.
+ *
+ * Must run before stopGoMode() and before the trip session is replaced.
+ */
+function stopOriginFor(state: any, originalFrom: any): any | null {
+  if (originalFrom?.category !== 'CURRENT_LOCATION') return null
+  const goMode = state?.otp?.goMode
+  const lastPosition: GeolocationPosition | null =
+    goMode?.tracking?.lastPosition ?? null
+  const simulated = session.simulationActive || isReplayActive()
+  const nowMs =
+    simulated && lastPosition?.timestamp != null
+      ? Number(lastPosition.timestamp)
+      : Date.now()
+  const aboard = stopOriginAboard(state, nowMs)
+  if (aboard) return aboard
+  const coords =
+    replanOriginPick(state)?.position?.coords ??
+    lastPosition?.coords ??
+    state?.otp?.location?.currentPosition?.coords ??
+    null
+  if (
+    coords &&
+    Number.isFinite(coords.latitude) &&
+    Number.isFinite(coords.longitude)
+  ) {
+    return { ...originalFrom, lat: coords.latitude, lon: coords.longitude }
+  }
+  return { ...originalFrom }
 }
 
 /**
@@ -2564,13 +3170,98 @@ function armAutoEndTimer(dispatch: any, getState: any): void {
 }
 
 /**
+ * The fix an automatic re-plan may start from (51.3) — see
+ * `pickReplanOriginFix`. Simulation and replay fixes carry the simulated clock
+ * in `timestamp`, so there the newest fix's own time is "now" (the same
+ * forcing transit trust's fix age uses) and recorded rides replay the same.
+ */
+function replanOriginPick(state: any): ReplanOriginPick | null {
+  const goMode = state?.otp?.goMode
+  const lastPosition: GeolocationPosition | null =
+    goMode?.tracking?.lastPosition ?? null
+  const simulated = session.simulationActive || isReplayActive()
+  const nowMs =
+    simulated && lastPosition?.timestamp != null
+      ? Number(lastPosition.timestamp)
+      : Date.now()
+  return pickReplanOriginFix({
+    goModeFix: lastPosition,
+    lastTrustedFix: goMode?.tracking?.lastTrustedPosition ?? null,
+    nowMs,
+    plannerFix: state?.otp?.location?.currentPosition ?? null
+  })
+}
+
+/**
+ * Record that an automatic re-plan is waiting for a usable origin fix (51.3).
+ * Writes `REPLAN_ORIGIN_WAIT {phase: 'wait'}` once per wait, not per tick.
+ */
+function noteReplanOriginWait(dispatch: any, state: any, reason: string) {
+  if (session.replanOriginWaitSince[reason] != null) return
+  const nowMs = Date.now()
+  session.replanOriginWaitSince = {
+    ...session.replanOriginWaitSince,
+    [reason]: nowMs
+  }
+  const coords = state?.otp?.goMode?.tracking?.lastPosition?.coords
+  dispatch({
+    payload: {
+      fixAccuracyM:
+        coords?.accuracy != null ? Math.round(coords.accuracy) : null,
+      phase: 'wait',
+      reason,
+      tMs: getCurrentTime().getTime()
+    },
+    type: REPLAN_ORIGIN_WAIT
+  })
+}
+
+/**
+ * The other end of `noteReplanOriginWait`: a usable fix has ended the wait for
+ * `reason` (see REPLAN_ORIGIN_WAIT). Silent when it never waited.
+ */
+function noteReplanOriginResume(
+  dispatch: any,
+  state: any,
+  reason: string,
+  gaveUp = false
+) {
+  const since = session.replanOriginWaitSince[reason]
+  if (since == null) return
+  const rest = { ...session.replanOriginWaitSince }
+  delete rest[reason]
+  session.replanOriginWaitSince = rest
+  const pick = replanOriginPick(state)
+  dispatch({
+    payload: {
+      fixAccuracyM:
+        pick?.position?.coords?.accuracy != null
+          ? Math.round(pick.position.coords.accuracy)
+          : null,
+      fixAgeMs: pick ? Math.round(pick.ageMs) : null,
+      fixSource: pick?.source ?? null,
+      // The wait ended without a usable fix (stale-plan-origin only).
+      gaveUp,
+      phase: 'resume',
+      reason,
+      tMs: getCurrentTime().getTime(),
+      waitedMs: Date.now() - since
+    },
+    type: REPLAN_ORIGIN_WAIT
+  })
+}
+
+/**
  * Where a mid-trip search should start FROM. Aboard a bus, "current position"
  * is a moving mid-street point the rider can't act on, so plan from the next
  * stop ahead on their line, anchored to when the bus gets there. Otherwise plan
  * from the GPS fix, now. Shared by the isolated auto-reroute and the rider's
  * own "Search from here" so the two never disagree about where they are.
  */
-function currentPositionOrigin(state: any): {
+function currentPositionOrigin(
+  state: any,
+  options: { trustedOnly?: boolean } = {}
+): {
   date: string
   from: any
   time: string
@@ -2591,6 +3282,15 @@ function currentPositionOrigin(state: any): {
       time: format(zoned, coreUtils.time.OTP_API_TIME_FORMAT)
     }
   }
+  // Off a bus, the freshest fix good enough to plan from (51.3) — never a
+  // kilometre-wide one. An automatic re-plan (`trustedOnly`) gets null when
+  // there is none, and its caller waits for one; the rider's own search falls
+  // back to the latest fix, because they asked and a plan from roughly here
+  // beats no plan.
+  const fix =
+    replanOriginPick(state)?.position ??
+    (options.trustedOnly ? null : lastPosition)
+  if (!fix) return null
   // Anchored to NOW, so it asks for the second it is actually at (18.4).
   // `coreUtils.time.getCurrentTime` is `format(now, OTP_API_TIME_FORMAT)` and
   // would floor this request to the minute it started in.
@@ -2599,8 +3299,8 @@ function currentPositionOrigin(state: any): {
     date: coreUtils.time.getCurrentDate(homeTimezone),
     from: {
       category: 'CURRENT_LOCATION',
-      lat: lastPosition.coords.latitude,
-      lon: lastPosition.coords.longitude,
+      lat: fix.coords.latitude,
+      lon: fix.coords.longitude,
       name: 'Current location'
     },
     time: format(nowZoned, GO_MODE_API_TIME_FORMAT)
@@ -2834,8 +3534,10 @@ export function reRouteFromCurrentPosition(
     const legs = itinerary?.legs || []
     const destLeg = legs[legs.length - 1]
     // Aboard a bus this resolves to the next stop ahead at the time the bus
-    // gets there, else the GPS fix now — see currentPositionOrigin.
-    const origin = currentPositionOrigin(state)
+    // gets there, else the freshest trustworthy GPS fix — see
+    // currentPositionOrigin. Every caller is automatic, and each waits before
+    // calling when there is no such fix (51.3); this is the backstop.
+    const origin = currentPositionOrigin(state, { trustedOnly: true })
 
     // Need a real position and destination — never fabricate either.
     if (!itinerary || !lastPosition || !destLeg || !origin) {
@@ -3281,6 +3983,16 @@ export function quietReplanAccessLeg() {
       return
     }
 
+    // 51.3: never re-plan from a fix too poor to say where the rider is. The
+    // freshest fix within FIX_ACCURACY_MAX_M and a minute old is the origin;
+    // with none, wait — before admission, so the wait spends no cooldown.
+    const originPick = replanOriginPick(state)
+    if (!originPick) {
+      noteReplanOriginWait(dispatch, state, 'quiet-replan')
+      return
+    }
+    const originFix = originPick.position
+
     if (
       !quietReplanAdmitted({
         // A re-plan the rider rode away from buys a long silence — see
@@ -3305,6 +4017,7 @@ export function quietReplanAccessLeg() {
     ) {
       return
     }
+    noteReplanOriginResume(dispatch, state, 'quiet-replan')
     session.lastQuietReplanAt = nowMs
     session.quietReplanHistory = [
       ...trimQuietReplanHistory(session.quietReplanHistory, nowMs),
@@ -3319,8 +4032,8 @@ export function quietReplanAccessLeg() {
     // back. So: remember where the rider was when the question went out, and
     // record the attempt once, when a fetch resolves.
     const attemptPoint: [number, number] = [
-      lastPosition.coords.latitude,
-      lastPosition.coords.longitude
+      originFix.coords.latitude,
+      originFix.coords.longitude
     ]
     let attemptRecorded = false
     const recordReplanAttempt = (returned: boolean) => {
@@ -3361,13 +4074,13 @@ export function quietReplanAccessLeg() {
     // still opened 41.1 s and 42.7 s `behind` with only the projection in.
     const projectAt = (latencyMs: number): ProjectedOrigin =>
       projectReplanOrigin({
-        accuracyM: lastPosition.coords.accuracy,
-        headingDeg: lastPosition.coords.heading,
-        lat: lastPosition.coords.latitude,
+        accuracyM: originFix.coords.accuracy,
+        headingDeg: originFix.coords.heading,
+        lat: originFix.coords.latitude,
         latencyMs,
-        lon: lastPosition.coords.longitude,
+        lon: originFix.coords.longitude,
         nowMs,
-        speedMps: lastPosition.coords.speed
+        speedMps: originFix.coords.speed
       })
     const originFrom = (projected: ProjectedOrigin) => ({
       category: 'CURRENT_LOCATION',
@@ -3537,7 +4250,80 @@ export function quietReplanAccessLeg() {
             session.quietReplanMissStreak += 1
             return
           }
+          // 53.2a (2026-10-15 17:51:02): the refusal measured OTP's arrival
+          // (17:55:22, 4 m/s) against a frozen 17:52:30 while the bus's own
+          // record had it 1.7 km short of the stop; it came at ~17:54:35 and
+          // the rider caught it. The miss is the RIDER's test, not the access
+          // plan's: their own pace against the bus's own time.
+          const heldTripId = tripGtfsId(
+            (nextTransitLeg as any).trip?.gtfsId ??
+              (nextTransitLeg as any).tripId ??
+              null
+          )
+          const heldVehicle = heldRunVehicle(
+            getState(),
+            heldTripId,
+            getLegRouteId(nextTransitLeg as Leg),
+            boardPlace,
+            getCurrentTime().getTime()
+          )
+          const heldVerdict = riderMakesRun({
+            boardMs:
+              liveBoardForCandidate(spliced, itinerary, goMode.liveLegTimes)
+                ?.epochMs ?? Number(nextTransitLeg.startTime),
+            nowMs: getCurrentTime().getTime(),
+            riderSecondsToStop: riderSecondsToBoard(
+              best.legs,
+              0,
+              0,
+              observedBikeSpeedMps(),
+              riderLatLon(getState()),
+              boardPlace
+            ),
+            vehicle: heldVehicle
+          })
+          recordHeldRunVerdict(
+            dispatch,
+            'quiet-replan',
+            heldTripId,
+            heldVerdict,
+            heldVehicle
+          )
+          if (heldVerdict.makes === true) {
+            // The held plan is still the rider's: keep it, and no strike — this
+            // says nothing against the destination.
+            recordReplanAttempt(false)
+            return
+          }
           heldBoardMissed = true
+          // 53.2b: before the next run from the same stop, the same run
+          // further along its line.
+          const later = await catchHeldRunAtLaterStop(dispatch, getState, {
+            accessMode,
+            boardLegIndex,
+            busAtBoardMs: heldVerdict.busMs,
+            comboTo: (to) => ({ ...scopedAt(null), to }),
+            itinerary,
+            stillReplannable
+          })
+          if (later === undefined) {
+            recordReplanAttempt(false)
+            return
+          }
+          if (
+            later &&
+            !autoReplanRefusal(dispatch, getState(), later, {
+              heldBoardMissed: true,
+              projected: scopedProjection,
+              reason: 'quiet-replan-later-stop'
+            })
+          ) {
+            recordReplanAttempt(false)
+            session.quietReplanMissStreak = 0
+            session.lastQuietReplanAppliedAt = getCurrentTime().getTime()
+            dispatch(beginGoMode(later))
+            return
+          }
         } else if (refusedBecause != null) {
           recordReplanAttempt(true)
           session.quietReplanMissStreak += 1
@@ -3666,15 +4452,56 @@ export function quietReplanAccessLeg() {
 
 /**
  * Record the current "alternatives to finish the trip" as a self-contained
- * request/response pair (recording only). Fires an ISOLATED plan from the rider's
- * current position → final destination — no UI/currentQuery side effects, like
- * the onboard alight optimizer — and dispatches REROUTE_SNAPSHOT, which the
- * debug-log captures in full. On replay these are served by nearest timestamp, so
- * "Find another way" at any moment yields the alternatives real at that moment.
- * The recorded `request` (query+variables) is also what a future primed-OTP
- * re-issues to reproduce the response. Best-effort; never disrupts the trip.
+ * request/response pair, on demand (the dev console's
+ * `__captureRerouteSnapshot`, and tests). The same tick the interval runs,
+ * with the recorder forced on and the faster-route check off — see
+ * backgroundRouteTick.
  */
 export function captureRerouteSnapshot() {
+  return backgroundRouteTick({ manual: true })
+}
+
+/**
+ * The background route interval's tick (backlog 56.1, cycle 25 B2): ONE
+ * isolated plan() from the rider's position to the destination, serving two
+ * consumers.
+ *
+ * - The faster-route CHECK, off the bus, on every ride whether or not it is
+ *   recorded: the answer goes through `classifyFasterRoute` (B1) and may put
+ *   up the "6 min faster · 14" card, and — phone locked — one push. Never an
+ *   automatic change of route: the rider taps Switch or nothing changes.
+ * - The RECORDER, with trip recording on: the same answer is dispatched as
+ *   REROUTE_SNAPSHOT so a replay can serve it by timestamp, as before.
+ *
+ * Before 56.1 the request existed only while recording and nothing read its
+ * answer. The two consumers do not ask different questions, so they share the
+ * request rather than doubling the load; a tick neither wants sends nothing.
+ */
+export function backgroundRouteCheck() {
+  return backgroundRouteTick({ manual: false })
+}
+
+/** Raw OTP2 plan payload -> the app's itinerary shape, never throwing. */
+function backgroundAnswerItineraries(
+  state: any,
+  response: any,
+  combo: any
+): Itinerary[] | null {
+  if (!response?.data?.plan) return null
+  try {
+    return convertPlanResponseItineraries(response, {
+      combo,
+      config: state.otp?.config || {},
+      query: {},
+      strictModes: false,
+      validModeCombinations: null
+    }) as Itinerary[]
+  } catch {
+    return (response.data.plan.itineraries || []) as Itinerary[]
+  }
+}
+
+function backgroundRouteTick(options: { manual: boolean }) {
   return async function (dispatch: any, getState: any) {
     const state = getState()
     const goMode = state.otp?.goMode
@@ -3693,40 +4520,72 @@ export function captureRerouteSnapshot() {
     // parked phone, the last at 23:35:52.
     if (goMode?.arrivedAt != null) {
       stopRerouteSnapshotCapture()
+      if (goMode?.fasterRoute) {
+        endFasterRouteOffer(dispatch, goMode.fasterRoute, 'expired', 'arrived')
+      }
       return
     }
+    const nowMs = getCurrentTime().getTime()
+    // The card's boarding has gone: it lapses whatever this tick does next.
+    if (offerExpired(goMode?.fasterRoute, nowMs)) {
+      endFasterRouteOffer(dispatch, goMode.fasterRoute, 'expired', 'board-time')
+    }
+    // One request at a time: a tick that lands while the last answer (and its
+    // less-biking follow-up) is still out does nothing.
+    if (session.backgroundCheckInFlight) return
 
-    // Settled aboard: stretch the cadence (see
-    // REROUTE_SNAPSHOT_RIDING_INTERVAL_MS). "Settled" is all three facts
-    // together — the sticky riding fact names a trip, the vehicle match is
-    // confirmed, and the route match still has the rider on the shape — so a
-    // rider whose bus has diverted, or who never really boarded, keeps the
-    // full-rate record that a diagnosis of exactly that would need.
-    const settledAboard =
-      goMode?.riding?.tripId != null &&
-      goMode?.vehicleMatch?.match?.confidence === 'confirmed' &&
-      goMode?.routeMatch?.isOnRoute === true
-    const sinceLastMs =
-      getCurrentTime().getTime() - session.lastRerouteSnapshotAt
-    if (
+    // The RECORDER's question. Settled aboard, it stretches its cadence to
+    // REROUTE_SNAPSHOT_RIDING_INTERVAL_MS. "Settled" (56.2) is the sticky
+    // riding fact naming a trip, the route match keeping the rider on the
+    // shape, and a vehicle match of `high` or `confirmed` — `confirmed` alone
+    // never engaged on 2026-10-17, whose match stayed `high` all ride. A rider
+    // whose bus has diverted, or who never really boarded, keeps the
+    // full-rate record a diagnosis of exactly that would need.
+    const settledAboard = recorderSettledAboard({
+      confidence: goMode?.vehicleMatch?.match?.confidence,
+      isOnRoute: goMode?.routeMatch?.isOnRoute,
+      ridingTripId: goMode?.riding?.tripId
+    })
+    const sinceLastMs = nowMs - session.lastRerouteSnapshotAt
+    const recorderDue = !(
       settledAboard &&
       session.lastRerouteSnapshotAt > 0 &&
       sinceLastMs < REROUTE_SNAPSHOT_RIDING_INTERVAL_MS
-    ) {
-      return
-    }
-    session.lastRerouteSnapshotAt = getCurrentTime().getTime()
+    )
+    const record = (options.manual || isTripRecordingEnabled()) && recorderDue
+
+    // The CHECK's question: off the bus, nothing else in charge of the trip.
+    const currentLegIndex: number | null =
+      goMode?.progress?.currentLegIndex ?? null
+    const skip = options.manual
+      ? 'manual'
+      : backgroundCheckSkip({
+          arrived: false,
+          backgrounded: !!goMode?.ui?.backgrounded,
+          hasPlan:
+            remainingTransitLegs(itinerary, nowMs, currentLegIndex).length > 0,
+          isActive: !!goMode?.isActive,
+          nowMs,
+          onboardOpen: (goMode?.onboard?.status ?? 'idle') !== 'idle',
+          planInstalledAtMs: session.planInstalledAtMs,
+          rerouteSearching: goMode?.reRoute?.status === 'searching',
+          riding: goMode?.riding?.tripId != null
+        })
+    const check = skip == null
+    if (!record && !check) return
+    if (record) session.lastRerouteSnapshotAt = nowMs
 
     const { homeTimezone } = state.otp.config
     const { modes, modeSettings, numItineraries } = getBasePlanParts(state)
     // Same levers a real re-plan would carry, observed bike speed included —
     // a snapshot that queries differently from the path it exists to reproduce
-    // is not a recording of anything.
+    // is not a recording of anything. (The check corrects for the observed
+    // pace itself: referenceBikeSpeedMps below.)
     const routingPreferences = withObservedBikeSpeed(
       state.otp.currentQuery?.routingPreferences,
       observedBikeSpeedMps()
     )
-    const zoned = utcToZonedTime(getCurrentTime().getTime(), homeTimezone)
+    const zoned = utcToZonedTime(nowMs, homeTimezone)
     const from = {
       category: 'CURRENT_LOCATION',
       lat: lastPosition.coords.latitude,
@@ -3753,35 +4612,955 @@ export function captureRerouteSnapshot() {
       time: format(zoned, GO_MODE_API_TIME_FORMAT),
       to
     }
+    // What the check judges feasibility against: the fix the request was
+    // planned FROM, not the one the rider has reached when the answer lands
+    // 3-12 s later (B1, 2026-10-18).
+    const sent = {
+      fix: lastPosition,
+      nowMs,
+      planSig: itinerarySignature(itinerary)
+    }
 
+    session.backgroundCheckInFlight = true
     try {
-      const { query, response, variables } = await dispatch(
-        fetchRerouteSnapshotPlan(combo)
-      )
-      dispatch({
-        payload: {
-          // Says what this record IS, because the row that asked for the field
-          // read one of these as the request behind a swap. It is not: the
-          // capture is periodic (REROUTE_SNAPSHOT_INTERVAL_MS), nothing
-          // consumes it, and it never changes the trip. Automatic re-plans
-          // announce themselves with AUTO_REPLAN instead.
-          reason: 'periodic',
-          request: { departArrive: 'NOW', from, modes, query, to, variables },
-          response,
-          tMs: getCurrentTime().getTime()
-        },
-        type: REROUTE_SNAPSHOT
+      let answer: Itinerary[] | null = null
+      try {
+        const { query, response, variables } = await dispatch(
+          fetchRerouteSnapshotPlan(combo)
+        )
+        if (record) {
+          dispatch({
+            payload: {
+              // Whether this same answer also fed the faster-route check.
+              fasterRouteCheck: check,
+              // Says what this record IS, because the row that asked for the
+              // field read one of these as the request behind a swap. It is
+              // not: the capture is periodic (REROUTE_SNAPSHOT_INTERVAL_MS) and
+              // it never changes the trip. Automatic re-plans announce
+              // themselves with AUTO_REPLAN; a faster-route offer with
+              // FASTER_ROUTE_OFFER.
+              reason: 'periodic',
+              request: {
+                departArrive: 'NOW',
+                from,
+                modes,
+                query,
+                to,
+                variables
+              },
+              response,
+              tMs: getCurrentTime().getTime()
+            },
+            type: REROUTE_SNAPSHOT
+          })
+        }
+        answer = backgroundAnswerItineraries(getState(), response, combo)
+      } catch {
+        // best-effort — never disrupt the trip
+      }
+      if (!check || !answer) return
+
+      // The less-biking question (55.1's second query at LOW_BIKE_RELUCTANCE):
+      // once per leg, and only with a kilometre of biking left (B1: 0 new
+      // offers in 20 real re-issued requests, so not every 90 s).
+      const legKey = `${sent.planSig}#${currentLegIndex ?? -1}`
+      let lowBike: Itinerary[] = []
+      if (
+        shouldAskLowBike({
+          bikeInModes: (modes || []).some((m: any) => m?.mode === 'BICYCLE'),
+          lastLegKey: session.fasterRouteLowBikeLegKey,
+          legKey,
+          lowBikeReluctance: LOW_BIKE_RELUCTANCE,
+          remainingBikeM: remainingBikeMeters(itinerary, currentLegIndex),
+          riderBikeReluctance: routingPreferences?.bikeReluctance
+        })
+      ) {
+        session.fasterRouteLowBikeLegKey = legKey
+        try {
+          const lowCombo = {
+            ...combo,
+            routingPreferences: {
+              ...(routingPreferences || {}),
+              bikeReluctance: LOW_BIKE_RELUCTANCE
+            }
+          }
+          const { response } = await dispatch(
+            fetchRerouteSnapshotPlan(lowCombo)
+          )
+          lowBike =
+            backgroundAnswerItineraries(getState(), response, lowCombo) || []
+        } catch {
+          // best-effort
+        }
+      }
+      settleFasterRouteCheck(dispatch, getState, {
+        answer,
+        lowBike,
+        sent
       })
-    } catch {
-      // best-effort — never disrupt the trip
+    } finally {
+      session.backgroundCheckInFlight = false
+    }
+  }
+}
+
+/** The held plan's next boarding as the card times it (live, when it is). */
+function heldLiveBoard(
+  goMode: any,
+  currentLegIndex: number | null
+): { epochMs: number; tripId: string } | null {
+  const held: Itinerary | null = goMode?.activeItinerary ?? null
+  if (!held) return null
+  const from =
+    currentLegIndex != null && currentLegIndex >= 0 ? currentLegIndex : 0
+  return liveBoardForCandidate(
+    { ...held, legs: (held.legs || []).slice(from) } as Itinerary,
+    held,
+    goMode?.liveLegTimes
+  )
+}
+
+/**
+ * Judge one background answer and put the card up, update it in place, or
+ * take it down. Runs at the ANSWER, against the trip as it is now — a swap,
+ * an arrival, the onboard flow or a planner browse that happened while the
+ * request was out makes the answer moot — but with feasibility measured at
+ * the fix the request was sent from.
+ */
+function settleFasterRouteCheck(
+  dispatch: any,
+  getState: any,
+  ctx: {
+    answer: Itinerary[]
+    lowBike: Itinerary[]
+    sent: { fix: GeolocationPosition; nowMs: number; planSig: string }
+  }
+): void {
+  const goMode = getState().otp?.goMode
+  const held: Itinerary | null = goMode?.activeItinerary ?? null
+  const nowMs = getCurrentTime().getTime()
+  if (!held || itinerarySignature(held) !== ctx.sent.planSig) return
+  const currentLegIndex: number | null =
+    goMode?.progress?.currentLegIndex ?? null
+  if (
+    backgroundCheckSkip({
+      arrived: goMode?.arrivedAt != null,
+      backgrounded: !!goMode?.ui?.backgrounded,
+      hasPlan: true,
+      isActive: !!goMode?.isActive,
+      nowMs,
+      onboardOpen: (goMode?.onboard?.status ?? 'idle') !== 'idle',
+      planInstalledAtMs: null,
+      rerouteSearching: goMode?.reRoute?.status === 'searching',
+      riding: goMode?.riding?.tripId != null
+    })
+  ) {
+    return
+  }
+  const coords: any = ctx.sent.fix?.coords
+  const liveBoard = heldLiveBoard(goMode, currentLegIndex)
+  const input: FasterRouteInput = {
+    answer: ctx.answer.concat(ctx.lowBike),
+    current: held,
+    currentLegIndex,
+    headingDeg: coords?.heading ?? null,
+    liveBoardEpochMs: liveBoard?.epochMs ?? null,
+    liveBoardTripId: liveBoard?.tripId ?? null,
+    // Plan-dead suppression (B1): an offer measured against a bus the rider
+    // is not going to catch is the missed-bus path's business, not this one's.
+    missedBusRecoveryActive:
+      session.missedBusRerouteAttempt != null ||
+      (goMode?.reRoute?.reason === 'missed-bus' &&
+        goMode?.reRoute?.status !== 'idle'),
+    nowMs,
+    position:
+      coords?.latitude != null && coords?.longitude != null
+        ? [coords.latitude, coords.longitude]
+        : null,
+    // The held plan's own bike pace (B1): the query rides at the OBSERVED
+    // pace, which a stop-and-wait leg drags down — without this, 7 of B1's
+    // fixture offers were fake savings on the rider's own closing bike leg.
+    referenceBikeSpeedMps: bikeSpeedOf(held),
+    riding: goMode?.riding?.tripId != null,
+    speedMps: coords?.speed ?? null
+  }
+  const verdict = classifyFasterRoute(input)
+  const lowSet = new Set(ctx.lowBike)
+  const offerOf = (v: FasterRouteVerdict, offerId: string) =>
+    offerFromVerdict(v, {
+      nowMs,
+      offerId,
+      source: v.candidate && lowSet.has(v.candidate) ? 'low-bike' : 'ordinary'
+    })
+  const shown: FasterRouteOffer | null = goMode?.fasterRoute ?? null
+
+  if (verdict.why === 'offer') {
+    // The card up already names this route: update it in place.
+    if (shown && shown.routeSet === verdict.routeSet) {
+      updateFasterRouteOffer(
+        dispatch,
+        getState,
+        offerOf(verdict, shown.offerId),
+        shown
+      )
+      return
+    }
+    const fresh = offerOf(verdict, `fr-${++session.fasterRouteOfferSeq}`)
+    if (fresh) {
+      const gate = latchAllows(session.fasterRouteLatch, offerKeyOf(fresh))
+      if (gate.allow) {
+        raiseFasterRouteOffer(dispatch, getState, fresh, gate.push, shown)
+        return
+      }
+    }
+    // A different route wins this answer but may not be raised (the latch).
+    // The card up stands if the answer still offers ITS route.
+    if (shown) {
+      const without = (input.answer || []).filter(
+        (it) => routeSetOf(it) !== verdict.routeSet
+      )
+      const again = classifyFasterRoute({ ...input, answer: without })
+      if (again.why === 'offer' && again.routeSet === shown.routeSet) {
+        updateFasterRouteOffer(
+          dispatch,
+          getState,
+          offerOf(again, shown.offerId),
+          shown
+        )
+        return
+      }
+    }
+  }
+  // A later check no longer sees the offer on screen.
+  if (shown && shown.kind !== 'aboard') {
+    endFasterRouteOffer(dispatch, shown, 'expired', 'not-seen')
+  }
+}
+
+/** The scalar record of one step in an offer's life (FASTER_ROUTE_OFFER). */
+function recordFasterRouteOffer(
+  dispatch: any,
+  offer: FasterRouteOffer,
+  outcome: 'expired' | 'kept' | 'offered' | 'switched',
+  extra: { push?: 'none' | 'replaced' | 'sent'; why?: string } = {}
+): void {
+  const latch = session.fasterRouteLatch
+  dispatch({
+    payload: {
+      // Aboard (B4): faster | lessBike, and the stop the offer gets off at.
+      aboardKind: offer.kind === 'aboard' ? offerSubKind(offer) : null,
+
+      addedBikeKm: Math.round(offer.addedBikeM / 100) / 10,
+      bikeSavedKm: Math.round(offer.bikeSavedM / 100) / 10,
+      kind: offer.kind,
+      laterMin: Math.round(offer.laterMs / 6000) / 10,
+      offerId: offer.offerId,
+      offers: latch.offers,
+      outcome,
+      push: extra.push ?? null,
+      pushes: latch.pushes,
+      route: offer.routeLabel || 'bike',
+      routeSet: offer.routeSet,
+      savingMin: Math.round(offer.savingMs / 6000) / 10,
+      source: offer.source,
+      stop: offer.kind === 'aboard' ? offer.stopName ?? null : null,
+      tMs: getCurrentTime().getTime(),
+      why: extra.why ?? null
+    },
+    type: FASTER_ROUTE_OFFER
+  })
+}
+
+function clearFasterRouteExpiry(): void {
+  if (session.fasterRouteExpiryTimerId) {
+    clearTimeout(session.fasterRouteExpiryTimerId)
+    session.fasterRouteExpiryTimerId = null
+  }
+}
+
+/** Lapse the card at its boarding time, to the second, between checks. */
+function armFasterRouteExpiry(
+  dispatch: any,
+  getState: any,
+  offer: FasterRouteOffer
+): void {
+  clearFasterRouteExpiry()
+  if (offer.expiresAtMs == null) return
+  const delay = Math.max(0, offer.expiresAtMs - getCurrentTime().getTime())
+  session.fasterRouteExpiryTimerId = setTimeout(() => {
+    session.fasterRouteExpiryTimerId = null
+    const cur: FasterRouteOffer | null =
+      getState().otp?.goMode?.fasterRoute ?? null
+    if (
+      cur?.offerId === offer.offerId &&
+      offerExpired(cur, getCurrentTime().getTime())
+    ) {
+      endFasterRouteOffer(dispatch, cur, 'expired', 'board-time')
+    }
+  }, delay)
+}
+
+/** Put a NEW offer up (replacing any card already up). */
+function raiseFasterRouteOffer(
+  dispatch: any,
+  getState: any,
+  offer: FasterRouteOffer,
+  pushAllowed: boolean,
+  shown: FasterRouteOffer | null
+): void {
+  // The push is for a phone that is not showing the app; on screen, the card
+  // is the whole of it.
+  const hidden =
+    typeof document !== 'undefined' && document.visibilityState !== 'visible'
+  const push = pushAllowed && hidden && !isReplayActive()
+  const pushedBefore = session.fasterRouteLatch.pushes > 0
+  if (shown) endFasterRouteOffer(dispatch, shown, 'expired', 'replaced', true)
+  session.fasterRouteLatch = latchRecordOffer(
+    session.fasterRouteLatch,
+    offerKeyOf(offer),
+    push
+  )
+  dispatch({ payload: offer, type: SET_FASTER_ROUTE_OFFER })
+  armFasterRouteExpiry(dispatch, getState, offer)
+  if (push) sendPush(buildFasterRouteNotice(offer))
+  recordFasterRouteOffer(dispatch, offer, 'offered', {
+    push: push ? (pushedBefore ? 'replaced' : 'sent') : 'none'
+  })
+}
+
+/** Refresh the card up in place: same offer, this answer's numbers. */
+function updateFasterRouteOffer(
+  dispatch: any,
+  getState: any,
+  offer: FasterRouteOffer | null,
+  shown: FasterRouteOffer
+): void {
+  if (!offer) return
+  const next = {
+    ...offer,
+    offerId: shown.offerId,
+    raisedAtMs: shown.raisedAtMs
+  }
+  dispatch({ payload: next, type: SET_FASTER_ROUTE_OFFER })
+  armFasterRouteExpiry(dispatch, getState, next)
+}
+
+/**
+ * Take the card down — the rider answered it, or it lapsed — and the push
+ * with it. `keepPush` when a new offer is about to replace both on the same id.
+ */
+function endFasterRouteOffer(
+  dispatch: any,
+  offer: FasterRouteOffer,
+  outcome: 'expired' | 'kept' | 'switched',
+  why: string | null = null,
+  keepPush = false
+): void {
+  clearFasterRouteExpiry()
+  dispatch({
+    payload: { offerId: offer.offerId },
+    type: CLEAR_FASTER_ROUTE_OFFER
+  })
+  if (!keepPush && session.fasterRouteLatch.pushes > 0) {
+    cancelPush(FASTER_ROUTE_NOTICE_ID)
+  }
+  recordFasterRouteOffer(dispatch, offer, outcome, why ? { why } : {})
+}
+
+/**
+ * The rider's "Switch" on the faster-route card: start Go Mode on the offered
+ * itinerary. The ONLY way an offer changes the trip. Recorded as an
+ * AUTO_REPLAN with `autoApply: false` — the rider's choice, not the app's —
+ * so the stream shows the swap and why, and the storm counter (which counts
+ * `autoApply: true`) does not.
+ */
+export function acceptFasterRoute() {
+  return async function (dispatch: any, getState: any) {
+    const goMode = getState().otp?.goMode
+    const offer: FasterRouteOffer | null = goMode?.fasterRoute ?? null
+    if (!goMode?.isActive || !offer) return
+    dispatch(
+      recordGoModeControlTap('faster-route-switch', {
+        kind: offer.kind,
+        routeSet: offer.routeSet
+      })
+    )
+    // The aboard get-off offer switches differently (B4): a splice of the bus
+    // the rider is on, not a fresh plan from where they stand.
+    if (offer.kind === 'aboard') {
+      await acceptAboardFasterRoute(dispatch, getState, offer)
+      return
+    }
+    // Its boarding has gone while the card was up: nothing to switch to.
+    if (offerExpired(offer, getCurrentTime().getTime())) {
+      endFasterRouteOffer(dispatch, offer, 'expired', 'board-time')
+      return
+    }
+    const coords = goMode?.tracking?.lastPosition?.coords
+    dispatch({
+      payload: {
+        accepted: true,
+        autoApply: false,
+        heldBoardMissed: false,
+        originGapM: coords
+          ? originGapMeters(offer.candidate, [
+              coords.latitude,
+              coords.longitude
+            ])
+          : null,
+        planLeftByRider: false,
+        projectedAtMs: null,
+        projectedM: 0,
+        reason: 'faster-route',
+        refusedBecause: null,
+        tMs: getCurrentTime().getTime()
+      },
+      type: AUTO_REPLAN
+    })
+    endFasterRouteOffer(dispatch, offer, 'switched')
+    await dispatch(beginGoMode(offer.candidate))
+  }
+}
+
+/**
+ * The rider's "Keep mine": the card goes, the rider's route stays, and the
+ * latch holds the offer they turned down — nothing is raised again this ride
+ * unless it beats it by another 3 min or 1 km (B1's latch).
+ */
+export function keepCurrentRoute() {
+  return function (dispatch: any, getState: any) {
+    const offer: FasterRouteOffer | null =
+      getState().otp?.goMode?.fasterRoute ?? null
+    if (!offer) return
+    dispatch(
+      recordGoModeControlTap('faster-route-keep', {
+        kind: offer.kind,
+        routeSet: offer.routeSet
+      })
+    )
+    session.fasterRouteLatch = {
+      ...session.fasterRouteLatch,
+      held: offerKeyOf(offer)
+    }
+    endFasterRouteOffer(dispatch, offer, 'kept')
+  }
+}
+
+/**
+ * A tap on the card's words: look at the offer next to the rider's own route
+ * in the planner (showRerouteCandidates), the trip running underneath. The
+ * card stays up — looking is not answering.
+ */
+export function viewFasterRoute() {
+  return function (dispatch: any, getState: any): boolean {
+    const offer: FasterRouteOffer | null =
+      getState().otp?.goMode?.fasterRoute ?? null
+    if (!offer || offer.kind === 'aboard') return false
+    dispatch(
+      recordGoModeControlTap('faster-route-view', {
+        kind: offer.kind,
+        routeSet: offer.routeSet
+      })
+    )
+    return dispatch(
+      showRerouteCandidates(
+        [offer.candidate, offer.baseline].filter(Boolean) as Itinerary[]
+      )
+    )
+  }
+}
+
+/* ------------------------------------------------------------------------ */
+/* Aboard: "4 min faster · off at 30th Ave" (56.1, cycle 25 B4)              */
+/* ------------------------------------------------------------------------ */
+
+/** Missed-bus recovery is running: the plan in hand is already dead. */
+function missedBusRecoveryActive(goMode: any): boolean {
+  return (
+    session.missedBusRerouteAttempt != null ||
+    (goMode?.reRoute?.reason === 'missed-bus' &&
+      goMode?.reRoute?.status !== 'idle')
+  )
+}
+
+/** The held plan's leg for the bus the rider is riding (by trip), or -1. */
+function aboardLegIndexOf(itinerary: Itinerary | null, tripId: string): number {
+  return ((itinerary?.legs || []) as Leg[]).findIndex(
+    (leg) => leg.transitLeg && tripIdsMatch(legTripId(leg), tripId)
+  )
+}
+
+const placeStopId = (place: any): string | null =>
+  place?.stop?.gtfsId ?? place?.stopId ?? place?.stop?.id ?? null
+
+/**
+ * Where on the boarded trip the rider is, for the aboard window: the boarding
+ * stop, the bus's next stop (the optimizer's own anchor) and the planned
+ * alight stop, by index into the trip's stop times — and the bus's arrival at
+ * the planned stop.
+ */
+function aboardWindowFor(
+  trip: any,
+  vehicle: any,
+  leg: any,
+  ctx: {
+    boardedAtMs: number | null
+    lastPosition: any
+    nowMs: number
+    to: { lat: number; lon: number }
+  }
+): {
+  downstream: DownstreamStop[]
+  why: ReturnType<typeof aboardCheckWindow>
+} {
+  const stopTimes = trip?.stopTimes || []
+  const coords = ctx.lastPosition?.coords
+  const downstream = getDownstreamStops(
+    trip,
+    vehicle,
+    coords ? { lat: coords.latitude, lon: coords.longitude } : null,
+    ctx.to,
+    ctx.nowMs
+  )
+  const plannedIdx = findStopTimeIndex(
+    stopTimes,
+    placeStopId(leg?.to),
+    leg?.to?.name
+  )
+  const boardIdx = findStopTimeIndex(
+    stopTimes,
+    placeStopId(leg?.from),
+    leg?.from?.name
+  )
+  const planned = downstream.find((d) => d.stopIndexInTrip === plannedIdx)
+  return {
+    downstream,
+    why: aboardCheckWindow({
+      anchorIdx: downstream.length ? downstream[0].stopIndexInTrip : null,
+      boardedAtMs: ctx.boardedAtMs,
+      boardIdx,
+      nowMs: ctx.nowMs,
+      plannedArrivalMs: planned?.busArrivalEpoch ?? null,
+      plannedIdx
+    })
+  }
+}
+
+/**
+ * The aboard get-off check (backlog 56.1, rider Q4, cycle 25 B4): on the bus,
+ * is there a stop to get off at and continue that gets the rider in 3+ min
+ * sooner, or about as soon (±2 min) with 1 km+ less biking? If so ONE card —
+ * "4 min faster · off at 30th Ave" — and, phone locked, one push. Never an
+ * automatic change: the rider taps Switch or nothing changes.
+ *
+ * The question is the onboard optimizer's (optimizeAlightFromTrip), asked
+ * read-only: no onboard UI state (`updateOnboardState` off — a non-idle
+ * onboard status would put the chooser over the live trip), no reroute
+ * bookkeeping (no startReroute: this is not a re-plan, and reRoute's gating
+ * must not see one). The answer is judged by B1's compareAlightOffer, whose
+ * baseline is "off at the planned stop, onto the planned onward trip" in the
+ * same answer — and not at all when that connection is already lost
+ * (aboardPlanDeadWhy).
+ *
+ * Cost per check: one trip read (findTrip) plus one onward plan per candidate
+ * stop — the sampled five plus the planned stop and the three before it, 6-9.
+ * So it asks every ABOARD_CHECK_INTERVAL_MS (360 s), only from two stops after
+ * boarding, and stops with two stops or four minutes to go. Out of that window
+ * on the trip already held it sends nothing at all.
+ *
+ * Run on the background route interval's timer, beside backgroundRouteCheck;
+ * exported for tests.
+ */
+export function aboardRouteCheck() {
+  return async function (dispatch: any, getState: any): Promise<void> {
+    const state = getState()
+    const goMode = state.otp?.goMode
+    const riding: RidingState | null = goMode?.riding ?? null
+    const shown: FasterRouteOffer | null = goMode?.fasterRoute ?? null
+    // An aboard offer is about one bus: off it, or on another, it is gone.
+    if (
+      shown?.kind === 'aboard' &&
+      !(riding?.tripId && tripIdsMatch(riding.tripId, shown.aboard?.tripId))
+    ) {
+      endFasterRouteOffer(dispatch, shown, 'expired', 'not-aboard')
+    }
+    if (!goMode?.isActive || !riding?.tripId || goMode?.arrivedAt != null) {
+      return
+    }
+    if (session.aboardCheckInFlight) return
+    const nowMs = getCurrentTime().getTime()
+    if (
+      backgroundCheckSkip({
+        arrived: false,
+        backgrounded: !!goMode?.ui?.backgrounded,
+        hasPlan: true,
+        isActive: true,
+        nowMs,
+        onboardOpen: (goMode?.onboard?.status ?? 'idle') !== 'idle',
+        planInstalledAtMs: session.planInstalledAtMs,
+        rerouteSearching: goMode?.reRoute?.status === 'searching',
+        riding: false
+      })
+    ) {
+      return
+    }
+    // The plan is already dead: the missed-bus path has it. Nothing is asked.
+    if (missedBusRecoveryActive(goMode)) return
+    const tripId = riding.tripId
+    if (
+      session.aboardCheckTripId != null &&
+      tripIdsMatch(session.aboardCheckTripId, tripId) &&
+      nowMs - session.aboardCheckLastAtMs < ABOARD_CHECK_INTERVAL_MS
+    ) {
+      return
+    }
+    const itinerary: Itinerary | null = goMode?.activeItinerary ?? null
+    const legs = (itinerary?.legs || []) as Leg[]
+    // The plan has to be riding THIS bus. When it is not (an earlier or later
+    // run than planned), the boarded-earlier re-plan owns the trip.
+    const aboardLegIndex = aboardLegIndexOf(itinerary, tripId)
+    const leg: any = legs[aboardLegIndex]
+    const destLeg: any = legs[legs.length - 1]
+    if (aboardLegIndex < 0 || !placeStopId(leg?.to) || !destLeg?.to) return
+    const to = {
+      lat: destLeg.to.lat,
+      lon: destLeg.to.lon,
+      name: destLeg.to.name
+    }
+    const windowCtx = () => ({
+      boardedAtMs: riding.boardedAt ?? null,
+      lastPosition: getState().otp?.goMode?.tracking?.lastPosition ?? null,
+      // The optimizer's own clock (wall time; see optimizeAlightFromTrip).
+      nowMs: Date.now(),
+      to
+    })
+    // Out of the window on the stop times already held: ask nothing, and do
+    // not spend the cadence slot.
+    const held = state.otp?.transitIndex?.trips?.[tripId]
+    if (held?.stopTimes?.length) {
+      const pre = aboardWindowFor(
+        held,
+        aboardVehicleContext(state, riding, tripId),
+        leg,
+        windowCtx()
+      )
+      if (pre.why) return
+    }
+
+    session.aboardCheckInFlight = true
+    session.aboardCheckLastAtMs = nowMs
+    session.aboardCheckTripId = tripId
+    const sentSig = itinerarySignature(itinerary as Itinerary)
+    try {
+      try {
+        await dispatch(findTrip({ tripId }))
+      } catch {
+        // the held read, if any, is used below
+      }
+      const trip = getState().otp?.transitIndex?.trips?.[tripId]
+      if (!trip?.stopTimes?.length) return
+      const vehicle = aboardVehicleContext(getState(), riding, tripId)
+      if (aboardWindowFor(trip, vehicle, leg, windowCtx()).why) return
+
+      // The planned stop and the three before it, always (53.1's reason: the
+      // even five-stop sample can step over the one stop that makes a
+      // connection).
+      const stopTimes = trip.stopTimes || []
+      const plannedIdx = findStopTimeIndex(
+        stopTimes,
+        placeStopId(leg.to),
+        leg.to?.name
+      )
+      const alsoAskStopIds =
+        plannedIdx >= 0
+          ? stopTimes
+              .slice(Math.max(0, plannedIdx - 3), plannedIdx + 1)
+              .map((st: any) => st?.stop?.id ?? st?.stop?.gtfsId)
+              .filter(Boolean)
+          : []
+      let settled: {
+        downstream: DownstreamStop[]
+        nowMs: number
+        results: AlightCandidateResult[]
+      } | null = null
+      await dispatch(
+        optimizeAlightFromTrip({
+          alsoAskStopIds,
+          keepRouteId: onwardTransitRouteId(itinerary as Itinerary, {
+            afterLegIndex: aboardLegIndex
+          }),
+          limit: 50,
+          onSettled: (results, downstream, at) => {
+            settled = { downstream, nowMs: at, results }
+          },
+          to,
+          trip,
+          // Read-only: never the onboard UI, never reRoute.
+          updateOnboardState: false,
+          vehicle
+        })
+      )
+      if (!settled) return
+      settleAboardCheck(dispatch, getState, {
+        aboardLegIndex,
+        sentSig,
+        settled,
+        trip,
+        tripId,
+        vehicle
+      })
+    } finally {
+      session.aboardCheckInFlight = false
     }
   }
 }
 
 /**
- * Start periodic reroute-snapshot capture (recording sessions only). Cadence is
- * the knob (each tick is a real plan() call); overridable via
- * localStorage.otpRerouteSnapshotMs for testing.
+ * Judge one aboard check's answers and put the card up, update it in place, or
+ * take it down — against the trip as it is NOW: a swap, a new bus, the onboard
+ * flow or a reroute that happened while the plans were out makes them moot.
+ */
+function settleAboardCheck(
+  dispatch: any,
+  getState: any,
+  ctx: {
+    aboardLegIndex: number
+    sentSig: string
+    settled: {
+      downstream: DownstreamStop[]
+      nowMs: number
+      results: AlightCandidateResult[]
+    }
+    trip: any
+    tripId: string
+    vehicle: any
+  }
+): void {
+  const goMode = getState().otp?.goMode
+  const held: Itinerary | null = goMode?.activeItinerary ?? null
+  const nowMs = getCurrentTime().getTime()
+  if (!held || itinerarySignature(held) !== ctx.sentSig) return
+  if (
+    !goMode?.riding?.tripId ||
+    !tripIdsMatch(goMode.riding.tripId, ctx.tripId)
+  )
+    return
+  if (
+    goMode?.arrivedAt != null ||
+    backgroundCheckSkip({
+      arrived: false,
+      backgrounded: !!goMode?.ui?.backgrounded,
+      hasPlan: true,
+      isActive: !!goMode?.isActive,
+      nowMs,
+      onboardOpen: (goMode?.onboard?.status ?? 'idle') !== 'idle',
+      planInstalledAtMs: null,
+      rerouteSearching: goMode?.reRoute?.status === 'searching',
+      riding: false
+    })
+  ) {
+    return
+  }
+  const legs = (held.legs || []) as Leg[]
+  const leg: any = legs[ctx.aboardLegIndex]
+  const plannedStopId = placeStopId(leg?.to) as string
+  const heldTail = legs.slice(ctx.aboardLegIndex + 1)
+  const onwardOffset = heldTail.findIndex((l) => l.transitLeg)
+  const onward = onwardOffset >= 0 ? heldTail[onwardOffset] : null
+  const onwardLive =
+    onwardOffset >= 0
+      ? goMode?.liveLegTimes?.[ctx.aboardLegIndex + 1 + onwardOffset]
+      : null
+  const { downstream, results } = ctx.settled
+  const plannedResult = results.find((r) => r && r.stopId === plannedStopId)
+  const plannedStopArrivalMs =
+    plannedResult?.busArrivalEpoch ??
+    downstream.find((d) => d.stop?.id === plannedStopId)?.busArrivalEpoch ??
+    null
+  const shown: FasterRouteOffer | null = goMode?.fasterRoute ?? null
+  const endShownAboard = (why: string) => {
+    if (shown?.kind === 'aboard') {
+      endFasterRouteOffer(dispatch, shown, 'expired', why)
+    }
+  }
+
+  // Plan-dead (B1 found the aboard comparator had none): an offer measured
+  // against a connection the rider is not going to make is not an offer.
+  const dead = aboardPlanDeadWhy({
+    heldTail,
+    missedBusRecoveryActive: missedBusRecoveryActive(goMode),
+    nowMs: ctx.settled.nowMs,
+    onwardLiveBoardMs:
+      onwardLive?.boardRealtime && !onwardLive.boardIsFloor
+        ? onwardLive.boardEpoch
+        : null,
+    plannedStopArrivalMs,
+    plannedStopId,
+    results
+  })
+  if (dead) {
+    endShownAboard('plan-dead')
+    return
+  }
+
+  const judge = (rs: AlightCandidateResult[]) =>
+    compareAlightOffer({
+      boarded: { routeId: ctx.vehicle?.routeId ?? null, tripId: ctx.tripId },
+      downstream,
+      nowMs: ctx.settled.nowMs,
+      plannedOnwardTripId: onward ? legTripId(onward) : null,
+      plannedStopId,
+      results: rs
+    })
+  const lastPosition = goMode?.tracking?.lastPosition || null
+  const offerOf = (v: ReturnType<typeof judge>, offerId: string) => {
+    if (v.why !== 'offer' || !v.candidate) return null
+    const offer = aboardOfferFromVerdict(v, {
+      nowMs,
+      offerId,
+      spliced: buildOnboardItinerary(
+        ctx.trip,
+        ctx.vehicle,
+        v.candidate,
+        lastPosition
+      ),
+      tripId: ctx.tripId
+    })
+    // Too close to ring the bell for: it would lapse within the minute.
+    return offer && !offerExpired(offer, nowMs + ABOARD_OFFER_LEAD_MS)
+      ? offer
+      : null
+  }
+  const verdict = judge(results)
+  const fresh = offerOf(verdict, `fr-${session.fasterRouteOfferSeq + 1}`)
+  if (fresh) {
+    if (shown?.kind === 'aboard' && shown.routeSet === fresh.routeSet) {
+      updateFasterRouteOffer(dispatch, getState, fresh, shown)
+      return
+    }
+    const gate = latchAllows(session.fasterRouteLatch, offerKeyOf(fresh))
+    if (gate.allow) {
+      session.fasterRouteOfferSeq++
+      raiseFasterRouteOffer(dispatch, getState, fresh, gate.push, shown)
+      return
+    }
+    // The winner may not be raised (the latch). The card up stands if this
+    // answer still offers ITS stop and onward route.
+    if (shown?.kind === 'aboard' && shown.aboard) {
+      const winner = verdict.candidate
+      const without = results.map((r) =>
+        r && winner && r.stopId === winner.stopId
+          ? {
+              ...r,
+              itineraries: (r.itineraries || []).filter(
+                (it) => routeSetOf(it) !== routeSetOf(winner.itinerary)
+              )
+            }
+          : r
+      )
+      const again = offerOf(judge(without), shown.offerId)
+      if (again && again.routeSet === shown.routeSet) {
+        updateFasterRouteOffer(dispatch, getState, again, shown)
+        return
+      }
+    }
+  }
+  // A later check no longer sees the offer on screen.
+  endShownAboard('not-seen')
+}
+
+/**
+ * Switch on an aboard offer: splice the ride — stay on this bus to the
+ * offered stop, then the onward plan from it — and install it the way the
+ * aboard re-plan does (buildOnboardItinerary + beginGoMode +
+ * reconfirmBoardedVehicle, the riding fact re-asserted on the spliced bus
+ * leg, live leg times anchored at once). The stop times are read again from
+ * the transit index and the vehicle context rebuilt, so the splice starts
+ * where the bus is now, not where it was when the card went up.
+ */
+async function acceptAboardFasterRoute(
+  dispatch: any,
+  getState: any,
+  offer: FasterRouteOffer
+): Promise<void> {
+  const state = getState()
+  const goMode = state.otp?.goMode
+  const riding: RidingState | null = goMode?.riding ?? null
+  const a = offer.aboard
+  if (!a || !riding?.tripId || !tripIdsMatch(riding.tripId, a.tripId)) {
+    endFasterRouteOffer(dispatch, offer, 'expired', 'not-aboard')
+    return
+  }
+  if (offerExpired(offer, getCurrentTime().getTime())) {
+    endFasterRouteOffer(dispatch, offer, 'expired', 'board-time')
+    return
+  }
+  const trip = state.otp?.transitIndex?.trips?.[riding.tripId]
+  if (!trip?.stopTimes?.length) {
+    endFasterRouteOffer(dispatch, offer, 'expired', 'no-trip')
+    return
+  }
+  const vehicle = aboardVehicleContext(state, riding, riding.tripId)
+  const spliced = buildOnboardItinerary(
+    trip,
+    vehicle,
+    {
+      arrivalIsFloor: a.arrivalIsFloor,
+      busArrivalEpoch: a.busArrivalEpoch,
+      itinerary: a.itinerary,
+      stopId: a.stopId,
+      stopName: a.stopName
+    },
+    goMode?.tracking?.lastPosition || null
+  )
+  dispatch({
+    payload: {
+      accepted: true,
+      autoApply: false,
+      heldBoardMissed: false,
+      originGapM: null,
+      planLeftByRider: false,
+      projectedAtMs: null,
+      projectedM: 0,
+      reason: 'faster-route-aboard',
+      refusedBecause: null,
+      tMs: getCurrentTime().getTime()
+    },
+    type: AUTO_REPLAN
+  })
+  endFasterRouteOffer(dispatch, offer, 'switched')
+  await dispatch(beginGoMode(spliced))
+  // beginGoMode resets the vehicle match; re-lock the boarded bus.
+  reconfirmBoardedVehicle(dispatch, vehicle)
+  // ...and re-assert the riding fact on the spliced bus leg, as the aboard
+  // re-plan does: START_GO_MODE's reanchorRiding may have nothing to carry.
+  const busLegIndex = aboardLegIndexOf(spliced, riding.tripId)
+  const ridingAfter: RidingState | null = getState().otp?.goMode?.riding ?? null
+  dispatch(
+    setRiding({
+      boardedAt: ridingAfter?.boardedAt ?? riding.boardedAt,
+      headsign:
+        (spliced.legs?.[busLegIndex] as any)?.headsign ??
+        riding.headsign ??
+        null,
+      legIndex: busLegIndex,
+      offRouteSince: null,
+      routeId: riding.routeId ?? null,
+      routeShortName: riding.routeShortName ?? null,
+      tripId: riding.tripId,
+      vehicleId: riding.vehicleId ?? vehicle.vehicleId ?? null
+    })
+  )
+  if (!isReplayActive()) {
+    await dispatch(refreshLiveLegTimes())
+  }
+}
+
+/**
+ * Start the background route interval (56.1: every Go Mode trip, recording or
+ * not — see backgroundRouteCheck). Cadence is the knob (each tick that sends is
+ * a real plan() call); overridable via localStorage.otpRerouteSnapshotMs for
+ * testing.
  */
 function startRerouteSnapshotCapture(dispatch: any) {
   if (session.rerouteSnapshotIntervalId) return
@@ -3795,7 +5574,10 @@ function startRerouteSnapshotCapture(dispatch: any) {
     // ignore
   }
   session.rerouteSnapshotIntervalId = setInterval(() => {
-    dispatch(captureRerouteSnapshot())
+    dispatch(backgroundRouteCheck())
+    // The same timer drives the aboard get-off check (56.1 B4); it keeps its
+    // own 360 s cadence and does nothing off the bus.
+    dispatch(aboardRouteCheck())
   }, intervalMs)
 }
 
@@ -3852,12 +5634,53 @@ function gtfsTypeToMode(type: number | undefined): string {
 }
 
 /**
+ * Drop a kept riding fact that is no longer about now (54.1, 15.3), together
+ * with the confirmed vehicle match it would otherwise re-assert. Returns true
+ * when it dropped one. See ridingFactIsCurrent for the rules and the
+ * 2026-10-15 ride they come from.
+ */
+function dropStaleRidingFact(dispatch: any, getState: any): boolean {
+  const state = getState()
+  const riding: RidingState | null = state.otp?.goMode?.riding ?? null
+  if (!riding) return false
+  const transitIndex = state.otp?.transitIndex
+  const reason = ridingFactStaleReason({
+    nowMs: Date.now(),
+    riding,
+    trip: riding.tripId ? transitIndex?.trips?.[riding.tripId] ?? null : null,
+    vehicles: transitIndex?.routes?.[riding.routeId ?? '']?.vehicles ?? null
+  })
+  if (!reason) return false
+  // eslint-disable-next-line no-console
+  console.log(
+    `[go-mode] dropped kept riding fact ${riding.vehicleId ?? '-'} / ` +
+      `${riding.tripId ?? '-'}: ${reason}`
+  )
+  dispatch(clearRiding())
+  const match: any = state.otp?.goMode?.vehicleMatch?.match
+  if (
+    match?.confidence === 'confirmed' &&
+    ((riding.vehicleId != null && match.vehicleId === riding.vehicleId) ||
+      (riding.tripId != null && match.tripId === riding.tripId))
+  ) {
+    dispatch(clearVehicleMatch())
+  }
+  return true
+}
+
+/**
  * "I'm already on the bus" — entry point. Captures the rider's trip origin,
  * navigates to the Go Mode screen, starts GPS, and kicks off discovery of the
  * live vehicle they are aboard. A destination must already be set on the query.
  */
 export function beginOnboardFlow() {
   return function (dispatch: any, getState: any) {
+    // A remembered train is only re-adopted while it is current (54.1, 15.3):
+    // on 2026-10-15 this branch silently re-adopted a 3-hour-old northbound
+    // Blue Line fact for a rider going south, and the get-off list offered
+    // stations behind them. Dropped first, so nothing below — the kept route,
+    // the silent re-adopt, the confirmed-match branch — can read it.
+    dropStaleRidingFact(dispatch, getState)
     const before = getState()
     const originalFrom = before.otp.currentQuery?.from || null
     // Read the rider's plan BEFORE dispatching: BEGIN_ONBOARD_FLOW nulls
@@ -3924,7 +5747,13 @@ export function beginOnboardFlow() {
           vehicleId
         })
       )
-      dispatch(loadOnboardScheduleAndOptimize(riding.tripId))
+      // A real vehicle (not a route-only guess) on the plan's own train goes
+      // straight to guidance for the plan's stop (54.1, rider's Q4 = A).
+      dispatch(
+        loadOnboardScheduleAndOptimize(riding.tripId, {
+          planned: ridingFactIsEvidenced(riding) ? planned : null
+        })
+      )
       return
     }
     if (riding?.routeId) {
@@ -3967,7 +5796,7 @@ export function beginOnboardFlow() {
           vehicleId: match.vehicleId
         })
       )
-      dispatch(loadOnboardScheduleAndOptimize(match.tripId))
+      dispatch(loadOnboardScheduleAndOptimize(match.tripId, { planned }))
       return
     }
 
@@ -4021,6 +5850,25 @@ export function discoverNearbyVehicles(attempt = 0) {
       return
     }
 
+    await dispatch(discoverVehiclesOnNearbyRoutes(pos))
+    dispatch(setOnboardStatus('awaiting-selection'))
+    dispatch(showBoardingPromptAction())
+  }
+}
+
+/**
+ * Live vehicles near the rider from EVERY route around them, not only the
+ * plan's: the onboard flow's discovery (step 1-3 below), shared since 51.1 with
+ * "On a different bus?" on the waiting and access cards, which has to find a
+ * bus the itinerary does not hold. On 2026-10-13 the app polled only route
+ * 1:539 for ten minutes while the rider sat on a 546.
+ *
+ * Writes `transitIndex.nearbyRoutes` (the sheet's route badges),
+ * `vehicleMatch.nearbyVehicles` and the search-failed flag; changes no flow
+ * status, so each caller decides what the sheet is for.
+ */
+export function discoverVehiclesOnNearbyRoutes(pos: GeolocationPosition) {
+  return async function (dispatch: any, getState: any) {
     const lat = pos.coords.latitude
     const lon = pos.coords.longitude
 
@@ -4114,8 +5962,7 @@ export function discoverNearbyVehicles(attempt = 0) {
     ).map((v) => ({ ...v, ...(vehicleDetails[v.vehicleId] || {}) }))
 
     dispatch({ payload: nearby, type: UPDATE_NEARBY_VEHICLES })
-    dispatch(setOnboardStatus('awaiting-selection'))
-    dispatch(showBoardingPromptAction())
+    return nearby
   }
 }
 
@@ -4244,7 +6091,17 @@ function hasOnboardAnchorEvidence(getState: any): boolean {
  * not know — which is recoverable, unlike a confident list from the wrong end
  * of the line.
  */
-export function loadOnboardScheduleAndOptimize(tripId: string) {
+export function loadOnboardScheduleAndOptimize(
+  tripId: string,
+  options: {
+    /**
+     * The rider's plan, when the vehicle was CONFIRMED rather than picked just
+     * now: if it is the plan's own train (or line), the trip goes straight to
+     * guidance for the plan's stop instead of the get-off list (54.1).
+     */
+    planned?: Itinerary | null
+  } = {}
+) {
   return async function (dispatch: any, getState: any) {
     await dispatch(findTrip({ tripId }))
     const trip = getState().otp?.transitIndex?.trips?.[tripId]
@@ -4262,7 +6119,130 @@ export function loadOnboardScheduleAndOptimize(tripId: string) {
         setTimeout(resolve, ONBOARD_ANCHOR_POLL_MS)
       )
     }
+    if (options.planned && dispatch(goStraightToPlannedStop(options.planned))) {
+      return
+    }
     dispatch(planFromOnboardBus())
+  }
+}
+
+/**
+ * Where the rider's plan gets off the train they are confirmed aboard, or null
+ * when it does not (54.1). The plan's leg on the ridden TRIP wins; failing
+ * that, its first leg on the same LINE whose alight stop the ridden trip still
+ * reaches ahead of now — the rider's words are "the train in your plan", and
+ * the next run of the planned line is that train to them. A stop the ridden
+ * trip passed already (or never serves — the other direction) is no answer.
+ */
+export function plannedAlightOnTrip(
+  planned: Itinerary | null | undefined,
+  trip: any,
+  nowMs: number
+): {
+  arrivalEpoch: number
+  legIndex: number
+  stopId: string
+  stopName: string | null
+} | null {
+  const legs: any[] = planned?.legs || []
+  const tripId = trip?.id ?? trip?.gtfsId ?? null
+  const routeId = trip?.route?.id ?? trip?.route?.gtfsId ?? null
+  const onTrip = (l: any) =>
+    l?.transitLeg &&
+    tripId != null &&
+    (l.trip?.gtfsId === tripId || l.tripId === tripId)
+  const onRoute = (l: any) =>
+    l?.transitLeg && routeId != null && getLegRouteId(l) === routeId
+  const order = [
+    ...legs.map((l, i) => (onTrip(l) ? i : -1)),
+    ...legs.map((l, i) => (!onTrip(l) && onRoute(l) ? i : -1))
+  ].filter((i) => i >= 0)
+  for (const legIndex of order) {
+    const leg = legs[legIndex]
+    const stopId = leg?.to?.stop?.gtfsId ?? leg?.to?.stopId ?? null
+    if (!stopId) continue
+    // The bus leg's shown arrival; read past the next-stop zero (57.1).
+    const arrival = tripQueryAlightPoint(
+      trip?.stopTimes || [],
+      stopId,
+      leg?.to?.name
+    )
+    if (!arrival || arrival.epoch <= nowMs) continue
+    return {
+      arrivalEpoch: arrival.epoch,
+      legIndex,
+      stopId,
+      stopName: leg?.to?.name ?? null
+    }
+  }
+  return null
+}
+
+/**
+ * "I'm on the bus" on the plan's own train: straight to guidance for the
+ * plan's stop, keeping the rest of the plan (54.1, the rider 2026-10-16: "If
+ * it's the train in your plan: go straight to directions for your plan's stop,
+ * with a 'Pick another stop' button. A different train: show the list.").
+ *
+ * The splice is the one replanFromAboard's automatic branch makes —
+ * buildOnboardItinerary with the plan's alight stop and the plan's legs after
+ * it — with the same "a stop still ahead" rule. Returns false (and changes
+ * nothing) when the plan does not ride this train, so the caller shows the
+ * list exactly as before.
+ */
+function goStraightToPlannedStop(planned: Itinerary) {
+  return function (dispatch: any, getState: any): boolean {
+    const goMode = getState().otp?.goMode
+    const trip = goMode?.onboard?.trip
+    const vehicle = goMode?.onboard?.vehicle
+    if (!trip || !vehicle || goMode?.onboard?.status === 'idle') return false
+    const alight = plannedAlightOnTrip(
+      planned,
+      trip,
+      getCurrentTime().getTime()
+    )
+    if (!alight) return false
+    const legs: any[] = planned.legs || []
+    const spliced = buildOnboardItinerary(
+      trip,
+      vehicle,
+      {
+        busArrivalEpoch: alight.arrivalEpoch,
+        itinerary: { ...planned, legs: legs.slice(alight.legIndex + 1) },
+        stopId: alight.stopId,
+        stopName: alight.stopName
+      },
+      goMode.tracking?.lastPosition || null
+    )
+    // eslint-disable-next-line no-console
+    console.log(
+      `[go-mode] onboard: plan's train ${vehicle.vehicleId ?? '-'} — ` +
+        `straight to ${alight.stopName ?? alight.stopId}`
+    )
+    dispatch(clearOnboard())
+    dispatch(beginGoMode(spliced))
+    reconfirmBoardedVehicle(dispatch, vehicle)
+    // After beginGoMode's START_GO_MODE, which clears the offer.
+    const tripId = trip.id ?? trip.gtfsId ?? vehicle.tripId ?? null
+    if (tripId) dispatch(setPlanStopOffer({ tripId }))
+    if (!isReplayActive()) {
+      dispatch(refreshLiveLegTimes())
+    }
+    return true
+  }
+}
+
+/**
+ * "Pick another stop": the escape from goStraightToPlannedStop — the existing
+ * get-off list over the live trip (replanFromAboard's explicit path; the trip
+ * keeps running underneath, and Back returns to it).
+ */
+export function pickAnotherAlightStop() {
+  return function (dispatch: any) {
+    dispatch(recordGoModeControlTap('pick-another-stop'))
+    dispatch(
+      replanFromAboard({ autoApply: false, reason: 'pick-another-stop' })
+    )
   }
 }
 
@@ -4582,6 +6562,13 @@ export function planFromOnboardBus() {
  */
 function optimizeAlightFromTrip(options: {
   /**
+   * Stops to plan from on top of the sampled five, when the bus still serves
+   * them (53.1). The even sample across a long run can step over the one stop
+   * that makes a connection; a caller that knows where the plan alights can
+   * name the stops around it.
+   */
+  alsoAskStopIds?: string[]
+  /**
    * The route the rider already chose for the leg AFTER this bus. Never
    * filters; it wins ties and holds a slot so the cap cannot cut it. Defaults
    * to the id captured when the onboard flow opened.
@@ -4594,6 +6581,18 @@ function optimizeAlightFromTrip(options: {
    * elsewhere.
    */
   limit?: number
+  /**
+   * Handed the run's raw per-stop answers and the downstream stops, before
+   * ranking (cycle 25 B4): the aboard faster-route check judges the stops
+   * with its own comparator (compareAlightOffer), which needs the answers as
+   * they came, not the ranked and decorated options this resolves to. Called
+   * once, with an empty list when there was no stop to ask.
+   */
+  onSettled?: (
+    results: AlightCandidateResult[],
+    downstream: DownstreamStop[],
+    nowMs: number
+  ) => void
   /** Rider-supplied routing prefs; falls back to currentQuery — see
    * onboardCandidateRoutingPreferences. */
   prefsOverride?: any
@@ -4633,8 +6632,13 @@ function optimizeAlightFromTrip(options: {
       { lat: to.lat, lon: to.lon },
       nowMs
     )
-    const candidates = selectCandidateStops(downstream, 5)
+    const sampled = selectCandidateStops(downstream, 5)
+    const alsoAsk = new Set(options.alsoAskStopIds || [])
+    const candidates = alsoAsk.size
+      ? downstream.filter((d) => sampled.includes(d) || alsoAsk.has(d.stop.id))
+      : sampled
     if (candidates.length === 0) {
+      options.onSettled?.([], downstream, nowMs)
       if (updateOnboardState) dispatch(setOnboardResult(null))
       return null
     }
@@ -4920,6 +6924,7 @@ function optimizeAlightFromTrip(options: {
     // back as if it had just been fetched.
     rememberCandidateResults(results, runKey)
     results = mergeCachedCandidateResults(results, runKey)
+    options.onSettled?.(results, downstream, nowMs)
 
     if (updateOnboardState) retryFailedCandidates(failedIndexes)
 
@@ -5404,6 +7409,40 @@ export function confirmOnboardAlightStop(option?: any) {
 }
 
 /**
+ * Vehicle context for an aboard splice, from the riding fact + the live match
+ * (refreshConfirmedMatch keeps match.nextStopId fresh mid-ride). Only trust
+ * nextStopId when the matched vehicle is the boarded bus AND its feed record is
+ * fresh; otherwise buildOnboardItinerary falls back to nearest-stop boarding —
+ * acceptable. Shared by the aboard re-plan and the aboard faster-route offer's
+ * check and Switch (56.1 B4), so the two splice the same bus the same way.
+ */
+function aboardVehicleContext(state: any, riding: RidingState, tripId: string) {
+  const match: any = state.otp?.goMode?.vehicleMatch?.match
+  const matchIsBoarded =
+    match != null &&
+    (match.tripId === tripId ||
+      (riding.vehicleId != null && match.vehicleId === riding.vehicleId))
+  const feedRecord = findRidingVehicle(
+    state.otp?.transitIndex?.routes?.[riding.routeId ?? '']?.vehicles,
+    riding,
+    Date.now()
+  )
+  return {
+    label: riding.routeShortName || riding.headsign || riding.routeId || null,
+    nextStopId:
+      matchIsBoarded && isVehicleRecordFresh(feedRecord)
+        ? match.nextStopId ?? null
+        : null,
+    routeId: riding.routeId ?? null,
+    tripId,
+    vehicleId:
+      riding.vehicleId ||
+      (matchIsBoarded ? match.vehicleId : null) ||
+      `route:${riding.routeId}`
+  }
+}
+
+/**
  * Mid-ride, ABOARD-AWARE re-plan — the recovery for "the app took me off the
  * Orange Line" (7/29). While the sticky riding fact holds a verified tripId,
  * any re-plan must start from the physical truth: the rider is ON that bus.
@@ -5509,11 +7548,27 @@ export function replanFromAboard(
             getLegRouteId(l) === riding.routeId
         )
       : -1
+    // The rider named this bus themselves from "On a different bus?" (51.1),
+    // on the automatic path. Its route need not be in the plan at all — on
+    // 2026-10-13 it was a 546 against a planned 539 — and then the leg the
+    // splice replaces is the planned transit leg the rider walked away from,
+    // not the bike leg before it: alighting where THAT leg alights keeps the
+    // rest of the plan when the picked bus serves the stop.
+    const riderPicked =
+      !!options.autoApply && options.reason === 'rider-picked-bus'
+    const abandonedTransitLegIndex =
+      riderPicked && ridingLegIsAccess
+        ? legs.findIndex(
+            (l: any, i: number) => i > ridingLegIndex && l?.transitLeg
+          )
+        : -1
     const aboardLegIndex =
       boardedLegIndex >= 0
         ? boardedLegIndex
         : nextRiddenRouteLegIndex >= 0
         ? nextRiddenRouteLegIndex
+        : abandonedTransitLegIndex >= 0
+        ? abandonedTransitLegIndex
         : ridingLegIndex
 
     // The route to preserve is the one the rider has NOT boarded yet — the leg
@@ -5535,10 +7590,16 @@ export function replanFromAboard(
     // 23.6). Only where the splice ALIGHTS moved in 26.6.
     const keepRouteAfterIndex =
       boardedLegIndex >= 0 ? boardedLegIndex : ridingLegIndex
-    const keepRouteId = onwardTransitRouteId(itinerary, {
-      afterLegIndex: keepRouteAfterIndex,
-      boardedRouteId: keepRouteAfterIndex >= 0 ? null : riding.routeId ?? null
-    })
+    // A bus the rider picked is the route change, made by the rider: there
+    // is no "their route" left for an automatic update to keep (51.1). Held
+    // to the planned 539 here, the 546 splice could only have been refused.
+    const keepRouteId = riderPicked
+      ? null
+      : onwardTransitRouteId(itinerary, {
+          afterLegIndex: keepRouteAfterIndex,
+          boardedRouteId:
+            keepRouteAfterIndex >= 0 ? null : riding.routeId ?? null
+        })
 
     // Single-flight bookkeeping: same token/stuck-detection contract as
     // reRouteFromCurrentPosition.
@@ -5575,35 +7636,7 @@ export function replanFromAboard(
       return
     }
 
-    // Vehicle context for the splice, from the riding fact + the live match
-    // (refreshConfirmedMatch keeps match.nextStopId fresh mid-ride). Only
-    // trust nextStopId when the matched vehicle is the boarded bus AND its
-    // feed record is fresh; otherwise buildOnboardItinerary falls back to
-    // nearest-stop boarding — acceptable.
-    const nowState = getState()
-    const match: any = nowState.otp?.goMode?.vehicleMatch?.match
-    const matchIsBoarded =
-      match != null &&
-      (match.tripId === tripId ||
-        (riding.vehicleId != null && match.vehicleId === riding.vehicleId))
-    const feedRecord = findRidingVehicle(
-      nowState.otp?.transitIndex?.routes?.[riding.routeId ?? '']?.vehicles,
-      riding,
-      Date.now()
-    )
-    const vehicle = {
-      label: riding.routeShortName || riding.headsign || riding.routeId || null,
-      nextStopId:
-        matchIsBoarded && isVehicleRecordFresh(feedRecord)
-          ? match.nextStopId ?? null
-          : null,
-      routeId: riding.routeId ?? null,
-      tripId,
-      vehicleId:
-        riding.vehicleId ||
-        (matchIsBoarded ? match.vehicleId : null) ||
-        `route:${riding.routeId}`
-    }
+    const vehicle = aboardVehicleContext(getState(), riding, tripId)
 
     // Same preference ladder as the other rider-facing re-plans; undefined
     // falls through to currentQuery prefs / stay-seated in the optimizer.
@@ -5634,16 +7667,99 @@ export function replanFromAboard(
         ridingLegForAlight?.to?.stop?.gtfsId ??
         ridingLegForAlight?.to?.stopId ??
         null
-      const plannedArrival =
+      const plannedArrivalAny =
         plannedAlightStopId != null
-          ? liveStopArrival(
+          ? // becomes the spliced bus leg's shown arrival (57.1)
+            tripQueryAlightPoint(
               trip.stopTimes || [],
               plannedAlightStopId,
               ridingLegForAlight?.to?.name
             )
           : null
+      // A picked bus on another route can serve the plan's stop BEHIND the
+      // rider (51.1); only a stop still ahead is somewhere to get off.
+      const plannedArrival =
+        riderPicked &&
+        plannedArrivalAny &&
+        plannedArrivalAny.epoch <= getCurrentTime().getTime()
+          ? null
+          : plannedArrivalAny
       let best: any = null
-      if (plannedArrival) {
+      // 53.1 — an EARLIER (or later) run of the planned route, not the plan's
+      // own trip. The plan's tail was timed for the run the plan named: on
+      // 2026-10-15 the held plan was the 18:18 539 into the 18:43 Blue Line,
+      // the rider caught the 18:01, and the same-stop shortcut below kept the
+      // 18:43 train behind an 18:11 alight — a 32-minute layover, pushed as
+      // "arriving in 60 min", while the 18:13 train was makeable from an
+      // earlier stop. Grafting cannot see that: anchorGraftedTail never moves
+      // a transit leg (by design), and re-planning from the SAME stop still
+      // misses the 18:13 by 41 s. So ask the optimizer, held to the plan's
+      // ONWARD route (the 901 — not the ridden 539, which pickSameRouteAlight
+      // would never find onward), and keep the planned stop when it does as
+      // well as the best. Only with a timed transit leg onward: a street-only
+      // tail moves with the bus already (anchorGraftedTail). A bus the rider
+      // picked (51.1) keeps its own path below.
+      const boardedOtherRun =
+        boardedLegIndex < 0 && !riderPicked && !!ridingLegForAlight?.transitLeg
+      const onwardRouteId = boardedOtherRun
+        ? onwardTransitRouteId(itinerary, { afterLegIndex: aboardLegIndex })
+        : null
+      if (plannedArrival && onwardRouteId) {
+        // The stop that made the 18:13 was Old Shakopee & 86th, two stops
+        // before the planned one (the 539 loops past it first); the even
+        // five-stop sample from 98th St stepped over it. Always ask from the
+        // planned stop and the three just before it.
+        const STOPS_BEFORE = 3
+        const stopTimes = trip.stopTimes || []
+        const plannedIdx = findStopTimeIndex(
+          stopTimes,
+          plannedAlightStopId,
+          ridingLegForAlight?.to?.name
+        )
+        const alsoAskStopIds =
+          plannedIdx >= 0
+            ? stopTimes
+                .slice(Math.max(0, plannedIdx - STOPS_BEFORE), plannedIdx + 1)
+                .map((st: any) => st?.stop?.id ?? st?.stop?.gtfsId)
+                .filter(Boolean)
+            : []
+        const ranked = await dispatch(
+          optimizeAlightFromTrip({
+            alsoAskStopIds,
+            keepRouteId: onwardRouteId,
+            limit: 50,
+            prefsOverride,
+            to,
+            trip,
+            vehicle
+          })
+        )
+        if (!stillCurrent()) return
+        const arrivalOf = (o: any) =>
+          scoreAlightOption(o.busArrivalEpoch, o.itinerary, {
+            arrivalIsFloor: o.arrivalIsFloor
+          })
+        const top = pickSameRouteAlight(ranked, onwardRouteId)
+        const atPlanned = pickSameRouteAlight(
+          (ranked || []).filter((r: any) => r.stopId === plannedAlightStopId),
+          onwardRouteId
+        )
+        const pick =
+          atPlanned && top && arrivalOf(atPlanned) <= arrivalOf(top)
+            ? atPlanned
+            : top
+        // The graft below arrives when the held plan does; an optimizer
+        // answer has to beat that to be worth a different stop. No answer
+        // at all (timeouts) leaves the graft — the boarded bus still goes in.
+        const graftArrival = Number(legs[legs.length - 1]?.endTime)
+        if (
+          pick &&
+          (!Number.isFinite(graftArrival) || arrivalOf(pick) < graftArrival)
+        ) {
+          best = pick
+        }
+      }
+      if (!best && plannedArrival) {
         best = {
           busArrivalEpoch: plannedArrival.epoch,
           itinerary: {
@@ -5656,7 +7772,7 @@ export function replanFromAboard(
           // falls back to boardIdx + 1.
           stopName: ridingLegForAlight?.to?.name ?? null
         }
-      } else {
+      } else if (!best) {
         const ranked = await dispatch(
           optimizeAlightFromTrip({
             keepRouteId,
@@ -5750,7 +7866,10 @@ export function replanFromAboard(
           // A missed connection makes the plan in hand unachievable, so there
           // is no arrival left to defend — only the boarded-earlier case is
           // asked to be no worse than what it replaces.
-          currentPlanIsDead: options.reason === 'missed-bus' || planRunLeft,
+          // The rider's own pick (51.1) is the same: they are on another bus,
+          // so the plan in hand is not one they can still take.
+          currentPlanIsDead:
+            options.reason === 'missed-bus' || planRunLeft || riderPicked,
           reason: options.reason ?? 'boarded-earlier'
         })
       ) {
@@ -6680,7 +8799,14 @@ export function refreshLiveLegTimes() {
               realtime: prev.alightRealtime ?? prev.realtime
             }
           : null,
-        liveStopArrival(stopTimes, leg.to?.stop?.gtfsId, leg.to?.name, anchor),
+        // The feed reads the bus's NEXT stop as the timetable under an
+        // UPDATED flag while later stops keep the delay (57.1).
+        tripQueryAlightPoint(
+          stopTimes,
+          leg.to?.stop?.gtfsId,
+          leg.to?.name,
+          anchor
+        ),
         nowMs
       )
       // "Always prio the real times" (rider, 2026-09-21). The boarding stop is
@@ -7491,8 +9617,15 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         accessBoardLegIndex > 0 &&
         // Asked before the projection below, which costs a decode-and-scan of
         // the bus leg's shape: under transit pace the run cannot start
-        // whatever the geometry says, so there is nothing to pay for.
-        (position.coords.speed ?? 0) >= ACCESS_BOARD_MIN_SPEED_MPS
+        // whatever the geometry says, so there is nothing to pay for...
+        ((position.coords.speed ?? 0) >= ACCESS_BOARD_MIN_SPEED_MPS ||
+          // ...unless a transit-pace run is already open. A bus slows for its
+          // stops; dropping the run on the first fix under 12 m/s is what let
+          // the quiet re-plan send a rider on the bus back to Gate C by bike
+          // on 2026-10-13 (09:54:14, 11.8 m/s, 42 fast fixes just counted).
+          // trackTransitPace decides whether a slow fix keeps the run; the
+          // access-board run is unaffected — it refuses any fix under pace.
+          session.transitPace != null)
       ) {
         const accessBoardSample = {
           boardLeg: itinerary.legs[accessBoardLegIndex],
@@ -8624,15 +10757,32 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       // "Aboard already?"), so a missed-bus re-plan can only ever run for a
       // rider who is not on a bus. That is what makes this path's
       // currentPositionOrigin anchor — the next stop ahead — safe.
-      dispatch(
-        reRouteFromCurrentPosition({
-          autoApply: recovery.autoApply,
-          keepRouteId: getLegRouteId(
-            itinerary.legs[missedCtx.boardLegIndex] as Leg
-          ),
-          reason: 'missed-bus'
-        })
-      )
+      //
+      // 51.3: and never from a fix too poor to say where the rider is. On
+      // 2026-10-13 09:31:25 this re-plan went out from a 1,414 m fix 1,247 m
+      // south of a rider standing at I-35W & 46th St, and installed a 2 km
+      // bike loop back to the same station. With no usable fix it waits, and
+      // the attempt is handed back unspent with its clock at zero, so the
+      // first tick that has a usable fix re-plans (retryDue in
+      // missed-bus-recovery) — at 09:31:48 on that ride, the 90 m fix.
+      if (!currentPositionOrigin(getState(), { trustedOnly: true })) {
+        const next = session.missedBusRerouteAttempt
+        session.missedBusRerouteAttempt = next
+          ? { ...next, attempts: Math.max(0, next.attempts - 1), lastAtMs: 0 }
+          : next
+        noteReplanOriginWait(dispatch, getState(), 'missed-bus')
+      } else {
+        noteReplanOriginResume(dispatch, getState(), 'missed-bus')
+        dispatch(
+          reRouteFromCurrentPosition({
+            autoApply: recovery.autoApply,
+            keepRouteId: getLegRouteId(
+              itinerary.legs[missedCtx.boardLegIndex] as Leg
+            ),
+            reason: 'missed-bus'
+          })
+        )
+      }
     } else if (
       // Boarded an EARLIER same-route trip than the itinerary planned (the
       // auto-anchor targets it while walking; this fixes the legs once the
@@ -9117,6 +11267,137 @@ export function searchBoardingVehicles() {
 }
 
 /**
+ * "On a different bus?" — the link under the waiting card and the access
+ * (bike/walk) card (51.1, rider's design answer B, 2026-10-13).
+ *
+ * Ride mv6ret6s-h5he2i: the rider waited at I-35W & 98th St Gate C for the
+ * planned 539, then boarded a 546 at 09:52. The plan did not hold the 546 and
+ * the app polled only route 1:539, so there was no vehicle match, no riding
+ * fact and nothing the rider could tap to say which bus they were on — and the
+ * quiet re-plans kept routing them back to Gate C by bike. Their note at
+ * 09:52:16: "Add a button to change which bus I get on if I choose a
+ * different one mid trip. This triggers a re route".
+ *
+ * Opens the boarding sheet in its choose-bus mode: live buses near the rider
+ * from every route first, then the nearby routes as badges, then a box for a
+ * route number that is not listed. Never opens by itself — only this tap.
+ */
+export function openChooseBusSheet() {
+  return function (dispatch: any, getState: any) {
+    const goMode = getState().otp?.goMode
+    dispatch(
+      recordGoModeControlTap('choose-bus-open', {
+        legIndex: goMode?.routeMatch?.legIndex ?? null
+      })
+    )
+    return dispatch(searchAnyNearbyBus())
+  }
+}
+
+/**
+ * The choose-bus sheet's search: the onboard flow's discovery across every
+ * nearby route (discoverVehiclesOnNearbyRoutes), without entering that flow —
+ * its status would put the onboard screen over the live trip.
+ */
+export function searchAnyNearbyBus() {
+  return async function (dispatch: any, getState: any) {
+    dispatch(openChooseBusAction())
+    const pos = getState().otp?.goMode?.tracking?.lastPosition
+    if (!pos) {
+      // No fix to compare a feed against: the route badges and the route
+      // number box still work (the schedule resolver needs a fix too, and
+      // says so through the sheet's error line).
+      dispatch(setBoardingSearching(false))
+      return
+    }
+    try {
+      await dispatch(discoverVehiclesOnNearbyRoutes(pos))
+    } catch {
+      dispatch(setBoardingSearchFailed(true))
+    } finally {
+      dispatch(setBoardingSearching(false))
+    }
+  }
+}
+
+/** True while the boarding sheet is the choose-bus one and no onboard flow is
+ * running underneath it (the flow's own picker keeps its old behaviour). */
+function choosingBus(goMode: any): boolean {
+  const status = goMode?.onboard?.status
+  return !!goMode?.boardingPrompt?.chooseBus && (!status || status === 'idle')
+}
+
+/**
+ * After a choose-bus pick has stamped the riding fact: record the pick and
+ * re-plan from that bus. Automatic and quiet — the rider has already said
+ * which bus they are on, and asking where to get off before showing anything
+ * is the redundant prompt their standing rule forbids. The riding trip id is
+ * what holds the quiet access re-plan off from here on (quietReplanAccessLeg).
+ */
+function replanFromRiderPickedBus(
+  dispatch: any,
+  pick: {
+    how: 'route' | 'typed' | 'vehicle'
+    routeId: string | null
+    tripId: string | null
+    vehicleId: string | null
+  }
+) {
+  dispatch(recordGoModeControlTap('choose-bus-pick', pick))
+  return dispatch(
+    replanFromAboard({ autoApply: true, reason: 'rider-picked-bus' })
+  )
+}
+
+/**
+ * The choose-bus sheet's "Type a route number" box (51.1): for a bus the feed
+ * shows nothing for and whose route is not among the nearby badges. The
+ * short name the rider typed is resolved through the route index the app
+ * already holds, then the nearby routes, then OTP itself; the trip comes from
+ * the same static-schedule resolver a route badge uses.
+ */
+export function confirmTypedRoute(typed: string) {
+  return async function (dispatch: any, getState: any) {
+    const wanted = (typed || '').trim()
+    if (!wanted) return
+    const same = (name?: string | null) =>
+      !!name && name.trim().toLowerCase() === wanted.toLowerCase()
+    const state = getState()
+    const indexed: any[] = Object.entries(
+      state.otp?.transitIndex?.routes || {}
+    ).map(([id, r]: [string, any]) => ({ ...r, id: r?.id ?? id }))
+    const nearby: any[] = state.otp?.transitIndex?.nearbyRoutes || []
+    let route: any =
+      indexed.find((r) => same(r?.shortName)) ||
+      nearby.find((r) => same(r?.shortName))
+    if (!route) {
+      dispatch(setBoardingSearching(true))
+      const resp: any = await dispatch(
+        onboardGraphQLQuery(
+          `{ routes(name: ${JSON.stringify(
+            wanted
+          )}) { gtfsId shortName longName } }`
+        )
+      )
+      const found = (resp?.data?.routes || []).find((r: any) =>
+        same(r?.shortName)
+      )
+      route = found ? { ...found, id: found.gtfsId } : null
+    }
+    if (!route?.id) {
+      dispatch(setChooseBusError({ kind: 'no-route', route: wanted }))
+      return
+    }
+    return dispatch(
+      confirmOnboardRoute(route.id, {
+        how: 'typed',
+        shortName: route.shortName ?? wanted
+      })
+    )
+  }
+}
+
+/**
  * The rider says they ARE on the bus (trip-sheet button, 6.10c).
  *
  * Deliberately not a new way to write `riding`: it routes through
@@ -9158,6 +11439,10 @@ export function confirmBoardingByRider() {
  */
 export function retryBoardingSearch() {
   return function (dispatch: any, getState: any) {
+    // "On a different bus?" (51.1) searches every nearby route, not the plan's.
+    if (getState().otp?.goMode?.boardingPrompt?.chooseBus) {
+      return dispatch(searchAnyNearbyBus())
+    }
     const onboardStatus = getState().otp?.goMode?.onboard?.status
     // Inside the onboard flow, discovery is what fills the list — and never
     // as a denial: the rider asked for a re-search, not to be taken off the
@@ -9255,6 +11540,19 @@ export function confirmVehicleSelection(vehicleId: string) {
       if (known?.vehicleId === vehicleId) selected = { ...selected, ...known }
     }
 
+    // "On a different bus?" (51.1). A feed record with no trip id still names
+    // its route, and a route is enough for the schedule resolver — the same
+    // fallback a route badge takes.
+    const choosing = choosingBus(goMode)
+    if (choosing && !selected?.tripId && selected?.routeId) {
+      return dispatch(
+        confirmOnboardRoute(selected.routeId, {
+          how: 'vehicle',
+          shortName: selected.routeName ?? null
+        })
+      )
+    }
+
     dispatch({
       payload: {
         confidence: 'confirmed' as const,
@@ -9288,11 +11586,20 @@ export function confirmVehicleSelection(vehicleId: string) {
           legIndex: goMode?.routeMatch?.legIndex ?? -1,
           offRouteSince: null,
           routeId: selected.routeId ?? null,
-          routeShortName: null,
+          // The choose-bus rows carry the route's rider-facing name (51.1).
+          routeShortName: choosing ? selected.routeName ?? null : null,
           tripId: selected.tripId ?? null,
           vehicleId
         })
       )
+      if (choosing) {
+        return replanFromRiderPickedBus(dispatch, {
+          how: 'vehicle',
+          routeId: selected.routeId ?? null,
+          tripId: selected.tripId ?? null,
+          vehicleId
+        })
+      }
     }
 
     // In the "I'm on the bus" onboard flow, use the selected vehicle's trip to
@@ -9366,7 +11673,14 @@ export function resolveOnboardTripFromSchedule(routeId: string) {
     if (!pos) return null
     const userLat = pos.coords.latitude
     const userLon = pos.coords.longitude
-    const to = state.otp.currentQuery?.to
+    // Mid-trip the destination is the ACTIVE ITINERARY's, not the query's: a
+    // mid-trip browse rewrites currentQuery (replanFromAboard's own warning),
+    // and the choose-bus pick (51.1) is always mid-trip. Pre-trip there is no
+    // itinerary and the query is what the rider asked for.
+    const legsNow: any[] = state.otp?.goMode?.activeItinerary?.legs || []
+    const to = legsNow.length
+      ? legsNow[legsNow.length - 1]?.to
+      : state.otp.currentQuery?.to
 
     // 1. Route directions (patterns) with their ordered stops.
     const routeResp: any = await dispatch(
@@ -9422,8 +11736,11 @@ export function resolveOnboardTripFromSchedule(routeId: string) {
 
     // 2. Today's departures at that stop; pick the trip on the chosen direction
     // whose departure is closest to now — the bus the rider just boarded.
+    // The Go Mode clock, so a replayed ride resolves against its own moment
+    // (getCurrentTime is wall time on a live ride).
+    const nowDate = getCurrentTime()
     const startOfToday = (() => {
-      const d = new Date()
+      const d = new Date(nowDate.getTime())
       d.setHours(0, 0, 0, 0)
       return Math.floor(d.getTime() / 1000)
     })()
@@ -9444,7 +11761,7 @@ export function resolveOnboardTripFromSchedule(routeId: string) {
       )
     )
     const groups = schedResp?.data?.stop?.stoptimesForPatterns || []
-    const now = Date.now()
+    const now = nowDate.getTime()
     let chosen: { headsign?: string; tripId: string } | null = null
     let bestDelta = Infinity
     groups.forEach((g: any) => {
@@ -9477,11 +11794,30 @@ export function resolveOnboardTripFromSchedule(routeId: string) {
  * otherwise infer the trip from the static schedule. Then run the same schedule
  * fetch + alight optimization as a direct vehicle pick.
  */
-export function confirmOnboardRoute(routeId: string) {
+export function confirmOnboardRoute(
+  routeId: string,
+  /** How a choose-bus pick named the route, and its rider-facing name (51.1). */
+  pickedVia: {
+    how?: 'route' | 'typed' | 'vehicle'
+    shortName?: string | null
+  } = {}
+) {
   return async function (dispatch: any, getState: any) {
     const state = getState()
     const goMode = state.otp?.goMode
     const onboardStatus = goMode?.onboard?.status
+    // "On a different bus?" (51.1): mid-trip, outside the onboard flow, which
+    // this used to refuse outright (the `onboardStatus === 'idle'` exit below).
+    const choosing = choosingBus(goMode)
+    const nearbyRoute = (state.otp?.transitIndex?.nearbyRoutes || []).find(
+      (r: { id: string }) => r.id === routeId
+    )
+    const routeShortName =
+      pickedVia.shortName ??
+      nearbyRoute?.shortName ??
+      state.otp?.transitIndex?.routes?.[routeId]?.shortName ??
+      null
+    if (choosing) dispatch(setBoardingSearching(true))
     const pos = goMode?.tracking?.lastPosition
     const routesIndex = state.otp?.transitIndex?.routes || {}
     const vehicles = (routesIndex[routeId]?.vehicles || []).filter(
@@ -9494,10 +11830,16 @@ export function confirmOnboardRoute(routeId: string) {
         pos.coords.latitude,
         pos.coords.longitude,
         vehicles,
-        Infinity,
+        // A choose-bus pick (51.1) comes from a sheet that has already listed
+        // every live bus within the picker's radius; a route badge tapped
+        // there means none of them was the rider's, and the nearest run of
+        // that route kilometres away is not either. The schedule decides.
+        choosing
+          ? speedAdjustedRadius(PICKER_RADIUS_METERS, pos.coords.speed)
+          : Infinity,
         { userSpeedMps: pos.coords.speed }
       )[0]
-    } else if (vehicles.length) {
+    } else if (vehicles.length && !choosing) {
       chosen = vehicles[0]
     }
 
@@ -9514,6 +11856,57 @@ export function confirmOnboardRoute(routeId: string) {
         tripId = resolved.tripId
         label = resolved.headsign || label
       }
+    }
+
+    if (choosing) {
+      if (!tripId) {
+        // Said on the sheet, which stays open: the onboard error card would
+        // put the onboard screen over a trip that is still running.
+        dispatch(
+          setChooseBusError({
+            kind: 'no-trip',
+            route: routeShortName || routeId
+          })
+        )
+        return
+      }
+      const vehicleId = chosen?.vehicleId || `route:${routeId}`
+      dispatch({
+        payload: {
+          confidence: 'confirmed' as const,
+          distanceMeters: chosen?.distanceMeters ?? null,
+          // The bus's own number when the feed has it, else the route: the
+          // schedule resolver's headsign is not something a badge can say.
+          label:
+            chosen?.label || chosen?.vehicleId || routeShortName || routeId,
+          lastSeen: Date.now(),
+          routeId,
+          tripId,
+          vehicleId
+        },
+        type: CONFIRM_VEHICLE
+      })
+      // A new boarding: the bus the rider names is not the one any earlier
+      // riding fact described, so its board time is now.
+      dispatch(
+        setRiding({
+          boardedAt: Date.now(),
+          // With no live bus, `label` is the schedule resolver's headsign.
+          headsign: chosen ? chosen.tripHeadsign ?? null : label ?? null,
+          legIndex: goMode?.routeMatch?.legIndex ?? -1,
+          offRouteSince: null,
+          routeId,
+          routeShortName,
+          tripId,
+          vehicleId
+        })
+      )
+      return replanFromRiderPickedBus(dispatch, {
+        how: pickedVia.how ?? 'route',
+        routeId,
+        tripId,
+        vehicleId: chosen?.vehicleId ?? null
+      })
     }
 
     if (!tripId || !onboardStatus || onboardStatus === 'idle') {

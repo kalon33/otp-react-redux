@@ -7,17 +7,23 @@ import {
   planConstraintVariables
 } from '../../lib/util/routing-profiles'
 import {
+  applyStopStays,
   buildMultiStopPlan,
+  canonicalStopStays,
   hasNextSegment,
   itineraryDistanceM,
   itineraryStopNames,
+  itineraryStopTimes,
   markStopLegs,
   normalizeIntermediatePlacesParam,
+  parseStopStaysParam,
   pickNextSegment,
   queryStops,
+  queryStopStays,
   segmentStreetMode,
   splitAtStops,
   stitchSegments,
+  stopStaysParam,
   viaVisitLocations
 } from '../../lib/util/multi-stop'
 
@@ -279,6 +285,57 @@ describe('util > multi-stop (43.1)', () => {
       expect(stitchSegments([null, null])).toBeNull()
     })
   })
+
+  describe('the transit chain keeps scheduled times (52.1)', () => {
+    // Segment 1 arrives at the stop 10:25; the next bus out leaves 10:33, so
+    // the rider waits 8 minutes there. Shifting it back would put the rider
+    // on a bus that does not run then.
+    const a: any = {
+      legs: [
+        leg('WALK', '10:00:00', '10:05:00', HOME, { name: 'Stop A' }, 300),
+        leg('BUS', '10:08:00', '10:25:00', { name: 'Stop A' }, PERENNIAL, 5000)
+      ],
+      startTime: T('10:00:00'),
+      waitingTime: 180
+    }
+    const b: any = {
+      legs: [leg('BUS', '10:33:00', '10:50:00', PERENNIAL, MICRO_CENTER, 4000)],
+      startTime: T('10:33:00'),
+      waitingTime: 0
+    }
+
+    it('leaves every leg at its scheduled time', () => {
+      const stitched = stitchSegments([a, b], { keepTimes: true }) as any
+      expect(stitched.legs.map((l: any) => l.startTime)).toEqual([
+        T('10:00:00'),
+        T('10:08:00'),
+        T('10:33:00')
+      ])
+      expect(stitched.startTime).toBe(T('10:00:00'))
+      expect(stitched.endTime).toBe(T('10:50:00'))
+      expect(stitched.duration).toBe(50 * 60)
+    })
+
+    it('counts the gap at the stop as waiting', () => {
+      const stitched = stitchSegments([a, b], { keepTimes: true }) as any
+      // 3 min inside segment 1, 8 min at the stop.
+      expect(stitched.waitingTime).toBe(11 * 60)
+      expect(stitched.transfers).toBe(1)
+    })
+
+    it('marks the same joins as the street chain', () => {
+      expect(
+        (stitchSegments([a, b], { keepTimes: true }) as any).stopLegIndexes
+      ).toEqual((stitchSegments([a, b]) as any).stopLegIndexes)
+      expect(
+        (stitchSegments([a, b], { keepTimes: true }) as any).stopLegIndexes
+      ).toEqual([1])
+    })
+
+    it('still gives up when a segment has no answer', () => {
+      expect(stitchSegments([a, null], { keepTimes: true })).toBeNull()
+    })
+  })
 })
 
 describe('util > multi-stop > pickNextSegment (43.1)', () => {
@@ -313,5 +370,246 @@ describe('util > multi-stop > pickNextSegment (43.1)', () => {
 
   it('has no street mode for a transit segment', () => {
     expect(segmentStreetMode(it1([bus('1:38', '11:00:00')]))).toBeNull()
+  })
+})
+
+/**
+ * Backlog 58.3 — the rider's 10-16 note "add a time of arrival to intermediate
+ * stops … And a dwell time"; answers 10-18: the stops the rider adds, a
+ * separate stay for each, times on the card and in the step list.
+ *
+ * Measured against production OTP 2026-10-18 (home → Perennial Cycle → Micro
+ * Center, 2026-10-20 10:00, WALK+TRANSIT, `minimumWaitTime: "PT20M"`): the
+ * first itinerary reached the stop 10:59:26 (walk 10:58:00–10:59:26), walked
+ * on to Lagoon & Hennepin Station at once (10:59:26–11:11:16), waited for the
+ * 11:34 bus to Lake & France (–11:40) and walked to Micro Center by 12:10:40;
+ * waitingTime 1722 s. The stay was in the bus wait, not at the stop.
+ */
+describe('util > multi-stop > a stay at each stop (58.3)', () => {
+  const LAGOON = {
+    lat: 44.949308,
+    lon: -93.29851,
+    name: 'Lagoon & Hennepin Station'
+  }
+  const LAKE_FRANCE = {
+    lat: 44.948131,
+    lon: -93.328168,
+    name: 'Lake & France Station'
+  }
+  const measured = (): any => ({
+    duration: 7704,
+    endTime: T('12:10:40'),
+    legs: [
+      leg('WALK', '10:02:16', '10:03:00', HOME, HENNEPIN_33, 53),
+      leg('BUS', '10:45:00', '10:58:00', HENNEPIN_33, HENNEPIN_33, 4284, {
+        route: { id: '1:6' }
+      }),
+      leg('WALK', '10:58:00', '10:59:26', HENNEPIN_33, OTP_LABEL, 114),
+      leg('WALK', '10:59:26', '11:11:16', OTP_LABEL, LAGOON, 900),
+      leg('BUS', '11:34:00', '11:40:00', LAGOON, LAKE_FRANCE, 2500, {
+        route: { id: '1:21' }
+      }),
+      leg('WALK', '11:40:00', '12:10:40', LAKE_FRANCE, MICRO_CENTER, 2300)
+    ],
+    startTime: T('10:02:16'),
+    waitingTime: 1722
+  })
+
+  describe('the request', () => {
+    it('sends each stop with its own stay, PT0S where there is none', () => {
+      expect(
+        viaVisitLocations([PERENNIAL, MICRO_CENTER], [20, 0]).map(
+          (v) => v.visit.minimumWaitTime
+        )
+      ).toEqual(['PT20M', 'PT0S'])
+    })
+
+    it('keeps PT0S for every stop when no stays are given (43.1 unchanged)', () => {
+      expect(
+        viaVisitLocations([PERENNIAL, MICRO_CENTER]).map(
+          (v) => v.visit.minimumWaitTime
+        )
+      ).toEqual(['PT0S', 'PT0S'])
+    })
+
+    it('reads the stays off the query, one per stop, clamped', () => {
+      const query = {
+        intermediatePlaces: [PERENNIAL, {}, MICRO_CENTER],
+        stopStays: [15, -3]
+      }
+      // The `{}` placeholder is not a stop, so the stays line up with the two
+      // real ones; a negative stay is none.
+      expect(queryStopStays(query)).toEqual([15, 0])
+      expect(queryStopStays({ intermediatePlaces: [PERENNIAL] })).toEqual([0])
+      expect(
+        queryStopStays({ intermediatePlaces: [PERENNIAL], stopStays: [9999] })
+      ).toEqual([720])
+    })
+
+    it('puts the stays in the plan variables, never the raw key', () => {
+      const query = {
+        intermediatePlaces: [PERENNIAL],
+        stopStays: [20]
+      }
+      const vars: any = planConstraintVariables(query as any)
+      expect(vars.via[0].visit.minimumWaitTime).toBe('PT20M')
+      expect(
+        applyRoutingPreferences({ ...query, fromPlace: 'x' }).stopStays
+      ).toBeUndefined()
+    })
+  })
+
+  describe('the URL', () => {
+    it('writes the stays as one parameter and reads them back', () => {
+      expect(stopStaysParam([20, 0, 15])).toBe('20,0,15')
+      expect(parseStopStaysParam('20,0,15')).toEqual([20, 0, 15])
+      // qs + planParamsToQuery turn a lone "20" into the number 20.
+      expect(parseStopStaysParam(20)).toEqual([20])
+    })
+
+    it('writes nothing for no stays, and "none" is always []', () => {
+      expect(stopStaysParam([0, 0])).toBeUndefined()
+      expect(stopStaysParam(undefined)).toBeUndefined()
+      expect(parseStopStaysParam(undefined)).toEqual([])
+      expect(canonicalStopStays([0, 0])).toEqual([])
+      expect(canonicalStopStays([0, 20, 0])).toEqual([0, 20])
+    })
+  })
+
+  describe('the results', () => {
+    it('moves the walk away from the stop to after the stay, before the bus', () => {
+      const marked: any = markStopLegs(measured(), [PERENNIAL], [20])
+      expect(marked.stopLegIndexes).toEqual([2])
+      expect(marked.stopStayMinutes).toEqual([20])
+      // Arrival untouched; the walk on starts 20 min later and still makes
+      // the 11:34 bus (ends 11:31:16).
+      expect(marked.legs[2].endTime).toBe(T('10:59:26'))
+      expect(marked.legs[3].startTime).toBe(T('11:19:26'))
+      expect(marked.legs[3].endTime).toBe(T('11:31:16'))
+      expect(marked.legs[4].startTime).toBe(T('11:34:00'))
+      expect(marked.endTime).toBe(T('12:10:40'))
+      // The 20 minutes are the stay now, not waiting for a bus.
+      expect(marked.waitingTime).toBe(1722 - 1200)
+    })
+
+    it('gives each stop its arrival and leave time, with the stay asked for', () => {
+      const marked = markStopLegs(measured(), [PERENNIAL], [20])
+      expect(itineraryStopTimes(marked)).toEqual([
+        {
+          arrivalTime: T('10:59:26'),
+          leaveTime: T('11:19:26'),
+          name: 'Perennial Cycle',
+          stayMinutes: 20
+        }
+      ])
+      // The step list's row for the stop sees the arrival on its own leg.
+      expect((marked.legs[3].from as any).riderStop).toEqual({
+        arrivalTime: T('10:59:26'),
+        stayMinutes: 20
+      })
+    })
+
+    it('without a stay, arrival and leave are the same and no leg moves', () => {
+      const plain = measured()
+      const marked: any = markStopLegs(plain, [PERENNIAL])
+      expect(marked.legs[3].startTime).toBe(plain.legs[3].startTime)
+      expect(marked.waitingTime).toBe(1722)
+      const [times] = itineraryStopTimes(marked)
+      expect(times.arrivalTime).toBe(times.leaveTime)
+      expect(times.stayMinutes).toBe(0)
+    })
+
+    it('never moves the walk past the bus', () => {
+      // 30 min asked, 22:44 free before the 11:34 bus: the walk ends at the
+      // bus, and the plan leaves the stop as late as it can.
+      const marked: any = markStopLegs(measured(), [PERENNIAL], [30])
+      expect(marked.legs[3].endTime).toBe(T('11:34:00'))
+      expect(marked.legs[3].startTime).toBe(T('11:22:10'))
+    })
+
+    it('leaves a stop with no bus after it alone', () => {
+      const it0: any = measured()
+      // Walk the rest of the way: no bus to take the wait from.
+      it0.legs = [
+        ...it0.legs.slice(0, 3),
+        leg('WALK', '10:59:26', '11:40:00', OTP_LABEL, MICRO_CENTER, 3000)
+      ]
+      const marked: any = markStopLegs(it0, [PERENNIAL], [20])
+      expect(marked.legs[3].startTime).toBe(T('10:59:26'))
+      expect(marked.stopStayMinutes).toEqual([20])
+    })
+
+    it('counts a gap already at the stop (the chain leaves one)', () => {
+      const it0: any = measured()
+      it0.legs[3] = leg('WALK', '11:19:26', '11:31:16', OTP_LABEL, LAGOON, 900)
+      const input = { ...it0, stopLegIndexes: [2] }
+      const out: any = applyStopStays(input, [20])
+      expect(out).toBe(input)
+      expect(out.legs[3].startTime).toBe(T('11:19:26'))
+    })
+
+    it('names the right stop when OTP skipped the one before it', () => {
+      const marked: any = markStopLegs(
+        measured(),
+        [{ lat: 45.1, lon: -93.1, name: 'Elsewhere' }, PERENNIAL],
+        [5, 20]
+      )
+      expect(marked.legs[2].to.name).toBe('Perennial Cycle')
+      expect(marked.stopStayMinutes).toEqual([20])
+    })
+
+    it('Go Mode splits a stayed itinerary with the next segment leaving after the stay', () => {
+      const plan = buildMultiStopPlan(
+        markStopLegs(measured(), [PERENNIAL], [20])
+      )
+      expect(plan?.segments[0].endTime).toBe(T('10:59:26'))
+      expect(plan?.segments[1].startTime).toBe(T('11:19:26'))
+      expect((plan?.segments[1] as any).stopStayMinutes).toBeUndefined()
+    })
+  })
+
+  describe('the chain', () => {
+    const a: any = {
+      legs: [leg('BICYCLE', '10:00:00', '10:20:00', HOME, PERENNIAL, 5000)],
+      startTime: T('10:00:00')
+    }
+    const b: any = {
+      legs: [
+        leg('BICYCLE', '10:40:00', '11:00:00', PERENNIAL, MICRO_CENTER, 4000)
+      ],
+      startTime: T('10:40:00')
+    }
+
+    it('street-only: the next segment starts once the stay is over', () => {
+      const stitched: any = stitchSegments([a, b], { stays: [20] })
+      expect(stitched.legs[0].endTime).toBe(T('10:20:00'))
+      expect(stitched.legs[1].startTime).toBe(T('10:40:00'))
+      expect(stitched.endTime).toBe(T('11:00:00'))
+      expect(stitched.duration).toBe(60 * 60)
+      // Marking it does not add the stay a second time.
+      const marked: any = markStopLegs(stitched, [PERENNIAL], [20])
+      expect(marked.legs[1].startTime).toBe(T('10:40:00'))
+      expect(itineraryStopTimes(marked)[0]).toMatchObject({
+        arrivalTime: T('10:20:00'),
+        leaveTime: T('10:40:00')
+      })
+    })
+
+    it('transit (keepTimes): the stay is not counted as waiting', () => {
+      const bus: any = {
+        legs: [
+          leg('BUS', '10:43:00', '11:00:00', PERENNIAL, MICRO_CENTER, 4000)
+        ],
+        startTime: T('10:43:00'),
+        waitingTime: 0
+      }
+      const stitched: any = stitchSegments([a, bus], {
+        keepTimes: true,
+        stays: [20]
+      })
+      // 23 min between arrival and the bus, 20 of them the stay.
+      expect(stitched.waitingTime).toBe(3 * 60)
+      expect(stitched.legs[1].startTime).toBe(T('10:43:00'))
+    })
   })
 })

@@ -12,7 +12,7 @@
  * nonsensical value to the routing engine.
  */
 
-import { queryStops, viaVisitLocations } from './multi-stop'
+import { queryStops, queryStopStays, viaVisitLocations } from './multi-stop'
 
 export interface RoutingPreferences {
   bikeReluctance?: number
@@ -60,6 +60,20 @@ export const LEVER_RANGES: Record<LeverKey, readonly [number, number]> = {
  * makes long bike legs expensive, never forbidden.
  */
 export const SERVER_BIKE_RELUCTANCE = 0.5
+
+/**
+ * Backlog 55.1 — the bike reluctance of the one extra "less biking" bike +
+ * transit plan a rider's search asks (rider, 2026-10-16, cycle 23 Q1 A). At
+ * the server's 0.5 OTP prices 8 km of biking below a 13-minute wait, so a
+ * low-bike chain that arrives a few minutes later is dropped as dominated
+ * inside the router. Measured serial on production OTP 2026-10-16, the
+ * 2026-10-15 21:16 O/D (44.92008,-93.21954 -> 44.816546,-93.30986), bike +
+ * transit, 40 itineraries, cap 2000: Blue Line -> 539 (21:21 -> 22:17, 1.5 km
+ * of bike) is absent at 0.5 and 0.8, present at 0.9, 1.0 and 2.0. 1.0 is the
+ * lowest round value past that edge; warm answers took 1.6-2.4 s at every
+ * reluctance.
+ */
+export const LOW_BIKE_RELUCTANCE = 1
 export const SERVER_BIKE_SPEED_MPS = 5
 export const BIKE_ACCESS_CEILING_MINUTES = 120
 
@@ -559,6 +573,8 @@ export interface PlanConstraints {
   /** The rider's stops (backlog 43.1) — see util/multi-stop.ts. */
   intermediatePlaces?: unknown[]
   noTransfers?: boolean
+  /** Minutes at each of those stops (backlog 58.3). */
+  stopStays?: unknown[]
   viaStop?: ViaStop | null
 }
 
@@ -583,7 +599,11 @@ export function planConstraintVariables(
   // The rider's stops first, in the order they visit them (backlog 43.1):
   // OTP's via list is ordered, and a pass-through stop is a constraint on the
   // ride, not a place the rider is going.
-  const via: unknown[] = viaVisitLocations(queryStops(query))
+  // Each with the rider's minimum stay there (backlog 58.3).
+  const via: unknown[] = viaVisitLocations(
+    queryStops(query),
+    queryStopStays(query)
+  )
   const stopIds = query?.viaStop?.ids?.filter(Boolean)
   if (stopIds?.length) {
     via.push({ passThrough: { stopLocationIds: stopIds } })
@@ -616,6 +636,9 @@ export const NON_OTP_QUERY_KEYS = [
   // for the way back — actions/round-trip.ts), never of the outbound query.
   'roundTrip',
   'stayMinutes',
+  // The stay at each of the rider's stops: it rides in `via` as each visit's
+  // minimumWaitTime, never under this name (backlog 58.3).
+  'stopStays',
   'viaStop'
 ]
 
@@ -689,9 +712,16 @@ export const PREFERENCES_API_PATH = '/api/preferences'
 export interface PreferencesAnswer {
   preferences: RoutingPreferences
   /**
-   * A transit route the rider asked to ride and nothing else, in their own
-   * words ("18", "Orange Line"). Not an id — the caller resolves it against the
-   * OTP route index. Absent when they named no route.
+   * The transit routes the rider asked to ride and nothing else, in their own
+   * words and in the order they said them ("18", "Orange Line"). Not ids — the
+   * caller resolves them against the OTP route index. Empty when they named no
+   * route. A sidecar from before cycle 27 sends only a single `routeQuery`;
+   * that arrives here as a list of one.
+   */
+  routeQueries: string[]
+  /**
+   * The first of `routeQueries`, kept for callers that only ever held one
+   * route. Absent when they named no route.
    */
   routeQuery?: string
 }
@@ -700,6 +730,8 @@ export interface PreferencesAnswer {
 // nothing that could be markup or an injected id.
 const ROUTE_QUERY_RE = /^[A-Za-z0-9][A-Za-z0-9 .-]*$/
 const MAX_ROUTE_QUERY_CHARS = 40
+// Mirrors MAX_ROUTE_QUERIES in transitnav/preferences_api.py.
+export const MAX_ROUTE_QUERIES = 6
 
 /** Keep a route name only if it still looks like one on this side too. */
 function cleanRouteQuery(value: unknown): string | undefined {
@@ -710,8 +742,29 @@ function cleanRouteQuery(value: unknown): string | undefined {
 }
 
 /**
+ * The route names in an answer: the `routeQueries` list when the sidecar sends
+ * one, else its lone `routeQuery` (the shape every sidecar before cycle 27
+ * sends). Each name is re-checked; bad entries are dropped, not fatal; the
+ * same name twice ("18", "18 ") counts once; at most MAX_ROUTE_QUERIES.
+ */
+function cleanRouteQueries(data: any): string[] {
+  const raw: unknown[] = Array.isArray(data?.routeQueries)
+    ? data.routeQueries
+    : [data?.routeQuery]
+  const seen = new Set<string>()
+  const names: string[] = []
+  raw.forEach((value) => {
+    const name = cleanRouteQuery(value)
+    if (!name || seen.has(name.toLowerCase())) return
+    seen.add(name.toLowerCase())
+    names.push(name)
+  })
+  return names.slice(0, MAX_ROUTE_QUERIES)
+}
+
+/**
  * POST a plain-language description to the (login-gated) preferences endpoint
- * and return the clamped routing levers, plus any route the rider asked to be
+ * and return the clamped routing levers, plus any routes the rider asked to be
  * held to. Same-origin fetch, so the nginx Basic Auth credential rides along
  * automatically; both halves are re-validated client-side (defense in depth).
  * Throws when the answer is empty on both counts. Shared by the search-form box
@@ -731,9 +784,9 @@ export async function postPreferences(
   }
   const data = await response.json()
   const preferences = clampPreferences(data?.preferences)
-  const routeQuery = cleanRouteQuery(data?.routeQuery)
-  if (Object.keys(preferences).length === 0 && !routeQuery) {
+  const routeQueries = cleanRouteQueries(data)
+  if (Object.keys(preferences).length === 0 && routeQueries.length === 0) {
     throw new Error('No usable preferences returned')
   }
-  return { preferences, routeQuery }
+  return { preferences, routeQueries, routeQuery: routeQueries[0] }
 }

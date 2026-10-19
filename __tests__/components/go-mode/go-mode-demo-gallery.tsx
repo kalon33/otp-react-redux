@@ -29,6 +29,17 @@ describe('components > go-mode > GoModeDemo gallery', () => {
     expect(wrapper.text()).toContain('Trip sheet (overview + search from here)')
   })
 
+  it('shows the transfer frames’ "how often it runs" line (58.1)', () => {
+    const wrapper = mount(<GoModeDemo />)
+    const lines = wrapper
+      .find('[data-testid="transfer-frequency"]')
+      .hostNodes()
+      .map((n) => n.text())
+    expect(lines).toHaveLength(2)
+    expect(lines[0]).toMatch(/^Every 12 min, next /)
+    expect(lines[1]).toMatch(/^Next .+, .+/)
+  })
+
   it('renders the onboard options list, not an empty frame', () => {
     const wrapper = mount(<GoModeDemo />)
     // Two alight frames (LIVE + SCHEDULED), each grouping three options into

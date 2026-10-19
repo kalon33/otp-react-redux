@@ -496,13 +496,19 @@ describe('go-mode > retargetPlanToDeparture, through the store', () => {
       expect(store.retargets()).toEqual([
         {
           boardLegIndex: 1,
+          // 23.3 (2026-10-15): the rider test did not run — no tick has
+          // measured the rider on this plan yet — so the plan's own times
+          // stand, and nothing of the rider's is recorded.
+          busMs: null,
           departureMs: ANCHORED_MS,
           // Bike leg ends 09:09:36, the bus leaves 09:14:54.
           overrunMs: -318000,
+          riderEtaMs: null,
           runDepartureMs: ANCHORED_MS,
           source: 'anchor',
           tripId: ADOPTED_TRIP,
-          verdict: 'applied'
+          verdict: 'applied',
+          why: null
         }
       ])
       const types = store.types()
@@ -531,12 +537,15 @@ describe('go-mode > retargetPlanToDeparture, through the store', () => {
       expect(store.retargets()).toEqual([
         {
           boardLegIndex: 1,
+          busMs: null,
           departureMs: ANCHORED_MS,
           overrunMs: 38000,
+          riderEtaMs: null,
           runDepartureMs: ANCHORED_MS,
           source: 'anchor',
           tripId: ADOPTED_TRIP,
-          verdict: 'refused-overrun'
+          verdict: 'refused-overrun',
+          why: null
         }
       ])
     })
@@ -556,12 +565,15 @@ describe('go-mode > retargetPlanToDeparture, through the store', () => {
       expect(store.retargets()).toEqual([
         {
           boardLegIndex: null,
+          busMs: null,
           departureMs: ANCHORED_MS,
           overrunMs: null,
+          riderEtaMs: null,
           runDepartureMs: null,
           source: 'anchor',
           tripId: null,
-          verdict: 'aboard'
+          verdict: 'aboard',
+          why: null
         }
       ])
     })

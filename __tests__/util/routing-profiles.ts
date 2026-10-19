@@ -16,9 +16,11 @@ import {
   getRoutingProfile,
   GO_MODE_SEARCH_WINDOW_SECONDS,
   LEVER_RANGES,
+  MAX_ROUTE_QUERIES,
   NO_TRANSFERS_MAX_TRANSFERS,
   NON_OTP_QUERY_KEYS,
   planConstraintVariables,
+  postPreferences,
   ROUTING_PROFILES,
   SEARCH_WINDOW_RANGE,
   SERVER_BIKE_RELUCTANCE,
@@ -453,5 +455,62 @@ describe('the profile set as a whole', () => {
         })
       }
     }
+  })
+})
+
+describe('postPreferences route names (58.2, cycle 27 Q5)', () => {
+  const g = global as any
+  const answer = (data: any) => {
+    g.fetch = jest.fn().mockResolvedValue({ json: async () => data, ok: true })
+  }
+  afterEach(() => {
+    g.fetch = undefined
+  })
+
+  it('takes the list a cycle-27 sidecar sends', async () => {
+    answer({ preferences: {}, routeQueries: ['18', '21'], routeQuery: '18' })
+    const { routeQueries, routeQuery } = await postPreferences('/p', 'x')
+    expect(routeQueries).toEqual(['18', '21'])
+    expect(routeQuery).toBe('18')
+  })
+
+  it("reads an older sidecar's single route as a list of one", async () => {
+    answer({ preferences: {}, routeQuery: 'Orange Line' })
+    const { routeQueries } = await postPreferences('/p', 'x')
+    expect(routeQueries).toEqual(['Orange Line'])
+  })
+
+  it('drops bad names, repeats and anything past the cap', async () => {
+    answer({
+      preferences: {},
+      routeQueries: [
+        '18',
+        '<b>21</b>',
+        ' 18 ',
+        42,
+        'orange line',
+        'Orange Line',
+        '2',
+        '3',
+        '6',
+        '7',
+        '9'
+      ]
+    })
+    const { routeQueries } = await postPreferences('/p', 'x')
+    expect(routeQueries).toEqual(['18', 'orange line', '2', '3', '6', '7'])
+    expect(routeQueries).toHaveLength(MAX_ROUTE_QUERIES)
+  })
+
+  it('still throws when there is neither a lever nor a route', async () => {
+    answer({ preferences: {}, routeQueries: ['<script>'] })
+    await expect(postPreferences('/p', 'x')).rejects.toThrow()
+  })
+
+  it('gives levers alone an empty list', async () => {
+    answer({ preferences: { walkReluctance: 4 } })
+    const { routeQueries, routeQuery } = await postPreferences('/p', 'x')
+    expect(routeQueries).toEqual([])
+    expect(routeQuery).toBeUndefined()
   })
 })

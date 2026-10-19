@@ -231,13 +231,21 @@ describe('go-mode riding reducer', () => {
   })
 
   it('START_GO_MODE falls back to routeId, else keeps fact un-anchored', () => {
-    const set = goMode(initial, setRiding(riding))
+    // A mid-ride swap (Go Mode active) may anchor by route alone...
+    const set = goMode({ ...initial, isActive: true }, setRiding(riding))
     const byRoute: any = {
       legs: [{ mode: 'BUS', route: { id: '1:904' }, transitLeg: true }]
     }
     expect(
       goMode(set, startGoMode({ itinerary: byRoute })).riding?.legIndex
     ).toBe(0)
+    // ...a RESTART may not: a fact naming trip-1 is not on another trip of the
+    // same route (54.1, 2026-10-15 21:21:07).
+    const restarted = goMode(
+      goMode(initial, setRiding(riding)),
+      startGoMode({ itinerary: byRoute })
+    )
+    expect(restarted.riding?.legIndex).toBe(-1)
     const noMatch: any = { legs: [{ mode: 'WALK' }] }
     const state = goMode(set, startGoMode({ itinerary: noMatch }))
     expect(state.riding?.legIndex).toBe(-1)
@@ -291,7 +299,12 @@ describe('go-mode riding reducer', () => {
     // re-ran (failing) discovery. Alight and sustained off-route remain the
     // physical invalidators (and a stale fact self-heals in 90s off-route).
     const set = goMode(initial, setRiding(riding))
-    expect(goMode(set, stopGoMode()).riding).toEqual(riding)
+    // ...stamped with when it was kept, so a later start can tell a back-out
+    // from a fact hours old (54.1).
+    expect(goMode(set, stopGoMode()).riding).toEqual({
+      ...riding,
+      keptAtMs: expect.any(Number)
+    })
   })
 })
 

@@ -1,6 +1,7 @@
 import React from 'react'
 import type { Leg } from '@opentripplanner/types'
 
+import type { LegFrequencyEntry } from '../../util/leg-frequency'
 import type { TripProgress } from '../../util/go-mode/progress-calculator'
 
 import { LegPanelContainer } from './styled'
@@ -21,6 +22,8 @@ interface Props {
   departureOverrideTripId?: string | null
   leg: Leg
   nextLeg?: Leg
+  /** "On a different bus?" (51.1) — see WalkingNavigation / TransitProgress. */
+  onChooseBus?: () => void
   /** Recording hook — see WalkingNavigation. */
   onDepartureMismatch?: (info: {
     cardDepartureMs: number | null
@@ -33,6 +36,8 @@ interface Props {
   onExit?: () => void
   onSelectDeparture?: (epochMs: number | null, tripId?: string | null) => void
   progress: TripProgress
+  /** How often the transfer's route runs (58.1) — see WalkingNavigation. */
+  transferFrequency?: LegFrequencyEntry | null
 }
 
 const TRANSIT_MODES = new Set(['BUS', 'FERRY', 'RAIL', 'SUBWAY', 'TRAM'])
@@ -44,10 +49,12 @@ const CurrentLegPanel = ({
   departureOverrideTripId,
   leg,
   nextLeg,
+  onChooseBus,
   onDepartureMismatch,
   onExit,
   onSelectDeparture,
-  progress
+  progress,
+  transferFrequency
 }: Props) => {
   const isTransit = TRANSIT_MODES.has(leg.mode)
   const isWalking = leg.mode === 'WALK' || leg.mode === 'BICYCLE'
@@ -55,7 +62,12 @@ const CurrentLegPanel = ({
   return (
     <LegPanelContainer>
       {isTransit && (
-        <TransitProgress leg={leg} onExit={onExit} progress={progress} />
+        <TransitProgress
+          leg={leg}
+          onChooseBus={onChooseBus}
+          onExit={onExit}
+          progress={progress}
+        />
       )}
       {isWalking && (
         <WalkingNavigation
@@ -65,10 +77,12 @@ const CurrentLegPanel = ({
           departureOverrideTripId={departureOverrideTripId}
           leg={leg}
           nextLeg={nextLeg}
+          onChooseBus={onChooseBus}
           onDepartureMismatch={onDepartureMismatch}
           onExit={onExit}
           onSelectDeparture={onSelectDeparture}
           progress={progress}
+          transferFrequency={transferFrequency}
         />
       )}
       {/* Fallback: unknown modes get walking navigation */}
@@ -80,10 +94,12 @@ const CurrentLegPanel = ({
           departureOverrideTripId={departureOverrideTripId}
           leg={leg}
           nextLeg={nextLeg}
+          onChooseBus={onChooseBus}
           onDepartureMismatch={onDepartureMismatch}
           onExit={onExit}
           onSelectDeparture={onSelectDeparture}
           progress={progress}
+          transferFrequency={transferFrequency}
         />
       )}
     </LegPanelContainer>

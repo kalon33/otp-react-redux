@@ -360,3 +360,79 @@ export function applyRouteLockToItineraries<
   }
   return [...kept, ...itineraries.filter((itin) => !matches(itin))]
 }
+
+/**
+ * Every transit route the itineraries ride, each once, in the order they first
+ * appear — OTP's own ranking order, so the routes of the best trips come first.
+ * Street legs carry no route and are skipped.
+ */
+export function routesInItineraries(
+  itineraries: Array<{ legs?: Array<unknown> } | null | undefined> | undefined
+): string[] {
+  const seen = new Set<string>()
+  for (const itinerary of itineraries || []) {
+    for (const leg of itinerary?.legs || []) {
+      const id = getLegRouteId(leg as never)
+      if (id) seen.add(id)
+    }
+  }
+  return Array.from(seen)
+}
+
+/** The bits of a place the "same trip" test compares. */
+interface PlaceLike {
+  lat?: number | string | null
+  lon?: number | string | null
+}
+
+/** One entry of `state.otp.searches`, as far as the route sheet reads it. */
+export interface SearchLike {
+  query?: { from?: PlaceLike | null; to?: PlaceLike | null } | null
+  response?: Array<{ plan?: { itineraries?: Array<any> } | null } | null>
+  timestamp?: string
+}
+
+/**
+ * How far apart two ends may be and still be "the same trip". A Current
+ * Location origin is re-read from GPS on every search, so the same doorstep
+ * comes back a few metres off each time (the 10-16 home -> Oakdale searches
+ * spread over ~5 m); 0.001 deg is ~110 m north-south, ~80 m east-west here.
+ */
+const SAME_PLACE_DEG = 0.001
+
+function samePlace(a?: PlaceLike | null, b?: PlaceLike | null): boolean {
+  if (!a || !b) return false
+  const close = (x: unknown, y: unknown) =>
+    Number.isFinite(Number(x)) &&
+    Number.isFinite(Number(y)) &&
+    Math.abs(Number(x) - Number(y)) < SAME_PLACE_DEG
+  return close(a.lat, b.lat) && close(a.lon, b.lon)
+}
+
+/**
+ * The routes of the most recent search between these two places — what the
+ * route sheet offers on top as "In your last results".
+ *
+ * Read from the search history rather than the active search: on the phone the
+ * results are cleared (CLEAR_ACTIVE_SEARCH, showMobileSearchScreen) before
+ * Settings can be opened, so the active search is empty exactly when the rider
+ * is choosing routes. Searches for any other pair of places are ignored — the
+ * routes of yesterday's trip to work are no help on the way to the dentist.
+ */
+export function lastResultsRouteIds(
+  searches: Record<string, SearchLike> | undefined,
+  query: { from?: PlaceLike | null; to?: PlaceLike | null } | undefined
+): string[] {
+  const latest = Object.values(searches || {})
+    .filter(
+      (search) =>
+        samePlace(search?.query?.from, query?.from) &&
+        samePlace(search?.query?.to, query?.to) &&
+        (search.response || []).some((r) => r?.plan?.itineraries?.length)
+    )
+    .sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''))[0]
+  if (!latest) return []
+  return routesInItineraries(
+    (latest.response || []).flatMap((r) => r?.plan?.itineraries || [])
+  )
+}

@@ -4,6 +4,7 @@ import type { Itinerary } from '@opentripplanner/types'
 import {
   ADD_NOTIFICATION,
   BEGIN_ONBOARD_FLOW,
+  CLEAR_FASTER_ROUTE_OFFER,
   CLEAR_ONBOARD,
   CLEAR_REROUTE,
   CLEAR_RIDING,
@@ -11,6 +12,7 @@ import {
   CLOSE_ONBOARD_PREVIEW,
   CONFIRM_VEHICLE,
   DISMISS_BOARDING_PROMPT,
+  OPEN_CHOOSE_BUS,
   OPEN_ONBOARD_PREVIEW,
   PAUSE_GPS_SIMULATION,
   REPAIR_LEG_GEOMETRY,
@@ -18,8 +20,10 @@ import {
   SET_ARRIVED,
   SET_BOARDING_SEARCH_FAILED,
   SET_BOARDING_SEARCHING,
+  SET_CHOOSE_BUS_ERROR,
   SET_DEPARTURE_OVERRIDE,
   SET_EARLY_ALIGHT,
+  SET_FASTER_ROUTE_OFFER,
   SET_GO_MODE_ACTIVE_LEG,
   SET_GO_MODE_BACKGROUNDED,
   SET_LEG_TURN_CUES,
@@ -30,6 +34,7 @@ import {
   SET_ONBOARD_STATUS,
   SET_ONBOARD_TRIP,
   SET_ONBOARD_VEHICLE,
+  SET_PLAN_STOP_OFFER,
   SET_REROUTE_RESULT,
   SET_RETURN_COUNTDOWN,
   SET_RIDING,
@@ -58,13 +63,18 @@ import {
   DEFAULT_TURN_CUE_SETTINGS,
   TurnCueSettings
 } from '../util/go-mode/turn-cue-settings'
-import { ridingFactIsEvidenced } from '../util/go-mode/riding'
+import { FIX_ACCURACY_MAX_M } from '../util/go-mode/transit-trust'
+import {
+  ridingFactIsEvidenced,
+  ridingKeptTooLong
+} from '../util/go-mode/riding'
 import type {
   DepartureOverrideSource,
   LiveLegTime,
   RidingState
 } from '../util/go-mode/types'
 import type { EarlyAlightRecord } from '../util/go-mode/riding'
+import type { FasterRouteOffer } from '../util/go-mode/faster-route-offer'
 import type { MultiStopPlan } from '../util/multi-stop'
 import type {
   NearbyVehicleOption,
@@ -244,6 +254,16 @@ export interface GoModeState {
   arrivedDelay: number | null
 
   boardingPrompt: {
+    /**
+     * The sheet was opened from "On a different bus?" on the waiting or
+     * access card (51.1), not by the boarding flow: it lists live buses from
+     * every nearby route plus route badges and a route-number box, and a pick
+     * sets the riding fact and re-plans from that bus. On 2026-10-13 the rider
+     * boarded a 546 the plan did not hold and the app had no way to be told.
+     */
+    chooseBus?: boolean
+    /** Why the last pick in that mode could not be resolved (51.1). */
+    chooseBusError?: { kind: 'no-route' | 'no-trip'; route: string } | null
     lastDismissedAt: number | null
     /**
      * The last vehicle search for this prompt FAILED — the feed reads did not
@@ -298,12 +318,6 @@ export interface GoModeState {
    */
   earlyAlight: EarlyAlightRecord | null
 
-  isActive: boolean
-
-  /** Live (or schedule-fallback) transit-leg times, keyed by leg index. Kept
-   * fresh mid-ride by refreshLiveLegTimes; consumed by the trip overview. */
-  liveLegTimes: Record<number, LiveLegTime>
-
   /**
    * A trip through the rider's stops (backlog 43.1), guided one segment at a
    * time: `activeItinerary` is `segments[index]`, and arriving at the end of
@@ -311,6 +325,23 @@ export interface GoModeState {
    * no auto-end; the arrival card offers the next segment. Null for every
    * ordinary trip. See util/multi-stop.ts.
    */
+  /**
+   * The background "faster route available" offer on screen (56.1, cycle 25
+   * B2), or null. ONE card, updated in place while later checks still see the
+   * same route, replaced by a better one, and gone when its boarding passes,
+   * when a later check no longer sees it, or when the rider answers it.
+   * `kind` is `faster` | `lessBike` off the bus; `aboard` is the get-off
+   * offer's (B4). START_GO_MODE and STOP_GO_MODE clear it: a new plan has not
+   * been compared with anything yet. Never applied without the rider's tap.
+   */
+  fasterRoute: FasterRouteOffer | null
+
+  isActive: boolean
+
+  /** Live (or schedule-fallback) transit-leg times, keyed by leg index. Kept
+   * fresh mid-ride by refreshLiveLegTimes; consumed by the trip overview. */
+  liveLegTimes: Record<number, LiveLegTime>
+
   multiStop: MultiStopPlan | null
 
   notifications: {
@@ -329,6 +360,15 @@ export interface GoModeState {
    * lets endGoMode restore the origin the rider started with on exit.
    */
   originalFrom: any
+
+  /**
+   * "Pick another stop" (54.1, rider's Q4 = A). Set when "I'm on the bus" met
+   * a current riding fact on the plan's own train and went straight to
+   * guidance for the plan's stop instead of the get-off list; names the trip
+   * so the button shows only while the rider is on that ride. START_GO_MODE
+   * clears it (a new plan has not made that choice).
+   */
+  planStopOffer: { tripId: string } | null
 
   progress: TripProgress | null
 
@@ -400,6 +440,13 @@ export interface GoModeState {
     interval: number
     isTracking: boolean
     lastPosition: GeolocationPosition | null
+    /**
+     * The latest Go Mode fix whose accuracy was within `FIX_ACCURACY_MAX_M`
+     * (51.3). `lastPosition` is the latest fix of any quality; an automatic
+     * re-plan takes its origin from the freshest trusted fix instead — see
+     * `pickReplanOriginFix` (util/go-mode/replan-origin).
+     */
+    lastTrustedPosition: GeolocationPosition | null
   }
 
   /**
@@ -459,6 +506,8 @@ const defaultState: GoModeState = {
   arrivedDelay: null,
 
   boardingPrompt: {
+    chooseBus: false,
+    chooseBusError: null,
     lastDismissedAt: null,
     searchFailed: false,
     searching: false,
@@ -473,6 +522,8 @@ const defaultState: GoModeState = {
   departureOverrideTripId: null,
 
   earlyAlight: null,
+
+  fasterRoute: null,
 
   isActive: false,
   liveLegTimes: {},
@@ -501,6 +552,8 @@ const defaultState: GoModeState = {
   },
 
   originalFrom: null,
+
+  planStopOffer: null,
 
   progress: null,
 
@@ -533,7 +586,8 @@ const defaultState: GoModeState = {
     error: null,
     interval: 8000,
     isTracking: false,
-    lastPosition: null
+    lastPosition: null,
+    lastTrustedPosition: null
   },
 
   turnCues: { ...DEFAULT_TURN_CUE_SETTINGS },
@@ -576,7 +630,8 @@ function legRouteId(leg: any): string | null {
  */
 function reanchorRiding(
   riding: RidingState | null,
-  itinerary: Itinerary | null
+  itinerary: Itinerary | null,
+  options: { routeFallback?: boolean } = {}
 ): RidingState | null {
   if (!riding || !itinerary?.legs) return riding
   const legs: any[] = itinerary.legs
@@ -588,7 +643,13 @@ function reanchorRiding(
         (l.trip?.gtfsId === riding.tripId || l.tripId === riding.tripId)
     )
   }
-  if (legIndex < 0 && riding.routeId) {
+  // The route-only fallback is for a fact that never named its trip. On a
+  // RESTART it must not stand in for a trip miss (54.1): on 2026-10-15 at
+  // 21:21:07 it anchored the 18:14 Blue Line fact (trip 1:892049) onto the new
+  // plan's tram leg (trip 1:983182) — same route, another train — and the
+  // vehicle match it carried forced TRANSITION_LEG 1 five seconds later.
+  const routeFallback = options.routeFallback ?? true
+  if (legIndex < 0 && riding.routeId && (routeFallback || !riding.tripId)) {
     legIndex = legs.findIndex(
       (l) => l?.transitLeg && legRouteId(l) === riding.routeId
     )
@@ -674,6 +735,14 @@ const goMode = handleActions<GoModeState, any>(
           : { ...defaultState.vehicleMatch }
     }),
 
+    [CLEAR_FASTER_ROUTE_OFFER]: (state, action) =>
+      // Only the offer it names, when it names one: a clear for an offer that
+      // has already been replaced must not take the new one with it.
+      action.payload?.offerId &&
+      state.fasterRoute?.offerId !== action.payload.offerId
+        ? state
+        : { ...state, fasterRoute: null },
+
     [CLEAR_ONBOARD]: (state) => ({
       ...state,
       onboard: { ...defaultState.onboard }
@@ -693,6 +762,8 @@ const goMode = handleActions<GoModeState, any>(
       ...state,
       boardingPrompt: {
         ...state.boardingPrompt,
+        chooseBus: false,
+        chooseBusError: null,
         searching: false,
         shown: false,
         transitLegEnteredAt: null
@@ -721,6 +792,8 @@ const goMode = handleActions<GoModeState, any>(
       alightedFrom: null,
       boardingPrompt: {
         ...state.boardingPrompt,
+        chooseBus: false,
+        chooseBusError: null,
         searching: false,
         shown: false
       },
@@ -737,6 +810,8 @@ const goMode = handleActions<GoModeState, any>(
       ...state,
       boardingPrompt: {
         ...state.boardingPrompt,
+        chooseBus: false,
+        chooseBusError: null,
         lastDismissedAt: Date.now(),
         searching: false,
         shown: false
@@ -756,6 +831,20 @@ const goMode = handleActions<GoModeState, any>(
      * (the tap is stale) rather than previewing something the rider did not
      * choose.
      */
+    // "On a different bus?" (51.1): the sheet opens already searching, so the
+    // empty list is never read as an answer before a poll has been compared.
+    [OPEN_CHOOSE_BUS]: (state) => ({
+      ...state,
+      boardingPrompt: {
+        ...state.boardingPrompt,
+        chooseBus: true,
+        chooseBusError: null,
+        searchFailed: false,
+        searching: true,
+        shown: true
+      }
+    }),
+
     [OPEN_ONBOARD_PREVIEW]: (state, action) => {
       const list = state.onboard.alightOptions || []
       const { control, index, stopId } = action.payload || {}
@@ -841,6 +930,15 @@ const goMode = handleActions<GoModeState, any>(
     // own voice and the shape every caller used before 12.15, or
     // `{ ms, source }` when the writer knows whose pick it is. Normalized here
     // rather than at the call sites so the two fields can never disagree.
+    [SET_CHOOSE_BUS_ERROR]: (state, action: any) => ({
+      ...state,
+      boardingPrompt: {
+        ...state.boardingPrompt,
+        chooseBusError: action.payload ?? null,
+        searching: false
+      }
+    }),
+
     [SET_DEPARTURE_OVERRIDE]: (state, action) => {
       const { payload } = action
       const ms =
@@ -878,6 +976,11 @@ const goMode = handleActions<GoModeState, any>(
       departureOverrideTripId: null,
       earlyAlight: action.payload,
       riding: null
+    }),
+
+    [SET_FASTER_ROUTE_OFFER]: (state, action) => ({
+      ...state,
+      fasterRoute: action.payload ?? null
     }),
 
     [SET_GO_MODE_ACTIVE_LEG]: (state, action) => ({
@@ -992,6 +1095,11 @@ const goMode = handleActions<GoModeState, any>(
       }
     }),
 
+    [SET_PLAN_STOP_OFFER]: (state, action) => ({
+      ...state,
+      planStopOffer: action.payload ?? null
+    }),
+
     [SET_REROUTE_RESULT]: (state, action) => {
       // Payload is the full list of alternatives (or null/[] for "none"), or a
       // single itinerary — the original one-result shape, still used by tests
@@ -1068,12 +1176,28 @@ const goMode = handleActions<GoModeState, any>(
       ...state,
       boardingPrompt: {
         ...state.boardingPrompt,
+        // The boarding flow's own sheet is never the choose-bus one (51.1).
+        chooseBus: false,
+        chooseBusError: null,
         shown: true
       }
     }),
 
     [START_GO_MODE]: (state, action) => {
       const { itinerary, multiStop, originalFrom, roundTrip } = action.payload
+      const nowMs: number = action.payload?.nowMs ?? Date.now()
+      const restart = !state.isActive
+      const carried =
+        !restart ||
+        (ridingFactIsEvidenced(state.riding) &&
+          !ridingKeptTooLong(state.riding, nowMs))
+          ? state.riding
+          : null
+      const restartedRiding = reanchorRiding(
+        carried ? { ...carried, keptAtMs: null } : null,
+        itinerary,
+        { routeFallback: !restart }
+      )
 
       // `ui` is deliberately preserved: a background auto-update (missed bus,
       // quiet access replan) swaps the itinerary via this action while the
@@ -1101,6 +1225,8 @@ const goMode = handleActions<GoModeState, any>(
         departureOverride: null,
         departureOverrideSource: null,
         departureOverrideTripId: null,
+        // Compared with the plan that has just been replaced (56.1).
+        fasterRoute: null,
         isActive: true,
         liveLegTimes: {},
         // Same rule as roundTrip below: beginGoMode passes the plan back in
@@ -1148,8 +1274,11 @@ const goMode = handleActions<GoModeState, any>(
           )
         },
         originalFrom: originalFrom ?? null,
+        planStopOffer: null,
         progress: null,
+
         reRoute: { ...defaultState.reRoute },
+
         // The countdown belongs to the plan, and the plan has just been
         // (re)stated: a mid-trip itinerary swap on a round trip re-enters here
         // with the SAME roundTrip, and re-arming from null is correct — the
@@ -1168,12 +1297,14 @@ const goMode = handleActions<GoModeState, any>(
         // and TRANSITION_LEG stepped straight onto the bus leg one second
         // later. An unevidenced fact has to be re-earned; an evidenced one
         // (a real, non-synthetic vehicle id) is a physical fact and stays.
-        riding: reanchorRiding(
-          state.isActive || ridingFactIsEvidenced(state.riding)
-            ? state.riding
-            : null,
-          itinerary
-        ),
+        //
+        // ...and an evidenced fact is only physical while it is CURRENT
+        // (54.1): a fact kept across STOP_GO_MODE for longer than the 7/12
+        // back-out-and-reopen needs is dropped here. The feed and trip-end
+        // checks need the transit index and are applied by beginGoMode before
+        // it dispatches this; the age check is here so no caller can skip it.
+        // A fact resumed by a restart is in use again, so its keep stamp goes.
+        riding: restartedRiding,
         // Absent means one-way, explicitly: an auto-update that swaps the
         // outbound itinerary mid-trip goes through beginGoMode with no
         // options, and a round trip must not silently survive a re-plan the
@@ -1213,7 +1344,10 @@ const goMode = handleActions<GoModeState, any>(
         // itinerary for the SAME bus the rider is sitting on, and making them
         // re-confirm it would be a regression. reanchorRiding above decides
         // that, so key off its result rather than the pre-swap state.
-        vehicleMatch: reanchorRiding(state.riding, itinerary)
+        //
+        // Keyed off the CARRIED fact: a dropped (stale or unevidenced) fact
+        // must not leave its confirmed match behind to be re-asserted.
+        vehicleMatch: restartedRiding
           ? state.vehicleMatch
           : { ...defaultState.vehicleMatch }
       }
@@ -1262,7 +1396,7 @@ const goMode = handleActions<GoModeState, any>(
       }
     }),
 
-    [STOP_GO_MODE]: (state) => ({
+    [STOP_GO_MODE]: (state, action) => ({
       ...defaultState,
       // Getting OFF a bus is just as physical, and it has to survive alongside
       // the confirmed match below — otherwise exiting Go Mode after an alight
@@ -1274,7 +1408,22 @@ const goMode = handleActions<GoModeState, any>(
       // reopened "I'm on the bus" — with riding wiped here, the flow forgot
       // the confirmed vehicle and re-ran (failing) discovery. Alight and
       // sustained off-route remain the only physical invalidators.
-      riding: state.riding,
+      //
+      // Stamped with WHEN (54.1): nothing re-evidences the fact while Go Mode
+      // is off, so the next start / "I'm on the bus" asks how long it has been
+      // kept (ridingFactIsCurrent). An earlier stamp stands — an onboard flow
+      // that re-adopted the fact and was backed out of again has not made it
+      // any fresher.
+      riding: state.riding
+        ? {
+            ...state.riding,
+            keptAtMs:
+              state.riding.keptAtMs ??
+              (typeof action.payload?.nowMs === 'number'
+                ? action.payload.nowMs
+                : Date.now())
+          }
+        : null,
       // The rider's global turn-by-turn choice is a SETTING, not trip state:
       // ending a trip must not silently return it to the shipped default. The
       // per-leg overrides go with the trip they belonged to (defaultState).
@@ -1381,12 +1530,20 @@ const goMode = handleActions<GoModeState, any>(
     }),
 
     [UPDATE_POSITION]: (state: GoModeState, action: any) => {
+      const accuracy = action.payload?.coords?.accuracy
+      const trusted =
+        accuracy != null &&
+        Number.isFinite(accuracy) &&
+        accuracy <= FIX_ACCURACY_MAX_M
       return {
         ...state,
         tracking: {
           ...state.tracking,
           error: null,
-          lastPosition: action.payload
+          lastPosition: action.payload,
+          lastTrustedPosition: trusted
+            ? action.payload
+            : state.tracking.lastTrustedPosition ?? null
         }
       }
     },

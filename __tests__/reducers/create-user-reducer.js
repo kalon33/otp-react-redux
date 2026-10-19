@@ -394,4 +394,123 @@ describe('lib > reducers > create-user-reducer', () => {
       expect(getUserInitialState({}).localUser.storeTripHistory).toBe(true)
     })
   })
+
+  describe('saved route sets (58.2)', () => {
+    const config = { persistence: { enabled: true, strategy: 'localStorage' } }
+    const reducer = createUserReducer(config)
+    const freshState = () => getUserInitialState(config)
+    const stored = () =>
+      JSON.parse(window.localStorage.getItem('otp.routeSets') || 'null')
+    const draft = {
+      name: 'Commute',
+      routes: [
+        { id: '1:18', label: '18' },
+        { id: '1:21', label: '21' },
+        { id: '1:904', label: 'Orange' }
+      ],
+      scope: 'only'
+    }
+    const save = (payload) => ({
+      payload: { draft, id: 'set-1', now: 1000, replace: false, ...payload },
+      type: 'SAVE_ROUTE_SET'
+    })
+
+    afterEach(() => window.localStorage.clear())
+
+    it('starts empty, and garbage in storage still boots empty', () => {
+      expect(freshState().localUser.routeSets).toEqual([])
+      window.localStorage.setItem('otp.routeSets', '{"not":"a list"}')
+      expect(freshState().localUser.routeSets).toEqual([])
+    })
+
+    it('save persists, and a reload restores it', () => {
+      const state = reducer(freshState(), save())
+      const expected = [
+        {
+          id: 'set-1',
+          name: 'Commute',
+          routes: draft.routes,
+          savedAt: 1000,
+          scope: 'only'
+        }
+      ]
+      expect(state.localUser.routeSets).toEqual(expected)
+      expect(stored()).toEqual(expected)
+      expect(freshState().localUser.routeSets).toEqual(expected)
+    })
+
+    it('a taken name is a no-op unless replace, which keeps the id', () => {
+      let state = reducer(freshState(), save())
+      const before = state
+      state = reducer(
+        state,
+        save({ draft: { ...draft, name: 'COMMUTE' }, id: 'set-2' })
+      )
+      expect(state).toBe(before)
+      state = reducer(
+        state,
+        save({
+          draft: { ...draft, routes: [{ id: '1:5', label: '5' }] },
+          id: 'set-2',
+          now: 2000,
+          replace: true
+        })
+      )
+      expect(state.localUser.routeSets).toHaveLength(1)
+      expect(state.localUser.routeSets[0]).toMatchObject({
+        id: 'set-1',
+        routes: [{ id: '1:5', label: '5' }],
+        savedAt: 2000
+      })
+      expect(freshState().localUser.routeSets[0].routes).toEqual([
+        { id: '1:5', label: '5' }
+      ])
+    })
+
+    it('rename persists; delete persists; a reload sees both', () => {
+      let state = reducer(freshState(), save())
+      state = reducer(
+        state,
+        save({ draft: { ...draft, name: 'Gym' }, id: 'set-2' })
+      )
+      state = reducer(state, {
+        payload: { id: 'set-1', name: 'Work run', now: 3000 },
+        type: 'RENAME_ROUTE_SET'
+      })
+      expect(freshState().localUser.routeSets.map((s) => s.name)).toEqual([
+        'Gym',
+        'Work run'
+      ])
+      state = reducer(state, {
+        payload: { id: 'set-2' },
+        type: 'DELETE_ROUTE_SET'
+      })
+      expect(state.localUser.routeSets.map((s) => s.id)).toEqual(['set-1'])
+      expect(freshState().localUser.routeSets.map((s) => s.name)).toEqual([
+        'Work run'
+      ])
+      // Deleting what is not there changes nothing.
+      expect(
+        reducer(state, { payload: { id: 'nope' }, type: 'DELETE_ROUTE_SET' })
+      ).toBe(state)
+    })
+
+    it('a places restore reloads the sets from storage', () => {
+      const state = freshState()
+      window.localStorage.setItem(
+        'otp.routeSets',
+        JSON.stringify([
+          {
+            id: 'set-9',
+            name: 'Back',
+            routes: [{ id: '1:18', label: '18' }],
+            savedAt: 1,
+            scope: 'only'
+          }
+        ])
+      )
+      const next = reducer(state, { type: 'RESTORE_LOCAL_USER_PLACES' })
+      expect(next.localUser.routeSets.map((s) => s.name)).toEqual(['Back'])
+    })
+  })
 })

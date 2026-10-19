@@ -253,7 +253,12 @@ describe('reRouteFromCurrentPosition (isolated pipeline)', () => {
       isActive: true,
       tracking: {
         ...initial.tracking,
-        lastPosition: { coords: { latitude: 44.95, longitude: -93.29 } }
+        // A usable fix taken now (51.3: an automatic re-plan only starts
+        // from a fix within FIX_ACCURACY_MAX_M and a minute old).
+        lastPosition: {
+          coords: { accuracy: 5, latitude: 44.95, longitude: -93.29 },
+          timestamp: Date.now()
+        }
       },
       ...goModeOverrides
     }
@@ -459,7 +464,11 @@ describe('quietReplanAccessLeg (leg-scoped with full-trip fallback)', () => {
       routeMatch: { legIndex: 0 },
       tracking: {
         ...initial.tracking,
-        lastPosition: { coords: { latitude: 44.85, longitude: -93.31 } }
+        // A usable fix taken now (51.3).
+        lastPosition: {
+          coords: { accuracy: 5, latitude: 44.85, longitude: -93.31 },
+          timestamp: Date.now()
+        }
       }
     }
     const actions: any[] = []
@@ -731,6 +740,15 @@ describe('quietReplanAccessLeg (leg-scoped with full-trip fallback)', () => {
     const store = makeStore(trip)
     await store.dispatch(quietReplanAccessLeg())
     advanceClock(61000)
+    // The rider's fix moves on with the clock: a 61 s old one would be no
+    // re-plan origin at all (51.3), which is not what this case is about.
+    store.dispatch({
+      payload: {
+        ...store.getGoMode().tracking.lastPosition,
+        timestamp: Date.now()
+      },
+      type: 'UPDATE_POSITION'
+    })
     await store.dispatch(quietReplanAccessLeg())
 
     expect(mockedFetch).toHaveBeenCalledTimes(4)
@@ -828,8 +846,9 @@ describe('a named route survives a Go Mode re-route', () => {
       tracking: {
         ...initial.tracking,
         lastPosition: {
-          coords: { latitude: 44.95, longitude: -93.29 },
-          timestamp: T
+          coords: { accuracy: 5, latitude: 44.95, longitude: -93.29 },
+          // Taken now: a fix over a minute old is no re-plan origin (51.3).
+          timestamp: Date.now()
         }
       }
     }

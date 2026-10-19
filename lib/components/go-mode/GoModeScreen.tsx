@@ -5,7 +5,15 @@ import React, { useEffect, useRef, useState } from 'react'
 import * as goModeActions from '../../actions/go-mode'
 import * as uiActions from '../../actions/ui'
 import { aboardBeforeLegStart } from '../../util/go-mode/riding'
+import { fetchLegFrequency } from '../../actions/leg-frequency'
 import { hasNextSegment } from '../../util/multi-stop'
+import { isReplayActive } from '../../util/go-mode/replay/replay-engine'
+import {
+  LegFrequencyEntry,
+  legFrequencyQuestion,
+  shouldFetchTransferFrequency,
+  transferFrequencyLeg
+} from '../../util/leg-frequency'
 import { MobileScreens } from '../../actions/ui-constants'
 import MobileNavigationBar from '../mobile/navigation-bar'
 import type { GoModeState } from '../../reducers/go-mode'
@@ -34,6 +42,7 @@ import {
 import AlightRecommendation from './AlightRecommendation'
 import BoardingPrompt from './BoardingPrompt'
 import CurrentLegPanel from './CurrentLegPanel'
+import FasterRouteCard from './FasterRouteCard'
 import GoModeMap from './GoModeMap'
 import GoModeNotifications from './GoModeNotifications'
 import GoModeStopViewer from './GoModeStopViewer'
@@ -51,8 +60,11 @@ interface Props {
   departureOverride: number | null
   departureOverrideTripId: string | null
   endGoMode: () => void
+  fetchLegFrequency: (leg: any) => void
   finishArrivedTrip: () => void
   goMode: GoModeState
+  /** The app-wide leg-frequency cache (58.1). */
+  legFrequency: Record<string, LegFrequencyEntry>
   onDepartureMismatch: (info: {
     cardDepartureMs: number | null
     heldTripId: string | null
@@ -61,6 +73,8 @@ interface Props {
     /** The run the tick is on (38.1) — beside heldTripId. */
     tickTripId?: string | null
   }) => void
+  /** "On a different bus?" on the waiting and access cards (51.1). */
+  openChooseBusSheet: () => void
   pauseGpsSimulation: () => void
   recordMapFollowGesture: (gesture: MapFollowGesture) => void
   resumeGpsSimulation: () => void
@@ -80,9 +94,12 @@ const GoModeScreen = ({
   departureOverride,
   departureOverrideTripId,
   endGoMode,
+  fetchLegFrequency,
   finishArrivedTrip,
   goMode,
+  legFrequency,
   onDepartureMismatch,
+  openChooseBusSheet,
   pauseGpsSimulation,
   recordMapFollowGesture,
   resumeGpsSimulation,
@@ -130,6 +147,32 @@ const GoModeScreen = ({
   // Wake lock + reload warning for the life of the trip (shared with the
   // ReturnToTripBanner so the guards survive backgrounding).
   useActiveTripGuards(goMode.isActive)
+
+  // How often a transfer's route runs (58.1, cycle 26 Q1 C). Asked here, by
+  // the screen, when the rider starts the walk to a transfer — never from the
+  // tick: the state machine neither waits for this answer nor reads it.
+  // Skipped when cached, in flight or replaying (see the util).
+  const replaying = isReplayActive()
+  const transferQuestion = goMode.isActive
+    ? shouldFetchTransferFrequency({
+        cache: legFrequency,
+        currentLegIndex: goMode.progress?.currentLegIndex,
+        legs: goMode.activeItinerary?.legs,
+        nowMs: Date.now(),
+        replay: replaying
+      })
+    : null
+  const transferQuestionKey = transferQuestion?.key ?? null
+  useEffect(() => {
+    if (!transferQuestionKey || !goMode.activeItinerary || !goMode.progress) {
+      return
+    }
+    fetchLegFrequency(
+      goMode.activeItinerary.legs[goMode.progress.currentLegIndex + 1]
+    )
+    // The question's key is the request; the legs are read at that moment.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [transferQuestionKey])
 
   // Every path that ENDS the trip asks first. Shared so the two of them cannot
   // drift — on 8/9 only one of them asked.
@@ -287,6 +330,16 @@ const GoModeScreen = ({
       ?.name || undefined
   // This segment ends at one of the rider's stops, not the destination (43.1).
   const atStopSegment = hasNextSegment(goMode.multiStop)
+  const transferKey = legFrequencyQuestion(
+    transferFrequencyLeg({
+      currentLegIndex: goMode.progress.currentLegIndex,
+      legs: goMode.activeItinerary.legs,
+      replay: replaying
+    })
+  )?.key
+  const transferFrequencyEntry = transferKey
+    ? legFrequency?.[transferKey] ?? null
+    : null
 
   return (
     <FullScreenWrapper>
@@ -329,10 +382,12 @@ const GoModeScreen = ({
               ? goMode.activeItinerary.legs[goMode.progress.currentLegIndex + 1]
               : undefined
           }
+          onChooseBus={openChooseBusSheet}
           onDepartureMismatch={onDepartureMismatch}
           onExit={handleExit}
           onSelectDeparture={setDepartureOverride}
           progress={goMode.progress}
+          transferFrequency={transferFrequencyEntry}
         />
 
         <GoModeMap
@@ -413,6 +468,9 @@ const GoModeScreen = ({
             </RerouteCard>
           </RerouteBar>
         )}
+
+        {/* "6 min faster · 14" (56.1): only an offer, above the handle. */}
+        {!sheetOpen && goMode.arrivedAt == null && <FasterRouteCard />}
 
         {!sheetOpen && goMode.arrivedAt == null && (
           <SheetHandle
@@ -565,7 +623,8 @@ const mapStateToProps = (state: any) => {
     boardingStopData,
     departureOverride: goMode?.departureOverride ?? null,
     departureOverrideTripId: goMode?.departureOverrideTripId ?? null,
-    goMode
+    goMode,
+    legFrequency: state.otp.legFrequency
   }
 }
 
@@ -574,8 +633,10 @@ const mapDispatchToProps = {
   clearOnboard: goModeActions.clearOnboard,
   closeOnboardAlightPreview: goModeActions.closeOnboardAlightPreview,
   endGoMode: goModeActions.endGoMode,
+  fetchLegFrequency,
   finishArrivedTrip: goModeActions.finishArrivedTrip,
   onDepartureMismatch: goModeActions.recordCardDepartureMismatch,
+  openChooseBusSheet: goModeActions.openChooseBusSheet,
   pauseGpsSimulation: goModeActions.pauseGpsSimulation,
   recordMapFollowGesture: goModeActions.recordMapFollowGesture,
   resumeGpsSimulation: goModeActions.resumeGpsSimulation,
