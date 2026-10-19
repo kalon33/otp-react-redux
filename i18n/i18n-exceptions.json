@@ -145,6 +145,10 @@
     "otpUi.TextOnlyItinerary.transitDepartFrom",
     "otpUi.LocationField.geocoderTimeout",
     "components.FavoritePlaceList.setAddressForPlaceType",
-    "components.PlaceShortcut.enterAlert"
+    "components.PlaceShortcut.enterAlert",
+    "actions.callTaker.callQuerySaveError",
+    "actions.callTaker.checkSessionError",
+    "actions.callTaker.couldNotFindCallError",
+    "actions.callTaker.queryFetchError"
   ]
 }
