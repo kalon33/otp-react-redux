@@ -4,6 +4,7 @@ import { injectIntl, IntlShape, WrappedComponentProps } from 'react-intl'
 import React from 'react'
 
 import * as callTakerActions from '../../actions/call-taker'
+import { compareEndTimes } from '../../util/call-taker'
 import { IconWithText } from '../util/styledIcon'
 
 import { WindowHeader } from './styled'
@@ -14,22 +15,16 @@ type Props = {
   callTaker: {
     activeCall: any
     callHistory: {
-      calls: {
-        data: Array<any>
-      }
+      calls: Array<any>
       visible: boolean
     }
   }
-  // Loosened to what the action creator actually is. redux-actions' createAction
-  // returns ActionFunctionAny, whose parameters are optional; while that module
-  // was untyped the mismatch was invisible, and typing it surfaced this.
-  fetchQueries: (callId?: any, intl?: any) => void
   searches: Array<any>
   toggleCallHistory: (payload?: any) => unknown
 } & WrappedComponentProps
 
 function CallHistoryWindow(props: Props) {
-  const { callTaker, fetchQueries, intl, searches, toggleCallHistory } = props
+  const { callTaker, intl, searches, toggleCallHistory } = props
   const { activeCall, callHistory } = callTaker
   if (!callHistory.visible) return null
   return (
@@ -50,13 +45,12 @@ function CallHistoryWindow(props: Props) {
           searches={searches}
         />
       ) : null}
-      {callHistory.calls.data.length > 0 ? (
-        callHistory.calls.data.map((call, i) => (
+      {callHistory.calls.length > 0 ? (
+        callHistory.calls.sort(compareEndTimes).map((call, i) => (
           <CallRecord
             // Create a key so that when call records get added, elements in this list are
             // recreated/remounted so that they don't show the state from the previous list.
             call={call}
-            fetchQueries={fetchQueries}
             intl={intl}
             key={`${call.id}-${i}`}
           />
@@ -77,7 +71,6 @@ const mapStateToProps = (state: Record<string, any>) => {
 }
 
 const mapDispatchToProps = {
-  fetchQueries: callTakerActions.fetchQueries,
   toggleCallHistory: callTakerActions.toggleCallHistory
 }
 
