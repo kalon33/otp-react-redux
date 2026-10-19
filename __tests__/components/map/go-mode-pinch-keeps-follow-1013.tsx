@@ -44,8 +44,26 @@ const mockContainer = {
   addEventListener: jest.fn(add(domHandlers)),
   removeEventListener: jest.fn(remove(domHandlers))
 }
+// The 5.6.1 render task queue's shape, so the render guard (59.1) installs.
+const renderQueue = {
+  _cleared: false,
+  _currentlyRunning: false as false | unknown[],
+  _queue: [] as { callback: (t: number) => void }[],
+  add(callback: (t: number) => void) {
+    this._queue.push({ callback })
+    return this._queue.length
+  },
+  run(t = 0) {
+    if (this._currentlyRunning) throw new Error('already running')
+    const queue = (this._currentlyRunning = this._queue)
+    this._queue = []
+    queue.forEach((task) => task.callback(t))
+    this._currentlyRunning = false
+  }
+}
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const mockMap: any = {
+  _renderTaskQueue: renderQueue,
   easeTo: jest.fn(),
   fitBounds: jest.fn(),
   getCanvasContainer: () => mockContainer,
@@ -53,7 +71,8 @@ const mockMap: any = {
   isMoving: () => moving,
   off: jest.fn(remove(mapHandlers)),
   on: jest.fn(add(mapHandlers)),
-  once: jest.fn(add(mapHandlers))
+  once: jest.fn(add(mapHandlers)),
+  triggerRepaint: jest.fn()
 }
 
 jest.mock('react-map-gl/maplibre', () => {
@@ -121,6 +140,7 @@ describe('components > go-mode map > a pinch keeps follow (48.1)', () => {
   let now = T0
   const onSetFollow = jest.fn()
   const onFollowGesture = jest.fn()
+  const onRenderRecovered = jest.fn()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const props = (over: any = {}) => ({
     activeLegIndex: null,
@@ -128,6 +148,7 @@ describe('components > go-mode map > a pinch keeps follow (48.1)', () => {
     currentPosition: position(44.941, T0),
     followUser: true,
     onFollowGesture,
+    onRenderRecovered,
     onSetFollow,
     onToggleFollow: () => undefined,
     routeGeoJson,
@@ -153,6 +174,7 @@ describe('components > go-mode map > a pinch keeps follow (48.1)', () => {
     Object.keys(mapHandlers).forEach((k) => delete mapHandlers[k])
     Object.keys(domHandlers).forEach((k) => delete domHandlers[k])
     jest.clearAllMocks()
+    mockMap.easeTo.mockReset()
   })
   afterEach(() => {
     jest.useRealTimers()
@@ -227,10 +249,102 @@ describe('components > go-mode map > a pinch keeps follow (48.1)', () => {
     expect(mockMap.easeTo).not.toHaveBeenCalled()
     moving = false
     fire(mapHandlers, 'moveend')
+    // Never from inside moveend itself (59.1): on its own stack, right after.
+    expect(mockMap.easeTo).not.toHaveBeenCalled()
+    jest.advanceTimersByTime(0)
     expect(mockMap.easeTo).toHaveBeenCalledTimes(1)
     expect(onFollowGesture).toHaveBeenCalledWith(
       expect.objectContaining({ followKept: true, handler: 'zoom' })
     )
+  })
+
+  // 59.1: ride 2026-10-19 08:47:35.972 pinch settle with the inertia still
+  // running, 08:47:36.043 GPS fix. The follow ease stops the inertia, and
+  // maplibre fires moveend synchronously from inside that easeTo — the old
+  // `once('moveend', recentre)` then started a second easeTo nested in the
+  // first, leaving an orphan ease frame that later froze the map.
+  const pinchStillMoving = () => {
+    touch('touchstart', 2)
+    fire(mapHandlers, 'zoomstart', mapEvent('touchmove', 2))
+    touch('touchend', 0)
+    moving = true
+    jest.advanceTimersByTime(GESTURE_SETTLE_MS)
+    expect(mockMap.easeTo).not.toHaveBeenCalled()
+  }
+  // easeTo the way maplibre does it: stopping a running ease fires moveend
+  // before the new ease starts, all inside the call.
+  let easeDepth = 0
+  let maxEaseDepth = 0
+  const easeLikeMaplibre = () =>
+    mockMap.easeTo.mockImplementation(() => {
+      easeDepth += 1
+      maxEaseDepth = Math.max(maxEaseDepth, easeDepth)
+      if (moving) {
+        moving = false
+        fire(mapHandlers, 'moveend')
+      }
+      moving = true
+      easeDepth -= 1
+    })
+
+  it('a follow ease that ends the pinch inertia never nests a re-centre inside it (59.1)', () => {
+    const wrapper = mountFollowing()
+    easeDepth = 0
+    maxEaseDepth = 0
+    easeLikeMaplibre()
+    pinchStillMoving()
+    now += 71
+    wrapper.setProps({ currentPosition: position(44.9414, now) })
+    expect(mockMap.easeTo).toHaveBeenCalledTimes(1)
+    expect(maxEaseDepth).toBe(1)
+    // The follow ease already centred on the rider; the pending re-centre
+    // is dropped rather than run after it.
+    moving = false
+    jest.advanceTimersByTime(1000)
+    fire(mapHandlers, 'moveend')
+    jest.advanceTimersByTime(1000)
+    expect(mockMap.easeTo).toHaveBeenCalledTimes(1)
+    expect(mockMap.easeTo).toHaveBeenCalledWith({
+      center: [-93.29, 44.9414],
+      duration: FOLLOW_EASE_MS
+    })
+  })
+
+  it('a new touch cancels a re-centre still waiting on the last pinch', () => {
+    mountFollowing()
+    pinchStillMoving()
+    touch('touchstart', 1)
+    moving = false
+    fire(mapHandlers, 'moveend')
+    jest.advanceTimersByTime(0)
+    expect(mockMap.easeTo).not.toHaveBeenCalled()
+  })
+
+  it('waits out another camera move before re-centring', () => {
+    mountFollowing()
+    pinchStillMoving()
+    // moveend of the inertia, but something else (a fit) is already moving.
+    fire(mapHandlers, 'moveend')
+    jest.advanceTimersByTime(0)
+    expect(mockMap.easeTo).not.toHaveBeenCalled()
+    moving = false
+    fire(mapHandlers, 'moveend')
+    jest.advanceTimersByTime(0)
+    expect(mockMap.easeTo).toHaveBeenCalledTimes(1)
+  })
+
+  it('records a caught render-frame throw instead of freezing (59.1)', () => {
+    mountFollowing()
+    mockMap._renderTaskQueue.add(() => {
+      throw new TypeError('this._onEaseFrame is not a function')
+    })
+    expect(() => mockMap._renderTaskQueue.run(0)).not.toThrow()
+    expect(mockMap._renderTaskQueue._currentlyRunning).toBe(false)
+    expect(mockMap.triggerRepaint).toHaveBeenCalled()
+    expect(onRenderRecovered).toHaveBeenCalledWith({
+      message: 'this._onEaseFrame is not a function',
+      suppressed: 0
+    })
   })
 
   it('a one-finger drag still stops following, once the finger lifts (Q4 A)', () => {

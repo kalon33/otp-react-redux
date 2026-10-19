@@ -3,6 +3,8 @@ import type { Itinerary, Leg } from '@opentripplanner/types'
 
 import { legLocationsAreEqual } from '../itinerary'
 
+import { tripIdsMatch } from './trip-id'
+
 /**
  * One bus ride is one leg.
  *
@@ -507,6 +509,49 @@ function shiftLeg(leg: any, delta: number): any {
   return next
 }
 
+/** A transit leg moved by `delta` onto `run`, a different run of its route. */
+function runLeg(leg: any, delta: number, run: AdoptedRun): any {
+  return {
+    ...shiftLeg(leg, delta),
+    // The delays described the OLD run against ITS timetable.
+    arrivalDelay: 0,
+    departureDelay: 0,
+    headsign: run.headsign ?? leg.headsign,
+    realTime: !!run.realtime,
+    realtimeState: run.realtime ? 'UPDATED' : 'SCHEDULED',
+    // `arrivalStoptime`/`departureStoptime` name the old run's terminals and
+    // would outlive it; the trip is now only its id.
+    trip: { gtfsId: run.tripId },
+    tripId: run.tripId
+  }
+}
+
+/** The first run leaving at or after `readyMs`, or null. */
+function pickOnwardRun(
+  runs: AdoptedRun[] | null | undefined,
+  readyMs: number
+): AdoptedRun | null {
+  let best: AdoptedRun | null = null
+  for (const r of runs || []) {
+    const dep = Number(r?.departureMs)
+    if (!r?.tripId || !Number.isFinite(dep) || dep < readyMs) continue
+    if (!best || dep < best.departureMs) best = r
+  }
+  return best
+}
+
+export interface RetargetOptions {
+  /** Called with the leg index when a later transit leg cannot be placed. */
+  onUnresolved?: (legIndex: number) => void
+  /**
+   * The runs of a LATER transit leg's route, in its direction, from its own
+   * boarding stop (the stop-times answer `beginGoMode` pre-fetches for every
+   * boarding stop of the plan); null when the store has none for that stop.
+   * Omitted: later transit legs move with the delta, as before 56.1.
+   */
+  onwardRuns?: (leg: Leg) => AdoptedRun[] | null
+}
+
 /**
  * Put the plan on the bus the rider is actually going to take.
  *
@@ -527,21 +572,24 @@ function shiftLeg(leg: any, delta: number): any {
  * same access legs. Only which run serves it, and therefore when.
  *
  * So: the boarding leg keeps everything and is moved to the new run's
- * departure, carrying its own duration; every leg after it moves by the same
- * delta; every leg before it is returned BY REFERENCE, untouched (the 7/29
+ * departure, carrying its own duration; every street leg after it moves by
+ * the same delta, and every later TRANSIT leg is re-placed on a real run of
+ * its own (`options.onwardRuns`, backlog 56.1); every leg before it is
+ * returned BY REFERENCE, untouched (the 7/29
  * "only reroute the bike leg" promise the other splicers keep). The ride's
  * running time is the timetable's for that pattern, which is the same claim
  * the plan was already making — and `refreshLiveLegTimes` polls the new trip
  * from the next tick and publishes its realtime board and alight over the top.
  *
  * Returns null when there is nothing to do or nothing safe to do: not a
- * transit leg, no run named, the leg is already on that run, or the times do
- * not arithmetic.
+ * transit leg, no run named, the leg is already on that run, the times do
+ * not arithmetic, or a later transit leg has no run the rider can make.
  */
 export function retargetTransitLegToRun(
   itinerary: Itinerary | null | undefined,
   legIndex: number,
-  run: AdoptedRun | null | undefined
+  run: AdoptedRun | null | undefined,
+  options: RetargetOptions = {}
 ): Itinerary | null {
   const legs = itinerary?.legs
   if (!legs?.length || !run?.tripId) return null
@@ -554,27 +602,57 @@ export function retargetTransitLegToRun(
   if (!Number.isFinite(start) || !Number.isFinite(departure)) return null
   const delta = departure - start
 
-  const retargeted: any = {
-    ...shiftLeg(leg, delta),
-    // The delays described the OLD run against ITS timetable.
-    arrivalDelay: 0,
-    departureDelay: 0,
-    headsign: run.headsign ?? leg.headsign,
-    realTime: !!run.realtime,
-    realtimeState: run.realtime ? 'UPDATED' : 'SCHEDULED',
-    // `arrivalStoptime`/`departureStoptime` name the old run's terminals and
-    // would outlive it; the trip is now only its id.
-    trip: { gtfsId: run.tripId },
-    tripId: run.tripId
+  const retargeted: any = runLeg(leg, delta, run)
+
+  // Every leg after the retargeted one. A street leg moves with the run it
+  // follows. A LATER TRANSIT leg is a run of its own: moved by the same delta
+  // it would keep a trip id at a time that trip does not run (56.1, 2026-10-19
+  // 08:48:29 — the Gold Line leg became `1:1262609` at Robert 09:16:04; that
+  // trip boards Robert at 09:35:09). With `onwardRuns` it is put on the first
+  // run of its route, in its direction, that leaves its stop once the rider
+  // can be there; with no such run in the store it keeps its own run and time
+  // when the connection still holds, and otherwise the retarget is refused.
+  let shift = delta
+  const nextLegs: Leg[] = []
+  for (let i = 0; i < legs.length; i++) {
+    const l: any = legs[i]
+    if (i < legIndex) {
+      nextLegs.push(l)
+      continue
+    }
+    if (i === legIndex) {
+      nextLegs.push(retargeted as Leg)
+      continue
+    }
+    if (!l?.transitLeg || !options.onwardRuns) {
+      nextLegs.push(shiftLeg(l, shift) as Leg)
+      continue
+    }
+    const readyMs = Number((nextLegs[i - 1] as any)?.endTime)
+    const ownStart = Number(l.startTime)
+    if (!Number.isFinite(readyMs) || !Number.isFinite(ownStart)) return null
+    const onward = pickOnwardRun(options.onwardRuns(l as Leg), readyMs)
+    if (onward) {
+      shift = onward.departureMs - ownStart
+      nextLegs.push(
+        (tripIdsMatch(legTripId(l), onward.tripId)
+          ? shiftLeg(l, shift)
+          : runLeg(l, shift, onward)) as Leg
+      )
+      continue
+    }
+    if (readyMs <= ownStart) {
+      // No run in the stop data (or no stop data), but the plan's own run is
+      // still made: keep it, and everything after it, as planned.
+      shift = 0
+      nextLegs.push(l)
+      continue
+    }
+    options.onUnresolved?.(i)
+    return null
   }
 
-  const nextLegs = legs.map((l: Leg, i: number) => {
-    if (i < legIndex) return l
-    if (i === legIndex) return retargeted as Leg
-    return shiftLeg(l, delta) as Leg
-  })
-
-  const endTime = shifted(itinerary?.endTime, delta)
+  const endTime = shifted(itinerary?.endTime, shift)
   const startTime = (itinerary as any).startTime
   const next: any = { ...itinerary, endTime, legs: nextLegs }
   if (Number.isFinite(Number(startTime)) && Number.isFinite(Number(endTime))) {
