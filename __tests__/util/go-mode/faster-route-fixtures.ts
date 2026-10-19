@@ -12,6 +12,7 @@ import {
   findBaseline,
   latchAllows,
   latchRecordOffer,
+  plannedOnwardOf,
   remainingTransitLegs,
   routeSetOf
 } from '../../../lib/util/go-mode/faster-route'
@@ -336,12 +337,25 @@ function measureFixture(file: string): void {
     }
     const plannedStopId = legs[i].to?.stop?.gtfsId
     const onward = legs.slice(i + 1).find((l: any) => l.transitLeg)
+    // As the caller asks (56.1 re-build): the onward leg as the card shows it.
     const v = compareAlightOffer({
+      nowMs: t,
+      plannedOnward: plannedOnwardOf(held, i, null),
+      plannedOnwardTripId: onward ? legTripId(onward) : null,
+      plannedStopId,
+      results
+    })
+    // ...and the trip-id-only baseline it replaced, printed where it differs.
+    const byId = compareAlightOffer({
       nowMs: t,
       plannedOnwardTripId: onward ? legTripId(onward) : null,
       plannedStopId,
       results
     })
+    const differs =
+      byId.why !== v.why ||
+      byId.kind !== v.kind ||
+      byId.baselineArrival !== v.baselineArrival
     if (v.kind) pinAboard[ride] = (pinAboard[ride] || 0) + 1
     aboardRows.push(
       `${ride.padEnd(32)} ${hm(t)} stops=${
@@ -354,6 +368,11 @@ function measureFixture(file: string): void {
             } [${routeSetOf(v.candidate?.itinerary) || 'bike'}] saving=${min(
               v.savingMs
             )}m bike-${v.bikeSavedM}m`
+          : '') +
+        (differs
+          ? ` [trip-id-only: ${byId.why}${
+              byId.kind ? `:${byId.kind}` : ''
+            } base=${hm(byId.baselineArrival)} saving=${min(byId.savingMs)}m]`
           : '')
     )
   }

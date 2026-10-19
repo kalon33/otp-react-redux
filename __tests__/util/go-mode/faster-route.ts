@@ -9,6 +9,7 @@ import {
   findBaseline,
   latchAllows,
   latchRecordOffer,
+  plannedOnwardOf,
   remainingTransitLegs,
   routeSetOf
 } from '../../../lib/util/go-mode/faster-route'
@@ -372,7 +373,9 @@ describe('util > go-mode > faster-route', () => {
           result('B', [onward('1:7', T0 + 48 * MIN, 1500)])
         ]
       })
-      expect(close.why).toBe('not-better')
+      // 2 min sooner elsewhere is a tie: it goes to the planned stop (56.1).
+      expect(close.why).toBe('planned-stop-ties')
+      expect(close.kind).toBeNull()
     })
     it('less bike at the same arrival; street onward plans work too', () => {
       const v = compareAlightOffer({
@@ -393,6 +396,125 @@ describe('util > go-mode > faster-route', () => {
         results: [result('B', [onward('1:7', T0 + 40 * MIN)])]
       })
       expect(v.why).toBe('no-baseline')
+    })
+    // 56.1, 2026-10-19 08:59:57: the plan's onward leg carried a trip id a
+    // retarget had left stale (that trip ran 19 min later). The baseline is
+    // the onward leg as the card shows it: route + board stop + board time.
+    it('baseline = the planned onward as the card shows it, not a stale trip id', () => {
+      const BOARD = BUS_AT + 3 * MIN
+      const planned = {
+        boardMs: BOARD,
+        boardStopId: '1:56831',
+        routeId: '1:905',
+        tripId: '1:STALE'
+      }
+      const results = [
+        result('A', [
+          // the stale id's real run, 19 min later
+          onward('1:905', T0 + 79 * MIN, 1500, '1:STALE'),
+          // the run the card shows (another id, same route/stop/time)
+          onward('1:905', T0 + 60 * MIN, 1500, '1:REAL')
+        ]),
+        result('B', [onward('1:905', T0 + 60 * MIN, 3200, '1:REAL')])
+      ]
+      const byId = compareAlightOffer({
+        plannedOnwardTripId: '1:STALE',
+        plannedStopId: 'A',
+        results
+      })
+      expect(byId.baselineArrival).toBe(T0 + 79 * MIN)
+      const v = compareAlightOffer({
+        plannedOnward: planned,
+        plannedOnwardTripId: '1:STALE',
+        plannedStopId: 'A',
+        results
+      })
+      expect(v.baselineArrival).toBe(T0 + 60 * MIN)
+      expect(v.kind).toBeNull()
+      // A different route from the planned stop is not the planned onward.
+      const other = compareAlightOffer({
+        plannedOnward: { ...planned, routeId: '1:7', tripId: null },
+        plannedOnwardTripId: null,
+        plannedStopId: 'A',
+        results
+      })
+      expect(other.why).toBe('no-baseline')
+    })
+    it('a tie goes to the planned stop: never another stop for no gain', () => {
+      // The planned onward arrives 60; B 50; staying on to A with ANOTHER
+      // onward (an earlier run) arrives 51 — the offer is A, not B.
+      const v = compareAlightOffer({
+        plannedOnwardTripId: '1:PLANNED',
+        plannedStopId: 'A',
+        results: [
+          result('A', [
+            onward('1:539', T0 + 60 * MIN, 1500, '1:PLANNED'),
+            onward('1:539', T0 + 51 * MIN, 1500, '1:EARLIER')
+          ]),
+          result('B', [onward('1:7', T0 + 50 * MIN, 1500)])
+        ]
+      })
+      expect(v.kind).toBe('faster')
+      expect(v.candidate?.stopId).toBe('A')
+      expect(v.savingMs).toBe(9 * MIN)
+      // When the tied stay IS the planned onward: no offer.
+      const plan = compareAlightOffer({
+        plannedOnwardTripId: '1:PLANNED',
+        plannedStopId: 'A',
+        results: [
+          result('A', [onward('1:539', T0 + 51 * MIN, 1500, '1:PLANNED')]),
+          result('B', [onward('1:7', T0 + 50 * MIN, 1500)])
+        ]
+      })
+      expect(plan.why).toBe('planned-stop-ties')
+      expect(plan.kind).toBeNull()
+      // The winner bikes 1.1 km less than the stay: a less-bike offer,
+      // measured against the stay (1 min), never "10 min faster".
+      const lessBike = compareAlightOffer({
+        plannedOnwardTripId: '1:PLANNED',
+        plannedStopId: 'A',
+        results: [
+          result('A', [
+            onward('1:539', T0 + 60 * MIN, 2600, '1:PLANNED'),
+            onward('1:539', T0 + 51 * MIN, 2600, '1:EARLIER')
+          ]),
+          result('B', [onward('1:7', T0 + 50 * MIN, 1500)])
+        ]
+      })
+      expect(lessBike.kind).toBe('lessBike')
+      expect(lessBike.candidate?.stopId).toBe('B')
+      expect(lessBike.savingMs).toBe(MIN)
+      expect(lessBike.bikeSavedM).toBe(1100)
+    })
+  })
+  describe('plannedOnwardOf', () => {
+    it('the next transit leg after the aboard one, live board when real', () => {
+      const plan = itin([
+        bus('1:94', T0, T0 + 20 * MIN, { trip: '1:A' }),
+        bike(T0 + 20 * MIN, T0 + 22 * MIN, 200),
+        bus('1:905', T0 + 25 * MIN, T0 + 45 * MIN, { trip: '1:G' })
+      ])
+      expect(plannedOnwardOf(plan, 0, null)).toEqual({
+        boardMs: T0 + 25 * MIN,
+        boardStopId: '1:56831',
+        routeId: '1:905',
+        tripId: '1:G'
+      })
+      expect(
+        plannedOnwardOf(plan, 0, {
+          2: { boardEpoch: T0 + 27 * MIN, boardRealtime: true }
+        })?.boardMs
+      ).toBe(T0 + 27 * MIN)
+      expect(
+        plannedOnwardOf(plan, 0, {
+          2: {
+            boardEpoch: T0 + 27 * MIN,
+            boardIsFloor: true,
+            boardRealtime: true
+          }
+        })?.boardMs
+      ).toBe(T0 + 25 * MIN)
+      expect(plannedOnwardOf(plan, 2, null)).toBeNull()
     })
   })
 

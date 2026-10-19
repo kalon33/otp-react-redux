@@ -11,6 +11,7 @@ import { rankAlightOptions, scoreAlightOption } from './alight-optimizer'
 import { tripIdsMatch } from './trip-id'
 import type {
   AlightCandidateResult,
+  AlightOption,
   BoardedTrip,
   DownstreamStop
 } from './alight-optimizer'
@@ -517,10 +518,64 @@ export function classifyFasterRoute(
 /* Aboard: a better stop to get off (rider Q4)                              */
 /* ------------------------------------------------------------------------ */
 
+/**
+ * The planned onward transit leg AS THE CARD SHOWS IT: its route, the stop it
+ * boards at and the time the card gives for that boarding. Its trip id is a
+ * hint, not the key — a plan retargeted onto an earlier run once carried the
+ * old run's onward trip id at a time that trip does not run (56.1, 2026-10-19:
+ * `1:1262609` shown at Robert 09:16:04, really 09:35:09), and a baseline
+ * taken by that id read 16.8 min "faster" for a 19 s gain.
+ */
+export interface PlannedOnward {
+  boardMs: number | null
+  boardStopId: string | null
+  routeId: string | null
+  tripId: string | null
+}
+
+/** How far an answer's boarding may sit from the card's and still be it. */
+export const ONWARD_BOARD_MATCH_MS = 180000
+
+/**
+ * The planned onward leg after the leg at `aboardLegIndex`, as the card shows
+ * it: the live board time when the card has a real one, else the plan's.
+ */
+export function plannedOnwardOf(
+  held: Itinerary | null | undefined,
+  aboardLegIndex: number,
+  liveLegTimes?: Record<number, any> | any[] | null
+): PlannedOnward | null {
+  const legs = (held?.legs || []) as Leg[]
+  for (let i = aboardLegIndex + 1; i < legs.length; i++) {
+    const leg = legs[i]
+    if (!leg?.transitLeg) continue
+    const live: any = (liveLegTimes as any)?.[i]
+    const liveBoard =
+      live?.boardRealtime && !live.boardIsFloor ? Number(live.boardEpoch) : NaN
+    const planned = Number(leg.startTime)
+    return {
+      boardMs: Number.isFinite(liveBoard)
+        ? liveBoard
+        : Number.isFinite(planned)
+        ? planned
+        : null,
+      boardStopId: boardStopId(leg),
+      routeId: getLegRouteId(leg),
+      tripId: legTripId(leg)
+    }
+  }
+  return null
+}
+
 export interface AlightOfferInput {
   boarded?: BoardedTrip | null
   downstream?: DownstreamStop[] | null
   nowMs?: number | null
+  /**
+   * The planned onward leg (plannedOnwardOf). When given, it decides; the
+   * bare trip id below is the older key, kept for callers that have no leg.
+   */
+  plannedOnward?: PlannedOnward | null
   /** The planned onward transit trip after the alight; null = street onward. */
   plannedOnwardTripId: string | null
   /** The stop the plan gets the rider off at. */
@@ -531,21 +586,51 @@ export interface AlightOfferInput {
 export interface AlightOfferVerdict {
   baselineArrival: number | null
   bikeSavedM: number
-  candidate: ReturnType<typeof rankAlightOptions>[number] | null
+  candidate: AlightOption | null
   candidateArrival: number | null
   kind: FasterRouteKind | null
   savingMs: number
-  why: 'no-baseline' | 'no-candidate' | 'same-as-plan' | 'not-better' | 'offer'
+  why:
+    | 'no-baseline'
+    | 'no-candidate'
+    | 'same-as-plan'
+    | 'not-better'
+    | 'planned-stop-ties'
+    | 'offer'
 }
 
-/** Is this onward itinerary the plan's own continuation from its stop? */
+/**
+ * Is this onward itinerary the plan's own continuation from its stop? With a
+ * PlannedOnward: its first transit leg is the planned route from the planned
+ * boarding stop within ONWARD_BOARD_MATCH_MS of the card's board time — or the
+ * planned trip itself (still a real run of the plan; the earliest wins in the
+ * caller). Without one, by trip id alone, as before.
+ */
 function isPlannedOnward(
   itin: Itinerary,
-  plannedOnwardTripId: string | null
+  input: Pick<AlightOfferInput, 'plannedOnward' | 'plannedOnwardTripId'>
 ): boolean {
   const first = transitLegs(itin)[0]
-  if (!plannedOnwardTripId) return !first
-  return !!first && tripIdsMatch(legTripId(first), plannedOnwardTripId)
+  const planned = input.plannedOnward
+  if (planned === undefined) {
+    if (!input.plannedOnwardTripId) return !first
+    return !!first && tripIdsMatch(legTripId(first), input.plannedOnwardTripId)
+  }
+  if (!planned) return !first
+  if (!first) return false
+  if (planned.tripId && tripIdsMatch(legTripId(first), planned.tripId)) {
+    return true
+  }
+  const start = Number(first.startTime)
+  return (
+    !!planned.routeId &&
+    getLegRouteId(first) === planned.routeId &&
+    !!planned.boardStopId &&
+    boardStopId(first) === planned.boardStopId &&
+    planned.boardMs != null &&
+    Number.isFinite(start) &&
+    Math.abs(start - planned.boardMs) <= ONWARD_BOARD_MATCH_MS
+  )
 }
 
 /**
@@ -577,7 +662,7 @@ export function compareAlightOffer(
   for (const r of input.results || []) {
     if (!r || r.error || r.stopId !== input.plannedStopId) continue
     for (const itin of r.itineraries || []) {
-      if (!isPlannedOnward(itin, input.plannedOnwardTripId)) continue
+      if (!isPlannedOnward(itin, input)) continue
       const arrival = scoreAlightOption(r.busArrivalEpoch, itin)
       if (baselineArrival == null || arrival < baselineArrival) {
         baselineArrival = arrival
@@ -592,15 +677,40 @@ export function compareAlightOffer(
     limit: 1,
     nowMs: input.nowMs ?? null
   })
-  const top = ranked[0]
-  if (!top) return none('no-candidate', { baselineArrival })
-  const candidateArrival = scoreAlightOption(
-    top.busArrivalEpoch,
-    top.itinerary,
-    {
-      arrivalIsFloor: top.arrivalIsFloor
+  const winner = ranked[0]
+  if (!winner) return none('no-candidate', { baselineArrival })
+  const arrivalOf = (o: AlightOption) =>
+    scoreAlightOption(o.busArrivalEpoch, o.itinerary, {
+      arrivalIsFloor: o.arrivalIsFloor
+    })
+  // A tie goes to the planned stop (56.1, 2026-10-19: 5th St & Cedar and Rice
+  // Park arrived 10:00:06 on Gold Line run 1:1344457 — and so did staying on
+  // to 5th St & Robert). When getting off at the planned stop, onto ANY onward
+  // in the same answer, arrives within the same-arrival band of the winner and
+  // the winner does not save a kilometre of biking over it, that stay is the
+  // candidate: the plan itself (no offer), or the planned stop with a better
+  // onward — never a different stop for no gain.
+  const stay = preferPlannedStop(input, winner, arrivalOf(winner))
+  if (stay && !stay.ties) {
+    // Staying arrives as early, and the winner's only gain is the biking:
+    // measured against the stay, not against the planned onward.
+    const stayArrival = arrivalOf(stay.option)
+    const winnerArrival = arrivalOf(winner)
+    const stayExtra = {
+      baselineArrival: stayArrival,
+      bikeSavedM: Math.round(
+        bikeMetersOf(stay.option.itinerary) - bikeMetersOf(winner.itinerary)
+      ),
+      candidate: winner,
+      candidateArrival: winnerArrival,
+      savingMs: stayArrival - winnerArrival
     }
-  )
+    return Math.abs(stayExtra.savingMs) <= LESS_BIKE_ARRIVAL_BAND_MS
+      ? { ...stayExtra, kind: 'lessBike', why: 'offer' }
+      : none('planned-stop-ties', stayExtra)
+  }
+  const top = stay?.option ?? winner
+  const candidateArrival = arrivalOf(top)
   const savingMs = baselineArrival - candidateArrival
   const bikeSavedM = Math.round(baselineBike - bikeMetersOf(top.itinerary))
   const extra = {
@@ -612,9 +722,9 @@ export function compareAlightOffer(
   }
   if (
     top.stopId === input.plannedStopId &&
-    isPlannedOnward(top.itinerary, input.plannedOnwardTripId)
+    isPlannedOnward(top.itinerary, input)
   ) {
-    return none('same-as-plan', extra)
+    return none(top === winner ? 'same-as-plan' : 'planned-stop-ties', extra)
   }
   if (savingMs >= FASTER_ROUTE_MIN_SAVING_MS) {
     return { ...extra, kind: 'faster', why: 'offer' }
@@ -626,6 +736,50 @@ export function compareAlightOffer(
     return { ...extra, kind: 'lessBike', why: 'offer' }
   }
   return none('not-better', extra)
+}
+
+/**
+ * The planned stop's own option that arrives no later than the same-arrival
+ * band after `winner` (a different stop) — the planned onward first, else the
+ * ranker's best. `ties` when the winner does not save LESS_BIKE_MIN_METERS of
+ * biking over it. Null when the winner is already at the planned stop or
+ * nothing there comes close.
+ */
+function preferPlannedStop(
+  input: AlightOfferInput,
+  winner: AlightOption,
+  winnerArrival: number
+): { option: AlightOption; ties: boolean } | null {
+  if (winner.stopId === input.plannedStopId) return null
+  const close = rankAlightOptions(
+    (input.results || []).filter((r) => r?.stopId === input.plannedStopId),
+    {
+      boarded: input.boarded ?? null,
+      downstream: input.downstream ?? null,
+      limit: 50,
+      nowMs: input.nowMs ?? null
+    }
+  ).filter(
+    (o) =>
+      scoreAlightOption(o.busArrivalEpoch, o.itinerary, {
+        arrivalIsFloor: o.arrivalIsFloor
+      }) -
+        winnerArrival <=
+      LESS_BIKE_ARRIVAL_BAND_MS
+  )
+  if (!close.length) return null
+  const savesOver = (o: AlightOption) =>
+    bikeMetersOf(o.itinerary) - bikeMetersOf(winner.itinerary)
+  const tied = close.filter((o) => savesOver(o) < LESS_BIKE_MIN_METERS)
+  if (tied.length) {
+    return {
+      option: tied.find((o) => isPlannedOnward(o.itinerary, input)) ?? tied[0],
+      ties: true
+    }
+  }
+  // Every close stay bikes a kilometre more: the least-biking one is the bar.
+  const least = close.reduce((m, o) => (savesOver(o) < savesOver(m) ? o : m))
+  return { option: least, ties: false }
 }
 
 /**

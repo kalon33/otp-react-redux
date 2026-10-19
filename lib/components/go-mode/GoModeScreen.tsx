@@ -18,6 +18,7 @@ import {
 import { MobileScreens } from '../../actions/ui-constants'
 import MobileNavigationBar from '../mobile/navigation-bar'
 import type { GoModeState } from '../../reducers/go-mode'
+import type { MapRenderRecovered } from '../../util/go-mode/map-render-guard'
 
 import {
   ErrorMessage,
@@ -78,6 +79,7 @@ interface Props {
   openChooseBusSheet: () => void
   pauseGpsSimulation: () => void
   recordMapFollowGesture: (gesture: MapFollowGesture) => void
+  recordMapRenderRecovered: (record: MapRenderRecovered) => void
   resumeGpsSimulation: () => void
   setDepartureOverride: (epochMs: number | null, tripId?: string | null) => void
   setMapFollow: (value: boolean) => void
@@ -104,6 +106,7 @@ const GoModeScreen = ({
   openChooseBusSheet,
   pauseGpsSimulation,
   recordMapFollowGesture,
+  recordMapRenderRecovered,
   resumeGpsSimulation,
   setDepartureOverride,
   setMapFollow,
@@ -421,6 +424,7 @@ const GoModeScreen = ({
           itinerary={goMode.activeItinerary}
           nextTurnCue={goMode.progress.nextTurnCue ?? null}
           onFollowGesture={recordMapFollowGesture}
+          onRenderRecovered={recordMapRenderRecovered}
           onSetFollow={setMapFollow}
           onToggleFollow={toggleMapFollow}
           routeMatch={goMode.routeMatch}
@@ -655,6 +659,7 @@ const mapDispatchToProps = {
   openChooseBusSheet: goModeActions.openChooseBusSheet,
   pauseGpsSimulation: goModeActions.pauseGpsSimulation,
   recordMapFollowGesture: goModeActions.recordMapFollowGesture,
+  recordMapRenderRecovered: goModeActions.recordMapRenderRecovered,
   resumeGpsSimulation: goModeActions.resumeGpsSimulation,
   setDepartureOverride: goModeActions.selectDeparture,
   setMapFollow: goModeActions.setMapFollow,
