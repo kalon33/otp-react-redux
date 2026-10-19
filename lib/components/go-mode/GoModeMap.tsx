@@ -31,7 +31,9 @@ import {
   FOLLOW_ZOOM_TRANSIT,
   isTransitLegMode
 } from '../../util/go-mode/follow-camera'
+import { installMapRenderGuard } from '../../util/go-mode/map-render-guard'
 import DefaultMap from '../map/default-map'
+import type { MapRenderRecovered } from '../../util/go-mode/map-render-guard'
 import type { RouteMatchResult } from '../../util/go-mode/position-matching'
 import type { StepCue } from '../../util/go-mode/turn-by-turn'
 
@@ -85,6 +87,8 @@ interface Props {
   nextTurnCue?: StepCue | null
   /** Recording only (MAP_FOLLOW_GESTURE), 48.1. */
   onFollowGesture?: (gesture: MapFollowGesture) => void
+  /** Recording only (MAP_RENDER_RECOVERED), 59.1. */
+  onRenderRecovered?: (record: MapRenderRecovered) => void
   onSetFollow: (value: boolean) => void
   onToggleFollow: () => void
   routeMatch: RouteMatchResult | null
@@ -328,6 +332,7 @@ export const GoModeMapOverlay = ({
   followUser,
   nextTurnCue,
   onFollowGesture,
+  onRenderRecovered,
   onSetFollow,
   onToggleFollow,
   routeGeoJson
@@ -342,6 +347,8 @@ export const GoModeMapOverlay = ({
   nextTurnCue?: StepCue | null
   /** Recording only (MAP_FOLLOW_GESTURE): how a touch gesture was judged. */
   onFollowGesture?: (gesture: MapFollowGesture) => void
+  /** Recording only (MAP_RENDER_RECOVERED): a throwing frame was caught. */
+  onRenderRecovered?: (record: MapRenderRecovered) => void
   onSetFollow: (value: boolean) => void
   onToggleFollow: () => void
   routeGeoJson: GeoJSON.FeatureCollection | null
@@ -371,6 +378,22 @@ export const GoModeMapOverlay = ({
   followUserRef.current = followUser
   const onFollowGestureRef = useRef(onFollowGesture)
   onFollowGestureRef.current = onFollowGesture
+  // A pinch's re-centre waiting for its inertia to end (59.1). Any follow
+  // ease clears it: that ease re-centres anyway.
+  const pendingRecentre = useRef(false)
+  const onRenderRecoveredRef = useRef(onRenderRecovered)
+  onRenderRecoveredRef.current = onRenderRecovered
+
+  // One throwing animation frame used to lock MapLibre's render queue for the
+  // life of the map (59.1, see map-render-guard). The guard stays on the map
+  // instance (reuseMaps keeps it across remounts); unmount only detaches the
+  // recorder.
+  useEffect(() => {
+    if (!map) return
+    return installMapRenderGuard(map, (record) =>
+      onRenderRecoveredRef.current?.(record)
+    )
+  }, [map])
 
   // The next corner as something to draw, cut from the leg's own polyline.
   // Drawn whenever the card has a turn on a walk/bike leg — the camera only
@@ -451,12 +474,47 @@ export const GoModeMapOverlay = ({
     // without it every touch drag falls back to the one-finger rule below.
     const container = map.getCanvasContainer?.()
     let settleTimer: ReturnType<typeof setTimeout> | null = null
+    let recentreTimer: ReturnType<typeof setTimeout> | null = null
 
     const recentre = () => {
       const rider = prevAccepted.current
       // The turn view frames rider + corner itself on its next tick.
       if (!rider || !followUserRef.current || turnViewRotated.current) return
       map.easeTo({ center: [rider.lng, rider.lat], duration: FOLLOW_EASE_MS })
+    }
+
+    // A pinch's re-centre waits for its inertia, but never eases from inside
+    // MapLibre's `moveend` (59.1). The follow tick's easeTo ends the inertia
+    // ease, and maplibre-gl 5.6.1 fires that `moveend` synchronously from the
+    // easeTo's own `_stop` (camera.ts:1085 → 1559 → `_afterEase`). An easeTo
+    // started there runs nested inside the outer one: both queue an ease
+    // frame, the outer overwrites `_easeFrameId`, and the nested frame is left
+    // queued with nothing tracking it. The next touch or `stop()` deletes
+    // `_onEaseFrame`, that frame calls it, and the TypeError locked the render
+    // loop for 18 min on 2026-10-19. Measured in headless Chrome (CDP pinch,
+    // follow fix 50-100 ms after the settle): 38 of 60 maps froze.
+    // So `moveend` only schedules the check, which runs on its own stack.
+    const consumeRecentre = () => {
+      recentreTimer = null
+      if (!pendingRecentre.current) return
+      // Fingers back on the map: the new gesture decides.
+      if (gestureRef.current) {
+        pendingRecentre.current = false
+        return
+      }
+      // Something else is moving the camera: wait for that to end too.
+      if (map.isMoving()) {
+        map.off('moveend', onMoveEnd)
+        map.once('moveend', onMoveEnd)
+        return
+      }
+      pendingRecentre.current = false
+      recentre()
+    }
+    function onMoveEnd() {
+      if (pendingRecentre.current && !recentreTimer) {
+        recentreTimer = setTimeout(consumeRecentre, 0)
+      }
     }
 
     const settle = () => {
@@ -478,11 +536,18 @@ export const GoModeMapOverlay = ({
       }
       // Let a pinch's inertia finish before easing, or the ease cuts it off
       // and the zoom the rider chose snaps short.
-      if (map.isMoving()) map.once('moveend', recentre)
-      else recentre()
+      if (map.isMoving()) {
+        pendingRecentre.current = true
+        map.off('moveend', onMoveEnd)
+        map.once('moveend', onMoveEnd)
+      } else {
+        recentre()
+      }
     }
 
     const handleTouchStart = (e: TouchEvent) => {
+      // A new touch cancels a re-centre still waiting on the last pinch.
+      pendingRecentre.current = false
       const touches = e.touches.length
       let gesture = gestureRef.current
       // A lifted gesture still settling, or one whose touchend never came
@@ -580,7 +645,9 @@ export const GoModeMapOverlay = ({
       map.off('dragstart', handleDragStart)
       map.off('rotatestart', handleRotateStart)
       map.off('zoomstart', handleZoomStart)
-      map.off('moveend', recentre)
+      map.off('moveend', onMoveEnd)
+      if (recentreTimer) clearTimeout(recentreTimer)
+      pendingRecentre.current = false
       container?.removeEventListener('touchstart', handleTouchStart)
       container?.removeEventListener('touchmove', handleTouchMove)
       container?.removeEventListener('touchend', handleTouchEnd)
@@ -677,6 +744,7 @@ export const GoModeMapOverlay = ({
         padding: TURN_VIEW_PADDING_PX
       })
       if (!camera) return
+      pendingRecentre.current = false
       map.easeTo({
         bearing: turnGeometry.approachBearing,
         center: camera.center,
@@ -697,6 +765,7 @@ export const GoModeMapOverlay = ({
         ? { lat: coords.latitude, lng: coords.longitude }
         : prevAccepted.current
       if (rider) {
+        pendingRecentre.current = false
         map.easeTo({
           bearing: 0,
           center: [rider.lng, rider.lat],
@@ -714,6 +783,7 @@ export const GoModeMapOverlay = ({
     if (decision.move && decision.center) {
       // No `essential: true` — prefers-reduced-motion degrades the ease to a
       // jump, which is the right call for a camera that moves every second.
+      pendingRecentre.current = false
       map.easeTo({
         center: decision.center,
         duration: FOLLOW_EASE_MS,
@@ -850,6 +920,7 @@ const GoModeMap = ({
   itinerary,
   nextTurnCue,
   onFollowGesture,
+  onRenderRecovered,
   onSetFollow,
   onToggleFollow,
   routeMatch
@@ -934,6 +1005,7 @@ const GoModeMap = ({
           followUser={followUser}
           nextTurnCue={nextTurnCue}
           onFollowGesture={onFollowGesture}
+          onRenderRecovered={onRenderRecovered}
           onSetFollow={onSetFollow}
           onToggleFollow={onToggleFollow}
           routeGeoJson={routeGeoJson}
