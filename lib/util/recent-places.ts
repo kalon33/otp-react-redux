@@ -8,6 +8,12 @@ import { UserSavedLocation } from '../components/user/types'
  */
 export const RECENT_PLACE_MATCH_METERS = 5
 
+/**
+ * How many recent places the phone keeps (the reducer's sortAndTrim, and the
+ * union with the server copy in places-state.ts — backlog 60.1).
+ */
+export const MAX_RECENT_STORAGE = 5
+
 /** Case- and whitespace-insensitive address key. */
 export function normalizeRecentAddress(value?: string | null): string {
   return (value || '').trim().toLowerCase().replace(/\s+/g, ' ')
