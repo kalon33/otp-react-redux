@@ -127,6 +127,110 @@ export async function getNativeDeviceId(): Promise<string | null> {
 }
 
 /**
+ * One app launch as the native shell's LaunchProbe recorded it
+ * (transitnav-ios ios/App/App/LaunchProbe.swift). Statuses and timings only —
+ * no ids, no Keychain values.
+ */
+export type NativeLaunchEntry = {
+  activePrewarm?: string | null
+  applicationState?: string
+  defaultsKeyCount?: number
+  firstInContainer?: boolean
+  isProtectedDataAvailable?: boolean
+  keychainAttrStatus?: number
+  keychainCreated?: number
+  keychainDataStatus?: number
+  keychainDataStatusAfterUnlock?: number
+  launchId?: string
+  launchOptionKeys?: string[]
+  nativeBuild?: string | null
+  nativeVersion?: string | null
+  pid?: number
+  protectedDataAfterS?: number
+  systemUptime?: number
+  t?: number
+}
+
+export type NativeLaunchProbe = {
+  /** Oldest first; the last one is this process's launch. */
+  launches: NativeLaunchEntry[]
+  /** The same probe taken when the web layer asked, not at launch. */
+  now?: NativeLaunchEntry
+  writeError?: string
+}
+
+/** How many past launches ride along on the boot record. */
+export const NATIVE_LAUNCH_HISTORY = 5
+
+/**
+ * The shell's record of how this process (and the few before it) was
+ * launched, or null in a browser, in a shell built before LaunchProbe, or on
+ * any failure.
+ *
+ * Backlog 44.1: the dev app has come back as a "fresh install" mid-ride four
+ * times (new Capgo Keychain id, new web id, built-in bundle). The lead is a
+ * launch before the first unlock after a phone restart, when the Keychain and
+ * UserDefaults cannot be read; this is the evidence that settles it.
+ */
+export async function getNativeLaunches(
+  limit: number = NATIVE_LAUNCH_HISTORY
+): Promise<NativeLaunchProbe | null> {
+  try {
+    const cap = (window as any).Capacitor
+    if (!cap?.isNativePlatform?.()) return null
+    // Same guard as native-live-activity.ts: isPluginAvailable answers for the
+    // NATIVE side, so an older shell says false even if a proxy exists.
+    if (
+      typeof cap.isPluginAvailable === 'function' &&
+      !cap.isPluginAvailable('LaunchProbe')
+    ) {
+      return null
+    }
+    const plugin = cap.Plugins?.LaunchProbe
+    if (typeof plugin?.getLaunches !== 'function') return null
+    const result = await plugin.getLaunches({ limit })
+    if (!result || !Array.isArray(result.launches)) return null
+    return {
+      launches: result.launches,
+      now: result.now ?? undefined,
+      writeError:
+        typeof result.writeError === 'string' ? result.writeError : undefined
+    }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Send ONE `NATIVE_LAUNCH` session record carrying the probe, and say whether
+ * there was anything to send. A no-op (false) wherever the plugin is absent —
+ * a browser, or a native shell older than the probe — so the web bundle can
+ * ship ahead of the native build.
+ */
+export async function recordNativeLaunch(
+  send: (event: string, fields: Record<string, unknown>) => unknown,
+  getLaunches: () => Promise<NativeLaunchProbe | null> = getNativeLaunches
+): Promise<boolean> {
+  let probe: NativeLaunchProbe | null = null
+  try {
+    probe = await getLaunches()
+  } catch {
+    probe = null
+  }
+  if (!probe) return false
+  try {
+    send('NATIVE_LAUNCH', {
+      launches: probe.launches,
+      now: probe.now,
+      writeError: probe.writeError
+    })
+  } catch {
+    // Diagnostics never break a boot.
+  }
+  return true
+}
+
+/**
  * How long a freshly-booted bundle has to stay up before it is confirmed.
  *
  * Well inside the plugin's own `appReadyTimeout` (20 s, see
