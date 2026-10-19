@@ -21,6 +21,15 @@ const APP = process.env.APP_URL || 'http://localhost:9967/'
 const CHROME =
   process.env.PUPPETEER_EXECUTABLE_PATH || '/opt/google/chrome/chrome'
 
+// Test-only (backlog 41.4): pin the bus the script picks by its short name,
+// e.g. STUCK_ROUTE=18, so a measurement can land on a local bus at an hour
+// when the earliest walk->bus option would be the Orange Line.
+const ROUTE_PIN = process.env.STUCK_ROUTE || null
+// Test-only companion: route ids the setup plan may not use (OTP's
+// `banned.routes`, comma-separated GTFS ids, e.g. STUCK_BAN=1:904 to keep the
+// Orange Line out so a local bus is offered at all).
+const ROUTE_BAN = process.env.STUCK_BAN || null
+
 const FROM = { lat: 44.9205, lon: -93.276, name: 'Test origin' }
 const TO = { lat: 44.9778, lon: -93.2707, name: 'Downtown Minneapolis' }
 
@@ -42,6 +51,164 @@ function skip(reason) {
   process.exit(EXIT_SKIP)
 }
 
+// ---- the trace (backlog 41.4) ----
+// What the app did between the wedge and the end of the run, printed on PASS
+// and FAIL alike, so a slow or missing recovery says WHICH path it took rather
+// than only that a wait expired. Actions are read from redux-logger's
+// `action` line (the dev server always installs it, lib/main.js) — recording-
+// only types such as PLAN_RETARGET change no state, so a store subscriber can
+// never see them. Plan swaps and notifications come from a store subscriber.
+const TRACE_TYPES = [
+  'PLAN_RETARGET',
+  'HELD_RUN_VERDICT',
+  'HELD_RUN_LATER_STOP',
+  'START_REROUTE',
+  'SET_REROUTE_RESULT',
+  'CLEAR_REROUTE',
+  'REPLAN_ORIGIN_WAIT',
+  'AUTO_REPLAN',
+  'START_GO_MODE'
+]
+
+function installTrace(types) {
+  window.__srbTrace = []
+  window.__srbOn = false
+  const want = new Set(types)
+  const boardOf = (it) => {
+    const leg = (it?.legs || []).find((l) => l.transitLeg)
+    if (!leg) return null
+    return {
+      route: leg.routeShortName || leg.routeLongName || null,
+      routeId: leg.route?.gtfsId || leg.route?.id || leg.routeId || null,
+      start: Number(leg.startTime),
+      trip: leg.trip?.gtfsId || leg.tripId || null
+    }
+  }
+  window.__srbBoardOf = boardOf
+  const summarise = (a) => {
+    const p = a.payload
+    switch (a.type) {
+      case 'PLAN_RETARGET':
+      case 'HELD_RUN_VERDICT':
+      case 'HELD_RUN_LATER_STOP':
+      case 'REPLAN_ORIGIN_WAIT':
+      case 'AUTO_REPLAN':
+        try {
+          return JSON.stringify(p).slice(0, 400)
+        } catch {
+          return '?'
+        }
+      case 'START_REROUTE':
+        try {
+          return JSON.stringify(p).slice(0, 300)
+        } catch {
+          return `searchId=${p?.searchId}`
+        }
+      case 'SET_REROUTE_RESULT': {
+        if (p == null) return 'null'
+        const list = Array.isArray(p) ? p : [p]
+        const runs = list.map((it) => {
+          const b = boardOf(it)
+          return b
+            ? `${b.route}[${b.routeId}]/${b.trip}@${new Date(b.start)
+                .toTimeString()
+                .slice(0, 8)}`
+            : 'no-transit'
+        })
+        return `${Array.isArray(p) ? 'list' : 'single'}(${
+          list.length
+        }) ${runs.join(', ')}`
+      }
+      case 'START_GO_MODE': {
+        const it = p?.itinerary || p
+        return JSON.stringify(boardOf(it))
+      }
+      default:
+        return ''
+    }
+  }
+  const origLog = console.log
+  console.log = function (...args) {
+    const head = typeof args[0] === 'string' ? args[0] : ''
+    if (head === '%c action    ' || head === 'action    ') {
+      const a = head.startsWith('%c') ? args[2] : args[1]
+      if (window.__srbOn && a && want.has(a.type)) {
+        window.__srbTrace.push({
+          detail: summarise(a),
+          t: Date.now(),
+          type: a.type
+        })
+      }
+      return undefined
+    }
+    // Drop redux-logger's prev/next state dumps: every tick would otherwise
+    // ship the whole store over the devtools protocol.
+    if (/^%c (prev|next) state/.test(head)) return undefined
+    return origLog.apply(this, args)
+  }
+}
+
+// Store-side half of the trace: each activeItinerary swap (board run + its
+// start), each new notification, and each reRoute.status change.
+function installStoreWatch() {
+  const boardOf = window.__srbBoardOf
+  let lastItin = null
+  let lastStatus = null
+  const seenNotes = new Set()
+  window.store.subscribe(() => {
+    if (!window.__srbOn) return
+    const g = window.store.getState().otp.goMode
+    if (g.activeItinerary !== lastItin) {
+      lastItin = g.activeItinerary
+      window.__srbTrace.push({
+        detail: JSON.stringify({
+          board: boardOf(g.activeItinerary),
+          start: Number(g.activeItinerary?.startTime)
+        }),
+        t: Date.now(),
+        type: 'itinerary'
+      })
+    }
+    const status = g.reRoute?.status
+    if (status !== lastStatus) {
+      lastStatus = status
+      window.__srbTrace.push({ detail: status, t: Date.now(), type: 'reRoute' })
+    }
+    // Keyed, not counted: the list is capped and newest-first.
+    for (const n of g.notifications?.recentNotifications || []) {
+      const key = n.id || `${n.type}|${n.timestamp}|${n.message}`
+      if (seenNotes.has(key)) continue
+      seenNotes.add(key)
+      window.__srbTrace.push({
+        detail: String(n.message || '').slice(0, 120),
+        t: Date.now(),
+        type: `notify:${n.type}`
+      })
+    }
+  })
+}
+
+let tracePage = null
+let traceZeroMs = null
+async function printTrace() {
+  if (!tracePage) return
+  let trace = []
+  try {
+    trace = await tracePage.evaluate(() => window.__srbTrace || [])
+  } catch (e) {
+    console.log(`[trace] unreadable: ${e.message}`)
+    return
+  }
+  const zero = traceZeroMs ?? trace[0]?.t ?? 0
+  console.log(
+    `\n===== TRACE (${trace.length} entries, s relative to MISSED_BUS) =====`
+  )
+  for (const e of trace) {
+    const rel = ((e.t - zero) / 1000).toFixed(1).padStart(7)
+    console.log(`${rel}s  ${e.type.padEnd(22)} ${e.detail}`)
+  }
+}
+
 async function main() {
   const browser = await puppeteer.launch({
     args: ['--no-sandbox'],
@@ -59,6 +226,8 @@ async function main() {
     longitude: FROM.lon
   })
   page.on('pageerror', (e) => console.log('[pageerror]', e.message))
+  await page.evaluateOnNewDocument(installTrace, TRACE_TYPES)
+  tracePage = page
   await page.goto(APP, { timeout: 60000, waitUntil: 'networkidle2' })
   // 60s, not 30s: this is the FIRST wait in every script and it is a Vite dev
   // server transforming the module graph, not the product. Two runs on
@@ -70,21 +239,28 @@ async function main() {
   // otp-frontend-dev` (a full `yarn jest` or `ship_web.sh` clobbers its
   // tmp/config.yml).
   await page.waitForFunction(() => !!window.store, { timeout: 60000 })
+  await page.evaluate(installStoreWatch)
 
   // ---- plan a walk→bus trip through the app's own pipeline ----
   await page.evaluate(
-    async (from, to) => {
+    async (from, to, ban) => {
       // eslint-disable-next-line import/no-absolute-path
       const form = await import('/lib/actions/form.js')
       // eslint-disable-next-line import/no-absolute-path
       const api = await import('/lib/actions/api.js')
       window.store.dispatch(
-        form.setQueryParam({ departArrive: 'NOW', from, to })
+        form.setQueryParam({
+          departArrive: 'NOW',
+          from,
+          to,
+          ...(ban ? { banned: { routes: ban } } : {})
+        })
       )
       window.store.dispatch(api.routingQuery())
     },
     FROM,
-    TO
+    TO,
+    ROUTE_BAN
   )
   // Five of the eleven red rows on the 2026-09-17 nightly were this one wait
   // expiring, reported as the bare line "waiting for function failed: timeout
@@ -132,7 +308,7 @@ async function main() {
         JSON.stringify(searches)
     )
   }
-  const chosen = await page.evaluate(() => {
+  const chosen = await page.evaluate((routePin) => {
     const searches = window.store.getState().otp.searches || {}
     const itins = Object.values(searches)
       .flatMap((s) => s.response || [])
@@ -147,22 +323,47 @@ async function main() {
         legs[0].distance > 80
       )
     })
-    if (!ok.length) return null
-    ok.sort((a, b) => a.startTime - b.startTime)
-    window.__stuckTestItinerary = ok[0]
-    const busLeg = ok[0].legs.find((l) => l.transitLeg)
+    const routeOf = (it) => {
+      const l = it.legs.find((x) => x.transitLeg)
+      return l.routeShortName || l.routeLongName
+    }
+    const offered = ok.map(routeOf)
+    const pool = routePin
+      ? ok.filter((it) => String(routeOf(it)) === String(routePin))
+      : ok
+    if (!pool.length) return { offered, pinMissed: true }
+    pool.sort((a, b) => a.startTime - b.startTime)
+    window.__stuckTestItinerary = pool[0]
+    const busLeg = pool[0].legs.find((l) => l.transitLeg)
     return {
       busRoute: busLeg.routeShortName || busLeg.routeLongName,
       busStart: Number(busLeg.startTime),
-      itinStart: Number(ok[0].startTime)
+      busTrip: busLeg.trip?.gtfsId || busLeg.tripId || null,
+      itinStart: Number(pool[0].startTime),
+      offered
     }
-  })
+  }, ROUTE_PIN)
   if (!chosen) throw new Error('no walk→bus itinerary with >80m access walk')
+  if (chosen.pinMissed) {
+    skip(
+      `STUCK_ROUTE=${ROUTE_PIN} pinned, but the plan offered only ` +
+        JSON.stringify(chosen.offered)
+    )
+  }
   console.log(
-    `[setup] bus ${chosen.busRoute} boards ${fmt(
+    `[setup] walk->bus options: ${JSON.stringify(chosen.offered)}` +
+      (ROUTE_PIN ? ` (pinned ${ROUTE_PIN})` : '')
+  )
+  console.log(
+    `[setup] bus ${chosen.busRoute} (${chosen.busTrip}) boards ${fmt(
       chosen.busStart
     )}, trip departs ${fmt(chosen.itinStart)}`
   )
+
+  // The trace starts here, before Go Mode, so the first plan is its first line.
+  await page.evaluate(() => {
+    window.__srbOn = true
+  })
 
   // ---- start Go Mode + sim ----
   await page.evaluate(() => window.__beginGoMode(window.__stuckTestItinerary))
@@ -231,6 +432,12 @@ async function main() {
       status: g.reRoute.status
     }
   }, chosen.itinStart)
+  traceZeroMs = await page.evaluate(() => {
+    const e = (window.__srbTrace || []).find(
+      (x) => x.type === 'notify:MISSED_BUS'
+    )
+    return e ? e.t : Date.now()
+  })
   console.log(
     `[zombie] MISSED_BUS fired; reRoute=${blocked.status}; trip unchanged=${blocked.sameTrip}`
   )
@@ -272,6 +479,7 @@ async function main() {
       reRouteStatus: g.reRoute.status
     }
   })
+  await printTrace()
   console.log('\n===== RESULT =====')
   console.log(`recovered in:  ${recoverySec}s wall clock (watchdog is 90s)`)
   console.log(`confirmation:  ${after.confirmMsg}`)
@@ -295,7 +503,8 @@ async function main() {
   )
 }
 
-main().catch((e) => {
+main().catch(async (e) => {
+  await printTrace()
   // e.stack, not e.message: a puppeteer waitForFunction timeout says only
   // "waiting for function failed: timeout 60000ms exceeded" and names neither
   // the wait that failed nor its line. Six of the eleven red rows on
