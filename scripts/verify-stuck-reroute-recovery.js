@@ -154,6 +154,8 @@ function installStoreWatch() {
   const boardOf = window.__srbBoardOf
   let lastItin = null
   let lastStatus = null
+  let lastLive = null
+  let lastLiveSig = null
   const seenNotes = new Set()
   window.store.subscribe(() => {
     if (!window.__srbOn) return
@@ -168,6 +170,27 @@ function installStoreWatch() {
         t: Date.now(),
         type: 'itinerary'
       })
+    }
+    // The board leg's live time as the app holds it (what a miss is judged
+    // against): one line per change, so a flip of boardRealtime/boardIsFloor
+    // after the clock jump -- which turns a definitive miss ambiguous -- shows.
+    if (g.liveLegTimes !== lastLive) {
+      lastLive = g.liveLegTimes
+      const idx = (g.activeItinerary?.legs || []).findIndex((l) => l.transitLeg)
+      const lt = g.liveLegTimes?.[idx]
+      const sig = JSON.stringify({
+        epoch: lt?.boardEpoch ?? null,
+        floor: !!lt?.boardIsFloor,
+        rt: !!(lt?.boardRealtime ?? lt?.realtime)
+      })
+      if (sig !== lastLiveSig) {
+        lastLiveSig = sig
+        window.__srbTrace.push({
+          detail: `${sig} (board leg ${idx})`,
+          t: Date.now(),
+          type: 'liveLegTimes'
+        })
+      }
     }
     const status = g.reRoute?.status
     if (status !== lastStatus) {
@@ -403,7 +426,39 @@ async function main() {
       ? new Date(g.progress.currentTime).getTime()
       : null
   })
-  const advanceMs = chosen.busStart - (simTime || chosen.itinStart) + 300000
+  // Wait past the bus's LIVE departure, not its scheduled one (rider, 41.4 Q3=A).
+  // The app judges a miss against getEffectiveBoardTimeMs: the feed's
+  // goMode.liveLegTimes[boardLeg].boardEpoch when boardRealtime, else the
+  // scheduled leg.startTime. A late bus has boardEpoch > startTime, so a jump
+  // to scheduled+5min lands BEFORE live+grace and the miss is ambiguous
+  // (autoApply false, never applied). Jump past whichever is later.
+  const live = await page.evaluate(() => {
+    const g = window.store.getState().otp.goMode
+    const legs = g.activeItinerary?.legs || []
+    const idx = legs.findIndex((l) => l.transitLeg)
+    const lt = g.liveLegTimes?.[idx]
+    return {
+      boardEpoch: lt?.boardEpoch ?? null,
+      boardIsFloor: !!lt?.boardIsFloor,
+      boardRealtime: !!(lt?.boardRealtime ?? lt?.realtime)
+    }
+  })
+  const liveBoardMs =
+    live.boardRealtime && live.boardEpoch != null && !live.boardIsFloor
+      ? Number(live.boardEpoch)
+      : null
+  const targetBoardMs = Math.max(chosen.busStart, liveBoardMs ?? 0)
+  console.log(
+    `[live] feed boardRealtime=${live.boardRealtime} boardEpoch=${fmt(
+      live.boardEpoch
+    )} scheduled=${fmt(chosen.busStart)} -> ` +
+      (liveBoardMs != null && liveBoardMs > chosen.busStart
+        ? `bus is ${((liveBoardMs - chosen.busStart) / 60000).toFixed(
+            1
+          )} min LATE, jumping past ${fmt(liveBoardMs)}`
+        : 'on time (or no live time), jumping past the scheduled time')
+  )
+  const advanceMs = targetBoardMs - (simTime || chosen.itinStart) + 300000
   await page.evaluate((ms) => {
     window.__advanceSimulatedTime(ms)
     window.__pingPosition()
@@ -443,28 +498,81 @@ async function main() {
   )
 
   // ---- recovery: watchdog (90s) clears the wedge, retry applies the swap ----
+  // Two settled outcomes are a pass: the same-route swap (TRIP_UPDATED), or --
+  // when the replan holds no run of the kept route, i.e. a local bus where OTP
+  // answers Orange/bike -- a `found` choices card the app deliberately does not
+  // apply (rider, 41.4 Q2=B: "showing the choices is enough"). A wedge is still
+  // a failure: no result, a `searching` that outlives the watchdog, or a
+  // null/empty result (`none`) that is never retried all run out the deadline.
   const t0 = Date.now()
   const tick = setInterval(
     () => page.evaluate(() => window.__pingPosition()).catch(() => undefined),
     5000
   )
+  const readSettled = (origStart, keptRoute) => {
+    const g = window.store.getState().otp.goMode
+    const swapped =
+      g.activeItinerary &&
+      Number(g.activeItinerary.startTime) !== origStart &&
+      g.notifications.recentNotifications.some((n) => n.type === 'TRIP_UPDATED')
+    const cands = g.reRoute.candidates || []
+    const routeOf = (it) => {
+      const l = (it.legs || []).find((x) => x.transitLeg)
+      return l ? String(l.routeShortName || l.routeLongName) : null
+    }
+    return {
+      choices:
+        !swapped &&
+        g.reRoute.status === 'found' &&
+        !g.reRoute.autoApply &&
+        cands.length > 0 &&
+        Number(g.activeItinerary.startTime) === origStart,
+      keptInList: cands.some((it) => routeOf(it) === String(keptRoute)),
+      offered: cands.map(routeOf),
+      status: g.reRoute.status,
+      swapped: !!swapped
+    }
+  }
+  let outcome = null
+  let choicesInfo = null
+  let choicesSince = 0
   try {
-    await page.waitForFunction(
-      (origStart) => {
-        const g = window.store.getState().otp.goMode
-        return (
-          g.activeItinerary &&
-          Number(g.activeItinerary.startTime) !== origStart &&
-          g.notifications.recentNotifications.some(
-            (n) => n.type === 'TRIP_UPDATED'
-          )
-        )
-      },
-      { polling: 500, timeout: 240000 },
-      chosen.itinStart
-    )
+    const deadline = Date.now() + 240000
+    while (Date.now() < deadline) {
+      const r = await page.evaluate(
+        readSettled,
+        chosen.itinStart,
+        chosen.busRoute
+      )
+      if (r.swapped) {
+        outcome = 'swap'
+        break
+      }
+      if (r.choices && !r.keptInList) {
+        // Hold it 8s: a card that is still being replaced is not settled.
+        choicesSince = choicesSince || Date.now()
+        choicesInfo = r
+        if (Date.now() - choicesSince >= 8000) {
+          outcome = 'choices'
+          break
+        }
+      } else {
+        choicesSince = 0
+      }
+      await new Promise((resolve) => setTimeout(resolve, 500))
+    }
   } finally {
     clearInterval(tick)
+  }
+  if (!outcome) {
+    const r = await page
+      .evaluate(readSettled, chosen.itinStart, chosen.busRoute)
+      .catch(() => ({}))
+    throw new Error(
+      `no recovery within 240s (wedge not cleared, or empty/null result never retried): ${JSON.stringify(
+        r
+      )}`
+    )
   }
   const recoverySec = ((Date.now() - t0) / 1000).toFixed(0)
 
@@ -481,12 +589,34 @@ async function main() {
   })
   await printTrace()
   console.log('\n===== RESULT =====')
+  console.log(`outcome:       ${outcome}`)
   console.log(`recovered in:  ${recoverySec}s wall clock (watchdog is 90s)`)
-  console.log(`confirmation:  ${after.confirmMsg}`)
-  console.log(`reRoute state: ${after.reRouteStatus} (expected idle)`)
+  if (outcome === 'choices') {
+    console.log(
+      `choices card:  status=${after.reRouteStatus}, offered ${JSON.stringify(
+        choicesInfo.offered
+      )}, kept route ${chosen.busRoute} not among them`
+    )
+  } else {
+    console.log(`confirmation:  ${after.confirmMsg}`)
+    console.log(`reRoute state: ${after.reRouteStatus} (expected idle)`)
+  }
 
   await browser.close()
 
+  if (Number(recoverySec) > 200) {
+    throw new Error('recovery took longer than watchdog + retry should allow')
+  }
+  if (outcome === 'choices') {
+    console.log(
+      `\nPASS (choices shown — kept route not in replan, rider-confirmed behaviour 41.4 Q2=B): wedge cleared by watchdog, missed ${
+        chosen.busRoute
+      } replanned to ${JSON.stringify(
+        choicesInfo.offered
+      )} and shown as choices, not applied`
+    )
+    return
+  }
   if (after.reRouteStatus !== 'idle') {
     throw new Error('reRoute state not reset after recovery')
   }
@@ -494,9 +624,6 @@ async function main() {
     throw new Error(
       `recovery changed the route: ${chosen.busRoute} -> ${after.newBusRoute}`
     )
-  }
-  if (Number(recoverySec) > 200) {
-    throw new Error('recovery took longer than watchdog + retry should allow')
   }
   console.log(
     '\nPASS: wedged reroute cleared by watchdog, trip auto-updated on the SAME route without waiting for the 30-min notification re-fire'
