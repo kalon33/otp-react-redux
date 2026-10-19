@@ -7,6 +7,7 @@ import {
   loadCustomPlaces,
   SAVED_PLACES_KEY
 } from './saved-places'
+import { isSameRecentPlace, MAX_RECENT_STORAGE } from './recent-places'
 import { loadRouteSets, parseRouteSets, RouteSet } from './route-sets'
 
 const { getItem } = coreUtils.storage
@@ -75,17 +76,33 @@ export function readPlacesState(): PlacesState {
 }
 
 /**
- * What is synced: the custom list plus the two legacy slots (not recents),
- * and the saved route sets (58.2, cycle 27 Q6 = B: "phone plus a server
- * backup with your places").
+ * A recent place as the `otp.recent` key stores it (the reducer writes the
+ * legacy LocationField shape, convertToLegacyLocation).
+ */
+export interface StoredRecentPlace {
+  icon?: string
+  id?: string
+  lat: number
+  lon: number
+  name?: string
+  timestamp?: number
+  type?: string
+}
+
+/**
+ * What is synced: the custom list plus the two legacy slots, the saved route
+ * sets (58.2, cycle 27 Q6 = B: "phone plus a server backup with your
+ * places"), and the recent places (60.1 — the only thing the 10-08 and 10-19
+ * dev-app resets actually took).
  *
- * `routeSets` is absent — not [] — when a server answer has no such key: a
- * sidecar older than 58.2 knows nothing about sets, and its silence must not
- * read as "this device has none".
+ * `routeSets` / `recent` are absent — not [] — when a server answer has no
+ * such key: a sidecar older than 58.2 / 60.1 knows nothing about them, and
+ * its silence must not read as "this device has none".
  */
 export interface PlacesSnapshot {
   home: UserSavedLocation | null
   places: UserSavedLocation[]
+  recent?: StoredRecentPlace[]
   routeSets?: RouteSet[]
   work: UserSavedLocation | null
 }
@@ -117,14 +134,46 @@ function isSlotLocation(p: any): p is UserSavedLocation {
   )
 }
 
+const RECENT_FIELDS = ['icon', 'id', 'lat', 'lon', 'name', 'timestamp', 'type']
+
+/**
+ * Recent places worth keeping: numeric coordinates at least, and only the
+ * fields the stored shape has (nothing else from a server answer is written
+ * back into localStorage).
+ */
+export function parseRecentPlaces(value: unknown): StoredRecentPlace[] {
+  if (!Array.isArray(value)) return []
+  return value.filter(isSlotLocation).map((entry: any) => {
+    const clean: Record<string, unknown> = {}
+    RECENT_FIELDS.forEach((field) => {
+      if (entry[field] !== undefined && entry[field] !== null) {
+        clean[field] = entry[field]
+      }
+    })
+    return clean as unknown as StoredRecentPlace
+  })
+}
+
 /** The synced keys as this phone holds them right now. */
 export function readPlacesSnapshot(): PlacesSnapshot {
   return {
     home: getItem('home') as UserSavedLocation | null,
     places: loadCustomPlaces(),
+    recent: parseRecentPlaces(getItem('recent', [])),
     routeSets: loadRouteSets(),
     work: getItem('work') as UserSavedLocation | null
   }
+}
+
+/** Whether a copy holds nothing at all (the app-key migration's trigger). */
+export function isEmptySnapshot(snapshot: PlacesSnapshot): boolean {
+  return (
+    !snapshot.home &&
+    !snapshot.work &&
+    snapshot.places.length === 0 &&
+    !snapshot.recent?.length &&
+    !snapshot.routeSets?.length
+  )
 }
 
 /** Server JSON → a snapshot, dropping anything malformed. */
@@ -136,11 +185,43 @@ export function parsePlacesSnapshot(data: any): PlacesSnapshot {
       : [],
     work: isSlotLocation(data?.work) ? data.work : null
   }
-  // Only a server that sent the key has said anything about sets.
+  // Only a server that sent the key has said anything about sets / recents.
   if (data && typeof data === 'object' && 'routeSets' in data) {
     snapshot.routeSets = parseRouteSets(data.routeSets)
   }
+  if (data && typeof data === 'object' && 'recent' in data) {
+    snapshot.recent = parseRecentPlaces(data.recent)
+  }
   return snapshot
+}
+
+/**
+ * Recents, local first then the server's, as one list: an entry the
+ * reducer's own rule calls the same place (isSameRecentPlace — ~5 m or the
+ * same address) keeps the LOCAL copy; newest first; capped at
+ * MAX_RECENT_STORAGE. A union, not local-wins-the-list: the first recent a
+ * freshly reset app records must not block the restore of the other four.
+ */
+export function mergeRecentPlaces(
+  local: StoredRecentPlace[],
+  server: StoredRecentPlace[]
+): StoredRecentPlace[] {
+  const union = [...local]
+  server.forEach((entry) => {
+    if (!union.some((kept) => isSameRecentPlace(kept as any, entry as any))) {
+      union.push(entry)
+    }
+  })
+  // Array.prototype.sort is stable: equal (or missing) timestamps keep local
+  // ahead of server.
+  return union
+    .map((entry, index) => ({ entry, index }))
+    .sort(
+      (a, b) =>
+        (b.entry.timestamp || 0) - (a.entry.timestamp || 0) || a.index - b.index
+    )
+    .slice(0, MAX_RECENT_STORAGE)
+    .map(({ entry }) => entry)
 }
 
 export interface PlacesMerge {
@@ -149,15 +230,29 @@ export interface PlacesMerge {
   merged: PlacesSnapshot
   /**
    * What came BACK from the server, as counts (for the beacon). `routeSets`
-   * only when the server gave back at least one saved set.
+   * / `recent` only when the server gave back at least one of them.
    */
-  restored: { home: boolean; places: number; routeSets?: number; work: boolean }
+  restored: {
+    home: boolean
+    places: number
+    recent?: number
+    routeSets?: number
+    work: boolean
+  }
 }
 
-/** Without the sets — what a server that predates them can be compared on. */
-function withoutSets(snapshot: PlacesSnapshot): PlacesSnapshot {
-  const { routeSets, ...rest } = snapshot // eslint-disable-line @typescript-eslint/no-unused-vars
-  return rest
+/**
+ * Without the keys the server's answer lacks — what a server that predates
+ * sets (58.2) or recents (60.1) can be compared on.
+ */
+function comparableTo(
+  merged: PlacesSnapshot,
+  server: PlacesSnapshot
+): PlacesSnapshot {
+  const comparable = { ...merged }
+  if (!server.routeSets) delete comparable.routeSets
+  if (!server.recent) delete comparable.recent
+  return comparable
 }
 
 /**
@@ -178,6 +273,9 @@ function withoutSets(snapshot: PlacesSnapshot): PlacesSnapshot {
  *   A server answer with no `routeSets` key (a sidecar older than 58.2) fills
  *   nothing and is not counted as behind on sets — the phone's sets are
  *   simply kept.
+ * - Recent places (60.1) are a UNION (mergeRecentPlaces), not a fill: the
+ *   reset app's first new recent must not hide the four on the server. Same
+ *   absent-key rule as sets for an old server.
  */
 export function mergePlaces(
   local: PlacesSnapshot,
@@ -185,6 +283,7 @@ export function mergePlaces(
   localAuthoritative = false
 ): PlacesMerge {
   const hasSets = !!local.routeSets || !!server.routeSets
+  const hasRecent = !!local.recent || !!server.recent
   if (localAuthoritative) {
     return {
       aheadOfServer: true,
@@ -211,17 +310,25 @@ export function mergePlaces(
     setsFromServer = union.length - localSets.length
     merged.routeSets = union
   }
+  let recentFromServer = 0
+  if (hasRecent) {
+    const localRecent = local.recent || []
+    const recent = mergeRecentPlaces(localRecent, server.recent || [])
+    recentFromServer = recent.filter((r) => !localRecent.includes(r)).length
+    merged.recent = recent
+  }
   // Push only when the server would not already hold the merged result
   // (a place added or edited here). A spurious difference in key order
   // costs one redundant POST, never a loss. An old server holds no sets
-  // and never will, so it is compared on places alone.
-  const comparable = server.routeSets ? merged : withoutSets(merged)
+  // (or recents) and never will, so it is compared without them.
+  const comparable = comparableTo(merged, server)
   return {
     aheadOfServer: JSON.stringify(comparable) !== JSON.stringify(server),
     merged,
     restored: {
       home: !local.home && !!server.home,
       places: fromServer.length,
+      ...(recentFromServer > 0 ? { recent: recentFromServer } : {}),
       ...(setsFromServer > 0 ? { routeSets: setsFromServer } : {}),
       work: !local.work && !!server.work
     }
