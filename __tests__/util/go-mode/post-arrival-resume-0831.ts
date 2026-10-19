@@ -267,6 +267,7 @@ describe('wake lock on a restored trip (2026-08-31)', () => {
 
   afterEach(() => {
     act(() => {
+      // eslint-disable-next-line react/no-deprecated
       ReactDOM.unmountComponentAtNode(container)
     })
     container.remove()
@@ -299,6 +300,7 @@ describe('wake lock on a restored trip (2026-08-31)', () => {
     jest.spyOn(console, 'warn').mockImplementation(() => undefined)
 
     await act(async () => {
+      // eslint-disable-next-line react/no-deprecated
       ReactDOM.render(React.createElement(Harness), container)
     })
     await flush()
@@ -319,6 +321,7 @@ describe('wake lock on a restored trip (2026-08-31)', () => {
     const request = installWakeLock([{ release: jest.fn() }])
 
     await act(async () => {
+      // eslint-disable-next-line react/no-deprecated
       ReactDOM.render(React.createElement(Harness), container)
     })
     await flush()
@@ -330,6 +333,7 @@ describe('wake lock on a restored trip (2026-08-31)', () => {
     const request = installWakeLock([lock, { release: jest.fn() }])
 
     await act(async () => {
+      // eslint-disable-next-line react/no-deprecated
       ReactDOM.render(React.createElement(Harness), container)
     })
     await flush()

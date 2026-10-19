@@ -21,7 +21,7 @@ export const formattedToastSuccessMessage = (
   )
 }
 
-export const toastPromise = async <T extends unknown>(
+export const toastPromise = async <T,>(
   promise: Promise<T>,
   successMessage: JSX.Element | string,
   intl: IntlShape,

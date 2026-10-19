@@ -1,5 +1,5 @@
-import { AnchorHTMLAttributes, ComponentType, FC } from 'react'
 import { connect } from 'react-redux'
+import React, { AnchorHTMLAttributes, ComponentType, FC } from 'react'
 
 import { AppReduxState } from '../../util/state-types'
 import { combineQueryParams } from '../../util/api'
@@ -21,10 +21,20 @@ export function isSubpath(path: string, to: string): boolean {
  * Renders an anchor element <a> with specified path and query params,
  * that preserves other existing query params.
  */
-const LinkComponent: FC<OwnProps> = ({ to, toParams, tracking, ...rest }) => {
+const LinkComponent: FC<OwnProps> = ({
+  to,
+  toParams,
+  tracking,
+  children,
+  ...rest
+}) => {
   // These props are handled internally and should not be passed to the <a> element
   const { className, ...otherProps } = rest
-  return <a {...otherProps} className={className} />
+  return (
+    <a {...otherProps} className={className}>
+      {children}
+    </a>
+  )
 }
 
 // connect to the redux store so that the search params get updated in timely fashion.
