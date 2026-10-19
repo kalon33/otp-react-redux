@@ -1304,6 +1304,8 @@ config:
 otpUi:
   LocationField:
     geocoderTimeout: Impossible de joindre le serveur
+    recentPlaces: Récents
+    savedPlaces: Lieux enregistrés
 util:
   state:
     errorPlanningTrip: Une erreur s'est produite lors de la planification du 
