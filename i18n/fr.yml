@@ -459,6 +459,7 @@ components:
     boardingKnownVehicle: "Déjà suivi · n°{label}"
     boardingQuestion: "Êtes-vous dans le bus ?"
     boardingRetry: "Réessayer"
+    noBusesNearby: "Aucun bus détecté à proximité."
     boardingSearchFailed: "Flux des bus injoignable."
     boardingSearching: "Recherche…"
     boardingSubtitle: "Recherche du {route} à proximité"

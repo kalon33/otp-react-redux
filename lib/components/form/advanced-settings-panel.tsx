@@ -40,6 +40,9 @@ import {
   AnyRouteLock,
   lastResultsRouteIds,
   LockableRoute,
+  RouteLock,
+  routeLockIds,
+  routeLockLabel,
   routeLockRoutes,
   routeLockScope,
   RouteLockScope,
@@ -76,22 +79,12 @@ import { getDependentName } from '../../util/user'
 import { IconWithText } from '../util/styledIcon'
 import { invisibleCss } from '../util/invisible-a11y-label'
 import { isModuleEnabled, Modules } from '../../util/config'
-import {
-  LockableRoute,
-  RouteLock,
-  routeLockIds,
-  routeLockLabel,
-  RouteLockScope
-} from '../../util/route-lock'
+import { matchSavedSet, RouteSet, RouteSetWrite } from '../../util/route-sets'
 import { PersistenceConfig } from '../../util/config-types'
 import { toastPromise } from '../util/toasts'
 import { User } from '../user/types'
 import BackButton from '../util/back-button'
 import withSuspense from '../util/with-suspense'
-import type {
-  RouteLockWriteOptions,
-  RouteSetSource
-} from '../../actions/route-lock'
 
 import {
   addCustomSettingLabels,
@@ -115,13 +108,16 @@ import {
   SettingDropdown,
   VisibleSubheader
 } from './styled'
-import { matchSavedSet, RouteSet, RouteSetWrite } from '../../util/route-sets'
 import { SavedRouteSetList } from './saved-route-sets'
 import { setModeButtonEnabled } from './batch-settings'
 import { StyledTransparentButton } from './advanced-settings-button'
 import ArriveOnTimeSetting from './arrive-on-time-setting'
 import DateTimeModal from './date-time-modal'
 import RouteSetPicker from './route-set-picker'
+import type {
+  RouteLockWriteOptions,
+  RouteSetSource
+} from '../../actions/route-lock'
 
 const DependentSelector = withSuspense(
   lazy(() => import('../user/mobility-profile/dependent-selector'))
@@ -243,6 +239,13 @@ const UserSavedTripDefaultsButton = styled(StyledTransparentButton)`
   text-decoration: underline;
   width: 100%;
 `
+const RoutingProfileDropdown = styled(DropdownSelector)`
+  margin: 20px 0px;
+  label {
+    padding-left: 0;
+  }
+`
+
 const NlStatus = styled.div`
   font-size: 13px;
   margin-top: 8px;
@@ -1210,8 +1213,8 @@ const mapStateToProps = (state: AppReduxState) => {
     modeSettingDefinitions: state.otp?.modeSettingDefinitions || [],
     modeSettingValues,
     persistence: state.otp.config?.persistence,
-    routeSets: state.user?.localUser?.routeSets,
     routes: state.otp.transitIndex?.routes,
+    routeSets: state.user?.localUser?.routeSets,
     saveAndReturnButton,
     searches: state.otp.searches as Record<string, SearchLike> | undefined,
     user: state.user.loggedInUser

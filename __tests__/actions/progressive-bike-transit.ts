@@ -479,7 +479,7 @@ describe('actions > apiV2 > routingQuery progressive bike + transit (38.3)', () 
   it('no second pass when the rider’s cap is already 2000', async () => {
     init({
       ...baseConfig,
-      itinerary: { maxStopCount: 2000, enableMaxStopCount: true }
+      itinerary: { enableMaxStopCount: true, maxStopCount: 2000 }
     })
     anyGlobal.fetch = server(happy)
     dispatch(routingQuery())

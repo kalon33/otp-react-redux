@@ -68,7 +68,8 @@
       "nlPreferencesPlaceholder",
       "stopCapQuick",
       "stopCapStandard",
-      "stopCapThorough"
+      "stopCapThorough",
+      "routeLockAdd"
     ],
     "components.ActiveRoutingPreferences.*": [
       "avoidingBiking",

@@ -1064,7 +1064,9 @@ export function matchDescribesLeg(
 /** Loose headsign agreement — either side may be absent or differently cased. */
 function headsignsAgree(a?: string | null, b?: string | null): boolean {
   if (!a || !b) return false
-  return (a?.trim?.()?.toLowerCase?.() || a) === (b?.trim?.()?.toLowerCase?.() || b)
+  return (
+    (a?.trim?.()?.toLowerCase?.() || a) === (b?.trim?.()?.toLowerCase?.() || b)
+  )
 }
 
 /**

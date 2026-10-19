@@ -17,7 +17,7 @@ export default function PlaceNameWithTranslation({
   name
 }: PlaceNameWithTranslationProps): React.ReactElement {
   const intl = useIntl()
-  
+
   if (!name) {
     return <span />
   }

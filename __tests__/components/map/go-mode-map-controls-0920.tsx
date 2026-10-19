@@ -101,8 +101,8 @@ const mapProps = (overrides = {}) => ({
   feeds: [],
   findFeeds: jest.fn(),
   findStopTimesForStop: jest.fn(),
-  getStopClosures: jest.fn(),
   getCurrentPosition: jest.fn(),
+  getStopClosures: jest.fn(),
   intl: {
     formatList: (items: string[]) => items.join(', '),
     formatMessage: ({ id }: { id: string }) => id

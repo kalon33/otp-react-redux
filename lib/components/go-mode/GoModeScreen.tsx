@@ -4,9 +4,9 @@ import React, { useEffect, useRef, useState } from 'react'
 
 import * as goModeActions from '../../actions/go-mode'
 import * as uiActions from '../../actions/ui'
-import { formatPlaceName } from '../../util/format-place-name'
 import { aboardBeforeLegStart } from '../../util/go-mode/riding'
 import { fetchLegFrequency } from '../../actions/leg-frequency'
+import { formatPlaceName } from '../../util/format-place-name'
 import { hasNextSegment } from '../../util/multi-stop'
 import { isReplayActive } from '../../util/go-mode/replay/replay-engine'
 import {

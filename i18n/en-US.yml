@@ -435,6 +435,7 @@ components:
     boardingKnownVehicle: 'Already tracking · #{label}'
     boardingQuestion: Are you on the bus?
     boardingRetry: Try again
+    noBusesNearby: No buses detected nearby
     boardingSearchFailed: Couldn't reach the bus feed.
     boardingSearching: Looking…
     boardingSubtitle: Looking for {route} nearby
