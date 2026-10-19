@@ -935,6 +935,13 @@ export const SET_MAP_FOLLOW = 'SET_MAP_FOLLOW'
  * be told from a drag in the stream.
  */
 export const MAP_FOLLOW_GESTURE = 'MAP_FOLLOW_GESTURE'
+/**
+ * Recording only (59.1): the map's render loop caught a throwing frame and
+ * kept drawing (lib/util/go-mode/map-render-guard.ts). Before the guard, one
+ * such throw froze the map for the rest of the session. At most one per 60 s;
+ * `suppressed` counts the recoveries in between.
+ */
+export const MAP_RENDER_RECOVERED = 'MAP_RENDER_RECOVERED'
 export const SET_BOARDING_SEARCHING = 'SET_BOARDING_SEARCHING'
 // Whether the last vehicle search for the picker FAILED, as opposed to
 // honestly finding nothing. Must also appear in create-otp-reducer's explicit
@@ -1250,6 +1257,11 @@ export const recordMapFollowGesture = createAction<{
   touches: number
   zoomDelta: number
 }>(MAP_FOLLOW_GESTURE)
+// Recording only (MAP_RENDER_RECOVERED), 59.1.
+export const recordMapRenderRecovered = createAction<{
+  message: string
+  suppressed: number
+}>(MAP_RENDER_RECOVERED)
 export const setGoModeBackgrounded = createAction<boolean>(
   SET_GO_MODE_BACKGROUNDED
 )
