@@ -132,7 +132,12 @@ describe('util > go-mode > the dwelling bus (2026-07-29)', () => {
         null,
         [stopped],
         null,
-        null
+        null,
+        80,
+        null,
+        null,
+        // The frame is from 2026-07-29; a >10 min old frame is not live (54.6).
+        { nowMs: stopped.seconds * 1000 }
       )
       expect(match.vehicleId).toBe('1:8140')
       expect(match.stopStatus).toBe('STOPPED_AT')
@@ -147,7 +152,11 @@ describe('util > go-mode > the dwelling bus (2026-07-29)', () => {
         null,
         [{ ...stopped, stopStatus: undefined }],
         null,
-        null
+        null,
+        80,
+        null,
+        null,
+        { nowMs: stopped.seconds * 1000 }
       )
       expect(match.stopStatus).toBeNull()
     })
