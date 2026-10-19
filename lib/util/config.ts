@@ -50,8 +50,8 @@ export function checkForRouteModeOverride(
  * @return a path with a leading slash and no trailing slash
  */
 export function getVectorTilesPath(api: {
-  path?: string
   basePath?: string
+  path?: string
 }): string {
   const routerPath = api?.path ?? `${api?.basePath ?? '/otp'}/routers/default`
   return `${routerPath}/vectorTiles`

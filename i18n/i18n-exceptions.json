@@ -68,7 +68,8 @@
       "nlPreferencesPlaceholder",
       "stopCapQuick",
       "stopCapStandard",
-      "stopCapThorough"
+      "stopCapThorough",
+      "routeLockAdd"
     ],
     "components.ActiveRoutingPreferences.*": [
       "avoidingBiking",
@@ -124,6 +125,8 @@
     "components.BatchSearchScreen.routeLockChip",
     "components.BatchSearchScreen.routeLockDetail",
     "components.BatchSearchScreen.routeLockLabel",
+    "components.BatchSearchScreen.routeLockNoneStarted",
+    "components.BatchSearchScreen.routeLockNoneUsed",
     "components.BatchSearchScreen.routeLockNotFound",
     "components.BatchSearchScreen.routeLockNotStarted",
     "components.BatchSearchScreen.routeLockNotUsed",
@@ -142,6 +145,10 @@
     "otpUi.TextOnlyItinerary.transitDepartFrom",
     "otpUi.LocationField.geocoderTimeout",
     "components.FavoritePlaceList.setAddressForPlaceType",
-    "components.PlaceShortcut.enterAlert"
+    "components.PlaceShortcut.enterAlert",
+    "actions.callTaker.callQuerySaveError",
+    "actions.callTaker.checkSessionError",
+    "actions.callTaker.couldNotFindCallError",
+    "actions.callTaker.queryFetchError"
   ]
 }

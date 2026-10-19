@@ -83,6 +83,9 @@ export function getDefaultQuery(config: AppConfig) {
     roundTrip: false,
     routingType: 'ITINERARY', // obsolete but required to avoid crash
     stayMinutes: DEFAULT_STAY_MINUTES,
+    // Minutes at each of the rider's stops (backlog 58.3); `[]` is no stays.
+    // Not an OTP argument: it rides in `via` and in the URL as `stopStays`.
+    stopStays: [],
     time: getCurrentTime()
   }
 }

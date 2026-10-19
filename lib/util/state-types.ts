@@ -32,6 +32,8 @@ export interface OtpState {
   modeSettingDefinitions: ModeSetting[]
   overlay: any
   roundTrip?: RoundTripState
+  /** Every search this session, keyed by search id (create-otp-reducer). */
+  searches?: Record<string, any>
   serviceTimeRange?: {
     end: number
     start: number

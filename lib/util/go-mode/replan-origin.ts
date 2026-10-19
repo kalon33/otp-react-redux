@@ -1,3 +1,5 @@
+import { FIX_ACCURACY_MAX_M } from './transit-trust'
+
 /**
  * Where an automatic re-plan should say the rider IS, given that the answer
  * takes seconds to come back.
@@ -249,4 +251,82 @@ export function projectReplanOrigin(input: {
   if (metres <= 0) return unchanged('speed')
   const moved = moveAlongBearing(lat, lon, headingDeg, metres)
   return { atMs: nowMs + latency, lat: moved.lat, lon: moved.lon, metres }
+}
+
+/**
+ * How old a fix may be and still be where an automatic re-plan starts (51.3).
+ * A minute of standing still or walking is well inside any access leg the
+ * re-plan would draw; a minute of cycling is not, but a fix that old is only
+ * ever chosen when every newer one is worse than `FIX_ACCURACY_MAX_M`, and a
+ * kilometre-wide fix is a far worse guess than a 60 s old one.
+ */
+export const REPLAN_ORIGIN_MAX_AGE_MS = 60000
+
+/** Where a fix handed to `pickReplanOriginFix` came from. */
+export type ReplanOriginSource = 'go-mode' | 'last-trusted' | 'planner'
+
+export interface ReplanOriginPick {
+  /** Its age at `nowMs`, in ms. */
+  ageMs: number
+  position: GeolocationPosition
+  source: ReplanOriginSource
+}
+
+/** A fix's accuracy radius, or null when it reports none. */
+function fixAccuracyM(fix: GeolocationPosition | null | undefined) {
+  const a = fix?.coords?.accuracy
+  return a != null && Number.isFinite(a) ? (a as number) : null
+}
+
+/**
+ * The fix an AUTOMATIC re-plan may take as its origin: the freshest of the
+ * three candidates whose accuracy is within `FIX_ACCURACY_MAX_M` and whose age
+ * is within `REPLAN_ORIGIN_MAX_AGE_MS` — else null, and the caller waits for a
+ * better fix rather than planning from a bad one.
+ *
+ * 2026-10-13 09:31:25, ride `mv6ret6s-h5he2i` (backlog 51.3): the missed-bus
+ * re-plan went out from Go Mode's first watcher fix, accuracy 1,414 m and
+ * 1,247 m south of a rider standing ~14 m from I-35W & 46th St, and built a
+ * 2,060 m bike loop back to the same station. The planner's own fix from 23 s
+ * earlier (14 m) was in state the whole time, and a 90 m fix came 23 s later.
+ *
+ * - `goModeFix` — `goMode.tracking.lastPosition`, the latest fix of any quality.
+ * - `lastTrustedFix` — `goMode.tracking.lastTrustedPosition`, the latest Go
+ *   Mode fix that was itself within the accuracy bound.
+ * - `plannerFix` — `otp.location.currentPosition`, the trip planner's own
+ *   geolocation (what the search that started the trip went out from).
+ *
+ * A fix with no reported accuracy is not trusted: the bound is the whole
+ * point. A fix dated in the future by more than the age bound (a simulated
+ * clock against a wall-clock fix) is as unusable as one that old.
+ * Ties go to the earlier argument, Go Mode's own stream first.
+ */
+export function pickReplanOriginFix(input: {
+  goModeFix?: GeolocationPosition | null
+  lastTrustedFix?: GeolocationPosition | null
+  nowMs: number
+  plannerFix?: GeolocationPosition | null
+}): ReplanOriginPick | null {
+  const { nowMs } = input
+  const candidates: Array<[ReplanOriginSource, any]> = [
+    ['go-mode', input.goModeFix],
+    ['last-trusted', input.lastTrustedFix],
+    ['planner', input.plannerFix]
+  ]
+  let best: ReplanOriginPick | null = null
+  for (const [source, fix] of candidates) {
+    const lat = fix?.coords?.latitude
+    const lon = fix?.coords?.longitude
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue
+    const accuracy = fixAccuracyM(fix)
+    if (accuracy == null || accuracy > FIX_ACCURACY_MAX_M) continue
+    const at = Number(fix.timestamp)
+    if (!Number.isFinite(at)) continue
+    const ageMs = nowMs - at
+    if (Math.abs(ageMs) > REPLAN_ORIGIN_MAX_AGE_MS) continue
+    if (!best || at > Number(best.position.timestamp)) {
+      best = { ageMs, position: fix, source }
+    }
+  }
+  return best
 }

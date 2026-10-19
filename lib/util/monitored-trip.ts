@@ -6,7 +6,7 @@ export const WEEKDAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday']
 export const WEEKEND_DAYS = ['saturday', 'sunday']
 export const ALL_DAYS = [...WEEKDAYS, ...WEEKEND_DAYS] as const
 
-export type DaysOfWeek = typeof ALL_DAYS[number]
+export type DaysOfWeek = (typeof ALL_DAYS)[number]
 
 /**
  * Extracts the day of week fields of an object (e.g. a monitoredTrip) to an array.

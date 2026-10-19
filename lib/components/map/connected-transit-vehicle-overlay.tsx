@@ -93,7 +93,9 @@ function VehicleTooltip({
       )}
       {nextStopName && (
         <FormattedMessage
-          id={`components.TransitVehicleOverlay.${(stopStatus?.toLowerCase?.() || stopStatus || 'in_transit_to')}`}
+          id={`components.TransitVehicleOverlay.${
+            stopStatus?.toLowerCase?.() || stopStatus || 'in_transit_to'
+          }`}
           tagName="div"
           values={{ stop: nextStopName }}
         />

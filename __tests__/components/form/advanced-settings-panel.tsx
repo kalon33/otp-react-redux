@@ -3,15 +3,28 @@ import '../../test-utils/mock-window-url'
 import { readFileSync } from 'fs'
 import path from 'path'
 
+import { act } from 'react-dom/test-utils'
 import React from 'react'
 import yaml from 'js-yaml'
 
+import { FETCH_STATUS } from '../../../lib/util/constants'
 import {
   getMockInitialState,
   mockWithProvider
 } from '../../test-utils/mock-data/store'
 import { setDefaultTestTime } from '../../test-utils'
 import AdvancedSettingsPanel from '../../../lib/components/form/advanced-settings-panel'
+
+// Count searches instead of running them (see __tests__/actions/route-lock).
+jest.mock('../../../lib/actions/api', () => ({
+  ...jest.requireActual('../../../lib/actions/api'),
+  routingQuery: (searchId: string) => ({
+    payload: searchId,
+    type: 'TEST_ROUTING_QUERY'
+  })
+}))
+
+const flush = () => new Promise((resolve) => setTimeout(resolve, 0))
 
 /**
  * Jest maps i18n/*.yml to an empty object, so an import would give us nothing.
@@ -49,7 +62,19 @@ const ROUTES = {
   '1:921': { longName: 'METRO A Line', shortName: null, sortOrder: 21 }
 }
 
-function renderPanel(currentQueryOverrides = {}, configOverrides = {}) {
+function renderPanel(
+  currentQueryOverrides = {},
+  configOverrides = {},
+  props: Record<string, unknown> = {}
+) {
+  return mountPanel(currentQueryOverrides, configOverrides, props).wrapper
+}
+
+function mountPanel(
+  currentQueryOverrides = {},
+  configOverrides = {},
+  props: Record<string, unknown> = {}
+) {
   const state = getMockInitialState()
   // getMockInitialState leaves `router` as the connected-react-router reducer;
   // this panel's mapStateToProps reads location.search off it.
@@ -73,15 +98,20 @@ function renderPanel(currentQueryOverrides = {}, configOverrides = {}) {
   }
   state.otp.transitIndex = {
     ...(state.otp.transitIndex || {}),
-    routes: ROUTES
+    routes: ROUTES,
+    routesFetchStatus: FETCH_STATUS.FETCHED
   }
-  const { wrapper } = mockWithProvider(
+  return mockWithProvider(
     AdvancedSettingsPanel,
-    { innerRef: React.createRef() },
+    { innerRef: React.createRef(), ...props },
     state,
     messages
   )
-  return wrapper
+}
+
+const VALID_TRIP = {
+  from: { lat: 44.8168, lon: -93.3102, name: 'Home' },
+  to: { lat: 45.0, lon: -92.9489, name: 'Oakdale' }
 }
 
 describe('components > form > advanced settings panel', () => {
@@ -155,14 +185,25 @@ describe('components > form > advanced settings panel', () => {
   })
 
   describe('route selection (rider asks #45 and #46)', () => {
-    it('offers every route in the index as something to add', () => {
-      const select = renderPanel().find('select#id-query-param-routeLock')
-      expect(select).toHaveLength(1)
-      // The placeholder plus the three routes; the control never holds a
-      // selection, because picking one adds a chip and resets.
-      expect(select.prop('value')).toBe('')
-      expect(select.find('option')).toHaveLength(4)
-      expect(renderPanel().text()).toContain('Add a route')
+    it('offers the route sheet instead of a one-pick list (58.2)', () => {
+      const wrapper = renderPanel()
+      expect(wrapper.find('select#id-query-param-routeLock')).toHaveLength(0)
+      expect(wrapper.find('button.route-set-open').text()).toBe('Choose routes')
+    })
+
+    it('counts the routes already picked on the button', () => {
+      const wrapper = renderPanel({
+        routeLock: {
+          routes: [
+            { id: '1:18', label: '18' },
+            { id: '1:904', label: 'METRO Orange Line' }
+          ],
+          scope: 'only'
+        }
+      })
+      expect(wrapper.find('button.route-set-open').text()).toBe(
+        'Choose routes (2 picked)'
+      )
     })
 
     it('shows a chip per named route, not one chip listing them', () => {
@@ -181,16 +222,55 @@ describe('components > form > advanced settings panel', () => {
       expect(chips.at(1).text()).toContain('METRO Orange Line')
     })
 
-    it('drops a route already chosen out of the add picker', () => {
-      const select = renderPanel({
-        routeLock: {
-          routes: [{ id: '1:18', label: '18' }],
-          scope: 'only'
-        }
-      }).find('select#id-query-param-routeLock')
-      const values = select.find('option').map((o) => o.prop('value'))
-      expect(values).not.toContain('1:18')
-      expect(values).toContain('1:904')
+    it('renders a lock written before 2026-09-02 instead of crashing', () => {
+      // { id, label } with no routes array: the URL a phone reopens on after
+      // the update. Reading `.routes` directly threw in render (6.46 class).
+      const wrapper = renderPanel({ routeLock: { id: '1:18', label: '18' } })
+      const chips = wrapper.find('.route-lock-chips button')
+      expect(chips).toHaveLength(1)
+      expect(chips.at(0).text()).toContain('18')
+      expect(
+        wrapper.find('select#id-query-param-routeLockScope').prop('value')
+      ).toBe('only')
+      expect(wrapper.text()).toContain('Only trips on 18')
+    })
+
+    it('removes a chip without searching; closing Settings runs ONE search', async () => {
+      const handlePlanTrip = jest.fn()
+      const closeAdvancedSettings = jest.fn()
+      const { store, wrapper } = mountPanel(
+        {
+          ...VALID_TRIP,
+          routeLock: {
+            routes: [
+              { id: '1:18', label: '18' },
+              { id: '1:904', label: 'METRO Orange Line' }
+            ],
+            scope: 'only'
+          }
+        },
+        {},
+        { closeAdvancedSettings, handlePlanTrip }
+      )
+      await act(async () => {
+        wrapper.find('.route-lock-chips button').at(0).simulate('click')
+        await flush()
+      })
+      const writes = store
+        .getActions()
+        .filter((a: any) => a.type === 'SET_QUERY_PARAM' && a.payload.routeLock)
+      expect(writes).toHaveLength(1)
+      expect(writes[0].payload.routeLock.routes.map((r: any) => r.id)).toEqual([
+        '1:904'
+      ])
+      const searches = () =>
+        store.getActions().filter((a: any) => a.type === 'TEST_ROUTING_QUERY')
+      expect(searches()).toHaveLength(0)
+      expect(handlePlanTrip).not.toHaveBeenCalled()
+
+      wrapper.find('button#close-advanced-settings-button').simulate('click')
+      expect(handlePlanTrip).toHaveBeenCalledTimes(1)
+      expect(searches()).toHaveLength(0)
     })
 
     it('offers both scopes and shows which one is in effect', () => {
@@ -284,6 +364,61 @@ describe('components > form > advanced settings panel', () => {
         'input#id-query-param-hideWalkTransitOptions'
       )
       expect(box.prop('checked')).toBe(true)
+    })
+  })
+
+  describe('box naming several routes (58.2, cycle 27 Q5)', () => {
+    const g = global as any
+    afterEach(() => {
+      g.fetch = undefined
+    })
+
+    async function describeIt(data: any) {
+      g.fetch = jest
+        .fn()
+        .mockResolvedValue({ json: async () => data, ok: true })
+      const { wrapper } = mountPanel(VALID_TRIP)
+      wrapper
+        .find('textarea')
+        .simulate('change', { target: { value: 'only the 18 and 99' } })
+      await act(async () => {
+        wrapper
+          .find('textarea')
+          .closest('div')
+          .find('button')
+          .last()
+          .simulate('click')
+        await flush()
+        await flush()
+      })
+      wrapper.update()
+      return wrapper.find('.nl-preferences-status').hostNodes().text()
+    }
+
+    it('sums up the routes it holds to', async () => {
+      const text = await describeIt({
+        preferences: {},
+        routeQueries: ['18', 'Orange Line']
+      })
+      expect(text).toContain('Only: 18, METRO Orange Line')
+      expect(text).not.toContain('find')
+    })
+
+    it('says which names it could not find, and what it held to', async () => {
+      const text = await describeIt({
+        preferences: {},
+        routeQueries: ['18', '99']
+      })
+      expect(text).toContain('Only: 18')
+      expect(text).toContain('Couldn’t find 99 — held to 18.')
+    })
+
+    it('says so when no name matched at all', async () => {
+      const text = await describeIt({
+        preferences: {},
+        routeQueries: ['99']
+      })
+      expect(text).toContain('No route called “99”')
     })
   })
 })

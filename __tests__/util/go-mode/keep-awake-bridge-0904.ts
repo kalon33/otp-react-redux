@@ -35,6 +35,7 @@ describe('keep awake: native plugin vs the web ladder (2026-09-04)', () => {
 
   afterEach(() => {
     act(() => {
+      // eslint-disable-next-line react/no-deprecated
       ReactDOM.unmountComponentAtNode(container)
     })
     container.remove()
@@ -89,6 +90,7 @@ describe('keep awake: native plugin vs the web ladder (2026-09-04)', () => {
 
   const mount = async () => {
     await act(async () => {
+      // eslint-disable-next-line react/no-deprecated
       ReactDOM.render(React.createElement(Harness), container)
     })
     await flushMicrotasks()
@@ -119,6 +121,7 @@ describe('keep awake: native plugin vs the web ladder (2026-09-04)', () => {
     expect(allowSleep).not.toHaveBeenCalled()
 
     await act(async () => {
+      // eslint-disable-next-line react/no-deprecated
       ReactDOM.unmountComponentAtNode(container)
     })
     await flushMicrotasks()

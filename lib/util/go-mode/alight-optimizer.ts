@@ -897,23 +897,47 @@ export function onwardRouteOfItinerary(itinerary: Itinerary): string | null {
 }
 
 /**
- * Order two scored options: earlier total arrival wins, but ties (within
- * TIE_MS) break on the rider's own route first, then fewer transfers, then less
- * walking, then earlier arrival — biasing toward staying on the current bus to
- * a convenient stop rather than getting off early to shave a few seconds.
+ * Metres the rider must cover on their own (walk + bike) for an onward plan,
+ * from the non-transit legs. Unlike streetDistance this leaves out the bus and
+ * train legs, which would otherwise make a long ride look like a long walk.
+ * Falls back to `itinerary.walkDistance` only when no leg carries a distance.
+ */
+export function accessStreetMeters(itin: Itinerary): number {
+  const legs = itin.legs || []
+  const measured = legs.reduce(
+    (sum, leg) => sum + (leg.transitLeg ? 0 : Number(leg.distance) || 0),
+    0
+  )
+  if (measured > 0) return measured
+  if (legs.some((leg) => Number(leg.distance) > 0)) return 0
+  return typeof itin.walkDistance === 'number' ? itin.walkDistance : 0
+}
+
+/**
+ * Order two scored options against the best arrival in the list. Options that
+ * arrive within TIE_MS of `bestArrival` form one bucket and sit above everything
+ * later; inside the bucket the order is the rider's own route, then fewer
+ * transfers, then the fewest metres walked or biked (staying aboard longest),
+ * then earlier arrival. Outside the bucket it is arrival alone. Comparing
+ * against one fixed anchor — not pairwise — keeps the order transitive, so a
+ * chain of options each 2 minutes apart cannot scramble the sort.
  * Returns <0 when `a` is better.
  *
- * The keepRouteId clause is deliberately INSIDE the tie window: the rider's
- * chosen route wins when the difference is noise, and a genuinely faster
- * alternative still ranks above it and stays visible. Never dropping it is
+ * The keepRouteId clause is deliberately INSIDE the bucket: the rider's chosen
+ * route wins when the difference is noise, and a genuinely faster alternative
+ * still ranks above it and stays visible. Never dropping it is
  * rankAlightOptions' job, not this comparator's.
  */
 function compareAlightOptions(
   a: ScoredAlightOption,
   b: ScoredAlightOption,
-  keepRouteId: string | null = null
+  keepRouteId: string | null = null,
+  bestArrival: number = Math.min(a.arrival, b.arrival)
 ): number {
-  if (Math.abs(a.arrival - b.arrival) <= TIE_MS) {
+  const aIn = a.arrival - bestArrival <= TIE_MS
+  const bIn = b.arrival - bestArrival <= TIE_MS
+  if (aIn !== bIn) return aIn ? -1 : 1
+  if (aIn) {
     if (keepRouteId) {
       const dK =
         Number(onwardRouteOfItinerary(b.itinerary) === keepRouteId) -
@@ -922,7 +946,7 @@ function compareAlightOptions(
     }
     const dT = (a.itinerary.transfers ?? 0) - (b.itinerary.transfers ?? 0)
     if (dT !== 0) return dT
-    const dW = (a.itinerary.walkDistance ?? 0) - (b.itinerary.walkDistance ?? 0)
+    const dW = accessStreetMeters(a.itinerary) - accessStreetMeters(b.itinerary)
     if (dW !== 0) return dW
   }
   return a.arrival - b.arrival
@@ -1190,7 +1214,8 @@ export function rankAlightOptions(
     })
   })
 
-  scored.sort((a, b) => compareAlightOptions(a, b, keepRouteId))
+  const bestArrival = scored.reduce((m, o) => Math.min(m, o.arrival), Infinity)
+  scored.sort((a, b) => compareAlightOptions(a, b, keepRouteId, bestArrival))
 
   // An onward plan that ends with a token bus hop does not get to sit above the
   // same journey without it (4.2). Applied BEFORE the dedupe and the cap, so a
@@ -1222,6 +1247,28 @@ export function rankAlightOptions(
     seen.add(sig)
     deduped.push(option)
     if (ranked.length < limit) ranked.push(strip(option))
+  }
+
+  // The least-street option inside the tie bucket holds a slot too (54.2): the
+  // 130 m stay-aboard transfer was cut by the pool cap while longer bike
+  // options kept their places. Normally it already ranks near the top of the
+  // bucket; this only matters when keep-route options crowd it out.
+  if (ranked.length >= limit && deduped.length > ranked.length) {
+    const inBucket = deduped.filter((o) => o.arrival - bestArrival <= TIE_MS)
+    const least = inBucket.reduce<ScoredAlightOption | null>(
+      (m, o) =>
+        !m || accessStreetMeters(o.itinerary) < accessStreetMeters(m.itinerary)
+          ? o
+          : m,
+      null
+    )
+    if (least) {
+      const sig = journeySignature(least.stopId, least.itinerary)
+      const present = ranked.some(
+        (o) => journeySignature(o.stopId, o.itinerary) === sig
+      )
+      if (!present) ranked[ranked.length - 1] = strip(least)
+    }
   }
 
   // The chosen route holds a slot. It is already ranked ahead of anything it

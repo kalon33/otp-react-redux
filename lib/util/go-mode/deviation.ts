@@ -245,13 +245,32 @@ export function shouldQuietReplanAccessLeg(input: {
  */
 export const TRANSIT_PACE_REPLAN_HOLD_FIXES = 3
 
+/**
+ * How long an ESTABLISHED transit-pace run survives the bus slowing down,
+ * measured from its last fix at transit pace.
+ *
+ * A bus stops. On 2026-10-13 (`mv6ret6s-h5he2i`) the run had counted 42
+ * distinct fixes at 12.2-16.3 m/s, 2-9 m off the 539 leg's shape, by the
+ * 09:54:13 fix; the 09:54:14 fix was 11.8 m/s as the bus braked for a stop,
+ * the run was dropped on that fix, and the quiet re-plan went out on the same
+ * second with a 1,445 m bicycle leg back to Gate C. The bus then stood
+ * 09:54:43-09:55:28 and the next re-plan (1,634 m) went out at 09:55:35, 81 s
+ * after the last fast fix. Ninety seconds covers a stop and a light; a rider
+ * still standing on the bus's line after that has very likely got off, and the
+ * re-plan is theirs again.
+ */
+export const TRANSIT_PACE_DWELL_MAX_MS = 90_000
+
 /** A run of fixes that look like a rider carried along the next transit leg. */
 export interface TransitPaceRun {
   /** The transit leg whose shape the run tracks. */
   boardLegIndex: number
   /** Distinct qualifying fixes in the run. */
   fixes: number
-  /** The last fix folded in, by its own clock. */
+  /**
+   * The last fix at transit pace folded in, by its own clock. A slower fix
+   * kept through a dwell does not move it: it is what the dwell is timed from.
+   */
   lastFixMs: number
   /** The access leg the matcher is on. */
   legIndex: number
@@ -273,13 +292,27 @@ export function trackTransitPace(
   sample: AccessBoardSample
 ): TransitPaceRun | null {
   const gates = accessBoardGates({ ...sample, vehicleMatch: null })
-  if (!gates.transitPace || !gates.onCorridor || !gates.fixSound) return null
+  if (!gates.onCorridor || !gates.fixSound) return null
   const { boardLegIndex, legIndex, nowMs } = sample
-  if (
-    !prev ||
-    prev.legIndex !== legIndex ||
-    prev.boardLegIndex !== boardLegIndex
-  ) {
+  const sameRun =
+    !!prev && prev.legIndex === legIndex && prev.boardLegIndex === boardLegIndex
+  if (!gates.transitPace) {
+    // A dwell, not a departure: once the run holds, a sound fix still on the
+    // transit leg's shape keeps it — uncounted — for up to
+    // TRANSIT_PACE_DWELL_MAX_MS after its last fast fix. A run that does not
+    // hold yet is not kept: three CONSECUTIVE fast fixes is what keeps a lone
+    // spike (bike-false-board-1029) from ever holding anything.
+    if (
+      sameRun &&
+      prev &&
+      prev.fixes >= TRANSIT_PACE_REPLAN_HOLD_FIXES &&
+      nowMs - prev.lastFixMs <= TRANSIT_PACE_DWELL_MAX_MS
+    ) {
+      return prev
+    }
+    return null
+  }
+  if (!sameRun || !prev) {
     return { boardLegIndex, fixes: 1, lastFixMs: nowMs, legIndex }
   }
   if (nowMs <= prev.lastFixMs) return prev
@@ -291,8 +324,9 @@ export function trackTransitPace(
  * measure short of a vehicle id, already on the bus?
  *
  * Only for the access leg the run was measured on. Silence is not asked for
- * anywhere else: a rider who slows below transit pace or leaves the transit
- * leg's shape resets the run on that very fix, and the re-plan is theirs again.
+ * anywhere else: a rider who leaves the transit leg's shape resets the run on
+ * that very fix, and so does one who stays below transit pace for longer than
+ * a bus stops (TRANSIT_PACE_DWELL_MAX_MS) — the re-plan is theirs again.
  */
 export function transitPaceHoldsAccessReplan(
   run: TransitPaceRun | null | undefined,

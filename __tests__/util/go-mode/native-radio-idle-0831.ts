@@ -606,6 +606,7 @@ describe('wake lock: retrying a refusal at load (2026-08-31)', () => {
 
   afterEach(() => {
     act(() => {
+      // eslint-disable-next-line react/no-deprecated
       ReactDOM.unmountComponentAtNode(container)
     })
     container.remove()
@@ -644,6 +645,7 @@ describe('wake lock: retrying a refusal at load (2026-08-31)', () => {
     jest.spyOn(console, 'warn').mockImplementation(() => undefined)
 
     await act(async () => {
+      // eslint-disable-next-line react/no-deprecated
       ReactDOM.render(React.createElement(Harness), container)
     })
     await flushMicrotasks()
@@ -662,6 +664,7 @@ describe('wake lock: retrying a refusal at load (2026-08-31)', () => {
     jest.spyOn(console, 'warn').mockImplementation(() => undefined)
 
     await act(async () => {
+      // eslint-disable-next-line react/no-deprecated
       ReactDOM.render(React.createElement(Harness), container)
     })
     await flushMicrotasks()
@@ -688,6 +691,7 @@ describe('wake lock: retrying a refusal at load (2026-08-31)', () => {
     jest.spyOn(console, 'warn').mockImplementation(() => undefined)
 
     await act(async () => {
+      // eslint-disable-next-line react/no-deprecated
       ReactDOM.render(React.createElement(Harness), container)
     })
     await flushMicrotasks()

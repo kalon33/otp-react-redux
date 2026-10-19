@@ -1,6 +1,7 @@
 import {
   mergePlaces,
   parsePlacesSnapshot,
+  readPlacesSnapshot,
   readPlacesState
 } from '../../lib/util/places-state'
 
@@ -140,6 +141,89 @@ describe('lib > util > places-state', () => {
       )
       expect(result.merged).toEqual({ ...empty, places: [GYM] })
       expect(result.restored).toEqual({ home: false, places: 0, work: false })
+      expect(result.aheadOfServer).toBe(true)
+    })
+  })
+
+  describe('saved route sets ride along (58.2, cycle 27 Q6 = B)', () => {
+    const empty = { home: null, places: [], work: null }
+    const COMMUTE = {
+      id: 'set-commute',
+      name: 'Commute',
+      routes: [
+        { id: '1:18', label: '18' },
+        { id: '1:21', label: '21' }
+      ],
+      savedAt: 1,
+      scope: 'only' as const
+    }
+    const GYM_SET = { ...COMMUTE, id: 'set-gym', name: 'Gym' }
+
+    it('the snapshot the phone POSTs carries its sets', () => {
+      store('routeSets', [COMMUTE, { junk: true }])
+      expect(readPlacesSnapshot().routeSets).toEqual([COMMUTE])
+    })
+
+    it('a server answer with no routeSets key says nothing about sets', () => {
+      expect('routeSets' in parsePlacesSnapshot({ places: [] })).toBe(false)
+      expect(
+        parsePlacesSnapshot({ places: [], routeSets: [COMMUTE, 'x'] }).routeSets
+      ).toEqual([COMMUTE])
+      expect(
+        parsePlacesSnapshot({ places: [], routeSets: 'nope' }).routeSets
+      ).toEqual([])
+    })
+
+    it('an OLD server (no key) leaves the local sets intact and is not "behind"', () => {
+      const local = { ...empty, places: [GYM], routeSets: [COMMUTE] }
+      const result = mergePlaces(
+        local,
+        parsePlacesSnapshot({ ...empty, places: [GYM] })
+      )
+      expect(result.merged.routeSets).toEqual([COMMUTE])
+      expect(result.restored).toEqual({ home: false, places: 0, work: false })
+      // No POST every launch at a server that will never keep sets.
+      expect(result.aheadOfServer).toBe(false)
+    })
+
+    it('a wiped phone gets its sets back; a set on both sides keeps the local copy', () => {
+      const renamed = { ...COMMUTE, name: 'Work run' }
+      const result = mergePlaces(
+        { ...empty, routeSets: [renamed] },
+        { ...empty, routeSets: [COMMUTE, GYM_SET] }
+      )
+      expect(result.merged.routeSets).toEqual([renamed, GYM_SET])
+      expect(result.restored).toEqual({
+        home: false,
+        places: 0,
+        routeSets: 1,
+        work: false
+      })
+      expect(result.aheadOfServer).toBe(true)
+
+      const wiped = mergePlaces(
+        { ...empty, routeSets: [] },
+        { ...empty, routeSets: [COMMUTE, GYM_SET] }
+      )
+      expect(wiped.merged.routeSets).toEqual([COMMUTE, GYM_SET])
+      expect(wiped.restored.routeSets).toBe(2)
+      expect(wiped.aheadOfServer).toBe(false)
+    })
+
+    it('a server set whose name a local set took is dropped, not doubled', () => {
+      const local = { ...empty, routeSets: [{ ...GYM_SET, name: 'commute' }] }
+      const result = mergePlaces(local, { ...empty, routeSets: [COMMUTE] })
+      expect(result.merged.routeSets).toEqual(local.routeSets)
+      expect(result.restored.routeSets).toBeUndefined()
+    })
+
+    it('an unacknowledged local delete is not undone by the server copy', () => {
+      const result = mergePlaces(
+        { ...empty, routeSets: [] },
+        { ...empty, routeSets: [COMMUTE] },
+        true
+      )
+      expect(result.merged.routeSets).toEqual([])
       expect(result.aheadOfServer).toBe(true)
     })
   })

@@ -696,6 +696,29 @@ export const RerouteKeepButton = styled.button`
   padding: 10px;
 `
 
+// The faster-route card (56.1): the Reroute* card, lifted clear of the
+// "View trip & other ways" handle it sits above (~42 px tall), with the
+// secondary button drawn in RerouteButton's outline rather than grey, so
+// "Keep mine" reads as a choice and not as a disabled Switch.
+export const FasterRouteBar = styled(RerouteBar)`
+  bottom: 54px;
+`
+
+export const FasterRouteText = styled.div`
+  cursor: pointer;
+`
+
+export const FasterRouteDetail = styled(RerouteSummary)`
+  overflow-wrap: break-word;
+`
+
+export const FasterRouteKeepButton = styled(RerouteKeepButton)`
+  background: #fff;
+  border: 1px solid #2196f3;
+  color: #2196f3;
+  font-weight: 600;
+`
+
 // Dev simulation toolbar styles
 export const SimToolbar = styled.div`
   background: #263238;
@@ -891,6 +914,8 @@ export const VehicleSelectButton = styled.button`
   font-size: 14px;
   font-weight: 500;
   margin-left: 12px;
+  /* A thumb-sized target (51.1): 8px of padding on 14px text came to 35px. */
+  min-height: 44px;
   padding: 8px 16px;
 
   &:active {
@@ -906,12 +931,82 @@ export const BoardingDismissButton = styled.button`
   cursor: pointer;
   font-size: 14px;
   margin-top: 8px;
+  min-height: 44px;
   padding: 10px;
   width: 100%;
 
   &:active {
     background: #f5f5f5;
   }
+`
+
+/**
+ * "On a different bus?" under the waiting and access cards (51.1). The same
+ * blue underlined text link as the card's other quiet controls (ResetButton),
+ * given a thumb-sized hit area — the rider reaches for it on a moving bus.
+ */
+export const ChooseBusLink = styled(ResetButton)`
+  align-items: center;
+  display: inline-flex;
+  font-size: 13px;
+  min-height: 44px;
+  padding: 0 4px;
+`
+
+/** Section line inside the choose-bus sheet (51.1). */
+export const ChooseBusSection = styled.div`
+  color: #666;
+  font-size: 13px;
+  font-weight: 600;
+  margin: 12px 0 8px;
+`
+
+/** The nearby routes as tappable badges, wrapped (51.1). */
+export const RouteBadgeGrid = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+`
+
+/** A route badge (RouteBadge's look) that is itself the button (51.1). */
+export const RouteBadgeButton = styled.button<{ $bg: string; $fg: string }>`
+  background-color: ${(props) => props.$bg};
+  border: none;
+  border-radius: 4px;
+  color: ${(props) => props.$fg};
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 700;
+  max-width: 100%;
+  min-height: 44px;
+  min-width: 56px;
+  overflow: hidden;
+  padding: 0 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  &:active {
+    opacity: 0.8;
+  }
+`
+
+/** "Type a route number" row: the box and its button (51.1). */
+export const RouteNumberForm = styled.form`
+  align-items: center;
+  display: flex;
+  margin-top: 4px;
+`
+
+export const RouteNumberInput = styled.input`
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  flex: 1 1 auto;
+  /* 16px: iOS zooms the page into any smaller input on focus. */
+  font-size: 16px;
+  min-height: 44px;
+  min-width: 0;
+  padding: 0 12px;
 `
 
 // Vehicle tracking badge for TransitProgress

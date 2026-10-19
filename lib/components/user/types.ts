@@ -22,7 +22,7 @@ export const visionLimitations = [
   'legally-blind'
 ] as const
 
-export type VisionLimitation = typeof visionLimitations[number]
+export type VisionLimitation = (typeof visionLimitations)[number]
 
 export interface MobilityProfile {
   isMobilityLimited: boolean
@@ -51,7 +51,7 @@ export const notificationChannels: ReadonlyArray<string> = [
   'push'
 ]
 
-export type NotificationChannel = typeof notificationChannels[number]
+export type NotificationChannel = (typeof notificationChannels)[number]
 /**
  * Type definition for an OTP-middleware (OTP-personas) user.
  */

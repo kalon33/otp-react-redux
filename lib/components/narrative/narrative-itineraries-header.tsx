@@ -182,7 +182,8 @@ export default function NarrativeItinerariesHeader({
                 <StyledIconWrapper
                   className={`${customBatchUiBackground && 'base-color-bg'}`}
                 >
-                  {(sort.direction?.toLowerCase?.() || sort.direction) === 'asc' ? (
+                  {(sort.direction?.toLowerCase?.() || sort.direction) ===
+                  'asc' ? (
                     <SortUp />
                   ) : (
                     <SortDown />

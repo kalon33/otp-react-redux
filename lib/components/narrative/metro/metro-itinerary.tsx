@@ -21,6 +21,7 @@ import {
   buildMultiStopPlan,
   itineraryDistanceM,
   itineraryStopNames,
+  itineraryStopTimes,
   MultiStopPlan
 } from '../../../util/multi-stop'
 import {
@@ -338,6 +339,40 @@ export class MetroItinerary extends NarrativeItinerary {
     }
   }
 
+  /**
+   * The Via line's stops, each with when the rider gets there and the stay
+   * asked for there as a minimum — "Perennial Cycle 10:59 AM (20 min+)"
+   * (backlog 58.3; the rider's answer: times on the card and in the step
+   * list). A stop without a usable time is just its name, as before.
+   */
+  _stopsText = (itinerary: Itinerary, stopNames: string[]): string => {
+    const { intl } = this.props
+    const times = itineraryStopTimes(itinerary)
+    if (!times.length) return stopNames.join(' › ')
+    return times
+      .map(({ arrivalTime, name, stayMinutes }) => {
+        if (!Number.isFinite(arrivalTime)) return name
+        const time = intl.formatTime(arrivalTime)
+        if (!stayMinutes) {
+          return intl.formatMessage(
+            { id: 'components.MultiStop.stopTime' },
+            { stop: name, time }
+          )
+        }
+        const stay = intl
+          .formatMessage(
+            { id: 'components.RoundTrip.stayOption' },
+            { hours: Math.floor(stayMinutes / 60), minutes: stayMinutes % 60 }
+          )
+          .trim()
+        return intl.formatMessage(
+          { id: 'components.MultiStop.stopTimeStay' },
+          { stay, stop: name, time }
+        )
+      })
+      .join(' › ')
+  }
+
   _lookupOtherStops = () => {
     const { itinerary, lookupOtherStops } = this.props
     if (lookupOtherStops) lookupOtherStops(itinerary)
@@ -500,6 +535,7 @@ export class MetroItinerary extends NarrativeItinerary {
       SvgIcon
     } = this.context
     const stopNames = itineraryStopNames(itinerary)
+    const stopsText = this._stopsText(itinerary, stopNames)
     const Route = RouteRenderer || DefaultRouteRenderer
 
     const { isCallAhead, isFlexItinerary } = getFlexAttributes(itinerary)
@@ -791,7 +827,7 @@ export class MetroItinerary extends NarrativeItinerary {
                           false,
                           intl
                         ),
-                        stops: stopNames.join(' › ')
+                        stops: stopsText
                       }}
                     />
                   </StopsRow>
@@ -827,7 +863,7 @@ export class MetroItinerary extends NarrativeItinerary {
                   <MiniStopsRow className="multi-stop-summary">
                     <FormattedMessage
                       id="components.MultiStop.via"
-                      values={{ stops: stopNames.join(' › ') }}
+                      values={{ stops: stopsText }}
                     />
                   </MiniStopsRow>
                 )}

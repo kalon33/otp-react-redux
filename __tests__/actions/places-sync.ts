@@ -2,10 +2,10 @@ import { applyMiddleware, combineReducers, createStore } from 'redux'
 import thunk from 'redux-thunk'
 
 import {
-  notePlacesWrite,
   PLACES_PUSH_DEBOUNCE_MS,
   resetPlacesSyncForTests,
-  startPlacesSync
+  startPlacesSync,
+  watchPlacesWrites
 } from '../../lib/actions/places-sync'
 import { recordedSessionEvents } from '../../lib/util/debug-log'
 import createUserReducer from '../../lib/reducers/create-user-reducer'
@@ -46,17 +46,8 @@ function launch() {
     }),
     applyMiddleware(thunk)
   )
-  // main.js's watcher, verbatim in effect.
-  let lastSaved = store.getState().user.localUser.savedLocations
-  let lastRecent = store.getState().user.localUser.recentPlaces
-  store.subscribe(() => {
-    const { recentPlaces, savedLocations } = store.getState().user.localUser
-    if (savedLocations === lastSaved && recentPlaces === lastRecent) return
-    const places = savedLocations !== lastSaved
-    lastSaved = savedLocations
-    lastRecent = recentPlaces
-    store.dispatch(notePlacesWrite({ places }) as any)
-  })
+  // main.js's watcher — the same function.
+  watchPlacesWrites(store)
   return store
 }
 
@@ -71,14 +62,19 @@ const placesEvents = () =>
   recordedSessionEvents.filter((e: any) => e.event === 'PLACES_STATE')
 
 /** fetch stub: GET answers `server`; POSTs are recorded (and update it). */
-function serve(initial: any, { failGet = false, failPost = false } = {}) {
+function serve(
+  initial: any,
+  { failGet = false, failPost = false, oldServer = false } = {}
+) {
   const state = { posts: [] as any[], server: initial }
   g.fetch = jest.fn((url: string, init?: any) => {
     if (init?.method === 'POST') {
       if (failPost) return Promise.reject(new Error('offline'))
       const body = JSON.parse(init.body)
       state.posts.push({ body, url })
-      state.server = body
+      // A sidecar older than 58.2 keeps what it knows and drops the rest.
+      const { routeSets, ...known } = body // eslint-disable-line @typescript-eslint/no-unused-vars
+      state.server = oldServer ? known : body
       return Promise.resolve({ json: async () => ({ ok: true }), ok: true })
     }
     if (failGet) return Promise.reject(new Error('offline'))
@@ -278,5 +274,107 @@ describe('lib > actions > places-sync (backlog 28.1)', () => {
       '/api/places?deviceId=dev-web-id'
     )
     expect(placesEvents()[0].idSource).toBe('web')
+  })
+
+  describe('saved route sets ride along (58.2, cycle 27 Q6 = B)', () => {
+    const COMMUTE = {
+      id: 'set-commute',
+      name: 'Commute',
+      routes: [
+        { id: '1:18', label: '18' },
+        { id: '1:21', label: '21' }
+      ],
+      savedAt: 1,
+      scope: 'only'
+    }
+    const saveSet = (name: string, id: string) => ({
+      payload: {
+        draft: { name, routes: COMMUTE.routes, scope: 'only' },
+        id,
+        now: 1,
+        replace: false
+      },
+      type: 'SAVE_ROUTE_SET'
+    })
+
+    it('saving a set is a places write: the POST carries the sets', async () => {
+      const server = serve({
+        home: null,
+        places: [],
+        routeSets: [],
+        work: null
+      })
+      const store = launch()
+      await store.dispatch(startPlacesSync() as any)
+      store.dispatch(saveSet('Commute', 'set-commute'))
+      await flush()
+      jest.advanceTimersByTime(PLACES_PUSH_DEBOUNCE_MS)
+      await flush()
+      expect(server.posts).toHaveLength(1)
+      expect(server.posts[0].body.routeSets).toEqual([COMMUTE])
+      expect(server.posts[0].body.deviceId).toBe('NATIVE-UUID-1')
+    })
+
+    it('a wiped phone gets its sets back from the server', async () => {
+      const server = serve({
+        home: null,
+        places: [],
+        routeSets: [COMMUTE],
+        work: null
+      })
+      const store = launch()
+      expect(store.getState().user.localUser.routeSets).toEqual([])
+      await store.dispatch(startPlacesSync() as any)
+      await flush()
+      expect(stored('routeSets')).toEqual([COMMUTE])
+      expect(store.getState().user.localUser.routeSets).toEqual([COMMUTE])
+      const restore = placesEvents().find((e: any) => e.trigger === 'restore')
+      expect(restore.restored).toEqual({
+        home: false,
+        places: 0,
+        routeSets: 1,
+        work: false
+      })
+      // The restore is not a rider write: nothing goes back up.
+      jest.advanceTimersByTime(PLACES_PUSH_DEBOUNCE_MS)
+      await flush()
+      expect(server.posts).toHaveLength(0)
+    })
+
+    it('an OLD server (no routeSets key) leaves the local sets alone, every launch', async () => {
+      const server = serve(
+        { home: null, places: [GYM], work: null },
+        { oldServer: true }
+      )
+      window.localStorage.setItem('otp.savedPlaces', JSON.stringify([GYM]))
+      window.localStorage.setItem('otp.routeSets', JSON.stringify([COMMUTE]))
+      let store = launch()
+      await store.dispatch(startPlacesSync() as any)
+      await flush()
+      jest.advanceTimersByTime(PLACES_PUSH_DEBOUNCE_MS)
+      await flush()
+      expect(store.getState().user.localUser.routeSets).toEqual([COMMUTE])
+      expect(stored('routeSets')).toEqual([COMMUTE])
+      // In step on places, silent on sets: no POST at boot.
+      expect(server.posts).toHaveLength(0)
+
+      // The rider saves another set: the POST goes (the old server drops the
+      // key), and the next launch still has both sets locally.
+      store.dispatch(saveSet('Gym', 'set-gym'))
+      await flush()
+      jest.advanceTimersByTime(PLACES_PUSH_DEBOUNCE_MS)
+      await flush()
+      expect(server.posts).toHaveLength(1)
+      expect('routeSets' in server.server).toBe(false)
+
+      resetPlacesSyncForTests()
+      store = launch()
+      await store.dispatch(startPlacesSync() as any)
+      await flush()
+      expect(
+        store.getState().user.localUser.routeSets.map((s: any) => s.name)
+      ).toEqual(['Gym', 'Commute'])
+      expect(stored('savedPlaces').map((p: any) => p.id)).toEqual([GYM.id])
+    })
   })
 })

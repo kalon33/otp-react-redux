@@ -1,9 +1,13 @@
 import type { Leg } from '@opentripplanner/types'
 
-import { shouldRebindRidingTrip } from './transit-trust'
+import {
+  findVehicleById,
+  shouldRebindRidingTrip,
+  VEHICLE_RECORD_STALE_SEC
+} from './transit-trust'
 import type { RidingState } from './types'
 import type { RouteMatchResult } from './position-matching'
-import type { VehicleMatchResult } from './vehicle-matching'
+import type { VehicleMatchResult, VehiclePosition } from './vehicle-matching'
 
 /**
  * Deciding the sticky "riding" fact, as a pure function.
@@ -294,6 +298,109 @@ export function ridingFactIsEvidenced(
 ): boolean {
   const id = riding?.vehicleId
   return !!id && !id.startsWith('route:')
+}
+
+/**
+ * ─── Is a remembered riding fact still about NOW? (54.1, 15.3) ──────────────
+ *
+ * STOP_GO_MODE keeps `riding` on purpose (7/12: the rider backed out and
+ * reopened "I'm on the bus" a moment later), but nothing re-evidences the fact
+ * while Go Mode is off — no tick, no off-route clock — so it was kept for ever.
+ * On 2026-10-15 (session mva4fpf5-hhg1cf) the Blue Line fact from 18:14:17
+ * (vehicle 1:31286, trip 1:892049, northbound, a run that ended at Target
+ * Field at 18:51) was re-confirmed by START_GO_MODE at 21:21:07 and silently
+ * re-adopted by "I'm on the bus" at 21:26:13, for a rider going SOUTH near
+ * Terminal 1: the first get-off list offered stations behind them, and the
+ * stale match forced TRANSITION_LEG 1 five seconds into the 21:21 trip.
+ *
+ * A kept fact is dropped when any one of these says it is over:
+ * - Go Mode was stopped more than RIDING_KEPT_MAX_MS ago (`keptAtMs`). The
+ *   7/12 back-out-and-reopen is seconds; ten minutes is generous for it.
+ * - The ridden trip's last stop time (realtime where published) is more than
+ *   RIDING_TRIP_END_SLACK_MS past — nobody is aboard a run that has finished.
+ * - A FRESH feed record for the remembered vehicle names a different trip: the
+ *   train has moved on to its next run, the rider has not been carried along.
+ *   "Fresh" here needs a known age: a record with no timestamp may be hours
+ *   old in the route cache (nothing evicts it), and the cost of a wrong drop is
+ *   a re-ask, so unknown evidence never drops the fact.
+ * Unknown data (no trip record, no feed) never drops it either — the same
+ * policy as everywhere else in this module.
+ */
+export const RIDING_KEPT_MAX_MS = 10 * 60_000
+
+/** Slack past the ridden trip's final stop time before the fact is over. */
+export const RIDING_TRIP_END_SLACK_MS = 10 * 60_000
+
+export type RidingStaleReason =
+  | 'kept-too-long'
+  | 'trip-ended'
+  | 'vehicle-on-other-trip'
+
+interface TripStopTimeLike {
+  realtimeArrival?: number | null
+  scheduledArrival?: number | null
+  serviceDay?: number | null
+}
+
+/** Epoch ms of a trip's last stop time, or null when the record cannot say. */
+export function tripLastStopMs(
+  trip: { stopTimes?: TripStopTimeLike[] | null } | null | undefined
+): number | null {
+  let last: number | null = null
+  for (const st of trip?.stopTimes || []) {
+    const sec = st?.realtimeArrival ?? st?.scheduledArrival
+    if (typeof st?.serviceDay !== 'number' || typeof sec !== 'number') continue
+    const ms = (st.serviceDay + sec) * 1000
+    if (Number.isFinite(ms) && (last == null || ms > last)) last = ms
+  }
+  return last
+}
+
+/** Is the fact past its keep window (only meaningful while Go Mode is off)? */
+export function ridingKeptTooLong(
+  riding: Pick<RidingState, 'keptAtMs'> | null | undefined,
+  nowMs: number
+): boolean {
+  const kept = riding?.keptAtMs
+  return typeof kept === 'number' && nowMs - kept > RIDING_KEPT_MAX_MS
+}
+
+export function ridingFactStaleReason(input: {
+  nowMs: number
+  riding: RidingState | null | undefined
+  /** transitIndex.trips[riding.tripId], when cached. */
+  trip?: { stopTimes?: TripStopTimeLike[] | null } | null
+  /** transitIndex.routes[riding.routeId].vehicles, when polled. */
+  vehicles?: VehiclePosition[] | null
+}): RidingStaleReason | null {
+  const { nowMs, riding, trip, vehicles } = input
+  if (!riding) return null
+  if (ridingKeptTooLong(riding, nowMs)) return 'kept-too-long'
+  const endMs = tripLastStopMs(trip)
+  if (endMs != null && nowMs > endMs + RIDING_TRIP_END_SLACK_MS) {
+    return 'trip-ended'
+  }
+  if (ridingFactIsEvidenced(riding) && riding.tripId) {
+    const record = findVehicleById(vehicles, riding.vehicleId, nowMs)
+    const feedTrip = record?.vehicle?.tripId ?? null
+    if (
+      record &&
+      record.ageSec != null &&
+      record.ageSec <= VEHICLE_RECORD_STALE_SEC &&
+      feedTrip &&
+      feedTrip !== riding.tripId
+    ) {
+      return 'vehicle-on-other-trip'
+    }
+  }
+  return null
+}
+
+/** The fact is safe to adopt again without asking. */
+export function ridingFactIsCurrent(
+  input: Parameters<typeof ridingFactStaleReason>[0]
+): boolean {
+  return !!input.riding && ridingFactStaleReason(input) == null
 }
 
 /**
@@ -957,7 +1064,9 @@ export function matchDescribesLeg(
 /** Loose headsign agreement — either side may be absent or differently cased. */
 function headsignsAgree(a?: string | null, b?: string | null): boolean {
   if (!a || !b) return false
-  return (a?.trim?.()?.toLowerCase?.() || a) === (b?.trim?.()?.toLowerCase?.() || b)
+  return (
+    (a?.trim?.()?.toLowerCase?.() || a) === (b?.trim?.()?.toLowerCase?.() || b)
+  )
 }
 
 /**

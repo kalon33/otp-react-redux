@@ -143,7 +143,10 @@ export const RouteRowDetails = ({
       {modeFromRoute && operator?.routeIcons !== false && (
         <ModeIconElement>
           <ModeIcon
-            aria-label={getFormattedMode(modeFromRoute?.toLowerCase?.() || modeFromRoute, intl)}
+            aria-label={getFormattedMode(
+              modeFromRoute?.toLowerCase?.() || modeFromRoute,
+              intl
+            )}
             height={28}
             leg={{
               routeId: id,

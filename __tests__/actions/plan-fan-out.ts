@@ -274,11 +274,13 @@ describe('actions > apiV2 > routingQuery fan-out', () => {
     dispatch(routingQuery())
     await settleAll()
 
-    // The fan-out (3), 38.3's full bike + transit pass, then the top-up.
-    expect(sent).toHaveLength(5)
+    // The fan-out (3), 38.3's full bike + transit pass, 55.1's low-bike
+    // plan, then the top-up.
+    expect(sent).toHaveLength(6)
     expect(sent[3].variables.maxStopCount).toBe(10000)
     expect(sent[3].variables.searchWindow).toBe(7200)
-    const topUp = sent[4]
+    expect(sent[4].variables.bikeReluctance).toBe(1)
+    const topUp = sent[5]
     expect(topUp.variables.searchWindow).toBe(14400)
     expect(topUp.variables.maxStopCount).toBe(2000)
     // The rider's own modes, not a wider set: only the window and the cap
@@ -291,13 +293,15 @@ describe('actions > apiV2 > routingQuery fan-out', () => {
     expect(
       sent.filter((req) => req.variables.searchWindow === 14400)
     ).toHaveLength(1)
-    // And the first four asked for the default window.
+    // And the first five asked for the default window.
     sent
-      .slice(0, 4)
+      .slice(0, 5)
       .forEach((req) => expect(req.variables.searchWindow).toBe(7200))
+    // The widen keeps the rider's own bike reluctance, not the low-bike one.
+    expect(topUp.variables.bikeReluctance).toBeUndefined()
     // The search is not left looking pending forever.
     expect(otpState.searches[otpState.activeSearchId].pending).toBe(0)
-    expect(otpState.searches[otpState.activeSearchId].response).toHaveLength(5)
+    expect(otpState.searches[otpState.activeSearchId].response).toHaveLength(6)
   })
 
   it('does not widen a window that is already wider', async () => {
@@ -316,8 +320,9 @@ describe('actions > apiV2 > routingQuery fan-out', () => {
     anyGlobal.fetch = controllableServer()
     dispatch(routingQuery())
     await settleAll()
-    // The fan-out and 38.3's full bike + transit pass; no top-up.
-    expect(sent).toHaveLength(4)
+    // The fan-out, 38.3's full bike + transit pass and 55.1's low-bike
+    // plan; no top-up.
+    expect(sent).toHaveLength(5)
     sent.forEach((req) => expect(req.variables.searchWindow).toBe(21600))
   })
 

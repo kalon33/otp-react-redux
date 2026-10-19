@@ -181,6 +181,15 @@ export interface RouteMatchResult {
   provisionalSeed?: boolean
   segmentIndex: number
   /**
+   * The rider's fix at which `unaccountedPathM` last stood at zero — where the
+   * ground this projection still owes began. `unaccountedPathM` is a scalar,
+   * so a metre ridden AWAY from the leg buys as much catch-up as one ridden
+   * beside it; the displacement from here keeps the direction the scalar
+   * throws away (see `offCorridorAdvanceUnearned`, backlog 12.17's 2026-10-15
+   * sighting). Set only alongside `unaccountedPathM`.
+   */
+  unaccountedFromFix?: LatLngArray
+  /**
    * Ground metres the RIDER has covered that this projection never accounted
    * for — their own displacement, less however far the projection actually
    * moved along the leg, floored at zero and carried across ticks. Near zero
@@ -582,6 +591,88 @@ function continuityGapM(
       )
 }
 
+/**
+ * Would accepting `winner` move the projection FORWARD along the leg, off the
+ * corridor, further than the rider has actually travelled in its direction?
+ *
+ * The ground budget in `exceedsJumpBudget` licenses a jump with
+ * `unaccountedPathM`, a scalar: every metre the rider moves, in any direction,
+ * buys two metres of catch-up. On a parallel street that is the point. Off the
+ * corridor it is a hole, and 2026-10-15 21:38:56–21:39:42 (`mva4fpf5-hhg1cf`,
+ * DEV `2026.1015.1`, backlog 12.17) fell straight through it: a 679.96 m bike
+ * leg that opens NORTH and loops round to Gate H, a rider who rode SOUTH and
+ * then west, `distanceFromRoute` climbing 11 -> 339 m while the projection sat
+ * on the leg's first vertex — until the leg's LAST vertex became the nearer of
+ * the two. `unaccountedPathM` stood at 419.9 m, so 25 + 2 x 419.9 = 865 m
+ * licensed the whole 680 m leg in one tick: progress 0 -> 100 % with the rider
+ * 335 m off the line, ground ridden away from the leg paying for the jump
+ * along it. The same hole as closed 6.5 (2026-09-01, segment 0 -> 40): its
+ * ground budget never had a direction.
+ *
+ * So, only for a same-leg forward advance onto a winner outside the corridor,
+ * the ground that counts is the rider's displacement since the owed ground
+ * began, resolved onto the way the projection is moving — the larger of its
+ * component toward the winner (held point -> winner) and its component along
+ * the winner's own segment. The first is a rider catching up round a corner;
+ * the second is a rider on a parallel street beside a leg that opened with a
+ * stub they never rode. Same slack, same chord-vs-path factor as the ground
+ * budget. Measured on the recordings (margin = licensed - needed):
+ *
+ *   2026-10-15 21:39:41  680 m  toward 202, along 202, needs 327  -> refused
+ *   2026-09-21 16:38:31  282 m  toward 130, along 176, needs 129  -> released
+ *   2026-09-19 14:40:29  225 m  toward 609, along 104, needs 100  -> released
+ *   2026-09-21 17:36:06   42 m  toward 214, along 214, needs   8  -> released
+ *
+ * Inside the corridor nothing changes: the rider is on the line and the scalar
+ * is the right quantity. And it cannot pin anyone for good: it binds only
+ * while the winner is beyond the corridor, so a rider who comes back within
+ * MATCH_CORRIDOR_*_M of the leg is judged by the ordinary budget again.
+ */
+function offCorridorAdvanceUnearned(
+  winner: RouteMatchResult,
+  winnerLegDistance: number,
+  previousMatch: RouteMatchResult,
+  legs: Leg[],
+  currentPosition: LatLngArray,
+  fromFix: LatLngArray
+): boolean {
+  if (winner.isOnRoute) return false
+  if (winner.legIndex !== previousMatch.legIndex) return false
+  const advanceM =
+    (winner.progressAlongLeg - previousMatch.progressAlongLeg) *
+    winnerLegDistance
+  if (!(advanceM > MATCH_JUMP_SLACK_MOVED_M)) return false
+
+  // Local metres around the held point; equirectangular is exact to well under
+  // a percent over the few hundred metres in question.
+  const [lat0] = previousMatch.nearestPoint
+  const mPerDegLon = 111320 * Math.cos((lat0 * Math.PI) / 180)
+  const toXY = (a: LatLngArray, b: LatLngArray) => [
+    (b[0] - a[0]) * 111320,
+    (b[1] - a[1]) * mPerDegLon
+  ]
+  const moved = toXY(fromFix, currentPosition)
+  const componentM = (dir: number[]) => {
+    const len = Math.hypot(dir[0], dir[1])
+    return len > 0
+      ? Math.max(0, (moved[0] * dir[0] + moved[1] * dir[1]) / len)
+      : 0
+  }
+
+  const towardM = componentM(
+    toXY(previousMatch.nearestPoint, winner.nearestPoint)
+  )
+  const polyline = decodeLegGeometry(legs[winner.legIndex])
+  const segStart = polyline[winner.segmentIndex]
+  const segEnd = polyline[winner.segmentIndex + 1]
+  const alongM = segStart && segEnd ? componentM(toXY(segStart, segEnd)) : 0
+
+  return (
+    advanceM >
+    MATCH_JUMP_SLACK_MOVED_M + MATCH_PATH_FACTOR * Math.max(towardM, alongM)
+  )
+}
+
 export function matchPositionToRoute(
   currentPosition: LatLngArray,
   legs: Leg[],
@@ -769,6 +860,36 @@ export function matchPositionToRoute(
       : { ...held, unaccountedPathM: unaccountedM }
   }
 
+  // Held the same way — progress, point and stamp — with one difference: the
+  // winner is off the corridor, so its perpendicular is an honest measurement
+  // of how far the rider is from this leg, and the deviation check gets that
+  // rather than a number frozen on the tick the hold began (12.17's fourth
+  // sighting: "the held match freezes distanceFromRoute too"). Skipped when
+  // there is no recorded start to the owed ground — no step, or a match from
+  // before the field existed — so such callers are bit-for-bit unchanged.
+  const fromFix = previousMatch?.unaccountedFromFix
+  if (
+    !reseeding &&
+    unaccountedM != null &&
+    previousMatch != null &&
+    fromFix != null &&
+    offCorridorAdvanceUnearned(
+      winner,
+      winnerLegDistance,
+      previousMatch,
+      legs,
+      currentPosition,
+      fromFix
+    )
+  ) {
+    return {
+      ...previousMatch,
+      distanceFromRoute: winner.distanceFromRoute,
+      isOnRoute: winner.isOnRoute,
+      unaccountedPathM: unaccountedM
+    }
+  }
+
   // Accepted: whatever ground the projection just covered along the leg is
   // ground it has now accounted for. A projection tracking the rider settles
   // at zero; one that is accepted every tick but barely moves keeps the
@@ -782,8 +903,21 @@ export function matchPositionToRoute(
           unaccountedM -
             continuityGapM(previousMatch, winner, winnerLegDistance)
         )
+  // Caught up in full — or nothing was owed to begin with, as on a leg's
+  // opening match — and the ground still owed starts from this fix. Otherwise
+  // it starts where it did, and stays unrecorded if it never was.
+  const owedFrom =
+    previousMatch?.unaccountedPathM == null || accountedM === 0
+      ? currentPosition
+      : previousMatch.unaccountedFromFix
   const withPath = hasStep
-    ? { ...winner, unaccountedPathM: accountedM }
+    ? owedFrom == null
+      ? { ...winner, unaccountedPathM: accountedM }
+      : {
+          ...winner,
+          unaccountedFromFix: owedFrom,
+          unaccountedPathM: accountedM
+        }
     : winner
   const accepted = provisionalSeed
     ? { ...withPath, provisionalSeed: true }

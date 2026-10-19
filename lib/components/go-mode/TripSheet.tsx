@@ -5,7 +5,6 @@ import { ListUl } from '@styled-icons/fa-solid/ListUl'
 import React, { useRef, useState } from 'react'
 import type { Itinerary, Leg } from '@opentripplanner/types'
 
-import { formatPlaceName } from '../../util/format-place-name'
 import * as goModeActions from '../../actions/go-mode'
 import * as routingProfileActions from '../../actions/routing-profiles'
 import {
@@ -18,6 +17,7 @@ import {
   isTurnCueLeg,
   turnCuesEnabledForLeg
 } from '../../util/go-mode/turn-cue-settings'
+import { formatPlaceName } from '../../util/format-place-name'
 import { getModeIcon } from '../../util/go-mode/mode-icon'
 import { IconWithText } from '../util/styledIcon'
 import ItineraryBody from '../narrative/line-itin/connected-itinerary-body'
@@ -61,10 +61,10 @@ const REROUTE_CHIPS = [
 ]
 // Map profile IDs to their translation keys for the dropdown
 const PROFILE_LABELS: Record<string, string> = {
-  'fastest': 'components.GoMode.fastest',
+  'avoid-biking': 'components.GoMode.avoidBiking',
+  fastest: 'components.GoMode.fastest',
   'minimize-walking': 'components.GoMode.lessWalking',
-  'stay-seated': 'components.GoMode.fewerTransfers',
-  'avoid-biking': 'components.GoMode.avoidBiking'
+  'stay-seated': 'components.GoMode.fewerTransfers'
 }
 
 const TRANSIT_MODES = new Set(['BUS', 'FERRY', 'RAIL', 'SUBWAY', 'TRAM'])

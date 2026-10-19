@@ -8,7 +8,9 @@ import { ComponentContext } from '../../util/contexts'
 import DefaultItinerary from '../narrative/default/default-itinerary'
 import type { TripProgress } from '../../util/go-mode/progress-calculator'
 
+import { SheetHandle, SheetHandleLabel } from './styled'
 import AlightRecommendation from './AlightRecommendation'
+import FasterRouteCard from './FasterRouteCard'
 import ReturnCountdownCard from './ReturnCountdownCard'
 import TransitProgress from './TransitProgress'
 import TripSheet from './TripSheet'
@@ -67,6 +69,39 @@ const makeBoardingStopData = (live: boolean) => ({
     }
   ]
 })
+
+// A transfer (58.1): the rider is walking to their SECOND bus, with room to
+// spare (first run 14 min out), so the tight "Next:" list stays closed and the
+// "how often it runs" line shows instead. Each run carries a trip id, so the
+// cached runs are re-timed from this stop poll by trip.
+const TRANSFER_RUN_MINUTES = [14, 26, 38, 50]
+const makeTransferStopData = () => ({
+  ...makeBoardingStopData(true),
+  stoptimesForPatterns: [
+    {
+      pattern: {
+        desc: '21 to Downtown',
+        id: '1:21:0',
+        route: { gtfsId: '1:21' }
+      },
+      stoptimes: TRANSFER_RUN_MINUTES.map((min, i) => {
+        const st = stoptime(min * 60000, i < 2)
+        return { ...st, trip: { ...st.trip, gtfsId: `1:demo-${min}` } }
+      })
+    }
+  ]
+})
+const transferFrequency = (minutes: number[]) =>
+  ({
+    fetchedAt: NOW,
+    runs: minutes.map((min, i) => ({
+      live: i < 2,
+      ms: NOW + min * 60000,
+      tripId: `1:demo-${min}`
+    })),
+    status: 'done',
+    windowEndMs: NOW + 120 * 60000
+  } as const)
 
 const baseProgress: TripProgress = {
   currentLegIndex: 0,
@@ -530,6 +565,43 @@ const roundTripStore = {
   subscribe: () => () => undefined
 } as any
 
+// The faster-route card (56.1): the offer itself is injected, so the store
+// only has to satisfy connect(). Itineraries are not drawn by the card.
+const fasterRouteStore = {
+  dispatch: () => undefined,
+  getState: () => ({ otp: { goMode: { fasterRoute: null } } }),
+  subscribe: () => () => undefined
+} as any
+
+const demoOffer = (extra: Record<string, unknown>): any => ({
+  addedBikeM: 0,
+  baseline: null,
+  bikeSavedM: 0,
+  candidate: { legs: [] },
+  expiresAtMs: NOW + 6 * 60000,
+  kind: 'faster',
+  laterMs: 0,
+  offerId: 'demo',
+  raisedAtMs: NOW,
+  routeLabel: '14',
+  routeSet: '1:14',
+  savingMs: 6 * 60000,
+  source: 'ordinary',
+  ...extra
+})
+
+/** The card above the "View trip & other ways" handle, as on the screen. */
+const FasterRouteFrame = ({ offer }: { offer: any }) => (
+  <Provider store={fasterRouteStore}>
+    <div style={{ background: '#e8ecef', height: 230, position: 'relative' }}>
+      <FasterRouteCard offer={offer} />
+      <SheetHandle type="button">
+        <SheetHandleLabel>View trip &amp; other ways</SheetHandleLabel>
+      </SheetHandle>
+    </div>
+  </Provider>
+)
+
 const Frame = ({
   children,
   minHeight = 150,
@@ -596,6 +668,10 @@ const GoModeDemo = (): JSX.Element => (
       'components.GoMode.returnPlanNow': 'Plan return now',
       'components.GoMode.returnRouteDeparts': '{route} departs {time}',
       'components.GoMode.returnStart': 'Start return trip',
+      'components.LegFrequency.every': 'Every {minutes} min, next {time}',
+      'components.LegFrequency.nextOne': 'Next {time}',
+      'components.LegFrequency.nextTwo': 'Next {first}, {second}',
+      'components.LegFrequency.noneBefore': 'No later run before {time}',
       'components.MetroUI.otherStops': 'Other stops',
       'components.MetroUI.variantArrives': 'arrives {time}',
       'components.MetroUI.variantBiking': '{distance} biking',
@@ -677,6 +753,36 @@ const GoModeDemo = (): JSX.Element => (
             }
           }}
           units="imperial"
+        />
+      </Frame>
+
+      <Frame
+        note="Walking to a SECOND bus with time to spare: one line says how often the route runs after the run the card is on (58.1). Hidden on the first boarding and whenever the tight 'Next:' list shows."
+        title="Transfer (walk → bus), regular runs"
+      >
+        <WalkingNavigation
+          boardingStopData={makeTransferStopData()}
+          leg={walkLeg}
+          nextLeg={busNextLeg}
+          onExit={() => undefined}
+          onSelectDeparture={() => undefined}
+          progress={{ ...baseProgress, plannedDepartureTime: NOW + 14 * 60000 }}
+          transferFrequency={transferFrequency(TRANSFER_RUN_MINUTES)}
+        />
+      </Frame>
+
+      <Frame
+        note="Uneven gaps after the run the card is on: the next two times instead of 'every' (cycle 26 Q4)."
+        title="Transfer (walk → bus), irregular runs"
+      >
+        <WalkingNavigation
+          boardingStopData={makeTransferStopData()}
+          leg={walkLeg}
+          nextLeg={busNextLeg}
+          onExit={() => undefined}
+          onSelectDeparture={() => undefined}
+          progress={{ ...baseProgress, plannedDepartureTime: NOW + 14 * 60000 }}
+          transferFrequency={transferFrequency([14, 26, 53, 61])}
         />
       </Frame>
 
@@ -836,6 +942,97 @@ const GoModeDemo = (): JSX.Element => (
             </ComponentContext.Provider>
           </Provider>
         </div>
+      </Frame>
+
+      <Frame
+        note="Background check found a route ≥ 3 min sooner (56.1). Only an offer: Switch is the one way it changes the trip; Keep mine latches; a tap on the words opens it beside the rider's own route."
+        title="Faster route available"
+      >
+        <FasterRouteFrame offer={demoOffer({})} />
+      </Frame>
+
+      <Frame
+        note="A faster route that adds ≥ 0.5 km of biking says so."
+        title="Faster route, more biking"
+      >
+        <FasterRouteFrame
+          offer={demoOffer({
+            addedBikeM: 1800,
+            routeLabel: 'METRO Blue Line → 539',
+            routeSet: '1:901+1:539',
+            savingMs: 9 * 60000
+          })}
+        />
+      </Frame>
+
+      <Frame
+        note="Same arrival ±2 min with ≥ 1 km less biking; '+1 min' only when it lands later."
+        title="Less biking"
+      >
+        <FasterRouteFrame
+          offer={demoOffer({
+            bikeSavedM: 1400,
+            kind: 'lessBike',
+            laterMs: 60000,
+            savingMs: -60000
+          })}
+        />
+      </Frame>
+
+      <Frame
+        note="Aboard, every 6 min from two stops in (56.1 B4): a better stop to get off this bus and continue. Switch splices the ride onto the same bus; the words are not a button."
+        title="On the bus: get off sooner"
+      >
+        <FasterRouteFrame
+          offer={demoOffer({
+            aboard: { kind: 'faster', stopId: '1:30th', stopName: '30th Ave' },
+            kind: 'aboard',
+            routeSet: '1:30th|1:539',
+            savingMs: 4 * 60000,
+            stopName: '30th Ave'
+          })}
+        />
+      </Frame>
+
+      <Frame
+        note="Aboard, about the same arrival with ≥ 1 km less biking."
+        title="On the bus: less biking"
+      >
+        <FasterRouteFrame
+          offer={demoOffer({
+            aboard: {
+              kind: 'lessBike',
+              stopId: '1:moa',
+              stopName: 'Mall of America Station'
+            },
+            bikeSavedM: 1400,
+            kind: 'aboard',
+            laterMs: 60000,
+            routeSet: '1:moa|1:539',
+            savingMs: -60000,
+            stopName: 'Mall of America Station'
+          })}
+        />
+      </Frame>
+
+      <Frame
+        note="Aboard, faster but with ≥ 0.5 km more biking: it says so."
+        title="On the bus: faster, more biking"
+      >
+        <FasterRouteFrame
+          offer={demoOffer({
+            aboard: {
+              kind: 'faster',
+              stopId: '1:american',
+              stopName: 'American Blvd'
+            },
+            addedBikeM: 1800,
+            kind: 'aboard',
+            routeSet: '1:american|1:534',
+            savingMs: 5 * 60000,
+            stopName: 'American Blvd'
+          })}
+        />
       </Frame>
 
       <Frame
