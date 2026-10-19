@@ -3,9 +3,12 @@ import coreUtils from '@opentripplanner/core-utils'
 import { apiUrl } from '../util/api-base'
 import { getDeviceId } from '../util/debug-log-boot'
 import { getNativeDeviceId, getRunningBundle } from '../util/native-updates'
+import { getPlacesKey } from '../util/places-key'
 import {
+  isEmptySnapshot,
   mergePlaces,
   parsePlacesSnapshot,
+  PlacesSnapshot,
   readPlacesSnapshot,
   readPlacesState
 } from '../util/places-state'
@@ -27,6 +30,12 @@ const { getItem, removeItem, storeItem } = coreUtils.storage
  *    sidecar (debounced); at boot, GET it back and merge (mergePlaces: local
  *    wins, the server only fills). Places then survive whatever is clearing
  *    the key.
+ *
+ * Backlog 60.1 (cycle 31): the copy is filed under the installed app's fixed
+ * key when the shell has one (util/places-key — every recorded dev-app reset
+ * re-minted both device ids, orphaning a copy under either), and it carries
+ * the recent places too (the only thing those resets actually took). The
+ * first key-bearing launch moves the old copy over (see pull).
  *
  * FAIL CLOSED, both ways. A network error leaves local state exactly as it is.
  * And nothing is POSTed until one GET has succeeded this launch: a phone whose
@@ -51,7 +60,15 @@ let pushTimer: ReturnType<typeof setTimeout> | null = null
 let writeSeq = 0
 let restoring = false
 let bundleVersion: Promise<string | null> | null = null
-let syncId: Promise<{ id: string | null; source: string }> | null = null
+
+/**
+ * Where the server copy is filed. `id` is the app key when the installed app
+ * has one, else the device id; `legacyId` is the device id the copy was filed
+ * under before the key existed (only set when it differs from `id`), read
+ * once to migrate it. NEITHER id is ever beaconed — `source` is.
+ */
+type SyncId = { id: string | null; legacyId: string | null; source: string }
+let syncId: Promise<SyncId> | null = null
 
 /** Test seam: module state is per-launch, and every test is a launch. */
 export function resetPlacesSyncForTests(): void {
@@ -76,22 +93,60 @@ function runningBundle(): Promise<string | null> {
 }
 
 /**
- * The key the server copy is filed under. The native updater's id is kept
- * natively (iOS Keychain), so it outlives a localStorage wipe; the web
- * `otpDeviceId` is in the same storage as the places and would be re-minted
- * by the loss, orphaning the copy. The web id is the browser fallback only.
+ * The key the server copy is filed under, in order:
+ * 1. the installed app's fixed per-app key (60.1) — survives the resets that
+ *    re-mint both ids below;
+ * 2. the native updater's id, kept in the iOS Keychain, so it outlives a
+ *    localStorage wipe (but not a dev-app reset — 44.1);
+ * 3. the web `otpDeviceId` — the browser fallback only (it lives in the same
+ *    storage as the places and is re-minted by the loss).
  */
-function resolveSyncId(): Promise<{ id: string | null; source: string }> {
+function resolveSyncId(): Promise<SyncId> {
   if (!syncId) {
-    syncId = getNativeDeviceId()
-      .catch(() => null)
-      .then((nativeId) =>
-        nativeId
-          ? { id: nativeId, source: 'native' }
-          : { id: getDeviceId() || null, source: 'web' }
-      )
+    syncId = Promise.all([
+      getPlacesKey().catch(() => null),
+      getNativeDeviceId().catch(() => null)
+    ]).then(([appKey, nativeId]) => {
+      const deviceId = nativeId || getDeviceId() || null
+      if (appKey) {
+        return {
+          id: appKey,
+          legacyId: deviceId && deviceId !== appKey ? deviceId : null,
+          source: 'app-key'
+        }
+      }
+      return {
+        id: deviceId,
+        legacyId: null,
+        source: nativeId ? 'native' : 'web'
+      }
+    })
   }
   return syncId
+}
+
+/**
+ * GET one server copy. null on any failure (network, non-2xx, bad JSON) —
+ * which every caller treats as "not reconciled", never as "empty".
+ */
+async function fetchCopy(
+  getState: () => any,
+  id: string
+): Promise<PlacesSnapshot | null> {
+  const response = await fetch(
+    `${placesUrl(getState)}?deviceId=${encodeURIComponent(id)}`
+  )
+  if (!response.ok) return null
+  return parsePlacesSnapshot(await response.json())
+}
+
+/**
+ * Whether recent places are tracked on this phone (the rider's opt-in, or the
+ * deployment's default). An opted-out phone neither restores recents from the
+ * copy nor counts the copy's recents as something to push.
+ */
+function tracksRecents(getState: () => any): boolean {
+  return !!getState()?.user?.localUser?.storeTripHistory
 }
 
 function placesUrl(getState: () => any): string {
@@ -166,13 +221,29 @@ function pull(dispatch: any, getState: () => any): Promise<boolean> {
   if (pullInFlight) return pullInFlight
   pullInFlight = (async () => {
     try {
-      const { id } = await resolveSyncId()
+      const { id, legacyId } = await resolveSyncId()
       if (!id) return false
-      const response = await fetch(
-        `${placesUrl(getState)}?deviceId=${encodeURIComponent(id)}`
-      )
-      if (!response.ok) return false
-      const server = parsePlacesSnapshot(await response.json())
+      let server = await fetchCopy(getState, id)
+      if (!server) return false
+      // One-time move to the app key (60.1): while the copy under the key is
+      // empty, the copy under the old device id is read and merged in, and
+      // the result is pushed under the key below. No flag: once the key's
+      // copy holds anything this never runs again; a failed read of the old
+      // copy fails the whole pull (the next write or launch retries), so the
+      // key's copy is never seeded from a phone that has not seen the old one.
+      let migrated = false
+      if (legacyId && isEmptySnapshot(server)) {
+        const legacy = await fetchCopy(getState, legacyId)
+        if (!legacy) return false
+        if (!isEmptySnapshot(legacy)) {
+          server = legacy
+          migrated = true
+        }
+      }
+      if (!tracksRecents(getState)) {
+        server = { ...server }
+        delete server.recent
+      }
       // Read local only now, after the last await, so nothing the rider does
       // can land between this read and the write below.
       const local = readPlacesSnapshot()
@@ -183,16 +254,19 @@ function pull(dispatch: any, getState: () => any): Promise<boolean> {
         pending
       )
       const restoredSets = (restored.routeSets || 0) > 0
+      const restoredRecent = (restored.recent || 0) > 0
       if (
         restored.places > 0 ||
         restored.home ||
         restored.work ||
-        restoredSets
+        restoredSets ||
+        restoredRecent
       ) {
         persistCustomPlaces(merged.places)
         if (restored.home) storeItem('home', merged.home)
         if (restored.work) storeItem('work', merged.work)
         if (restoredSets) persistRouteSets(merged.routeSets || [])
+        if (restoredRecent) storeItem('recent', merged.recent || [])
         restoring = true
         try {
           dispatch({ type: 'RESTORE_LOCAL_USER_PLACES' })
@@ -202,7 +276,9 @@ function pull(dispatch: any, getState: () => any): Promise<boolean> {
         emitPlacesState('restore', { restored })
       }
       reconciled = true
-      if (aheadOfServer) push(getState)
+      // A migrated copy is not yet under the key, whatever the comparison
+      // with the old copy says.
+      if (aheadOfServer || migrated) push(getState)
       return true
     } catch {
       return false
@@ -224,18 +300,16 @@ export function startPlacesSync() {
 }
 
 /**
- * After any change to the rider's places (main.js watches the user slice).
- * `places` is false for a recents-only change: beaconed, but recents are not
- * part of the server copy. A change to the saved route sets (58.2) is a
- * places write: they ride in the same copy.
+ * After any change to the rider's places (main.js watches the user slice):
+ * saved places, saved route sets (58.2) and — since 60.1 — recent places all
+ * ride in the same copy, so every write is beaconed and pushed.
  */
-export function notePlacesWrite({ places }: { places: boolean }) {
+export function notePlacesWrite() {
   return function (dispatch: any, getState: () => any): void {
     // The restore's own dispatch is reported by the 'restore' beacon and is
     // not a rider write.
     if (restoring) return
     emitPlacesState('write')
-    if (!places) return
     if (!reconciled) {
       // The boot GET failed (or has not answered yet): try again now, and
       // push only once it has succeeded — never over a copy we have not read.
@@ -248,8 +322,8 @@ export function notePlacesWrite({ places }: { places: boolean }) {
 
 /**
  * main.js's watcher: every change to the rider's places — a save, an edit, a
- * delete, a recent, a saved route set — is beaconed and, for all but recents,
- * copied to the server. Watched from outside the reducer, which must stay
+ * delete, a recent, a saved route set — is beaconed and copied to the server
+ * (recents too since 60.1). Watched from outside the reducer, which must stay
  * pure of network; the user slice's arrays are replaced on every write
  * (immutability-helper), so a reference check is the whole test.
  */
@@ -269,10 +343,7 @@ export function watchPlacesWrites(store: {
     ) {
       return
     }
-    const places =
-      now.savedLocations !== last.savedLocations ||
-      now.routeSets !== last.routeSets
     last = now
-    store.dispatch(notePlacesWrite({ places }))
+    store.dispatch(notePlacesWrite())
   })
 }

@@ -362,8 +362,35 @@ describe('lib > reducers > create-user-reducer', () => {
         'custom',
         'suggested'
       ])
-      // Nothing else in localUser moves.
-      expect(state.localUser.recentPlaces).toBe(empty.localUser.recentPlaces)
+      // Recents are rebuilt (60.1) but there were none; nothing else moves.
+      expect(state.localUser.recentPlaces).toEqual([])
+      expect(state.localUser.favoriteStops).toBe(empty.localUser.favoriteStops)
+    })
+
+    it('reloads restored recent places too (60.1), shaped as a boot would', () => {
+      const reducer = createUserReducer(config)
+      const empty = getUserInitialState(config)
+      const RECENT = {
+        icon: 'clock',
+        id: 'recent-1',
+        lat: 44.91,
+        lon: -93.2,
+        name: '1 Recent Ave',
+        timestamp: 1000,
+        type: 'recent'
+      }
+      window.localStorage.setItem('otp.recent', JSON.stringify([RECENT]))
+      const state = reducer(empty, { type: 'RESTORE_LOCAL_USER_PLACES' })
+      expect(state.localUser.recentPlaces).toEqual(
+        getUserInitialState(config).localUser.recentPlaces
+      )
+      expect(state.localUser.recentPlaces).toEqual([
+        expect.objectContaining({
+          address: '1 Recent Ave',
+          id: 'recent-1',
+          timestamp: 1000
+        })
+      ])
     })
   })
 
