@@ -115,21 +115,23 @@ describe('actions > apiV2 > convertPlanResponseItineraries', () => {
   // (network error, error response, or a search fired while parsing the URL
   // on first load). rewritePayload used to crash on
   // `withCollapsedShortNames.length` because this helper returned undefined.
-  it('returns undefined (never throws) when response.data is undefined', () => {
+  // The helper now normalizes a missing plan to an empty list (backlog 52.1):
+  // no plan is no itineraries, and callers map over the result.
+  it('returns an empty list (never throws) when response.data is undefined', () => {
     expect(
       convertPlanResponseItineraries({ data: undefined }, convertCtx)
-    ).toBeUndefined()
+    ).toEqual([])
   })
 
-  it('returns undefined when response.data.plan is undefined', () => {
+  it('returns an empty list when response.data.plan is undefined', () => {
     expect(
       convertPlanResponseItineraries({ data: { plan: undefined } }, convertCtx)
-    ).toBeUndefined()
+    ).toEqual([])
   })
 
-  it('returns undefined when the plan has no itineraries', () => {
+  it('returns an empty list when the plan has no itineraries', () => {
     expect(
       convertPlanResponseItineraries({ data: { plan: {} } }, convertCtx)
-    ).toBeUndefined()
+    ).toEqual([])
   })
 })
