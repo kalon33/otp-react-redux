@@ -87,6 +87,8 @@
     "components.ServerUnreachable.forMinutes",
     "components.ServerUnreachable.now",
     "otpUi.LocationField.geocoderTimeout",
+    "otpUi.LocationField.recentPlaces",
+    "otpUi.LocationField.savedPlaces",
     "otpUi.TripDetails.title"
   ]
 }
