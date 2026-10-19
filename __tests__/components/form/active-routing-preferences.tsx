@@ -26,8 +26,9 @@ const messages = flatten(
   )
 )
 
-function renderChips(currentQueryOverrides = {}) {
+function renderChips(currentQueryOverrides = {}, routeSets?: any[]) {
   const state: any = getMockInitialState()
+  if (routeSets) state.user.localUser.routeSets = routeSets
   state.otp.config = {
     ...state.otp.config,
     modes: { modeButtons: [], numItineraries: 40 }
@@ -127,5 +128,55 @@ describe('components > form > active routing preferences', () => {
     }).text()
     expect(text).toContain('avoiding biking')
     expect(text).toContain('No walk + transit')
+  })
+
+  describe('a lock that is a saved set (58.2)', () => {
+    const COMMUTE = {
+      id: 'set-commute',
+      name: 'Commute',
+      routes: [
+        { id: '1:18', label: '18' },
+        { id: '1:21', label: '21' },
+        { id: '1:904', label: 'Orange' }
+      ],
+      savedAt: 1,
+      scope: 'only'
+    }
+    const lock = (scope: string, ids = ['1:21', '1:18', '1:904']) => ({
+      routeLock: {
+        routes: ids.map((id) => ({
+          id,
+          label: { '1:18': '18', '1:21': '21', '1:904': 'Orange' }[id]
+        })),
+        scope
+      }
+    })
+
+    it('reads as the set: one chip, "Only: Commute (…)"', () => {
+      const wrapper = renderChips(lock('only'), [COMMUTE])
+      const chip = wrapper.find('.route-set-saved-summary').hostNodes()
+      expect(chip.text()).toBe('Only: Commute (21, 18, Orange)')
+      expect(wrapper.text()).not.toContain('Only 18')
+    })
+
+    it('"Start on: …" for a starting set', () => {
+      const wrapper = renderChips(lock('starting'), [
+        { ...COMMUTE, scope: 'starting' }
+      ])
+      expect(wrapper.find('.route-set-saved-summary').hostNodes().text()).toBe(
+        'Start on: Commute (21, 18, Orange)'
+      )
+    })
+
+    it('a different scope or set of routes keeps the per-route chips', () => {
+      expect(
+        renderChips(lock('starting'), [COMMUTE]).find(
+          '.route-set-saved-summary'
+        )
+      ).toHaveLength(0)
+      const partial = renderChips(lock('only', ['1:18', '1:21']), [COMMUTE])
+      expect(partial.find('.route-set-saved-summary')).toHaveLength(0)
+      expect(partial.text()).toContain('Only 18')
+    })
   })
 })

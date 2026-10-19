@@ -418,7 +418,15 @@ describe('the access leg that leads away from the destination (2026-09-15)', () 
       await tickAndReplan('09:38:58')
       dateFaker?.setSystemTime(at('09:42:41'))
       store?.setRunThunks(false)
-      store?.run(handlePositionUpdate(positionAt('09:38:58')))
+      // The rider still at the 09:38:58 point, on a fix taken now: a fix
+      // 3m43s old is no re-plan origin (51.3), and this case is about the
+      // stall count, not about fix age.
+      store?.run(
+        handlePositionUpdate({
+          ...positionAt('09:38:58'),
+          timestamp: at('09:42:41')
+        } as GeolocationPosition)
+      )
       store?.setRunThunks(true)
       await store?.run(quietReplanAccessLeg())
       expect(mockedFetch.mock.calls.length).toBeGreaterThan(before)

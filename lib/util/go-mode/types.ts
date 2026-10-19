@@ -92,6 +92,14 @@ export interface RidingState {
   /** Epoch ms when aboard-ness was first established. */
   boardedAt: number
   headsign: string | null
+  /**
+   * Epoch ms when Go Mode was STOPPED with this fact still standing (54.1 /
+   * 15.3). STOP_GO_MODE keeps the fact so a rider who backs out and taps "I'm
+   * on the bus" is not re-asked (7/12) — but nothing re-evidences it while Go
+   * Mode is off, so how long ago that was is what `ridingFactIsCurrent` asks.
+   * Null/absent while a trip is running on it; START_GO_MODE clears it.
+   */
+  keptAtMs?: number | null
   /** Transit leg index in activeItinerary; -1 = not anchored to a leg. */
   legIndex: number
   /** Epoch ms of the first consecutive off-route tick; null while on route. */

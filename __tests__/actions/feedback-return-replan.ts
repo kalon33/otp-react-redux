@@ -105,12 +105,20 @@ const baseState = (searches: any, activeSearchId: string | null) => ({
 
 describe('backlog 23.4 > returning to / with ui_activeSearch in the URL', () => {
   it('reads the same query out of the URL that the ride logged', async () => {
+    // Clock pinned to 09:01 on the URL's day: 51.2 turns a DEPART more than
+    // two minutes old into NOW, which this test is not about.
+    const spy = jest
+      .spyOn(Date, 'now')
+      .mockReturnValue(Date.parse('2026-09-21T14:01:00Z'))
     const dispatched = await run(baseState({}, null))
+    spy.mockRestore()
     const setParam = dispatched.find((a) => a.type === 'SET_QUERY_PARAM')
     expect(setParam.payload).toEqual({
       date: '2026-09-21',
       departArrive: 'DEPART',
       from: {
+        // 51.2: the label alone says it was live GPS
+        category: 'CURRENT_LOCATION',
         lat: 44.942580484827246,
         lon: -93.2639665716265,
         name: '(Current Location)'

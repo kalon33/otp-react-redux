@@ -16,6 +16,7 @@ import type { StopCountLatch } from './next-stop'
  * `replayTrackedRouteId` deliberately outlive a trip today. They stay module
  * scoped in actions/go-mode.ts rather than change behaviour silently.
  */
+import { EMPTY_FASTER_ROUTE_LATCH } from './faster-route'
 import {
   REPLAN_LATENCY_SEED_FULL_MS,
   REPLAN_LATENCY_SEED_SCOPED_MS
@@ -28,6 +29,7 @@ import type {
 import type { DepartureBaselineState } from './departure-drift'
 import type { DestinationProgressState } from './destination-progress'
 import type { DeviatedStreak } from './replan-acceptance'
+import type { FasterRouteLatch } from './faster-route'
 import type { MissedBusAttempt } from './missed-bus-recovery'
 import type { PacingCardState } from './pacing-card'
 import type { RiderFix, VehicleCompany } from './vehicle-company'
@@ -38,6 +40,16 @@ import type { TransitPaceRun } from './deviation'
 
 export interface TripSession {
   /**
+   * The aboard get-off check (56.1 B4): its request is out (one at a time),
+   * when it last asked, and about which bus — a new bus is asked about as soon
+   * as its window opens, not 6 minutes after the last bus's check.
+   */
+  aboardCheckInFlight: boolean
+
+  aboardCheckLastAtMs: number
+
+  aboardCheckTripId: string | null
+  /**
    * The run of access-leg ticks on which the rider looked like someone being
    * carried by a bus the plan has not put them on yet — see
    * ACCESS_BOARD_MIN_MS in riding.ts (backlog 23.6). Held here, like
@@ -45,7 +57,6 @@ export interface TripSession {
    * twenty seconds" is not a question one fix can answer.
    */
   accessBoard: AccessBoardWatch | null
-
   /**
    * The one-way arrival dwell, armed from the WALL CLOCK rather than from the
    * position tick. `AUTO_END_AFTER_ARRIVAL_MS` used to be checked in the
@@ -59,6 +70,13 @@ export interface TripSession {
    * clock (`getCurrentTime`), which a wall-clock timeout knows nothing about.
    */
   autoEndTimeoutId: ReturnType<typeof setTimeout> | null
+
+  /**
+   * The background route check's request is out (56.1). One interval, one
+   * request: a tick that lands while the last answer is still coming does
+   * nothing rather than stack a second plan() on the server.
+   */
+  backgroundCheckInFlight: boolean
 
   /**
    * How long the rider has waited, continuously, at the boarding stop of the
@@ -117,6 +135,23 @@ export interface TripSession {
     key: string
     lastAtMs: number
   } | null
+
+  /** Timer that lapses the faster-route card at its boarding time. */
+  fasterRouteExpiryTimerId: ReturnType<typeof setTimeout> | null
+
+  /**
+   * The faster-route latch for the whole ride (56.1): what was offered, what a
+   * new offer has to beat, how many offers and pushes are spent. Session, not
+   * store, because START_GO_MODE — every swap — clears the store's card, and
+   * a swap must not hand the rider a fresh allowance of offers and pushes.
+   */
+  fasterRouteLatch: FasterRouteLatch
+
+  /** Plan + leg the less-biking question was last asked on (once per leg). */
+  fasterRouteLowBikeLegKey: string | null
+
+  /** Counter behind each offer's id. */
+  fasterRouteOfferSeq: number
 
   /**
    * When the leg geometry last moved under the rider: an itinerary swap or a
@@ -283,6 +318,12 @@ export interface TripSession {
   missedBusRerouteAttempt: MissedBusAttempt | null
 
   /**
+   * When the plan now held was installed (startGoModeTracking — a fresh start,
+   * a resume and every swap), for the check's quiet minute after a swap.
+   */
+  planInstalledAtMs: number | null
+
+  /**
    * A single wild GPS fix (urban multipath) can put the matched distance
    * kilometres off-route for one tick — 5836 m mid-ride on 7/22 while riding
    * the bus dead on its line. Deviation handling only acts on a distance that
@@ -315,6 +356,15 @@ export interface TripSession {
    * replan-origin.ts and blended with each observed answer.
    */
   replanLatencyMs: { full: number; scoped: number }
+
+  /**
+   * Automatic re-plans waiting for a fix good enough to start from (51.3),
+   * keyed by re-plan reason, valued by when the wait began. One
+   * `REPLAN_ORIGIN_WAIT` record is written when a wait begins and one when it
+   * ends, not one per tick.
+   */
+  replanOriginWaitSince: Record<string, number>
+
   /** Reroute-snapshot capture interval (recording sessions only). */
   rerouteSnapshotIntervalId: ReturnType<typeof setInterval> | null
 
@@ -415,8 +465,12 @@ export interface TripSession {
 /** A trip's state at its first GPS fix. */
 export function createTripSession(): TripSession {
   return {
+    aboardCheckInFlight: false,
+    aboardCheckLastAtMs: 0,
+    aboardCheckTripId: null,
     accessBoard: null,
     autoEndTimeoutId: null,
+    backgroundCheckInFlight: false,
     boardStopDwell: null,
     clearedRiding: null,
     destinationProgress: null,
@@ -424,6 +478,10 @@ export function createTripSession(): TripSession {
     deviationHandledAtMs: null,
     earlyAlightWatch: null,
     earlyBoardReplan: null,
+    fasterRouteExpiryTimerId: null,
+    fasterRouteLatch: EMPTY_FASTER_ROUTE_LATCH,
+    fasterRouteLowBikeLegKey: null,
+    fasterRouteOfferSeq: 0,
     geometryChangedAtMs: null,
     gpsPollingIntervalId: null,
     gpsSimulationTimeoutId: null,
@@ -446,6 +504,7 @@ export function createTripSession(): TripSession {
     matchHeldSinceMs: null,
     missedBusNoticeKey: null,
     missedBusRerouteAttempt: null,
+    planInstalledAtMs: null,
     prevDistanceFromRoute: null,
     quietReplanHistory: [],
     quietReplanIgnoredStreak: 0,
@@ -454,6 +513,7 @@ export function createTripSession(): TripSession {
       full: REPLAN_LATENCY_SEED_FULL_MS,
       scoped: REPLAN_LATENCY_SEED_SCOPED_MS
     },
+    replanOriginWaitSince: {},
     rerouteSnapshotIntervalId: null,
     returnRefreshInFlight: false,
     riderBoardingMiss: null,

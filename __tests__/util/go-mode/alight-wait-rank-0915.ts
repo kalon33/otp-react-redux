@@ -275,8 +275,10 @@ describe('15.9 — the alight ranker scored the wait as free', () => {
 
   it('ranks the list by true arrival, undoing the 24-minute inversion', () => {
     const ranked = rankAlightOptions(results, { limit: 5, nowMs: NOW })
+    // 54.2: the first two land 174 s apart, inside the 3-minute bucket, so the
+    // one with fewer metres of bike (the tram-less bike-only plan) goes first.
     expect(ranked.map((o) => o.itinerary.endTime)).toEqual([
-      1789507539000, 1789507713000, 1789508979000, 1789509276000, 1789509446000
+      1789507713000, 1789507539000, 1789508979000, 1789509276000, 1789509446000
     ])
   })
 
@@ -286,7 +288,8 @@ describe('15.9 — the alight ranker scored the wait as free', () => {
     // The measured failure: 16:49 above 16:25, and the 16:28:33 the rider
     // actually chose sitting in the last slot.
     expect(arrivals.indexOf(1789508979000)).toBeGreaterThan(1)
-    expect(arrivals.indexOf(1789507713000)).toBe(1)
+    // 54.2: first, by street metres, inside the 3-minute bucket
+    expect(arrivals.indexOf(1789507713000)).toBe(0)
     expect(arrivals[0]).toBeLessThanOrEqual(1789507713000)
   })
 

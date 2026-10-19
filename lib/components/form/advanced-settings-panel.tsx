@@ -33,8 +33,18 @@ import styled from 'styled-components'
 import * as apiActions from '../../actions/api'
 import * as formActions from '../../actions/form'
 import * as routeLockActions from '../../actions/route-lock'
+import * as routeSetActions from '../../actions/route-sets'
 import * as routingProfileActions from '../../actions/routing-profiles'
 import * as userActions from '../../actions/user'
+import {
+  AnyRouteLock,
+  lastResultsRouteIds,
+  LockableRoute,
+  routeLockRoutes,
+  routeLockScope,
+  RouteLockScope,
+  SearchLike
+} from '../../util/route-lock'
 import { AppReduxState } from '../../util/state-types'
 import {
   BIKE_ACCESS_CEILING_MINUTES,
@@ -78,6 +88,10 @@ import { toastPromise } from '../util/toasts'
 import { User } from '../user/types'
 import BackButton from '../util/back-button'
 import withSuspense from '../util/with-suspense'
+import type {
+  RouteLockWriteOptions,
+  RouteSetSource
+} from '../../actions/route-lock'
 
 import {
   addCustomSettingLabels,
@@ -89,17 +103,25 @@ import {
   tripPlannerValidationErrors
 } from './util'
 import {
+  ChipRow,
   GlobalSettingsContainer,
   HelperText,
   LeverContainer,
   LeverSlider,
+  PanelPrimaryButton,
+  PanelTextInput,
+  RouteChip,
   SettingCheckbox,
+  SettingDropdown,
   VisibleSubheader
 } from './styled'
+import { matchSavedSet, RouteSet, RouteSetWrite } from '../../util/route-sets'
+import { SavedRouteSetList } from './saved-route-sets'
 import { setModeButtonEnabled } from './batch-settings'
 import { StyledTransparentButton } from './advanced-settings-button'
 import ArriveOnTimeSetting from './arrive-on-time-setting'
 import DateTimeModal from './date-time-modal'
+import RouteSetPicker from './route-set-picker'
 
 const DependentSelector = withSuspense(
   lazy(() => import('../user/mobility-profile/dependent-selector'))
@@ -184,13 +206,6 @@ const RoutingProfileContainer = styled.div`
   margin: 2em 0;
 `
 
-const RoutingProfileDropdown = styled(DropdownSelector)`
-  margin: 20px 0px;
-  label {
-    padding-left: 0;
-  }
-`
-
 const NlPreferencesContainer = styled.div`
   margin: 2em 0;
 `
@@ -253,41 +268,6 @@ const SearchOptionBlock = styled.div`
   }
 `
 
-// One row of route chips under the picker. Same pill look as the search form's
-// active-preferences chips so the two readouts of the same fact match.
-const ChipRow = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 10px 0;
-`
-
-const RouteChip = styled.button`
-  align-items: center;
-  background: #f1f1f1;
-  border: 1px solid #ccc;
-  border-radius: 999px;
-  color: #333;
-  cursor: pointer;
-  display: flex;
-  font-size: 13px;
-  gap: 6px;
-  padding: 4px 10px;
-
-  &:hover {
-    border-color: #d32f2f;
-    color: #d32f2f;
-  }
-`
-
-const StopInput = styled.input`
-  border: 1px solid #ccc;
-  border-radius: 6px;
-  font: inherit;
-  padding: 8px;
-  width: 100%;
-`
-
 const StopSuggestions = styled.ul`
   border: 1px solid #ccc;
   border-radius: 6px;
@@ -320,13 +300,16 @@ const VIA_STOP_DEBOUNCE_MS = 350
 
 const AdvancedSettingsPanel = ({
   applyPreferencesFromText,
+  applyRouteSet,
   applyRoutingProfile,
+  applySavedRouteSet,
   autoPlan,
   closeAdvancedSettings,
   configuredStopCap,
   createOrUpdateUser,
   currentQuery,
   defaultNumItineraries,
+  deleteRouteSet,
   enableMaxStopCount,
   enabledModeButtons,
   findRoutesIfNeeded,
@@ -340,8 +323,12 @@ const AdvancedSettingsPanel = ({
   modeSettingDefinitions,
   modeSettingValues,
   persistence,
+  renameRouteSet,
   routes,
+  routeSets,
   saveAndReturnButton,
+  saveRouteSet,
+  searches,
   setCloseAdvancedSettingsWithDelay,
   setQueryParam,
   setRouteLockScope,
@@ -351,13 +338,24 @@ const AdvancedSettingsPanel = ({
   user
 }: {
   applyPreferencesFromText: (text: string) => Promise<any>
+  applyRouteSet: (
+    routeIds: string[],
+    scope: RouteLockScope,
+    source: RouteSetSource,
+    options?: RouteLockWriteOptions
+  ) => Promise<unknown>
   applyRoutingProfile: (profileId: string) => void
+  applySavedRouteSet: (
+    setId: string,
+    options?: RouteLockWriteOptions
+  ) => Promise<unknown>
   autoPlan: boolean
   closeAdvancedSettings: () => void
   configuredStopCap: number
   createOrUpdateUser: (user: User, intl: IntlShape) => Promise<number>
   currentQuery: any
   defaultNumItineraries: number
+  deleteRouteSet: (setId: string) => void
   enableMaxStopCount: boolean
   enabledModeButtons: string[]
   findRoutesIfNeeded: () => void
@@ -371,11 +369,23 @@ const AdvancedSettingsPanel = ({
   modeSettingDefinitions: ModeSetting[]
   modeSettingValues: ModeSettingValues
   persistence?: PersistenceConfig
+  renameRouteSet: (setId: string, name: string) => RouteSetWrite
+  routeSets?: RouteSet[]
   routes?: Record<string, LockableRoute>
   saveAndReturnButton?: boolean
+  saveRouteSet: (
+    name: string,
+    routeIds: string[],
+    scope: RouteLockScope,
+    options?: { replace?: boolean }
+  ) => RouteSetWrite
+  searches?: Record<string, SearchLike>
   setCloseAdvancedSettingsWithDelay: () => void
   setQueryParam: (evt: any) => void
-  setRouteLockScope: (scope: RouteLockScope) => void
+  setRouteLockScope: (
+    scope: RouteLockScope,
+    options?: RouteLockWriteOptions
+  ) => void
   setRoutingPreferences: (
     prefs: RoutingPreferences,
     activeProfileId?: string
@@ -387,7 +397,10 @@ const AdvancedSettingsPanel = ({
     numItineraries?: number
     viaStop?: ViaStop | null
   }) => void
-  toggleRouteLockRoute: (routeId: string) => void
+  toggleRouteLockRoute: (
+    routeId: string,
+    options?: RouteLockWriteOptions
+  ) => void
   user: User
 }): JSX.Element => {
   const intl = useIntl()
@@ -399,6 +412,10 @@ const AdvancedSettingsPanel = ({
     'idle' | 'loading' | 'applied' | 'error' | 'routeMissing'
   >('idle')
   const [nlSummary, setNlSummary] = useState('')
+  // Route names the describe box was given that the graph does not have,
+  // said back next to the summary ("Couldn't find 99 — held to 18").
+  const [nlMissing, setNlMissing] = useState('')
+  const [nlHeld, setNlHeld] = useState('')
   const dependents = useMemo(
     () => loggedInUser?.dependents || [],
     [loggedInUser]
@@ -415,43 +432,22 @@ const AdvancedSettingsPanel = ({
     findRoutesIfNeeded()
   }, [findRoutesIfNeeded])
 
-  const routeLock: RouteLock | undefined = currentQuery.routeLock
-  const lockedRouteIds = useMemo(() => routeLockIds(routeLock), [routeLock])
-
-  // The picker ADDS a route (#46), so routes already chosen drop out of it and
-  // the chips below are the only place they appear. Selecting always leaves the
-  // control back on its placeholder, which is what makes a second pick possible
-  // without a reset step.
-  const routeLockOptions = useMemo(() => {
-    const named = Object.entries(routes || {})
-      // Vehicle-position updates stash bare {vehicles} entries under a route id;
-      // those aren't pickable routes.
-      .filter(([, route]) => route.shortName || route.longName)
-      .filter(([id]) => !lockedRouteIds.includes(id))
-      .map(([id, route]) => ({
-        sortOrder: route.sortOrder ?? Number.MAX_SAFE_INTEGER,
-        text: route.longName
-          ? `${routeLockLabel({ ...route, id })} — ${route.longName}`
-          : routeLockLabel({ ...route, id }),
-        value: id
-      }))
-      .sort(
-        (a, b) =>
-          a.sortOrder - b.sortOrder ||
-          a.text.localeCompare(b.text, undefined, {
-            numeric: true
-          })
-      )
-    return [
-      {
-        text: intl.formatMessage({
-          id: 'components.BatchSearchScreen.routeLockAdd'
-        }),
-        value: ''
-      },
-      ...named.map(({ text, value }) => ({ text, value }))
-    ]
-  }, [intl, lockedRouteIds, routes])
+  // Read through routeLockRoutes, never `.routes`: a lock written before
+  // 2026-09-02 has no routes array, and reading it directly throws in render.
+  const routeLock: AnyRouteLock | undefined = currentQuery.routeLock
+  const lockedRoutes = useMemo(() => routeLockRoutes(routeLock), [routeLock])
+  const lockScope = routeLockScope(routeLock)
+  const savedSets = useMemo(() => routeSets || [], [routeSets])
+  const activeSavedSet = useMemo(
+    () => matchSavedSet(routeLock, savedSets),
+    [routeLock, savedSets]
+  )
+  // "In your last results": the latest search between these two places, from
+  // the history — on the phone the active search is already cleared by now.
+  const lastResultRouteIds = useMemo(
+    () => lastResultsRouteIds(searches, currentQuery),
+    [currentQuery, searches]
+  )
 
   const routeLockScopeOptions = useMemo(
     () => [
@@ -471,17 +467,18 @@ const AdvancedSettingsPanel = ({
     [intl]
   )
 
-  const onRouteLockChange = useCallback(
-    (evt: QueryParamChangeEvent) => {
-      const id = evt.routeLock as string
-      if (id) toggleRouteLockRoute(id)
-    },
+  // Inside Settings: closing the panel runs the search.
+  const onRemoveLockedRoute = useCallback(
+    (routeId: string) => toggleRouteLockRoute(routeId, { replan: false }),
     [toggleRouteLockRoute]
   )
 
   const onRouteLockScopeChange = useCallback(
     (evt: QueryParamChangeEvent) => {
-      setRouteLockScope(evt.routeLockScope as RouteLockScope)
+      // Inside Settings: closing the panel runs the search.
+      setRouteLockScope(evt.routeLockScope as RouteLockScope, {
+        replan: false
+      })
     },
     [setRouteLockScope]
   )
@@ -546,11 +543,51 @@ const AdvancedSettingsPanel = ({
 
   const tripFormErrors = tripPlannerValidationErrors(currentQuery, intl)
 
-  const closePanel = useCallback(() => {
-    // Only autoplan if there are no validation errors
-    tripFormErrors.length === 0 && autoPlan && handlePlanTrip()
-    closeAdvancedSettings()
-  }, [autoPlan, closeAdvancedSettings, handlePlanTrip, tripFormErrors.length])
+  // `search === true` searches even where the config turned autoPlan off —
+  // the route sheet's button says "Done — search". Strictly true, because the
+  // back button passes its click event here.
+  const closePanel = useCallback(
+    (search?: unknown) => {
+      // Only autoplan if there are no validation errors
+      tripFormErrors.length === 0 &&
+        (autoPlan || search === true) &&
+        handlePlanTrip()
+      closeAdvancedSettings()
+    },
+    [autoPlan, closeAdvancedSettings, handlePlanTrip, tripFormErrors.length]
+  )
+
+  // The route sheet's Done (cycle 27 Q2): write the whole set without a search
+  // of its own, then close Settings, which runs the one search.
+  const onRouteSetApply = useCallback(
+    async (
+      routeIds: string[],
+      scope: RouteLockScope,
+      source: RouteSetSource
+    ) => {
+      await applyRouteSet(routeIds, scope, source, { replan: false })
+      closePanel(true)
+    },
+    [applyRouteSet, closePanel]
+  )
+
+  // Saved sets (58.2). The sheet's Save writes the ticked draft; nothing
+  // searches. Use in the Settings list puts the set on the query without a
+  // search — closing Settings runs the one search, as for every other change
+  // made here.
+  const onSaveRouteSet = useCallback(
+    (
+      name: string,
+      routeIds: string[],
+      scope: RouteLockScope,
+      replace: boolean
+    ) => saveRouteSet(name, routeIds, scope, { replace }),
+    [saveRouteSet]
+  )
+  const onUseSavedSet = useCallback(
+    (setId: string) => applySavedRouteSet(setId, { replan: false }),
+    [applySavedRouteSet]
+  )
 
   const handleModeButtonToggle = setModeButton(
     enabledModeButtons,
@@ -733,24 +770,30 @@ const AdvancedSettingsPanel = ({
     if (!text) return
     setNlStatus('loading')
     try {
-      const { lock, preferences, routeQuery } = await applyPreferencesFromText(
+      const { locks, missing, preferences } = await applyPreferencesFromText(
         text
       )
-      // A route the rider named but the graph doesn't have is worth saying out
+      const missingText = (missing as string[]).join(', ')
+      const heldText = (locks as { label: string }[])
+        .map((lock) => lock.label)
+        .join(', ')
+      setNlMissing(missingText)
+      setNlHeld(heldText)
+      // Routes the rider named but the graph doesn't have are worth saying out
       // loud — the levers still applied, but the trip they asked for didn't.
-      if (routeQuery && !lock) {
-        setNlSummary(routeQuery)
+      if (missing.length && !locks.length) {
+        setNlSummary(missingText)
         setNlStatus('routeMissing')
         return
       }
       const parts = Object.entries(preferences).map(
         ([key, value]) => `${key}: ${value}`
       )
-      if (lock) {
+      if (locks.length) {
         parts.unshift(
           intl.formatMessage(
-            { id: 'components.BatchSearchScreen.routeLockChip' },
-            { route: lock.label }
+            { id: 'components.BatchSearchScreen.routeSetSummary' },
+            { routes: heldText }
           )
         )
       }
@@ -777,7 +820,7 @@ const AdvancedSettingsPanel = ({
         <VisibleSubheader>
           <FormattedMessage id="components.BatchSearchScreen.routingProfileHeader" />
         </VisibleSubheader>
-        <RoutingProfileDropdown
+        <SettingDropdown
           label={intl.formatMessage({
             id: 'components.BatchSearchScreen.routingProfileLabel'
           })}
@@ -796,26 +839,25 @@ const AdvancedSettingsPanel = ({
         <VisibleSubheader>
           <FormattedMessage id="components.BatchSearchScreen.routeLockHeader" />
         </VisibleSubheader>
-        <RoutingProfileDropdown
-          label={intl.formatMessage({
-            id: 'components.BatchSearchScreen.routeLockLabel'
-          })}
-          name="routeLock"
-          onChange={onRouteLockChange}
-          options={routeLockOptions}
-          value=""
+        <RouteSetPicker
+          lastResultRouteIds={lastResultRouteIds}
+          lock={routeLock}
+          onApply={onRouteSetApply}
+          onSaveSet={onSaveRouteSet}
+          routes={routes}
+          savedSets={savedSets}
         />
-        {routeLock && (
+        {lockedRoutes.length > 0 && (
           <>
             <ChipRow className="route-lock-chips">
-              {routeLock.routes.map((route) => (
+              {lockedRoutes.map((route) => (
                 <RouteChip
                   aria-label={intl.formatMessage(
                     { id: 'components.BatchSearchScreen.routeLockRemove' },
                     { route: route.label }
                   )}
                   key={route.id}
-                  onClick={() => toggleRouteLockRoute(route.id)}
+                  onClick={() => onRemoveLockedRoute(route.id)}
                   type="button"
                 >
                   {route.label}
@@ -823,29 +865,37 @@ const AdvancedSettingsPanel = ({
                 </RouteChip>
               ))}
             </ChipRow>
-            <RoutingProfileDropdown
+            <SettingDropdown
               label={intl.formatMessage({
                 id: 'components.BatchSearchScreen.routeLockScopeLabel'
               })}
               name="routeLockScope"
               onChange={onRouteLockScopeChange}
               options={routeLockScopeOptions}
-              value={routeLock.scope}
+              value={lockScope}
             />
             <HelperText>
               <FormattedMessage
                 id={
-                  routeLock.scope === 'starting'
+                  lockScope === 'starting'
                     ? 'components.BatchSearchScreen.routeLockStartDetail'
                     : 'components.BatchSearchScreen.routeLockDetail'
                 }
                 values={{
-                  route: routeLock.routes.map((route) => route.label).join(', ')
+                  route: lockedRoutes.map((route) => route.label).join(', ')
                 }}
               />
             </HelperText>
           </>
         )}
+        <SavedRouteSetList
+          activeSetId={activeSavedSet?.id}
+          graphRoutes={routes}
+          onDelete={deleteRouteSet}
+          onRename={renameRouteSet}
+          onUse={onUseSavedSet}
+          sets={savedSets}
+        />
       </RouteLockContainer>
       <LeverContainer>
         <VisibleSubheader>
@@ -889,7 +939,7 @@ const AdvancedSettingsPanel = ({
         <VisibleSubheader>
           <FormattedMessage id="components.BatchSearchScreen.searchOptionsHeader" />
         </VisibleSubheader>
-        <RoutingProfileDropdown
+        <SettingDropdown
           label={intl.formatMessage({
             id: 'components.BatchSearchScreen.numItinerariesLabel'
           })}
@@ -964,7 +1014,7 @@ const AdvancedSettingsPanel = ({
             </ChipRow>
           ) : (
             <>
-              <StopInput
+              <PanelTextInput
                 id="via-stop-input"
                 onChange={(e) => setStopText(e.target.value)}
                 placeholder={intl.formatMessage({
@@ -1024,7 +1074,7 @@ const AdvancedSettingsPanel = ({
           })}
           value={nlText}
         />
-        <NlApplyButton
+        <PanelPrimaryButton
           disabled={nlStatus === 'loading' || !nlText.trim()}
           onClick={onApplyNlPreferences}
           type="button"
@@ -1036,17 +1086,26 @@ const AdvancedSettingsPanel = ({
                 : 'components.BatchSearchScreen.nlPreferencesApply'
             }
           />
-        </NlApplyButton>
+        </PanelPrimaryButton>
         {nlStatus === 'applied' && (
-          <NlStatus>
+          <NlStatus className="nl-preferences-status">
             <FormattedMessage
               id="components.BatchSearchScreen.nlPreferencesApplied"
               values={{ summary: nlSummary }}
             />
+            {nlMissing && (
+              <>
+                {' '}
+                <FormattedMessage
+                  id="components.BatchSearchScreen.routeSetPartial"
+                  values={{ missing: nlMissing, routes: nlHeld }}
+                />
+              </>
+            )}
           </NlStatus>
         )}
         {nlStatus === 'routeMissing' && (
-          <NlStatus>
+          <NlStatus className="nl-preferences-status">
             <FormattedMessage
               id="components.BatchSearchScreen.routeLockNotFound"
               values={{ route: nlSummary }}
@@ -1151,19 +1210,26 @@ const mapStateToProps = (state: AppReduxState) => {
     modeSettingDefinitions: state.otp?.modeSettingDefinitions || [],
     modeSettingValues,
     persistence: state.otp.config?.persistence,
+    routeSets: state.user?.localUser?.routeSets,
     routes: state.otp.transitIndex?.routes,
     saveAndReturnButton,
+    searches: state.otp.searches as Record<string, SearchLike> | undefined,
     user: state.user.loggedInUser
   }
 }
 
 const mapDispatchToProps = {
   applyPreferencesFromText: routingProfileActions.applyPreferencesFromText,
+  applyRouteSet: routeLockActions.applyRouteSet,
   applyRoutingProfile: routingProfileActions.applyRoutingProfile,
+  applySavedRouteSet: routeSetActions.applySavedRouteSet,
   createOrUpdateUser: userActions.createOrUpdateUser,
+  deleteRouteSet: routeSetActions.deleteRouteSet,
   findRoutesIfNeeded: apiActions.findRoutesIfNeeded,
   getDependentUserInfo: userActions.getDependentUserInfo,
   lookupViaStops: routingProfileActions.lookupViaStops,
+  renameRouteSet: routeSetActions.renameRouteSet,
+  saveRouteSet: routeSetActions.saveRouteSet,
   setQueryParam: formActions.setQueryParam,
   setRouteLockScope: routeLockActions.setRouteLockScope,
   setRoutingPreferences: routingProfileActions.setRoutingPreferences,

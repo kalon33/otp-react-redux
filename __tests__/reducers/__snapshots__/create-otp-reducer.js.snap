@@ -30,6 +30,7 @@ Object {
     "roundTrip": false,
     "routingType": "ITINERARY",
     "stayMinutes": 60,
+    "stopStays": Array [],
     "time": "19:34",
   },
   "filter": Object {
@@ -44,6 +45,8 @@ Object {
     "arrivedAt": null,
     "arrivedDelay": null,
     "boardingPrompt": Object {
+      "chooseBus": false,
+      "chooseBusError": null,
       "lastDismissedAt": null,
       "searchFailed": false,
       "searching": false,
@@ -54,6 +57,7 @@ Object {
     "departureOverrideSource": null,
     "departureOverrideTripId": null,
     "earlyAlight": null,
+    "fasterRoute": null,
     "isActive": false,
     "liveLegTimes": Object {},
     "multiStop": null,
@@ -79,6 +83,7 @@ Object {
       "vehicle": null,
     },
     "originalFrom": null,
+    "planStopOffer": null,
     "progress": null,
     "reRoute": Object {
       "autoApply": false,
@@ -104,6 +109,7 @@ Object {
       "interval": 8000,
       "isTracking": false,
       "lastPosition": null,
+      "lastTrustedPosition": null,
     },
     "turnCues": Object {
       "enabledByDefault": false,
@@ -126,6 +132,7 @@ Object {
   },
   "initialUrl": "/",
   "lastActionMillis": 0,
+  "legFrequency": Object {},
   "location": Object {
     "currentPosition": Object {
       "coords": null,

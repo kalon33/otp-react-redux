@@ -101,9 +101,12 @@ describe('util > go-mode > the rider keeps the route they chose (8/9)', () => {
     // three plans all leave from the same poisoned anchor (19:20:00) and the
     // D Line's is the only one that does not sit at the stop for twenty
     // minutes first.
-    expect(routesOf(reachable())).toEqual([D_LINE, '1:5', '1:5'])
+    // 54.2: all three end within 120 s, inside the 3-minute bucket, so the two
+    // route 5 plans (less bike/walk) now sit above the D Line, which is still
+    // the earliest arrival and still on the list.
+    expect(routesOf(reachable())).toEqual(['1:5', '1:5', D_LINE])
     const ends = reachable().map((o: any) => Number(o.itinerary.endTime))
-    expect(ends).toEqual([1786323721000, 1786323841000, 1786323841000])
+    expect(ends).toEqual([1786323841000, 1786323841000, 1786323721000])
     // What the shipped score said instead, off the same three plans:
     // 19:42:09, 19:43:05 and 19:46:23 — the D Line last, 4m14s behind, on a
     // journey that actually lands two minutes ahead.
@@ -121,13 +124,15 @@ describe('util > go-mode > the rider keeps the route they chose (8/9)', () => {
     // The mechanism, on the case that still needs it: ask for one slot and the
     // chosen route is the only thing in it, even though something else could
     // have taken it.
+    // 54.2: unguarded, the least-street route 5 takes the one slot; guarding
+    // the D Line puts the rider's own route there instead.
     const oneUnguarded = reachable({ limit: 1 })
     expect(oneUnguarded).toHaveLength(1)
-    const kept = reachable({ keepRouteId: '1:5', limit: 1 })
+    const kept = reachable({ keepRouteId: D_LINE, limit: 1 })
     expect(kept).toHaveLength(1)
-    expect(routesOf(kept)).toEqual(['1:5'])
+    expect(routesOf(kept)).toEqual([D_LINE])
     // ...and the route the rider did NOT choose is what got displaced.
-    expect(routesOf(oneUnguarded)).toEqual([D_LINE])
+    expect(routesOf(oneUnguarded)).toEqual(['1:5'])
   })
 
   it('does not promote the chosen route past a genuinely faster one (8/9)', () => {

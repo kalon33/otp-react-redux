@@ -933,6 +933,46 @@ describe('util > go-mode > notification-service', () => {
         )
       ).toBeNull()
     })
+
+    describe('54.3 — a bus laying over at the stop', () => {
+      it('sends no "Bus here" for a bus at the stop with a board time 13 min out', () => {
+        expect(
+          check(
+            { distanceToBoardStopM: 24 },
+            { liveBoardEpochMs: NOW + 13 * 60000 }
+          )
+        ).toBeNull()
+      })
+
+      it('sends no heads-up either until the board time is inside the window', () => {
+        expect(
+          check(
+            { distanceToBoardStopM: 24 },
+            { liveBoardEpochMs: NOW + 300 * 1000 }
+          )
+        ).toBeNull()
+        const event = check(
+          { distanceToBoardStopM: 24 },
+          { liveBoardEpochMs: NOW + 200 * 1000 }
+        )
+        expect(event!.type).toBe('BOARD_BUS_APPROACHING')
+      })
+
+      it('says "Bus here" once the board time is 60 s out', () => {
+        const event = check(
+          { distanceToBoardStopM: 24 },
+          { liveBoardEpochMs: NOW + 60000 }
+        )
+        expect(event!.type).toBe('BOARD_BUS_ARRIVING')
+        expect(event!.title).toBe('Bus here')
+      })
+
+      it('still says "Bus here" at the stop with no live board time', () => {
+        expect(check({ distanceToBoardStopM: 24 })!.type).toBe(
+          'BOARD_BUS_ARRIVING'
+        )
+      })
+    })
   })
 
   describe('checkDelayAlert staleness', () => {

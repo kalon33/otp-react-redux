@@ -11,7 +11,7 @@ import { queryIsValid } from '../util/state'
 import type { LockedRoute } from '../util/route-lock'
 import type { RoutingPreferences, ViaStop } from '../util/routing-profiles'
 
-import { applyRouteLockFromText, setRouteLock } from './route-lock'
+import { applyRouteLocksFromText, setRouteLock } from './route-lock'
 import { createGraphQLQueryAction } from './apiV2'
 import { setQueryParam } from './form'
 
@@ -157,20 +157,30 @@ export function applyRoutingProfile(profileId: string) {
 
 /** What a plain-language request turned into, for the search form to report. */
 export interface AppliedPreferences {
-  /** The route we held the search to, when the rider named one and it exists. */
-  lock?: LockedRoute | null
+  /**
+   * The routes the search is now held to, when the rider named any and at
+   * least one exists. Empty when they named none, or none matched.
+   */
+  locks: LockedRoute[]
+  /** Route names the rider used that matched nothing in the graph. */
+  missing: string[]
   preferences: RoutingPreferences
-  /** The route name the rider used, echoed back so an error can quote it. */
-  routeQuery?: string
+  /** Every route name the rider used, as they said it. */
+  routeQueries: string[]
 }
 
 /**
- * Resolve plain-language text to levers — and, if the rider asked to ride one
- * specific route, to a route lock — and apply them to the current query
+ * Resolve plain-language text to levers — and, if the rider asked to ride
+ * particular routes, to a route set — and apply them to the current query
  * (search-form box). Throws on failure so the caller can surface an error; the
- * current settings are left untouched in that case. A named route that matches
- * nothing in the graph applies the levers and reports lock: null rather than
- * quietly planning a trip the rider didn't ask for.
+ * current settings are left untouched in that case.
+ *
+ * Named routes REPLACE any set already in place (rider, cycle 27 Q7): "only
+ * the 18 and the 21" is the whole answer. One rider action is one search: with
+ * routes to follow the levers are written silently and the route set's write
+ * runs the search. A name that matches nothing is reported in `missing`; when
+ * every name misses, nothing is locked, the old set stays, and the levers wait
+ * for the search that closing Settings runs (as they always have).
  */
 export function applyPreferencesFromText(text: string) {
   return async function (
@@ -179,15 +189,14 @@ export function applyPreferencesFromText(text: string) {
   ): Promise<AppliedPreferences> {
     const url =
       getState().otp.config?.routingPreferencesApiUrl || PREFERENCES_API_PATH
-    const { preferences, routeQuery } = await postPreferences(url, text)
-    // With a route lock to follow, hold the re-search until it's applied: one
-    // rider action should produce one search.
-    dispatch(
-      setRoutingPreferences(preferences, undefined, { replan: !routeQuery })
+    const { preferences, routeQueries } = await postPreferences(url, text)
+    const named = routeQueries.length > 0
+    dispatch(setRoutingPreferences(preferences, undefined, { replan: !named }))
+    if (!named) return { locks: [], missing: [], preferences, routeQueries }
+    const { locks, missing } = await dispatch(
+      applyRouteLocksFromText(routeQueries, 'replace')
     )
-    if (!routeQuery) return { preferences }
-    const { lock } = await dispatch(applyRouteLockFromText(routeQuery))
-    return { lock, preferences, routeQuery }
+    return { locks, missing, preferences, routeQueries }
   }
 }
 

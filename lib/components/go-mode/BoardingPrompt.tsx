@@ -1,6 +1,6 @@
 import { connect } from 'react-redux'
 import { useIntl } from 'react-intl'
-import React from 'react'
+import React, { useState } from 'react'
 
 import * as goModeActions from '../../actions/go-mode'
 import {
@@ -15,8 +15,13 @@ import {
   BoardingSheet,
   BoardingSubtitle,
   BoardingTitle,
+  ChooseBusSection,
   RouteBadge,
+  RouteBadgeButton,
+  RouteBadgeGrid,
   RouteDirection,
+  RouteNumberForm,
+  RouteNumberInput,
   VehicleDetail,
   VehicleInfo,
   VehicleLabel,
@@ -44,6 +49,8 @@ const fleetNumber = (vehicleId: string): string =>
 
 interface Props {
   confirmOnboardRoute: (routeId: string) => void
+  /** "Type a route number" in the choose-bus sheet (51.1). */
+  confirmTypedRoute: (typed: string) => void
   confirmVehicleSelection: (vehicleId: string) => void
   dismissBoardingPrompt: () => void
   goMode: GoModeState
@@ -54,6 +61,7 @@ interface Props {
 
 const BoardingPrompt = ({
   confirmOnboardRoute,
+  confirmTypedRoute,
   confirmVehicleSelection,
   dismissBoardingPrompt,
   goMode,
@@ -62,6 +70,9 @@ const BoardingPrompt = ({
   routeName
 }: Props) => {
   const intl = useIntl()
+  // The choose-bus sheet's route number box (51.1). Held here so a re-render
+  // on the next GPS tick does not wipe what the rider is typing.
+  const [typedRoute, setTypedRoute] = useState('')
 
   /** NB/SB/EB/WB as a word. Anything unexpected is passed through as-is
    * rather than dropped — a raw code still beats no direction at all. */
@@ -125,6 +136,287 @@ const BoardingPrompt = ({
       id: 'components.GoMode.theBus'
     })
 
+  // One live bus row (shared by both modes since 51.1). In the choose-bus
+  // sheet the distance rides on the top line, beside the route — "546 ·
+  // Westbound · 80 m", the rider's own sketch — because the detail line
+  // truncates at 390 px and it was the distance that went.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const renderVehicleRow = (vehicle: any, distanceFirst = false) => (
+    <VehicleOptionRow key={vehicle.vehicleId}>
+      <VehicleInfo>
+        {/* Route first, direction beside it: the two things a rider
+            can check against the sign on the bus they are sitting in.
+            The fleet number moves to the bottom line — it is only
+            useful for telling two identical runs apart. */}
+        <VehicleLabel>
+          <RouteBadge
+            $bg={vehicle.routeColor || DEFAULT_ROUTE_COLOR}
+            $fg={vehicle.routeTextColor || DEFAULT_ROUTE_TEXT_COLOR}
+          >
+            {vehicle.routeName ||
+              intl.formatMessage(
+                {
+                  defaultMessage: 'Bus {label}',
+                  id: 'components.GoMode.busLabel'
+                },
+                { label: vehicle.label || vehicle.vehicleId }
+              )}
+          </RouteBadge>
+          {distanceFirst ? (
+            <RouteDirection>
+              {[
+                directionLabel(vehicle.direction),
+                intl.formatMessage(
+                  {
+                    defaultMessage: '{distance} m',
+                    id: 'components.GoMode.chooseBusDistance'
+                  },
+                  { distance: Math.round(vehicle.distanceMeters) }
+                )
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+            </RouteDirection>
+          ) : (
+            directionLabel(vehicle.direction) && (
+              <RouteDirection>
+                {directionLabel(vehicle.direction)}
+              </RouteDirection>
+            )
+          )}
+        </VehicleLabel>
+        {vehicle.tripHeadsign && (
+          <VehicleDetail>
+            {intl.formatMessage(
+              {
+                defaultMessage: 'to {headsign}',
+                id: 'components.GoMode.busHeadsign'
+              },
+              { headsign: vehicle.tripHeadsign }
+            )}
+          </VehicleDetail>
+        )}
+        <VehicleDetail>
+          {distanceFirst && vehicle.nextStopName
+            ? intl.formatMessage(
+                {
+                  defaultMessage: 'Next stop: {stop} · #{label}',
+                  id: 'components.GoMode.chooseBusNextStop'
+                },
+                {
+                  label: fleetNumber(vehicle.label || vehicle.vehicleId),
+                  stop: vehicle.nextStopName
+                }
+              )
+            : distanceFirst
+            ? intl.formatMessage(
+                {
+                  defaultMessage: '#{label}',
+                  id: 'components.GoMode.chooseBusFleetNumber'
+                },
+                { label: fleetNumber(vehicle.label || vehicle.vehicleId) }
+              )
+            : vehicle.nextStopName
+            ? intl.formatMessage(
+                {
+                  defaultMessage:
+                    'Next stop: {stop} - {distance}m away · #{label}',
+                  id: 'components.GoMode.vehicleDetail'
+                },
+                {
+                  distance: Math.round(vehicle.distanceMeters),
+                  label: vehicle.label || vehicle.vehicleId,
+                  stop: vehicle.nextStopName
+                }
+              )
+            : intl.formatMessage(
+                {
+                  defaultMessage: '{distance}m away · #{label}',
+                  id: 'components.GoMode.vehicleDistance'
+                },
+                {
+                  distance: Math.round(vehicle.distanceMeters),
+                  label: vehicle.label || vehicle.vehicleId
+                }
+              )}
+        </VehicleDetail>
+      </VehicleInfo>
+      <VehicleSelectButton
+        onClick={() => confirmVehicleSelection(vehicle.vehicleId)}
+      >
+        {intl.formatMessage({
+          defaultMessage: 'This one',
+          id: 'components.GoMode.selectVehicle'
+        })}
+      </VehicleSelectButton>
+    </VehicleOptionRow>
+  )
+
+  const searching = !!goMode.boardingPrompt.searching
+
+  /**
+   * "On a different bus?" (51.1, rider's answer B): live buses near the rider
+   * from every route first, then the nearby routes as badges, then a box for a
+   * route number that is not listed. Opened only by the rider's tap on the
+   * waiting or access card.
+   */
+  if (goMode.boardingPrompt.chooseBus) {
+    const chooseError = goMode.boardingPrompt.chooseBusError
+    return (
+      <>
+        <BoardingOverlay onClick={dismissBoardingPrompt} />
+        <BoardingSheet data-testid="choose-bus-sheet">
+          <BoardingTitle>
+            {intl.formatMessage({
+              defaultMessage: 'On a different bus?',
+              id: 'components.GoMode.chooseBusTitle'
+            })}
+          </BoardingTitle>
+          <BoardingSubtitle>
+            {intl.formatMessage({
+              defaultMessage: "Pick the bus you're on",
+              id: 'components.GoMode.chooseBusSubtitle'
+            })}
+          </BoardingSubtitle>
+
+          {searching ? (
+            <VehicleDetail style={{ marginBottom: 12, textAlign: 'center' }}>
+              {intl.formatMessage({
+                defaultMessage: 'Looking…',
+                id: 'components.GoMode.boardingSearching'
+              })}
+            </VehicleDetail>
+          ) : nearbyVehicles.length > 0 ? (
+            nearbyVehicles.map((v) => renderVehicleRow(v, true))
+          ) : (
+            <VehicleDetail
+              data-testid={searchFailed ? 'boarding-search-failed' : undefined}
+              style={{ marginBottom: 12, textAlign: 'center' }}
+            >
+              {searchFailed
+                ? intl.formatMessage({
+                    defaultMessage: "Couldn't reach the bus feed.",
+                    id: 'components.GoMode.boardingSearchFailed'
+                  })
+                : intl.formatMessage({
+                    defaultMessage: 'No buses detected nearby',
+                    id: 'components.GoMode.noBusesNearby'
+                  })}
+            </VehicleDetail>
+          )}
+
+          {nearbyRoutes.length > 0 && (
+            <>
+              <ChooseBusSection>
+                {intl.formatMessage({
+                  defaultMessage: 'No live bus? Pick your route',
+                  id: 'components.GoMode.chooseBusPickRoute'
+                })}
+              </ChooseBusSection>
+              <RouteBadgeGrid>
+                {nearbyRoutes.map((route) => (
+                  <RouteBadgeButton
+                    $bg={
+                      route.color
+                        ? `#${route.color.replace(/^#/, '')}`
+                        : DEFAULT_ROUTE_COLOR
+                    }
+                    $fg={
+                      route.textColor
+                        ? `#${route.textColor.replace(/^#/, '')}`
+                        : DEFAULT_ROUTE_TEXT_COLOR
+                    }
+                    key={route.id}
+                    onClick={() => confirmOnboardRoute(route.id)}
+                    type="button"
+                  >
+                    {route.shortName || route.longName || route.id}
+                  </RouteBadgeButton>
+                ))}
+              </RouteBadgeGrid>
+            </>
+          )}
+
+          <ChooseBusSection>
+            {intl.formatMessage({
+              defaultMessage: 'Type a route number',
+              id: 'components.GoMode.chooseBusTypeRoute'
+            })}
+          </ChooseBusSection>
+          <RouteNumberForm
+            onSubmit={(e) => {
+              e.preventDefault()
+              if (typedRoute.trim()) confirmTypedRoute(typedRoute)
+            }}
+          >
+            <RouteNumberInput
+              aria-label={intl.formatMessage({
+                defaultMessage: 'Route number',
+                id: 'components.GoMode.chooseBusRouteNumber'
+              })}
+              autoComplete="off"
+              enterKeyHint="go"
+              onChange={(e) => setTypedRoute(e.target.value)}
+              placeholder={intl.formatMessage({
+                defaultMessage: 'e.g. 546',
+                id: 'components.GoMode.chooseBusRoutePlaceholder'
+              })}
+              type="text"
+              value={typedRoute}
+            />
+            <VehicleSelectButton disabled={!typedRoute.trim()} type="submit">
+              {intl.formatMessage({
+                defaultMessage: 'This one',
+                id: 'components.GoMode.selectVehicle'
+              })}
+            </VehicleSelectButton>
+          </RouteNumberForm>
+          {chooseError && (
+            <VehicleDetail
+              data-testid="choose-bus-error"
+              role="alert"
+              style={{ marginTop: 8, whiteSpace: 'normal' }}
+            >
+              {chooseError.kind === 'no-route'
+                ? intl.formatMessage(
+                    {
+                      defaultMessage: 'No route {route} found.',
+                      id: 'components.GoMode.chooseBusNoRoute'
+                    },
+                    { route: chooseError.route }
+                  )
+                : intl.formatMessage(
+                    {
+                      defaultMessage: "Couldn't find a {route} bus near you.",
+                      id: 'components.GoMode.chooseBusNoTrip'
+                    },
+                    { route: chooseError.route }
+                  )}
+            </VehicleDetail>
+          )}
+
+          {offerRetry && (
+            <BoardingDismissButton
+              data-testid="boarding-retry"
+              onClick={retryBoardingSearch}
+            >
+              {intl.formatMessage({
+                defaultMessage: 'Try again',
+                id: 'components.GoMode.boardingRetry'
+              })}
+            </BoardingDismissButton>
+          )}
+          <BoardingDismissButton onClick={dismissBoardingPrompt}>
+            {intl.formatMessage({
+              defaultMessage: 'Cancel',
+              id: 'components.GoMode.chooseBusCancel'
+            })}
+          </BoardingDismissButton>
+        </BoardingSheet>
+      </>
+    )
+  }
+
   return (
     <>
       <BoardingOverlay onClick={dismissBoardingPrompt} />
@@ -146,80 +438,7 @@ const BoardingPrompt = ({
         </BoardingSubtitle>
 
         {body === 'vehicles' ? (
-          nearbyVehicles.map((vehicle) => (
-            <VehicleOptionRow key={vehicle.vehicleId}>
-              <VehicleInfo>
-                {/* Route first, direction beside it: the two things a rider
-                    can check against the sign on the bus they are sitting in.
-                    The fleet number moves to the bottom line — it is only
-                    useful for telling two identical runs apart. */}
-                <VehicleLabel>
-                  <RouteBadge
-                    $bg={vehicle.routeColor || DEFAULT_ROUTE_COLOR}
-                    $fg={vehicle.routeTextColor || DEFAULT_ROUTE_TEXT_COLOR}
-                  >
-                    {vehicle.routeName ||
-                      intl.formatMessage(
-                        {
-                          defaultMessage: 'Bus {label}',
-                          id: 'components.GoMode.busLabel'
-                        },
-                        { label: vehicle.label || vehicle.vehicleId }
-                      )}
-                  </RouteBadge>
-                  {directionLabel(vehicle.direction) && (
-                    <RouteDirection>
-                      {directionLabel(vehicle.direction)}
-                    </RouteDirection>
-                  )}
-                </VehicleLabel>
-                {vehicle.tripHeadsign && (
-                  <VehicleDetail>
-                    {intl.formatMessage(
-                      {
-                        defaultMessage: 'to {headsign}',
-                        id: 'components.GoMode.busHeadsign'
-                      },
-                      { headsign: vehicle.tripHeadsign }
-                    )}
-                  </VehicleDetail>
-                )}
-                <VehicleDetail>
-                  {vehicle.nextStopName
-                    ? intl.formatMessage(
-                        {
-                          defaultMessage:
-                            'Next stop: {stop} - {distance}m away · #{label}',
-                          id: 'components.GoMode.vehicleDetail'
-                        },
-                        {
-                          distance: Math.round(vehicle.distanceMeters),
-                          label: vehicle.label || vehicle.vehicleId,
-                          stop: vehicle.nextStopName
-                        }
-                      )
-                    : intl.formatMessage(
-                        {
-                          defaultMessage: '{distance}m away · #{label}',
-                          id: 'components.GoMode.vehicleDistance'
-                        },
-                        {
-                          distance: Math.round(vehicle.distanceMeters),
-                          label: vehicle.label || vehicle.vehicleId
-                        }
-                      )}
-                </VehicleDetail>
-              </VehicleInfo>
-              <VehicleSelectButton
-                onClick={() => confirmVehicleSelection(vehicle.vehicleId)}
-              >
-                {intl.formatMessage({
-                  defaultMessage: 'This one',
-                  id: 'components.GoMode.selectVehicle'
-                })}
-              </VehicleSelectButton>
-            </VehicleOptionRow>
-          ))
+          nearbyVehicles.map((v) => renderVehicleRow(v))
         ) : body === 'searching' ? (
           <VehicleDetail style={{ marginBottom: 12, textAlign: 'center' }}>
             {intl.formatMessage({
@@ -365,7 +584,11 @@ const mapStateToProps = (state: any) => {
 }
 
 const mapDispatchToProps = {
-  confirmOnboardRoute: goModeActions.confirmOnboardRoute,
+  // Bound with the route id only: a second argument is the choose-bus pick's
+  // own bookkeeping, never an event object.
+  confirmOnboardRoute: (routeId: string) =>
+    goModeActions.confirmOnboardRoute(routeId),
+  confirmTypedRoute: goModeActions.confirmTypedRoute,
   confirmVehicleSelection: goModeActions.confirmVehicleSelection,
   // Mid-ride, closing the picker has to resolve onboard.status too or the
   // rider is left on a panel with nothing in it and no way back (17.5).

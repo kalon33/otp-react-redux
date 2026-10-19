@@ -1,6 +1,7 @@
 import {
   CheckboxSelector,
   DateTimeSelector,
+  DropdownSelector,
   SliderSelector,
   Styled as TripFormClasses
 } from '@opentripplanner/trip-form'
@@ -249,4 +250,103 @@ export const LeverContainer = styled.div`
 // than sitting in its own rhythm.
 export const LeverSlider = styled(SliderSelector)`
   margin: 20px 0px;
+`
+
+/** The panel's dropdown: trip-form's selector, label flush left. */
+export const SettingDropdown = styled(DropdownSelector)`
+  margin: 20px 0px;
+  label {
+    padding-left: 0;
+  }
+`
+
+/** The panel's filled action button (the describe box's Apply, the route
+ * sheet's Done). */
+export const PanelPrimaryButton = styled.button`
+  background-color: var(--main-base-color, ${blue[900]});
+  border: 0;
+  border-radius: 6px;
+  color: white;
+  cursor: pointer;
+  font-weight: 600;
+  margin-top: 8px;
+  padding: 8px 16px;
+
+  &:disabled {
+    opacity: 0.6;
+  }
+`
+
+// One row of removable chips (routes, the via stop). Same pill look as the
+// search form's active-preferences chips so the two readouts of the same fact
+// match.
+export const ChipRow = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0;
+`
+
+export const RouteChip = styled.button`
+  align-items: center;
+  background: #f1f1f1;
+  border: 1px solid #ccc;
+  border-radius: 999px;
+  color: #333;
+  cursor: pointer;
+  display: flex;
+  font-size: 13px;
+  gap: 6px;
+  padding: 4px 10px;
+
+  &:hover {
+    border-color: #d32f2f;
+    color: #d32f2f;
+  }
+`
+
+/** The panel's plain text field (the via-stop name, the route filter). */
+export const PanelTextInput = styled.input`
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font: inherit;
+  padding: 8px;
+  width: 100%;
+`
+
+/**
+ * A saved route set to put back (58.2): the route chip's pill, but a tap
+ * applies rather than removes — so no red hover — and thumb-sized.
+ */
+export const SavedSetChip = styled(RouteChip)`
+  font-size: 14px;
+  min-height: 44px;
+  padding: 6px 14px;
+
+  &:hover {
+    border-color: var(--main-base-color, ${blue[900]});
+    color: var(--main-base-color, ${blue[900]});
+  }
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.5;
+  }
+`
+
+/** The panel's outlined button, beside a PanelPrimaryButton. */
+export const PanelSecondaryButton = styled.button`
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  color: #333;
+  cursor: pointer;
+  font-weight: 600;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 8px 12px;
+
+  &:disabled {
+    opacity: 0.6;
+  }
 `

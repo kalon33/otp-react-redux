@@ -132,9 +132,18 @@ const aboardPlan = () => ({
   startTime: NOW - 900_000
 })
 
+/**
+ * The tap's own fix was 113.5 m; the next, a second later, 14 m. Since 51.3 an
+ * automatic re-plan never starts from a fix worse than FIX_ACCURACY_MAX_M
+ * (100 m), so the recovery is answered by the 14 m fix — the default here —
+ * and the 113.5 m one is the subject of its own case below.
+ */
+const TAP_FIX_ACCURACY_M = 113.49501400000001
+
 const fix = (
   at: [number, number],
-  accuracy = 113.49501400000001
+  accuracy = 14,
+  timestamp = NOW
 ): GeolocationPosition =>
   ({
     coords: {
@@ -146,7 +155,7 @@ const fix = (
       longitude: at[1],
       speed: null
     },
-    timestamp: NOW
+    timestamp
   } as GeolocationPosition)
 
 describe('util > go-mode > a plan the rider taps must start where they are', () => {
@@ -248,7 +257,10 @@ describe('util > go-mode > a plan the rider taps must start where they are', () 
     let store: ReturnType<typeof makeStore> | undefined
 
     /** The same minimal store the other action-level Go Mode cases use. */
-    const makeStore = (riderAt: [number, number] | null) => {
+    const makeStore = (
+      riderAt: [number, number] | null,
+      accuracyM?: number
+    ) => {
       let goModeState: any = { ...initial }
       const actions: any[] = []
       const getState = () => ({
@@ -271,7 +283,10 @@ describe('util > go-mode > a plan the rider taps must start where they are', () 
       if (riderAt) {
         goModeState = {
           ...goModeState,
-          tracking: { ...initial.tracking, lastPosition: fix(riderAt) }
+          tracking: {
+            ...initial.tracking,
+            lastPosition: fix(riderAt, accuracyM)
+          }
         }
       }
       return {
@@ -285,7 +300,16 @@ describe('util > go-mode > a plan the rider taps must start where they are', () 
           ),
         reRoute: () => goModeState.reRoute,
         run: (thunk: any) => thunk(dispatch, getState),
-        types: () => actions.map((a) => a.type)
+        types: () => actions.map((a) => a.type),
+        /** REPLAN_ORIGIN_WAIT records: [reason, phase, fix accuracy]. */
+        waits: () =>
+          actions
+            .filter((a) => a.type === 'REPLAN_ORIGIN_WAIT')
+            .map((a) => [
+              a.payload.reason,
+              a.payload.phase,
+              a.payload.fixAccuracyM
+            ])
       }
     }
 
@@ -382,6 +406,52 @@ describe('util > go-mode > a plan the rider taps must start where they are', () 
       await new Promise((resolve) => setTimeout(resolve, 0))
       expect(mockedFetch).toHaveBeenCalledTimes(1)
       expect(mockedFetch.mock.calls[0][0].from.lat).toBeCloseTo(RIDER[0], 5)
+    })
+
+    it('waits past the 113.5 m tap fix for the 14 m one a second later (51.3)', async () => {
+      // The 09-08 sequence as it was: the fix in hand at the tap is 113.5 m,
+      // too poor to plan from, so the question waits — latch unspent, nothing
+      // fetched — and the 14 m fix one second later answers it, from itself.
+      store = makeStore(RIDER, TAP_FIX_ACCURACY_M)
+      await store.run(beginGoMode(tappedPlan() as any))
+      expect(store.recoveries()).toHaveLength(0)
+      expect(mockedFetch).not.toHaveBeenCalled()
+      expect(store.waits()).toEqual([['stale-plan-origin', 'wait', 113]])
+
+      clock?.setSystemTime(NOW + 1000)
+      store.run(handlePositionUpdate(fix(RIDER, 14, NOW + 1000)))
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(store.recoveries()).toHaveLength(1)
+      expect(mockedFetch).toHaveBeenCalledTimes(1)
+      expect(mockedFetch.mock.calls[0][0].from.lat).toBeCloseTo(RIDER[0], 5)
+      expect(
+        store.waits().filter((w: any) => w[0] === 'stale-plan-origin')
+      ).toEqual([
+        ['stale-plan-origin', 'wait', 113],
+        ['stale-plan-origin', 'resume', 14]
+      ])
+    })
+
+    it('gives the question up after a minute with no usable fix (51.3)', async () => {
+      // A rider moving for a minute may have ridden the plan's access leg; a
+      // late answer would re-plan a trip going fine. The latch is spent.
+      store = makeStore(RIDER, TAP_FIX_ACCURACY_M)
+      await store.run(beginGoMode(tappedPlan() as any))
+      clock?.setSystemTime(NOW + 61_000)
+      store.run(
+        handlePositionUpdate(fix(RIDER, TAP_FIX_ACCURACY_M, NOW + 61_000))
+      )
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      clock?.setSystemTime(NOW + 62_000)
+      store.run(handlePositionUpdate(fix(RIDER, 14, NOW + 62_000)))
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(store.recoveries()).toHaveLength(0)
+      expect(
+        store
+          .waits()
+          .filter((w: any) => w[0] === 'stale-plan-origin')
+          .map((w: any) => w[1])
+      ).toEqual(['wait', 'resume'])
     })
 
     it('leaves a rider who simply walked their own access leg alone', async () => {

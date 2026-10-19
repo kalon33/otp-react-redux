@@ -8,6 +8,7 @@ import {
   transitRouteSignature
 } from '../itinerary'
 
+import { accessSecondsToBoardStop } from './progress-calculator'
 import {
   angleBetweenDegrees,
   bearingDegrees,
@@ -18,6 +19,10 @@ import {
   TRANSIT_BOARD_STOP_RADIUS_M
 } from './position-matching'
 import { legTripId } from './leg-merge'
+import {
+  VEHICLE_AT_BOARD_STOP_M,
+  VEHICLE_RECORD_STALE_SEC
+} from './transit-trust'
 import type { LiveLegTime } from './types'
 
 /**
@@ -674,6 +679,186 @@ export function liveBoardForCandidate(
   const epochMs = Number(live.boardEpoch)
   if (!Number.isFinite(epochMs) || epochMs <= 0) return null
   return { epochMs, tripId }
+}
+
+/**
+ * The fastest a bus is taken to close on a stop it has not reached, m/s
+ * (~47 km/h, no dwell). Used only to put a FLOOR under when it can be there:
+ * a bus 1,768 m out on its 17:49:59 record (2026-10-15, SL-60152 on
+ * `1:897704`) cannot be at 98th & Penn before 17:52:15 at this pace; it got
+ * there at about 17:54:35.
+ */
+export const BUS_APPROACH_MAX_MPS = 13
+
+/**
+ * How far behind the bus's predicted time a rider may still be counted as
+ * making it while the bus's own fresh record puts it UPSTREAM of the stop
+ * (backlog 53.2a). A prediction for a bus kilometres out is a forecast, and on
+ * 2026-10-15 it was a frozen one: the feed said 17:52:30 for `1:897704` at
+ * 98th & Penn from 17:50:16 until 17:53:02 while SL-60152 was on a detour
+ * 1.7 km away, and the bus came at about 17:54:35 — 125 s after it. The rider,
+ * judged 123 s late against it at 17:51:02, caught that bus. Beyond this the
+ * verdict is a miss even with the bus upstream: then the next quiet re-plan
+ * looks for the same run further along (53.2b).
+ */
+export const HELD_RUN_UPSTREAM_TOLERANCE_MS = 180000
+
+/** The bus's own record, as `riderMakesRun` reads it. */
+export interface HeldRunVehicle {
+  /** Feed age in seconds; null when the feed publishes no timestamp. */
+  ageSec: number | null
+  distanceToBoardStopM: number | null
+  /** vehiclePassedStopOnTrip; null/absent = unanswerable. */
+  passedBoardStop?: boolean | null
+  /** Epoch ms of the position (the feed's own timestamp), else null. */
+  recordMs?: number | null
+}
+
+export type HeldRunWhy =
+  | 'bus-passed'
+  | 'bus-upstream'
+  | 'in-time'
+  | 'late'
+  | 'unmeasured'
+
+export interface HeldRunVerdict {
+  /** When the bus is taken to be at the stop: the later of feed and floor. */
+  busMs: number | null
+  /** null = not measurable; callers fall back to their own test. */
+  makes: boolean | null
+  overrunMs: number | null
+  riderEtaMs: number | null
+  why: HeldRunWhy
+}
+
+/**
+ * Seconds the rider still needs to the boarding stop, measured from the
+ * RIDER (backlogs 23.3, 53.2): the access chain from where the matcher has
+ * them at their own observed pace (`accessSecondsToBoardStop`), and never less
+ * than the straight line to the stop at that pace. The floor is there because
+ * the matcher's leg progress is not always where the rider is: at 17:52:42 on
+ * 2026-10-15 it said 99.55 % of a 988 m leg for a rider 550 m from the stop
+ * (12.17 family). Null when the chain cannot be measured.
+ */
+export function riderSecondsToBoard(
+  legs: Leg[] | undefined,
+  legIndex: number,
+  progressPct: number | null | undefined,
+  observedMps: number | null | undefined,
+  rider: [number, number] | null | undefined,
+  boardStop: { lat?: number | null; lon?: number | null } | null | undefined
+): number | null {
+  const byLegs = accessSecondsToBoardStop(
+    legs,
+    legIndex,
+    progressPct,
+    observedMps
+  )
+  if (byLegs == null) return null
+  const leg: any = legs?.[legIndex]
+  if (!rider || boardStop?.lat == null || boardStop?.lon == null || !leg) {
+    return byLegs
+  }
+  const rest = (legs || []).slice(legIndex)
+  const boardAt = rest.findIndex((l: any) => l.transitLeg)
+  const chainBikes = rest
+    .slice(0, boardAt < 0 ? rest.length : boardAt)
+    .some((l: any) => l.mode === 'BICYCLE')
+  const planned =
+    leg.duration > 0 && leg.distance > 0 ? leg.distance / leg.duration : null
+  const pace =
+    (chainBikes && observedMps != null && observedMps > 0
+      ? observedMps
+      : null) ?? planned
+  if (!(pace != null && pace > 0)) return byLegs
+  const straight =
+    calculateDistance(rider[0], rider[1], boardStop.lat, boardStop.lon) / pace
+  return Math.max(byLegs, straight)
+}
+
+/**
+ * Does the rider make this run at this stop? (backlogs 23.3 + 53.2a)
+ *
+ * The one test the plan re-target and the missed-bus verdict share. The
+ * rider's arrival is `nowMs + riderSecondsToStop` — their own pace, not the
+ * arrival an OTP access plan prints (which on 2026-10-15 was a time-shifted
+ * 18:14:14 -> 18:18:24 leg, and before that 4 m/s for a rider doing 5-10).
+ * The bus's time is the later of the feed's board time and a floor from its
+ * own fresh record (distance / BUS_APPROACH_MAX_MPS from the record's time).
+ *
+ *  - `bus-passed`: a fresh record has the bus past the stop on its own run.
+ *  - `in-time`: the rider gets there within `slackMs` of the bus.
+ *  - `bus-upstream`: later than that, but by no more than
+ *    HELD_RUN_UPSTREAM_TOLERANCE_MS, with a fresh record placing the bus short
+ *    of the stop on its run and not at it — there is nothing yet to have
+ *    missed (the 25.1 reading, `vehicleShortOfBoardStop`).
+ *  - `late`: anything else.
+ *  - `unmeasured`: no rider figure or no bus time; `makes` is null.
+ */
+export function riderMakesRun({
+  boardMs,
+  nowMs,
+  riderSecondsToStop,
+  slackMs = AUTO_REPLAN_ACCESS_BOARD_SLACK_MS,
+  vehicle
+}: {
+  boardMs: number | null | undefined
+  nowMs: number
+  riderSecondsToStop: number | null | undefined
+  slackMs?: number
+  vehicle?: HeldRunVehicle | null
+}): HeldRunVerdict {
+  const riderEtaMs =
+    riderSecondsToStop != null && Number.isFinite(riderSecondsToStop)
+      ? nowMs + Math.max(0, riderSecondsToStop) * 1000
+      : null
+  const fresh =
+    !!vehicle &&
+    (vehicle.ageSec == null || vehicle.ageSec <= VEHICLE_RECORD_STALE_SEC)
+  if (fresh && vehicle?.passedBoardStop === true) {
+    return {
+      busMs: null,
+      makes: false,
+      overrunMs: null,
+      riderEtaMs,
+      why: 'bus-passed'
+    }
+  }
+  const distance = fresh ? vehicle?.distanceToBoardStopM ?? null : null
+  const floorMs =
+    distance != null && Number.isFinite(distance)
+      ? (vehicle?.recordMs ?? nowMs) + (distance / BUS_APPROACH_MAX_MPS) * 1000
+      : null
+  const feedMs =
+    boardMs != null && Number.isFinite(Number(boardMs)) && Number(boardMs) > 0
+      ? Number(boardMs)
+      : null
+  const busMs =
+    feedMs != null && floorMs != null
+      ? Math.max(feedMs, floorMs)
+      : feedMs ?? floorMs
+  if (riderEtaMs == null || busMs == null) {
+    return {
+      busMs,
+      makes: null,
+      overrunMs: null,
+      riderEtaMs,
+      why: 'unmeasured'
+    }
+  }
+  const overrunMs = riderEtaMs - busMs
+  if (overrunMs <= slackMs) {
+    return { busMs, makes: true, overrunMs, riderEtaMs, why: 'in-time' }
+  }
+  const upstream =
+    fresh &&
+    vehicle?.passedBoardStop === false &&
+    distance != null &&
+    distance > VEHICLE_AT_BOARD_STOP_M
+  if (upstream && overrunMs <= HELD_RUN_UPSTREAM_TOLERANCE_MS) {
+    return { busMs, makes: true, overrunMs, riderEtaMs, why: 'bus-upstream' }
+  }
+  return { busMs, makes: false, overrunMs, riderEtaMs, why: 'late' }
 }
 
 /**
