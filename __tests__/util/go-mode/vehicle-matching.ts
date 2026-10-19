@@ -18,7 +18,9 @@ const vehicle = (over: Partial<VehiclePosition>): VehiclePosition => ({
   nextStopName: 'I-35W & 46th St Station',
   patternId: '1:904:0:01',
   routeId: '1:904',
-  seconds: 1700000000,
+  // A fresh frame: the helpers default nowMs to Date.now(), and a frame past
+  // MAX_LIVE_FRAME_AGE_SECONDS is no longer a live bus (54.6).
+  seconds: Math.floor(Date.now() / 1000),
   speed: 20,
   stopStatus: 'IN_TRANSIT_TO',
   tripHeadsign: 'Downtown Minneapolis',

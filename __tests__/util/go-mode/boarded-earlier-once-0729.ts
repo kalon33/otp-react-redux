@@ -149,7 +149,10 @@ async function replay(speed: number) {
   globalScope.fetch = jest.fn(() =>
     Promise.resolve({ json: () => Promise.resolve({}), ok: true, status: 200 })
   )
-  const clock = FakeTimers.install({ now: 1790181000000 })
+  // The wall clock starts at the recording's own start: the matcher drops any
+  // frame more than 10 min older than Date.now() (54.6), and the recorded
+  // frames are stamped with the ride's day.
+  const clock = FakeTimers.install({ now: fx.meta.startMs })
   const gateYes: GateYes[] = []
   const shadow: Array<{
     fresh: boolean

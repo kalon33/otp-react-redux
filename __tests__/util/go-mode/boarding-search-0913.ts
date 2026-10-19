@@ -134,9 +134,16 @@ const makeStore = (
 }
 
 beforeEach(() => {
+  // The recorded frames are from 2026-09-13; the picker drops a frame older
+  // than 10 min (54.6), so the clock stays at the recorded tap (11:36:29).
+  jest.spyOn(Date, 'now').mockReturnValue(1789317389000)
   mockFeedRoutes = {}
   mockPolledRoutes = []
   mockPollLands = {}
+})
+
+afterEach(() => {
+  jest.restoreAllMocks()
 })
 
 describe('the tap searches the route the rider chose (2026-09-13)', () => {
