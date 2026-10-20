@@ -101,6 +101,10 @@ export async function confirmAndReplay(
     option: any
     /** The whole list the preview was opened from; defaults to [option]. */
     options?: any[]
+    /** When the list was ranked (SET_ONBOARD_RESULT.resultAtMs, 64.1). */
+    resultAtMs?: number | null
+    /** The onboard trip record; defaults to the fixture's trip snapshot. */
+    trip?: any
     vehicle: any
   },
   opts: {
@@ -125,6 +129,10 @@ export async function confirmAndReplay(
     'RIDING_VEHICLE_HOLD',
     'START_ONBOARD_OPTIMIZE',
     'TRANSITION_LEG',
+    'SET_ONBOARD_CONFIRMING',
+    'SET_ONBOARD_RESULT',
+    'CLOSE_ONBOARD_PREVIEW',
+    'GO_MODE_CONTROL_TAP',
     ...(opts.record || [])
   ])
   const statuses: Array<{ s: string; t: number }> = []
@@ -164,9 +172,12 @@ export async function confirmAndReplay(
     type: CONFIRM_VEHICLE
   })
   dispatch(setOnboardVehicle(setup.vehicle))
-  await dispatch(findTrip({ tripId: setup.vehicle.tripId }))
-  const trip =
-    store.getState().otp.transitIndex?.trips?.[setup.vehicle.tripId] ?? null
+  let trip = setup.trip ?? null
+  if (!trip) {
+    await dispatch(findTrip({ tripId: setup.vehicle.tripId }))
+    trip =
+      store.getState().otp.transitIndex?.trips?.[setup.vehicle.tripId] ?? null
+  }
   dispatch(setOnboardTrip(trip))
   const lastFix = [...fx.gpsTrack]
     .filter((g: any) => g.tMs <= setup.confirmAtMs)
@@ -178,6 +189,7 @@ export async function confirmAndReplay(
       failedCandidates: 0,
       options: setup.options ?? [setup.option],
       pendingCandidates: 0,
+      resultAtMs: setup.resultAtMs ?? null,
       totalCandidates: 1
     })
   )
@@ -188,12 +200,23 @@ export async function confirmAndReplay(
   events.length = 0
 
   if (opts.commit === 'confirm') {
-    dispatch(confirmOnboardAlightStop())
+    // A Confirm that re-checks (64.1) returns the re-check's promise; run the
+    // clock until it settles (bounded), so the trip it starts is the one the
+    // track then plays through.
+    let settled = false
+    Promise.resolve(dispatch(confirmOnboardAlightStop())).finally(() => {
+      settled = true
+    })
+    for (let i = 0; i < 400; i++) {
+      if (settled) break
+      await clock.tickAsync(50)
+    }
   } else {
     dispatch(clearOnboard())
     dispatch(beginGoMode(setup.option.__itinerary))
   }
   const riding0: RidingState | null = store.getState().otp.goMode.riding
+  const onboardAfter = store.getState().otp.goMode.onboard
   await clock.tickAsync(0)
   const track = fx.gpsTrack.filter(
     (g: any) =>
@@ -208,6 +231,7 @@ export async function confirmAndReplay(
   }
   const riding: RidingState | null = store.getState().otp.goMode.riding
   const itinerary = store.getState().otp.goMode.activeItinerary
+  const onboardAtEnd = store.getState().otp.goMode.onboard
   dispatch(stopReplay())
   stopVehicleTracking()(() => undefined)
   endReplay()
@@ -218,6 +242,8 @@ export async function confirmAndReplay(
     deviated: statuses.filter((s) => s.s === 'deviated').map((s) => s.t),
     events,
     itinerary,
+    onboardAfter,
+    onboardAtEnd,
     riding,
     riding0,
     sets: of('SET_RIDING'),

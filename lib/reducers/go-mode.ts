@@ -30,6 +30,7 @@ import {
   SET_LIVE_LEG_TIMES,
   SET_MAP_FOLLOW,
   SET_NOTIFICATION_CONFIG,
+  SET_ONBOARD_CONFIRMING,
   SET_ONBOARD_RESULT,
   SET_ONBOARD_STATUS,
   SET_ONBOARD_TRIP,
@@ -176,6 +177,15 @@ export interface OnboardState {
   bestAlightStop: OnboardAlightOption | null
   candidates: OnboardCandidate[]
   /**
+   * Epoch ms the preview's Confirm started re-checking the chosen stop
+   * against where the rider is now (64.1); null when it is not. While set the
+   * Confirm button is disabled under "Finding the best stop to get off…" and
+   * a second tap does nothing. Back (CLOSE_ONBOARD_PREVIEW) and CLEAR_ONBOARD
+   * drop it, and a re-check that comes back to find it gone or changed stands
+   * down — the rider has moved on.
+   */
+  confirmingAtMs: number | null
+  /**
    * Candidates that settled with no plan at all and have nothing more coming —
    * the request errored or timed out and its retry did too. Null when unknown.
    *
@@ -200,6 +210,15 @@ export interface OnboardState {
    * Never cleared by a result landing — a straggler folding into the list
    * behind the preview must not close it. */
   preview: OnboardAlightPreview | null
+  /**
+   * Epoch ms (wall clock) the options on screen were ranked — set by the
+   * optimizer's SET_ONBOARD_RESULT (64.1). The Confirm uses it to tell a list
+   * built minutes ago from one built just now: on 2026-10-19 16:35:17 the
+   * rider confirmed a 69 s-old list with the bus already past its stop, and on
+   * 2026-10-20 08:32:53 a 12.8 min-old one. Null when unknown — a payload that
+   * did not say — which never counts as stale.
+   */
+  resultAtMs: number | null
   status:
     | 'idle'
     | 'discovering'
@@ -541,10 +560,12 @@ const defaultState: GoModeState = {
     answeredCandidates: null,
     bestAlightStop: null,
     candidates: [],
+    confirmingAtMs: null,
     failedCandidates: null,
     keepRouteId: null,
     pendingCandidates: null,
     preview: null,
+    resultAtMs: null,
     status: 'idle',
     totalCandidates: null,
     trip: null,
@@ -781,6 +802,9 @@ const goMode = handleActions<GoModeState, any>(
       ...state,
       onboard: {
         ...state.onboard,
+        // Back drops a Confirm still re-checking (64.1): its answer is for a
+        // preview the rider has left.
+        confirmingAtMs: null,
         preview: null
       }
     }),
@@ -1033,6 +1057,14 @@ const goMode = handleActions<GoModeState, any>(
       }
     },
 
+    [SET_ONBOARD_CONFIRMING]: (state, action) => ({
+      ...state,
+      onboard: {
+        ...state.onboard,
+        confirmingAtMs: action.payload ?? null
+      }
+    }),
+
     [SET_ONBOARD_RESULT]: (state, action) => {
       // Two payload shapes on purpose. A bare array is the original one and
       // still means "this is the whole answer"; the object form carries how
@@ -1055,6 +1087,7 @@ const goMode = handleActions<GoModeState, any>(
           // failures by definition.
           failedCandidates: isCounted ? payload.failedCandidates ?? 0 : 0,
           pendingCandidates: isCounted ? payload.pendingCandidates ?? 0 : 0,
+          resultAtMs: isCounted ? payload.resultAtMs ?? null : null,
           status: options.length ? ('ready' as const) : ('error' as const),
           totalCandidates: isCounted
             ? payload.totalCandidates ??
