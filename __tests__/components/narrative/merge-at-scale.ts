@@ -77,8 +77,8 @@ function signature({ allItineraries, mergedItineraries }: any) {
 }
 
 function merge(list: any[]) {
-  doMergeItineraries.cache.clear()
-  return doMergeItineraries(list, defaultFareType, mergeByRouteSignature)
+  // A fresh array is a fresh cache key (doMergeItineraries is keyed on it).
+  return doMergeItineraries([...list], defaultFareType, mergeByRouteSignature)
 }
 
 describe('backlog 66.1 > merging a 185-itinerary search', () => {

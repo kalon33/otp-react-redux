@@ -1,9 +1,10 @@
 import { connect } from 'react-redux'
+import { createSelector } from 'reselect'
 import { Itinerary, Location } from '@opentripplanner/types'
 import { Layer, Source, useMap } from 'react-map-gl/maplibre'
 import { util } from '@opentripplanner/base-map'
 import polyline from '@mapbox/polyline'
-import React, { useEffect } from 'react'
+import React, { useEffect, useMemo } from 'react'
 
 import { AppReduxState } from '../../util/state-types'
 import { DARK_TEXT_GREY } from '../util/colors'
@@ -17,7 +18,7 @@ import { hidePlannerItineraryOverlay } from './connected-transitive-overlay'
 
 type Props = {
   from: Location
-  geometries: string[]
+  geometries?: string[]
   hasNoMainPanelContent?: boolean
   to: Location
   visible?: boolean
@@ -41,46 +42,76 @@ const RoutePreviewOverlay = ({
     }
   }, [map, visible, hasNoMainPanelContent, from, to])
 
-  if (!geometries || !visible) return <></>
-
-  const uniqueGeometries = Array.from(new Set(geometries))
-  try {
-    const geojson: GeoJSON.FeatureCollection = {
-      features: uniqueGeometries
-        .filter((s) => !!s)
-        .map((segment) => {
+  // Decoding every leg polyline is the expensive part, and `geometries` is the
+  // same array until the response changes (66.3), so it runs once per response
+  // and not once per dispatch. react-maplibre also deep-compares `data`; a
+  // stable object makes that comparison short-circuit on identity.
+  const geojson = useMemo(() => {
+    if (!geometries) return null
+    try {
+      const collection: GeoJSON.FeatureCollection = {
+        features: geometries.map((segment) => {
           return {
             geometry: polyline.toGeoJSON(segment),
             properties: [],
             type: 'Feature'
           }
         }),
-      type: 'FeatureCollection'
+        type: 'FeatureCollection'
+      }
+      return collection
+    } catch (error) {
+      console.warn(`Can't create geojson from route ${geometries}: ${error}`)
+      return null
     }
-    return (
-      <Source data={geojson} id="route-preview-source" type="geojson">
-        <Layer
-          id="route-preview"
-          layout={{
-            'line-cap': 'round',
-            'line-join': 'round'
-          }}
-          paint={{
-            'line-blur': 4,
-            'line-color': DARK_TEXT_GREY,
-            'line-dasharray': [1, 2],
-            'line-opacity': 0.6,
-            'line-width': 4
-          }}
-          type="line"
-        />
-      </Source>
-    )
-  } catch (error) {
-    console.warn(`Can't create geojson from route ${geometries}: ${error}`)
-    return <></>
-  }
+  }, [geometries])
+
+  if (!geometries || !visible || !geojson) return <></>
+
+  return (
+    <Source data={geojson} id="route-preview-source" type="geojson">
+      <Layer
+        id="route-preview"
+        layout={{
+          'line-cap': 'round',
+          'line-join': 'round'
+        }}
+        paint={{
+          'line-blur': 4,
+          'line-color': DARK_TEXT_GREY,
+          'line-dasharray': [1, 2],
+          'line-opacity': 0.6,
+          'line-width': 4
+        }}
+        type="line"
+      />
+    </Source>
+  )
 }
+
+/**
+ * Every distinct leg polyline of the active search's responses, as one array
+ * that is the SAME array until `response` changes (66.3). A fresh `flatMap`
+ * per mapStateToProps call made connect re-render the overlay on every
+ * dispatch, and the render then re-decoded and deep-compared the whole
+ * FeatureCollection. Distinct and non-empty, so the render maps it as is.
+ * `undefined` when there is no response, as before.
+ */
+export const getPreviewGeometries = createSelector(
+  // @ts-expect-error state is not typed
+  (state: AppReduxState) => getActiveSearch(state)?.response,
+  (response: unknown) => {
+    if (!response) return undefined
+    const points = (
+      response as Array<{ plan?: { itineraries?: Itinerary[] } }>
+    ).flatMap((serverResponse) =>
+      serverResponse?.plan?.itineraries?.flatMap((itinerary) => {
+        return itinerary.legs?.map((leg) => leg.legGeometry.points)
+      })
+    ) as Array<string | undefined>
+    return Array.from(new Set(points)).filter((s): s is string => !!s)
+  }
+)
 
 // Exported for unit tests (mirrors hidePlannerItineraryOverlay).
 export const mapStateToProps = (state: AppReduxState) => {
@@ -111,13 +142,7 @@ export const mapStateToProps = (state: AppReduxState) => {
   const activeItinerary = getActiveItinerary(state)
 
   const activeSearch = getActiveSearch(state)
-  // @ts-expect-error state is not typed
-  const geometries = activeSearch?.response?.flatMap(
-    (serverResponse: { plan?: { itineraries?: Itinerary[] } }) =>
-      serverResponse?.plan?.itineraries?.flatMap((itinerary) => {
-        return itinerary.legs?.map((leg) => leg.legGeometry.points)
-      })
-  )
+  const geometries = getPreviewGeometries(state)
 
   // @ts-expect-error state is not typed
   const query = activeSearch ? activeSearch?.query : state.otp.currentQuery
