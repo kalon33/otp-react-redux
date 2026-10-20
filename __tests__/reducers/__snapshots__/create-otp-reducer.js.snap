@@ -61,6 +61,7 @@ Object {
     "isActive": false,
     "liveLegTimes": Object {},
     "multiStop": null,
+    "nearDestination": null,
     "notifications": Object {
       "enabled": true,
       "recentNotifications": Array [],

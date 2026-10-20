@@ -8,6 +8,7 @@ import {
 } from './notification-service'
 import { hasNextSegment } from '../multi-stop'
 import type { DepartureOverrideSource } from './types'
+import type { NearDestination } from './arrival-dwell'
 
 import type { MultiStopPlan } from '../multi-stop'
 
@@ -126,6 +127,10 @@ export interface GoModeSession {
   lastTransitionedLegIndex?: number | null
   // The rider's stops and which segment is being guided (43.1).
   multiStop?: MultiStopPlan | null
+  // When the rider came within 75 m of a bike or walking finish, and which
+  // destination that was — the one-minute dwell (12.17). Saved for the reason
+  // `arrivedAt` is: a relaunch at the door must not start the minute again.
+  nearDestination?: NearDestination | null
   // What the notifier has already said, re-keyed onto leg indexes so it can be
   // rebuilt on the other side of a re-mount. Its three latches live on the leg
   // OBJECT and so die with the page; see notification-service.
@@ -238,6 +243,7 @@ export function saveGoModeSession(
     departureOverrideTripId: goMode.departureOverrideTripId ?? null,
     lastTransitionedLegIndex: savedTransitionedLegIndex,
     multiStop: goMode.multiStop ?? null,
+    nearDestination: goMode.nearDestination ?? null,
     notificationLatches: captureNotificationLatches(
       goMode.activeItinerary?.legs
     ),

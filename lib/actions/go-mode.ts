@@ -35,6 +35,13 @@ import {
   hasArrivedAtDestination
 } from '../util/go-mode/progress-calculator'
 import {
+  nearDestinationApplies,
+  nearDestinationDelayMs,
+  nearDestinationDwellDone,
+  nextNearDestination
+} from '../util/go-mode/arrival-dwell'
+import type { NearDestination } from '../util/go-mode/arrival-dwell'
+import {
   aboardBeforeLegStart,
   accessBoardEstablished,
   ACCESS_BOARD_MIN_SPEED_MPS,
@@ -79,6 +86,7 @@ import {
   checkDestinationUnreachable,
   checkForNotifications,
   checkMissedBus,
+  checkTripComplete,
   classifyMissedBus,
   deviationThresholdM,
   findBoardLegIndex,
@@ -936,6 +944,12 @@ export const SET_GO_MODE_ACTIVE_LEG = 'SET_GO_MODE_ACTIVE_LEG'
 export const SET_GO_MODE_BACKGROUNDED = 'SET_GO_MODE_BACKGROUNDED'
 export const SET_MAP_FOLLOW = 'SET_MAP_FOLLOW'
 /**
+ * The near-destination dwell started or stopped (12.17): payload is the
+ * NearDestination the minute is counting from, or null. Dispatched only on a
+ * change, so a ride shows one at 75 m and at most one when it ends.
+ */
+export const SET_NEAR_DESTINATION = 'SET_NEAR_DESTINATION'
+/**
  * Recording only, like GO_MODE_CONTROL_TAP: no reducer consumes it, so it is
  * deliberately absent from create-otp-reducer's goMode delegation list, and
  * its payload is scalars so the debug-log middleware keeps it verbatim on
@@ -1260,6 +1274,9 @@ export const toggleMapFollow = createAction(TOGGLE_MAP_FOLLOW)
 // Idempotent "set" alongside the toggle: auto-disengage (map drag/rotate)
 // must never race the follow button — dispatching false twice stays false.
 export const setMapFollow = createAction<boolean>(SET_MAP_FOLLOW)
+export const setNearDestination = createAction<NearDestination | null>(
+  SET_NEAR_DESTINATION
+)
 // Recording only (MAP_FOLLOW_GESTURE), 48.1.
 export const recordMapFollowGesture = createAction<{
   followKept: boolean
@@ -2366,6 +2383,10 @@ export function beginGoMode(
     // the trip before this one would fire over the new trip — startReturnTrip
     // enters here straight off a round trip's arrival (backlog 13.5).
     clearAutoEndTimer()
+    // The near-destination minute survives a swap only onto a plan with the
+    // SAME destination (a quiet re-plan at the door); onto any other it is
+    // cleared here rather than left to fire over the new trip (12.17).
+    syncNearArrivalTimer(dispatch, getState)
     if (roundTrip) {
       // eslint-disable-next-line no-console
       console.log(
@@ -2903,6 +2924,9 @@ export function resumeGoModeTrip() {
     // `arrivedAt`, not off a fix; already spent means it ends on the next
     // macrotask. No-op for a round trip and in replay.
     armAutoEndTimer(dispatch, getState)
+    // ...and a trip that came back NEAR the door picks the minute up where the
+    // saved session left it, fix or no fix (12.17).
+    syncNearArrivalTimer(dispatch, getState)
 
     // Put the departure pick's OWNER back (12.15). create-otp-reducer has
     // restored the value; whose it is lives in two module-level trip-session
@@ -2990,6 +3014,9 @@ export function endGoMode() {
     // (handleArrivedDone -> finishArrivedTrip -> endGoMode) and by the auto-end
     // itself, so a trip cannot be ended twice and no timer outlives it.
     clearAutoEndTimer()
+    // ...and the near-destination dwell (12.17): a Stop inside the minute must
+    // not be followed by an "Arrived" on a trip that no longer exists.
+    clearNearArrivalTimer()
     stopLiveBoardTimer()
     if (session.visibilityChangeHandler) {
       document.removeEventListener(
@@ -3239,6 +3266,227 @@ function armAutoEndTimer(dispatch: any, getState: any): void {
     // drift.
     dispatch(finishArrivedTrip())
   }, delay)
+}
+
+/**
+ * The one-way arrival latch, and everything that has to go with it.
+ *
+ * Lifted out of handlePositionUpdate (2026-10-20, 12.17) because it now has a
+ * second caller: the near-destination dwell's wall-clock timer, which arrives a
+ * rider who has stayed within ARRIVAL_RADIUS_M of a bike or walking finish for
+ * ARRIVAL_DWELL_MS even when no further fix comes. A copy would drift, and
+ * every line below is here because an arrival once went out without it.
+ *
+ * `why` is what the tick measured on the arriving fix — logged, never decided
+ * on. `byDwell` says the minute fired it rather than the distance or the
+ * scalar.
+ */
+function latchArrival(
+  dispatch: any,
+  getState: any,
+  nowMs: number,
+  why: {
+    byDwell: boolean
+    distanceToDestination?: number | null
+    finalLegProgress?: number | null
+    overallProgress: number
+  }
+): void {
+  const goMode = getState().otp?.goMode
+  if (!goMode) return
+  // The dwell's own timer is spent either way: the distance got there first,
+  // or this is the dwell.
+  clearNearArrivalTimer()
+  // Say which condition fired. The daemon reads this stream and had no way
+  // to tell an arrival from a trip that simply stopped reporting, and a
+  // one-way latch deserves a reason in the record.
+  // eslint-disable-next-line no-console
+  console.log(
+    `[go-mode] arrived${
+      why.byDwell ? ' (dwell)' : ''
+    }: progress=${why.overallProgress.toFixed(2)}% ` +
+      `finalLegProgress=${
+        why.finalLegProgress == null
+          ? 'n/a'
+          : `${why.finalLegProgress.toFixed(2)}%`
+      } ` +
+      `distanceToDestination=${
+        why.distanceToDestination == null
+          ? 'unknown'
+          : `${Math.round(why.distanceToDestination)}m`
+      }`
+  )
+  dispatch(setArrived(nowMs))
+  if (hasNextSegment(goMode.multiStop)) {
+    // `warn` so the debug sink carries it: the daemon has to be able to
+    // tell a pause at a stop from a trip that never ended (13.5).
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[go-mode] multi-stop: arrived at stop ${goMode.multiStop.index + 1} of ${
+        goMode.multiStop.segments.length - 1
+      } ` +
+        `(${goMode.multiStop.stopNames[goMode.multiStop.index] || '?'}); ` +
+        'no auto-end, waiting for the rider to continue'
+    )
+  }
+  // ...and the dwell starts ticking on the wall clock from here, whether or
+  // not another fix ever arrives (backlog 13.5). A round trip is refused
+  // inside armAutoEndTimer — its arrival is a pause.
+  armAutoEndTimer(dispatch, getState)
+  // Take the card down with the arrival on it. Every later tick returns at
+  // the `hasArrived` guard in handlePositionUpdate, so this is the only
+  // chance to say so.
+  pushLiveActivity(getState, nowMs)
+  // On a ROUND TRIP the arrival is a pause, not an ending: hand the two
+  // return alerts to the OS now, while the JS layer is certainly alive.
+  // The tick-driven countdown below is the primary path, but the rider is
+  // about to pocket the phone for hours and iOS will suspend this WebView
+  // long before the departure. Same stable ids either way, so at worst one
+  // replaces the other.
+  if (goMode.roundTrip) {
+    armReturnPushes(goMode.roundTrip, nowMs)
+    // eslint-disable-next-line no-console
+    console.log(
+      '[go-mode] round trip: countdown armed leaveBy=' +
+        `${new Date(goMode.roundTrip.leaveByMs).toISOString()} ` +
+        `remaining=${Math.round(
+          (goMode.roundTrip.leaveByMs - nowMs) / 60000
+        )}min`
+    )
+  }
+  // The tick's quiesce only governs what handlePositionUpdate does; the two
+  // subsystems that live outside the tick have to be told separately, and
+  // on 2026-08-28 neither was. The trip was over at 22:08:37 and the rider
+  // ended it by hand at 23:37:04 — 48% of that ride's telemetry (16,740 of
+  // 34,784 actions) was recorded in between.
+  stopRerouteSnapshotCapture()
+  stopVehiclePolling()
+  stopLiveBoardTimer()
+  dispatch(updateTrackingInterval({ interval: ARRIVED_TRACKING_INTERVAL_MS }))
+  // Resize the running poll in place, the way advanceToLeg does: the store
+  // value is read once, when the interval is armed, so a dispatch on its
+  // own never reaches the setInterval already ticking. Replay drives
+  // positions from the recorded track and simulation from its own timer —
+  // neither has a poll to resize, and starting one would put a live GPS
+  // stream underneath a reproduced trip.
+  if (!session.simulationActive && !isReplayActive()) {
+    if (session.gpsPollingIntervalId) {
+      clearInterval(session.gpsPollingIntervalId)
+      session.gpsPollingIntervalId = null
+    }
+    dispatch(startPositionTracking())
+  }
+}
+
+/** Disarm the near-destination dwell's timer. Idempotent. */
+function clearNearArrivalTimer(): void {
+  if (session.nearArrivalTimeout) {
+    clearTimeout(session.nearArrivalTimeout.id)
+    session.nearArrivalTimeout = null
+  }
+}
+
+/**
+ * Bring the near-destination dwell's WALL-CLOCK timer in line with the store
+ * (backlog 12.17, Q4 "also count it once I've been within 75 m for a minute").
+ *
+ * The tick decides the dwell on every fix, but a decision that waits for a fix
+ * is the 13.5 failure again: a rider who locks the bike 60 m from the pin and
+ * walks indoors stops producing fixes, and a minute measured by fixes never
+ * ends. So the minute is ALSO a timer, armed off `goMode.nearDestination`:
+ *  - armed when the store holds a dwell that applies to this itinerary and
+ *    none is armed for that `sinceMs`;
+ *  - cleared when the store holds none (a fix beyond ARRIVAL_RADIUS_M, the
+ *    trip arriving, STOP_GO_MODE, a new itinerary with another destination);
+ *  - never armed during simulation or replay (the armAutoEndTimer rule —
+ *    those run on the simulated clock, and the tick decides there).
+ *
+ * Called from the tick, from resumeGoModeTrip (so a relaunch at the door picks
+ * up the minute where the saved session left it), from beginGoMode, and,
+ * clearing, from endGoMode.
+ */
+function syncNearArrivalTimer(dispatch: any, getState: any): void {
+  const goMode = getState().otp?.goMode
+  const near: NearDestination | null = goMode?.nearDestination ?? null
+  const applies =
+    !!goMode?.isActive &&
+    goMode.arrivedAt == null &&
+    nearDestinationApplies(near, goMode.activeItinerary?.legs)
+  if (!applies || !near || session.simulationActive || isReplayActive()) {
+    clearNearArrivalTimer()
+    return
+  }
+  if (session.nearArrivalTimeout?.sinceMs === near.sinceMs) return
+  clearNearArrivalTimer()
+  const sinceMs = near.sinceMs
+  session.nearArrivalTimeout = {
+    id: setTimeout(() => {
+      session.nearArrivalTimeout = null
+      fireNearArrival(dispatch, getState, sinceMs)
+    }, nearDestinationDelayMs(near, Date.now())),
+    sinceMs
+  }
+}
+
+/**
+ * The dwell's timer has run out: arrive through the same latch a distance
+ * arrival uses, and say so the way that tick would have.
+ *
+ * Everything that could have changed in a minute is checked again, from the
+ * store rather than from the closure: the rider tapped Stop, the trip arrived
+ * on distance in the meantime, a fix beyond 75 m cleared the dwell, a re-plan
+ * or the next multi-stop segment moved the destination, or this timer was
+ * armed for a minute that has since been replaced.
+ */
+function fireNearArrival(dispatch: any, getState: any, sinceMs: number): void {
+  const goMode = getState().otp?.goMode
+  if (!goMode?.isActive || goMode.arrivedAt != null) return
+  const near: NearDestination | null = goMode.nearDestination ?? null
+  if (!near || near.sinceMs !== sinceMs) return
+  const legs = goMode.activeItinerary?.legs
+  const nowMs = Date.now()
+  if (!nearDestinationDwellDone(near, legs, nowMs)) {
+    // Early (a clock step): try again for what is left of the minute.
+    if (nearDestinationApplies(near, legs))
+      syncNearArrivalTimer(dispatch, getState)
+    return
+  }
+  // `warn` so the debug sink carries it, like the auto-end's own line.
+  // eslint-disable-next-line no-console
+  console.warn(
+    `[go-mode] arrival dwell: within 75 m for ${Math.round(
+      (nowMs - near.sinceMs) / 1000
+    )}s, arriving`
+  )
+  // The status the arrival tick would have shown, so the card, the store and
+  // the notification check read the same thing it would have.
+  const prev = goMode.progress
+  const completed = prev ? { ...prev, status: 'completed' as const } : null
+  if (completed) dispatch(updateProgress(completed))
+  latchArrival(dispatch, getState, nowMs, {
+    byDwell: true,
+    distanceToDestination: prev?.distanceToDestination ?? null,
+    finalLegProgress: prev?.finalLegProgress ?? null,
+    overallProgress: prev?.overallProgress ?? 0
+  })
+  // The tick's notification pass is what says "Arrived" on a distance arrival;
+  // there is no tick here, so ask the same check the same question.
+  if (completed) {
+    const done = checkTripComplete(
+      completed,
+      getState().otp?.goMode?.notifications?.sentNotifications || []
+    )
+    if (done) emitNotification(dispatch, done, goMode.notifications)
+  }
+  // ...and take the two sticky wrist cards down, as the arrival tick does.
+  if (session.lastTurnCardKey !== null) {
+    cancelPush(TURN_CARD_NOTIFICATION_ID)
+    session.lastTurnCardKey = null
+  }
+  if (session.lastPacingCard !== null) {
+    cancelPush(PACING_CARD_NOTIFICATION_ID)
+    session.lastPacingCard = null
+  }
 }
 
 /**
@@ -10020,6 +10268,37 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       if (heldDelay != null) progress.delay = heldDelay
     }
 
+    // The near-destination dwell (12.17, rider's Q4: "also count it once I've
+    // been within 75 m for a minute"). A bike or walking finish now needs the
+    // rider within ARRIVAL_RADIUS_ACTIVE_M to arrive on distance, and this is
+    // what keeps that from stranding a trip whose phone never reads inside
+    // 40 m: the first fix within ARRIVAL_RADIUS_M (past the progress floor)
+    // starts a minute, any fix outside ends it, and a full minute is an
+    // arrival through the same latch and the same notification pass as a
+    // distance arrival. Decided here on the tick's own clock — the simulated
+    // one in replay — and backed by a wall-clock timer for the phone that goes
+    // quiet at the door (syncNearArrivalTimer). Never more eager than the
+    // 75 m rule it stands in for.
+    let arrivedByDwell = false
+    if (goMode.arrivedAt == null) {
+      const prevNear: NearDestination | null = goMode.nearDestination ?? null
+      const near = nextNearDestination(prevNear, {
+        distanceToDestination: progress.distanceToDestination,
+        legs: itinerary.legs,
+        nowMs: currentTime.getTime(),
+        overallProgress: progress.overallProgress
+      })
+      if (near !== prevNear) dispatch(setNearDestination(near))
+      if (
+        progress.status !== 'completed' &&
+        nearDestinationDwellDone(near, itinerary.legs, currentTime.getTime())
+      ) {
+        progress.status = 'completed'
+        arrivedByDwell = true
+      }
+      syncNearArrivalTimer(dispatch, getState)
+    }
+
     dispatch(updateProgress(progress))
     // The deviated streak's onset, from the status the rider was just shown —
     // the quiet full re-plan below reads it (35.2, accessPlanDeadByDeviation).
@@ -10070,87 +10349,16 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         hasArrivedAtDestination(
           progress.overallProgress,
           progress.distanceToDestination,
-          progress.finalLegProgress
+          progress.finalLegProgress,
+          progress.finalLegMode
         ))
     ) {
-      // Say which condition fired. The daemon reads this stream and had no way
-      // to tell an arrival from a trip that simply stopped reporting, and a
-      // one-way latch deserves a reason in the record.
-      // eslint-disable-next-line no-console
-      console.log(
-        `[go-mode] arrived: progress=${progress.overallProgress.toFixed(2)}% ` +
-          `finalLegProgress=${
-            progress.finalLegProgress == null
-              ? 'n/a'
-              : `${progress.finalLegProgress.toFixed(2)}%`
-          } ` +
-          `distanceToDestination=${
-            progress.distanceToDestination == null
-              ? 'unknown'
-              : `${Math.round(progress.distanceToDestination)}m`
-          }`
-      )
-      dispatch(setArrived(currentTime.getTime()))
-      if (hasNextSegment(goMode.multiStop)) {
-        // `warn` so the debug sink carries it: the daemon has to be able to
-        // tell a pause at a stop from a trip that never ended (13.5).
-        // eslint-disable-next-line no-console
-        console.warn(
-          `[go-mode] multi-stop: arrived at stop ${
-            goMode.multiStop.index + 1
-          } of ${goMode.multiStop.segments.length - 1} ` +
-            `(${goMode.multiStop.stopNames[goMode.multiStop.index] || '?'}); ` +
-            'no auto-end, waiting for the rider to continue'
-        )
-      }
-      // ...and the dwell starts ticking on the wall clock from here, whether or
-      // not another fix ever arrives (backlog 13.5). A round trip is refused
-      // inside armAutoEndTimer — its arrival is a pause.
-      armAutoEndTimer(dispatch, getState)
-      // Take the card down with the arrival on it. Every later tick returns at
-      // the `hasArrived` guard below, so this is the only chance to say so.
-      pushLiveActivity(getState, currentTime.getTime())
-      // On a ROUND TRIP the arrival is a pause, not an ending: hand the two
-      // return alerts to the OS now, while the JS layer is certainly alive.
-      // The tick-driven countdown below is the primary path, but the rider is
-      // about to pocket the phone for hours and iOS will suspend this WebView
-      // long before the departure. Same stable ids either way, so at worst one
-      // replaces the other.
-      if (goMode.roundTrip) {
-        armReturnPushes(goMode.roundTrip, currentTime.getTime())
-        // eslint-disable-next-line no-console
-        console.log(
-          '[go-mode] round trip: countdown armed leaveBy=' +
-            `${new Date(goMode.roundTrip.leaveByMs).toISOString()} ` +
-            `remaining=${Math.round(
-              (goMode.roundTrip.leaveByMs - currentTime.getTime()) / 60000
-            )}min`
-        )
-      }
-      // The quiesce below only governs what THIS function does; the two
-      // subsystems that live outside the tick have to be told separately, and
-      // on 2026-08-28 neither was. The trip was over at 22:08:37 and the rider
-      // ended it by hand at 23:37:04 — 48% of that ride's telemetry (16,740 of
-      // 34,784 actions) was recorded in between.
-      stopRerouteSnapshotCapture()
-      stopVehiclePolling()
-      stopLiveBoardTimer()
-      dispatch(
-        updateTrackingInterval({ interval: ARRIVED_TRACKING_INTERVAL_MS })
-      )
-      // Resize the running poll in place, the way advanceToLeg does: the store
-      // value is read once, when the interval is armed, so a dispatch on its
-      // own never reaches the setInterval already ticking. Replay drives
-      // positions from the recorded track and simulation from its own timer —
-      // neither has a poll to resize, and starting one would put a live GPS
-      // stream underneath a reproduced trip.
-      if (!session.simulationActive && !isReplayActive()) {
-        if (session.gpsPollingIntervalId) {
-          clearInterval(session.gpsPollingIntervalId)
-          session.gpsPollingIntervalId = null
-        }
-        dispatch(startPositionTracking())
-      }
+      latchArrival(dispatch, getState, currentTime.getTime(), {
+        byDwell: arrivedByDwell,
+        distanceToDestination: progress.distanceToDestination,
+        finalLegProgress: progress.finalLegProgress,
+        overallProgress: progress.overallProgress
+      })
     } else if (hasArrived) {
       // A ROUND TRIP is the one thing with work left after arrival. The rider
       // is at their destination for the next hour or three, and the countdown
