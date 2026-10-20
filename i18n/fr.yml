@@ -746,6 +746,7 @@ components:
     finding: Recherche du prochain trajet…
     headerStop: Vers {destination} · étape {number} sur {total}
     leaveAt: départ {time}
+    missesBy: manquée de {minutes} min
     noStay: Sans pause
     plannedStay: Séjour prévu jusqu'à {time}
     stayGroupLabel: Temps minimum à {stop}

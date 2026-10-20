@@ -4,11 +4,13 @@ import { Leg } from '@opentripplanner/types'
 import React, { ReactElement } from 'react'
 import styled from 'styled-components'
 
+import { RED_ON_WHITE } from '../../util/colors'
 import RealtimeStatusLabel, {
   DelayText,
   MainContent
 } from '../../viewers/realtime-status-label'
 import type { RiderStopMark } from '../../../util/multi-stop'
+import type { TransferArrivalMark } from '../../../util/transfer-times'
 
 interface Props {
   isDestination: boolean
@@ -50,6 +52,32 @@ function riderStopTimes(
   return { arrival, leave }
 }
 
+/** "misses by 3 min": the outgoing bus leaves before the rider arrives. */
+const MissLine = styled.div`
+  color: ${RED_ON_WHITE};
+  font-size: 80%;
+  line-height: 1.1em;
+`
+
+/**
+ * A transit→transit change (backlog 61.1): the row is the leaving leg's, so
+ * the arriving bus's own arrival rides on `from.transferArrival`.
+ */
+function transferTimes(
+  leg: Leg,
+  isDestination: boolean
+): { arrival: TransferArrivalMark; missedBy: number } | null {
+  if (isDestination) return null
+  const arrival = (leg.from as { transferArrival?: TransferArrivalMark })
+    ?.transferArrival
+  const leave = Number(leg.startTime)
+  if (!arrival || !Number.isFinite(arrival.time) || !Number.isFinite(leave)) {
+    return null
+  }
+  const gap = Math.floor(leave / 60000) - Math.floor(arrival.time / 60000)
+  return { arrival, missedBy: gap < 0 ? -gap : 0 }
+}
+
 /**
  * This component displays the scheduled departure/arrival time for a leg,
  * and, for transit legs, displays any delays or earliness where applicable.
@@ -72,6 +100,53 @@ function RealtimeTimeColumn({ isDestination, leg }: Props): ReactElement {
             }}
           />
         </LeaveLine>
+      </div>
+    )
+  }
+
+  const transfer = transferTimes(leg, isDestination)
+  if (transfer) {
+    const { arrival, missedBy } = transfer
+    const leaveDelay = leg.departureDelay || 0
+    return (
+      <div className="transfer-times">
+        {arrival.realtime ? (
+          <StyledStatusLabel
+            delay={arrival.delay}
+            isFlex={false}
+            isRealtime
+            originalTime={arrival.time - arrival.delay * 1000}
+            time={arrival.time}
+          />
+        ) : (
+          // Schedule only: a plain time, no early/late/scheduled words.
+          <div>
+            <FormattedTime timeStyle="short" value={arrival.time} />
+          </div>
+        )}
+        <LeaveLine>
+          <FormattedMessage
+            id="components.MultiStop.leaveAt"
+            values={{
+              time: <FormattedTime timeStyle="short" value={leg.startTime} />
+            }}
+          />
+        </LeaveLine>
+        {missedBy > 0 ? (
+          <MissLine>
+            <FormattedMessage
+              id="components.MultiStop.missesBy"
+              values={{ minutes: missedBy }}
+            />
+          </MissLine>
+        ) : (
+          <StyledStatusLabel
+            delay={leaveDelay}
+            isFlex={isFlex(leg)}
+            isRealtime={!!leg.realTime}
+            originalTime={Number(leg.startTime) - leaveDelay * 1000}
+          />
+        )}
       </div>
     )
   }
