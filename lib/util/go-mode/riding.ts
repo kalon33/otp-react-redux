@@ -1,5 +1,7 @@
 import type { Leg } from '@opentripplanner/types'
 
+import { bearingBetween } from './turn-view'
+import { calculateDistance, decodeLegGeometry } from './position-matching'
 import {
   findVehicleById,
   shouldRebindRidingTrip,
@@ -962,6 +964,12 @@ export interface RidingDecisionInput {
   /** ms the rider must be off-route before the fact is dropped. */
   offRouteClearMs: number
   prevRiding: RidingState | null
+  /**
+   * The rider's own GPS course, when the fix carries one (iOS reports -1 for
+   * "unknown"). Read only by {@link matchTripIsRollover}; omitted, the trip is
+   * named exactly as before 62.1.
+   */
+  riderHeadingDeg?: number | null
   /** The rider's own GPS ground speed, when the fix carries one. */
   riderSpeedMps: number | null
   /**
@@ -1197,6 +1205,100 @@ export function firstEstablishmentIsCorroborated(input: {
 }
 
 /**
+ * How far the rider's own course may sit from the leg's bearing and still read
+ * as "carried along this leg" — well inside the matcher's 120° opposing gate,
+ * since the question here is the opposite one: is this unmistakably the leg's
+ * own direction?
+ */
+export const RIDING_ALONG_LEG_MAX_DEG = 45
+
+/** Distance ahead along the leg that the leg's local bearing is taken over —
+ * long enough to step past the few-metre jogs a stop's polyline starts with
+ * (the 465's first segment at Oak St & Washington is 4 m long and points east
+ * on a westbound leg). */
+const LEG_BEARING_SPAN_M = 20
+
+/** The leg's own bearing from the start of `segmentIndex`, over at least
+ * LEG_BEARING_SPAN_M of its shape; null when the leg has no usable geometry. */
+function legBearingAt(leg: Leg, segmentIndex: number): number | null {
+  const pts = decodeLegGeometry(leg)
+  const from = Math.max(0, segmentIndex)
+  if (from >= pts.length - 1) return null
+  let to = from + 1
+  while (
+    to < pts.length - 1 &&
+    calculateDistance(pts[from][0], pts[from][1], pts[to][0], pts[to][1]) <
+      LEG_BEARING_SPAN_M
+  ) {
+    to++
+  }
+  return bearingBetween(pts[from], pts[to])
+}
+
+/**
+ * Is the trusted match's trip id a stale label for the plan's own run (62.1)?
+ *
+ * A bus finishing one run and starting the next keeps reporting the run it
+ * just finished until the feed rolls it over. On 2026-10-19 MVTA bus 2:4054
+ * reported 2:t64A "North to UMN" (direction 0, no next stop) for ten minutes
+ * at the UMN end — including the 17:18:04 tick the rider was carried away
+ * aboard it on the plan's 2:t6B2 "South to Burnsville TS", the same block's
+ * next run. Letting that match name the trip put a run that never calls at
+ * the leg's stops into the riding fact: 79 s of timetable-only leg times and a
+ * flip to t6B2 at 17:19:23 on the same bus and boardedAt.
+ *
+ * The feed's own heading and direction cannot tell this from a genuinely
+ * wrong-way bus — they agree with the stale label (184° at speed 0, direction
+ * 0) — and the stale trip's stop list is a fetch the decision does not have.
+ * The rider's own motion can: a rider carried along the leg's bearing is on a
+ * bus going the leg's way, whatever the label says; one aboard the 2026-08-27
+ * inbound 94 is carried against it, and that bus's trip is still named.
+ *
+ * All of: the match names a different trip than the plan, its headsign
+ * contradicts the leg's (both known — an earlier run of the same service
+ * agrees and is untouched), the rider is carried (the same speed the
+ * first-establishment gate asks), and their course is within
+ * RIDING_ALONG_LEG_MAX_DEG of the leg's bearing at their projection. Any
+ * missing input answers false — the pre-62.1 naming.
+ */
+export function matchTripIsRollover(input: {
+  match: { tripHeadsign?: string | null; tripId?: string | null } | null
+  matchedLeg: Leg | null | undefined
+  riderHeadingDeg?: number | null
+  riderSpeedMps: number | null
+  routeMatch: Pick<RouteMatchResult, 'segmentIndex'>
+}): boolean {
+  const { match, matchedLeg, riderHeadingDeg, riderSpeedMps, routeMatch } =
+    input
+  const plannedTripId = legTripId(matchedLeg)
+  if (!plannedTripId || !match?.tripId || match.tripId === plannedTripId) {
+    return false
+  }
+  const legHeadsign = (matchedLeg as any)?.headsign
+  if (!match.tripHeadsign || !legHeadsign) return false
+  if (headsignsAgree(match.tripHeadsign, legHeadsign)) return false
+  if (
+    riderSpeedMps == null ||
+    !(riderSpeedMps > RIDING_ESTABLISH_MIN_SPEED_MPS)
+  )
+    return false
+  if (
+    riderHeadingDeg == null ||
+    !Number.isFinite(riderHeadingDeg) ||
+    riderHeadingDeg < 0
+  ) {
+    return false
+  }
+  const legBearing = legBearingAt(
+    matchedLeg as Leg,
+    routeMatch.segmentIndex ?? 0
+  )
+  if (legBearing == null) return false
+  const diff = Math.abs(riderHeadingDeg - legBearing) % 360
+  return (diff > 180 ? 360 - diff : diff) <= RIDING_ALONG_LEG_MAX_DEG
+}
+
+/**
  * Establish, refresh, mark off-route, or drop the riding fact for this tick.
  */
 export function decideRiding(input: RidingDecisionInput): RidingDecision {
@@ -1211,6 +1313,7 @@ export function decideRiding(input: RidingDecisionInput): RidingDecision {
     nowMs,
     offRouteClearMs,
     prevRiding,
+    riderHeadingDeg,
     riderSpeedMps,
     ridingCorridor,
     routeMatch,
@@ -1388,19 +1491,34 @@ export function decideRiding(input: RidingDecisionInput): RidingDecision {
   // rider's own stop, 44 s stale) suppressed the naming too, so the fact went
   // in with `vehicleId: null` and the first bus it ever named was whatever the
   // feed flapped to. A match that cannot establish can still identify.
-  const ridingTripId =
+  const claimedTripId =
     (vehicleSpeaksForLeg ? match?.tripId : null) ||
     legTripId(matchedLeg) ||
     prevRiding?.tripId ||
     null
+  // …unless that trip id is the bus's stale label for the plan's own run
+  // (62.1): the match still names its VEHICLE below, just not the trip.
+  const ridingTripId =
+    vehicleSpeaksForLeg &&
+    matchTripIsRollover({
+      match,
+      matchedLeg,
+      riderHeadingDeg,
+      riderSpeedMps,
+      routeMatch
+    })
+      ? legTripId(matchedLeg)
+      : claimedTripId
 
   const isFirstEstablishment = !prevRiding || prevRiding.tripId == null
+  // Judged on what the match CLAIMS, not on the renamed trip: renaming must
+  // never buy an establishment the 2026-08-27 gate would refuse.
   if (
     isFirstEstablishment &&
     !firstEstablishmentIsCorroborated({
       matchedLeg,
       riderSpeedMps,
-      ridingTripId,
+      ridingTripId: claimedTripId,
       vehicleMatch: match,
       vehicleTrusted: vehicleSpeaksForLeg
     })
