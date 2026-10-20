@@ -3,6 +3,7 @@ import { encode } from '@mapbox/polyline'
 import {
   alightBannerLevel,
   ARRIVAL_MIN_PROGRESS,
+  ARRIVAL_RADIUS_ACTIVE_M,
   ARRIVAL_RADIUS_M,
   calculateExpectedProgress,
   calculateOverallProgress,
@@ -16,6 +17,7 @@ import {
   getUpcomingTransitTiming,
   getWalkingInstruction,
   hasArrivedAtDestination,
+  isActiveFinishMode,
   shouldAlertForApproachingStop,
   shouldAlertForBoarding
 } from '../../../lib/util/go-mode/progress-calculator'
@@ -606,6 +608,122 @@ describe('util > go-mode > progress-calculator', () => {
       expect(hasArrivedAtDestination(99, undefined)).toBe(false)
       expect(hasArrivedAtDestination(99, NaN)).toBe(false)
       expect(hasArrivedAtDestination(99, Infinity)).toBe(false)
+    })
+
+    /**
+     * 12.17 (rider's answer 2026-10-20, Q3 = B): on a bike or walking last
+     * leg, "Arrived" waits until the rider is within 40 m. The 2026-10-19
+     * 17:49:06 arrival was 72.4 m out on a bike, overall 99.93 %, final leg
+     * 99.42 % — the distance branch at 75 m. The minute-within-75 m rule
+     * (Q4) lives in util/go-mode/arrival-dwell and is tested there.
+     */
+    describe('on a bike or walking finish (12.17)', () => {
+      it('is 40 m, and only bikes and feet', () => {
+        expect(ARRIVAL_RADIUS_ACTIVE_M).toBe(40)
+        expect(isActiveFinishMode('BICYCLE')).toBe(true)
+        expect(isActiveFinishMode('WALK')).toBe(true)
+        expect(isActiveFinishMode('BUS')).toBe(false)
+        expect(isActiveFinishMode('TRAM')).toBe(false)
+        expect(isActiveFinishMode(null)).toBe(false)
+        expect(isActiveFinishMode(undefined)).toBe(false)
+      })
+
+      it('41 m on a BICYCLE finish is not arrived', () => {
+        expect(hasArrivedAtDestination(96.9, 41, null, 'BICYCLE')).toBe(false)
+      })
+
+      it('40 m on a WALK finish is arrived', () => {
+        expect(hasArrivedAtDestination(96.9, 40, null, 'WALK')).toBe(true)
+      })
+
+      it('the 10-19 ride itself: 72.4 m on the bike is not arrived', () => {
+        expect(hasArrivedAtDestination(99.93, 72.4, 99.42, 'BICYCLE')).toBe(
+          false
+        )
+      })
+
+      it('72.4 m off a BUS is still arrived — 75 m everywhere else', () => {
+        expect(hasArrivedAtDestination(96.9, 72.4, null, 'BUS')).toBe(true)
+        expect(hasArrivedAtDestination(96.9, 72.4, null)).toBe(true)
+        expect(hasArrivedAtDestination(96.9, 72.4)).toBe(true)
+      })
+
+      it('60 m on a BICYCLE refuses the 99.5 % shortcut too', () => {
+        expect(hasArrivedAtDestination(99.6, 60, 99.6, 'BICYCLE')).toBe(false)
+        expect(hasArrivedAtDestination(99.6, 60, null, 'BICYCLE')).toBe(false)
+        // ...which a bus finish keeps.
+        expect(hasArrivedAtDestination(99.6, 60, 99.6, 'BUS')).toBe(true)
+      })
+
+      it('an unknown distance leaves the 99.5 % rule as it was', () => {
+        expect(hasArrivedAtDestination(99.5, null, null, 'BICYCLE')).toBe(true)
+        expect(hasArrivedAtDestination(99.5, undefined, 99.5, 'WALK')).toBe(
+          true
+        )
+        expect(hasArrivedAtDestination(99.4, null, null, 'BICYCLE')).toBe(false)
+      })
+
+      it('the progress floor still applies inside 40 m', () => {
+        expect(
+          hasArrivedAtDestination(ARRIVAL_MIN_PROGRESS - 0.1, 5, null, 'WALK')
+        ).toBe(false)
+      })
+
+      it('determineTripStatus and calculateTripProgress carry the mode', () => {
+        expect(
+          determineTripStatus(
+            null,
+            99,
+            96.9,
+            41,
+            false,
+            null,
+            false,
+            false,
+            'BICYCLE'
+          )
+        ).toBe('deviated')
+        expect(
+          determineTripStatus(null, 99, 96.9, 41, false, null, false, false)
+        ).toBe('completed')
+
+        const DEST: [number, number] = [44.9, -93.2]
+        const legs = [
+          {
+            distance: 1000,
+            duration: 300,
+            endTime: 300_000,
+            from: { lat: 44.89, lon: -93.2, name: 'A' },
+            legGeometry: { points: encode([[44.89, -93.2], DEST]) },
+            mode: 'BICYCLE',
+            startTime: 0,
+            to: { lat: DEST[0], lon: DEST[1], name: 'B' }
+          }
+        ]
+        const progress = calculateTripProgress(
+          new Date(290_000),
+          { endTime: 300_000, legs, startTime: 0 } as any,
+          {
+            distanceFromRoute: 0,
+            isOnRoute: true,
+            legIndex: 0,
+            nearestPoint: [44.8995, -93.2],
+            progressAlongLeg: 0.95,
+            segmentIndex: 0
+          } as any,
+          null,
+          undefined,
+          null,
+          null,
+          null,
+          // ~55.6 m short of the door: inside 75, outside 40.
+          [44.8995, -93.2]
+        )
+        expect(progress.finalLegMode).toBe('BICYCLE')
+        expect(progress.distanceToDestination).toBeGreaterThan(40)
+        expect(progress.distanceToDestination).toBeLessThan(75)
+        expect(progress.status).not.toBe('completed')
+      })
     })
   })
 

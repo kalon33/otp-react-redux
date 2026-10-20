@@ -107,6 +107,13 @@ export const DESTINATION_STALL_REPLANS = 3
  * 114.4 m of accuracy. 30 m would sit inside that scatter. A radius the app
  * already treats as "there" cannot be a distance that proves a rider went
  * somewhere.
+ *
+ * Deliberately NOT moved to 40 m when a bike or walking finish began needing
+ * ARRIVAL_RADIUS_ACTIVE_M to arrive (2026-10-20, 12.17). The reason for the
+ * number is the GPS scatter above — 32.4 m between fixes of a rider standing
+ * still — not the arrival radius, and 40 m would sit right on top of it. 75 m
+ * is still the radius within which the app counts the rider as there, on the
+ * one-minute dwell.
  */
 export const DESTINATION_REPLAN_MOTION_MIN_M = 75
 

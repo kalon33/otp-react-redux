@@ -30,6 +30,7 @@ import {
   SET_LEG_TURN_CUES,
   SET_LIVE_LEG_TIMES,
   SET_MAP_FOLLOW,
+  SET_NEAR_DESTINATION,
   SET_NOTIFICATION_CONFIG,
   SET_ONBOARD_CONFIRMING,
   SET_ONBOARD_RESULT,
@@ -84,6 +85,7 @@ import type {
   NearbyVehicleOption,
   VehicleMatchResult
 } from '../util/go-mode/vehicle-matching'
+import type { NearDestination } from '../util/go-mode/arrival-dwell'
 import type { NotificationEvent } from '../util/go-mode/notification-service'
 import type { OnboardStop } from '../util/go-mode/onboard-stops'
 import type {
@@ -390,6 +392,15 @@ export interface GoModeState {
 
   multiStop: MultiStopPlan | null
 
+  /**
+   * When the rider came within ARRIVAL_RADIUS_M of a bike or walking finish,
+   * and which destination that was — the one-minute dwell that arrives a
+   * rider who never reads inside 40 m (backlog 12.17; util/go-mode/
+   * arrival-dwell). Null when not near. Saved with the session, like
+   * `arrivedAt`, so a relaunch at the door does not restart the minute.
+   */
+  nearDestination: NearDestination | null
+
   notifications: {
     enabled: boolean
     recentNotifications: NotificationEvent[]
@@ -574,6 +585,9 @@ const defaultState: GoModeState = {
   isActive: false,
   liveLegTimes: {},
   multiStop: null,
+
+  nearDestination: null,
+
   notifications: {
     enabled: true,
     recentNotifications: [],
@@ -995,9 +1009,13 @@ const goMode = handleActions<GoModeState, any>(
     [SET_ARRIVED]: (state, action) => ({
       ...state,
       arrivedAt: action.payload,
+
       // The arrival tick dispatches UPDATE_PROGRESS before it dispatches this,
       // so `state.progress.delay` here IS the measurement taken at arrival.
-      arrivedDelay: state.progress?.delay ?? null
+      arrivedDelay: state.progress?.delay ?? null,
+
+      // The dwell has done its job, or the distance did it first (12.17).
+      nearDestination: null
     }),
 
     [SET_BOARDING_SEARCH_FAILED]: (state, action) => ({
@@ -1111,6 +1129,11 @@ const goMode = handleActions<GoModeState, any>(
         ...state.ui,
         mapFollowUser: !!action.payload
       }
+    }),
+
+    [SET_NEAR_DESTINATION]: (state, action) => ({
+      ...state,
+      nearDestination: action.payload ?? null
     }),
 
     [SET_NOTIFICATION_CONFIG]: (state, action) => {
@@ -1328,6 +1351,7 @@ const goMode = handleActions<GoModeState, any>(
         activeItinerary: itinerary,
         arrivedAt: null,
         arrivedDelay: null,
+
         // The departure pick belonged to the plan that has just been replaced
         // (12.14). A mid-trip auto-update IS a START_GO_MODE, so an override
         // chosen against the pre-swap itinerary used to survive onto one that
@@ -1343,15 +1367,27 @@ const goMode = handleActions<GoModeState, any>(
         // rider's standing rule. The session flags that would otherwise keep a
         // dead boarding's lock alive are reset alongside it, in beginGoMode.
         departureOverride: null,
+
         departureOverrideSource: null,
+
         departureOverrideTripId: null,
+
         // Compared with the plan that has just been replaced (56.1).
         fasterRoute: null,
+
         isActive: true,
+
         liveLegTimes: {},
+
         // Same rule as roundTrip below: beginGoMode passes the plan back in
         // for a swap within the same segment; absent clears it.
         multiStop: multiStop ?? null,
+
+        // ...and kept across a swap, which a quiet re-plan at the door is: the
+        // minute belongs to a destination, not to a plan, and the tick and the
+        // timer both re-check it against the new plan's own `to` (12.17). A
+        // fresh start begins with none.
+        nearDestination: restart ? null : state.nearDestination ?? null,
         notifications: {
           ...state.notifications,
           recentNotifications: [],

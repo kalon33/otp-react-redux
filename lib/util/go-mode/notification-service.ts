@@ -2122,7 +2122,8 @@ export function checkDelayAlert(
     hasArrivedAtDestination(
       progress.overallProgress,
       progress.distanceToDestination,
-      progress.finalLegProgress
+      progress.finalLegProgress,
+      progress.finalLegMode
     )
   ) {
     return null
@@ -2216,7 +2217,8 @@ export function checkTripComplete(
     hasArrivedAtDestination(
       progress.overallProgress,
       progress.distanceToDestination,
-      progress.finalLegProgress
+      progress.finalLegProgress,
+      progress.finalLegMode
     )
   ) {
     const id = generateNotificationId('TRIP_COMPLETE', 'trip_end')
