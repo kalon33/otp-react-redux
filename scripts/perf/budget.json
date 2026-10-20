@@ -1,0 +1,11 @@
+{
+  "tapToPaintP95Ms": 100,
+  "goModeSteadyLongTaskMaxMs": 200,
+  "perTickWorkP95Ms": 50,
+  "anyLongTaskMaxMs": 500,
+  "routingResponseAllowance": {
+    "minSearchItineraries": 25,
+    "maxLongTaskMs": 1000,
+    "perResponse": 1
+  }
+}
