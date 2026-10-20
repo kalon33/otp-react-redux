@@ -769,6 +769,106 @@ export async function settleCandidatePlans<T>(
   return results
 }
 
+/**
+ * How the aboard faster-route check paces its plans (56.1, 2026-10-19). Every
+ * get-off check on ride `mvfqu4i0-yd2epd` sent 7-8 onward plans at once
+ * (40 itineraries, 3600 s window each) and 3-7 of them hit the 12 s request
+ * deadline every time, the planned stop among them at 16:07, 16:19, 16:25,
+ * 16:49, 16:55 and 17:00 — so the check had no baseline and said nothing. The
+ * server, not the phone: in the OTP container's GC log each of those 12 s
+ * windows holds one or two Full GC pauses of ~2 s (2560 MB heap full, 23 Full
+ * GCs 16:05-17:01, every one inside a burst), on a 2-vCPU box. The same plans
+ * asked alone took 1.4-2.0 s; two at a time 1.6 / 3.0 s wall, no Full GC.
+ *
+ * So the plan the comparison cannot do without goes first, alone, and the rest
+ * follow at most ABOARD_CHECK_MAX_CONCURRENT at a time. Nobody is watching a
+ * background check, so trading ~10 s of wall time for answers is free.
+ */
+export const ABOARD_CHECK_MAX_CONCURRENT = 2
+/** Backstop over the whole paced set (vs ONBOARD_CANDIDATE_SETTLE_MS for a
+ * burst): the first plan plus four waves of two at ~2-3 s fit well inside. */
+export const ABOARD_CHECK_SETTLE_MS = 30000
+
+/**
+ * Start candidate plans in a paced order instead of all at once: `firstIndex`
+ * alone, then the rest with at most `maxConcurrent` in flight. Returns one
+ * promise per index, for settleCandidatePlans.
+ *
+ * When the first one comes back `isFailure`, the rest are never sent and
+ * resolve to `onSkip(index)`: the first is the one the caller cannot judge
+ * without (the planned stop's baseline), and seven more plans at a server that
+ * could not answer one alone is load for nothing. `stop()` keeps any plan not
+ * yet started from starting (call it once the answer has been handed off).
+ */
+export function paceCandidatePlans<T>(
+  count: number,
+  start: (index: number) => Promise<T>,
+  opts: {
+    firstIndex?: number | null
+    isFailure: (value: T) => boolean
+    maxConcurrent: number
+    onSkip: (index: number) => T
+  }
+): { plans: Array<Promise<T>>; stop: () => void } {
+  const resolvers: Array<(v: T | Promise<T>) => void> = []
+  const plans = Array.from(
+    { length: count },
+    (_, i) => new Promise<T>((resolve) => (resolvers[i] = resolve))
+  )
+  let stopped = false
+  const first =
+    opts.firstIndex != null && opts.firstIndex >= 0 && opts.firstIndex < count
+      ? opts.firstIndex
+      : null
+  const queue: number[] = []
+  for (let i = 0; i < count; i++) if (i !== first) queue.push(i)
+  const width = Math.max(1, Math.floor(opts.maxConcurrent) || 1)
+  let running = 0
+  const skipRest = () => {
+    while (queue.length) {
+      const i = queue.shift() as number
+      resolvers[i](opts.onSkip(i))
+    }
+  }
+  const run = (i: number): Promise<T> => {
+    let p: Promise<T>
+    try {
+      p = Promise.resolve(start(i))
+    } catch (err) {
+      p = Promise.reject(err)
+    }
+    resolvers[i](p)
+    return p
+  }
+  const pump = () => {
+    if (stopped) return skipRest()
+    while (running < width && queue.length) {
+      const i = queue.shift() as number
+      running++
+      const done = () => {
+        running--
+        pump()
+      }
+      run(i).then(done, done)
+    }
+  }
+  if (first == null) {
+    pump()
+  } else {
+    run(first).then(
+      (value) => (opts.isFailure(value) ? skipRest() : pump()),
+      () => skipRest()
+    )
+  }
+  return {
+    plans,
+    stop: () => {
+      stopped = true
+      skipRest()
+    }
+  }
+}
+
 /** The chosen best stop to get off, with its remaining-journey itinerary. */
 export interface AlightOption {
   /**

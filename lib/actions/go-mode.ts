@@ -8,6 +8,8 @@ import polyline from '@mapbox/polyline'
 import type { Itinerary, LatLngArray, Leg } from '@opentripplanner/types'
 
 import {
+  ABOARD_CHECK_MAX_CONCURRENT,
+  ABOARD_CHECK_SETTLE_MS,
   builtAlightStop,
   findStopTimeIndex,
   getDownstreamStops,
@@ -16,6 +18,7 @@ import {
   markStaleLegTimes,
   mergeLiveTimePoint,
   ONBOARD_CANDIDATE_SETTLE_MS,
+  paceCandidatePlans,
   pickSameRouteAlight,
   rankAlightOptions,
   scoreAlightOption,
@@ -257,6 +260,7 @@ import {
   routeSetOf
 } from '../util/go-mode/faster-route'
 import type {
+  AlightOfferVerdict,
   FasterRouteInput,
   FasterRouteVerdict
 } from '../util/go-mode/faster-route'
@@ -876,6 +880,11 @@ export const PLAN_RETARGET = 'PLAN_RETARGET'
 // (riderMakesRun, 23.3 + 53.2a) and each later stop of it tried (53.2b).
 export const HELD_RUN_VERDICT = 'HELD_RUN_VERDICT'
 export const HELD_RUN_LATER_STOP = 'HELD_RUN_LATER_STOP'
+// Recording only (scalars, no reducer): what one aboard get-off check
+// concluded — `why` is compareAlightOffer's or `plan-dead:<reason>` — with how
+// many of its plans answered and whether the planned stop's did (56.1,
+// 2026-10-19: four verifies had to infer `no-baseline` from timeouts).
+export const ABOARD_CHECK_VERDICT = 'ABOARD_CHECK_VERDICT'
 /**
  * Recording only, like AUTO_REPLAN: no reducer consumes it, so it is
  * deliberately absent from create-otp-reducer's goMode delegation list, and
@@ -5356,6 +5365,10 @@ export function aboardRouteCheck() {
           onSettled: (results, downstream, at) => {
             settled = { downstream, nowMs: at, results }
           },
+          // 56.1 (2026-10-19): the planned stop's plan is the baseline — ask
+          // it alone first, then the rest two at a time. All at once, 3-7 of
+          // 7-8 plans timed out every check and the planned stop with them.
+          paced: { firstStopId: placeStopId(leg.to) ?? null },
           to,
           trip,
           // Read-only: never the onboard UI, never reRoute.
@@ -5461,7 +5474,26 @@ function settleAboardCheck(
     plannedStopId,
     results
   })
+  const recordVerdict = (why: string, v?: AlightOfferVerdict) =>
+    dispatch({
+      payload: {
+        answered: results.filter((r) => r && !r.error).length,
+        asked: results.length,
+        baselineArrival: v?.baselineArrival ?? null,
+        candidateArrival: v?.candidateArrival ?? null,
+        candidateStopId: v?.candidate?.stopId ?? null,
+        elapsedMs: Date.now() - ctx.settled.nowMs,
+        plannedAnswered: !!plannedResult && !plannedResult.error,
+        plannedStopId,
+        savingMs: v?.savingMs ?? null,
+        tMs: nowMs,
+        tripId: ctx.tripId,
+        why
+      },
+      type: ABOARD_CHECK_VERDICT
+    })
   if (dead) {
+    recordVerdict(`plan-dead:${dead}`)
     endShownAboard('plan-dead')
     return
   }
@@ -5502,6 +5534,7 @@ function settleAboardCheck(
       : null
   }
   const verdict = judge(results)
+  recordVerdict(verdict.why, verdict)
   const fresh = offerOf(verdict, `fr-${session.fasterRouteOfferSeq + 1}`)
   if (fresh) {
     if (shown?.kind === 'aboard' && shown.routeSet === fresh.routeSet) {
@@ -6663,6 +6696,15 @@ function optimizeAlightFromTrip(options: {
     downstream: DownstreamStop[],
     nowMs: number
   ) => void
+  /**
+   * Pace the plans instead of sending them all at once (56.1, 2026-10-19; see
+   * paceCandidatePlans): the stop named by `paced.firstStopId` is asked alone
+   * first and, if it fails, nothing else is asked; the rest go
+   * ABOARD_CHECK_MAX_CONCURRENT at a time under ABOARD_CHECK_SETTLE_MS. For
+   * the background aboard check only — the rider-facing chooser keeps its
+   * one burst, since someone is waiting on it.
+   */
+  paced?: { firstStopId: string | null } | null
   /** Rider-supplied routing prefs; falls back to currentQuery — see
    * onboardCandidateRoutingPreferences. */
   prefsOverride?: any
@@ -6964,17 +7006,29 @@ function optimizeAlightFromTrip(options: {
       })
     }
 
+    const askOne = (index: number): Promise<AlightCandidateResult> =>
+      Promise.resolve(dispatch(fetchCandidatePlan(candidates[index], ctx)))
+    const pacing = options.paced
+      ? paceCandidatePlans<AlightCandidateResult>(candidates.length, askOne, {
+          firstIndex: candidates.findIndex(
+            (c) => c.stop.id === options.paced?.firstStopId
+          ),
+          isFailure: (r) => !r || !!r.error,
+          maxConcurrent: ABOARD_CHECK_MAX_CONCURRENT,
+          onSkip: substitute
+        })
+      : null
     results = await settleCandidatePlans<AlightCandidateResult>(
-      candidates.map((c) =>
-        Promise.resolve(dispatch(fetchCandidatePlan(c, ctx)))
-      ),
-      settleMs,
+      pacing ? pacing.plans : candidates.map((_, i) => askOne(i)),
+      pacing ? ABOARD_CHECK_SETTLE_MS : settleMs,
       (index, reason) => {
         if (reason === 'timeout') stillInFlight.add(index)
         return substitute(index)
       },
       updateOnboardState ? foldInLateResult : undefined
     )
+    // Whatever is still queued past the backstop is not sent.
+    pacing?.stop()
 
     // What this run actually failed to answer, decided before the carry-forward
     // below hides it: a stop whose hole was filled from the previous run is
