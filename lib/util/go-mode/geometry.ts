@@ -448,3 +448,67 @@ export function firstStopAheadOnShape(
   }
   return null
 }
+
+/**
+ * How close the shape comes to `point` BEHIND and AHEAD of a position along it
+ * (`splitAlongM`, metres from the first vertex) — the two closest approaches,
+ * each searched over its own half of the shape only. Null for a half the
+ * shape does not have (the split at either end). Backlog 63.1: an added stop
+ * the bus has left behind is one the run came nearer to before the rider's
+ * position than it will after it.
+ */
+export function closestApproachEitherSide(
+  shape: Array<[number, number]> | null | undefined,
+  point: [number, number] | null | undefined,
+  splitAlongM: number
+): { aheadM: number | null; behindM: number | null } | null {
+  if (!shape?.length || !point) return null
+  if (!Number.isFinite(point[0]) || !Number.isFinite(point[1])) return null
+  if (!Number.isFinite(splitAlongM)) return null
+  if (shape.length === 1) {
+    const d = haversineDistance(shape[0], point)
+    return { aheadM: d, behindM: d }
+  }
+  const cosLat = Math.cos((point[0] * Math.PI) / 180)
+  let aheadM: number | null = null
+  let behindM: number | null = null
+  let alongToVertex = 0
+  const at = (a: [number, number], b: [number, number], t: number) =>
+    haversineDistance(
+      [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t],
+      point
+    )
+  for (let i = 0; i < shape.length - 1; i++) {
+    const a = shape[i]
+    const b = shape[i + 1]
+    const segM = haversineDistance(a, b)
+    const ax = (a[1] - point[1]) * cosLat
+    const ay = a[0] - point[0]
+    const dx = (b[1] - point[1]) * cosLat - ax
+    const dy = b[0] - point[0] - ay
+    const len2 = dx * dx + dy * dy
+    // Closest point of the whole segment; within a sub-range of it the
+    // closest is that point clamped into the range (distance is convex in t).
+    const tStar =
+      len2 > 0 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / len2)) : 0
+    // Where the split falls on this segment, as t (may be outside [0, 1]).
+    const tSplit =
+      segM > 0
+        ? (splitAlongM - alongToVertex) / segM
+        : splitAlongM >= alongToVertex
+        ? 1
+        : 0
+    if (tSplit > 0) {
+      const hi = Math.min(1, tSplit)
+      const d = at(a, b, Math.min(tStar, hi))
+      if (behindM == null || d < behindM) behindM = d
+    }
+    if (tSplit < 1) {
+      const lo = Math.max(0, tSplit)
+      const d = at(a, b, Math.max(tStar, lo))
+      if (aheadM == null || d < aheadM) aheadM = d
+    }
+    alongToVertex += segM
+  }
+  return { aheadM, behindM }
+}

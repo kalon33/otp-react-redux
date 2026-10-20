@@ -3,6 +3,7 @@ import type { Itinerary } from '@opentripplanner/types'
 
 import {
   ADD_NOTIFICATION,
+  ANSWER_ONBOARD_STOP_CHOICE,
   BEGIN_ONBOARD_FLOW,
   CLEAR_FASTER_ROUTE_OFFER,
   CLEAR_ONBOARD,
@@ -33,6 +34,7 @@ import {
   SET_ONBOARD_CONFIRMING,
   SET_ONBOARD_RESULT,
   SET_ONBOARD_STATUS,
+  SET_ONBOARD_STOP_CHOICE,
   SET_ONBOARD_TRIP,
   SET_ONBOARD_VEHICLE,
   SET_PLAN_STOP_OFFER,
@@ -69,6 +71,7 @@ import {
   ridingFactIsEvidenced,
   ridingKeptTooLong
 } from '../util/go-mode/riding'
+import { sameOnboardStop } from '../util/go-mode/onboard-stops'
 import type {
   DepartureOverrideSource,
   LiveLegTime,
@@ -82,6 +85,7 @@ import type {
   VehicleMatchResult
 } from '../util/go-mode/vehicle-matching'
 import type { NotificationEvent } from '../util/go-mode/notification-service'
+import type { OnboardStop } from '../util/go-mode/onboard-stops'
 import type {
   ReturnCountdownState,
   RoundTripPlan
@@ -201,6 +205,12 @@ export interface OnboardState {
    * cannot be re-derived later). Ranks its options up, never filters. */
   keepRouteId: string | null
   /**
+   * The rider's added stops the bus has already left behind, while the card
+   * asks "still go there, or skip it?" (63.1, 2026-10-20 Q2 = C); null when
+   * nothing is being asked. Only ever stops the rider has not answered for.
+   */
+  passedStops: OnboardStop[] | null
+  /**
    * Candidates whose onward plan was still in flight when the deadline fired,
    * so a straggler could still land and improve the list. Rejections are NOT
    * counted here — those are over. Null when unknown.
@@ -224,9 +234,26 @@ export interface OnboardState {
     | 'discovering'
     | 'awaiting-selection'
     | 'fetching-schedule'
+    /** The added-stop card, before any candidate is asked (63.1). */
+    | 'added-stop-choice'
     | 'optimizing'
     | 'ready'
     | 'error'
+  /**
+   * Where the added-stop card was put up from, so its answer resumes the
+   * right step: 'list' — the onboard flow, before the get-off list was asked
+   * for; 'confirm' — the preview's Confirm (the preview stays underneath).
+   * Null when no card is up.
+   */
+  stopChoiceFor: 'confirm' | 'list' | null
+  /**
+   * The search's added stops this flow is taking the rider through, with
+   * their stays (63.1), captured at BEGIN_ONBOARD_FLOW — a stop skipped on
+   * the card is removed, a stop kept is marked `kept`. Null when the flow was
+   * not opened by BEGIN_ONBOARD_FLOW (the mid-ride "Pick another stop" list,
+   * replanFromAboard), which leaves the live trip's own plan as it was.
+   */
+  stops: OnboardStop[] | null
   /**
    * How many candidate stops this optimize asked about — the denominator for
    * the three counts above. `candidates.length` is the same number while the
@@ -563,10 +590,13 @@ const defaultState: GoModeState = {
     confirmingAtMs: null,
     failedCandidates: null,
     keepRouteId: null,
+    passedStops: null,
     pendingCandidates: null,
     preview: null,
     resultAtMs: null,
     status: 'idle',
+    stopChoiceFor: null,
+    stops: null,
     totalCandidates: null,
     trip: null,
     vehicle: null
@@ -729,6 +759,34 @@ const goMode = handleActions<GoModeState, any>(
       }
     },
 
+    // The rider's answer (63.1): "Still go to …" marks the stops kept —
+    // never asked again this flow; "Skip" takes them out of this trip's stops
+    // only (the search keeps them). From the flow, what follows is the list's
+    // own search, so the status says so straight away.
+    [ANSWER_ONBOARD_STOP_CHOICE]: (state, action) => {
+      const passed = state.onboard.passedStops
+      if (!passed?.length) return state
+      const keep = !!action.payload?.keep
+      const isPassed = (s: OnboardStop) =>
+        passed.some((p) => sameOnboardStop(p, s))
+      const stops = (state.onboard.stops || []).flatMap((s) =>
+        !isPassed(s) ? [s] : keep ? [{ ...s, kept: true }] : []
+      )
+      return {
+        ...state,
+        onboard: {
+          ...state.onboard,
+          passedStops: null,
+          status:
+            state.onboard.stopChoiceFor === 'list'
+              ? ('optimizing' as const)
+              : state.onboard.status,
+          stopChoiceFor: null,
+          stops
+        }
+      }
+    },
+
     [BEGIN_ONBOARD_FLOW]: (state, action) => ({
       ...state,
       activeItinerary: null,
@@ -737,7 +795,10 @@ const goMode = handleActions<GoModeState, any>(
       onboard: {
         ...defaultState.onboard,
         keepRouteId: action.payload?.keepRouteId ?? null,
-        status: 'discovering' as const
+        status: 'discovering' as const,
+        // The search's added stops (63.1) — read by beginOnboardFlow before
+        // this, off the query the rider searched with.
+        stops: action.payload?.stops ?? []
       },
       originalFrom: action.payload?.originalFrom ?? null,
       progress: null,
@@ -805,6 +866,11 @@ const goMode = handleActions<GoModeState, any>(
         // Back drops a Confirm still re-checking (64.1): its answer is for a
         // preview the rider has left.
         confirmingAtMs: null,
+        // ...and the added-stop card that Confirm put up (63.1), for the same
+        // reason. The stop stays undecided; the next Confirm asks again.
+        ...(state.onboard.stopChoiceFor === 'confirm'
+          ? { passedStops: null, stopChoiceFor: null }
+          : null),
         preview: null
       }
     }),
@@ -1104,6 +1170,27 @@ const goMode = handleActions<GoModeState, any>(
         status: action.payload
       }
     }),
+
+    // The added-stop card goes up (63.1). From the flow ('list') it is the
+    // whole screen until answered; from the Confirm it stands over the
+    // preview, which is kept.
+    [SET_ONBOARD_STOP_CHOICE]: (state, action) => {
+      const passed: OnboardStop[] = action.payload?.passedStops || []
+      if (!passed.length) return state
+      const stopChoiceFor = action.payload?.stopChoiceFor ?? 'list'
+      return {
+        ...state,
+        onboard: {
+          ...state.onboard,
+          passedStops: passed,
+          status:
+            stopChoiceFor === 'list'
+              ? ('added-stop-choice' as const)
+              : state.onboard.status,
+          stopChoiceFor
+        }
+      }
+    },
 
     [SET_ONBOARD_TRIP]: (state, action) => ({
       ...state,
