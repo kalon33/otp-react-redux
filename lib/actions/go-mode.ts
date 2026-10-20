@@ -40,6 +40,7 @@ import {
   ACCESS_BOARD_MIN_SPEED_MPS,
   BOARD_AUTO_CONFIRM_MIN_CONSECUTIVE,
   decideRiding,
+  onboardConfirmRidingFact,
   riderStopOnLeg,
   ridingFactIsEvidenced,
   ridingFactStaleReason,
@@ -6323,6 +6324,7 @@ function goStraightToPlannedStop(planned: Itinerary) {
         `straight to ${alight.stopName ?? alight.stopId}`
     )
     dispatch(clearOnboard())
+    writeOnboardRidingFact(dispatch, getState, trip, vehicle, spliced)
     dispatch(beginGoMode(spliced))
     reconfirmBoardedVehicle(dispatch, vehicle)
     // After beginGoMode's START_GO_MODE, which clears the offer.
@@ -7475,6 +7477,31 @@ function reconfirmBoardedVehicle(dispatch: any, vehicle: any) {
 }
 
 /**
+ * Write the riding fact for the bus an onboard Confirm has just committed to
+ * (64.3) — before beginGoMode, so START_GO_MODE carries THIS fact, not
+ * whatever an earlier trip left in the store. See onboardConfirmRidingFact
+ * for the 2026-10-20 08:32 ride that had none. Shared by
+ * confirmOnboardAlightStop and goStraightToPlannedStop, the two doors from
+ * the onboard flow into a live trip.
+ */
+function writeOnboardRidingFact(
+  dispatch: any,
+  getState: any,
+  trip: any,
+  vehicle: any,
+  itinerary: Itinerary
+) {
+  const fact = onboardConfirmRidingFact({
+    legs: itinerary?.legs as Leg[],
+    nowMs: getCurrentTime().getTime(),
+    prior: getState().otp?.goMode?.riding ?? null,
+    trip,
+    vehicle
+  })
+  if (fact) dispatch(setRiding(fact))
+}
+
+/**
  * Commit to the recommended alight stop: synthesize the full itinerary and hand
  * off into live Go Mode tracking, keeping the same bus confirmed as the vehicle.
  *
@@ -7516,6 +7543,7 @@ export function confirmOnboardAlightStop(option?: any) {
     )
 
     dispatch(clearOnboard())
+    writeOnboardRidingFact(dispatch, getState, trip, vehicle, itinerary)
     dispatch(beginGoMode(itinerary))
 
     // beginGoMode resets the vehicle match; re-confirm this bus so tracking

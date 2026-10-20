@@ -404,6 +404,84 @@ export function ridingFactIsCurrent(
 }
 
 /**
+ * ─── The fact an onboard Confirm writes (backlog 64.3) ──────────────────────
+ *
+ * "I'm on the bus" → pick a stop → Confirm is the rider telling us, in so many
+ * words, which bus they are on. Until 64.3 nothing wrote that down: the
+ * Confirm dispatched `CONFIRM_VEHICLE` only, and the trip ran on whatever
+ * riding fact happened to be in the store.
+ *
+ * On 2026-10-20 08:32:53 (session `mvgplnrw-yvtqga`) that was ride 1's fact
+ * for the very same bus, 8222 — stamped `offRouteSince` 08:19:32.418 by ride
+ * 1's first tick and kept across a Stop and a fresh "I'm on the bus" (the
+ * onboard flow keeps Go Mode `isActive`, so START_GO_MODE carries the fact
+ * on its non-restart path, `offRouteSince` and all). The first tick of the new
+ * trip found it 13 minutes "off route" against the 90 s clock and dropped it
+ * 21 ms after START_GO_MODE: a rider aboard at 14–16 m/s read `deviated`,
+ * `waitingAtBoardingStop: true`, within 0.7 s.
+ *
+ * So the Confirm writes the fact fresh, for the vehicle and trip it confirms:
+ * no off-route clock, not kept (the trip is live again), anchored on the leg
+ * that rides this trip. The board time is the one thing kept — when the old
+ * fact named the SAME trip it is the same boarding, so "boarded at" must not
+ * jump to now (the 47.1 item (7) rule).
+ *
+ * Returns null when the trip cannot be named; nothing is written then and the
+ * old behaviour stands.
+ */
+export function onboardConfirmRidingFact(input: {
+  legs: Leg[] | null | undefined
+  nowMs: number
+  prior: RidingState | null | undefined
+  trip:
+    | {
+        gtfsId?: string | null
+        id?: string | null
+        route?: { gtfsId?: string | null; id?: string | null } | null
+        tripHeadsign?: string | null
+      }
+    | null
+    | undefined
+  vehicle:
+    | {
+        routeId?: string | null
+        tripId?: string | null
+        vehicleId?: string | null
+      }
+    | null
+    | undefined
+}): RidingState | null {
+  const { legs, nowMs, prior, trip, vehicle } = input
+  const tripId = trip?.id ?? trip?.gtfsId ?? vehicle?.tripId ?? null
+  if (!tripId) return null
+  const same = prior?.tripId === tripId ? prior : null
+  const routeId =
+    vehicle?.routeId ??
+    trip?.route?.id ??
+    trip?.route?.gtfsId ??
+    same?.routeId ??
+    null
+  const fact: RidingState = {
+    boardedAt:
+      typeof same?.boardedAt === 'number' && Number.isFinite(same.boardedAt)
+        ? same.boardedAt
+        : nowMs,
+    headsign: trip?.tripHeadsign ?? same?.headsign ?? null,
+    keptAtMs: null,
+    legIndex: -1,
+    offRouteSince: null,
+    routeId,
+    routeShortName: same?.routeShortName ?? null,
+    tripId,
+    vehicleId:
+      vehicle?.vehicleId ??
+      same?.vehicleId ??
+      (routeId ? `route:${routeId}` : null)
+  }
+  return { ...fact, legIndex: ridingTransitLegIndex(legs, fact) }
+}
+
+/**
  * ─── Getting off early, at a stop that is still on the route (backlog 8.11) ──
  *
  * The rider, 2026-08-27: *"I got off early for a transfer. It did not detect
