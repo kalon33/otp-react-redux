@@ -753,6 +753,7 @@ components:
     finding: Finding the next ride…
     headerStop: To {destination} · stop {number} of {total}
     leaveAt: leave {time}
+    missesBy: misses by {minutes} min
     noStay: No stay
     plannedStay: Planned stay until {time}
     stayGroupLabel: Minimum time at {stop}

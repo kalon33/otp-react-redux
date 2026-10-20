@@ -146,6 +146,10 @@ export function buildLiveItinerary(
     const board = legBoard(i, leg, liveLegTimes)
     const alight = legAlight(i, leg, liveLegTimes)
     const next: any = { ...leg }
+    // leg.realTime is an either-end flag; a transfer row needs to know
+    // whether the ARRIVAL itself is live (61.1).
+    // A leg with no live entry keeps OTP's own flag (markTransfers falls back).
+    if (liveLegTimes[i]?.alightEpoch) next.alightRealtime = !!alight.realtime
 
     // The delay fields must always end up numeric: the time column computes
     // `time - delay * 1000` to show the scheduled time struck through, and an
