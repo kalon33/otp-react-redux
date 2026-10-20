@@ -575,6 +575,53 @@ describe('aboard faster-route offer (56.1, cycle 25 B4)', () => {
     ).toEqual(['offered', 'kept'])
   })
 
+  describe('paced plans (56.1, 2026-10-19: the planned stop timed out in the burst)', () => {
+    it('asks the planned stop first and alone, then the rest, and still offers', async () => {
+      answers = { 5: [fourteenFrom5()], 7: [plannedFrom7()] }
+      let inFlight = 0
+      let peak = 0
+      let firstAlone = false
+      mockedFetch.mockImplementation((combo: any) => () => {
+        inFlight++
+        peak = Math.max(peak, inFlight)
+        if (asked.length === 0) firstAlone = inFlight === 1
+        return new Promise((resolve) =>
+          setTimeout(() => {
+            inFlight--
+            resolve(answerFor(combo))
+          }, 5)
+        )
+      })
+      store = makeStore()
+      await store.run(aboardRouteCheck())
+      expect(asked[0]).toBe(stopName(7))
+      expect(firstAlone).toBe(true)
+      expect(asked.length).toBeGreaterThan(2)
+      expect(peak).toBeLessThanOrEqual(2)
+      expect(store.goMode().fasterRoute?.aboard?.stopId).toBe(stopId(5))
+      const [rec] = store.of('ABOARD_CHECK_VERDICT')
+      expect(rec.payload).toMatchObject({
+        plannedAnswered: true,
+        plannedStopId: stopId(7),
+        why: 'offer'
+      })
+    })
+
+    it('when the planned stop fails, nothing else is asked and the verdict says no-baseline', async () => {
+      answers = { 5: [fourteenFrom5()] }
+      store = makeStore()
+      await store.run(aboardRouteCheck())
+      expect(asked).toEqual([stopName(7)])
+      expect(store.goMode().fasterRoute).toBeNull()
+      const [rec] = store.of('ABOARD_CHECK_VERDICT')
+      expect(rec.payload).toMatchObject({
+        answered: 0,
+        plannedAnswered: false,
+        why: 'no-baseline'
+      })
+    })
+  })
+
   describe('plan-dead: no offer against a connection already lost', () => {
     it('the bus reaches the planned stop too late for the planned onward bus', async () => {
       // The 901 now leaves at +8.5: the bus is at stop 7 at +9, then a 1-min
