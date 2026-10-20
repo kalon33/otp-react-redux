@@ -642,6 +642,7 @@ components:
     itineraryDetails: Détails du trajet
   LegFrequency:
     every: "Toutes les {minutes} min, prochain {time}"
+    everyBoarded: "Toutes les {minutes} min"
     nextOne: "Prochain {time}"
     nextTwo: "Prochains {first}, {second}"
     noneBefore: "Aucun autre passage avant {time}"

@@ -28,15 +28,27 @@ const Time = ({ ms }: { ms: number }) => (
 
 /** The copy for one line (ids `components.LegFrequency.*`). */
 export const LegFrequencyText = ({
+  boarded = false,
   line,
   renderTime = (ms: number) => <Time ms={ms} />
 }: {
+  /** The rider is on (or past) this leg: no "next {time}" (61.1). */
+  boarded?: boolean
   line: LegFrequencyLine
   /** How a time renders: the planner's FormattedTime by default. */
   renderTime?: (ms: number, live: boolean) => React.ReactNode
 }): JSX.Element => {
   switch (line.kind) {
     case 'every':
+      if (boarded) {
+        return (
+          <FormattedMessage
+            defaultMessage="Every {minutes} min"
+            id="components.LegFrequency.everyBoarded"
+            values={{ minutes: line.minutes }}
+          />
+        )
+      }
       return (
         <FormattedMessage
           defaultMessage="Every {minutes} min, next {time}"
@@ -86,16 +98,17 @@ export const LegFrequencyText = ({
  */
 const LegFrequencyFooter = ({ leg }: { leg: Leg }): JSX.Element | null => {
   const dispatch = useDispatch()
+  const boarded = !!(leg as Leg & { goModeBoarded?: boolean }).goModeBoarded
   const question = legFrequencyQuestion(leg)
   const key = question?.key
   const entry: LegFrequencyEntry | undefined = useSelector((state: any) =>
     key ? state.otp?.legFrequency?.[key] : undefined
   )
   useEffect(() => {
-    if (key) dispatch(fetchLegFrequency(leg))
+    if (key && !boarded) dispatch(fetchLegFrequency(leg))
     // The question's key is what identifies the request.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, dispatch])
+  }, [key, boarded, dispatch])
 
   if (!question || entry?.status !== 'done') return null
   const line = describeLegFrequency({
@@ -107,7 +120,7 @@ const LegFrequencyFooter = ({ leg }: { leg: Leg }): JSX.Element | null => {
   if (!line) return null
   return (
     <FooterLine className="leg-frequency" data-testid="leg-frequency">
-      <LegFrequencyText line={line} />
+      <LegFrequencyText boarded={boarded} line={line} />
     </FooterLine>
   )
 }
