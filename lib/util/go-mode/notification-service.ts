@@ -2142,6 +2142,13 @@ export function checkDelayAlert(
   // no longer do anything about is noise.
   if ((progress.currentLegProgress ?? 0) >= 99) return null
 
+  // Off the route is not on the bus. The matcher slides leg progress BACK while
+  // the rider walks away (100 -> 97 -> 88 on 2026-10-19), which defeats the
+  // guard above, yet `delay` is still wall clock minus the leg's schedule: the
+  // rider was told "8 min late" about a Gold Line they had left (backlog 64.2).
+  // A rider aboard a detouring bus is not `deviated` (47.1), so keeps theirs.
+  if (progress.status === 'deviated') return null
+
   const delaySeconds = progress.delay ?? 0
   if (delaySeconds < DELAY_ALERT_THRESHOLD_SECONDS) return null
 

@@ -1242,6 +1242,28 @@ describe('util > go-mode > notification-service', () => {
       expect(checkDelayAlert(progress, transitLeg, recent)).toBeNull()
     })
 
+    it('should return null while the rider is deviated (off the route, not on this bus)', () => {
+      // 64.2: leg progress slid back below 99 as the rider walked away, so the
+      // progress guard no longer held; `delay` is still wall-clock lateness.
+      const progress = makeProgress({
+        currentLegIndex: 0,
+        currentLegProgress: 88,
+        delay: 450,
+        status: 'deviated'
+      })
+      expect(checkDelayAlert(progress, transitLeg, [])).toBeNull()
+    })
+
+    it('should still alert when the same lateness is not deviated (aboard a detour, 47.1)', () => {
+      const progress = makeProgress({
+        currentLegIndex: 0,
+        currentLegProgress: 88,
+        delay: 450,
+        status: 'behind'
+      })
+      expect(checkDelayAlert(progress, transitLeg, [])).not.toBeNull()
+    })
+
     it('should re-alert when lateness escalates', () => {
       // Previously alerted at 4 min; now 10 min late.
       const progress = makeProgress({ currentLegIndex: 0, delay: 600 })
