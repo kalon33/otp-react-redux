@@ -135,10 +135,21 @@ describe('LegFrequencyFooter', () => {
     expect(text(wrapper)).not.toMatch(/next/i)
   })
 
-  it('asks for nothing for a ridden leg', async () => {
-    mountFooter(undefined, { ...busLeg, goModeBoarded: true })
+  it('a ridden leg still looks up its runs and renders "Every N min" with no next', async () => {
+    const { store } = mountFooter(undefined, { ...busLeg, goModeBoarded: true })
     await new Promise((resolve) => setTimeout(resolve, 0))
-    expect(g.__queries).toHaveLength(0)
+    expect(g.__queries).toHaveLength(1)
+    expect(store.getActions()[0]).toMatchObject({ type: 'LEG_FREQUENCY' })
+    const { wrapper } = mountFooter(
+      {
+        fetchedAt: 0,
+        runs: [run(0, false, '1:ridden'), run(10, true), run(20), run(30)],
+        status: 'done',
+        windowEndMs: BOARD + 120 * MIN
+      },
+      { ...busLeg, goModeBoarded: true }
+    )
+    expect(text(wrapper)).toBe('Every 10 min')
   })
 
   it('irregular: "Next 11:28 AM, 11:55 AM"', () => {

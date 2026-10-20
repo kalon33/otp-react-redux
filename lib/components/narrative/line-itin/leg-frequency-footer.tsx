@@ -105,10 +105,10 @@ const LegFrequencyFooter = ({ leg }: { leg: Leg }): JSX.Element | null => {
     key ? state.otp?.legFrequency?.[key] : undefined
   )
   useEffect(() => {
-    if (key && !boarded) dispatch(fetchLegFrequency(leg))
+    if (key) dispatch(fetchLegFrequency(leg))
     // The question's key is what identifies the request.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, boarded, dispatch])
+  }, [key, dispatch])
 
   if (!question || entry?.status !== 'done') return null
   const line = describeLegFrequency({
