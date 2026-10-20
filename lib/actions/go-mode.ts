@@ -9634,6 +9634,7 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         nowMs: nowForRiding,
         offRouteClearMs: RIDING_OFFROUTE_CLEAR_MS,
         prevRiding: ridingNow,
+        riderHeadingDeg: position.coords.heading ?? null,
         riderSpeedMps: position.coords.speed ?? null,
         ridingCorridor,
         routeMatch,
