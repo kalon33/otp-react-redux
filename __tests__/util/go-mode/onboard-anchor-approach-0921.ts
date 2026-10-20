@@ -1,4 +1,7 @@
-/* globals describe, expect, it */
+/* globals describe, expect, it, jest */
+import '../../test-utils/mock-window-url'
+
+import * as vehicleCompany from '../../../lib/util/go-mode/vehicle-company'
 import {
   aboardBeforeLegStart,
   PRE_LEG_PROGRESS_MAX,
@@ -9,8 +12,29 @@ import {
   determineTripStatus
 } from '../../../lib/util/go-mode/progress-calculator'
 import { checkRouteDeviation } from '../../../lib/util/go-mode/notification-service'
+import {
+  hhmmss as clockOf,
+  confirmAndReplay
+} from '../../test-utils/onboard-confirm-replay'
 import { matchPositionToRoute } from '../../../lib/util/go-mode/position-matching'
 import type { RidingState } from '../../../lib/util/go-mode/types'
+
+/** Same stub as detour-riding-hold-1012.ts: the full-tick block runs the tick. */
+jest.mock('@opentripplanner/core-utils', () => {
+  const actual = jest.requireActual('@opentripplanner/core-utils')
+  const { parse } = jest.requireActual('graphql')
+  const stub = parse('query Plan { plan { itineraries { duration } } }')
+  const core = actual.default || actual
+  const patched = {
+    ...core,
+    queryGen: {
+      ...core.queryGen,
+      generateOtp2Query: (params: unknown) =>
+        core.queryGen.generateOtp2Query(params, stub)
+    }
+  }
+  return { ...actual, __esModule: true, default: patched }
+})
 
 /**
  * 2026-09-21 ride 2, session `mubbbiy9-6zjoq9` — backlog 22.1.
@@ -303,4 +327,126 @@ describe('util > go-mode > what the exemption refuses', () => {
     // Arrival still wins over everything, exemption or not.
     expect(determineTripStatus(offRoute, 10, 99, 5, true)).toBe('completed')
   })
+})
+
+/**
+ * Cycle 33, measure-first (2026-10-20). Everything above feeds the exemption a
+ * FIXED riding fact and never runs `decideRiding`, so it cannot say whether
+ * the fact itself lives through the approach. On the phone it did not: the
+ * 09:24:21.334 tick stamped `offRouteSince` and `CLEAR_RIDING` landed at
+ * 09:25:52.081 (debug-2026-09-21.jsonl) — the 90 s clock, with the rider in
+ * 8228 the whole time. The exemption only gates status, card and map; the
+ * plan's question is whether today's holds (`ridingCorridor`, 47.1's
+ * `heldByVehicle`) keep a fresh fact alive through the same 116 s, or whether
+ * `decideRiding` needs the exemption as a third hold.
+ *
+ * Replayed through the REAL store and tick: the Confirm at 09:24:21.320 is
+ * the rider's own (onboard-preview-confirm, 98th St), committed by
+ * confirmOnboardAlightStop over the fact the 09:23:58 discovery wrote, so the
+ * riding fact is exactly the one 64.3's Confirm writes.
+ */
+const CONFIRM_MS = 1790000661320
+
+describe('22.1 — the fresh fact through the approach, full tick', () => {
+  const replayApproach = () => {
+    const result = fx.onboard.result.payload
+    return confirmAndReplay(
+      fx,
+      {
+        confirmAtMs: CONFIRM_MS,
+        // SET_RIDING 09:23:58.606 — the onboard discovery's fact.
+        kept: {
+          boardedAt: 1790000638606,
+          headsign: 'ORANGE Burnsville',
+          legIndex: -1,
+          offRouteSince: null,
+          routeId: '1:904',
+          routeShortName: null,
+          tripId: '1:1268952',
+          vehicleId: '1:8228'
+        },
+        option: result.options[1],
+        options: result.options,
+        // SET_ONBOARD_VEHICLE 09:23:58.606.
+        vehicle: {
+          label: '8228',
+          nextStopId: NEXT_STOP_ID,
+          routeId: '1:904',
+          tripId: '1:1268952',
+          vehicleId: '1:8228'
+        }
+      },
+      { commit: 'confirm', windowMs: 160_000 }
+    )
+  }
+  const stampsOf = (sets: Array<{ p: any }>) => {
+    let prev: number | null = null
+    const stamps: number[] = []
+    for (const e of sets) {
+      const now = e.p?.offRouteSince ?? null
+      if (prev == null && now != null) stamps.push(now)
+      prev = now
+    }
+    return stamps
+  }
+
+  it('measures stamps and clears over the 116 s approach (and to 09:27)', async () => {
+    const r = await replayApproach()
+    expect(r.itinerary.legs[0].from.name).toBe('I-35W & 66th St Station')
+    // Off-route stamps: SET_RIDING going from a clean clock to a stamped one.
+    const stamps = stampsOf(r.sets)
+    const holds = r.events
+      .filter((e) => e.type === 'RIDING_VEHICLE_HOLD')
+      .map((e) => [clockOf(e.t), e.p?.on, e.p?.verdict])
+    expect(r.statuses.length).toBeGreaterThan(150)
+
+    // MEASURED (cycle 33): one stamp, on the first tick — the rider 2.58 km
+    // short of 66th St, exactly as on the phone (09:24:21.333)…
+    expect(stamps.map(clockOf)).toEqual(['09:24:21'])
+    // …but no CLEAR_RIDING at all, where the phone cleared at 09:25:52.
+    expect(r.clears).toEqual([])
+    // What saved it is 47.1's hold: 8228's frames put the bus with the rider,
+    // the hold engaged at 09:25:08 and reset the clock — 47 s into the 90 —
+    // and let go at 09:26:16, the tick the rider came onto the shape.
+    expect(holds).toEqual([
+      ['09:25:08', true, 'together'],
+      ['09:26:16', false, 'together']
+    ])
+    expect(Date.parse('2026-09-21T09:25:08-05:00')).toBeLessThan(
+      stamps[0] + 90_000
+    )
+    // Status read the clock's ahead/behind throughout (the cycle 1
+    // exemption, now fed by a fact that exists): never deviated.
+    expect(r.deviated).toEqual([])
+    // At 09:27 the fact is still 8228 on leg 0, clock clean.
+    expect(r.riding).toMatchObject({
+      legIndex: 0,
+      offRouteSince: null,
+      tripId: '1:1268952',
+      vehicleId: '1:8228'
+    })
+    // So: nothing more is needed in decideRiding for this ride — no third
+    // hold. The margin is the hold's: it needs 8228's feed to put the bus
+    // with the rider inside 90 s of the stamp, and here it took 47 s.
+  }, 120_000)
+
+  it('control: without the 47.1 hold the clock clears it, as on the phone', async () => {
+    // The ride itself ran before 47.1 (2026-10-12) existed. Take the hold
+    // away and the same replay drops the fact on the 90 s clock — the
+    // phone's 09:25:52 CLEAR_RIDING — so the hold is the whole difference.
+    const spy = jest
+      .spyOn(vehicleCompany, 'ridingHeldByVehicle')
+      .mockReturnValue(false)
+    try {
+      const r = await replayApproach()
+      const stamps = stampsOf(r.sets)
+      expect(stamps.map(clockOf)).toEqual(['09:24:21'])
+      expect(r.clears).toHaveLength(1)
+      expect(r.clears[0] - stamps[0]).toBeGreaterThan(90_000)
+      expect(r.clears[0] - stamps[0]).toBeLessThan(92_000)
+      expect(clockOf(r.clears[0])).toBe('09:25:52')
+    } finally {
+      spy.mockRestore()
+    }
+  }, 120_000)
 })

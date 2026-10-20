@@ -18,6 +18,7 @@ import {
   markStaleLegTimes,
   mergeLiveTimePoint,
   ONBOARD_CANDIDATE_SETTLE_MS,
+  onwardRouteOfItinerary,
   paceCandidatePlans,
   pickSameRouteAlight,
   rankAlightOptions,
@@ -40,6 +41,7 @@ import {
   ACCESS_BOARD_MIN_SPEED_MPS,
   BOARD_AUTO_CONFIRM_MIN_CONSECUTIVE,
   decideRiding,
+  onboardConfirmRidingFact,
   riderStopOnLeg,
   ridingFactIsEvidenced,
   ridingFactStaleReason,
@@ -50,6 +52,12 @@ import {
   vehiclePassedRiderStop,
   vehicleReachedBoardStop
 } from '../util/go-mode/riding'
+import {
+  onboardConfirmRecheck,
+  pickRecheckedAlight,
+  recheckChangedTrip
+} from '../util/go-mode/onboard-confirm'
+import type { OnboardConfirmCheck } from '../util/go-mode/onboard-confirm'
 import { stopOriginAboard } from '../util/go-mode/stop-origin'
 import type { EarlyAlightRecord } from '../util/go-mode/riding'
 import {
@@ -1004,6 +1012,7 @@ export const BEGIN_ONBOARD_FLOW = 'BEGIN_ONBOARD_FLOW'
 export const CLEAR_ONBOARD = 'CLEAR_ONBOARD'
 export const CLOSE_ONBOARD_PREVIEW = 'CLOSE_ONBOARD_PREVIEW'
 export const OPEN_ONBOARD_PREVIEW = 'OPEN_ONBOARD_PREVIEW'
+export const SET_ONBOARD_CONFIRMING = 'SET_ONBOARD_CONFIRMING'
 export const SET_ONBOARD_RESULT = 'SET_ONBOARD_RESULT'
 export const SET_ONBOARD_STATUS = 'SET_ONBOARD_STATUS'
 export const SET_ONBOARD_TRIP = 'SET_ONBOARD_TRIP'
@@ -1965,6 +1974,9 @@ export const startOnboardOptimize = createAction<{
   }>
 }>(START_ONBOARD_OPTIMIZE)
 export const setOnboardResult = createAction<any>(SET_ONBOARD_RESULT)
+export const setOnboardConfirming = createAction<number | null>(
+  SET_ONBOARD_CONFIRMING
+)
 
 /**
  * Derive the GTFS route id from an itinerary leg.
@@ -6323,6 +6335,7 @@ function goStraightToPlannedStop(planned: Itinerary) {
         `straight to ${alight.stopName ?? alight.stopId}`
     )
     dispatch(clearOnboard())
+    writeOnboardRidingFact(dispatch, getState, trip, vehicle, spliced)
     dispatch(beginGoMode(spliced))
     reconfirmBoardedVehicle(dispatch, vehicle)
     // After beginGoMode's START_GO_MODE, which clears the offer.
@@ -6708,6 +6721,14 @@ function optimizeAlightFromTrip(options: {
   /** Rider-supplied routing prefs; falls back to currentQuery — see
    * onboardCandidateRoutingPreferences. */
   prefsOverride?: any
+  /**
+   * Ask the rider-facing question (the list's routing preferences and option
+   * pool) without the list's bookkeeping. Defaults to `updateOnboardState`;
+   * the onboard Confirm's re-check (64.1) sets it alone, so the re-asked list
+   * is the same question the rider's list answered and nothing on screen
+   * flashes to "optimizing".
+   */
+  riderFacing?: boolean
   to: { lat: number; lon: number; name?: string }
   trip: any
   updateOnboardState?: boolean
@@ -6798,7 +6819,7 @@ function optimizeAlightFromTrip(options: {
     // statement about ROUTES, and it stays at the fetch on both paths.
     const boardedRouteId =
       vehicle?.routeId || goMode?.riding?.routeId || trip.route?.id || null
-    const riderFacing = !!updateOnboardState
+    const riderFacing = options.riderFacing ?? !!updateOnboardState
     const ctx = {
       homeTimezone,
       modes,
@@ -6973,7 +6994,8 @@ function optimizeAlightFromTrip(options: {
       dispatch(
         setOnboardResult({
           ...counts(results),
-          options: improved
+          options: improved,
+          resultAtMs: Date.now()
         })
       )
     }
@@ -7058,7 +7080,10 @@ function optimizeAlightFromTrip(options: {
         decorated.length
           ? setOnboardResult({
               ...counts(results),
-              options: decorated
+              options: decorated,
+              // How old the list is, for the Confirm (64.1). Wall clock, the
+              // same clock as `nowMs` above and as the Confirm's own check.
+              resultAtMs: Date.now()
             })
           : setOnboardResult(null)
       )
@@ -7475,6 +7500,59 @@ function reconfirmBoardedVehicle(dispatch: any, vehicle: any) {
 }
 
 /**
+ * Write the riding fact for the bus an onboard Confirm has just committed to
+ * (64.3) — before beginGoMode, so START_GO_MODE carries THIS fact, not
+ * whatever an earlier trip left in the store. See onboardConfirmRidingFact
+ * for the 2026-10-20 08:32 ride that had none. Shared by
+ * confirmOnboardAlightStop and goStraightToPlannedStop, the two doors from
+ * the onboard flow into a live trip.
+ */
+function writeOnboardRidingFact(
+  dispatch: any,
+  getState: any,
+  trip: any,
+  vehicle: any,
+  itinerary: Itinerary
+) {
+  const fact = onboardConfirmRidingFact({
+    legs: itinerary?.legs as Leg[],
+    nowMs: getCurrentTime().getTime(),
+    prior: getState().otp?.goMode?.riding ?? null,
+    trip,
+    vehicle
+  })
+  if (fact) dispatch(setRiding(fact))
+}
+
+/**
+ * The commit tail every onboard Confirm ends in: the list goes, the fresh
+ * riding fact goes in (64.3), the trip starts, the bus stays locked.
+ */
+function commitOnboardItinerary(
+  dispatch: any,
+  getState: any,
+  trip: any,
+  vehicle: any,
+  itinerary: Itinerary
+) {
+  dispatch(clearOnboard())
+  writeOnboardRidingFact(dispatch, getState, trip, vehicle, itinerary)
+  dispatch(beginGoMode(itinerary))
+
+  // beginGoMode resets the vehicle match; re-confirm this bus so tracking
+  // stays locked to the vehicle the rider is already aboard.
+  reconfirmBoardedVehicle(dispatch, vehicle)
+
+  // Same latent gap verify-boarded-earlier caught on the aboard splice:
+  // live leg times otherwise wait for a position tick, so the synthesized
+  // bus leg would show schedule-anchored times until GPS delivers. Anchor
+  // them to the boarded trip immediately.
+  if (!isReplayActive()) {
+    dispatch(refreshLiveLegTimes())
+  }
+}
+
+/**
  * Commit to the recommended alight stop: synthesize the full itinerary and hand
  * off into live Go Mode tracking, keeping the same bus confirmed as the vehicle.
  *
@@ -7484,24 +7562,31 @@ function reconfirmBoardedVehicle(dispatch: any, vehicle: any) {
  * only copy of the list on the way out. Reaching this now takes the preview
  * screen's explicit Confirm (or the pre-existing programmatic callers, which
  * pass their own option and never went through a row).
+ *
+ * Before it commits it asks whether the stop is still ahead of the rider and
+ * the list still current (64.1, onboard-confirm.ts). When both hold — the
+ * ordinary case — it commits at once, exactly as before. When the rider's fix
+ * is already past the stop, or the list is more than two minutes old, it
+ * re-asks from the first stop still ahead (recheckOnboardConfirm) and starts
+ * the best of THAT; the preview stays up meanwhile with its Confirm disabled.
  */
 export function confirmOnboardAlightStop(option?: any) {
   return function (dispatch: any, getState: any) {
     const goMode = getState().otp?.goMode
-    const preview = goMode?.onboard?.preview
+    const onboard = goMode?.onboard
+    // One re-check at a time: a second tap while the first is out is the
+    // same Confirm, not another one.
+    if (onboard?.confirmingAtMs != null) return
+    const preview = onboard?.preview
     // Preview before bestAlightStop: while a preview is open, the stop the
     // rider is looking at is the one they mean — never the ranker's favourite.
-    const best = option || preview?.option || goMode?.onboard?.bestAlightStop
-    const trip = goMode?.onboard?.trip
-    const vehicle = goMode?.onboard?.vehicle
+    const best = option || preview?.option || onboard?.bestAlightStop
+    const trip = onboard?.trip
+    const vehicle = onboard?.vehicle
     if (!best || !trip) return
 
-    const itinerary = buildOnboardItinerary(
-      trip,
-      vehicle,
-      best,
-      goMode.tracking?.lastPosition || null
-    )
+    const lastPosition = goMode.tracking?.lastPosition || null
+    const itinerary = buildOnboardItinerary(trip, vehicle, best, lastPosition)
 
     // Recorded BEFORE clearOnboard, so the stream says which stop the rider
     // confirmed and whether they had previewed it (17.11). `fromPreview:
@@ -7515,19 +7600,159 @@ export function confirmOnboardAlightStop(option?: any) {
       })
     )
 
-    dispatch(clearOnboard())
-    dispatch(beginGoMode(itinerary))
+    // Wall clock: the same clock `resultAtMs` was stamped with.
+    const check = onboardConfirmRecheck({
+      itinerary,
+      lastPosition,
+      nowMs: Date.now(),
+      resultAtMs: onboard?.resultAtMs ?? null,
+      trip
+    })
+    if (!check.reason) {
+      commitOnboardItinerary(dispatch, getState, trip, vehicle, itinerary)
+      return
+    }
+    return dispatch(
+      recheckOnboardConfirm({ check, chosen: best, itinerary, trip, vehicle })
+    )
+  }
+}
 
-    // beginGoMode resets the vehicle match; re-confirm this bus so tracking
-    // stays locked to the vehicle the rider is already aboard.
-    reconfirmBoardedVehicle(dispatch, vehicle)
+/**
+ * The Confirm's re-check (64.1): re-ask the optimizer from the first stop
+ * still ahead of the rider, then start the best of that answer.
+ *
+ * - The question is the list's own (riderFacing), but none of the list's
+ *   bookkeeping runs: no START_ONBOARD_OPTIMIZE, no SET_ONBOARD_RESULT, so
+ *   the preview the rider is looking at does not flash back to "optimizing".
+ *   SET_ONBOARD_CONFIRMING is the only state it writes, and the preview
+ *   shows it as its Confirm disabled under "Finding the best stop to get
+ *   off…" — the existing string.
+ * - Back (CLOSE_ONBOARD_PREVIEW) or anything that clears the onboard state
+ *   drops it: an answer that comes back to a different token stands down.
+ * - Pick: the chosen stop if still offered, else the same onward route,
+ *   else the top (pickRecheckedAlight). The trip is built from the stop
+ *   ahead, so its bus leg starts where the rider is, not behind them.
+ * - "Trip updated" — the aboard re-plan's own card, in-app only, no push —
+ *   only when the stop or the onward route changed.
+ * - Nothing came back: when the chosen stop is BEHIND the rider the list is
+ *   refreshed on screen (from the stop ahead) for them to choose again; when
+ *   the list was only old, the rider's own choice starts.
+ */
+function recheckOnboardConfirm(input: {
+  check: OnboardConfirmCheck
+  chosen: any
+  itinerary: Itinerary
+  trip: any
+  vehicle: any
+}) {
+  return async function (dispatch: any, getState: any) {
+    const { check, chosen, itinerary, trip, vehicle } = input
+    const token = Date.now()
+    dispatch(setOnboardConfirming(token))
+    const stillMine = () => {
+      const ob = getState().otp?.goMode?.onboard
+      return ob?.confirmingAtMs === token && ob?.trip === trip
+    }
+    const anchored = check.aheadStopId
+      ? { ...vehicle, nextStopId: check.aheadStopId }
+      : vehicle
+    // The list's own destination: the end of the chosen option's onward plan.
+    const chosenLegs: any[] = chosen?.itinerary?.legs || []
+    const end = chosenLegs[chosenLegs.length - 1]?.to
+    const queryTo = getState().otp?.currentQuery?.to
+    const to =
+      end?.lat != null && end?.lon != null
+        ? { lat: end.lat, lon: end.lon, name: end.name }
+        : queryTo?.lat != null && queryTo?.lon != null
+        ? { lat: queryTo.lat, lon: queryTo.lon, name: queryTo.name }
+        : null
+    const chosenRoute = chosen?.itinerary
+      ? onwardRouteOfItinerary(chosen.itinerary)
+      : null
 
-    // Same latent gap verify-boarded-earlier caught on the aboard splice:
-    // live leg times otherwise wait for a position tick, so the synthesized
-    // bus leg would show schedule-anchored times until GPS delivers. Anchor
-    // them to the boarded trip immediately.
-    if (!isReplayActive()) {
-      dispatch(refreshLiveLegTimes())
+    // eslint-disable-next-line no-console
+    console.log(
+      `[go-mode] onboard confirm: re-check (${check.reason}) ` +
+        `past=${check.pastM == null ? '-' : Math.round(check.pastM)}m ` +
+        `age=${
+          check.listAgeMs == null ? '-' : Math.round(check.listAgeMs / 1000)
+        }s ahead=${check.aheadStopId ?? '-'}`
+    )
+
+    let ranked: any[] | null = null
+    if (to) {
+      try {
+        ranked = await dispatch(
+          optimizeAlightFromTrip({
+            keepRouteId: chosenRoute ?? undefined,
+            riderFacing: true,
+            to,
+            trip,
+            vehicle: anchored
+          })
+        )
+      } catch {
+        ranked = null
+      }
+    }
+    if (!stillMine()) return
+    dispatch(setOnboardConfirming(null))
+
+    // A stop already behind the rider is never the answer, whatever the
+    // re-ask says (it can only say it when no stop ahead could be placed and
+    // the optimizer fell back to the old anchor).
+    const behind =
+      check.reason === 'passed' ? chosen?.alightStopId ?? chosen?.stopId : null
+    const pick = pickRecheckedAlight(
+      behind
+        ? (ranked || []).filter(
+            (o: any) => (o.alightStopId ?? o.stopId) !== behind
+          )
+        : ranked,
+      chosen
+    )
+    if (!pick) {
+      if (check.reason === 'passed') {
+        // The rider's stop is behind them and nothing ahead answered: show
+        // them the list again, from where they are, and let them choose —
+        // the ordinary visible optimize, to the list's own destination.
+        dispatch({ type: CLOSE_ONBOARD_PREVIEW })
+        dispatch(setOnboardVehicle(anchored))
+        if (to) {
+          await dispatch(
+            optimizeAlightFromTrip({
+              to,
+              trip,
+              updateOnboardState: true,
+              vehicle: anchored
+            })
+          )
+        } else {
+          dispatch(setOnboardResult(null))
+        }
+        return
+      }
+      // Only the list's age was in question: start what the rider chose.
+      commitOnboardItinerary(dispatch, getState, trip, vehicle, itinerary)
+      return
+    }
+
+    const rebuilt = buildOnboardItinerary(
+      trip,
+      anchored,
+      pick,
+      getState().otp?.goMode?.tracking?.lastPosition || null
+    )
+    commitOnboardItinerary(dispatch, getState, trip, anchored, rebuilt)
+    if (recheckChangedTrip(pick, chosen)) {
+      const notification = aboardTripUpdatedNotification(rebuilt)
+      // After beginGoMode so the fresh trip's notification state keeps it.
+      dispatch(addNotification(notification))
+      if (!isReplayActive()) {
+        // In-app only: the rider is looking at the screen they just tapped.
+        showNotification(notification, getState().otp.goMode.notifications)
+      }
     }
   }
 }
@@ -7563,6 +7788,71 @@ function aboardVehicleContext(state: any, riding: RidingState, tripId: string) {
       riding.vehicleId ||
       (matchIsBoarded ? match.vehicleId : null) ||
       `route:${riding.routeId}`
+  }
+}
+
+/**
+ * The aboard "Trip updated" card: the bus, the stop it now gets the rider off
+ * at, and when the trip arrives. Extracted from replanFromAboard so the
+ * onboard Confirm's re-check (64.1) says it in the same words — the rider's
+ * rule: same look, same strings.
+ */
+function aboardTripUpdatedNotification(spliced: Itinerary): NotificationEvent {
+  const busLeg: any = spliced.legs?.[0]
+  // The arrival is the TRIP's end, not this leg's. `legs[0].endTime` is
+  // when the rider steps off the bus, and quoting it as the arrival is how
+  // 2026-09-01 ride 1 announced 8:45 AM against an itinerary that ended at
+  // 8:51:45 — see itineraryArrivalMs. Alight stop and arrival time are two
+  // facts, so the copy no longer runs them into one clause.
+  const arrivalMs = itineraryArrivalMs(spliced)
+  const intl = notifyIntl()
+  const arrivalText =
+    arrivalMs == null
+      ? ''
+      : intl.formatMessage(
+          {
+            defaultMessage: ' · arriving in {minutes} min',
+            id: 'components.GoMode.notify.tripUpdatedArriving'
+          },
+          {
+            minutes: Math.max(
+              0,
+              Math.round((arrivalMs - getCurrentTime().getTime()) / 60000)
+            )
+          }
+        )
+  const message = intl.formatMessage(
+    {
+      defaultMessage: '{routeName} · off at {stopName}{arrival}',
+      id: 'components.GoMode.notify.tripUpdatedAlight'
+    },
+    {
+      arrival: arrivalText,
+      routeName:
+        busLeg?.routeShortName ||
+        busLeg?.routeLongName ||
+        intl.formatMessage({
+          defaultMessage: 'your bus',
+          id: 'components.GoMode.notify.yourBus'
+        }),
+      stopName:
+        busLeg?.to?.name ||
+        intl.formatMessage({
+          defaultMessage: 'your stop',
+          id: 'components.GoMode.notify.yourStop'
+        })
+    }
+  )
+  return {
+    id: `TRIP_UPDATED_auto_${Date.now()}`,
+    message,
+    priority: 'high',
+    timestamp: new Date(),
+    title: intl.formatMessage({
+      defaultMessage: 'Trip updated',
+      id: 'components.GoMode.notify.tripUpdatedTitle'
+    }),
+    type: 'TRIP_UPDATED'
   }
 }
 
@@ -8051,67 +8341,16 @@ export function replanFromAboard(
 
       // Same "Trip updated" style as applyAutoReroute — but aboard, the new
       // ALIGHTING is the fact the rider needs (the boarding is under them).
-      const busLeg: any = spliced.legs?.[0]
-      // The arrival is the TRIP's end, not this leg's. `legs[0].endTime` is
-      // when the rider steps off the bus, and quoting it as the arrival is how
-      // 2026-09-01 ride 1 announced 8:45 AM against an itinerary that ended at
-      // 8:51:45 — see itineraryArrivalMs. Alight stop and arrival time are two
-      // facts, so the copy no longer runs them into one clause.
-      const arrivalMs = itineraryArrivalMs(spliced)
-      const intl = notifyIntl()
-      const arrivalText =
-        arrivalMs == null
-          ? ''
-          : intl.formatMessage(
-              {
-                defaultMessage: ' · arriving in {minutes} min',
-                id: 'components.GoMode.notify.tripUpdatedArriving'
-              },
-              {
-                minutes: Math.max(
-                  0,
-                  Math.round((arrivalMs - getCurrentTime().getTime()) / 60000)
-                )
-              }
-            )
-      const message = intl.formatMessage(
-        {
-          defaultMessage: '{routeName} · off at {stopName}{arrival}',
-          id: 'components.GoMode.notify.tripUpdatedAlight'
-        },
-        {
-          arrival: arrivalText,
-          routeName:
-            busLeg?.routeShortName ||
-            busLeg?.routeLongName ||
-            intl.formatMessage({
-              defaultMessage: 'your bus',
-              id: 'components.GoMode.notify.yourBus'
-            }),
-          stopName:
-            busLeg?.to?.name ||
-            intl.formatMessage({
-              defaultMessage: 'your stop',
-              id: 'components.GoMode.notify.yourStop'
-            })
-        }
-      )
-      const notification: NotificationEvent = {
-        id: `TRIP_UPDATED_auto_${Date.now()}`,
-        message,
-        priority: 'high',
-        timestamp: new Date(),
-        title: intl.formatMessage({
-          defaultMessage: 'Trip updated',
-          id: 'components.GoMode.notify.tripUpdatedTitle'
-        }),
-        type: 'TRIP_UPDATED'
-      }
+      const notification = aboardTripUpdatedNotification(spliced)
       // After beginGoMode so the fresh trip's notification state keeps it.
       dispatch(addNotification(notification))
       if (!isReplayActive()) {
         showNotification(notification, getState().otp.goMode.notifications)
-        sendPush({ message, priority: 1, title: notification.title })
+        sendPush({
+          message: notification.message,
+          priority: 1,
+          title: notification.title
+        })
       }
       return
     }
