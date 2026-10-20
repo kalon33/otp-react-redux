@@ -651,6 +651,7 @@ components:
     itineraryDetails: Itinerary details
   LegFrequency:
     every: Every {minutes} min, next {time}
+    everyBoarded: Every {minutes} min
     nextOne: Next {time}
     nextTwo: Next {first}, {second}
     noneBefore: No later run before {time}

@@ -94,6 +94,34 @@ interface Props {
  * two things only Go Mode knows — which leg is happening right now, and how
  * long the wait at the next stop is — are layered on top as a "Right now" card.
  */
+/**
+ * Copy of the itinerary with `goModeBoarded` on every leg before the current
+ * one and on the leg being ridden: `riding.legIndex`, or the current leg when
+ * the riding fact is not anchored to a leg (-1) and that leg is transit.
+ * Nothing is marked while the rider is not aboard. Never mutates its input.
+ */
+export function markBoardedLegs<T extends { legs: Leg[] }>(
+  itinerary: T,
+  currentLegIndex: number,
+  riding: RidingState | null | undefined
+): T {
+  const legs = itinerary.legs || []
+  const ridden =
+    riding && Number.isInteger(riding.legIndex) && riding.legIndex >= 0
+      ? riding.legIndex
+      : riding && legs[currentLegIndex]?.transitLeg
+      ? currentLegIndex
+      : -1
+  const marked = (i: number) => i < currentLegIndex || i === ridden
+  if (!legs.some((_, i) => marked(i))) return itinerary
+  return {
+    ...itinerary,
+    legs: legs.map((leg, i) =>
+      marked(i) ? ({ ...leg, goModeBoarded: true } as Leg) : leg
+    )
+  }
+}
+
 const TripSheet = ({
   activeItinerary,
   activeLeg,
@@ -131,11 +159,17 @@ const TripSheet = ({
   // disagree: the rows were built from buildLiveItinerary while the card and
   // the wait arithmetic read activeItinerary's build-time figures, so the sheet
   // could print two different clocks for the same stop.
-  const liveItinerary = activeItinerary
+  const currentLegIndex = progress?.currentLegIndex ?? 0
+  const builtItinerary = activeItinerary
     ? buildLiveItinerary(activeItinerary, liveLegTimes)
     : null
+  // Legs the rider has ridden or is riding are marked on a copy (61.1), so the
+  // frequency line under them drops its "next {time}" — a bus already boarded
+  // has no next departure to catch.
+  const liveItinerary = builtItinerary
+    ? markBoardedLegs(builtItinerary, currentLegIndex, riding)
+    : null
   const legs = liveItinerary?.legs || []
-  const currentLegIndex = progress?.currentLegIndex ?? 0
   const currentLeg: Leg | undefined = legs[currentLegIndex]
 
   // Wait at a transit leg's boarding stop: the gap between reaching the stop
