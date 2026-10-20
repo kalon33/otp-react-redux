@@ -178,6 +178,46 @@ let sessionStartedAt: number | null = null
 // and could not tell that from "there was no id".
 let lastLoaded: GoModeSession | null = null
 
+// One shared empty list, so a slice with no sent-notifications yet compares
+// equal to itself on the next save instead of minting a fresh `[]` each time.
+const NO_SENT_NOTIFICATIONS: string[] = []
+
+// What the last SUCCESSFUL save wrote, kept so an unchanged trip is not written
+// again (66.7). The store subscriber fires on every change of the goMode slice —
+// about five per GPS tick (UPDATE_POSITION, UPDATE_ROUTE_MATCH, UPDATE_PROGRESS,
+// UPDATE_VEHICLE_MATCH, ...) — and almost all of those touch only per-tick
+// fields that are not in the saved subset, so the session built from them is
+// identical and the strip-cycles + parse + stringify + setItem was pure cost
+// (2.6 ms for a 158 kB itinerary, 13 ms per tick in node over a recorded ride).
+//
+// Held as the session object itself plus the serialised notification latches
+// (`captureNotificationLatches` returns a fresh object every call, so identity
+// cannot be compared; its content is small). Invalidated whenever the stored
+// copy is dropped or replaced from outside this save path — see clear/load —
+// so the first save after either always writes.
+let lastSaved: GoModeSession | null = null
+let lastSavedLatchesKey: string | null = null
+
+/**
+ * Whether `session` carries exactly what the last save wrote. Compares every
+ * field of the session by `===` — except the notification latches, compared by
+ * their serialised content — and iterates the keys of BOTH objects, so a field
+ * added to the session later is compared automatically rather than silently
+ * ignored.
+ */
+function sameAsLastSave(
+  session: GoModeSession,
+  latchesKey: string | null
+): boolean {
+  if (!lastSaved || latchesKey !== lastSavedLatchesKey) return false
+  const next = session as unknown as Record<string, unknown>
+  const prev = lastSaved as unknown as Record<string, unknown>
+  const keys = Object.keys(next).concat(Object.keys(prev))
+  return keys.every(
+    (key) => key === 'notificationLatches' || next[key] === prev[key]
+  )
+}
+
 /**
  * Return a JSON-safe deep copy with any circular references dropped. Real OTP
  * itineraries can contain cycles (enriched leg/route back-references), which
@@ -251,14 +291,30 @@ export function saveGoModeSession(
     returnCountdown: goMode.returnCountdown ?? null,
     riding: goMode.riding ?? null,
     roundTrip: goMode.roundTrip ?? null,
-    sentNotifications: goMode.notifications?.sentNotifications ?? [],
+    sentNotifications:
+      goMode.notifications?.sentNotifications ?? NO_SENT_NOTIFICATIONS,
     startedAt: sessionStartedAt,
     vehicleMatch: goMode.vehicleMatch?.match ?? null
   }
+  // Nothing durable changed since the last write (the usual case: the change
+  // was a position/progress/route-match tick). Same bytes, so skip them.
+  let latchesKey: string | null = null
+  try {
+    latchesKey = JSON.stringify(session.notificationLatches)
+  } catch {
+    // Unserialisable latches cannot be compared; fall through and write.
+  }
+  if (latchesKey != null && sameAsLastSave(session, latchesKey)) return
   // Persistence is best-effort and runs from the store subscriber mid-dispatch:
   // it must NEVER throw, or it would abort the action that started the trip.
   try {
+    // Forget the last write first: if the save throws part-way the stored copy
+    // is unknown, and the next save must not be skipped on its account.
+    lastSaved = null
+    lastSavedLatchesKey = null
     storeItem(GO_MODE_SESSION_KEY, stripCycles(session))
+    lastSaved = session
+    lastSavedLatchesKey = latchesKey
   } catch {
     // Resume-on-reload is a nicety; a save failure must not disrupt the live trip.
   }
@@ -331,6 +387,8 @@ export function loadGoModeSession(): GoModeSession | null {
   // Adopt the restored start so subsequent saves this session keep it.
   sessionStartedAt = session.startedAt
   lastLoaded = session
+  lastSaved = null
+  lastSavedLatchesKey = null
   return session
 }
 
@@ -382,5 +440,7 @@ export function resumedTransitionedLegIndex(): number | null {
 export function clearGoModeSession(): void {
   sessionStartedAt = null
   lastLoaded = null
+  lastSaved = null
+  lastSavedLatchesKey = null
   removeItem(GO_MODE_SESSION_KEY)
 }
