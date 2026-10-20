@@ -592,6 +592,9 @@ components:
     onboardPreviewBack: Back to options
     onboardPreviewConfirm: Confirm this stop
     onboardPreviewWait: "{mins} min wait"
+    onboardStopPassedKeep: Still go to {stop}
+    onboardStopPassedSkip: "{count, plural, one {Skip it} other {Skip them}}"
+    onboardStopPassedTitle: Your bus has passed {stop}
     onboardTitle: On the bus
     openTripSheet: Open trip overview
     pickAnotherStop: Pick another stop

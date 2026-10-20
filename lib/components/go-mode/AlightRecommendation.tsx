@@ -21,6 +21,7 @@ import OnboardAlightPreview from './OnboardAlightPreview'
 import OnboardItineraryList from './OnboardItineraryList'
 
 interface Props {
+  answerOnboardStopChoice: (keep: boolean) => void
   changeBus: () => void
   clearOnboard: () => void
   endGoMode: () => void
@@ -36,6 +37,7 @@ interface Props {
  * ready, the recommended stop to get off plus a handoff into live guidance.
  */
 const AlightRecommendation = ({
+  answerOnboardStopChoice,
   changeBus,
   clearOnboard,
   endGoMode,
@@ -47,6 +49,68 @@ const AlightRecommendation = ({
   const { status } = onboard
 
   if (status === 'idle') return null
+
+  // 63.1. The rider added a stop to this trip and the bus has already left it
+  // behind — the one thing the app cannot decide for them (2026-10-20 Q2 = C,
+  // "Ask me each time"). A stop still ahead is never asked about; it is just
+  // kept. Several passed stops are one question. From the Confirm, this
+  // stands in for the preview until it is answered (the preview is kept).
+  // Same card, same buttons as the error card below — no new styles.
+  const passedStops = onboard.passedStops || []
+  if (passedStops.length) {
+    const names = intl.formatList(
+      passedStops.map(
+        (s) => s.name || `${s.lat.toFixed(5)}, ${s.lon.toFixed(5)}`
+      ),
+      { type: 'conjunction' }
+    )
+    return (
+      <RerouteBar>
+        <RerouteCard data-testid="onboard-stop-passed">
+          <RerouteCardTitle>
+            {intl.formatMessage(
+              {
+                defaultMessage: 'Your bus has passed {stop}',
+                id: 'components.GoMode.onboardStopPassedTitle'
+              },
+              { stop: names }
+            )}
+          </RerouteCardTitle>
+          {/* The progress card's own spacing (above), so the question and its
+              answers do not touch. */}
+          <RerouteActions style={{ marginTop: 10 }}>
+            <RerouteSwitchButton
+              data-testid="onboard-stop-keep"
+              onClick={() => answerOnboardStopChoice(true)}
+              type="button"
+            >
+              {intl.formatMessage(
+                {
+                  defaultMessage: 'Still go to {stop}',
+                  id: 'components.GoMode.onboardStopPassedKeep'
+                },
+                { stop: names }
+              )}
+            </RerouteSwitchButton>
+            <RerouteKeepButton
+              data-testid="onboard-stop-skip"
+              onClick={() => answerOnboardStopChoice(false)}
+              type="button"
+            >
+              {intl.formatMessage(
+                {
+                  defaultMessage:
+                    '{count, plural, one {Skip it} other {Skip them}}',
+                  id: 'components.GoMode.onboardStopPassedSkip'
+                },
+                { count: passedStops.length }
+              )}
+            </RerouteKeepButton>
+          </RerouteActions>
+        </RerouteCard>
+      </RerouteBar>
+    )
+  }
 
   // 15.3. The flow reaches this screen with a vehicle it was never asked
   // about: `riding` survives STOP_GO_MODE, so the next "I'm on the bus"
@@ -318,6 +382,8 @@ const mapStateToProps = (state: any) => ({
 })
 
 const mapDispatchToProps = {
+  // The added-stop card's two buttons (63.1).
+  answerOnboardStopChoice: goModeActions.answerOnboardStopChoice,
   // "Not this one" / "Change bus" is the rider contradicting the app, so it
   // goes through the deny path (15.3): rediscoverOnboardVehicles alone leaves
   // the riding fact standing and the next onboard flow re-adopts the vehicle

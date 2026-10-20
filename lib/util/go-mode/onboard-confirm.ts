@@ -57,8 +57,11 @@ export interface OnboardConfirmCheck {
    * Why the Confirm must re-ask, or null to commit as chosen. 'passed' wins
    * over 'stale': it is the one that changes what happens when the re-ask
    * finds nothing (the list is shown again rather than the choice started).
+   * 'stops' is never measured here: the Confirm sets it when the rider has
+   * just skipped an added stop the chosen option went through (63.1), and an
+   * empty re-ask then shows the list again too.
    */
-  reason: 'passed' | 'stale' | null
+  reason: 'passed' | 'stale' | 'stops' | null
 }
 
 interface FixLike {

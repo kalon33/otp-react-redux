@@ -353,6 +353,15 @@ import {
   segmentStreetMode
 } from '../util/multi-stop'
 import type { MultiStopPlan } from '../util/multi-stop'
+import {
+  itineraryVisitsStops,
+  onboardMultiStopStart,
+  onboardStopsFromQuery,
+  onboardStopsKey,
+  onboardStopsVia,
+  passedOnboardStops
+} from '../util/go-mode/onboard-stops'
+import type { OnboardStop } from '../util/go-mode/onboard-stops'
 import { evaluateTurnCard } from '../util/go-mode/turn-card'
 import { evaluateMissedBusRecovery } from '../util/go-mode/missed-bus-recovery'
 import {
@@ -1013,6 +1022,8 @@ export const CLEAR_ONBOARD = 'CLEAR_ONBOARD'
 export const CLOSE_ONBOARD_PREVIEW = 'CLOSE_ONBOARD_PREVIEW'
 export const OPEN_ONBOARD_PREVIEW = 'OPEN_ONBOARD_PREVIEW'
 export const SET_ONBOARD_CONFIRMING = 'SET_ONBOARD_CONFIRMING'
+export const SET_ONBOARD_STOP_CHOICE = 'SET_ONBOARD_STOP_CHOICE'
+export const ANSWER_ONBOARD_STOP_CHOICE = 'ANSWER_ONBOARD_STOP_CHOICE'
 export const SET_ONBOARD_RESULT = 'SET_ONBOARD_RESULT'
 export const SET_ONBOARD_STATUS = 'SET_ONBOARD_STATUS'
 export const SET_ONBOARD_TRIP = 'SET_ONBOARD_TRIP'
@@ -1146,6 +1157,8 @@ export type GoModeControl =
   | 'onboard-option-row'
   | 'onboard-preview-back'
   | 'onboard-preview-confirm'
+  | 'onboard-stop-keep'
+  | 'onboard-stop-skip'
   | 'onboard-variant-open'
   | 'pick-another-stop'
 
@@ -1954,6 +1967,8 @@ export const beginOnboardFlowAction = createAction<{
    * options); the type simply never said so. */
   keepRouteId?: string | null
   originalFrom?: any
+  /** The search's added stops, with their stays (63.1). */
+  stops?: OnboardStop[]
 }>(BEGIN_ONBOARD_FLOW)
 export const clearOnboard = createAction(CLEAR_ONBOARD)
 export const setOnboardStatus = createAction<string>(SET_ONBOARD_STATUS)
@@ -1977,6 +1992,11 @@ export const setOnboardResult = createAction<any>(SET_ONBOARD_RESULT)
 export const setOnboardConfirming = createAction<number | null>(
   SET_ONBOARD_CONFIRMING
 )
+/** The added-stop card goes up (63.1). */
+export const setOnboardStopChoice = createAction<{
+  passedStops: OnboardStop[]
+  stopChoiceFor: 'confirm' | 'list'
+}>(SET_ONBOARD_STOP_CHOICE)
 
 /**
  * Derive the GTFS route id from an itinerary leg.
@@ -5816,7 +5836,20 @@ export function beginOnboardFlow() {
     // between 11:38:18 and 11:39:31). It also cancels the quiet timer that the
     // Stop the rider tapped a moment ago started.
     noteGoModeActivity({ onHoldChange: recordSessionEvent })
-    dispatch(beginOnboardFlowAction({ keepRouteId, originalFrom }))
+    // The stops the rider added to this search, with their stays (63.1): the
+    // bus ride is part of a trip through them, and the candidates and the
+    // trip it starts go through them too. A live multi-stop trip's stops it
+    // has already reached are done, not passed — never asked about.
+    const priorMultiStop = before.otp.goMode?.isActive
+      ? before.otp.goMode?.multiStop ?? null
+      : null
+    const stops = onboardStopsFromQuery(
+      before.otp.currentQuery,
+      priorMultiStop
+        ? priorMultiStop.stopNames.slice(0, priorMultiStop.index)
+        : []
+    )
+    dispatch(beginOnboardFlowAction({ keepRouteId, originalFrom, stops }))
     dispatch(setMobileScreen(MobileScreens.GO_MODE))
     dispatch(updateTrackingInterval({ interval: 5000 }))
     dispatch(startPositionTracking())
@@ -6234,10 +6267,110 @@ export function loadOnboardScheduleAndOptimize(
         setTimeout(resolve, ONBOARD_ANCHOR_POLL_MS)
       )
     }
-    if (options.planned && dispatch(goStraightToPlannedStop(options.planned))) {
+    // An added stop the bus has already left behind is the rider's call
+    // (63.1): ask before any candidate is planned — the answer decides what
+    // the candidates are asked. answerOnboardStopChoice resumes from here.
+    if (dispatch(askAboutPassedStops('list', options.planned ?? null))) return
+    continueOnboardFlow(dispatch, options.planned ?? null)
+  }
+}
+
+/** The onboard flow after the added-stop question (if any): the plan's own
+ * stop when the plan rides this train, else the get-off list. */
+function continueOnboardFlow(dispatch: any, planned: Itinerary | null) {
+  if (planned && dispatch(goStraightToPlannedStop(planned))) return
+  dispatch(planFromOnboardBus())
+}
+
+/**
+ * The rider's plan, held while the added-stop card is up from the flow
+ * (63.1), so the answer can resume with it. Module scoped rather than in the
+ * store so the card's action stays a handful of scalars on the debug stream;
+ * keyed by the onboard trip it was asked about.
+ */
+let stopChoicePlanned: { planned: Itinerary | null; trip: any } | null = null
+
+/**
+ * Put up the added-stop card when any of the rider's undecided stops is
+ * behind the bus (63.1, the rider 2026-10-20 Q2 = C: "Ask me each time").
+ * Returns true when it did — the caller stops there, and
+ * answerOnboardStopChoice carries on. A stop still ahead, a stop already
+ * answered, and a flow that cannot place the rider (no fix, no next stop) all
+ * return false: never ask what the app already knows, or cannot know.
+ */
+function askAboutPassedStops(
+  stopChoiceFor: 'confirm' | 'list',
+  planned: Itinerary | null = null
+) {
+  return function (dispatch: any, getState: any): boolean {
+    const goMode = getState().otp?.goMode
+    const onboard = goMode?.onboard
+    if (!onboard?.stops?.length || !onboard.trip) return false
+    const passed = passedOnboardStops({
+      lastPosition: goMode.tracking?.lastPosition ?? null,
+      nextStopId: onboard.vehicle?.nextStopId ?? null,
+      nowMs: Date.now(),
+      stops: onboard.stops,
+      trip: onboard.trip
+    })
+    if (!passed.length) return false
+    // eslint-disable-next-line no-console
+    console.log(
+      `[go-mode] onboard: bus has passed ${passed
+        .map((s) => s.name || `${s.lat},${s.lon}`)
+        .join(' + ')} — asking (${stopChoiceFor})`
+    )
+    if (stopChoiceFor === 'list') {
+      stopChoicePlanned = { planned, trip: onboard.trip }
+    }
+    dispatch(setOnboardStopChoice({ passedStops: passed, stopChoiceFor }))
+    return true
+  }
+}
+
+/**
+ * The rider's answer on the added-stop card (63.1). Keep: the stops stay in
+ * this trip and are never asked about again. Skip: they leave this trip (the
+ * search keeps them). Then the step the card interrupted carries on — the
+ * flow's own next step, or the Confirm the rider had tapped.
+ */
+export function answerOnboardStopChoice(keep: boolean) {
+  return function (dispatch: any, getState: any) {
+    const onboard = getState().otp?.goMode?.onboard
+    const passed: OnboardStop[] = onboard?.passedStops || []
+    if (!passed.length) return
+    const stopChoiceFor = onboard.stopChoiceFor
+    dispatch(
+      recordGoModeControlTap(keep ? 'onboard-stop-keep' : 'onboard-stop-skip', {
+        stops: passed.length,
+        where: stopChoiceFor ?? null
+      })
+    )
+    dispatch({ payload: { keep }, type: ANSWER_ONBOARD_STOP_CHOICE })
+    if (stopChoiceFor === 'confirm') {
+      const option = getState().otp?.goMode?.onboard?.preview?.option
+      if (option) {
+        dispatch(confirmOnboardAlightStop(option, { stopsChanged: !keep }))
+      }
       return
     }
-    dispatch(planFromOnboardBus())
+    const held = stopChoicePlanned
+    stopChoicePlanned = null
+    let planned = held && held.trip === onboard.trip ? held.planned : null
+    // A plan that still goes through a stop the rider has just skipped is not
+    // their plan any more: the list, not straight to the plan's stop.
+    if (planned && !keep) {
+      const alight = plannedAlightOnTrip(
+        planned,
+        onboard.trip,
+        getCurrentTime().getTime()
+      )
+      const rest = alight
+        ? { ...planned, legs: (planned.legs || []).slice(alight.legIndex) }
+        : planned
+      if (itineraryVisitsStops(rest, passed)) planned = null
+    }
+    continueOnboardFlow(dispatch, planned)
   }
 }
 
@@ -6334,9 +6467,12 @@ function goStraightToPlannedStop(planned: Itinerary) {
       `[go-mode] onboard: plan's train ${vehicle.vehicleId ?? '-'} — ` +
         `straight to ${alight.stopName ?? alight.stopId}`
     )
+    // Through the rider's added stops, one segment at a time (63.1): the
+    // plan's legs after this train already go through any it reaches.
+    const { begin, start } = onboardTripStart(getState, spliced)
     dispatch(clearOnboard())
-    writeOnboardRidingFact(dispatch, getState, trip, vehicle, spliced)
-    dispatch(beginGoMode(spliced))
+    writeOnboardRidingFact(dispatch, getState, trip, vehicle, start)
+    dispatch(begin)
     reconfirmBoardedVehicle(dispatch, vehicle)
     // After beginGoMode's START_GO_MODE, which clears the offer.
     const tripId = trip.id ?? trip.gtfsId ?? vehicle.tripId ?? null
@@ -6433,6 +6569,7 @@ let lastCandidateResults: {
   /** Per stop, with the moment that plan was fetched — never re-stamped, so a
    * carried-forward answer cannot keep renewing its own freshness. */
   byStopId: Map<string, { atMs: number; result: AlightCandidateResult }>
+  stopsKey: string
   tripId: string | null
   vehicleId: string | null
 } | null = null
@@ -6449,6 +6586,8 @@ const CANDIDATE_CACHE_MAX_DRIFT_MS = 5 * 60 * 1000
 
 type CandidateRunKey = {
   nowMs: number
+  /** The added stops the plans went through (63.1) — onboardStopsKey. */
+  stopsKey: string
   tripId: string | null
   vehicleId: string | null
 }
@@ -6471,7 +6610,11 @@ function mergeCachedCandidateResults(
 ): AlightCandidateResult[] {
   const cache = lastCandidateResults
   if (!cache) return results
-  if (cache.tripId !== key.tripId || cache.vehicleId !== key.vehicleId) {
+  if (
+    cache.tripId !== key.tripId ||
+    cache.vehicleId !== key.vehicleId ||
+    cache.stopsKey !== key.stopsKey
+  ) {
     return results
   }
   // Holes in a partial answer only. A run where NOTHING answered is not a
@@ -6522,7 +6665,8 @@ function rememberCandidateResults(
   const sameBus =
     lastCandidateResults &&
     lastCandidateResults.tripId === key.tripId &&
-    lastCandidateResults.vehicleId === key.vehicleId
+    lastCandidateResults.vehicleId === key.vehicleId &&
+    lastCandidateResults.stopsKey === key.stopsKey
   const byStopId = new Map(sameBus ? lastCandidateResults!.byStopId : [])
   let added = 0
   results.forEach((result) => {
@@ -6539,6 +6683,7 @@ function rememberCandidateResults(
   })
   lastCandidateResults = {
     byStopId,
+    stopsKey: key.stopsKey,
     tripId: key.tripId,
     vehicleId: key.vehicleId
   }
@@ -6558,6 +6703,9 @@ function fetchCandidatePlan(
   },
   ctx: {
     homeTimezone: string
+    /** The rider's added stops (63.1) — `via` visits through
+     * planConstraintVariables, as on the planner's own search. */
+    intermediatePlaces?: Array<{ lat: number; lon: number; name?: string }>
     modeSettings: any
     modes: any
     /** The rider's "no transfers" constraint, as planConstraintVariables takes
@@ -6566,6 +6714,8 @@ function fetchCandidatePlan(
     numItineraries: number
     preferred: any
     routingPreferences: any
+    /** The minimum stay at each added stop, minutes (58.3). */
+    stopStays?: number[]
     to: { lat: number; lon: number; name?: string }
     /** The rider's "must pass through" stop, same story as noTransfers. */
     viaStop?: any
@@ -6590,7 +6740,13 @@ function fetchCandidatePlan(
       routingPreferences: ctx.routingPreferences,
       time: format(zoned, coreUtils.time.OTP_API_TIME_FORMAT),
       to: { lat: ctx.to.lat, lon: ctx.to.lon, name: ctx.to.name },
-      viaStop: ctx.viaStop
+      viaStop: ctx.viaStop,
+      ...(ctx.intermediatePlaces?.length
+        ? {
+            intermediatePlaces: ctx.intermediatePlaces,
+            stopStays: ctx.stopStays || []
+          }
+        : null)
     }
     const { error, itineraries, query, response, variables } = await dispatch(
       fetchOnboardCandidatePlan(combo)
@@ -6653,6 +6809,8 @@ export function planFromOnboardBus() {
 
     await dispatch(
       optimizeAlightFromTrip({
+        // The rider's added stops still in this trip (63.1).
+        stops: goMode?.onboard?.stops ?? null,
         to: { lat: to.lat, lon: to.lon, name: to.name },
         trip,
         updateOnboardState: true,
@@ -6729,6 +6887,13 @@ function optimizeAlightFromTrip(options: {
    * flashes to "optimizing".
    */
   riderFacing?: boolean
+  /**
+   * The rider's added stops this trip goes through (63.1): every candidate
+   * plan carries them as `via` visits, with their stays, and the candidate
+   * stops are picked around the first of them — the next place the rider is
+   * going — rather than the destination. Null or empty: none.
+   */
+  stops?: OnboardStop[] | null
   to: { lat: number; lon: number; name?: string }
   trip: any
   updateOnboardState?: boolean
@@ -6758,11 +6923,13 @@ function optimizeAlightFromTrip(options: {
     // live app, which is the only place it runs against a real feed.
     const nowMs = Date.now()
 
+    const stops: OnboardStop[] = options.stops || []
+    const nextPlace = stops[0] ?? to
     const downstream = getDownstreamStops(
       trip,
       vehicle,
       userPos,
-      { lat: to.lat, lon: to.lon },
+      { lat: nextPlace.lat, lon: nextPlace.lon },
       nowMs
     )
     const sampled = selectCandidateStops(downstream, 5)
@@ -6839,7 +7006,9 @@ function optimizeAlightFromTrip(options: {
         riderFacing
       }),
       to: { lat: to.lat, lon: to.lon, name: to.name },
-      viaStop
+      viaStop,
+      // The rider's added stops (63.1), the planner's own two fields.
+      ...(stops.length ? onboardStopsVia(stops) : null)
     }
     // NOT brought into parity, deliberately: searchWindow. Every Go Mode
     // background plan gets GO_MODE_SEARCH_WINDOW_SECONDS (3600) where a
@@ -7062,6 +7231,9 @@ function optimizeAlightFromTrip(options: {
 
     const runKey = {
       nowMs,
+      // A plan through the rider's stops answers a different question from
+      // one without them (63.1): never carried across.
+      stopsKey: onboardStopsKey(stops),
       tripId: trip?.id ?? null,
       vehicleId: vehicle?.vehicleId ?? null
     }
@@ -7525,6 +7697,48 @@ function writeOnboardRidingFact(
 }
 
 /**
+ * How an onboard trip enters Go Mode (63.1): through the rider's added stops
+ * when the flow carries any — the itinerary marked at each stop it reaches
+ * and split into segments, segment 0 started with the plan, exactly as a trip
+ * started from the results (metro-itinerary.tsx) — and with an explicit null
+ * plan when it carries none (every stop skipped, or none added), so a plan
+ * from an earlier trip cannot ride along. A flow that never captured stops
+ * (`stops` null: replanFromAboard's mid-ride list) starts as it always has.
+ * Must be called BEFORE clearOnboard.
+ */
+function onboardTripStart(
+  getState: any,
+  itinerary: Itinerary
+): { begin: any; start: Itinerary } {
+  const goMode = getState().otp?.goMode
+  const stops: OnboardStop[] | null = goMode?.onboard?.stops ?? null
+  if (stops == null) return { begin: beginGoMode(itinerary), start: itinerary }
+  // The round trip a live trip already had, as beginGoMode would keep it; on
+  // a multi-stop trip it belongs to the last segment, inside the plan.
+  const roundTrip = (goMode?.isActive && goMode?.roundTrip) || null
+  const { itinerary: start, multiStop } = onboardMultiStopStart(
+    itinerary,
+    stops,
+    roundTrip
+  )
+  // eslint-disable-next-line no-console
+  console.log(
+    `[go-mode] onboard: start ${
+      multiStop
+        ? `through ${multiStop.stopNames.slice(0, -1).join(' + ')}`
+        : 'with no added stop'
+    } (${stops.length} carried)`
+  )
+  return {
+    begin: beginGoMode(
+      start,
+      multiStop ? { multiStop, roundTrip: null } : { multiStop: null }
+    ),
+    start
+  }
+}
+
+/**
  * The commit tail every onboard Confirm ends in: the list goes, the fresh
  * riding fact goes in (64.3), the trip starts, the bus stays locked.
  */
@@ -7535,9 +7749,11 @@ function commitOnboardItinerary(
   vehicle: any,
   itinerary: Itinerary
 ) {
+  // Read before clearOnboard, which takes the flow's stops with it (63.1).
+  const { begin, start } = onboardTripStart(getState, itinerary)
   dispatch(clearOnboard())
-  writeOnboardRidingFact(dispatch, getState, trip, vehicle, itinerary)
-  dispatch(beginGoMode(itinerary))
+  writeOnboardRidingFact(dispatch, getState, trip, vehicle, start)
+  dispatch(begin)
 
   // beginGoMode resets the vehicle match; re-confirm this bus so tracking
   // stays locked to the vehicle the rider is already aboard.
@@ -7570,13 +7786,25 @@ function commitOnboardItinerary(
  * re-asks from the first stop still ahead (recheckOnboardConfirm) and starts
  * the best of THAT; the preview stays up meanwhile with its Confirm disabled.
  */
-export function confirmOnboardAlightStop(option?: any) {
+export function confirmOnboardAlightStop(
+  option?: any,
+  opts: {
+    /**
+     * The rider has just skipped an added stop on the card this Confirm put
+     * up (63.1): the option on screen was planned through it, so it is
+     * re-asked without it before anything starts.
+     */
+    stopsChanged?: boolean
+  } = {}
+) {
   return function (dispatch: any, getState: any) {
     const goMode = getState().otp?.goMode
     const onboard = goMode?.onboard
     // One re-check at a time: a second tap while the first is out is the
     // same Confirm, not another one.
     if (onboard?.confirmingAtMs != null) return
+    // The added-stop card is up: the Confirm waits for its answer.
+    if (onboard?.passedStops?.length) return
     const preview = onboard?.preview
     // Preview before bestAlightStop: while a preview is open, the stop the
     // rider is looking at is the one they mean — never the ranker's favourite.
@@ -7584,6 +7812,12 @@ export function confirmOnboardAlightStop(option?: any) {
     const trip = onboard?.trip
     const vehicle = onboard?.vehicle
     if (!best || !trip) return
+
+    // An added stop that was still ahead when the list was asked for and is
+    // behind the bus now (63.1): the same card, over the preview, before
+    // anything starts. Only with a preview to come back to — the card's
+    // answer resumes this Confirm from it.
+    if (preview && dispatch(askAboutPassedStops('confirm'))) return
 
     const lastPosition = goMode.tracking?.lastPosition || null
     const itinerary = buildOnboardItinerary(trip, vehicle, best, lastPosition)
@@ -7601,13 +7835,19 @@ export function confirmOnboardAlightStop(option?: any) {
     )
 
     // Wall clock: the same clock `resultAtMs` was stamped with.
-    const check = onboardConfirmRecheck({
+    const measured = onboardConfirmRecheck({
       itinerary,
       lastPosition,
       nowMs: Date.now(),
       resultAtMs: onboard?.resultAtMs ?? null,
       trip
     })
+    // A skipped stop outranks a stale list and loses to a passed alight stop
+    // — 'passed' is the one that filters the chosen stop out of the answer.
+    const check: OnboardConfirmCheck =
+      opts.stopsChanged && measured.reason !== 'passed'
+        ? { ...measured, reason: 'stops' }
+        : measured
     if (!check.reason) {
       commitOnboardItinerary(dispatch, getState, trip, vehicle, itinerary)
       return
@@ -7687,6 +7927,8 @@ function recheckOnboardConfirm(input: {
           optimizeAlightFromTrip({
             keepRouteId: chosenRoute ?? undefined,
             riderFacing: true,
+            // The trip's added stops as they stand now (63.1).
+            stops: getState().otp?.goMode?.onboard?.stops ?? null,
             to,
             trip,
             vehicle: anchored
@@ -7713,7 +7955,9 @@ function recheckOnboardConfirm(input: {
       chosen
     )
     if (!pick) {
-      if (check.reason === 'passed') {
+      // A skipped stop (63.1) is the same: the rider's choice went through
+      // it, so it is not theirs to start — the list again, without the stop.
+      if (check.reason === 'passed' || check.reason === 'stops') {
         // The rider's stop is behind them and nothing ahead answered: show
         // them the list again, from where they are, and let them choose —
         // the ordinary visible optimize, to the list's own destination.
@@ -7722,6 +7966,7 @@ function recheckOnboardConfirm(input: {
         if (to) {
           await dispatch(
             optimizeAlightFromTrip({
+              stops: getState().otp?.goMode?.onboard?.stops ?? null,
               to,
               trip,
               updateOnboardState: true,
