@@ -1160,7 +1160,62 @@ describe('util > go-mode > notification-service', () => {
       expect(result!.type).toBe('CONNECTION_WARNING')
       expect(result!.priority).toBe('high')
       expect(result!.title).toBe('Connection at risk')
-      expect(result!.message).toContain('21')
+      expect(result!.message).toBe(
+        '5 · 10 min late · may miss 21 at Transfer Center'
+      )
+    })
+
+    // 2026-10-20 09:28:17: current leg 94 at +180 s, connection METRO Gold Line.
+    it('names the late leg and the connection separately (09:28 shape)', () => {
+      const legs = [
+        {
+          endTime: T + 600000,
+          mode: 'BUS',
+          routeShortName: '94',
+          startTime: T,
+          to: { name: '5th St & Cedar Station' }
+        },
+        {
+          from: { name: '5th St & Cedar Station' },
+          mode: 'BUS',
+          routeLongName: 'METRO Gold Line',
+          startTime: T + 700000
+        }
+      ] as any[]
+      const result = checkConnectionWarning(
+        makeProgress({ currentLegIndex: 0, delay: 180 }),
+        legs,
+        0,
+        []
+      )
+      expect(result!.title).toBe('Connection at risk')
+      expect(result!.message).toBe(
+        '94 · 3 min late · may miss METRO Gold Line at 5th St & Cedar Station'
+      )
+      expect(result!.id).toContain('METRO Gold Line')
+    })
+
+    it('omits the stop when none is known (late branch)', () => {
+      const legs = [
+        {
+          endTime: T + 600000,
+          mode: 'BUS',
+          routeShortName: '94',
+          startTime: T
+        },
+        {
+          mode: 'BUS',
+          routeLongName: 'METRO Gold Line',
+          startTime: T + 700000
+        }
+      ] as any[]
+      const result = checkConnectionWarning(
+        makeProgress({ currentLegIndex: 0, delay: 180 }),
+        legs,
+        0,
+        []
+      )
+      expect(result!.message).toBe('94 · 3 min late · may miss METRO Gold Line')
     })
 
     it('should warn (tight) when slack is small but positive', () => {

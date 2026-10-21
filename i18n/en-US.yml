@@ -524,7 +524,8 @@ components:
       busHereTitle: Bus here
       changeWithSlack: "{change} · {slack}"
       connectionAtRiskTitle: Connection at risk
-      connectionLateAtStop: "{routeName} · {minutes} min late · {stopName}"
+      connectionLateMayMiss: "{lateRoute} · {minutes} min late · may miss {nextRoute}"
+      connectionLateMayMissAtStop: "{lateRoute} · {minutes} min late · may miss {nextRoute} at {stopName}"
       connectionSlack: "{routeName} · {seconds}s"
       connectionSlackAtStop: "{routeName} · {seconds}s · {stopName}"
       driftEarlier: "{minutes} min earlier"
