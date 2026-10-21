@@ -223,12 +223,16 @@ components:
     shareDiagnosticsOn: "Partage des diagnostics : activé"
     skipNavigation: Sauter la navigation
   ActiveRoutingPreferences:
+    bikeSpeedChip: "Vélo {speed} mph"
     clear: Effacer
     label: "Préférences :"
     noTransfers: "Sans correspondance"
     noWalkTransit: "Sans marche + transports"
     optionCount: "{count} options"
+    resetBikeSpeed: "Remettre la vitesse à vélo à la normale ({speed} mph)"
+    resetWalkSpeed: "Remettre la vitesse de marche à la normale ({speed} mph)"
     viaStop: "Via {stop}"
+    walkSpeedChip: "Marche {speed} mph"
   BackToTripPlanner:
     backToTripPlanner: Retour au planificateur de trajets
   BatchResultsScreen:

@@ -10,7 +10,16 @@ import {
   getMockInitialState,
   mockWithProvider
 } from '../../test-utils/mock-data/store'
+import coreUtils from '@opentripplanner/core-utils'
+
 import ActiveRoutingPreferences from '../../../lib/components/form/active-routing-preferences'
+
+// Capture the write the × makes instead of letting a real search fire.
+jest.mock('../../../lib/actions/form', () => ({
+  ...jest.requireActual('../../../lib/actions/form'),
+  setQueryParam: jest.fn(() => () => undefined)
+}))
+const { setQueryParam } = jest.requireMock('../../../lib/actions/form')
 
 function flatten(node: any, prefix = '', out: Record<string, string> = {}) {
   Object.entries(node || {}).forEach(([key, value]) => {
@@ -38,13 +47,13 @@ function renderChips(currentQueryOverrides = {}, routeSets?: any[]) {
     numItineraries: 40,
     ...currentQueryOverrides
   }
-  const { wrapper } = mockWithProvider(
+  const { store, wrapper } = mockWithProvider(
     ActiveRoutingPreferences,
     {},
     state,
     messages
   )
-  return wrapper
+  return Object.assign(wrapper, { store })
 }
 
 describe('components > form > active routing preferences', () => {
@@ -177,6 +186,94 @@ describe('components > form > active routing preferences', () => {
       const partial = renderChips(lock('only', ['1:18', '1:21']), [COMMUTE])
       expect(partial.find('.route-set-saved-summary')).toHaveLength(0)
       expect(partial.text()).toContain('Only 18')
+    })
+  })
+
+  describe('speed chips (69.1)', () => {
+    const PLACE = { lat: 44.9, lon: -93.2, name: 'Somewhere' }
+    const withPrefs = (prefs: any, valid = true) =>
+      renderChips({
+        routingPreferences: prefs,
+        ...(valid ? { from: PLACE, to: { ...PLACE, lat: 45 } } : {})
+      })
+    const stored = () => coreUtils.storage.getItem('routingProfile') as any
+    beforeEach(() => {
+      setQueryParam.mockClear()
+      coreUtils.storage.removeItem('routingProfile')
+    })
+
+    it('says the value: 8 m/s is "Bike 17.9 mph", with a x naming the default', () => {
+      const wrapper = withPrefs({ bikeSpeed: 8 })
+      const chip = wrapper.find('.speed-chip-bikeSpeed').hostNodes()
+      expect(chip.text()).toBe('Bike 17.9 mph')
+      expect(chip.find('button').prop('aria-label')).toBe(
+        'Set bike speed back to normal (11.2 mph)'
+      )
+    })
+
+    it('4.5 m/s is "Bike 10.1 mph" and never "faster"', () => {
+      const text = withPrefs({ bikeSpeed: 4.5 }).text()
+      expect(text).toContain('Bike 10.1 mph')
+      expect(text).not.toContain('faster')
+      expect(text).not.toContain('slower')
+    })
+
+    it('shows no chip at the server default (5 m/s)', () => {
+      const wrapper = withPrefs({ bikeSpeed: 5 })
+      expect(wrapper.find('.active-routing-preferences')).toHaveLength(0)
+    })
+
+    it('walking speed gets its own chip and x', () => {
+      const wrapper = withPrefs({ walkSpeed: 2 })
+      const chip = wrapper.find('.speed-chip-walkSpeed').hostNodes()
+      expect(chip.text()).toBe('Walk 4.5 mph')
+      expect(chip.find('button').prop('aria-label')).toBe(
+        'Set walking speed back to normal (3.0 mph)'
+      )
+    })
+
+    it('x drops only that lever, re-searches, and rewrites the stored profile', () => {
+      const wrapper = withPrefs({ bikeReluctance: 6, bikeSpeed: 8 })
+      wrapper
+        .find('.speed-chip-bikeSpeed')
+        .hostNodes()
+        .find('button')
+        .simulate('click')
+      expect(setQueryParam).toHaveBeenCalledTimes(1)
+      const [payload, searchId] = setQueryParam.mock.calls[0]
+      expect(payload.routingPreferences).toEqual({ bikeReluctance: 6 })
+      expect(searchId).toBeTruthy()
+      expect(stored().routingPreferences).toEqual({ bikeReluctance: 6 })
+    })
+
+    it('x on a lone speed removes the stored profile', () => {
+      coreUtils.storage.storeItem('routingProfile', {
+        routingPreferences: { bikeSpeed: 8 }
+      })
+      const wrapper = withPrefs({ bikeSpeed: 8 })
+      wrapper
+        .find('.speed-chip-bikeSpeed')
+        .hostNodes()
+        .find('button')
+        .simulate('click')
+      expect(setQueryParam.mock.calls[0][0].routingPreferences).toEqual({})
+      expect(stored()).toBeFalsy()
+    })
+
+    it('x does not search before there is a valid query', () => {
+      const wrapper = withPrefs({ bikeSpeed: 8 }, false)
+      wrapper
+        .find('.speed-chip-bikeSpeed')
+        .hostNodes()
+        .find('button')
+        .simulate('click')
+      expect(setQueryParam.mock.calls[0][1]).toBeUndefined()
+    })
+
+    it('Clear still clears everything', () => {
+      const wrapper = withPrefs({ bikeSpeed: 8, walkSpeed: 2 })
+      wrapper.find('button').last().simulate('click')
+      expect(setQueryParam.mock.calls[0][0].routingPreferences).toEqual({})
     })
   })
 })

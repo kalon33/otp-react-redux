@@ -472,7 +472,14 @@ const PREFERENCE_PHRASES: Record<
     higher: 'avoiding biking',
     lower: 'more biking'
   },
-  bikeSpeed: { baseline: 4, higher: 'faster biking', lower: 'slower biking' },
+  // Speed levers are shown as their own value chips ("Bike 17.9 mph", 69.1),
+  // not phrases, so summarizePreferences skips them; the baseline is the
+  // server's own so "equals the default" means the same thing everywhere.
+  bikeSpeed: {
+    baseline: SERVER_BIKE_SPEED_MPS,
+    higher: 'faster biking',
+    lower: 'slower biking'
+  },
   minTransferTime: {
     baseline: 0,
     higher: 'longer transfer buffer',
@@ -499,7 +506,7 @@ const PREFERENCE_PHRASES: Record<
     lower: 'more walking'
   },
   walkSpeed: {
-    baseline: 1.34,
+    baseline: SERVER_WALK_SPEED_MPS,
     higher: 'brisker walking pace',
     lower: 'gentler walking pace'
   }
@@ -515,6 +522,7 @@ export function summarizePreferences(
   const clamped = clampPreferences(prefs)
   const out: PreferenceSummary[] = []
   ;(Object.keys(clamped) as LeverKey[]).forEach((key) => {
+    if (key === 'bikeSpeed' || key === 'walkSpeed') return
     const value = clamped[key] as number
     const { baseline, higher, lower } = PREFERENCE_PHRASES[key]
     // Skip levers sitting at their neutral baseline — no meaningful change.

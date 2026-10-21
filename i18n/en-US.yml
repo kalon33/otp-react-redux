@@ -175,12 +175,16 @@ components:
       Your changes have been saved. You are ready to start planning trips. Click
       the "Finish" button to return to trip planner.
   ActiveRoutingPreferences:
+    bikeSpeedChip: Bike {speed} mph
     clear: Clear
     label: "Preferences:"
     noTransfers: No transfers
     noWalkTransit: No walk + transit
     optionCount: "{count} options"
+    resetBikeSpeed: Set bike speed back to normal ({speed} mph)
+    resetWalkSpeed: Set walking speed back to normal ({speed} mph)
     viaStop: Via {stop}
+    walkSpeedChip: Walk {speed} mph
   AddPlaceButton:
     addPlace: Add place
     needOriginDestination: Define origin/destination to add intermediate places
