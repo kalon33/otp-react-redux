@@ -174,6 +174,7 @@ import {
   repairLegTimeInversions,
   retargetTransitLegToRun
 } from '../util/go-mode/leg-merge'
+import type { AdoptedRun } from '../util/go-mode/leg-merge'
 import {
   getOnCandidates,
   legStopIndexes,
@@ -252,6 +253,7 @@ import {
   compareAlightOffer,
   latchAllows,
   latchRecordOffer,
+  plannedOnwardOf,
   remainingTransitLegs,
   routeSetOf
 } from '../util/go-mode/faster-route'
@@ -941,6 +943,13 @@ export const SET_MAP_FOLLOW = 'SET_MAP_FOLLOW'
  * be told from a drag in the stream.
  */
 export const MAP_FOLLOW_GESTURE = 'MAP_FOLLOW_GESTURE'
+/**
+ * Recording only (59.1): the map's render loop caught a throwing frame and
+ * kept drawing (lib/util/go-mode/map-render-guard.ts). Before the guard, one
+ * such throw froze the map for the rest of the session. At most one per 60 s;
+ * `suppressed` counts the recoveries in between.
+ */
+export const MAP_RENDER_RECOVERED = 'MAP_RENDER_RECOVERED'
 export const SET_BOARDING_SEARCHING = 'SET_BOARDING_SEARCHING'
 // Whether the last vehicle search for the picker FAILED, as opposed to
 // honestly finding nothing. Must also appear in create-otp-reducer's explicit
@@ -1257,6 +1266,11 @@ export const recordMapFollowGesture = createAction<{
   touches: number
   zoomDelta: number
 }>(MAP_FOLLOW_GESTURE)
+// Recording only (MAP_RENDER_RECOVERED), 59.1.
+export const recordMapRenderRecovered = createAction<{
+  message: string
+  suppressed: number
+}>(MAP_RENDER_RECOVERED)
 export const setGoModeBackgrounded = createAction<boolean>(
   SET_GO_MODE_BACKGROUNDED
 )
@@ -1620,6 +1634,31 @@ async function catchHeldRunAtLaterStop(
 }
 
 /**
+ * The runs of a later transit leg's route, in its direction, leaving its own
+ * boarding stop — from the stop-times answer in the store (beginGoMode
+ * pre-fetches one for every boarding stop of the plan). Null when the store
+ * has nothing for that stop or route (backlog 56.1).
+ */
+export function onwardRunsFromStore(state: any, leg: Leg): AdoptedRun[] | null {
+  const stopId = (leg as any)?.from?.stop?.gtfsId
+  const stopData = stopId ? state.otp?.transitIndex?.stops?.[stopId] : null
+  if (!stopData) return null
+  const runs = getRouteDepartures(
+    stopData,
+    getLegRouteId(leg),
+    legBoardingDirection(leg)
+  )
+    .map((d) => ({
+      departureMs: d.depMs,
+      headsign: d.headsign ?? null,
+      realtime: d.realtime,
+      tripId: tripGtfsId(d.tripId) as string
+    }))
+    .filter((r) => !!r.tripId)
+  return runs.length ? runs : null
+}
+
+/**
  * Put the ITINERARY on the run the card has moved to.
  *
  * Backlog 23.3. Rider, 2026-09-21 16:03 (board Q4): *"Yes override? Why are we
@@ -1766,12 +1805,36 @@ export function retargetPlanToDeparture(
     const legDepartureMs =
       verdict?.busMs != null ? Math.max(run.depMs, verdict.busMs) : run.depMs
 
-    let candidate = retargetTransitLegToRun(itinerary, boardLegIndex, {
-      departureMs: legDepartureMs,
-      headsign: run.headsign ?? null,
-      realtime: run.realtime,
-      tripId
-    })
+    // 56.1 (2026-10-19 08:48:29): a later transit leg goes on a real run from
+    // its own stop — the departures beginGoMode pre-fetched for every
+    // boarding stop of the plan — never on the old run's trip id moved by the
+    // boarding leg's delta.
+    let unresolvedLegIndex: number | null = null
+    let candidate = retargetTransitLegToRun(
+      itinerary,
+      boardLegIndex,
+      {
+        departureMs: legDepartureMs,
+        headsign: run.headsign ?? null,
+        realtime: run.realtime,
+        tripId
+      },
+      {
+        onUnresolved: (i) => {
+          unresolvedLegIndex = i
+        },
+        onwardRuns: (leg) => onwardRunsFromStore(state, leg)
+      }
+    )
+    if (!candidate && unresolvedLegIndex != null) {
+      record('onward-unresolved', {
+        boardLegIndex,
+        runDepartureMs: run.depMs,
+        tripId,
+        why: `leg ${unresolvedLegIndex}`
+      })
+      return
+    }
     if (!candidate) {
       record('no-candidate', {
         boardLegIndex,
@@ -5426,6 +5489,13 @@ function settleAboardCheck(
       boarded: { routeId: ctx.vehicle?.routeId ?? null, tripId: ctx.tripId },
       downstream,
       nowMs: ctx.settled.nowMs,
+      // 56.1: the onward leg as the card shows it (route, stop, board time),
+      // not only its trip id — which a retarget once left stale.
+      plannedOnward: plannedOnwardOf(
+        held,
+        ctx.aboardLegIndex,
+        goMode?.liveLegTimes
+      ),
       plannedOnwardTripId: onward ? legTripId(onward) : null,
       plannedStopId,
       results: rs
