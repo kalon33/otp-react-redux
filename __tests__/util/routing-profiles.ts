@@ -514,3 +514,21 @@ describe('postPreferences route names (58.2, cycle 27 Q5)', () => {
     expect(routeQuery).toBeUndefined()
   })
 })
+
+describe('summarizePreferences speed levers (69.1)', () => {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const rp = require('../../lib/util/routing-profiles')
+  it('no longer phrases the speed levers (they are value chips)', () => {
+    expect(rp.summarizePreferences({ bikeSpeed: 8, walkSpeed: 2 })).toEqual([])
+  })
+  it('baselines are the server constants', () => {
+    expect(
+      rp.summarizePreferences({ bikeSpeed: rp.SERVER_BIKE_SPEED_MPS })
+    ).toEqual([])
+    expect(
+      rp
+        .summarizePreferences({ bikeReluctance: 6, bikeSpeed: 8 })
+        .map((i: any) => i.phrase)
+    ).toEqual(['avoiding biking'])
+  })
+})
