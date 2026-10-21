@@ -540,6 +540,6 @@ describe('summarizePreferences speed levers (69.1)', () => {
       rp
         .summarizePreferences({ bikeReluctance: 6, bikeSpeed: 8 })
         .map((i: any) => i.phrase)
-    ).toEqual(['avoiding biking'])
+    ).toEqual(['components.ActiveRoutingPreferences.avoidingBiking'])
   })
 })

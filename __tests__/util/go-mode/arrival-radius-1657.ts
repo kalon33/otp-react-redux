@@ -1,3 +1,6 @@
+import { existsSync, readFileSync } from 'fs'
+import { join } from 'path'
+
 import FakeTimers from '@sinonjs/fake-timers'
 
 import '../../test-utils/mock-window-url'
@@ -11,8 +14,17 @@ import {
   handlePositionUpdate,
   resumeGoModeTrip
 } from '../../../lib/actions/go-mode'
-import fixture from '../../../lib/util/go-mode/replay/fixtures/green-465-1657.json'
 import goMode from '../../../lib/reducers/go-mode'
+
+// The 10-19 recording is 13 MB and deliberately NOT committed; the suite
+// skips when the fixture is absent.
+const FIXTURE_PATH = join(
+  __dirname,
+  '../../../lib/util/go-mode/replay/fixtures/green-465-1657.json'
+)
+const fixture: any = existsSync(FIXTURE_PATH)
+  ? JSON.parse(readFileSync(FIXTURE_PATH, 'utf8'))
+  : null
 
 jest.mock('../../../lib/actions/apiV2', () => ({
   ...jest.requireActual('../../../lib/actions/apiV2'),
@@ -95,185 +107,194 @@ const makeStore = (overrides: any = {}) => {
   }
 }
 
-const track: any[] = [...(fixture as any).gpsTrack].sort(
-  (a, b) => a.tMs - b.tMs
-)
+const track: any[] = fixture
+  ? [...(fixture as any).gpsTrack].sort((a, b) => a.tMs - b.tMs)
+  : []
 
 const of = (store: ReturnType<typeof makeStore>, type: string) =>
   store.actions().filter(({ a }) => a.type === type)
 
-describe('arrival radius on a bike finish (12.17, 2026-10-19 17:49 ride)', () => {
-  let clock: FakeTimers.InstalledClock
-  let store: ReturnType<typeof makeStore>
+;(fixture ? describe : describe.skip)(
+  'arrival radius on a bike finish (12.17, 2026-10-19 17:49 ride)',
+  () => {
+    let clock: FakeTimers.InstalledClock
+    let store: ReturnType<typeof makeStore>
 
-  /** Replay the recording up to and including `untilMs`. */
-  const replayUntil = (untilMs: number) => {
-    for (const g of track) {
-      if (g.tMs > untilMs) break
-      clock.setSystemTime(g.tMs)
-      store.run(handlePositionUpdate(posOf(g)))
+    /** Replay the recording up to and including `untilMs`. */
+    const replayUntil = (untilMs: number) => {
+      for (const g of track) {
+        if (g.tMs > untilMs) break
+        clock.setSystemTime(g.tMs)
+        store.run(handlePositionUpdate(posOf(g)))
+      }
     }
-  }
 
-  beforeEach(() => {
-    window.localStorage.clear()
-    clearGoModeSession()
-    clock = FakeTimers.install({
-      now: track[0].tMs,
-      toFake: ['Date', 'setTimeout', 'clearTimeout']
-    })
-    store = makeStore({
-      activeItinerary: (fixture as any).itinerary,
-      isActive: true,
-      tracking: { ...initial.tracking, isTracking: true }
-    })
-  })
-
-  afterEach(() => {
-    try {
-      if (store.getGoMode().isActive) store.run(endGoMode())
-    } catch (e) {
-      /* nothing to end */
-    }
-    clock.uninstall()
-  })
-
-  it('does not call it arrived at 17:49:06, 72 m out on the bike', () => {
-    replayUntil(track[track.length - 1].tMs)
-    expect(track[track.length - 1].tMs).toBe(ARRIVAL_TICK_MS)
-    expect(of(store, 'SET_ARRIVED')).toEqual([])
-    expect(store.getGoMode().arrivedAt).toBeNull()
-    const last = of(store, 'UPDATE_PROGRESS').pop()!.a.payload
-    expect(last.finalLegMode).toBe('BICYCLE')
-    expect(last.distanceToDestination).toBeCloseTo(72.4, 1)
-    expect(last.status).not.toBe('completed')
-    const pushes = of(store, 'ADD_NOTIFICATION').filter(
-      ({ a }) => a.payload?.type === 'TRIP_COMPLETE'
-    )
-    expect(pushes).toEqual([])
-  })
-
-  it('starts the minute on the first fix inside 75 m (78.2 m at 17:49:05 is outside)', () => {
-    replayUntil(ARRIVAL_TICK_MS)
-    const near = of(store, 'SET_NEAR_DESTINATION')
-    expect(near).toHaveLength(1)
-    expect(near[0].a.payload.sinceMs).toBe(FIRST_INSIDE_75_MS)
-    expect(store.getGoMode().nearDestination?.sinceMs).toBe(FIRST_INSIDE_75_MS)
-  })
-
-  it('arrives at 17:50:06 on the wall clock, with no further fix', () => {
-    replayUntil(ARRIVAL_TICK_MS)
-    const fixesBefore = of(store, 'UPDATE_POSITION').length
-    clock.tick(DWELL_MS - 1000)
-    expect(store.getGoMode().arrivedAt).toBeNull()
-    clock.tick(1000)
-
-    const arrived = of(store, 'SET_ARRIVED')
-    expect(arrived).toHaveLength(1)
-    expect(arrived[0].a.payload).toBe(ARRIVAL_TICK_MS + DWELL_MS)
-    expect(new Date(arrived[0].a.payload).toISOString()).toBe(
-      '2026-10-19T22:50:06.000Z'
-    )
-    // No fix was delivered to do it.
-    expect(of(store, 'UPDATE_POSITION')).toHaveLength(fixesBefore)
-    // The same arrival a distance latch makes: progress reads completed, the
-    // "Arrived" push goes out once, tracking drops to the arrived cadence, the
-    // dwell is cleared.
-    const types = store
-      .actions()
-      .filter(({ t }) => t >= ARRIVAL_TICK_MS + DWELL_MS)
-      .map(({ a }) => a.type)
-    expect(types).toEqual(
-      expect.arrayContaining([
-        'UPDATE_PROGRESS',
-        'SET_ARRIVED',
-        'UPDATE_TRACKING_INTERVAL',
-        'ADD_NOTIFICATION'
-      ])
-    )
-    expect(types.indexOf('UPDATE_PROGRESS')).toBeLessThan(
-      types.indexOf('SET_ARRIVED')
-    )
-    expect(store.getGoMode().progress.status).toBe('completed')
-    const pushes = of(store, 'ADD_NOTIFICATION').filter(
-      ({ a }) => a.payload?.type === 'TRIP_COMPLETE'
-    )
-    expect(pushes).toHaveLength(1)
-    expect(pushes[0].a.payload.message).toBe('Arrived')
-    expect(
-      of(store, 'UPDATE_TRACKING_INTERVAL').pop()!.a.payload.interval
-    ).toBe(30000)
-    expect(store.getGoMode().nearDestination).toBeNull()
-  })
-
-  it('a fix back beyond 75 m inside the minute disarms it', () => {
-    replayUntil(ARRIVAL_TICK_MS)
-    // The 17:49:05 fix (78.2 m out), re-delivered 20 s later.
-    const outside = track[track.length - 2]
-    clock.setSystemTime(ARRIVAL_TICK_MS + 20_000)
-    store.run(
-      handlePositionUpdate(posOf({ ...outside, tMs: ARRIVAL_TICK_MS + 20_000 }))
-    )
-    expect(store.getGoMode().nearDestination).toBeNull()
-    clock.tick(5 * DWELL_MS)
-    expect(of(store, 'SET_ARRIVED')).toEqual([])
-    expect(store.getGoMode().arrivedAt).toBeNull()
-  })
-
-  it('a Stop inside the minute leaves no arrival behind it', () => {
-    replayUntil(ARRIVAL_TICK_MS)
-    clock.tick(30_000)
-    store.run(endGoMode())
-    expect(store.getGoMode().isActive).toBe(false)
-    expect(store.getGoMode().nearDestination).toBeNull()
-    clock.tick(5 * DWELL_MS)
-    expect(of(store, 'SET_ARRIVED')).toEqual([])
-  })
-
-  it('a new itinerary with another destination cannot inherit the minute', () => {
-    replayUntil(ARRIVAL_TICK_MS)
-    const itin: any = (fixture as any).itinerary
-    const legs = itin.legs.slice()
-    const last = legs[legs.length - 1]
-    legs[legs.length - 1] = {
-      ...last,
-      to: { ...last.to, lat: last.to.lat + 0.01, name: 'Somewhere else' }
-    }
-    // A swap in place (what a re-plan does to the store): the dwell still
-    // names the OLD door.
-    store.run((dispatch: any) =>
-      dispatch({
-        payload: { itinerary: { ...itin, legs } },
-        type: 'START_GO_MODE'
+    beforeEach(() => {
+      window.localStorage.clear()
+      clearGoModeSession()
+      clock = FakeTimers.install({
+        now: track[0].tMs,
+        toFake: ['Date', 'setTimeout', 'clearTimeout']
       })
-    )
-    expect(store.getGoMode().nearDestination?.sinceMs).toBe(FIRST_INSIDE_75_MS)
-    clock.tick(5 * DWELL_MS)
-    expect(of(store, 'SET_ARRIVED')).toEqual([])
-  })
-
-  it('a relaunch inside the minute keeps the minute it had (persisted like arrivedAt)', async () => {
-    replayUntil(ARRIVAL_TICK_MS)
-    saveGoModeSession(store.getGoMode())
-    const saved = loadGoModeSession() as any
-    expect(saved.nearDestination?.sinceMs).toBe(FIRST_INSIDE_75_MS)
-
-    // The page goes away 40 s into the minute: its timer with it.
-    clock.tick(40_000)
-    store.run(endGoMode())
-    // ...and comes back, the way create-otp-reducer restores a session.
-    store = makeStore({
-      activeItinerary: saved.activeItinerary,
-      arrivedAt: saved.arrivedAt ?? null,
-      isActive: true,
-      nearDestination: saved.nearDestination ?? null,
-      tracking: { ...initial.tracking, isTracking: true }
+      store = makeStore({
+        activeItinerary: (fixture as any).itinerary,
+        isActive: true,
+        tracking: { ...initial.tracking, isTracking: true }
+      })
     })
-    await store.run(resumeGoModeTrip())
-    // 20 s left of the minute, not a fresh 60.
-    clock.tick(19_000)
-    expect(store.getGoMode().arrivedAt).toBeNull()
-    clock.tick(1_000)
-    expect(store.getGoMode().arrivedAt).toBe(ARRIVAL_TICK_MS + DWELL_MS)
-  })
-})
+
+    afterEach(() => {
+      try {
+        if (store.getGoMode().isActive) store.run(endGoMode())
+      } catch (e) {
+        /* nothing to end */
+      }
+      clock.uninstall()
+    })
+
+    it('does not call it arrived at 17:49:06, 72 m out on the bike', () => {
+      replayUntil(track[track.length - 1].tMs)
+      expect(track[track.length - 1].tMs).toBe(ARRIVAL_TICK_MS)
+      expect(of(store, 'SET_ARRIVED')).toEqual([])
+      expect(store.getGoMode().arrivedAt).toBeNull()
+      const last = of(store, 'UPDATE_PROGRESS').pop()!.a.payload
+      expect(last.finalLegMode).toBe('BICYCLE')
+      expect(last.distanceToDestination).toBeCloseTo(72.4, 1)
+      expect(last.status).not.toBe('completed')
+      const pushes = of(store, 'ADD_NOTIFICATION').filter(
+        ({ a }) => a.payload?.type === 'TRIP_COMPLETE'
+      )
+      expect(pushes).toEqual([])
+    })
+
+    it('starts the minute on the first fix inside 75 m (78.2 m at 17:49:05 is outside)', () => {
+      replayUntil(ARRIVAL_TICK_MS)
+      const near = of(store, 'SET_NEAR_DESTINATION')
+      expect(near).toHaveLength(1)
+      expect(near[0].a.payload.sinceMs).toBe(FIRST_INSIDE_75_MS)
+      expect(store.getGoMode().nearDestination?.sinceMs).toBe(
+        FIRST_INSIDE_75_MS
+      )
+    })
+
+    it('arrives at 17:50:06 on the wall clock, with no further fix', () => {
+      replayUntil(ARRIVAL_TICK_MS)
+      const fixesBefore = of(store, 'UPDATE_POSITION').length
+      clock.tick(DWELL_MS - 1000)
+      expect(store.getGoMode().arrivedAt).toBeNull()
+      clock.tick(1000)
+
+      const arrived = of(store, 'SET_ARRIVED')
+      expect(arrived).toHaveLength(1)
+      expect(arrived[0].a.payload).toBe(ARRIVAL_TICK_MS + DWELL_MS)
+      expect(new Date(arrived[0].a.payload).toISOString()).toBe(
+        '2026-10-19T22:50:06.000Z'
+      )
+      // No fix was delivered to do it.
+      expect(of(store, 'UPDATE_POSITION')).toHaveLength(fixesBefore)
+      // The same arrival a distance latch makes: progress reads completed, the
+      // "Arrived" push goes out once, tracking drops to the arrived cadence, the
+      // dwell is cleared.
+      const types = store
+        .actions()
+        .filter(({ t }) => t >= ARRIVAL_TICK_MS + DWELL_MS)
+        .map(({ a }) => a.type)
+      expect(types).toEqual(
+        expect.arrayContaining([
+          'UPDATE_PROGRESS',
+          'SET_ARRIVED',
+          'UPDATE_TRACKING_INTERVAL',
+          'ADD_NOTIFICATION'
+        ])
+      )
+      expect(types.indexOf('UPDATE_PROGRESS')).toBeLessThan(
+        types.indexOf('SET_ARRIVED')
+      )
+      expect(store.getGoMode().progress.status).toBe('completed')
+      const pushes = of(store, 'ADD_NOTIFICATION').filter(
+        ({ a }) => a.payload?.type === 'TRIP_COMPLETE'
+      )
+      expect(pushes).toHaveLength(1)
+      expect(pushes[0].a.payload.message).toBe('Arrived')
+      expect(
+        of(store, 'UPDATE_TRACKING_INTERVAL').pop()!.a.payload.interval
+      ).toBe(30000)
+      expect(store.getGoMode().nearDestination).toBeNull()
+    })
+
+    it('a fix back beyond 75 m inside the minute disarms it', () => {
+      replayUntil(ARRIVAL_TICK_MS)
+      // The 17:49:05 fix (78.2 m out), re-delivered 20 s later.
+      const outside = track[track.length - 2]
+      clock.setSystemTime(ARRIVAL_TICK_MS + 20_000)
+      store.run(
+        handlePositionUpdate(
+          posOf({ ...outside, tMs: ARRIVAL_TICK_MS + 20_000 })
+        )
+      )
+      expect(store.getGoMode().nearDestination).toBeNull()
+      clock.tick(5 * DWELL_MS)
+      expect(of(store, 'SET_ARRIVED')).toEqual([])
+      expect(store.getGoMode().arrivedAt).toBeNull()
+    })
+
+    it('a Stop inside the minute leaves no arrival behind it', () => {
+      replayUntil(ARRIVAL_TICK_MS)
+      clock.tick(30_000)
+      store.run(endGoMode())
+      expect(store.getGoMode().isActive).toBe(false)
+      expect(store.getGoMode().nearDestination).toBeNull()
+      clock.tick(5 * DWELL_MS)
+      expect(of(store, 'SET_ARRIVED')).toEqual([])
+    })
+
+    it('a new itinerary with another destination cannot inherit the minute', () => {
+      replayUntil(ARRIVAL_TICK_MS)
+      const itin: any = (fixture as any).itinerary
+      const legs = itin.legs.slice()
+      const last = legs[legs.length - 1]
+      legs[legs.length - 1] = {
+        ...last,
+        to: { ...last.to, lat: last.to.lat + 0.01, name: 'Somewhere else' }
+      }
+      // A swap in place (what a re-plan does to the store): the dwell still
+      // names the OLD door.
+      store.run((dispatch: any) =>
+        dispatch({
+          payload: { itinerary: { ...itin, legs } },
+          type: 'START_GO_MODE'
+        })
+      )
+      expect(store.getGoMode().nearDestination?.sinceMs).toBe(
+        FIRST_INSIDE_75_MS
+      )
+      clock.tick(5 * DWELL_MS)
+      expect(of(store, 'SET_ARRIVED')).toEqual([])
+    })
+
+    it('a relaunch inside the minute keeps the minute it had (persisted like arrivedAt)', async () => {
+      replayUntil(ARRIVAL_TICK_MS)
+      saveGoModeSession(store.getGoMode())
+      const saved = loadGoModeSession() as any
+      expect(saved.nearDestination?.sinceMs).toBe(FIRST_INSIDE_75_MS)
+
+      // The page goes away 40 s into the minute: its timer with it.
+      clock.tick(40_000)
+      store.run(endGoMode())
+      // ...and comes back, the way create-otp-reducer restores a session.
+      store = makeStore({
+        activeItinerary: saved.activeItinerary,
+        arrivedAt: saved.arrivedAt ?? null,
+        isActive: true,
+        nearDestination: saved.nearDestination ?? null,
+        tracking: { ...initial.tracking, isTracking: true }
+      })
+      await store.run(resumeGoModeTrip())
+      // 20 s left of the minute, not a fresh 60.
+      clock.tick(19_000)
+      expect(store.getGoMode().arrivedAt).toBeNull()
+      clock.tick(1_000)
+      expect(store.getGoMode().arrivedAt).toBe(ARRIVAL_TICK_MS + DWELL_MS)
+    })
+  }
+)
