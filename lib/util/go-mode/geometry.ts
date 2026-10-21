@@ -255,3 +255,260 @@ export function extractItineraryTimedPoints(
   }
   return points
 }
+
+/**
+ * ─── Where on a trip's shape is a point? (backlog 64.1) ─────────────────────
+ *
+ * The onboard Confirm needs two answers about the rider and the bus's run: how
+ * far past the chosen get-off stop the rider's fix already is, and which stop
+ * is the first one still ahead of them. Both are questions about position
+ * ALONG the run, so they are asked of the trip's own shape, not of straight
+ * lines between stops.
+ *
+ * And always searching FORWARD from an anchor — never a global nearest point.
+ * Routes loop back on themselves (the 539 loops past Old Shakopee & 86th
+ * before its 98th St stop; downtown couplets run the same street twice), so
+ * the closest vertex anywhere on the shape can be the other pass, and a rider
+ * read onto the wrong pass is "past" a stop they have not reached. The rule is
+ * the one buildOnboardItinerary's own slice has always used: each point is
+ * looked for from where the previous one was found.
+ */
+
+/** A point's position along a polyline. */
+export interface ShapePosition {
+  /** Metres along the shape from its first vertex to the projection. */
+  alongM: number
+  /** Metres from the point to the shape (perpendicular, or to a vertex). */
+  offM: number
+  /** Index of the segment's first vertex — the next search starts here. */
+  segmentIndex: number
+}
+
+/** Within this, the shape passes "by" the point — see projectForwardOnShape. */
+export const SHAPE_NEAR_M = 60
+
+/**
+ * Project `point` onto `shape` (decoded [lat, lon] vertices), looking only
+ * forward of `from` — a vertex index, or a position already found on the shape
+ * (then nothing behind that position, even on its own segment, is considered).
+ * The FIRST stretch of the shape that passes within `nearM` of the point wins
+ * — its closest projection — so a later pass of a loop cannot steal the answer
+ * even when it happens to run closer. When no stretch comes within `nearM`,
+ * the nearest projection ahead is the answer (a sparse shape, a poor fix).
+ * Null when there is nothing to project onto.
+ */
+export function projectForwardOnShape(
+  shape: Array<[number, number]> | null | undefined,
+  point: [number, number] | null | undefined,
+  from: number | ShapePosition = 0,
+  nearM: number = SHAPE_NEAR_M
+): ShapePosition | null {
+  if (!shape || !point || shape.length === 0) return null
+  if (!Number.isFinite(point[0]) || !Number.isFinite(point[1])) return null
+  const fromIndex = typeof from === 'number' ? from : from.segmentIndex
+  const floorAlongM = typeof from === 'number' ? -Infinity : from.alongM
+  const start = Math.max(0, Math.min(fromIndex, shape.length - 1))
+  if (shape.length === 1 || start === shape.length - 1) {
+    const offM = haversineDistance(shape[start], point)
+    let alongM = 0
+    for (let i = 0; i < start; i++) {
+      alongM += haversineDistance(shape[i], shape[i + 1])
+    }
+    return { alongM, offM, segmentIndex: start }
+  }
+  // Metres along the shape to vertex `start`.
+  let alongToVertex = 0
+  for (let i = 0; i < start; i++) {
+    alongToVertex += haversineDistance(shape[i], shape[i + 1])
+  }
+  let best: ShapePosition | null = null
+  let firstNear: ShapePosition | null = null
+  let inNearRun = false
+  const cosLat = Math.cos((point[0] * Math.PI) / 180)
+  for (let i = start; i < shape.length - 1; i++) {
+    const a = shape[i]
+    const b = shape[i + 1]
+    const segM = haversineDistance(a, b)
+    // Local equirectangular frame around the point: ample at stop spacing.
+    const ax = (a[1] - point[1]) * cosLat
+    const ay = a[0] - point[0]
+    const bx = (b[1] - point[1]) * cosLat
+    const by = b[0] - point[0]
+    const dx = bx - ax
+    const dy = by - ay
+    const len2 = dx * dx + dy * dy
+    // Never behind where the search started from (`from` as a position).
+    const tMin =
+      segM > 0 && floorAlongM > alongToVertex
+        ? Math.min(1, (floorAlongM - alongToVertex) / segM)
+        : 0
+    const t =
+      len2 > 0 ? Math.max(tMin, Math.min(1, -(ax * dx + ay * dy) / len2)) : tMin
+    const proj: [number, number] = [
+      a[0] + (b[0] - a[0]) * t,
+      a[1] + (b[1] - a[1]) * t
+    ]
+    const pos: ShapePosition = {
+      alongM: alongToVertex + segM * t,
+      offM: haversineDistance(proj, point),
+      segmentIndex: i
+    }
+    if (!best || pos.offM < best.offM) best = pos
+    if (pos.offM <= nearM) {
+      if (!firstNear || pos.offM < firstNear.offM) firstNear = pos
+      inNearRun = true
+    } else if (inNearRun) {
+      // The first pass by the point is over; whatever comes later is another.
+      break
+    }
+    alongToVertex += segM
+  }
+  return firstNear || best
+}
+
+interface StopLike {
+  id?: string | null
+  lat?: number | null
+  lon?: number | null
+}
+
+/**
+ * Each stop's position along the shape, in run order, each one searched for
+ * from where the stop before it was found (null where a stop has no
+ * coordinates; later stops then search from the last one placed).
+ */
+export function stopPositionsOnShape(
+  shape: Array<[number, number]> | null | undefined,
+  stops: Array<StopLike | null | undefined>
+): Array<ShapePosition | null> {
+  let from: number | ShapePosition = 0
+  return stops.map((stop) => {
+    if (stop?.lat == null || stop?.lon == null) return null
+    const pos = projectForwardOnShape(shape, [stop.lat, stop.lon], from)
+    if (pos) from = pos
+    return pos
+  })
+}
+
+/**
+ * How many metres along the run `point` is PAST `stops[stopIndex]` — negative
+ * while the stop is still ahead. The stops are placed in run order, each
+ * forward of the one before (stopPositionsOnShape), so a stop on the return
+ * pass of a loop is found on the return pass even where the outbound street
+ * runs beside it; the point is looked for forward of `stops[anchorIndex]`
+ * (where the ride is known to be — the leg's boarding stop). Null when the
+ * shape, the point or either stop cannot be placed.
+ */
+export function metersPastOnShape(
+  shape: Array<[number, number]> | null | undefined,
+  input: {
+    anchorIndex: number
+    point: [number, number] | null | undefined
+    stopIndex: number
+    stops: Array<StopLike | null | undefined>
+  }
+): number | null {
+  const { anchorIndex, point, stopIndex, stops } = input
+  if (!shape?.length || !point || !stops?.length) return null
+  const positions = stopPositionsOnShape(shape, stops)
+  const anchorPos = positions[anchorIndex] ?? null
+  const stopPos = positions[stopIndex] ?? null
+  if (!stopPos) return null
+  const pointPos = projectForwardOnShape(shape, point, anchorPos ?? 0)
+  if (!pointPos) return null
+  return pointPos.alongM - stopPos.alongM
+}
+
+/**
+ * Index (into `stops`) of the first stop at or after `fromStopIndex` that is
+ * still ahead of `point` along the run. A stop up to `atStopM` behind the
+ * point still counts as ahead — a bus dwelling at its stop, a fix a few metres
+ * long — so the rider standing at a stop is not told it is behind them. Null
+ * when nothing is ahead (end of the run) or nothing can be placed.
+ */
+export function firstStopAheadOnShape(
+  shape: Array<[number, number]> | null | undefined,
+  stops: Array<StopLike | null | undefined>,
+  point: [number, number] | null | undefined,
+  options: { atStopM?: number; fromStopIndex?: number } = {}
+): number | null {
+  if (!shape?.length || !point || !stops?.length) return null
+  const atStopM = options.atStopM ?? 30
+  const fromStopIndex = Math.max(0, options.fromStopIndex ?? 0)
+  const positions = stopPositionsOnShape(shape, stops)
+  const anchor = positions
+    .slice(0, fromStopIndex + 1)
+    .reverse()
+    .find((p) => p != null)
+  const pointPos = projectForwardOnShape(shape, point, anchor ?? 0)
+  if (!pointPos) return null
+  for (let i = fromStopIndex; i < stops.length; i++) {
+    const pos = positions[i]
+    if (pos && pos.alongM >= pointPos.alongM - atStopM) return i
+  }
+  return null
+}
+
+/**
+ * How close the shape comes to `point` BEHIND and AHEAD of a position along it
+ * (`splitAlongM`, metres from the first vertex) — the two closest approaches,
+ * each searched over its own half of the shape only. Null for a half the
+ * shape does not have (the split at either end). Backlog 63.1: an added stop
+ * the bus has left behind is one the run came nearer to before the rider's
+ * position than it will after it.
+ */
+export function closestApproachEitherSide(
+  shape: Array<[number, number]> | null | undefined,
+  point: [number, number] | null | undefined,
+  splitAlongM: number
+): { aheadM: number | null; behindM: number | null } | null {
+  if (!shape?.length || !point) return null
+  if (!Number.isFinite(point[0]) || !Number.isFinite(point[1])) return null
+  if (!Number.isFinite(splitAlongM)) return null
+  if (shape.length === 1) {
+    const d = haversineDistance(shape[0], point)
+    return { aheadM: d, behindM: d }
+  }
+  const cosLat = Math.cos((point[0] * Math.PI) / 180)
+  let aheadM: number | null = null
+  let behindM: number | null = null
+  let alongToVertex = 0
+  const at = (a: [number, number], b: [number, number], t: number) =>
+    haversineDistance(
+      [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t],
+      point
+    )
+  for (let i = 0; i < shape.length - 1; i++) {
+    const a = shape[i]
+    const b = shape[i + 1]
+    const segM = haversineDistance(a, b)
+    const ax = (a[1] - point[1]) * cosLat
+    const ay = a[0] - point[0]
+    const dx = (b[1] - point[1]) * cosLat - ax
+    const dy = b[0] - point[0] - ay
+    const len2 = dx * dx + dy * dy
+    // Closest point of the whole segment; within a sub-range of it the
+    // closest is that point clamped into the range (distance is convex in t).
+    const tStar =
+      len2 > 0 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / len2)) : 0
+    // Where the split falls on this segment, as t (may be outside [0, 1]).
+    const tSplit =
+      segM > 0
+        ? (splitAlongM - alongToVertex) / segM
+        : splitAlongM >= alongToVertex
+        ? 1
+        : 0
+    if (tSplit > 0) {
+      const hi = Math.min(1, tSplit)
+      const d = at(a, b, Math.min(tStar, hi))
+      if (behindM == null || d < behindM) behindM = d
+    }
+    if (tSplit < 1) {
+      const lo = Math.max(0, tSplit)
+      const d = at(a, b, Math.max(tStar, lo))
+      if (aheadM == null || d < aheadM) aheadM = d
+    }
+    alongToVertex += segM
+  }
+  return { aheadM, behindM }
+}

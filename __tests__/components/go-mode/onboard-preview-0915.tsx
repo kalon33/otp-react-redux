@@ -110,7 +110,10 @@ const OPTIONS = [
 ]
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function render(previewIndex: number | null = null) {
+function render(
+  previewIndex: number | null = null,
+  confirmingAtMs: number | null = null
+) {
   const state = getMockInitialState()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const otp = state.otp as any
@@ -123,6 +126,7 @@ function render(previewIndex: number | null = null) {
       answeredCandidates: 2,
       bestAlightStop: OPTIONS[0],
       candidates: [],
+      confirmingAtMs,
       keepRouteId: null,
       pendingCandidates: 0,
       preview:
@@ -247,6 +251,34 @@ describe('components > go-mode > onboard alight preview (17.1)', () => {
       expect(text).toContain('Arrive')
       expect(text).toContain('Confirm this stop')
       expect(text).toContain('Back to options')
+    })
+
+    /**
+     * 64.1: while the Confirm re-checks the stop against where the rider is,
+     * the same button holds — disabled, under the onboard flow's existing
+     * "Finding the best stop to get off…" — and Back stays live.
+     */
+    it('holds Confirm under "Finding the best stop" while it re-checks', () => {
+      const { wrapper } = render(1, T)
+      const confirm = wrapper.find(
+        'button[data-testid="onboard-preview-confirm"]'
+      )
+      expect(confirm.prop('disabled')).toBe(true)
+      expect(confirm.text()).toBe('Finding the best stop to get off…')
+      expect(wrapper.text()).not.toContain('Confirm this stop')
+      const back = wrapper.find('button[data-testid="onboard-preview-back"]')
+      expect(back.prop('disabled')).toBeFalsy()
+      // …and the screen is otherwise the same preview.
+      expect(wrapper.text()).toContain('Off at 2nd Ave S & Washington Ave S')
+    })
+
+    it('a preview not re-checking keeps Confirm live', () => {
+      const { wrapper } = render(1)
+      const confirm = wrapper.find(
+        'button[data-testid="onboard-preview-confirm"]'
+      )
+      expect(confirm.prop('disabled')).toBe(false)
+      expect(confirm.text()).toBe('Confirm this stop')
     })
 
     it('says nothing about waiting when the option implies none', () => {

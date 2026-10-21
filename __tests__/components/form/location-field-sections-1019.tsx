@@ -25,7 +25,7 @@ import LocationField from '../../../lib/components/form/connected-location-field
  * (`otp.home`/`otp.work`/`otp.savedPlaces` vs `otp.recent`) but the search
  * dropdown merged them under one "My Places" header, every row with the same
  * pin. The patched `@opentripplanner/location-field` takes them as two lists
- * and renders "Saved places" (Home, Work, custom) above "Recent", each only
+ * and renders "Recent" above "Saved places" (Home, Work, custom), each only
  * when it has entries; recents carry a clock; a "Recently searched" entry that
  * is already a recent is dropped; arrow keys walk the rows in the order shown.
  */
@@ -208,25 +208,25 @@ describe('components > form > location field saved/recent sections (backlog 60.2
     expect(frMessages['otpUi.LocationField.recentPlaces']).toBe('Récents')
   })
 
-  it('shows "Saved places" (Home, Work, custom) above "Recent", no "My Places"', () => {
+  it('shows "Recent" above "Saved places" (Home, Work, custom), no "My Places"', () => {
     const order = menuOrder(renderField())
     expect(headers(order)).toEqual([
-      'H:Saved places',
       'H:Recent',
+      'H:Saved places',
       'H:Recently Searched'
     ])
-    const saved = order.indexOf('H:Saved places')
     const rec = order.indexOf('H:Recent')
-    expect(order.slice(saved + 1, rec)).toEqual([
+    const saved = order.indexOf('H:Saved places')
+    expect(order.slice(rec + 1, saved)).toEqual([
+      'user-recent-Target-Field,-Minneapolis,-MN',
+      'user-recent-Mall-of-America,-Bloomington,-MN',
+      'user-recent-Union-Depot,-Saint-Paul,-MN'
+    ])
+    expect(order.slice(saved + 1, saved + 5)).toEqual([
       'user-saved-Home-(123-Home-St,-Minneapolis,-MN)',
       'user-saved-Work-(500-Nicollet-Mall,-Minneapolis,-MN)',
       'user-saved-Gym',
       "user-saved-Mom's-house"
-    ])
-    expect(order.slice(rec + 1, rec + 4)).toEqual([
-      'user-recent-Target-Field,-Minneapolis,-MN',
-      'user-recent-Mall-of-America,-Bloomington,-MN',
-      'user-recent-Union-Depot,-Saint-Paul,-MN'
     ])
     expect(order).not.toContain('H:My Places')
   })
@@ -251,7 +251,7 @@ describe('components > form > location field saved/recent sections (backlog 60.2
 
   it('hides the "Recently Searched" header when every entry is a recent', () => {
     const order = menuOrder(renderField({ sessionSearches: [SEARCHED_TARGET] }))
-    expect(headers(order)).toEqual(['H:Saved places', 'H:Recent'])
+    expect(headers(order)).toEqual(['H:Recent', 'H:Saved places'])
   })
 
   it('hides an empty section and its header', () => {

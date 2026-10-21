@@ -1,5 +1,5 @@
 diff --git a/node_modules/@opentripplanner/location-field/esm/index.js b/node_modules/@opentripplanner/location-field/esm/index.js
-index 85be40e..ca4543a 100644
+index 85be40e..5930326 100644
 --- a/node_modules/@opentripplanner/location-field/esm/index.js
 +++ b/node_modules/@opentripplanner/location-field/esm/index.js
 @@ -50,6 +50,10 @@ function filter(list, layers, include, limit) {
@@ -100,8 +100,8 @@ index 85be40e..ca4543a 100644
 -    return getRenderData(loc, setLocation, UserLocationIconComponent, intl);
 -  }) : [];
 +  // TransitNav fork (backlog 60.2): when the caller passes the saved places and
-+  // the recent places as two lists, they render under two headers ("Saved
-+  // places", then "Recent") instead of one merged "My Places" list. Callers that
++  // the recent places as two lists, they render under two headers ("Recent",
++  // then "Saved places") instead of one merged "My Places" list. Callers that
 +  // pass only `userLocationsAndRecentPlaces` keep the upstream single list.
 +  var sectionedUserPlaces = userSavedPlaces !== undefined || userRecentPlaces !== undefined;
 +  var toRenderData = function toRenderData(locations) {
@@ -143,23 +143,10 @@ index 85be40e..ca4543a 100644
      }));
    }
  
-+  /* 3a) TransitNav fork (backlog 60.2): saved places, then recent places, each
++  /* 3a) TransitNav fork (backlog 60.2): recent places, then saved places, each
 +     under its own header and only when it has entries. Rendered (and so
 +     registered for the arrow keys) in the order shown. */
 +  if (sectionedUserPlaces && showUserSettings) {
-+    if (savedPlaceRenderData.length > 0) {
-+      menuItems.push(/*#__PURE__*/React.createElement(S.MenuGroupHeader, {
-+        as: headingType,
-+        key: "sp-header"
-+      }, /*#__PURE__*/React.createElement(FormattedMessage, {
-+        defaultMessage: "Saved places",
-+        description: "Text for header above the places the user saved",
-+        id: "otpUi.LocationField.savedPlaces"
-+      })));
-+      menuItems = menuItems.concat(savedPlaceRenderData.map(function (userLocation, index) {
-+        return makeUserOption(userLocation, generateOptionId("user-saved", userLocation, index), activeIndex, pushToIndexedOptions, indexedOptionLookup);
-+      }));
-+    }
 +    if (recentPlaceRenderData.length > 0) {
 +      menuItems.push(/*#__PURE__*/React.createElement(S.MenuGroupHeader, {
 +        as: headingType,
@@ -171,6 +158,19 @@ index 85be40e..ca4543a 100644
 +      })));
 +      menuItems = menuItems.concat(recentPlaceRenderData.map(function (userLocation, index) {
 +        return makeUserOption(userLocation, generateOptionId("user-recent", userLocation, index), activeIndex, pushToIndexedOptions, indexedOptionLookup);
++      }));
++    }
++    if (savedPlaceRenderData.length > 0) {
++      menuItems.push(/*#__PURE__*/React.createElement(S.MenuGroupHeader, {
++        as: headingType,
++        key: "sp-header"
++      }, /*#__PURE__*/React.createElement(FormattedMessage, {
++        defaultMessage: "Saved places",
++        description: "Text for header above the places the user saved",
++        id: "otpUi.LocationField.savedPlaces"
++      })));
++      menuItems = menuItems.concat(savedPlaceRenderData.map(function (userLocation, index) {
++        return makeUserOption(userLocation, generateOptionId("user-saved", userLocation, index), activeIndex, pushToIndexedOptions, indexedOptionLookup);
 +      }));
 +    }
 +  }
@@ -243,7 +243,7 @@ index 85be40e..ca4543a 100644
    var menuItemCount = indexedOptionLookup.length;
  
 diff --git a/node_modules/@opentripplanner/location-field/lib/index.js b/node_modules/@opentripplanner/location-field/lib/index.js
-index dcfc5d2..769fc89 100644
+index dcfc5d2..324525b 100644
 --- a/node_modules/@opentripplanner/location-field/lib/index.js
 +++ b/node_modules/@opentripplanner/location-field/lib/index.js
 @@ -56,6 +56,10 @@ function filter(list, layers, include, limit) {
@@ -337,8 +337,8 @@ index dcfc5d2..769fc89 100644
    const indexedOptionLookup = [];
 -  const userLocationRenderData = showUserSettings ? userLocationsAndRecentPlaces.map(loc => (0, _options.getRenderData)(loc, setLocation, UserLocationIconComponent, intl)) : [];
 +  // TransitNav fork (backlog 60.2): when the caller passes the saved places and
-+  // the recent places as two lists, they render under two headers ("Saved
-+  // places", then "Recent") instead of one merged "My Places" list. Callers that
++  // the recent places as two lists, they render under two headers ("Recent",
++  // then "Saved places") instead of one merged "My Places" list. Callers that
 +  // pass only `userLocationsAndRecentPlaces` keep the upstream single list.
 +  const sectionedUserPlaces = userSavedPlaces !== undefined || userRecentPlaces !== undefined;
 +  const toRenderData = locations => showUserSettings && locations ? locations.map(loc => (0, _options.getRenderData)(loc, setLocation, UserLocationIconComponent, intl)) : [];
@@ -376,21 +376,10 @@ index dcfc5d2..769fc89 100644
      }));
    }
  
-+  /* 3a) TransitNav fork (backlog 60.2): saved places, then recent places, each
++  /* 3a) TransitNav fork (backlog 60.2): recent places, then saved places, each
 +     under its own header and only when it has entries. Rendered (and so
 +     registered for the arrow keys) in the order shown. */
 +  if (sectionedUserPlaces && showUserSettings) {
-+    if (savedPlaceRenderData.length > 0) {
-+      menuItems.push(/*#__PURE__*/_react.default.createElement(S.MenuGroupHeader, {
-+        as: headingType,
-+        key: "sp-header"
-+      }, /*#__PURE__*/_react.default.createElement(_reactIntl.FormattedMessage, {
-+        defaultMessage: "Saved places",
-+        description: "Text for header above the places the user saved",
-+        id: "otpUi.LocationField.savedPlaces"
-+      })));
-+      menuItems = menuItems.concat(savedPlaceRenderData.map((userLocation, index) => makeUserOption(userLocation, generateOptionId("user-saved", userLocation, index), activeIndex, pushToIndexedOptions, indexedOptionLookup)));
-+    }
 +    if (recentPlaceRenderData.length > 0) {
 +      menuItems.push(/*#__PURE__*/_react.default.createElement(S.MenuGroupHeader, {
 +        as: headingType,
@@ -401,6 +390,17 @@ index dcfc5d2..769fc89 100644
 +        id: "otpUi.LocationField.recentPlaces"
 +      })));
 +      menuItems = menuItems.concat(recentPlaceRenderData.map((userLocation, index) => makeUserOption(userLocation, generateOptionId("user-recent", userLocation, index), activeIndex, pushToIndexedOptions, indexedOptionLookup)));
++    }
++    if (savedPlaceRenderData.length > 0) {
++      menuItems.push(/*#__PURE__*/_react.default.createElement(S.MenuGroupHeader, {
++        as: headingType,
++        key: "sp-header"
++      }, /*#__PURE__*/_react.default.createElement(_reactIntl.FormattedMessage, {
++        defaultMessage: "Saved places",
++        description: "Text for header above the places the user saved",
++        id: "otpUi.LocationField.savedPlaces"
++      })));
++      menuItems = menuItems.concat(savedPlaceRenderData.map((userLocation, index) => makeUserOption(userLocation, generateOptionId("user-saved", userLocation, index), activeIndex, pushToIndexedOptions, indexedOptionLookup)));
 +    }
 +  }
 +
@@ -472,7 +472,7 @@ index dcfc5d2..769fc89 100644
    let menuItemCount = indexedOptionLookup.length;
  
 diff --git a/node_modules/@opentripplanner/location-field/lib/types.d.ts b/node_modules/@opentripplanner/location-field/lib/types.d.ts
-index aab2d04..cc69871 100644
+index aab2d04..6e71846 100644
 --- a/node_modules/@opentripplanner/location-field/lib/types.d.ts
 +++ b/node_modules/@opentripplanner/location-field/lib/types.d.ts
 @@ -264,6 +264,20 @@ export interface LocationFieldProps {
@@ -508,14 +508,14 @@ index aab2d04..cc69871 100644
 +    userSavedPlaces?: UserLocation[];
 +    /**
 +     * TransitNav fork (backlog 60.2): the user's recent places, shown under a
-+     * "Recent" header below the saved places.
++     * "Recent" header above the saved places.
 +     */
 +    userRecentPlaces?: UserLocation[];
  }
  export interface Properties {
      accuracy: string;
 diff --git a/node_modules/@opentripplanner/location-field/src/index.tsx b/node_modules/@opentripplanner/location-field/src/index.tsx
-index 223a90d..c6033e2 100644
+index 223a90d..099a6da 100644
 --- a/node_modules/@opentripplanner/location-field/src/index.tsx
 +++ b/node_modules/@opentripplanner/location-field/src/index.tsx
 @@ -79,6 +79,10 @@ function filter(
@@ -616,8 +616,8 @@ index 223a90d..c6033e2 100644
 -      )
 -    : [];
 +  // TransitNav fork (backlog 60.2): when the caller passes the saved places and
-+  // the recent places as two lists, they render under two headers ("Saved
-+  // places", then "Recent") instead of one merged "My Places" list. Callers that
++  // the recent places as two lists, they render under two headers ("Recent",
++  // then "Saved places") instead of one merged "My Places" list. Callers that
 +  // pass only `userLocationsAndRecentPlaces` keep the upstream single list.
 +  const sectionedUserPlaces =
 +    userSavedPlaces !== undefined || userRecentPlaces !== undefined;
@@ -666,32 +666,10 @@ index 223a90d..c6033e2 100644
      );
    }
  
-+  /* 3a) TransitNav fork (backlog 60.2): saved places, then recent places, each
++  /* 3a) TransitNav fork (backlog 60.2): recent places, then saved places, each
 +     under its own header and only when it has entries. Rendered (and so
 +     registered for the arrow keys) in the order shown. */
 +  if (sectionedUserPlaces && showUserSettings) {
-+    if (savedPlaceRenderData.length > 0) {
-+      menuItems.push(
-+        <S.MenuGroupHeader as={headingType} key="sp-header">
-+          <FormattedMessage
-+            defaultMessage="Saved places"
-+            description="Text for header above the places the user saved"
-+            id="otpUi.LocationField.savedPlaces"
-+          />
-+        </S.MenuGroupHeader>
-+      );
-+      menuItems = menuItems.concat(
-+        savedPlaceRenderData.map((userLocation, index) =>
-+          makeUserOption(
-+            userLocation,
-+            generateOptionId("user-saved", userLocation, index),
-+            activeIndex,
-+            pushToIndexedOptions,
-+            indexedOptionLookup
-+          )
-+        )
-+      );
-+    }
 +    if (recentPlaceRenderData.length > 0) {
 +      menuItems.push(
 +        <S.MenuGroupHeader as={headingType} key="rp-header">
@@ -707,6 +685,28 @@ index 223a90d..c6033e2 100644
 +          makeUserOption(
 +            userLocation,
 +            generateOptionId("user-recent", userLocation, index),
++            activeIndex,
++            pushToIndexedOptions,
++            indexedOptionLookup
++          )
++        )
++      );
++    }
++    if (savedPlaceRenderData.length > 0) {
++      menuItems.push(
++        <S.MenuGroupHeader as={headingType} key="sp-header">
++          <FormattedMessage
++            defaultMessage="Saved places"
++            description="Text for header above the places the user saved"
++            id="otpUi.LocationField.savedPlaces"
++          />
++        </S.MenuGroupHeader>
++      );
++      menuItems = menuItems.concat(
++        savedPlaceRenderData.map((userLocation, index) =>
++          makeUserOption(
++            userLocation,
++            generateOptionId("user-saved", userLocation, index),
 +            activeIndex,
 +            pushToIndexedOptions,
 +            indexedOptionLookup
@@ -790,7 +790,7 @@ index 223a90d..c6033e2 100644
    let menuItemCount = indexedOptionLookup.length;
  
 diff --git a/node_modules/@opentripplanner/location-field/src/types.ts b/node_modules/@opentripplanner/location-field/src/types.ts
-index 06577c2..9a26d3a 100644
+index 06577c2..18ac181 100644
 --- a/node_modules/@opentripplanner/location-field/src/types.ts
 +++ b/node_modules/@opentripplanner/location-field/src/types.ts
 @@ -270,6 +270,20 @@ export interface LocationFieldProps {
@@ -826,7 +826,7 @@ index 06577c2..9a26d3a 100644
 +  userSavedPlaces?: UserLocation[];
 +  /**
 +   * TransitNav fork (backlog 60.2): the user's recent places, shown under a
-+   * "Recent" header below the saved places.
++   * "Recent" header above the saved places.
 +   */
 +  userRecentPlaces?: UserLocation[];
  }

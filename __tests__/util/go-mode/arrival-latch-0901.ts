@@ -178,6 +178,37 @@ describe('util > go-mode > 2026-09-01 ride 3 arrival latch', () => {
       ).toBe(true)
     })
 
+    /**
+     * NOTE, 2026-10-20 (12.17). Every call above is mode-less, which is the
+     * 75 m rule, and that is what they still test. Handed a bike or walking
+     * finish the same pairs no longer latch on the spot: the radius there is
+     * ARRIVAL_RADIUS_ACTIVE_M (40 m), and a rider between 40 and 75 m arrives
+     * after a minute there instead (util/go-mode/arrival-dwell; replayed in
+     * arrival-radius-1657.ts). The 159 m veto is unchanged for every mode.
+     */
+    it('on a bike or walking finish the 41-75 m pairs wait for 40 m or the minute (12.17)', () => {
+      expect(
+        hasArrivedAtDestination(
+          95.47520431072041,
+          69.95598543807816,
+          null,
+          'BICYCLE'
+        )
+      ).toBe(false)
+      expect(
+        hasArrivedAtDestination(
+          99.7163907051284,
+          41.31963453162068,
+          null,
+          'WALK'
+        )
+      ).toBe(false)
+      expect(hasArrivedAtDestination(99.28, 12, 99.28, 'BICYCLE')).toBe(true)
+      expect(hasArrivedAtDestination(100, 159.29425813791872, 100, 'BUS')).toBe(
+        false
+      )
+    })
+
     it('does not report the trip complete on the arrival tick', () => {
       const fix = fixAt(ARRIVAL_TICK_MS)
       // The projection as it was recorded — progress snapped to 1.000. Even

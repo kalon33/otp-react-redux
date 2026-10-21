@@ -50,7 +50,8 @@ const mockSend = sendPush as jest.Mock
  *
  * It became reachable when 73ef2b9a taught arrival to fire on distance as well
  * as on a progress scalar — correctly; that is why trips end at all now. But
- * ARRIVAL_RADIUS_M is 75 m, so arrival can latch with the last turn of the leg
+ * ARRIVAL_RADIUS_M is 75 m (40 m on a bike or walking finish since 12.17), so
+ * arrival can latch with the last turn of the leg
  * still ahead of the rider, instead of on the final tick where the cue list had
  * run dry and the card cleared itself on the way past. That is precisely the
  * before/after in the nightly log: verify-turn-by-turn reported one cancel on
@@ -67,8 +68,14 @@ const mockSend = sendPush as jest.Mock
 
 const START: [number, number] = [44.9, -93.27]
 const DEST: [number, number] = [44.918, -93.27]
-/** ~60 m short of the destination: inside ARRIVAL_RADIUS_M, past 90%. */
-const NEARLY_THERE: [number, number] = [44.917461, -93.27]
+/**
+ * ~33 m short of the destination: inside ARRIVAL_RADIUS_ACTIVE_M (40 m — this
+ * is a BICYCLE finish), past 90%, and still ~11 m short of the final turn at
+ * 44.9178, so the arrival tick has a cue in hand. Was ~60 m (44.917461) until
+ * 2026-10-20: a bike finish no longer arrives on the spot between 40 and 75 m
+ * (12.17), and this file is about the arrival tick, not the minute.
+ */
+const NEARLY_THERE: [number, number] = [44.917703, -93.27]
 /** Early on the leg, with both turns still ahead. */
 const EARLY: [number, number] = [44.9018, -93.27]
 

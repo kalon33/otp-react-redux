@@ -7,9 +7,13 @@ import styled from 'styled-components'
 import * as routingProfileActions from '../../actions/routing-profiles'
 import { AppReduxState } from '../../util/state-types'
 import {
+  clampPreferences,
   clampStopCap,
   PreferenceSummary,
   RoutingPreferences,
+  SERVER_BIKE_SPEED_MPS,
+  SERVER_WALK_SPEED_MPS,
+  speedMph,
   stopCapMessageId,
   summarizePreferences,
   ViaStop
@@ -60,6 +64,54 @@ const ClearButton = styled.button`
     color: #d32f2f;
   }
 `
+
+// A chip with its own remove control: the rider can see the value AND undo it.
+const RemovableChip = styled(Chip)`
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+  padding-right: 6px;
+`
+
+const RemoveButton = styled.button`
+  align-items: center;
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+  color: #666;
+  cursor: pointer;
+  display: inline-flex;
+  height: 24px;
+  justify-content: center;
+  padding: 0;
+  width: 24px;
+
+  &:hover {
+    color: #d32f2f;
+  }
+`
+
+type SpeedKey = 'bikeSpeed' | 'walkSpeed'
+
+/** The speed levers the rider has moved off the server's value, as chips. */
+function customSpeeds(
+  preferences?: RoutingPreferences
+): { defaultMph: string; key: SpeedKey; mph: string }[] {
+  const clamped = clampPreferences(preferences)
+  const out: { defaultMph: string; key: SpeedKey; mph: string }[] = []
+  const add = (key: SpeedKey, serverMps: number) => {
+    const value = clamped[key]
+    if (typeof value !== 'number' || Math.abs(value - serverMps) < 1e-6) return
+    out.push({
+      defaultMph: speedMph(serverMps).toFixed(1),
+      key,
+      mph: speedMph(value).toFixed(1)
+    })
+  }
+  add('bikeSpeed', SERVER_BIKE_SPEED_MPS)
+  add('walkSpeed', SERVER_WALK_SPEED_MPS)
+  return out
+}
 
 /**
  * Has the rider changed anything at all? Module-level because the list of
@@ -123,6 +175,7 @@ function routeLockMessageIds(scope?: RouteLockScope): {
  * customized.
  */
 const ActiveRoutingPreferences = ({
+  clearLever,
   clearPreferences,
   defaultNumItineraries,
   defaultStopCap,
@@ -135,6 +188,7 @@ const ActiveRoutingPreferences = ({
   routeSets,
   viaStop
 }: {
+  clearLever: (key: SpeedKey) => void
   clearPreferences: () => void
   defaultNumItineraries: number
   defaultStopCap: number
@@ -149,6 +203,7 @@ const ActiveRoutingPreferences = ({
 }): JSX.Element | null => {
   const intl = useIntl()
   const summary: PreferenceSummary[] = summarizePreferences(preferences)
+  const speeds = customSpeeds(preferences)
   // The count only counts as "customized" when the rider moved it off whatever
   // the config ships, so an untouched app shows no chip for it.
   const customCount =
@@ -170,7 +225,7 @@ const ActiveRoutingPreferences = ({
       hideWalkTransitOptions,
       noTransfers,
       routeLock,
-      summaryCount: summary.length,
+      summaryCount: summary.length + speeds.length,
       viaStop
     })
   ) {
@@ -236,6 +291,49 @@ const ActiveRoutingPreferences = ({
           {item.phrase}
         </Chip>
       ))}
+      {speeds.map(({ defaultMph, key, mph }) => {
+        const isBike = key === 'bikeSpeed'
+        return (
+          <RemovableChip
+            className={`speed-chip speed-chip-${key}`}
+            key={key}
+            title={`${key} ${preferences?.[key]}`}
+          >
+            {isBike ? (
+              <FormattedMessage
+                id="components.ActiveRoutingPreferences.bikeSpeedChip"
+                values={{ speed: mph }}
+              />
+            ) : (
+              <FormattedMessage
+                id="components.ActiveRoutingPreferences.walkSpeedChip"
+                values={{ speed: mph }}
+              />
+            )}
+            <RemoveButton
+              aria-label={
+                isBike
+                  ? intl.formatMessage(
+                      {
+                        id: 'components.ActiveRoutingPreferences.resetBikeSpeed'
+                      },
+                      { speed: defaultMph }
+                    )
+                  : intl.formatMessage(
+                      {
+                        id: 'components.ActiveRoutingPreferences.resetWalkSpeed'
+                      },
+                      { speed: defaultMph }
+                    )
+              }
+              onClick={() => clearLever(key)}
+              type="button"
+            >
+              <Times size={11} />
+            </RemoveButton>
+          </RemovableChip>
+        )
+      })}
       {hideWalkTransitOptions && (
         <Chip
           title={intl.formatMessage({
@@ -309,6 +407,7 @@ const mapStateToProps = (state: AppReduxState) => ({
 })
 
 const mapDispatchToProps = {
+  clearLever: routingProfileActions.clearRoutingLever,
   // Reset to the default profile with no custom levers and no route lock; this
   // re-searches once when the query is valid, just like applying a preference.
   clearPreferences: routingProfileActions.clearRoutingPreferences

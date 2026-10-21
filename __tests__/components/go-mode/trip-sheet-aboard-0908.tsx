@@ -13,7 +13,9 @@ import {
   mockWithProvider
 } from '../../test-utils/mock-data/store'
 import { setDefaultTestTime } from '../../test-utils'
-import TripSheet from '../../../lib/components/go-mode/TripSheet'
+import TripSheet, {
+  markBoardedLegs
+} from '../../../lib/components/go-mode/TripSheet'
 
 jest.mock('../../../lib/util/debug-log', () => ({
   getBuildInfo: () => 'test',
@@ -232,6 +234,47 @@ describe('components > trip sheet while aboard (rider note 2026-09-08)', () => {
 
     it('still shows the connecting bus at its own live departure', () => {
       expect(sheetText(renderSheet())).toContain('11:51 AM')
+    })
+  })
+
+  describe('legs the rider has boarded are marked (61.1)', () => {
+    const itin = ABOARD_ITINERARY as never
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const marks = (i: any, cur: number, riding: any) =>
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      markBoardedLegs(i, cur, riding).legs.map((l: any) => !!l.goModeBoarded)
+
+    it('marks the ridden leg and earlier ones, not later ones', () => {
+      expect(marks(itin, 2, { ...RIDING, legIndex: 2 })).toEqual([
+        true,
+        true,
+        true
+      ])
+      expect(marks(itin, 1, { ...RIDING, legIndex: 0 })).toEqual([
+        true,
+        false,
+        false
+      ])
+      expect(marks(itin, 0, RIDING)).toEqual([true, false, false])
+    })
+
+    it('falls back to the current transit leg when legIndex is -1', () => {
+      expect(marks(itin, 0, { ...RIDING, legIndex: -1 })).toEqual([
+        true,
+        false,
+        false
+      ])
+    })
+
+    it('leaves a not-yet-boarded current transit leg and later legs alone', () => {
+      expect(marks(itin, 0, null)).toEqual([false, false, false])
+      expect(marks(itin, 2, null)).toEqual([true, true, false])
+    })
+
+    it('does not mutate the itinerary it is given', () => {
+      markBoardedLegs(itin, 2, { ...RIDING, legIndex: 2 })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      expect((itin as any).legs.some((l: any) => l.goModeBoarded)).toBe(false)
     })
   })
 })

@@ -97,15 +97,10 @@ const run = (min: number, live = false, tripId = `1:t${min}`) => ({
   tripId
 })
 
-function mountFooter(entry?: any) {
+function mountFooter(entry?: any, leg: any = busLeg) {
   const state: any = getMockInitialState()
   state.otp.legFrequency = entry ? { [KEY]: entry } : {}
-  return mockWithProvider(
-    LegFrequencyFooter as any,
-    { leg: busLeg },
-    state,
-    messages
-  )
+  return mockWithProvider(LegFrequencyFooter as any, { leg }, state, messages)
 }
 const text = (wrapper: any) => wrapper.text().replace(/\s+/g, ' ').trim()
 
@@ -124,6 +119,37 @@ describe('LegFrequencyFooter', () => {
       windowEndMs: BOARD + 120 * MIN
     })
     expect(text(wrapper)).toBe(`Every 12 min, next ${clock(BOARD + 12 * MIN)}`)
+  })
+
+  it('ridden leg (goModeBoarded): "Every 12 min" with no "next"', () => {
+    const { wrapper } = mountFooter(
+      {
+        fetchedAt: 0,
+        runs: [run(0, false, '1:ridden'), run(12, true), run(24), run(36)],
+        status: 'done',
+        windowEndMs: BOARD + 120 * MIN
+      },
+      { ...busLeg, goModeBoarded: true }
+    )
+    expect(text(wrapper)).toBe('Every 12 min')
+    expect(text(wrapper)).not.toMatch(/next/i)
+  })
+
+  it('a ridden leg still looks up its runs and renders "Every N min" with no next', async () => {
+    const { store } = mountFooter(undefined, { ...busLeg, goModeBoarded: true })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(g.__queries).toHaveLength(1)
+    expect(store.getActions()[0]).toMatchObject({ type: 'LEG_FREQUENCY' })
+    const { wrapper } = mountFooter(
+      {
+        fetchedAt: 0,
+        runs: [run(0, false, '1:ridden'), run(10, true), run(20), run(30)],
+        status: 'done',
+        windowEndMs: BOARD + 120 * MIN
+      },
+      { ...busLeg, goModeBoarded: true }
+    )
+    expect(text(wrapper)).toBe('Every 10 min')
   })
 
   it('irregular: "Next 11:28 AM, 11:55 AM"', () => {
@@ -164,7 +190,7 @@ describe('LegFrequencyFooter', () => {
     const copy = Object.entries(messages)
       .filter(([id]) => id.startsWith('components.LegFrequency.'))
       .map(([, value]) => value)
-    expect(copy).toHaveLength(4)
+    expect(copy).toHaveLength(5)
     copy.forEach((value) => {
       expect(value).not.toMatch(/miss/i)
       expect(value).not.toMatch(/\+/)

@@ -54,6 +54,32 @@ describe('buildLiveItinerary', () => {
     expect(leg.realTime).toBe(true)
   })
 
+  it('flags alightRealtime per field, not the either-end flag (61.1)', () => {
+    const boardOnly: Record<number, LiveLegTime> = {
+      1: {
+        alightEpoch: SCHED_ALIGHT,
+        alightRealtime: false,
+        boardEpoch: SCHED_BOARD + 60000,
+        boardRealtime: true,
+        realtime: true
+      }
+    }
+    const a = buildLiveItinerary(itinerary(), boardOnly).legs[1] as any
+    expect(a.realTime).toBe(true)
+    expect(a.alightRealtime).toBe(false)
+    const both: Record<number, LiveLegTime> = {
+      1: {
+        alightEpoch: SCHED_ALIGHT + 60000,
+        alightRealtime: true,
+        boardEpoch: SCHED_BOARD,
+        boardRealtime: false,
+        realtime: true
+      }
+    }
+    const b = buildLiveItinerary(itinerary(), both).legs[1] as any
+    expect(b.alightRealtime).toBe(true)
+  })
+
   it('applies only the field that is actually live', () => {
     // The common mid-ride case: a live alight prediction, but the board time
     // has already passed and only the schedule is known. The alight must not

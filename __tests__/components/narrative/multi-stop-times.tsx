@@ -182,6 +182,93 @@ describe('58.3 > the step list’s time column on a stop’s row', () => {
   })
 })
 
+describe('61.1 > the time column at a transit change', () => {
+  const T = (h: number, m: number, sec = 0) =>
+    Date.parse(
+      `2026-10-19T${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(
+        2,
+        '0'
+      )}-07:00`
+    )
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const outgoing = (over: any = {}, arrival: any = {}): any => ({
+    departureDelay: -133,
+    from: {
+      name: '6th St & Washington Station',
+      transferArrival: {
+        delay: -17,
+        realtime: true,
+        time: T(16, 36, 41),
+        ...arrival
+      }
+    },
+    mode: 'BUS',
+    realTime: true,
+    startTime: T(16, 46, 15),
+    transitLeg: true,
+    ...over
+  })
+  function mountLive(props: unknown) {
+    const state = getMockInitialState()
+    state.otp.config = {
+      ...state.otp.config,
+      itinerary: { ...state.otp.config.itinerary, showScheduleDeviation: true }
+    }
+    const Col = () => (
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      <RealtimeTimeColumn {...(props as any)} />
+    )
+    return mockWithProvider(Col, {}, state, messages).wrapper
+  }
+
+  it('shows the arrival, then leave, with the outgoing bus note', () => {
+    const wrapper = mountLive({ isDestination: false, leg: outgoing() })
+    const text = wrapper.text().replace(/\s+/g, ' ')
+    expect(text).toContain('4:36 PM')
+    expect(text.indexOf('4:36 PM')).toBeLessThan(text.indexOf('leave 4:46 PM'))
+    expect(text).toContain('2 min early')
+    expect(text).not.toMatch(/wait/)
+    expect(text).not.toMatch(/misses/)
+  })
+
+  it('shows misses by N min when the outgoing bus leaves first', () => {
+    const wrapper = mountLive({
+      isDestination: false,
+      leg: outgoing({ departureDelay: 0, startTime: T(16, 33, 5) })
+    })
+    expect(wrapper.text()).toContain('misses by 3 min')
+    expect(wrapper.text()).not.toMatch(/early|late/)
+  })
+
+  it('a rider-stop mark wins over a transfer mark', () => {
+    const leg = outgoing()
+    leg.from.riderStop = { arrivalTime: T(16, 30), stayMinutes: 5 }
+    const wrapper = mountLive({ isDestination: false, leg })
+    expect(wrapper.text()).toContain('4:30 PM')
+    expect(wrapper.text()).not.toContain('4:36 PM')
+  })
+
+  it('a stop row with no transfer mark is unchanged', () => {
+    const leg = outgoing()
+    delete leg.from.transferArrival
+    const wrapper = mountLive({ isDestination: false, leg })
+    expect(wrapper.find('.transfer-times')).toHaveLength(0)
+    expect(wrapper.text()).toContain('4:46 PM')
+    expect(wrapper.text()).not.toContain('leave')
+  })
+
+  it('a schedule-only arrival is a plain time', () => {
+    const wrapper = mountLive({
+      isDestination: false,
+      leg: outgoing({}, { delay: 0, realtime: false })
+    })
+    expect(wrapper.find('.realtime-icon').hostNodes().length).toBe(0)
+    const text = wrapper.text().replace(/\s+/g, ' ')
+    expect(text.startsWith('4:36 PMleave 4:46 PM')).toBe(true)
+    expect(text).not.toContain('on time')
+  })
+})
+
 function mountStops(stopStays: number[]) {
   const state = getMockInitialState()
   state.otp.currentQuery = {
