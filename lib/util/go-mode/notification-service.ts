@@ -1887,6 +1887,7 @@ function findNextTransitConnection(
  */
 function connectionWarningCopy(
   routeName: string,
+  lateRouteName: string,
   stopName: string,
   delaySeconds: number,
   slackSeconds: number
@@ -1898,20 +1899,29 @@ function connectionWarningCopy(
   if (slackSeconds < 0) {
     const minutes = Math.max(1, Math.round(delaySeconds / 60))
     return {
+      // The minutes belong to the CURRENT leg; the route being put at risk is
+      // the connection. Name both so the two are never conflated.
       message: stopName
         ? intl.formatMessage(
             {
-              defaultMessage: '{routeName} · {minutes} min late · {stopName}',
-              id: 'components.GoMode.notify.connectionLateAtStop'
+              defaultMessage:
+                '{lateRoute} · {minutes} min late · may miss {nextRoute} at {stopName}',
+              id: 'components.GoMode.notify.connectionLateMayMissAtStop'
             },
-            { minutes, routeName, stopName }
+            {
+              lateRoute: lateRouteName,
+              minutes,
+              nextRoute: routeName,
+              stopName
+            }
           )
         : intl.formatMessage(
             {
-              defaultMessage: '{routeName} · {minutes} min late',
-              id: 'components.GoMode.notify.routeMinutesLate'
+              defaultMessage:
+                '{lateRoute} · {minutes} min late · may miss {nextRoute}',
+              id: 'components.GoMode.notify.connectionLateMayMiss'
             },
-            { minutes, routeName }
+            { lateRoute: lateRouteName, minutes, nextRoute: routeName }
           ),
       title: intl.formatMessage({
         defaultMessage: 'Connection at risk',
@@ -2037,6 +2047,7 @@ export function checkConnectionWarning(
 
   const { message, title } = connectionWarningCopy(
     routeName,
+    legRouteName(currentLeg),
     stopName,
     delaySeconds,
     slackSeconds
