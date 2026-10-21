@@ -527,6 +527,26 @@ export function displayVehicleLabel(label: string | null | undefined): string {
 }
 
 /**
+ * A feed frame older than this is not a live bus (54.6). On 2026-10-16 route
+ * 901 had no poll for hours, its last frame (10,559 s old) sat in the store,
+ * and the picker offered it as the train the rider was on. Real frames run
+ * p99 90 s / max 268 s, so 600 s never touches a live bus. A frame with no
+ * usable `seconds` counts as live — unknown never drops.
+ */
+export const MAX_LIVE_FRAME_AGE_SECONDS = 600
+
+export function isLiveFrame(
+  v: { seconds?: number | null },
+  nowMs: number
+): boolean {
+  const { seconds } = v
+  if (typeof seconds !== 'number' || !Number.isFinite(seconds) || seconds <= 0)
+    return true
+  if (!Number.isFinite(nowMs)) return true
+  return nowMs / 1000 - seconds <= MAX_LIVE_FRAME_AGE_SECONDS
+}
+
+/**
  * Find vehicles within a given radius of the user, sorted by distance.
  *
  * `maxDistanceMeters` is the BASE radius: every frame is age-corrected first
@@ -544,6 +564,7 @@ export function findNearbyVehicles(
   }: { nowMs?: number; userSpeedMps?: number | null } = {}
 ): NearbyVehicleOption[] {
   return vehicles
+    .filter((v) => isLiveFrame(v, nowMs))
     .map((v) => ({
       measured: measureVehicle(
         userLat,
@@ -657,6 +678,7 @@ export function matchUserToVehicle(
       ? previousMatch.heading
       : null
   let nearby = vehicles
+    .filter((v) => isLiveFrame(v, nowMs))
     .map((v) => {
       const isRiding =
         ridingVehicleId != null && v.vehicleId === ridingVehicleId

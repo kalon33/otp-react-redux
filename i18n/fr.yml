@@ -208,6 +208,7 @@ components:
     skipNavigation: Sauter la navigation
   ActiveRoutingPreferences:
     avoidingBiking: "\xE9viter le v\xE9lo"
+    bikeSpeedChip: "Vélo {speed} mph"
     briskerWalking: marche plus rapide
     clear: Effacer
     fasterBiking: "v\xE9lo plus rapide"
@@ -224,9 +225,12 @@ components:
     noWalkTransit: Sans marche + transports
     okayWaiting: attente acceptable
     optionCount: '{count} options'
+    resetBikeSpeed: "Remettre la vitesse à vélo à la normale ({speed} mph)"
+    resetWalkSpeed: "Remettre la vitesse de marche à la normale ({speed} mph)"
     shorterTransferBuffer: marge de correspondance plus courte
     slowerBiking: "v\xE9lo plus lent"
     viaStop: Via {stop}
+    walkSpeedChip: "Marche {speed} mph"
   BackToTripPlanner:
     backToTripPlanner: Retour au planificateur de trajets
   BatchResultsScreen:
@@ -535,7 +539,8 @@ components:
       busHereTitle: "Bus ici"
       changeWithSlack: "{change} · {slack}"
       connectionAtRiskTitle: "Correspondance en danger"
-      connectionLateAtStop: "{routeName} · {minutes} min de retard · {stopName}"
+      connectionLateMayMiss: "{lateRoute} · {minutes} min de retard · risque de manquer {nextRoute}"
+      connectionLateMayMissAtStop: "{lateRoute} · {minutes} min de retard · risque de manquer {nextRoute} à {stopName}"
       connectionSlack: "{routeName} · {seconds} s"
       connectionSlackAtStop: "{routeName} · {seconds} s · {stopName}"
       driftEarlier: "{minutes} min plus tôt"
@@ -603,6 +608,9 @@ components:
     onboardPreviewBack: "Retour aux options"
     onboardPreviewConfirm: "Confirmer cet arrêt"
     onboardPreviewWait: "{mins} min d'attente"
+    onboardStopPassedKeep: "Aller quand même à {stop}"
+    onboardStopPassedSkip: "{count, plural, one {Passer cet arrêt} other {Passer ces arrêts}}"
+    onboardStopPassedTitle: "Votre bus a dépassé {stop}"
     onboardTitle: "Dans le bus"
     openTripSheet: "Ouvrir l'aperçu du trajet"
     pickAnotherStop: "Choisir un autre arrêt"
@@ -695,6 +703,7 @@ components:
     itineraryDetails: "Détails du trajet"
   LegFrequency:
     every: "Toutes les {minutes} min, prochain {time}"
+    everyBoarded: "Toutes les {minutes} min"
     nextOne: "Prochain {time}"
     nextTwo: "Prochains {first}, {second}"
     noneBefore: "Aucun autre passage avant {time}"
@@ -801,6 +810,7 @@ components:
     finding: Recherche du prochain trajet…
     headerStop: Vers {destination} · étape {number} sur {total}
     leaveAt: départ {time}
+    missesBy: manquée de {minutes} min
     noStay: Sans pause
     plannedStay: Séjour prévu jusqu'à {time}
     stayGroupLabel: Temps minimum à {stop}
@@ -1341,6 +1351,8 @@ config:
 otpUi:
   LocationField:
     geocoderTimeout: Impossible de joindre le serveur
+    recentPlaces: Récents
+    savedPlaces: Lieux enregistrés
   AccessLegBody:
     RentedVehicleSubheader:
       dropoffRental: "D\xE9posez {company} {vehicleType} {vehicleName} \xE0 {dropoffLocation}"

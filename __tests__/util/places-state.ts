@@ -1,5 +1,7 @@
 import {
+  isEmptySnapshot,
   mergePlaces,
+  mergeRecentPlaces,
   parsePlacesSnapshot,
   readPlacesSnapshot,
   readPlacesState
@@ -225,6 +227,121 @@ describe('lib > util > places-state', () => {
       )
       expect(result.merged.routeSets).toEqual([])
       expect(result.aheadOfServer).toBe(true)
+    })
+  })
+  describe('recent places ride along (60.1, cycle 31)', () => {
+    const empty = { home: null, places: [], work: null }
+    const recent = (n: number, timestamp?: number) => ({
+      icon: 'clock',
+      id: `recent-${n}`,
+      lat: 44.9 + n / 100,
+      lon: -93.2,
+      name: `${n} Recent Ave`,
+      timestamp,
+      type: 'recent'
+    })
+
+    it('the snapshot the phone POSTs carries its recents, cleaned', () => {
+      store('recent', [
+        { ...recent(1, 10), extra: 'dropped' },
+        { name: 'no coords' },
+        null
+      ])
+      expect(readPlacesSnapshot().recent).toEqual([recent(1, 10)])
+      window.localStorage.clear()
+      expect(readPlacesSnapshot().recent).toEqual([])
+    })
+
+    it('a server answer with no recent key says nothing about recents', () => {
+      expect('recent' in parsePlacesSnapshot({ places: [] })).toBe(false)
+      expect(
+        parsePlacesSnapshot({ places: [], recent: [recent(1, 1), 'x'] }).recent
+      ).toEqual([recent(1, 1)])
+      expect(
+        parsePlacesSnapshot({ places: [], recent: 'nope' }).recent
+      ).toEqual([])
+    })
+
+    it('union: one stray local recent plus five on the server keeps the five newest', () => {
+      const server = [5, 4, 3, 2, 1].map((n) => recent(n, n))
+      const stray = recent(9, 9)
+      const result = mergePlaces(
+        { ...empty, recent: [stray] },
+        { ...empty, recent: server }
+      )
+      expect(result.merged.recent?.map((r) => r.id)).toEqual([
+        'recent-9',
+        'recent-5',
+        'recent-4',
+        'recent-3',
+        'recent-2'
+      ])
+      expect(result.restored).toEqual({
+        home: false,
+        places: 0,
+        recent: 4,
+        work: false
+      })
+      expect(result.aheadOfServer).toBe(true)
+    })
+
+    it('the same place on both sides (within ~5 m, or same address) stays one row, the local copy', () => {
+      const local = { ...recent(1, 50), id: 'local-1' }
+      const nearby = { ...recent(1, 10), lat: local.lat + 0.00002 } // ~2 m
+      const sameAddress = {
+        ...recent(7, 20),
+        lat: 45.5,
+        name: '  1 RECENT   ave '
+      }
+      expect(
+        mergeRecentPlaces([local], [nearby, sameAddress, recent(2, 5)])
+      ).toEqual([local, recent(2, 5)])
+    })
+
+    it('newest first; missing timestamps sort last and keep local ahead', () => {
+      expect(
+        mergeRecentPlaces(
+          [recent(1), recent(2, 2)],
+          [recent(3), recent(4, 4)]
+        ).map((r) => r.id)
+      ).toEqual(['recent-4', 'recent-2', 'recent-1', 'recent-3'])
+    })
+
+    it('a wiped phone gets every recent back and is not behind', () => {
+      const server = { ...empty, recent: [recent(2, 2), recent(1, 1)] }
+      const result = mergePlaces({ ...empty, recent: [] }, server)
+      expect(result.merged).toEqual(server)
+      expect(result.restored.recent).toBe(2)
+      expect(result.aheadOfServer).toBe(false)
+    })
+
+    it('an OLD server (no key) leaves local recents intact and is not "behind"', () => {
+      const local = { ...empty, recent: [recent(1, 1)] }
+      const result = mergePlaces(local, parsePlacesSnapshot({ ...empty }))
+      expect(result.merged.recent).toEqual([recent(1, 1)])
+      expect(result.restored.recent).toBeUndefined()
+      expect(result.aheadOfServer).toBe(false)
+    })
+
+    it('an unacknowledged local write keeps the local recents only', () => {
+      const result = mergePlaces(
+        { ...empty, recent: [recent(1, 1)] },
+        { ...empty, recent: [recent(1, 1), recent(2, 2)] },
+        true
+      )
+      expect(result.merged.recent).toEqual([recent(1, 1)])
+      expect(result.restored.recent).toBeUndefined()
+      expect(result.aheadOfServer).toBe(true)
+    })
+
+    it('isEmptySnapshot: only a copy with nothing at all is empty', () => {
+      expect(isEmptySnapshot({ ...empty })).toBe(true)
+      expect(isEmptySnapshot({ ...empty, recent: [], routeSets: [] })).toBe(
+        true
+      )
+      expect(isEmptySnapshot({ ...empty, recent: [recent(1, 1)] })).toBe(false)
+      expect(isEmptySnapshot({ ...empty, home: HOME })).toBe(false)
+      expect(isEmptySnapshot({ ...empty, places: [GYM] })).toBe(false)
     })
   })
 })

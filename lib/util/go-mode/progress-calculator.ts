@@ -49,6 +49,12 @@ export interface TripProgress {
   // 0-100%
   estimatedArrival: Date
   /**
+   * The mode of the itinerary's LAST leg — the one that ends at the door. A
+   * bike or walking finish is held to ARRIVAL_RADIUS_ACTIVE_M rather than
+   * ARRIVAL_RADIUS_M; see hasArrivedAtDestination (backlog 12.17).
+   */
+  finalLegMode?: string | null
+  /**
    * The CURRENT leg's progress (0-100) when the rider is on the LAST leg of
    * the itinerary, and null on every earlier leg. The arrival test's progress
    * scalar: see hasArrivedAtDestination for why overall progress is the wrong
@@ -434,6 +440,47 @@ export const ARRIVAL_RADIUS_M = 75
 export const ARRIVAL_MIN_PROGRESS = 90
 
 /**
+ * The arrival radius when the trip ENDS on the rider's own wheels or feet — a
+ * BICYCLE or WALK final leg (backlog 12.17, rider's answer 2026-10-20: "on a
+ * bike or walking last leg, wait until within 40 m").
+ *
+ * 2026-10-19 17:49:06 (`green-465-1657.json`): "Arrived" went out on a bike
+ * finish with the rider's own fix 72.4 m from the door — inside
+ * ARRIVAL_RADIUS_M, overall progress past the floor — while they were still
+ * riding at 8.7 m/s, five seconds short of it. 75 m is a bus-stop-sized
+ * radius: a rider stepping off a bus 70 m from the door has arrived for every
+ * purpose the app has. A rider on a bike 70 m out has not, and the latch is
+ * one-way — the trip quiesces, navigation goes, the tracking rate drops to
+ * 30 s.
+ *
+ * What stops this radius from becoming a trip that can never complete (the
+ * warning on ARRIVAL_MAX_DISTANCE_M below) is the dwell, ARRIVAL_DWELL_MS: a
+ * rider who stays within ARRIVAL_RADIUS_M for a minute has arrived even if
+ * the phone never reads inside 40 m (rider's answer, same day: "also count it
+ * once I've been within 75 m for a minute").
+ */
+export const ARRIVAL_RADIUS_ACTIVE_M = 40
+
+/**
+ * How long a rider on a bike or walking finish must stay within
+ * ARRIVAL_RADIUS_M (with overall progress past ARRIVAL_MIN_PROGRESS) before
+ * that counts as arrival on its own. Measured on the wall clock by the
+ * near-destination timer in actions/go-mode, so a phone that stops producing
+ * fixes at the door — the 13.5 failure — still ends the trip. See
+ * util/go-mode/arrival-dwell.
+ */
+export const ARRIVAL_DWELL_MS = 60 * 1000
+
+/**
+ * The final-leg modes held to ARRIVAL_RADIUS_ACTIVE_M: the rider is moving
+ * under their own power right up to the door, so 75 m is seconds of travel
+ * rather than the last block of a walk from a stop.
+ */
+export function isActiveFinishMode(mode: string | null | undefined): boolean {
+  return mode === 'BICYCLE' || mode === 'WALK'
+}
+
+/**
  * The measured distance that vetoes arrival outright, however complete the
  * progress scalar claims to be.
  *
@@ -469,6 +516,12 @@ export const ARRIVAL_MIN_PROGRESS = 90
  * rider was still closing at ~2.5 m/s and reached 24.8 m half a minute later,
  * which is backlog 21.2's defect, and hasArrivedAtDestination below now
  * refuses it on the closing leg's own progress.
+ *
+ * 2026-10-20 (12.17): a 40 m rule DID arrive — ARRIVAL_RADIUS_ACTIVE_M, for a
+ * bike or walking finish only — and it is safe for the reason this comment
+ * gives for not having one: it is not the only arrival rule. The minute
+ * within ARRIVAL_RADIUS_M (ARRIVAL_DWELL_MS, on a wall-clock timer) is what
+ * ends a trip whose phone never reads inside 40 m. This veto is unchanged.
  */
 export const ARRIVAL_MAX_DISTANCE_M = 120
 
@@ -501,6 +554,16 @@ export const ARRIVAL_MAX_DISTANCE_M = 120
  * the rider at the door — is the one that must stay as reachable as it was.
  * Passing the leg's frozen figure into that floor would re-open the bug the
  * distance branch exists to close.
+ *
+ * A BICYCLE or WALK finish (`finalLegMode`, backlog 12.17) is held to
+ * ARRIVAL_RADIUS_ACTIVE_M instead of ARRIVAL_RADIUS_M, and a KNOWN distance
+ * beyond that radius also refuses the progress-only branch: on a bike, a
+ * scalar at 99.6% with the rider's own fix 60 m out is a projection that ran
+ * ahead of them, and the measurement outranks it. An unknown distance leaves
+ * the progress-only branch exactly as it was. Other modes, and a caller that
+ * passes no mode, keep 75 m. The minute-within-75 m rule that keeps this from
+ * stranding a trip lives in the tick (util/go-mode/arrival-dwell), because it
+ * needs a clock.
  */
 export function hasArrivedAtDestination(
   actualProgress: number,
@@ -510,7 +573,13 @@ export function hasArrivedAtDestination(
    * .finalLegProgress). Omitted/null on earlier legs, where overall progress
    * is the only scalar there is.
    */
-  finalLegProgress?: number | null
+  finalLegProgress?: number | null,
+  /**
+   * TripProgress.finalLegMode — the mode of the itinerary's last leg. BICYCLE
+   * or WALK selects ARRIVAL_RADIUS_ACTIVE_M; anything else, or omitted, is the
+   * 75 m rule this function always had.
+   */
+  finalLegMode?: string | null
 ): boolean {
   // The measurement first, and as a veto: a rider this far from where they
   // asked to go has not arrived, whatever the projection says about them.
@@ -523,15 +592,24 @@ export function hasArrivedAtDestination(
   ) {
     return false
   }
+  const distanceKnown =
+    distanceToDestination != null && Number.isFinite(distanceToDestination)
+  const activeFinish = isActiveFinishMode(finalLegMode)
+  const radiusM = activeFinish ? ARRIVAL_RADIUS_ACTIVE_M : ARRIVAL_RADIUS_M
+  // On a bike or walking finish the measurement also vetoes the progress-only
+  // branch from much closer in (12.17): beyond 40 m the rider is still on
+  // their way, whatever the scalar says.
+  if (activeFinish && distanceKnown && distanceToDestination! > radiusM) {
+    return false
+  }
   const progressAtDestination =
     finalLegProgress != null && Number.isFinite(finalLegProgress)
       ? finalLegProgress
       : actualProgress
   if (progressAtDestination >= 99.5) return true
   return (
-    distanceToDestination != null &&
-    Number.isFinite(distanceToDestination) &&
-    distanceToDestination <= ARRIVAL_RADIUS_M &&
+    distanceKnown &&
+    distanceToDestination! <= radiusM &&
     actualProgress >= ARRIVAL_MIN_PROGRESS
   )
 }
@@ -588,7 +666,9 @@ export function determineTripStatus(
    * see `ridingHeldByVehicle` in util/go-mode/vehicle-company. Defaults
    * false, which is the behaviour this function had before backlog 47.1.
    */
-  ridingHeldByVehicle = false
+  ridingHeldByVehicle = false,
+  /** See TripProgress.finalLegMode. Omitted keeps the 75 m rule (12.17). */
+  finalLegMode?: string | null
 ): TripStatus {
   // Arrival is tested FIRST, ahead of the deviation checks. It used to run
   // last, which meant a rider standing at their destination could never be
@@ -601,7 +681,8 @@ export function determineTripStatus(
     hasArrivedAtDestination(
       actualProgress,
       distanceToDestination,
-      finalLegProgress
+      finalLegProgress,
+      finalLegMode
     )
   ) {
     return 'completed'
@@ -1158,6 +1239,12 @@ export function calculateTripProgress(
     legs.length > 0 && currentLegIndex === legs.length - 1
       ? progressInCurrentLeg * 100
       : null
+  // ...and how the rider reaches the door, which sets the arrival radius
+  // (12.17). The LAST leg's mode on every leg, not only once the rider is on
+  // it: the distance branch reads overall progress and can fire from the
+  // leg before.
+  const finalLegMode =
+    legs.length > 0 ? legs[legs.length - 1]?.mode ?? null : null
 
   // The platform wait, measured spatially — see waitingAtBoardingStop for why
   // it is not `legBoard` in the future (backlog 18.6).
@@ -1179,7 +1266,8 @@ export function calculateTripProgress(
     aboardBeforeLeg,
     finalLegProgress,
     waitingAtStop,
-    ridingHeldByVehicle
+    ridingHeldByVehicle,
+    finalLegMode
   )
 
   const currentLeg = legs[currentLegIndex]
@@ -1239,6 +1327,7 @@ export function calculateTripProgress(
     delay,
     distanceToDestination,
     estimatedArrival,
+    finalLegMode,
     finalLegProgress,
     overallProgress,
     riderSpeedMps: riderSpeedMps ?? undefined,

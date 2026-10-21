@@ -3,6 +3,7 @@ import type { Itinerary } from '@opentripplanner/types'
 
 import {
   ADD_NOTIFICATION,
+  ANSWER_ONBOARD_STOP_CHOICE,
   BEGIN_ONBOARD_FLOW,
   CLEAR_FASTER_ROUTE_OFFER,
   CLEAR_ONBOARD,
@@ -29,9 +30,12 @@ import {
   SET_LEG_TURN_CUES,
   SET_LIVE_LEG_TIMES,
   SET_MAP_FOLLOW,
+  SET_NEAR_DESTINATION,
   SET_NOTIFICATION_CONFIG,
+  SET_ONBOARD_CONFIRMING,
   SET_ONBOARD_RESULT,
   SET_ONBOARD_STATUS,
+  SET_ONBOARD_STOP_CHOICE,
   SET_ONBOARD_TRIP,
   SET_ONBOARD_VEHICLE,
   SET_PLAN_STOP_OFFER,
@@ -68,6 +72,7 @@ import {
   ridingFactIsEvidenced,
   ridingKeptTooLong
 } from '../util/go-mode/riding'
+import { sameOnboardStop } from '../util/go-mode/onboard-stops'
 import type {
   DepartureOverrideSource,
   LiveLegTime,
@@ -80,7 +85,9 @@ import type {
   NearbyVehicleOption,
   VehicleMatchResult
 } from '../util/go-mode/vehicle-matching'
+import type { NearDestination } from '../util/go-mode/arrival-dwell'
 import type { NotificationEvent } from '../util/go-mode/notification-service'
+import type { OnboardStop } from '../util/go-mode/onboard-stops'
 import type {
   ReturnCountdownState,
   RoundTripPlan
@@ -176,6 +183,15 @@ export interface OnboardState {
   bestAlightStop: OnboardAlightOption | null
   candidates: OnboardCandidate[]
   /**
+   * Epoch ms the preview's Confirm started re-checking the chosen stop
+   * against where the rider is now (64.1); null when it is not. While set the
+   * Confirm button is disabled under "Finding the best stop to get off…" and
+   * a second tap does nothing. Back (CLOSE_ONBOARD_PREVIEW) and CLEAR_ONBOARD
+   * drop it, and a re-check that comes back to find it gone or changed stands
+   * down — the rider has moved on.
+   */
+  confirmingAtMs: number | null
+  /**
    * Candidates that settled with no plan at all and have nothing more coming —
    * the request errored or timed out and its retry did too. Null when unknown.
    *
@@ -191,6 +207,12 @@ export interface OnboardState {
    * cannot be re-derived later). Ranks its options up, never filters. */
   keepRouteId: string | null
   /**
+   * The rider's added stops the bus has already left behind, while the card
+   * asks "still go there, or skip it?" (63.1, 2026-10-20 Q2 = C); null when
+   * nothing is being asked. Only ever stops the rider has not answered for.
+   */
+  passedStops: OnboardStop[] | null
+  /**
    * Candidates whose onward plan was still in flight when the deadline fired,
    * so a straggler could still land and improve the list. Rejections are NOT
    * counted here — those are over. Null when unknown.
@@ -200,14 +222,40 @@ export interface OnboardState {
    * Never cleared by a result landing — a straggler folding into the list
    * behind the preview must not close it. */
   preview: OnboardAlightPreview | null
+  /**
+   * Epoch ms (wall clock) the options on screen were ranked — set by the
+   * optimizer's SET_ONBOARD_RESULT (64.1). The Confirm uses it to tell a list
+   * built minutes ago from one built just now: on 2026-10-19 16:35:17 the
+   * rider confirmed a 69 s-old list with the bus already past its stop, and on
+   * 2026-10-20 08:32:53 a 12.8 min-old one. Null when unknown — a payload that
+   * did not say — which never counts as stale.
+   */
+  resultAtMs: number | null
   status:
     | 'idle'
     | 'discovering'
     | 'awaiting-selection'
     | 'fetching-schedule'
+    /** The added-stop card, before any candidate is asked (63.1). */
+    | 'added-stop-choice'
     | 'optimizing'
     | 'ready'
     | 'error'
+  /**
+   * Where the added-stop card was put up from, so its answer resumes the
+   * right step: 'list' — the onboard flow, before the get-off list was asked
+   * for; 'confirm' — the preview's Confirm (the preview stays underneath).
+   * Null when no card is up.
+   */
+  stopChoiceFor: 'confirm' | 'list' | null
+  /**
+   * The search's added stops this flow is taking the rider through, with
+   * their stays (63.1), captured at BEGIN_ONBOARD_FLOW — a stop skipped on
+   * the card is removed, a stop kept is marked `kept`. Null when the flow was
+   * not opened by BEGIN_ONBOARD_FLOW (the mid-ride "Pick another stop" list,
+   * replanFromAboard), which leaves the live trip's own plan as it was.
+   */
+  stops: OnboardStop[] | null
   /**
    * How many candidate stops this optimize asked about — the denominator for
    * the three counts above. `candidates.length` is the same number while the
@@ -343,6 +391,15 @@ export interface GoModeState {
   liveLegTimes: Record<number, LiveLegTime>
 
   multiStop: MultiStopPlan | null
+
+  /**
+   * When the rider came within ARRIVAL_RADIUS_M of a bike or walking finish,
+   * and which destination that was — the one-minute dwell that arrives a
+   * rider who never reads inside 40 m (backlog 12.17; util/go-mode/
+   * arrival-dwell). Null when not near. Saved with the session, like
+   * `arrivedAt`, so a relaunch at the door does not restart the minute.
+   */
+  nearDestination: NearDestination | null
 
   notifications: {
     enabled: boolean
@@ -530,6 +587,9 @@ const defaultState: GoModeState = {
   isActive: false,
   liveLegTimes: {},
   multiStop: null,
+
+  nearDestination: null,
+
   notifications: {
     enabled: true,
     recentNotifications: [],
@@ -543,11 +603,16 @@ const defaultState: GoModeState = {
     answeredCandidates: null,
     bestAlightStop: null,
     candidates: [],
+    confirmingAtMs: null,
     failedCandidates: null,
     keepRouteId: null,
+    passedStops: null,
     pendingCandidates: null,
     preview: null,
+    resultAtMs: null,
     status: 'idle',
+    stopChoiceFor: null,
+    stops: null,
     totalCandidates: null,
     trip: null,
     vehicle: null
@@ -718,6 +783,34 @@ const goMode = handleActions<GoModeState, any>(
       }
     },
 
+    // The rider's answer (63.1): "Still go to …" marks the stops kept —
+    // never asked again this flow; "Skip" takes them out of this trip's stops
+    // only (the search keeps them). From the flow, what follows is the list's
+    // own search, so the status says so straight away.
+    [ANSWER_ONBOARD_STOP_CHOICE]: (state, action) => {
+      const passed = state.onboard.passedStops
+      if (!passed?.length) return state
+      const keep = !!action.payload?.keep
+      const isPassed = (s: OnboardStop) =>
+        passed.some((p) => sameOnboardStop(p, s))
+      const stops = (state.onboard.stops || []).flatMap((s) =>
+        !isPassed(s) ? [s] : keep ? [{ ...s, kept: true }] : []
+      )
+      return {
+        ...state,
+        onboard: {
+          ...state.onboard,
+          passedStops: null,
+          status:
+            state.onboard.stopChoiceFor === 'list'
+              ? ('optimizing' as const)
+              : state.onboard.status,
+          stopChoiceFor: null,
+          stops
+        }
+      }
+    },
+
     [BEGIN_ONBOARD_FLOW]: (state, action) => ({
       ...state,
       activeItinerary: null,
@@ -726,7 +819,10 @@ const goMode = handleActions<GoModeState, any>(
       onboard: {
         ...defaultState.onboard,
         keepRouteId: action.payload?.keepRouteId ?? null,
-        status: 'discovering' as const
+        status: 'discovering' as const,
+        // The search's added stops (63.1) — read by beginOnboardFlow before
+        // this, off the query the rider searched with.
+        stops: action.payload?.stops ?? []
       },
       originalFrom: action.payload?.originalFrom ?? null,
       progress: null,
@@ -791,6 +887,14 @@ const goMode = handleActions<GoModeState, any>(
       ...state,
       onboard: {
         ...state.onboard,
+        // Back drops a Confirm still re-checking (64.1): its answer is for a
+        // preview the rider has left.
+        confirmingAtMs: null,
+        // ...and the added-stop card that Confirm put up (63.1), for the same
+        // reason. The stop stays undecided; the next Confirm asks again.
+        ...(state.onboard.stopChoiceFor === 'confirm'
+          ? { passedStops: null, stopChoiceFor: null }
+          : null),
         preview: null
       }
     }),
@@ -915,9 +1019,13 @@ const goMode = handleActions<GoModeState, any>(
     [SET_ARRIVED]: (state, action) => ({
       ...state,
       arrivedAt: action.payload,
+
       // The arrival tick dispatches UPDATE_PROGRESS before it dispatches this,
       // so `state.progress.delay` here IS the measurement taken at arrival.
-      arrivedDelay: state.progress?.delay ?? null
+      arrivedDelay: state.progress?.delay ?? null,
+
+      // The dwell has done its job, or the distance did it first (12.17).
+      nearDestination: null
     }),
 
     [SET_BOARDING_SEARCH_FAILED]: (state, action) => ({
@@ -1033,6 +1141,11 @@ const goMode = handleActions<GoModeState, any>(
       }
     }),
 
+    [SET_NEAR_DESTINATION]: (state, action) => ({
+      ...state,
+      nearDestination: action.payload ?? null
+    }),
+
     [SET_NOTIFICATION_CONFIG]: (state, action) => {
       return {
         ...state,
@@ -1042,6 +1155,14 @@ const goMode = handleActions<GoModeState, any>(
         }
       }
     },
+
+    [SET_ONBOARD_CONFIRMING]: (state, action) => ({
+      ...state,
+      onboard: {
+        ...state.onboard,
+        confirmingAtMs: action.payload ?? null
+      }
+    }),
 
     [SET_ONBOARD_RESULT]: (state, action) => {
       // Two payload shapes on purpose. A bare array is the original one and
@@ -1065,6 +1186,7 @@ const goMode = handleActions<GoModeState, any>(
           // failures by definition.
           failedCandidates: isCounted ? payload.failedCandidates ?? 0 : 0,
           pendingCandidates: isCounted ? payload.pendingCandidates ?? 0 : 0,
+          resultAtMs: isCounted ? payload.resultAtMs ?? null : null,
           status: options.length ? ('ready' as const) : ('error' as const),
           totalCandidates: isCounted
             ? payload.totalCandidates ??
@@ -1081,6 +1203,27 @@ const goMode = handleActions<GoModeState, any>(
         status: action.payload
       }
     }),
+
+    // The added-stop card goes up (63.1). From the flow ('list') it is the
+    // whole screen until answered; from the Confirm it stands over the
+    // preview, which is kept.
+    [SET_ONBOARD_STOP_CHOICE]: (state, action) => {
+      const passed: OnboardStop[] = action.payload?.passedStops || []
+      if (!passed.length) return state
+      const stopChoiceFor = action.payload?.stopChoiceFor ?? 'list'
+      return {
+        ...state,
+        onboard: {
+          ...state.onboard,
+          passedStops: passed,
+          status:
+            stopChoiceFor === 'list'
+              ? ('added-stop-choice' as const)
+              : state.onboard.status,
+          stopChoiceFor
+        }
+      }
+    },
 
     [SET_ONBOARD_TRIP]: (state, action) => ({
       ...state,
@@ -1224,6 +1367,7 @@ const goMode = handleActions<GoModeState, any>(
         activeItinerary: itinerary,
         arrivedAt: null,
         arrivedDelay: null,
+
         // The departure pick belonged to the plan that has just been replaced
         // (12.14). A mid-trip auto-update IS a START_GO_MODE, so an override
         // chosen against the pre-swap itinerary used to survive onto one that
@@ -1239,15 +1383,27 @@ const goMode = handleActions<GoModeState, any>(
         // rider's standing rule. The session flags that would otherwise keep a
         // dead boarding's lock alive are reset alongside it, in beginGoMode.
         departureOverride: null,
+
         departureOverrideSource: null,
+
         departureOverrideTripId: null,
+
         // Compared with the plan that has just been replaced (56.1).
         fasterRoute: null,
+
         isActive: true,
+
         liveLegTimes: {},
+
         // Same rule as roundTrip below: beginGoMode passes the plan back in
         // for a swap within the same segment; absent clears it.
         multiStop: multiStop ?? null,
+
+        // ...and kept across a swap, which a quiet re-plan at the door is: the
+        // minute belongs to a destination, not to a plan, and the tick and the
+        // timer both re-check it against the new plan's own `to` (12.17). A
+        // fresh start begins with none.
+        nearDestination: restart ? null : state.nearDestination ?? null,
         notifications: {
           ...state.notifications,
           recentNotifications: [],

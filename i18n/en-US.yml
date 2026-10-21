@@ -169,6 +169,7 @@ components:
       to return to trip planner.
   ActiveRoutingPreferences:
     avoidingBiking: avoiding biking
+    bikeSpeedChip: Bike {speed} mph
     briskerWalking: brisker walking
     clear: Clear
     fasterBiking: faster biking
@@ -185,9 +186,12 @@ components:
     noWalkTransit: No walk + transit
     okayWaiting: okay with waiting
     optionCount: '{count} options'
+    resetBikeSpeed: Set bike speed back to normal ({speed} mph)
+    resetWalkSpeed: Set walking speed back to normal ({speed} mph)
     shorterTransferBuffer: shorter transfer buffer
     slowerBiking: slower biking
     viaStop: Via {stop}
+    walkSpeedChip: Walk {speed} mph
   AddPlaceButton:
     addPlace: Add place
     needOriginDestination: Define origin/destination to add intermediate places
@@ -519,7 +523,8 @@ components:
       busHereTitle: Bus here
       changeWithSlack: '{change} · {slack}'
       connectionAtRiskTitle: Connection at risk
-      connectionLateAtStop: '{routeName} · {minutes} min late · {stopName}'
+      connectionLateMayMiss: "{lateRoute} · {minutes} min late · may miss {nextRoute}"
+      connectionLateMayMissAtStop: "{lateRoute} · {minutes} min late · may miss {nextRoute} at {stopName}"
       connectionSlack: '{routeName} · {seconds}s'
       connectionSlackAtStop: '{routeName} · {seconds}s · {stopName}'
       driftEarlier: '{minutes} min earlier'
@@ -587,6 +592,9 @@ components:
     onboardPreviewBack: Back to options
     onboardPreviewConfirm: Confirm this stop
     onboardPreviewWait: '{mins} min wait'
+    onboardStopPassedKeep: Still go to {stop}
+    onboardStopPassedSkip: "{count, plural, one {Skip it} other {Skip them}}"
+    onboardStopPassedTitle: Your bus has passed {stop}
     onboardTitle: On the bus
     openTripSheet: Open trip overview
     pickAnotherStop: Pick another stop
@@ -666,6 +674,7 @@ components:
     itineraryDetails: Itinerary details
   LegFrequency:
     every: Every {minutes} min, next {time}
+    everyBoarded: Every {minutes} min
     nextOne: Next {time}
     nextTwo: Next {first}, {second}
     noneBefore: No later run before {time}
@@ -768,6 +777,7 @@ components:
     finding: Finding the next ride…
     headerStop: To {destination} · stop {number} of {total}
     leaveAt: leave {time}
+    missesBy: misses by {minutes} min
     noStay: No stay
     plannedStay: Planned stay until {time}
     stayGroupLabel: Minimum time at {stop}
@@ -1263,6 +1273,8 @@ otpUi:
     canceledMessage: The following trip has been canceled
   LocationField:
     geocoderTimeout: Can't reach the server
+    recentPlaces: Recent
+    savedPlaces: Saved places
   TextOnlyItinerary:
     arriveAt: Arrive at {place} at {timeMillis, time, short}.
     departFrom: Depart from {place} at {timeMillis, time, short}.
