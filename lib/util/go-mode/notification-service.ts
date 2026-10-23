@@ -1888,6 +1888,7 @@ function findNextTransitConnection(
  */
 function connectionWarningCopy(
   routeName: string,
+  lateRouteName: string,
   stopName: string,
   delaySeconds: number,
   slackSeconds: number
@@ -1899,20 +1900,29 @@ function connectionWarningCopy(
   if (slackSeconds < 0) {
     const minutes = Math.max(1, Math.round(delaySeconds / 60))
     return {
+      // The minutes belong to the CURRENT leg; the route being put at risk is
+      // the connection. Name both so the two are never conflated.
       message: stopName
         ? intl.formatMessage(
             {
-              defaultMessage: '{routeName} · {minutes} min late · {stopName}',
-              id: 'components.GoMode.notify.connectionLateAtStop'
+              defaultMessage:
+                '{lateRoute} · {minutes} min late · may miss {nextRoute} at {stopName}',
+              id: 'components.GoMode.notify.connectionLateMayMissAtStop'
             },
-            { minutes, routeName, stopName }
+            {
+              lateRoute: lateRouteName,
+              minutes,
+              nextRoute: routeName,
+              stopName
+            }
           )
         : intl.formatMessage(
             {
-              defaultMessage: '{routeName} · {minutes} min late',
-              id: 'components.GoMode.notify.routeMinutesLate'
+              defaultMessage:
+                '{lateRoute} · {minutes} min late · may miss {nextRoute}',
+              id: 'components.GoMode.notify.connectionLateMayMiss'
             },
-            { minutes, routeName }
+            { lateRoute: lateRouteName, minutes, nextRoute: routeName }
           ),
       title: intl.formatMessage({
         defaultMessage: 'Connection at risk',
@@ -2038,6 +2048,7 @@ export function checkConnectionWarning(
 
   const { message, title } = connectionWarningCopy(
     routeName,
+    legRouteName(currentLeg),
     stopName,
     delaySeconds,
     slackSeconds
@@ -2123,7 +2134,8 @@ export function checkDelayAlert(
     hasArrivedAtDestination(
       progress.overallProgress,
       progress.distanceToDestination,
-      progress.finalLegProgress
+      progress.finalLegProgress,
+      progress.finalLegMode
     )
   ) {
     return null
@@ -2142,6 +2154,13 @@ export function checkDelayAlert(
   // Near the end of a leg the rider is arriving, not riding: a delay they can
   // no longer do anything about is noise.
   if ((progress.currentLegProgress ?? 0) >= 99) return null
+
+  // Off the route is not on the bus. The matcher slides leg progress BACK while
+  // the rider walks away (100 -> 97 -> 88 on 2026-10-19), which defeats the
+  // guard above, yet `delay` is still wall clock minus the leg's schedule: the
+  // rider was told "8 min late" about a Gold Line they had left (backlog 64.2).
+  // A rider aboard a detouring bus is not `deviated` (47.1), so keeps theirs.
+  if (progress.status === 'deviated') return null
 
   const delaySeconds = progress.delay ?? 0
   if (delaySeconds < DELAY_ALERT_THRESHOLD_SECONDS) return null
@@ -2210,7 +2229,8 @@ export function checkTripComplete(
     hasArrivedAtDestination(
       progress.overallProgress,
       progress.distanceToDestination,
-      progress.finalLegProgress
+      progress.finalLegProgress,
+      progress.finalLegMode
     )
   ) {
     const id = generateNotificationId('TRIP_COMPLETE', 'trip_end')

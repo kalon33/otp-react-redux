@@ -144,11 +144,14 @@
     "otpUi.TextOnlyItinerary.transitArriveAt",
     "otpUi.TextOnlyItinerary.transitDepartFrom",
     "otpUi.LocationField.geocoderTimeout",
+    "otpUi.LocationField.recentPlaces",
+    "otpUi.LocationField.savedPlaces",
     "components.FavoritePlaceList.setAddressForPlaceType",
     "components.PlaceShortcut.enterAlert",
     "actions.callTaker.callQuerySaveError",
     "actions.callTaker.checkSessionError",
     "actions.callTaker.couldNotFindCallError",
-    "actions.callTaker.queryFetchError"
+    "actions.callTaker.queryFetchError",
+    "otpUi.TripDetails.title"
   ]
 }

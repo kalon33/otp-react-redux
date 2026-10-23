@@ -121,6 +121,21 @@ export function setSearchOptions(
 }
 
 /**
+ * Drop ONE lever from the current preferences (69.1: the × on a speed chip).
+ * Same write Settings makes, so it re-searches when the query is valid and the
+ * stored profile is rewritten — or removed when nothing is left — and the old
+ * value cannot come back on reload. Everything else on the query is untouched.
+ */
+export function clearRoutingLever(key: keyof RoutingPreferences) {
+  return function (dispatch: any, getState: any): void {
+    const { currentQuery } = getState().otp
+    const next: RoutingPreferences = { ...currentQuery?.routingPreferences }
+    delete next[key]
+    dispatch(setRoutingPreferences(next, undefined))
+  }
+}
+
+/**
  * Reset everything the rider has customized about routing: levers, profile,
  * route lock, and the panel's search options. One re-search, not several — the
  * writes ahead of the lock release are silenced so the release fires it.

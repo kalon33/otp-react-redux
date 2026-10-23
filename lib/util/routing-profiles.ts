@@ -476,8 +476,11 @@ const PREFERENCE_PHRASES: Record<
     higher: 'components.ActiveRoutingPreferences.avoidingBiking',
     lower: 'components.ActiveRoutingPreferences.moreBiking'
   },
+  // Speed levers are shown as their own value chips ("Bike 17.9 mph", 69.1),
+  // not phrases, so summarizePreferences skips them; the baseline is the
+  // server's own so "equals the default" means the same thing everywhere.
   bikeSpeed: {
-    baseline: 4,
+    baseline: SERVER_BIKE_SPEED_MPS,
     higher: 'components.ActiveRoutingPreferences.fasterBiking',
     lower: 'components.ActiveRoutingPreferences.slowerBiking'
   },
@@ -507,7 +510,7 @@ const PREFERENCE_PHRASES: Record<
     lower: 'components.ActiveRoutingPreferences.moreWalking'
   },
   walkSpeed: {
-    baseline: 1.34,
+    baseline: SERVER_WALK_SPEED_MPS,
     higher: 'components.ActiveRoutingPreferences.briskerWalking',
     lower: 'components.ActiveRoutingPreferences.gentlerWalking'
   }
@@ -523,6 +526,7 @@ export function summarizePreferences(
   const clamped = clampPreferences(prefs)
   const out: PreferenceSummary[] = []
   ;(Object.keys(clamped) as LeverKey[]).forEach((key) => {
+    if (key === 'bikeSpeed' || key === 'walkSpeed') return
     const value = clamped[key] as number
     const { baseline, higher, lower } = PREFERENCE_PHRASES[key]
     // Skip levers sitting at their neutral baseline — no meaningful change.

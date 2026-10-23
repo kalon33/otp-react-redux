@@ -70,13 +70,15 @@ describe('components > map > RoutePreviewOverlay, Go Mode gate', () => {
       state({ isActive: true, ui: { backgrounded: true } })
     )
     expect(props.visible).toBe(true)
-    expect(props.geometries).toHaveLength(2)
+    // Both itineraries share the one shape; the selector de-duplicates (66.3).
+    expect(props.geometries).toEqual([geometry.points])
   })
 
   it('is untouched when no trip is running', () => {
     const props = mapStateToProps(state({ isActive: false, ui: {} }))
     expect(props.visible).toBe(true)
-    expect(props.geometries).toHaveLength(2)
+    // Both itineraries share the one shape; the selector de-duplicates (66.3).
+    expect(props.geometries).toEqual([geometry.points])
   })
 
   it('reproduces the state that made it visible: nothing selected', () => {

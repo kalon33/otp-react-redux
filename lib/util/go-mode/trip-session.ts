@@ -318,6 +318,19 @@ export interface TripSession {
   missedBusRerouteAttempt: MissedBusAttempt | null
 
   /**
+   * The near-destination dwell's wall-clock timer (12.17): a rider within
+   * ARRIVAL_RADIUS_M of a bike or walking finish for ARRIVAL_DWELL_MS has
+   * arrived even if no further fix comes. `sinceMs` names the minute it was
+   * armed for, so the tick re-arms only when that changes. Same simulation
+   * and replay rule as `autoEndTimeoutId` — there the tick decides on the
+   * simulated clock instead.
+   */
+  nearArrivalTimeout: {
+    id: ReturnType<typeof setTimeout>
+    sinceMs: number
+  } | null
+
+  /**
    * When the plan now held was installed (startGoModeTracking — a fresh start,
    * a resume and every swap), for the check's quiet minute after a swap.
    */
@@ -504,6 +517,7 @@ export function createTripSession(): TripSession {
     matchHeldSinceMs: null,
     missedBusNoticeKey: null,
     missedBusRerouteAttempt: null,
+    nearArrivalTimeout: null,
     planInstalledAtMs: null,
     prevDistanceFromRoute: null,
     quietReplanHistory: [],

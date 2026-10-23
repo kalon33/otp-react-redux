@@ -28,6 +28,8 @@ const TRANSIT_MODES = new Set(['BUS', 'FERRY', 'RAIL', 'SUBWAY', 'TRAM'])
 interface Props {
   closeOnboardAlightPreview: () => void
   confirmOnboardAlightStop: (option?: unknown) => void
+  /** The Confirm is re-checking the stop against where the rider is (64.1). */
+  confirming?: boolean
   homeTimezone?: string
   preview: PreviewState | null
 }
@@ -67,6 +69,7 @@ function waitMinutesBeforeLeg(legs: Leg[], i: number): number {
  */
 const OnboardAlightPreview = ({
   closeOnboardAlightPreview,
+  confirming = false,
   confirmOnboardAlightStop,
   homeTimezone,
   preview
@@ -203,15 +206,24 @@ const OnboardAlightPreview = ({
         })}
       </div>
       <RerouteActions style={{ padding: '16px' }}>
+        {/* While the Confirm re-checks the stop against where the rider is
+            now (64.1) the button holds, the way MultiStopArrivalCard's does,
+            under the onboard flow's own "finding the best stop" line. */}
         <RerouteSwitchButton
           data-testid="onboard-preview-confirm"
+          disabled={confirming}
           onClick={() => confirmOnboardAlightStop(option)}
           type="button"
         >
-          {intl.formatMessage({
-            defaultMessage: 'Confirm this stop',
-            id: 'components.GoMode.onboardPreviewConfirm'
-          })}
+          {confirming
+            ? intl.formatMessage({
+                defaultMessage: 'Finding the best stop to get off…',
+                id: 'components.GoMode.findingBestStop'
+              })
+            : intl.formatMessage({
+                defaultMessage: 'Confirm this stop',
+                id: 'components.GoMode.onboardPreviewConfirm'
+              })}
         </RerouteSwitchButton>
         <RerouteKeepButton
           data-testid="onboard-preview-back"
@@ -230,6 +242,7 @@ const OnboardAlightPreview = ({
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const mapStateToProps = (state: any) => ({
+  confirming: state.otp?.goMode?.onboard?.confirmingAtMs != null,
   homeTimezone: state.otp?.config?.homeTimezone,
   preview: state.otp?.goMode?.onboard?.preview || null
 })

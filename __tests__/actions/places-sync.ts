@@ -16,11 +16,15 @@ jest.mock('../../lib/util/native-updates', () => ({
     Promise.resolve({ native: '0.0.36', version: '2026.0923.1' })
   )
 }))
+jest.mock('../../lib/util/places-key', () => ({
+  getPlacesKey: jest.fn(() => Promise.resolve(null))
+}))
 jest.mock('../../lib/util/debug-log-boot', () => ({
   getDeviceId: () => 'dev-web-id'
 }))
 
 const nativeUpdates = jest.requireMock('../../lib/util/native-updates')
+const placesKey = jest.requireMock('../../lib/util/places-key')
 const g = global as any
 
 const GYM = {
@@ -38,11 +42,11 @@ const HOME = { lat: 44.95, lon: -93.25, name: '1 Home St', type: 'home' }
 const config = { persistence: { enabled: true, strategy: 'localStorage' } }
 
 /** A launch: a fresh store built from whatever localStorage holds now. */
-function launch() {
+function launch(userConfig: any = config) {
   const store = createStore(
     combineReducers({
       otp: () => ({ config: {} }),
-      user: createUserReducer(config)
+      user: createUserReducer(userConfig)
     }),
     applyMiddleware(thunk)
   )
@@ -375,6 +379,262 @@ describe('lib > actions > places-sync (backlog 28.1)', () => {
         store.getState().user.localUser.routeSets.map((s: any) => s.name)
       ).toEqual(['Gym', 'Commute'])
       expect(stored('savedPlaces').map((p: any) => p.id)).toEqual([GYM.id])
+    })
+  })
+  describe('the installed app key + recents (60.1, cycle 31)', () => {
+    const APP_KEY = 'Ab3_dEf-GhIjKlMnOpQrStUvWxYz0123456789abcde'
+    // What the deployed config sets (frontend/port-config.yml): recents on.
+    const tracking = {
+      persistence: { ...config.persistence, trackRecentByDefault: true }
+    }
+    const recent = (n: number, timestamp: number) => ({
+      icon: 'clock',
+      id: `recent-${n}`,
+      lat: 44.9 + n / 100,
+      lon: -93.2,
+      name: `${n} Recent Ave`,
+      timestamp,
+      type: 'recent'
+    })
+    const EMPTY = {
+      home: null,
+      places: [],
+      recent: [],
+      routeSets: [],
+      work: null
+    }
+
+    /** fetch stub with one copy per deviceId, like places_api.py's files. */
+    function serveById(initial: Record<string, any>, { failGetFor = '' } = {}) {
+      const state = {
+        copies: { ...initial } as Record<string, any>,
+        gets: [] as string[],
+        posts: [] as any[]
+      }
+      g.fetch = jest.fn((url: string, init?: any) => {
+        if (init?.method === 'POST') {
+          const body = JSON.parse(init.body)
+          state.posts.push(body)
+          state.copies[body.deviceId] = body
+          return Promise.resolve({ json: async () => ({ ok: true }), ok: true })
+        }
+        const id = decodeURIComponent(url.split('deviceId=')[1])
+        state.gets.push(id)
+        if (id === failGetFor) return Promise.reject(new Error('offline'))
+        return Promise.resolve({
+          json: async () => state.copies[id] || { ...EMPTY, deviceId: id },
+          ok: true
+        })
+      })
+      return state
+    }
+
+    const settle = async () => {
+      await flush()
+      jest.advanceTimersByTime(PLACES_PUSH_DEBOUNCE_MS)
+      await flush()
+    }
+
+    afterEach(() => {
+      placesKey.getPlacesKey.mockImplementation(() => Promise.resolve(null))
+      nativeUpdates.getNativeDeviceId.mockImplementation(() =>
+        Promise.resolve('NATIVE-UUID-1')
+      )
+    })
+
+    it('files the copy under the app key; the key never reaches a beacon', async () => {
+      placesKey.getPlacesKey.mockImplementation(() => Promise.resolve(APP_KEY))
+      const server = serveById({ [APP_KEY]: { ...EMPTY, home: HOME } })
+      const store = launch(tracking)
+      await store.dispatch(startPlacesSync() as any)
+      store.dispatch(remember(GYM))
+      store.dispatch(remember(recent(1, 1000)))
+      await settle()
+      expect(server.gets).toEqual([APP_KEY])
+      expect(server.posts).toHaveLength(1)
+      expect(server.posts[0].deviceId).toBe(APP_KEY)
+      const events = placesEvents()
+      expect(events.map((e: any) => e.idSource)).toEqual(
+        events.map(() => 'app-key')
+      )
+      // Not in any session record — PLACES_STATE or otherwise.
+      expect(JSON.stringify(recordedSessionEvents)).not.toContain(APP_KEY)
+      expect(JSON.stringify(recordedSessionEvents)).not.toContain(
+        'NATIVE-UUID-1'
+      )
+    })
+
+    it('reset: a new native id and an empty localStorage still find the copy via the key', async () => {
+      placesKey.getPlacesKey.mockImplementation(() => Promise.resolve(APP_KEY))
+      const server = serveById({})
+      let store = launch(tracking)
+      await store.dispatch(startPlacesSync() as any)
+      store.dispatch(remember(HOME))
+      store.dispatch(remember(recent(1, 1000)))
+      store.dispatch(remember(recent(2, 2000)))
+      await settle()
+      expect(server.copies[APP_KEY].recent.map((r: any) => r.id)).toEqual([
+        'recent-2',
+        'recent-1'
+      ])
+
+      // The 10-19 reset: container wiped, Capgo's Keychain id re-minted.
+      window.localStorage.clear()
+      resetPlacesSyncForTests()
+      recordedSessionEvents.length = 0
+      nativeUpdates.getNativeDeviceId.mockImplementation(() =>
+        Promise.resolve('NATIVE-UUID-2')
+      )
+      store = launch(tracking)
+      expect(store.getState().user.localUser.recentPlaces).toEqual([])
+      await store.dispatch(startPlacesSync() as any)
+      await settle()
+      expect(server.gets.slice(-1)).toEqual([APP_KEY])
+      expect(stored('home')).toMatchObject({ name: '1 Home St' })
+      expect(stored('recent').map((r: any) => r.id)).toEqual([
+        'recent-2',
+        'recent-1'
+      ])
+      expect(
+        store.getState().user.localUser.recentPlaces.map((r: any) => r.id)
+      ).toEqual(['recent-2', 'recent-1'])
+      const restore = placesEvents().find((e: any) => e.trigger === 'restore')
+      expect(restore.restored).toEqual({
+        home: true,
+        places: 0,
+        recent: 2,
+        work: false
+      })
+      expect(restore.idSource).toBe('app-key')
+    })
+
+    it('migrates the old device-id copy to the key once, then never reads it again', async () => {
+      placesKey.getPlacesKey.mockImplementation(() => Promise.resolve(APP_KEY))
+      const legacy = {
+        ...EMPTY,
+        deviceId: 'NATIVE-UUID-1',
+        home: HOME,
+        places: [GYM],
+        recent: [recent(1, 1000)]
+      }
+      const server = serveById({ 'NATIVE-UUID-1': legacy })
+      let store = launch(tracking)
+      await store.dispatch(startPlacesSync() as any)
+      await settle()
+      expect(server.gets).toEqual([APP_KEY, 'NATIVE-UUID-1'])
+      expect(stored('savedPlaces').map((p: any) => p.id)).toEqual([GYM.id])
+      expect(stored('home')).toMatchObject({ name: '1 Home St' })
+      expect(stored('recent').map((r: any) => r.id)).toEqual(['recent-1'])
+      // Pushed under the key; the old copy is left exactly as it was.
+      expect(server.posts.map((p: any) => p.deviceId)).toEqual([APP_KEY])
+      expect(server.posts[0].places.map((p: any) => p.id)).toEqual([GYM.id])
+      expect(server.posts[0].recent.map((r: any) => r.id)).toEqual(['recent-1'])
+      expect(server.copies['NATIVE-UUID-1']).toBe(legacy)
+
+      // Next launch: the key's copy holds something, so no legacy read.
+      resetPlacesSyncForTests()
+      server.gets.length = 0
+      store = launch(tracking)
+      await store.dispatch(startPlacesSync() as any)
+      await settle()
+      expect(server.gets).toEqual([APP_KEY])
+      expect(server.posts).toHaveLength(1)
+    })
+
+    it('a failed read of the old copy fails closed: nothing pushed under the key', async () => {
+      placesKey.getPlacesKey.mockImplementation(() => Promise.resolve(APP_KEY))
+      window.localStorage.setItem('otp.savedPlaces', JSON.stringify([MOMS]))
+      const server = serveById(
+        { 'NATIVE-UUID-1': { ...EMPTY, places: [GYM] } },
+        { failGetFor: 'NATIVE-UUID-1' }
+      )
+      const store = launch(tracking)
+      await store.dispatch(startPlacesSync() as any)
+      store.dispatch(remember(recent(1, 1000)))
+      await settle()
+      expect(server.posts).toHaveLength(0)
+      expect(stored('savedPlaces').map((p: any) => p.id)).toEqual([MOMS.id])
+    })
+
+    it('without a key (older shell / browser) nothing changes: native id, no legacy read', async () => {
+      const server = serveById({})
+      const store = launch(tracking)
+      await store.dispatch(startPlacesSync() as any)
+      await settle()
+      expect(server.gets).toEqual(['NATIVE-UUID-1'])
+      expect(placesEvents()[0].idSource).toBe('native')
+    })
+
+    it("one stray local recent (the reset app's first trip) does not block the restore", async () => {
+      const onServer = [5, 4, 3, 2, 1].map((n) => recent(n, n * 1000))
+      const stray = { ...recent(9, 9000), lat: 45.1, name: '9 Fresh St' }
+      window.localStorage.setItem('otp.recent', JSON.stringify([stray]))
+      const server = serveById({
+        'NATIVE-UUID-1': { ...EMPTY, recent: onServer }
+      })
+      const store = launch(tracking)
+      await store.dispatch(startPlacesSync() as any)
+      await settle()
+      const ids = ['recent-9', 'recent-5', 'recent-4', 'recent-3', 'recent-2']
+      expect(stored('recent').map((r: any) => r.id)).toEqual(ids)
+      expect(
+        store.getState().user.localUser.recentPlaces.map((r: any) => r.id)
+      ).toEqual(ids)
+      expect(server.posts).toHaveLength(1)
+      expect(server.posts[0].recent.map((r: any) => r.id)).toEqual(ids)
+      const restore = placesEvents().find((e: any) => e.trigger === 'restore')
+      expect(restore.restored.recent).toBe(4)
+    })
+
+    it('an unacknowledged local write wins over the copy, recents included', async () => {
+      window.localStorage.setItem('otp.recent', JSON.stringify([recent(1, 1)]))
+      window.localStorage.setItem('otp.placesSyncPending', 'true')
+      const server = serveById({
+        'NATIVE-UUID-1': { ...EMPTY, recent: [recent(1, 1), recent(2, 2)] }
+      })
+      const store = launch(tracking)
+      await store.dispatch(startPlacesSync() as any)
+      await settle()
+      expect(stored('recent').map((r: any) => r.id)).toEqual(['recent-1'])
+      expect(server.posts).toHaveLength(1)
+      expect(server.posts[0].recent.map((r: any) => r.id)).toEqual(['recent-1'])
+    })
+
+    it('a recents-only write is pushed now', async () => {
+      const server = serveById({})
+      const store = launch(tracking)
+      await store.dispatch(startPlacesSync() as any)
+      await settle()
+      expect(server.posts).toHaveLength(0)
+      store.dispatch(remember(recent(1, 1000)))
+      await settle()
+      expect(server.posts).toHaveLength(1)
+      expect(server.posts[0].recent).toEqual([recent(1, 1000)])
+      expect(window.localStorage.getItem('otp.placesSyncPending')).toBeNull()
+    })
+
+    it('a server reply without `recent` (older sidecar) leaves local recents alone and is not "behind"', async () => {
+      window.localStorage.setItem('otp.recent', JSON.stringify([recent(1, 1)]))
+      const server = serveById({
+        'NATIVE-UUID-1': { home: null, places: [], routeSets: [], work: null }
+      })
+      const store = launch(tracking)
+      await store.dispatch(startPlacesSync() as any)
+      await settle()
+      expect(stored('recent').map((r: any) => r.id)).toEqual(['recent-1'])
+      expect(server.posts).toHaveLength(0)
+    })
+
+    it('a phone that does not track recents does not take them from the copy', async () => {
+      const server = serveById({
+        'NATIVE-UUID-1': { ...EMPTY, recent: [recent(1, 1)] }
+      })
+      const store = launch(config)
+      await store.dispatch(startPlacesSync() as any)
+      await settle()
+      expect(stored('recent')).toBeNull()
+      expect(store.getState().user.localUser.recentPlaces).toEqual([])
+      expect(server.posts).toHaveLength(0)
     })
   })
 })

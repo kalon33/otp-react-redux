@@ -153,12 +153,14 @@ describe('components > form > location picker', () => {
       const rest = ids.filter(
         (id) => id !== 'current-position' && id !== 'choose-on-map'
       )
-      // Recents before saved places, and each group internally in order.
+      // Saved places before this session's searches (backlog 60.2: "Saved
+      // places" and "Recent" now sit above "Recently Searched"), and each
+      // group internally in order.
       expect(rest).toEqual([
         '1:100',
+        'user-saved-Home-place',
         'recent-0',
-        'recent-1',
-        'user-saved-Home-place'
+        'recent-1'
       ])
     })
 
