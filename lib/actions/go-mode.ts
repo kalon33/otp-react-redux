@@ -122,6 +122,7 @@ import {
   findVehicleForTrip,
   RIDER_AT_BOARD_STOP_M,
   isVehicleRecordFresh,
+  matchFollowsRoute,
   matchProvesAboard,
   refreshConfirmedMatch,
   shouldRebindRidingTrip,
@@ -9866,6 +9867,18 @@ export function advanceToLeg(legIndex: number) {
     // track, which is all this needs to know.
     const newLegRouteId = getLegRouteId(newLeg)
     if (newLeg?.transitLeg && newLegRouteId) {
+      // ...and the MATCH follows it too (67.2). A same-stop change from one
+      // transit leg to another never passes through stopVehicleTracking, so
+      // without this the old route's match rides onto the new leg: on
+      // 2026-10-20 the 94's confirmed 1:2015 outlived TRANSITION_LEG 1 at
+      // 09:35:56 and every Gold Line poll refreshed it against the 1:905 feed,
+      // found nothing and returned — the train the rider sat on for 21 minutes
+      // was never matched. Clearing also re-arms the boarding prompt, which
+      // startVehicleTracking then re-stamps for this leg. An interlined leg is
+      // the same bus under a new number, so its match stands.
+      if (!matchFollowsRoute(goMode.vehicleMatch?.match, newLegRouteId, legs)) {
+        dispatch(clearVehicleMatch())
+      }
       dispatch(startVehicleTracking(newLegRouteId))
     } else if (
       goMode.vehicleMatch?.match ||
@@ -11854,7 +11867,19 @@ export function performVehicleMatching(routeId: string) {
       return
     }
 
-    const previousMatch = goMode.vehicleMatch?.match || null
+    // A match for ANOTHER route is no evidence about this one (67.2): the
+    // rider has changed vehicles, so it neither short-circuits as confirmed
+    // nor seeds the matcher's continuity. advanceToLeg clears it at the leg
+    // change; this covers the paths that arm a leg without one (start,
+    // resume). An interlined leg keeps its bus — see matchFollowsRoute.
+    const storedMatch = goMode.vehicleMatch?.match || null
+    const previousMatch = matchFollowsRoute(
+      storedMatch,
+      routeId,
+      goMode.activeItinerary?.legs ?? []
+    )
+      ? storedMatch
+      : null
 
     // A confirmed match never re-matches — but it must not freeze either. On
     // 7/29 the confirmed record kept its confirmation-time lastSeen/nextStopId
