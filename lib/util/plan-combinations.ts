@@ -138,6 +138,18 @@ export function generateModeSubsets<
 }
 
 /** The planConnection PlanDirectMode a legacy TransportMode maps to. */
+const DIRECT_MODES = new Set([
+  'BICYCLE',
+  'BICYCLE_PARKING',
+  'BICYCLE_RENTAL',
+  'CAR',
+  'CAR_PARKING',
+  'CAR_RENTAL',
+  'FLEX',
+  'SCOOTER_RENTAL',
+  'WALK'
+])
+
 function directMode({ mode, qualifier }: LegacyTransportMode): string {
   if (qualifier === 'RENT') {
     if (mode === 'BICYCLE') return 'BICYCLE_RENTAL'
@@ -145,7 +157,7 @@ function directMode({ mode, qualifier }: LegacyTransportMode): string {
     if (mode === 'CAR') return 'CAR_RENTAL'
   }
   if (mode === 'CAR') return 'CAR'
-  return mode
+  return DIRECT_MODES.has(mode) ? mode : 'WALK'
 }
 
 /** The planConnection access/egress mode a legacy TransportMode maps to. */
@@ -157,6 +169,17 @@ function accessMode({ mode, qualifier }: LegacyTransportMode): string | null {
   }
   if (mode === 'CAR') return 'CAR_PARKING'
   if (mode === 'BICYCLE' || mode === 'SCOOTER' || mode === 'FLEX') return mode
+  return null
+}
+
+/**
+ * The planConnection transfer mode a legacy TransportMode maps to. The
+ * PlanTransferMode enum is the narrowest of the four (BICYCLE, CAR, WALK
+ * only): FLEX, rentals and park-and-rides are legal access/egress but NOT
+ * transfer modes, and naming them there rejects the whole query.
+ */
+function transferMode(mode: string): string | null {
+  if (mode === 'BICYCLE' || mode === 'CAR' || mode === 'WALK') return mode
   return null
 }
 
@@ -189,12 +212,15 @@ export function toPlanModesInput(
     .map(accessMode)
     .filter((m): m is string => !!m)
   const egress = access.includes('CAR_PARKING') ? ['WALK'] : access
+  // FLEX/rentals ride as access/egress only: the PlanTransferMode enum takes
+  // BICYCLE, CAR and WALK, and anything else rejects the whole query.
+  const transfer = access.map(transferMode).filter((m): m is string => !!m)
   return {
     // Only name the access/egress/transfer modes when the subset carries a
     // street mode; a walk-access transit plan needs none of them (OTP adds
     // walking itself) and an empty transfer list is just wire noise.
     ...(access.length > 0 && {
-      transit: { access, egress, transfer: access }
+      transit: { access, egress, transfer }
     }),
     transitOnly: true
   }
