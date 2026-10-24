@@ -202,19 +202,27 @@ export function toPlanModesInput(
   const hasTransit = modes.some((m) => SIMPLIFICATIONS[m.mode] === 'TRANSIT')
 
   if (!hasTransit) {
-    const direct = modes.map(directMode).filter(Boolean)
+    // Same dedupe as the transit slots: the flex bundling can name FLEX more
+    // than once, and a repeated enum value is a server-side error.
+    const direct = Array.from(new Set(modes.map(directMode).filter(Boolean)))
     return direct.length
       ? { direct, directOnly: true }
       : { direct: ['WALK'], directOnly: true }
   }
 
-  const access = streetModes
-    .map(accessMode)
-    .filter((m): m is string => !!m)
+  // The legacy flex bundling names FLEX with several qualifiers; every one
+  // maps to the same planConnection enum value, and a repeated value is an
+  // error on the server ("Only one or two modes can be specified for a leg").
+  const dedupe = (modes: string[]): string[] => Array.from(new Set(modes))
+  const access = dedupe(
+    streetModes.map(accessMode).filter((m): m is string => !!m)
+  )
   const egress = access.includes('CAR_PARKING') ? ['WALK'] : access
   // FLEX/rentals ride as access/egress only: the PlanTransferMode enum takes
   // BICYCLE, CAR and WALK, and anything else rejects the whole query.
-  const transfer = access.map(transferMode).filter((m): m is string => !!m)
+  const transfer = dedupe(
+    access.map(transferMode).filter((m): m is string => !!m)
+  )
   return {
     // Only name the access/egress/transfer modes when the subset carries a
     // street mode; a walk-access transit plan needs none of them (OTP adds

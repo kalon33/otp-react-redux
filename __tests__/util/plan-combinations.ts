@@ -107,6 +107,32 @@ describe('util > plan-combinations > toPlanModesInput', () => {
       directOnly: true
     })
   })
+
+  it('collapses the three-mode flex bundling onto one enum value', () => {
+    // The legacy flex bundling names FLEX three times (one per qualifier);
+    // every one maps to the same planConnection enum, and a repeated value
+    // is a server-side error — measured live: "Only one or two modes can be
+    // specified for a leg, got: [FLEXIBLE, FLEXIBLE, FLEXIBLE]".
+    const input = toPlanModesInput([
+      { mode: 'TRANSIT' },
+      { mode: 'FLEX', qualifier: 'ACCESS' },
+      { mode: 'FLEX', qualifier: 'EGRESS' },
+      { mode: 'FLEX', qualifier: 'DIRECT' }
+    ])
+    expect(input).toEqual({
+      transit: { access: ['FLEX'], egress: ['FLEX'], transfer: [] },
+      transitOnly: true
+    })
+  })
+
+  it('collapses duplicate direct modes', () => {
+    expect(
+      toPlanModesInput([
+        { mode: 'FLEX', qualifier: 'ACCESS' },
+        { mode: 'FLEX', qualifier: 'EGRESS' }
+      ])
+    ).toEqual({ direct: ['FLEX'], directOnly: true })
+  })
 })
 
 describe('util > plan-combinations > generateModeSubsets', () => {
