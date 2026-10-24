@@ -135,9 +135,13 @@ describe('util > multi-stop (43.1)', () => {
         intermediatePlaces: [PERENNIAL, MICRO_CENTER],
         viaStop: { ids: ['1:56796'], name: 'Lake & Chicago' } as any
       })
+      // planConnection: query-gen wraps every via entry as {visit: v}, so
+      // planConstraintVariables emits the visit bodies themselves.
       expect(out.via).toEqual([
-        ...viaVisitLocations([PERENNIAL, MICRO_CENTER]),
-        { passThrough: { stopLocationIds: ['1:56796'] } }
+        ...viaVisitLocations([PERENNIAL, MICRO_CENTER]).map(
+          (v: any) => v.visit
+        ),
+        { stopLocationIds: ['1:56796'] }
       ])
     })
 
@@ -452,7 +456,7 @@ describe('util > multi-stop > a stay at each stop (58.3)', () => {
         stopStays: [20]
       }
       const vars: any = planConstraintVariables(query as any)
-      expect(vars.via[0].visit.minimumWaitTime).toBe('PT20M')
+      expect(vars.via[0].minimumWaitTime).toBe('PT20M')
       expect(
         applyRoutingPreferences({ ...query, fromPlace: 'x' }).stopStays
       ).toBeUndefined()

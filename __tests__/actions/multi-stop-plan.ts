@@ -11,14 +11,16 @@ import createOtpReducer from '../../lib/reducers/create-otp-reducer'
 jest.mock('@opentripplanner/core-utils', () => {
   const actual = jest.requireActual('@opentripplanner/core-utils')
   const { parse } = jest.requireActual('graphql')
-  const stub = parse('query Plan { plan { itineraries { duration } } }')
+  const stub = parse(
+        'query Plan { planConnection { edges { node { duration } } } }'
+      )
   const core = actual.default || actual
   const patched = {
     ...core,
     queryGen: {
       ...core.queryGen,
-      generateOtp2Query: (params: unknown) =>
-        core.queryGen.generateOtp2Query(params, stub)
+      generateOtp2Query: (params: unknown, homeTimezone: string) =>
+        core.queryGen.generateOtp2Query(params, homeTimezone, stub)
     }
   }
   return { ...actual, __esModule: true, default: patched }
@@ -74,6 +76,37 @@ describe('actions > apiV2 > routingQuery with the rider’s stops (43.1)', () =>
     return { lat, lon, name }
   }
 
+  /**
+   * The planConnection wire format: origin/destination are labeled
+   * coordinates, the departure (or arrival) time rides in dateTime, and
+   * modes is a PlanModesInput. Translate back into the plan()-era shape
+   * (fromPlace/toPlace/time/arriveBy/modes[]) the probe server and the
+   * assertions below reason over.
+   */
+  const wireToPlanEra = (v: Record<string, any>) => {
+    const when = v.dateTime || {}
+    const iso = when.earliestDeparture || when.latestArrival || ''
+    const [datePart, timePart] = iso.split('T')
+    const coordinate = (l: any) =>
+      `${l?.label || ''}::${l?.location?.coordinate?.latitude},${l?.location?.coordinate?.longitude}`
+    const modes = v.modes?.transitOnly
+      ? v.modes.transit
+        ? [{ mode: 'TRANSIT' }].concat(
+            (v.modes.transit.access || []).map((m: string) => ({ mode: m }))
+          )
+        : [{ mode: 'TRANSIT' }]
+      : (v.modes?.direct || []).map((m: string) => ({ mode: m }))
+    return {
+      ...v,
+      arriveBy: !!when.latestArrival,
+      fromPlace: coordinate(v.origin),
+      toPlace: coordinate(v.destination),
+      modes,
+      date: datePart,
+      time: timePart ? timePart.slice(0, 5) : undefined
+    }
+  }
+
   let sent: Array<Record<string, any>>
   let actions: any[]
   let otpState: any
@@ -98,13 +131,14 @@ describe('actions > apiV2 > routingQuery with the rider’s stops (43.1)', () =>
    */
   const probeServer = () =>
     jest.fn((_url: string, options: { body?: string }) => {
-      const { variables } = JSON.parse(options?.body || '{}')
+      const { variables: raw } = JSON.parse(options?.body || '{}')
+      const variables = wireToPlanEra(raw)
       sent.push(variables)
       const streetOnly = !variables.modes.some((m: any) => m.mode === 'TRANSIT')
       const from = place(variables.fromPlace)
       const to = place(variables.toPlace)
       let itineraries: any[] = []
-      if (streetOnly && !variables.via) {
+      if (streetOnly && (variables.via || []).length === 0) {
         // Arrive-by: the ride ends at the time asked (58.3's backward chain).
         const start = variables.arriveBy
           ? T(variables.time) - 1200000
@@ -127,7 +161,7 @@ describe('actions > apiV2 > routingQuery with the rider’s stops (43.1)', () =>
             startTime: start
           }
         ]
-      } else if (!streetOnly && variables.via) {
+      } else if (!streetOnly && (variables.via || []).length > 0) {
         const stop = {
           lat: 44.941584,
           lon: -93.298483,
@@ -219,7 +253,11 @@ describe('actions > apiV2 > routingQuery with the rider’s stops (43.1)', () =>
     )
     expect(transit.length).toBeGreaterThanOrEqual(2)
     transit.forEach((v) => {
-      expect(v.via).toEqual(viaVisitLocations([PERENNIAL]))
+      // planConnection: query-gen wraps every via entry as {visit: v}, so the
+      // wire carries the visit bodies themselves.
+      expect(v.via).toEqual(
+        viaVisitLocations([PERENNIAL]).map((entry: any) => entry.visit)
+      )
       // The raw otp-ui array is bookkeeping, never a plan() argument.
       expect(v.intermediatePlaces).toBeUndefined()
     })
@@ -232,7 +270,7 @@ describe('actions > apiV2 > routingQuery with the rider’s stops (43.1)', () =>
       (v) => !v.modes.some((m: any) => m.mode === 'TRANSIT')
     )
     // Never the via OTP answers with nothing.
-    expect(street.every((v) => v.via === undefined)).toBe(true)
+    expect(street.every((v) => (v.via || []).length === 0)).toBe(true)
     expect(street.map((v) => [v.fromPlace, v.toPlace])).toEqual([
       ['Home::44.8168,-93.3101', 'Perennial Cycle::44.941584,-93.298483'],
       [
@@ -276,7 +314,7 @@ describe('actions > apiV2 > routingQuery with the rider’s stops (43.1)', () =>
     }
     dispatch(routingQuery())
     await settle()
-    expect(sent.every((v) => v.via === undefined)).toBe(true)
+    expect(sent.every((v) => (v.via || []).length === 0)).toBe(true)
     // One plan per combination: no chain.
     expect(
       sent.filter((v) => !v.modes.some((m: any) => m.mode === 'TRANSIT'))
@@ -315,20 +353,24 @@ describe('actions > apiV2 > routingQuery with the rider’s stops (43.1)', () =>
     segmentsToo = false
   }: { segmentsToo?: boolean } = {}) =>
     jest.fn((_url: string, options: { body?: string }) => {
-      const { variables } = JSON.parse(options?.body || '{}')
+      const { variables: raw } = JSON.parse(options?.body || '{}')
+      const variables = wireToPlanEra(raw)
       sent.push(variables)
       const kind = kindOf(variables)
       const from = place(variables.fromPlace)
       const to = place(variables.toPlace)
       const start = T(variables.time)
       let body: any
-      if (kind !== 'bike' && (variables.via || segmentsToo)) {
+      if (
+        kind !== 'bike' &&
+        ((variables.via || []).length > 0 || segmentsToo)
+      ) {
         body = refused()
       } else if (kind === 'bike') {
         body = {
           data: {
             plan: {
-              itineraries: variables.via
+              itineraries: (variables.via || []).length > 0
                 ? []
                 : [
                     {
@@ -420,8 +462,10 @@ describe('actions > apiV2 > routingQuery with the rider’s stops (43.1)', () =>
       const wt = walkTransitSent()
       // The refused via plan, then one plan per segment.
       expect(wt).toHaveLength(3)
-      expect(wt[0].via).toEqual(viaVisitLocations([PERENNIAL]))
-      expect(wt.slice(1).every((v) => v.via === undefined)).toBe(true)
+      expect(wt[0].via).toEqual(
+        viaVisitLocations([PERENNIAL]).map((entry: any) => entry.visit)
+      )
+      expect(wt.slice(1).every((v) => (v.via || []).length === 0)).toBe(true)
       expect(wt.slice(1).every((v) => v.numItineraries === 1)).toBe(true)
       expect(wt.slice(1).map((v) => [v.fromPlace, v.toPlace])).toEqual([
         ['Home::44.8168,-93.3101', 'Perennial Cycle::44.941584,-93.298483'],
@@ -475,7 +519,7 @@ describe('actions > apiV2 > routingQuery with the rider’s stops (43.1)', () =>
       expect(bt).toHaveLength(3)
       expect(bt[0].maxStopCount).toBe(2000)
       expect(bt.some((v) => v.maxStopCount === 10000)).toBe(false)
-      expect(bt.slice(1).every((v) => v.via === undefined)).toBe(true)
+      expect(bt.slice(1).every((v) => (v.via || []).length === 0)).toBe(true)
       expect(types()).not.toContain('ROUTING_SILENT_ERROR')
       expect(types()).not.toContain('ROUTING_EXTRA_REQUEST')
       const itineraries = otpState.searches[
@@ -536,7 +580,9 @@ describe('actions > apiV2 > routingQuery with the rider’s stops (43.1)', () =>
         walkTransitSent().every(
           (v) =>
             JSON.stringify(v.via) ===
-            JSON.stringify(viaVisitLocations([PERENNIAL]))
+            JSON.stringify(
+              viaVisitLocations([PERENNIAL]).map((entry: any) => entry.visit)
+            )
         )
       ).toBe(true)
       expect(walkTransitSent()).toHaveLength(1)
@@ -571,7 +617,9 @@ describe('actions > apiV2 > routingQuery with the rider’s stops (43.1)', () =>
       )
       expect(transit.length).toBeGreaterThanOrEqual(2)
       transit.forEach((v) => {
-        expect(v.via[0].visit.minimumWaitTime).toBe('PT20M')
+        // planConnection: the visit body rides flat on the wire (query-gen
+        // adds the {visit} wrapper).
+        expect(v.via[0].minimumWaitTime).toBe('PT20M')
         expect(v.stopStays).toBeUndefined()
       })
     })

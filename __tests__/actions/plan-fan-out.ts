@@ -14,14 +14,16 @@ import createOtpReducer from '../../lib/reducers/create-otp-reducer'
 jest.mock('@opentripplanner/core-utils', () => {
   const actual = jest.requireActual('@opentripplanner/core-utils')
   const { parse } = jest.requireActual('graphql')
-  const stub = parse('query Plan { plan { itineraries { duration } } }')
+  const stub = parse(
+        'query Plan { planConnection { edges { node { duration } } } }'
+      )
   const core = actual.default || actual
   const patched = {
     ...core,
     queryGen: {
       ...core.queryGen,
-      generateOtp2Query: (params: unknown) =>
-        core.queryGen.generateOtp2Query(params, stub)
+      generateOtp2Query: (params: unknown, homeTimezone: string) =>
+        core.queryGen.generateOtp2Query(params, homeTimezone, stub)
     }
   }
   return { ...actual, __esModule: true, default: patched }
@@ -167,13 +169,26 @@ describe('actions > apiV2 > routingQuery fan-out', () => {
         req.variables.maxStopCount
       ])
     )
-    expect(byModes[JSON.stringify([{ mode: 'TRANSIT' }])]).toBe(10000)
+    // planConnection modes: transit-only rides as a transitOnly PlanModesInput
+    // with no access; walk + transit simplifies to the same transit-only
+    // object; bike + transit names BICYCLE as access/egress/transfer; the
+    // bike-only plan goes out as a direct mode.
+    expect(byModes[JSON.stringify({ transitOnly: true })]).toBe(10000)
     // Backlog 38.3: bike + transit goes first at the quick cap; the rider's
     // own cap follows once the fan-out has settled (progressive-bike-transit.ts).
     expect(
-      byModes[JSON.stringify([{ mode: 'TRANSIT' }, { mode: 'BICYCLE' }])]
+      byModes[
+        JSON.stringify({
+          transit: {
+            access: ['BICYCLE'],
+            egress: ['BICYCLE'],
+            transfer: ['BICYCLE']
+          },
+          transitOnly: true
+        })
+      ]
     ).toBe(2000)
-    expect(byModes[JSON.stringify([{ mode: 'BICYCLE' }])]).toBeUndefined()
+    expect(byModes[JSON.stringify({ direct: ['BICYCLE'], directOnly: true })]).toBeUndefined()
     await settleAll()
   })
 
@@ -278,25 +293,27 @@ describe('actions > apiV2 > routingQuery fan-out', () => {
     // plan, then the top-up.
     expect(sent).toHaveLength(6)
     expect(sent[3].variables.maxStopCount).toBe(10000)
-    expect(sent[3].variables.searchWindow).toBe(7200)
+    expect(sent[3].variables.searchWindow).toBe('7200s')
     expect(sent[4].variables.bikeReluctance).toBe(1)
     const topUp = sent[5]
-    expect(topUp.variables.searchWindow).toBe(14400)
+    expect(topUp.variables.searchWindow).toBe('14400s')
     expect(topUp.variables.maxStopCount).toBe(2000)
     // The rider's own modes, not a wider set: only the window and the cap
     // change (feedback_no_forced_route_changes).
-    expect(topUp.variables.modes).toEqual([
-      { mode: 'TRANSIT' },
-      { mode: 'BICYCLE' }
-    ])
+    // planConnection modes: the bike + transit subset rides as BICYCLE
+    // access/egress/transfer on a transit-only plan.
+    expect(topUp.variables.modes).toEqual({
+      transit: { access: ['BICYCLE'], egress: ['BICYCLE'], transfer: ['BICYCLE'] },
+      transitOnly: true
+    })
     // Not a second fan-out: exactly one extra plan.
     expect(
-      sent.filter((req) => req.variables.searchWindow === 14400)
+      sent.filter((req) => req.variables.searchWindow === '14400s')
     ).toHaveLength(1)
     // And the first five asked for the default window.
     sent
       .slice(0, 5)
-      .forEach((req) => expect(req.variables.searchWindow).toBe(7200))
+      .forEach((req) => expect(req.variables.searchWindow).toBe('7200s'))
     // The widen keeps the rider's own bike reluctance, not the low-bike one.
     expect(topUp.variables.bikeReluctance).toBeUndefined()
     // The search is not left looking pending forever.
@@ -323,7 +340,7 @@ describe('actions > apiV2 > routingQuery fan-out', () => {
     // The fan-out, 38.3's full bike + transit pass and 55.1's low-bike
     // plan; no top-up.
     expect(sent).toHaveLength(5)
-    sent.forEach((req) => expect(req.variables.searchWindow).toBe(21600))
+    sent.forEach((req) => expect(req.variables.searchWindow).toBe('21600s'))
   })
 
   it('does not widen while Go Mode is live', async () => {

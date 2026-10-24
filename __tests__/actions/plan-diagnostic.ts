@@ -14,14 +14,16 @@ import createOtpReducer from '../../lib/reducers/create-otp-reducer'
 jest.mock('@opentripplanner/core-utils', () => {
   const actual = jest.requireActual('@opentripplanner/core-utils')
   const { parse } = jest.requireActual('graphql')
-  const stub = parse('query Plan { plan { itineraries { duration } } }')
+  const stub = parse(
+        'query Plan { planConnection { edges { node { duration } } } }'
+      )
   const core = actual.default || actual
   const patched = {
     ...core,
     queryGen: {
       ...core.queryGen,
-      generateOtp2Query: (params: unknown) =>
-        core.queryGen.generateOtp2Query(params, stub)
+      generateOtp2Query: (params: unknown, homeTimezone: string) =>
+        core.queryGen.generateOtp2Query(params, homeTimezone, stub)
     }
   }
   return { ...actual, __esModule: true, default: patched }
@@ -112,6 +114,7 @@ describe('actions > apiV2 > missing-transit diagnostic', () => {
   const anyGlobal = global as unknown as Record<string, unknown>
   let realFetch: unknown
   let warn: jest.SpyInstance
+  let warnCalls: string[]
 
   const getState = () => ({ otp: otpState, user: {} })
   const dispatch = (action: any): any => {
@@ -137,13 +140,18 @@ describe('actions > apiV2 > missing-transit diagnostic', () => {
       const body = JSON.parse(options?.body || '{}')
       const v = body.variables || {}
       sent.push({ query: body.query, variables: v })
-      const modes = (v.modes || []).map((m: { mode: string }) => m.mode)
+      // planConnection modes: a PlanModesInput object. Transit-only carries
+      // transitOnly; bike + transit names BICYCLE in transit.access; the
+      // bike-only plan goes out as a direct mode.
+      const modes = v.modes || {}
+      const isTransit = !!modes.transitOnly
+      const isBikeAccess = (modes.transit?.access || []).includes('BICYCLE')
       let data
       if (v.debugItineraryFilter) {
         data = answerDiagnostic
-      } else if (!modes.includes('TRANSIT')) {
+      } else if (!isTransit) {
         data = { plan: { itineraries: [directBike], routingErrors: [] } }
-      } else if (modes.includes('BICYCLE')) {
+      } else if (isBikeAccess) {
         data = transitCombo
       } else {
         // The walk-access transit call: honest about walking, and only walking.
@@ -173,7 +181,7 @@ describe('actions > apiV2 > missing-transit diagnostic', () => {
   }
 
   const diagnostics = () =>
-    sent.filter((req) => req.variables.debugItineraryFilter === true)
+    sent.filter((req) => req.variables.debugItineraryFilter === 'LIST_ALL')
   const record = () => actions.find((a) => a.type === 'ROUTING_DIAGNOSTIC')
 
   beforeEach(() => {
@@ -222,15 +230,19 @@ describe('actions > apiV2 > missing-transit diagnostic', () => {
     // Exactly one, and it is the transit+bicycle combination's own question.
     expect(diagnostics()).toHaveLength(1)
     const probe = diagnostics()[0]
-    expect(probe.variables.modes).toEqual([
-      { mode: 'TRANSIT' },
-      { mode: 'BICYCLE' }
-    ])
+    // planConnection modes: the transit + bicycle subset rides as BICYCLE
+    // access/egress/transfer on a transit-only plan.
+    expect(probe.variables.modes).toEqual({
+      transit: { access: ['BICYCLE'], egress: ['BICYCLE'], transfer: ['BICYCLE'] },
+      transitOnly: true
+    })
     // The rider's own levers, re-sent unchanged — a cheaper question would not
     // diagnose the expensive one's answer.
     expect(probe.variables.maxStopCount).toBe(10000)
-    expect(probe.variables.searchWindow).toBe(7200)
-    expect(probe.query).toContain('$debugItineraryFilter: Boolean')
+    expect(probe.variables.searchWindow).toBe('7200s')
+    expect(probe.query).toContain(
+      '$debugItineraryFilter: ItineraryFilterDebugProfile'
+    )
     expect(probe.query).toContain('systemNotices')
 
     const rec = record()
@@ -339,15 +351,12 @@ describe('actions > apiV2 > missing-transit diagnostic', () => {
           status: 200
         })
       }
-      const modes = (v.modes || []).map((m: { mode: string }) => m.mode)
       return Promise.resolve({
         json: () =>
           Promise.resolve({
             data: {
               plan: {
-                itineraries: modes.includes('TRANSIT')
-                  ? [directBike]
-                  : [directBike],
+                itineraries: [directBike],
                 routingErrors: []
               }
             }

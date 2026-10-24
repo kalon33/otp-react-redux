@@ -612,13 +612,17 @@ export function planConstraintVariables(
   // OTP's via list is ordered, and a pass-through stop is a constraint on the
   // ride, not a place the rider is going.
   // Each with the rider's minimum stay there (backlog 58.3).
+  //
+  // planConnection note: query-gen wraps EVERY via entry as {visit: v}, so
+  // the entries here are the visit bodies themselves (coordinate/label/
+  // minimumWaitTime, or stopLocationIds for a pass-through stop).
   const via: unknown[] = viaVisitLocations(
     queryStops(query),
     queryStopStays(query)
-  )
+  ).map((v) => v.visit)
   const stopIds = query?.viaStop?.ids?.filter(Boolean)
   if (stopIds?.length) {
-    via.push({ passThrough: { stopLocationIds: stopIds } })
+    via.push({ stopLocationIds: stopIds })
   }
   if (via.length) out.via = via
   return out
@@ -630,6 +634,13 @@ export function planConstraintVariables(
  */
 export const NON_OTP_QUERY_KEYS = [
   'activeProfileId',
+  // plan()-era route bias/trip filters: planConnection has no `preferred`,
+  // `unpreferred` or `banned` inputs (a route ban travels as bannedRoutes,
+  // which query-gen turns into a transitFilter exclude). The sticky-route
+  // preference is applied client-side when the itineraries come back.
+  'banned',
+  'preferred',
+  'unpreferred',
   // Re-anchors Go Mode's scoped access re-plan onto an arrive-by deadline
   // (util/go-mode/arrive-on-time.ts). It picks the time a query is asked at;
   // it is not itself an argument OTP takes.
@@ -669,74 +680,86 @@ export function applyRoutingPreferences(
   return { ...cleaned, ...clampPreferences(prefs) }
 }
 
-// Variable declarations + plan() arguments for the levers the default
-// core-utils planQuery does not already declare. Verified against OTP's
-// (deprecated but functional) plan field: bikeSpeed/waitReluctance are Float,
-// transferPenalty/minTransferTime/walkBoardCost are Int, and searchWindow is
-// Long (Int is rejected with VariableTypeMismatch).
+// Variable declarations for the levers the default core-utils planConnection
+// query does not already declare, plus the `preferences` wiring that sends
+// them. Anchored on the minified fragments graphql-tag's `print()` always
+// emits for the default planConnection query. Verified against OTP's
+// planConnection schema: bicycle.speed is Speed, waitReluctance is
+// Reluctance, transfer cost is Cost, transfer slack is Duration, walk
+// boardCost is Cost, maximumTransfers is Int, searchWindow is Duration.
 //
-// `maxStopCount` is the OTP *fork's* plan(maxStopCount:) argument (backlog
-// 14.1) and is NOT part of the standard OTP schema: declaring it on a
-// standard OTP instance rejects the whole query with a validation error, so
-// it is injected only when the fork is in use (see extendPlanQueryWithLevers
-// and the `enableMaxStopCount` config flag). searchWindow, maxTransfers and
-// via ARE standard OTP 2.x plan() arguments and are always safe to declare.
+// `maxStopCount` is the OTP *fork's* access/egress cap (backlog 14.1) and is
+// NOT part of the standard planConnection schema: declaring it on a standard
+// OTP instance rejects the whole query, so it is injected only when the fork
+// is in use (the `enableMaxStopCount` config flag). searchWindow and via ARE
+// standard planConnection arguments and are always safe to declare.
 const FORK_MAX_STOP_COUNT_DECL = '  $maxStopCount: Int\n'
 const FORK_MAX_STOP_COUNT_ARG = '    maxStopCount: $maxStopCount\n'
 const EXTRA_VAR_DECLS =
-  '$walkSpeed: Float\n' +
-  '  $searchWindow: Long\n' +
-  '  $bikeSpeed: Float\n' +
-  '  $waitReluctance: Float\n' +
-  '  $transferPenalty: Int\n' +
-  '  $minTransferTime: Int\n' +
+  '$walkSpeed: Speed\n' +
+  '  $searchWindow: Duration\n' +
+  '  $bikeSpeed: Speed\n' +
+  '  $waitReluctance: Reluctance\n' +
+  '  $transferPenalty: Cost\n' +
+  '  $minTransferTime: Duration\n' +
   '  $maxTransfers: Int\n' +
-  '  $via: [PlanViaLocationInput!]\n' +
-  '  $walkBoardCost: Int'
-const EXTRA_PLAN_ARGS =
-  'walkSpeed: $walkSpeed\n' +
-  '    searchWindow: $searchWindow\n' +
-  '    bikeSpeed: $bikeSpeed\n' +
-  '    waitReluctance: $waitReluctance\n' +
-  '    transferPenalty: $transferPenalty\n' +
-  '    minTransferTime: $minTransferTime\n' +
-  '    maxTransfers: $maxTransfers\n' +
-  '    via: $via\n' +
-  '    walkBoardCost: $walkBoardCost'
+  '  $walkBoardCost: Cost'
+const WALK_ANCHOR =
+  'walk: {speed: $walkSpeed, reluctance: $walkReluctance}'
+const BICYCLE_ANCHOR = 'bicycle: {reluctance: $bikeReluctance}'
+const TRANSIT_ANCHOR = 'transit: {filters: $transitFilter'
 
 /**
- * The default OTP planQuery (from core-utils) declares only walk/bike/car
- * reluctance, walkSpeed and wheelchair. Inject the remaining levers' variable
- * declarations and plan() arguments so OTP actually receives them, anchoring on
- * the walkSpeed lines the default query always contains. If those anchors are
- * missing (unexpected query shape) the query is returned unchanged, and unset
- * levers are simply passed as null (OTP falls back to its defaults).
+ * The default core-utils planConnection query declares only walk/bike/car
+ * reluctance, walkSpeed, wheelchair and via. Inject the remaining levers'
+ * variable declarations and their `preferences` wiring so OTP actually
+ * receives them, anchoring on the fragments the printed query always
+ * contains. If those anchors are missing (unexpected query shape) the query
+ * is returned unchanged, and unset levers are simply passed as null (OTP
+ * falls back to its defaults).
  */
 export function extendPlanQueryWithLevers(
   query: string,
   { enableMaxStopCount = false }: { enableMaxStopCount?: boolean } = {}
 ): string {
   if (
-    !query.includes('$walkSpeed: Float') ||
-    !query.includes('walkSpeed: $walkSpeed')
+    !query.includes('$walkSpeed: Speed') ||
+    !query.includes(WALK_ANCHOR) ||
+    !query.includes(BICYCLE_ANCHOR) ||
+    !query.includes(TRANSIT_ANCHOR)
   ) {
     return query
   }
   const varDecls = enableMaxStopCount
     ? EXTRA_VAR_DECLS.replace(
-        '$walkSpeed: Float\n',
-        `$walkSpeed: Float\n${FORK_MAX_STOP_COUNT_DECL}`
+        '$walkSpeed: Speed\n',
+        `$walkSpeed: Speed\n${FORK_MAX_STOP_COUNT_DECL}`
       )
     : EXTRA_VAR_DECLS
-  const planArgs = enableMaxStopCount
-    ? EXTRA_PLAN_ARGS.replace(
-        'walkSpeed: $walkSpeed\n',
-        `walkSpeed: $walkSpeed\n${FORK_MAX_STOP_COUNT_ARG}`
-      )
-    : EXTRA_PLAN_ARGS
-  return query
-    .replace('$walkSpeed: Float', () => varDecls)
-    .replace('walkSpeed: $walkSpeed', () => planArgs)
+  let out = query
+    .replace('$walkSpeed: Speed', () => varDecls)
+    .replace(
+      WALK_ANCHOR,
+      () =>
+        'walk: {speed: $walkSpeed, reluctance: $walkReluctance, boardCost: $walkBoardCost}'
+    )
+    .replace(
+      BICYCLE_ANCHOR,
+      () => 'bicycle: {reluctance: $bikeReluctance, speed: $bikeSpeed}'
+    )
+    .replace(
+      TRANSIT_ANCHOR,
+      () =>
+        'transit: {board: {waitReluctance: $waitReluctance}, transfer: {cost: $transferPenalty, slack: $minTransferTime, maximumTransfers: $maxTransfers}, filters: $transitFilter'
+    )
+  // searchWindow is a standard planConnection argument the default query does
+  // not wire; attach it (and the fork's maxStopCount when opted in) after the
+  // via argument the default query declares.
+  const extraArgs = enableMaxStopCount
+    ? `    searchWindow: $searchWindow\n${FORK_MAX_STOP_COUNT_ARG}`
+    : '    searchWindow: $searchWindow\n'
+  out = out.replace('    via: $via\n', `    via: $via\n${extraArgs}`)
+  return out
 }
 
 /** Path of the login-gated preferences endpoint (same origin, proxied by nginx). */

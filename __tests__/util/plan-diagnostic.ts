@@ -22,69 +22,42 @@ describe('util > plan-diagnostic', () => {
   beforeEach(() => resetRoutingDiagnosticGate())
 
   describe('buildDiagnosticPlanQuery', () => {
-    // The shape core-utils' `print()` emits, with the ten arguments
-    // extendPlanQueryWithLevers injects (searchWindow/maxStopCount are the two
-    // that decide whether the diagnostic asks the same question at all).
-    const riderQuery = `query Plan($arriveBy: Boolean, $banned: InputBanned, $fromPlace: String!, $modes: [TransportMode], $numItineraries: Int, $preferred: InputPreferred, $toPlace: String!, $walkSpeed: Float
-  $searchWindow: Long
-  $maxStopCount: Int
-  $via: [PlanViaLocationInput!], $wheelchair: Boolean) {
-  plan(
-    arriveBy: $arriveBy
-    banned: $banned
-    fromPlace: $fromPlace
-    locale: "en"
-    numItineraries: $numItineraries
-    preferred: $preferred
-    toPlace: $toPlace
-    transportModes: $modes
-    walkSpeed: $walkSpeed
-    searchWindow: $searchWindow
-    maxStopCount: $maxStopCount
-    via: $via
-    wheelchair: $wheelchair
-  ) {
-    itineraries {
-      duration
-      legs {
-        legGeometry {
-          points
-        }
-      }
-    }
-    routingErrors {
-      code
-    }
-  }
-}`
+    // The shape core-utils' `print()` emits for the planConnection document,
+    // with the arguments extendPlanQueryWithLevers injects
+    // (searchWindow/maxStopCount decide whether the diagnostic asks the same
+    // question at all). The preferences block is printed inline on one line.
+    const riderQuery = `query Plan($transitFilter: [TransitFilterInput!], $bikeReluctance: Reluctance, $carReluctance: Reluctance, $dateTime: PlanDateTimeInput, $origin: PlanLabeledLocationInput!, $modes: PlanModesInput, $numItineraries: Int, $includeRealTimeCancellations: Boolean, $destination: PlanLabeledLocationInput!, $walkReluctance: Reluctance, $walkSpeed: Speed\n  $searchWindow: Duration\n  $maxStopCount: Int\n  $wheelchair: Boolean, $via: [PlanViaLocationInput!]) {\n  planConnection(\n    dateTime: $dateTime\n    destination: $destination\n    first: $numItineraries\n    locale: "en"\n    modes: $modes\n    origin: $origin\n    preferences: {accessibility: {wheelchair: {enabled: $wheelchair}}, street: {bicycle: {reluctance: $bikeReluctance}, car: {reluctance: $carReluctance}, walk: {speed: $walkSpeed, reluctance: $walkReluctance}}, transit: {filters: $transitFilter, timetable: {includeRealTimeCancellations: $includeRealTimeCancellations}}}\n    via: $via\n    searchWindow: $searchWindow\n    maxStopCount: $maxStopCount\n  ) {\n    edges {\n      node {\n        duration\n        legs {\n          legGeometry {\n            points\n          }\n        }\n      }\n    }\n    routingErrors {\n      code\n    }\n  }\n}`
 
     it('carries every lever the rider’s own query declared, plus the flag', () => {
       const query = buildDiagnosticPlanQuery(riderQuery) as string
       expect(query).not.toBeNull()
-      // Same question: every declaration and every plan() argument, verbatim.
+      // Same question: every declaration and every planConnection argument,
+      // verbatim.
       ;[
-        '$arriveBy: Boolean',
-        '$banned: InputBanned',
-        '$modes: [TransportMode]',
+        '$transitFilter: [TransitFilterInput!]',
+        '$modes: PlanModesInput',
         '$numItineraries: Int',
-        '$preferred: InputPreferred',
-        '$searchWindow: Long',
+        '$searchWindow: Duration',
         '$maxStopCount: Int',
         '$via: [PlanViaLocationInput!]'
       ].forEach((decl) => expect(query).toContain(decl))
       ;[
-        'transportModes: $modes',
+        'first: $numItineraries',
         'searchWindow: $searchWindow',
         'maxStopCount: $maxStopCount',
-        'preferred: $preferred',
+        'modes: $modes',
         'locale: "en"'
       ].forEach((arg) => expect(query).toContain(arg))
 
-      // The flag is DECLARED as well as passed: an undeclared variable is
-      // dropped by OTP, which would make the diagnostic an ordinary re-plan
-      // that answers the same silence.
-      expect(query).toContain('$debugItineraryFilter: Boolean')
-      expect(query).toContain('debugItineraryFilter: $debugItineraryFilter')
+      // The debug profile is DECLARED as well as passed: an undeclared
+      // variable is dropped by OTP, which would make the diagnostic an
+      // ordinary re-plan that answers the same silence.
+      expect(query).toContain(
+        '$debugItineraryFilter: ItineraryFilterDebugProfile'
+      )
+      expect(query).toContain(
+        'itineraryFilter: {itineraryFilterDebugProfile: $debugItineraryFilter}'
+      )
 
       // And it asks for the tags.
       expect(query).toContain('systemNotices')
@@ -106,7 +79,7 @@ describe('util > plan-diagnostic', () => {
       expect(() =>
         parse(
           buildDiagnosticPlanQuery(
-            'query Plan { plan { itineraries { duration } } }'
+            'query Plan { planConnection { edges { node { duration } } } }'
           ) as string
         )
       ).not.toThrow()
@@ -114,10 +87,10 @@ describe('util > plan-diagnostic', () => {
 
     it('handles a plan query with no variables and no arguments', () => {
       const query = buildDiagnosticPlanQuery(
-        'query Plan { plan { itineraries { duration } } }'
+        'query Plan { planConnection { edges { node { duration } } } }'
       ) as string
       expect(query).toContain('query PlanDiagnostic(\n  $debugItineraryFilter')
-      expect(query).toContain('plan(\n    debugItineraryFilter')
+      expect(query).toContain('planConnection(\n    itineraryFilter')
     })
 
     it('refuses anything it cannot recognise as a plan query', () => {

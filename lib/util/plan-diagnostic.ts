@@ -188,8 +188,8 @@ export function buildDiagnosticPlanQuery(riderQuery: string): string | null {
     decls = inner.trim()
   }
 
-  // The plan() argument list, if it has one.
-  const planCall = /(^|[^A-Za-z0-9_])plan\s*(\(|\{)/.exec(riderQuery)
+  // The planConnection() argument list, if it has one.
+  const planCall = /(^|[^A-Za-z0-9_])planConnection\s*(\(|\{)/.exec(riderQuery)
   if (!planCall) return null
   let args = ''
   if (planCall[2] === '(') {
@@ -199,36 +199,40 @@ export function buildDiagnosticPlanQuery(riderQuery: string): string | null {
     args = inner.trim()
   }
 
+  // planConnection has no debugItineraryFilter Boolean; the filter-chain debug
+  // rides inside its itineraryFilter argument as a debug profile enum.
   const declList = decls
-    ? `${decls}\n  $debugItineraryFilter: Boolean`
-    : '$debugItineraryFilter: Boolean'
+    ? `${decls}\n  $debugItineraryFilter: ItineraryFilterDebugProfile`
+    : '$debugItineraryFilter: ItineraryFilterDebugProfile'
   const argList = args
-    ? `${args}\n    debugItineraryFilter: $debugItineraryFilter`
-    : 'debugItineraryFilter: $debugItineraryFilter'
+    ? `${args}\n    itineraryFilter: {itineraryFilterDebugProfile: $debugItineraryFilter}`
+    : 'itineraryFilter: {itineraryFilterDebugProfile: $debugItineraryFilter}'
 
   return `query PlanDiagnostic(
   ${declList}
 ) {
-  plan(
+  planConnection(
     ${argList}
   ) {
     routingErrors {
       code
       inputField
     }
-    itineraries {
-      duration
-      generalizedCost
-      startTime
-      systemNotices {
-        tag
-      }
-      legs {
-        mode
-        transitLeg
-        route {
-          gtfsId
-          shortName
+    edges {
+      node {
+        duration
+        generalizedCost
+        startTime
+        systemNotices {
+          tag
+        }
+        legs {
+          mode
+          transitLeg
+          route {
+            gtfsId
+            shortName
+          }
         }
       }
     }

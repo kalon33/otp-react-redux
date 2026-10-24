@@ -1,3 +1,5 @@
+import { generateOtp2Query } from '@opentripplanner/core-utils/lib/query-gen'
+
 import {
   applyRoutingPreferences,
   BIKE_WILLINGNESS_RANGE,
@@ -29,6 +31,22 @@ import {
   stopCapMessageId,
   stopCapVariables
 } from '../../lib/util/routing-profiles'
+
+const makePlanConnectionQuery = () =>
+  generateOtp2Query(
+    {
+      arriveBy: false,
+      date: '2026-01-01',
+      departArrive: 'DEPART',
+      from: { lat: 1, lon: 2, name: 'a' },
+      modeSettings: [],
+      modes: [{ mode: 'WALK' }],
+      time: '10:00',
+      to: { lat: 3, lon: 4, name: 'b' }
+    },
+    'America/Chicago'
+  )
+
 
 describe('routing-profiles', () => {
   describe('bike willingness control (backlog 5.3)', () => {
@@ -159,19 +177,11 @@ describe('routing-profiles', () => {
   })
 
   describe('extendPlanQueryWithLevers', () => {
-    it('adds lever variables to a query with walkSpeed', () => {
-      const query = `
-        query TripQuery(
-          $walkSpeed: Float
-          $walkSpeed2: Float
-        ) {
-          walkSpeed: $walkSpeed
-          walkSpeed2: $walkSpeed2
-        }
-      `
+    it('adds lever variables to a planConnection query', () => {
+      const { query } = makePlanConnectionQuery()
       const extended = extendPlanQueryWithLevers(query)
-      expect(extended).toContain('$bikeSpeed: Float')
-      expect(extended).toContain('bikeSpeed: $bikeSpeed')
+      expect(extended).toContain('$bikeSpeed: Speed')
+      expect(extended).toContain('speed: $bikeSpeed')
     })
 
     it('returns the original query if walkSpeed is not found', () => {
@@ -208,15 +218,9 @@ describe('routing-profiles', () => {
       expect(NON_OTP_QUERY_KEYS).toContain('activeProfileId')
       expect(NON_OTP_QUERY_KEYS).toContain('routingPreferences')
     })
-    // A minimal plan query that contains the walkSpeed anchor
-    // extendPlanQueryWithLevers requires before it will inject the levers.
-    const baseQuery = `
-      query TripQuery(
-        $walkSpeed: Float
-      ) {
-        walkSpeed: $walkSpeed
-      }
-    `
+    // The real core-utils planConnection query: the levers are grafted onto
+    // the fragments its printed form always contains.
+    const baseQuery = makePlanConnectionQuery().query
 
     // 5.2: the client never sent searchWindow, so OTP auto-sized it to 3000 s
     // on the rider's commute and returned five Orange Line departures and
@@ -238,9 +242,9 @@ describe('routing-profiles', () => {
       expect(out).toContain('maxStopCount: $maxStopCount')
     })
 
-    it('declares searchWindow as Long, not Int', () => {
+    it('declares searchWindow as Duration', () => {
       const out = extendPlanQueryWithLevers(baseQuery)
-      expect(out).toContain('$searchWindow: Long')
+      expect(out).toContain('$searchWindow: Duration')
       expect(out).not.toContain('$searchWindow: Int')
       expect(out).toContain('searchWindow: $searchWindow')
     })
@@ -251,8 +255,11 @@ describe('routing-profiles', () => {
     // ignored by OTP — the search would have looked compliant and not been.
     it('declares the hard constraints too', () => {
       const out = extendPlanQueryWithLevers(baseQuery)
+      // maxTransfers rides inside preferences.transit.transfer on the
+      // planConnection API; via is a top-level argument the default query
+      // already wires.
       expect(out).toContain('$maxTransfers: Int')
-      expect(out).toContain('maxTransfers: $maxTransfers')
+      expect(out).toContain('maximumTransfers: $maxTransfers')
       expect(out).toContain('$via: [PlanViaLocationInput!]')
       expect(out).toContain('via: $via')
     })
@@ -273,13 +280,15 @@ describe('routing-profiles', () => {
       })
     })
 
-    it('turns a chosen stop into a passThrough via', () => {
+    it('turns a chosen stop into a stopLocationIds via visit', () => {
+      // query-gen wraps every via entry as {visit: v} for planConnection, so
+      // the entries here are the visit bodies themselves.
       expect(
         planConstraintVariables({
           viaStop: { ids: ['1:56796', '1:16871'], name: 'Lake & Chicago' }
         })
       ).toEqual({
-        via: [{ passThrough: { stopLocationIds: ['1:56796', '1:16871'] } }]
+        via: [{ stopLocationIds: ['1:56796', '1:16871'] }]
       })
     })
 
@@ -290,7 +299,7 @@ describe('routing-profiles', () => {
       const out = planConstraintVariables({
         viaStop: { ids: ['1:56796', '1:16871'], name: 'Lake & Chicago' }
       }) as any
-      expect(out.via[0].passThrough.stopLocationIds).toHaveLength(2)
+      expect(out.via[0].stopLocationIds).toHaveLength(2)
     })
 
     it('sends no via for a stop entry with no ids', () => {
@@ -308,7 +317,7 @@ describe('routing-profiles', () => {
         })
       ).toEqual({
         maxTransfers: 0,
-        via: [{ passThrough: { stopLocationIds: ['1:56796'] } }]
+        via: [{ stopLocationIds: ['1:56796'] }]
       })
     })
   })

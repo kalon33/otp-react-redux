@@ -1,16 +1,13 @@
-import { TransportMode } from '@opentripplanner/types'
-import coreUtils from '@opentripplanner/core-utils'
+import {
+  LegacyTransportMode,
+  SIMPLIFICATIONS
+} from '../util/plan-combinations'
 
-// core-utils types SIMPLIFICATIONS as a closed object literal, so widen it to
-// the lookup it actually is (mode name -> broad mode class).
-const SIMPLIFICATIONS: Record<string, string | undefined> =
-  coreUtils.queryGen.SIMPLIFICATIONS
-
-export const countFlexModes = (modes: TransportMode[]): number =>
+export const countFlexModes = (modes: LegacyTransportMode[]): number =>
   modes.filter((m) => m.mode === 'FLEX').length
 
 /** A plain transit mode (TRANSIT or a transit submode) with no qualifier. */
-const isTransitMode = (m: TransportMode): boolean =>
+const isTransitMode = (m: LegacyTransportMode): boolean =>
   !m.qualifier && SIMPLIFICATIONS[m.mode] === 'TRANSIT'
 
 /**
@@ -18,7 +15,7 @@ const isTransitMode = (m: TransportMode): boolean =>
  * a vehicle: BICYCLE/SCOOTER (PERSONAL), CAR, and everything qualified
  * (BICYCLE_RENT and the flex modes both simplify to SHARED).
  */
-const isNonWalkAccessMode = (m: TransportMode): boolean =>
+const isNonWalkAccessMode = (m: LegacyTransportMode): boolean =>
   !!m.qualifier ||
   SIMPLIFICATIONS[m.mode] === 'PERSONAL' ||
   SIMPLIFICATIONS[m.mode] === 'CAR' ||
@@ -43,7 +40,7 @@ const isNonWalkAccessMode = (m: TransportMode): boolean =>
  * can never turn a working search into an empty one.
  */
 export function filterWalkAccessCombinations<
-  T extends { modes?: TransportMode[] }
+  T extends { modes?: LegacyTransportMode[] }
 >(combinations: T[], hideWalkTransit?: boolean): T[] {
   if (!hideWalkTransit) return combinations
   const kept = combinations.filter((combo) => {
@@ -74,7 +71,7 @@ const STREET_ONLY_CLASSES = ['WALK', 'PERSONAL', 'CAR']
  * ([TRANSIT] and [TRANSIT, PERSONAL]) and the bike-only one is not — so with
  * the concurrency bound at 2 the common search waits on nothing.
  */
-export function combinationHasTransit<T extends { modes?: TransportMode[] }>(
+export function combinationHasTransit<T extends { modes?: LegacyTransportMode[] }>(
   combo: T
 ): boolean {
   const modes = combo?.modes
@@ -98,7 +95,7 @@ export type PendingComboKind =
   | 'BICYCLE_TRANSIT_FULL'
   | 'OTHER'
 
-export function pendingComboKind<T extends { modes?: TransportMode[] }>(
+export function pendingComboKind<T extends { modes?: LegacyTransportMode[] }>(
   combo: T
 ): PendingComboKind {
   const modes = combo?.modes || []
@@ -247,7 +244,7 @@ export function shouldWidenThinSearch({
   updateSearchInReducer,
   widenedWindow = WIDENED_SEARCH_WINDOW_SECONDS
 }: {
-  currentWindow?: number | null
+  currentWindow?: string | number | null
   goModeActive?: boolean
   hadError?: boolean
   isActiveSearch?: boolean
@@ -263,10 +260,36 @@ export function shouldWidenThinSearch({
   if (updateSearchInReducer) return false
   if (routingType && routingType !== 'ITINERARY') return false
   if (transitCount >= minTransit) return false
-  if (typeof currentWindow === 'number' && currentWindow >= widenedWindow) {
+  const windowSeconds = searchWindowSeconds(currentWindow)
+  if (
+    typeof windowSeconds === 'number' && windowSeconds >= widenedWindow
+  ) {
     return false
   }
   return true
+}
+
+/**
+ * planConnection's searchWindow is a Duration scalar ("7200s" or "PT2H");
+ * plan() took the bare seconds. Parse either spelling back to seconds for the
+ * comparisons the widen logic makes.
+ */
+export function searchWindowSeconds(
+  window: string | number | null | undefined
+): number | null {
+  if (typeof window === 'number') return window
+  if (typeof window !== 'string' || window.length === 0) return null
+  const bare = /^(-?\d+(\.\d+)?)s?$/i.exec(window.trim())
+  if (bare) return Number(bare[1])
+  const iso = /^-?PT(?:(\d+(?:\.\d+)?)H)?(?:(\d+(?:\.\d+)?)M)?(?:(\d+(?:\.\d+)?)S)?$/i.exec(
+    window.trim()
+  )
+  if (!iso) return null
+  return (
+    (Number(iso[1] || 0)) * 3600 +
+    (Number(iso[2] || 0)) * 60 +
+    Number(iso[3] || 0)
+  )
 }
 
 /**
@@ -284,7 +307,7 @@ export function shouldWidenThinSearch({
  * (`feedback_no_forced_route_changes`).
  */
 export function pickWidenTarget<
-  T extends { capBearing?: boolean; index: number; modes?: TransportMode[] }
+  T extends { capBearing?: boolean; index: number; modes?: LegacyTransportMode[] }
 >(
   plans: T[],
   responses: Array<PlanResponseLike | null | undefined> | null | undefined
@@ -502,4 +525,43 @@ export function dropRidesAlreadyListed<
     res?.plan?.itineraries?.forEach((itin) => listed.add(rideSignature(itin)))
   )
   return itineraries.filter((itin) => !listed.has(rideSignature(itin)))
+}
+
+/**
+ * planConnection's `bannedRoutes` takes an array of route ids. The route lock
+ * (and older URL params) store the same list as a comma-joined string; the
+ * submode overrides build an array. Normalize either shape to the array
+ * query-gen turns into a transitFilter exclude, or undefined when empty.
+ */
+export function toBannedRoutesArray(
+  routes: string | string[] | undefined | null
+): string[] | undefined {
+  if (!routes) return undefined
+  const list = Array.isArray(routes)
+    ? routes
+    : routes.split(',').filter(Boolean)
+  return list.length > 0 ? list : undefined
+}
+
+/**
+ * planConnection has no `preferred` input (the deprecated plan() field took
+ * one as a soft cost bias), so the Go Mode sticky-route bias ("stay on this
+ * bus" / a kept route ranking first) is applied here: itineraries containing
+ * a preferred route are moved to the front, order otherwise preserved. The
+ * preference rides on the query as `preferred.routes` (one id or several).
+ */
+export function preferRoutesInPlace<T extends { legs?: { route?: { id?: string } }[] }>(
+  itineraries: T[],
+  preferredRoutes: string | string[] | undefined | null
+): T[] {
+  const keep = new Set(
+    (Array.isArray(preferredRoutes) ? preferredRoutes : [preferredRoutes])
+      ?.filter(Boolean) || []
+  )
+  if (keep.size === 0 || !Array.isArray(itineraries)) return itineraries
+  const hasRoute = (itin: T) =>
+    (itin.legs || []).some((leg) => keep.has(leg?.route?.id as string))
+  const preferred = itineraries.filter(hasRoute)
+  if (preferred.length === 0) return itineraries
+  return [...preferred, ...itineraries.filter((i) => !hasRoute(i))]
 }

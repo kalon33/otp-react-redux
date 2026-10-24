@@ -23,14 +23,16 @@ import type { RidingState } from '../../../lib/util/go-mode/types'
 jest.mock('@opentripplanner/core-utils', () => {
   const actual = jest.requireActual('@opentripplanner/core-utils')
   const { parse } = jest.requireActual('graphql')
-  const stub = parse('query Plan { plan { itineraries { duration } } }')
+  const stub = parse(
+        'query Plan { planConnection { edges { node { duration } } } }'
+      )
   const core = actual.default || actual
   const patched = {
     ...core,
     queryGen: {
       ...core.queryGen,
-      generateOtp2Query: (params: unknown) =>
-        core.queryGen.generateOtp2Query(params, stub)
+      generateOtp2Query: (params: unknown, homeTimezone: string) =>
+        core.queryGen.generateOtp2Query(params, homeTimezone, stub)
     }
   }
   return { ...actual, __esModule: true, default: patched }

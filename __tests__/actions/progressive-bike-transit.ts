@@ -25,14 +25,16 @@ import createOtpReducer from '../../lib/reducers/create-otp-reducer'
 jest.mock('@opentripplanner/core-utils', () => {
   const actual = jest.requireActual('@opentripplanner/core-utils')
   const { parse } = jest.requireActual('graphql')
-  const stub = parse('query Plan { plan { itineraries { duration } } }')
+  const stub = parse(
+        'query Plan { planConnection { edges { node { duration } } } }'
+      )
   const core = actual.default || actual
   const patched = {
     ...core,
     queryGen: {
       ...core.queryGen,
-      generateOtp2Query: (params: unknown) =>
-        core.queryGen.generateOtp2Query(params, stub)
+      generateOtp2Query: (params: unknown, homeTimezone: string) =>
+        core.queryGen.generateOtp2Query(params, homeTimezone, stub)
     }
   }
   return { ...actual, __esModule: true, default: patched }
@@ -160,9 +162,14 @@ describe('actions > apiV2 > routingQuery progressive bike + transit (38.3)', () 
   }
 
   const kindOf = (v: Record<string, any>) => {
-    const modes = (v.modes || []).map((m: any) => m.mode)
-    if (!modes.includes('TRANSIT')) return 'bike'
-    return modes.includes('BICYCLE') ? 'bikeTransit' : 'walkTransit'
+    // planConnection modes: a PlanModesInput object. Transit-only carries
+    // transitOnly; bike + transit names BICYCLE in transit.access; a direct
+    // plan carries its street mode in direct.
+    const modes = v.modes || {}
+    if (!modes.transitOnly) return 'bike'
+    return (modes.transit?.access || []).includes('BICYCLE')
+      ? 'bikeTransit'
+      : 'walkTransit'
   }
 
   /** Answers per request; `fail: 'pending'` never answers. */
@@ -271,8 +278,11 @@ describe('actions > apiV2 > routingQuery progressive bike + transit (38.3)', () 
       2000, 10000, 2000
     ])
     const full = sent[3]
-    expect(full.modes).toEqual([{ mode: 'TRANSIT' }, { mode: 'BICYCLE' }])
-    expect(full.searchWindow).toBe(7200)
+    expect(full.modes).toEqual({
+      transit: { access: ['BICYCLE'], egress: ['BICYCLE'], transfer: ['BICYCLE'] },
+      transitOnly: true
+    })
+    expect(full.searchWindow).toBe('7200s')
     expect(full.bikeReluctance).toBeUndefined()
     expect(sent[4].bikeReluctance).toBe(1)
     expect(types().filter((t) => t === 'ROUTING_EXTRA_REQUEST')).toHaveLength(2)
@@ -370,7 +380,7 @@ describe('actions > apiV2 > routingQuery progressive bike + transit (38.3)', () 
     // quick fan-out (3) + full pass + 55.1's low-bike plan + widen.
     expect(sent).toHaveLength(6)
     expect(sent[4].bikeReluctance).toBe(1)
-    expect(sent[5].searchWindow).toBe(14400)
+    expect(sent[5].searchWindow).toBe('14400s')
     expect(types()).not.toContain('ROUTING_ERROR')
     expect(search().pending).toBe(0)
   })
