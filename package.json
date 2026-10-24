@@ -47,7 +47,7 @@
     "@opentripplanner/humanize-distance": "^2.1.1",
     "@opentripplanner/icons": "4.1.4",
     "@opentripplanner/itinerary-body": "9.8.2",
-    "@opentripplanner/location-field": "4.2.1",
+    "@opentripplanner/location-field": "4.1.7",
     "@opentripplanner/location-icon": "^2.0.0",
     "@opentripplanner/map-popup": "8.1.0",
     "@opentripplanner/otp2-tile-overlay": "5.3.0",
