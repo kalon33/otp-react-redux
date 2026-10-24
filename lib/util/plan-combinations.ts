@@ -184,6 +184,27 @@ function transferMode(mode: string): string | null {
 }
 
 /**
+ * Modes the server accepts ALONE in a leg's mode list (StreetModeMapper:
+ * WALK, BICYCLE, CAR, CARPOOL and the park-and-rides). Every other street
+ * mode — FLEX, the rentals, TAXI — must be combined with WALK in the same
+ * list or the whole query is rejected.
+ */
+const SOLO_LEG_MODES = new Set(['WALK', 'BICYCLE', 'CAR', 'CAR_PARKING'])
+
+/**
+ * OTP requires a WALK next to any non-solo street mode in a leg's mode list
+ * ("For the time being, FLEXIBLE needs to be combined with WALK mode for the
+ * same leg."). The list must also stay within the server's two-modes-per-leg
+ * limit, so this can only add WALK, never a second street mode.
+ */
+function withWalkIfRequired(modes: string[]): string[] {
+  if (modes.length === 0) return modes
+  if (modes.includes('WALK')) return modes
+  if (modes.every((m) => SOLO_LEG_MODES.has(m))) return modes
+  return [...modes, 'WALK']
+}
+
+/**
  * Convert a legacy TransportMode[] subset into the PlanModesInput object the
  * planConnection `modes` argument takes. A subset that simplifies to
  * transit-only sends no direct mode (OTP adds walking access itself); a subset
@@ -205,8 +226,11 @@ export function toPlanModesInput(
     // Same dedupe as the transit slots: the flex bundling can name FLEX more
     // than once, and a repeated enum value is a server-side error.
     const direct = Array.from(new Set(modes.map(directMode).filter(Boolean)))
+    // FLEX and the rentals must name WALK beside them (StreetModeMapper), or
+    // the whole query is rejected.
+    const withWalk = withWalkIfRequired(direct)
     return direct.length
-      ? { direct, directOnly: true }
+      ? { direct: withWalk, directOnly: true }
       : { direct: ['WALK'], directOnly: true }
   }
 
@@ -223,12 +247,16 @@ export function toPlanModesInput(
   const transfer = dedupe(
     access.map(transferMode).filter((m): m is string => !!m)
   )
+  // FLEX and the rentals must name WALK beside them in their leg's mode list
+  // (StreetModeMapper), or the whole query is rejected.
+  const accessWithWalk = withWalkIfRequired(access)
+  const egressWithWalk = withWalkIfRequired(egress)
   return {
     // Only name the access/egress/transfer modes when the subset carries a
     // street mode; a walk-access transit plan needs none of them (OTP adds
     // walking itself) and an empty transfer list is just wire noise.
     ...(access.length > 0 && {
-      transit: { access, egress, transfer }
+      transit: { access: accessWithWalk, egress: egressWithWalk, transfer }
     }),
     transitOnly: true
   }

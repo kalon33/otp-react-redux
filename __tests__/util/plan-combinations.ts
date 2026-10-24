@@ -13,14 +13,21 @@ import {
  * schema's enum values.
  */
 describe('util > plan-combinations > toPlanModesInput', () => {
-  it('never puts a non-transfer mode into transfer', () => {
-    // FLEX is a legal access/egress mode but NOT a PlanTransferMode.
+  it('never puts a non-transfer mode into transfer, and walks beside FLEX', () => {
+    // FLEX is a legal access/egress mode but NOT a PlanTransferMode; OTP
+    // also requires a WALK next to it in the same leg's mode list
+    // ("For the time being, FLEXIBLE needs to be combined with WALK mode
+    // for the same leg.").
     const input = toPlanModesInput([
       { mode: 'TRANSIT' },
       { mode: 'FLEX' }
     ])
     expect(input).toEqual({
-      transit: { access: ['FLEX'], egress: ['FLEX'], transfer: [] },
+      transit: {
+        access: ['FLEX', 'WALK'],
+        egress: ['FLEX', 'WALK'],
+        transfer: []
+      },
       transitOnly: true
     })
   })
@@ -38,7 +45,7 @@ describe('util > plan-combinations > toPlanModesInput', () => {
     })
   })
 
-  it('maps a rented bike to BICYCLE_RENTAL access, no transfer', () => {
+  it('maps a rented bike to BICYCLE_RENTAL + WALK access, no transfer', () => {
     expect(
       toPlanModesInput([
         { mode: 'TRANSIT' },
@@ -46,8 +53,8 @@ describe('util > plan-combinations > toPlanModesInput', () => {
       ])
     ).toEqual({
       transit: {
-        access: ['BICYCLE_RENTAL'],
-        egress: ['BICYCLE_RENTAL'],
+        access: ['BICYCLE_RENTAL', 'WALK'],
+        egress: ['BICYCLE_RENTAL', 'WALK'],
         transfer: []
       },
       transitOnly: true
@@ -67,8 +74,9 @@ describe('util > plan-combinations > toPlanModesInput', () => {
     })
   })
 
-  it('keeps CAR_RENTAL egress, no transfer', () => {
-    // CAR_RENTAL is a valid PlanEgressMode; only the transfer slot is closed.
+  it('keeps CAR_RENTAL egress with WALK beside it, no transfer', () => {
+    // CAR_RENTAL is a valid PlanEgressMode; only the transfer slot is closed,
+    // and OTP requires the WALK next to a rental mode.
     expect(
       toPlanModesInput([
         { mode: 'TRANSIT' },
@@ -76,8 +84,8 @@ describe('util > plan-combinations > toPlanModesInput', () => {
       ])
     ).toEqual({
       transit: {
-        access: ['CAR_RENTAL'],
-        egress: ['CAR_RENTAL'],
+        access: ['CAR_RENTAL', 'WALK'],
+        egress: ['CAR_RENTAL', 'WALK'],
         transfer: []
       },
       transitOnly: true
@@ -89,8 +97,9 @@ describe('util > plan-combinations > toPlanModesInput', () => {
       direct: ['BICYCLE'],
       directOnly: true
     })
+    // FLEX must name WALK beside it in the same leg (StreetModeMapper).
     expect(toPlanModesInput([{ mode: 'FLEX' }])).toEqual({
-      direct: ['FLEX'],
+      direct: ['FLEX', 'WALK'],
       directOnly: true
     })
   })
@@ -112,7 +121,8 @@ describe('util > plan-combinations > toPlanModesInput', () => {
     // The legacy flex bundling names FLEX three times (one per qualifier);
     // every one maps to the same planConnection enum, and a repeated value
     // is a server-side error — measured live: "Only one or two modes can be
-    // specified for a leg, got: [FLEXIBLE, FLEXIBLE, FLEXIBLE]".
+    // specified for a leg, got: [FLEXIBLE, FLEXIBLE, FLEXIBLE]". WALK rides
+    // beside the surviving FLEX (StreetModeMapper).
     const input = toPlanModesInput([
       { mode: 'TRANSIT' },
       { mode: 'FLEX', qualifier: 'ACCESS' },
@@ -120,7 +130,11 @@ describe('util > plan-combinations > toPlanModesInput', () => {
       { mode: 'FLEX', qualifier: 'DIRECT' }
     ])
     expect(input).toEqual({
-      transit: { access: ['FLEX'], egress: ['FLEX'], transfer: [] },
+      transit: {
+        access: ['FLEX', 'WALK'],
+        egress: ['FLEX', 'WALK'],
+        transfer: []
+      },
       transitOnly: true
     })
   })
@@ -131,7 +145,7 @@ describe('util > plan-combinations > toPlanModesInput', () => {
         { mode: 'FLEX', qualifier: 'ACCESS' },
         { mode: 'FLEX', qualifier: 'EGRESS' }
       ])
-    ).toEqual({ direct: ['FLEX'], directOnly: true })
+    ).toEqual({ direct: ['FLEX', 'WALK'], directOnly: true })
   })
 })
 
