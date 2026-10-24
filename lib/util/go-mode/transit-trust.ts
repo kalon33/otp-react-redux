@@ -1,6 +1,7 @@
 import type { Leg } from '@opentripplanner/types'
 
 import { calculateDistance, matchPositionToRoute } from './position-matching'
+import { getLegRouteId } from './departure-anchor'
 import { hasUsablePosition } from './vehicle-matching'
 import { orderedStopsOnLeg } from './next-stop'
 import type { RouteMatchResult } from './position-matching'
@@ -293,6 +294,39 @@ export function refreshConfirmedMatch(
         }
       : { tripId: vehicle.tripId ?? previousMatch.tripId })
   }
+}
+
+/**
+ * Does a vehicle match still speak for `routeId`? A match carries the route of
+ * the vehicle it named; tracking a different route means the rider has moved
+ * on to a different vehicle, and the old match must not stand in for the new
+ * one (67.2).
+ *
+ * 2026-10-20, the 94 → Gold Line change at 5th St & Cedar: the 94's confirmed
+ * match (1:2015) outlived TRANSITION_LEG 1 at 09:35:56, so every Gold Line
+ * poll took the confirmed-refresh path, could not find 1:2015 in the 1:905
+ * feed, and returned — no match, no boarding prompt, no SET_RIDING for the
+ * 21 minutes the rider sat on train 8181.
+ *
+ * True when either side has no route (nothing to compare — the old
+ * behaviour), when the routes are equal, or when `routeId` is reached from the
+ * match's route by an interlined chain of legs: the rider stays seated while
+ * the run changes its route number, so the bus they are on is the bus they
+ * were on.
+ */
+export function matchFollowsRoute(
+  match: { routeId?: string | null } | null | undefined,
+  routeId: string | null | undefined,
+  legs: ReadonlyArray<Leg | null | undefined> = []
+): boolean {
+  if (!match?.routeId || !routeId || match.routeId === routeId) return true
+  for (let i = 0; i < legs.length; i++) {
+    if (getLegRouteId(legs[i]) !== routeId) continue
+    for (let j = i; j > 0 && legs[j]?.interlineWithPreviousLeg; j--) {
+      if (getLegRouteId(legs[j - 1]) === match.routeId) return true
+    }
+  }
+  return false
 }
 
 /**
