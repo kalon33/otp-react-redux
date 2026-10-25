@@ -1,8 +1,8 @@
 diff --git a/node_modules/@opentripplanner/transitive-overlay/esm/index.js b/node_modules/@opentripplanner/transitive-overlay/esm/index.js
-index 0d45537..a919191 100644
+index 0d45537..518b775 100644
 --- a/node_modules/@opentripplanner/transitive-overlay/esm/index.js
 +++ b/node_modules/@opentripplanner/transitive-overlay/esm/index.js
-@@ -133,7 +133,44 @@ var loadImages = function loadImages(map, images) {
+@@ -133,7 +133,54 @@ var loadImages = function loadImages(map, images) {
      if (!map.hasImage(img.id)) {
        // Only load if the image hasn't already been added
        map.loadImage(img.url).then(function (response) {
@@ -39,6 +39,16 @@ index 0d45537..a919191 100644
 +            map.addImage(img.id, bitmap !== response.data && bitmap ? bitmap : response.data, img.options);
 +          })["catch"](function () {
 +            if (map.hasImage(img.id)) return;
++            // The bitmap re-encode failed (e.g. a WebView without
++            // createImageBitmap, or a decode error). The raw data's
++            // dimensions may read 0x0 there (an HTMLImageElement that
++            // never decoded), which fails maplibre's content
++            // validation ("Image ... has invalid \"content\" value") —
++            // only add the image when its dimensions are concrete, and
++            // drop the content/stretch paddings otherwise.
++            var w = response.data && (response.data.width || response.data.naturalWidth);
++            var h = response.data && (response.data.height || response.data.naturalHeight);
++            if (!w || !h) return;
 +            map.addImage(img.id, response.data, img.options);
 +          });
 +        })["catch"](function (error) {
@@ -49,10 +59,10 @@ index 0d45537..a919191 100644
          // eslint-disable-next-line no-console
          console.error("Error loading image ".concat(img.id, ":"), error);
 diff --git a/node_modules/@opentripplanner/transitive-overlay/lib/index.js b/node_modules/@opentripplanner/transitive-overlay/lib/index.js
-index 5af2e61..a4be2f3 100644
+index 5af2e61..68f5f64 100644
 --- a/node_modules/@opentripplanner/transitive-overlay/lib/index.js
 +++ b/node_modules/@opentripplanner/transitive-overlay/lib/index.js
-@@ -145,7 +145,65 @@ const loadImages = (map, images) => {
+@@ -145,7 +145,77 @@ const loadImages = (map, images) => {
      if (!map.hasImage(img.id)) {
        // Only load if the image hasn't already been added
        map.loadImage(img.url).then(response => {
@@ -109,6 +119,18 @@ index 5af2e61..a4be2f3 100644
 +              })
 +              .catch(() => {
 +                if (map.hasImage(img.id)) return;
++                // The bitmap re-encode failed (e.g. a WebView without
++                // createImageBitmap, or a decode error). The raw data's
++                // dimensions may read 0x0 there (an HTMLImageElement that
++                // never decoded), which fails maplibre's content
++                // validation ("Image ... has invalid "content" value") —
++                // only add the image when its dimensions are concrete, and
++                // drop the content/stretch paddings otherwise.
++                const w =
++                  response.data && (response.data.width || response.data.naturalWidth);
++                const h =
++                  response.data && (response.data.height || response.data.naturalHeight);
++                if (!w || !h) return;
 +                map.addImage(img.id, response.data, img.options);
 +              });
 +          })
@@ -120,10 +142,10 @@ index 5af2e61..a4be2f3 100644
          // eslint-disable-next-line no-console
          console.error(`Error loading image ${img.id}:`, error);
 diff --git a/node_modules/@opentripplanner/transitive-overlay/src/index.tsx b/node_modules/@opentripplanner/transitive-overlay/src/index.tsx
-index 5e3e06b..49062a5 100644
+index 5e3e06b..fec9cb5 100644
 --- a/node_modules/@opentripplanner/transitive-overlay/src/index.tsx
 +++ b/node_modules/@opentripplanner/transitive-overlay/src/index.tsx
-@@ -193,7 +193,65 @@ const loadImages = (map: MapRef, images: MapImage[]) => {
+@@ -193,7 +193,76 @@ const loadImages = (map: MapRef, images: MapImage[]) => {
        map
          .loadImage(img.url)
          .then(response => {
@@ -180,6 +202,17 @@ index 5e3e06b..49062a5 100644
 +                })
 +                .catch(() => {
 +                  if (map.hasImage(img.id)) return;
++                  // The bitmap re-encode failed (e.g. a WebView without
++                  // createImageBitmap, or a decode error). The raw data's
++                  // dimensions may read 0x0 there (an HTMLImageElement that
++                  // never decoded), which fails maplibre's content
++                  // validation ("Image ... has invalid \"content\" value") —
++                  // only add the image when its dimensions are concrete.
++                  const w =
++                    response.data && (response.data.width || response.data.naturalWidth);
++                  const h =
++                    response.data && (response.data.height || response.data.naturalHeight);
++                  if (!w || !h) return;
 +                  map.addImage(img.id, response.data, img.options);
 +                });
 +            })
