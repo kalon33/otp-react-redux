@@ -6,6 +6,7 @@ import {
   changesOf,
   rankAlightForPreset,
   rankForPreset,
+  SIMPLEST_MAX_ADDED_BIKE_M,
   waitMsOf,
   walkMetersOf
 } from '../../../lib/util/go-mode/auto-priority'
@@ -248,12 +249,39 @@ describe('util > go-mode > auto-priority', () => {
       // A bar with one change: walk, 5 then 7, by 17:20.
       const twoBar = twoBus('1:5', '1:7', T0 + 50 * MIN, { waitMs: 3 * MIN })
       it('fewer changes within the allowance switches; beyond it does not', () => {
-        const oneSeat = direct('1:904', T0 + 52 * MIN)
+        const oneSeat = direct('1:904', T0 + 52 * MIN, 900)
         expect(
           rankForPreset([oneSeat], twoBar, 'simplest').pick?.itinerary
         ).toBe(oneSeat)
-        const late = direct('1:904', T0 + 53 * MIN)
+        const late = direct('1:904', T0 + 53 * MIN, 900)
         expect(rankForPreset([late], twoBar, 'simplest').why).toBe('not-better')
+      })
+      // Q3 default (cycle 36 B2): a Simplest pick may bike at most 1 km more
+      // than the bar — B1's h5he2i-0931 09:32:57 took route 4 for +4.8 km.
+      it(`never more than ${SIMPLEST_MAX_ADDED_BIKE_M} m more biking than the bar`, () => {
+        const atLimit = direct(
+          '1:904',
+          T0 + 50 * MIN,
+          SIMPLEST_MAX_ADDED_BIKE_M
+        )
+        expect(
+          rankForPreset([atLimit], twoBar, 'simplest').pick?.itinerary
+        ).toBe(atLimit)
+        const over = direct(
+          '1:904',
+          T0 + 50 * MIN,
+          SIMPLEST_MAX_ADDED_BIKE_M + 1
+        )
+        expect(rankForPreset([over], twoBar, 'simplest').why).toBe('not-better')
+        // ...also for a same-changes switch that is faster.
+        const fastBiky = twoBus('1:6', '1:8', T0 + 40 * MIN, { bikeM: 4800 })
+        expect(rankForPreset([fastBiky], twoBar, 'simplest').why).toBe(
+          'not-better'
+        )
+        // The guard is Simplest's: Fastest still offers that faster route.
+        expect(
+          rankForPreset([fastBiky], twoBar, 'fastest').pick?.itinerary
+        ).toBe(fastBiky)
       })
       it('same changes and ≥ 3 min earlier switches; 2 min earlier does not', () => {
         const fast = twoBus('1:6', '1:8', T0 + 46 * MIN)
@@ -271,7 +299,7 @@ describe('util > go-mode > auto-priority', () => {
       })
       it('ties: fewer changes → less waiting → arrival → walking', () => {
         const fastOneChange = twoBus('1:6', '1:8', T0 + 40 * MIN)
-        const slowNoChange = direct('1:904', T0 + 51 * MIN)
+        const slowNoChange = direct('1:904', T0 + 51 * MIN, 900)
         expect(
           rankForPreset([fastOneChange, slowNoChange], twoBar, 'simplest').pick
             ?.itinerary
@@ -372,8 +400,9 @@ describe('util > go-mode > auto-priority', () => {
       }),
       bike(T0 + 34 * MIN, T0 + 44 * MIN, 2000)
     ])
-    // Bike the rest from R: no vehicle at all, 1 min later, 4 km of biking.
-    const r = onward('1:R', [bike(T0 + 25 * MIN, T0 + 51 * MIN, 4000)])
+    // Bike the rest from R: no vehicle at all, 1 min later, 3 km of biking
+    // (1 km more than the plan: Simplest's biking guard, at its limit).
+    const r = onward('1:R', [bike(T0 + 25 * MIN, T0 + 51 * MIN, 3000)])
     // Another route from S with a walk: no biking, 1 min later.
     const s = onward('1:S', [
       walk(T0 + 24 * MIN, T0 + 26 * MIN, 150),

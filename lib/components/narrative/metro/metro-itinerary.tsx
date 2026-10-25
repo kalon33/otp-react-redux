@@ -282,6 +282,7 @@ type Props = {
     itinerary: Itinerary,
     options?: {
       multiStop?: MultiStopPlan | null
+      newTrip?: boolean
       roundTrip?: RoundTripPlan | null
     }
   ) => void
@@ -446,9 +447,11 @@ export class MetroItinerary extends NarrativeItinerary {
     // waits for the last segment.
     const multiStop = buildMultiStopPlan(itinerary, roundTripPlan)
     const startItinerary = multiStop ? multiStop.segments[0] : itinerary
+    // Start Trip starts a trip — Auto (65.2) goes off even when this route
+    // replaces one already running.
     const startOptions = multiStop
-      ? { multiStop, roundTrip: null }
-      : { multiStop: null, roundTrip: roundTripPlan }
+      ? { multiStop, newTrip: true, roundTrip: null }
+      : { multiStop: null, newTrip: true, roundTrip: roundTripPlan }
     if (tripActive) {
       // A trip is already running (backgrounded behind the planner):
       // adopting an alternate is an explicit switch, so confirm — the current

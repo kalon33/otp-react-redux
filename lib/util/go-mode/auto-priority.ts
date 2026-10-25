@@ -37,7 +37,8 @@ import type { AlightOption } from './alight-optimizer'
  * - leastBike: ≥ 1 km less biking and at most the allowance after the bar;
  *   or no more biking and ≥ 3 min earlier.
  * - simplest: fewer vehicle changes and at most the allowance after the bar;
- *   or the same changes and ≥ 3 min earlier.
+ *   or the same changes and ≥ 3 min earlier — never more than
+ *   SIMPLEST_MAX_ADDED_BIKE_M more biking than the bar.
  * - stayOnRoute: never a different route.
  */
 
@@ -60,6 +61,15 @@ export const AUTO_PRESETS: AutoPreset[] = [
  * switch, 16:55:47).
  */
 export const AUTO_LATER_ALLOWANCE_MS = 120000
+
+/**
+ * Simplest's biking guard (cycle 36 Q3, default yes at 1 km pending the
+ * rider's answer): a Simplest pick may bike at most this much MORE than the
+ * bar. B1's sweep found the one hindsight-wrong Simplest switch without it:
+ * h5he2i-0931 09:32:57 → route 4, one fewer change for +4.8 km of biking and
+ * +16.5 min in hindsight. A "no" answer is `Infinity` here.
+ */
+export const SIMPLEST_MAX_ADDED_BIKE_M = 1000
 
 /** Vehicle changes: transit legs − 1, a stay-seated interline not counted
  * (equals OTP's `transfers` on all 15,113 fixture itineraries). */
@@ -157,8 +167,9 @@ export function qualifiesForPreset(
       )
     case 'simplest':
       return (
-        (s.changes < barChanges && s.savingMs >= -allowanceMs) ||
-        (s.changes === barChanges && isFasterOf(s))
+        s.bikeSavedM >= -SIMPLEST_MAX_ADDED_BIKE_M &&
+        ((s.changes < barChanges && s.savingMs >= -allowanceMs) ||
+          (s.changes === barChanges && isFasterOf(s)))
       )
     default:
       return false

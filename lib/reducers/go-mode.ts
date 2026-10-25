@@ -4,6 +4,7 @@ import type { Itinerary } from '@opentripplanner/types'
 import {
   ADD_NOTIFICATION,
   ANSWER_ONBOARD_STOP_CHOICE,
+  AUTO_SWITCH,
   BEGIN_ONBOARD_FLOW,
   CLEAR_FASTER_ROUTE_OFFER,
   CLEAR_ONBOARD,
@@ -19,6 +20,8 @@ import {
   REPAIR_LEG_GEOMETRY,
   RESUME_GPS_SIMULATION,
   SET_ARRIVED,
+  SET_AUTO_MODE,
+  SET_AUTO_UNDO,
   SET_BOARDING_SEARCH_FAILED,
   SET_BOARDING_SEARCHING,
   SET_CHOOSE_BUS_ERROR,
@@ -63,6 +66,7 @@ import {
   UPDATE_TRACKING_INTERVAL,
   UPDATE_VEHICLE_MATCH
 } from '../actions/go-mode'
+import { AUTO_OFF } from '../util/go-mode/auto-switch'
 import {
   DEFAULT_TURN_CUE_SETTINGS,
   TurnCueSettings
@@ -73,6 +77,7 @@ import {
   ridingKeptTooLong
 } from '../util/go-mode/riding'
 import { sameOnboardStop } from '../util/go-mode/onboard-stops'
+import type { AutoState } from '../util/go-mode/auto-switch'
 import type {
   DepartureOverrideSource,
   LiveLegTime,
@@ -300,6 +305,15 @@ export interface GoModeState {
    * Recorded here instead so the fact travels with the trip.
    */
   arrivedDelay: number | null
+
+  /**
+   * Auto mode (65.2, cycle 36 B2): on, which preset, the no-tap switches made
+   * this trip, the route sets it has left or undone, and the Undo on the card.
+   * OFF at every new trip — START_GO_MODE that starts one (not a swap within
+   * it), BEGIN_ONBOARD_FLOW and STOP_GO_MODE — and kept across every swap
+   * within the trip (its own switch is one). The Undo goes with any swap.
+   */
+  auto: AutoState
 
   boardingPrompt: {
     /**
@@ -562,6 +576,8 @@ const defaultState: GoModeState = {
 
   arrivedDelay: null,
 
+  auto: AUTO_OFF,
+
   boardingPrompt: {
     chooseBus: false,
     chooseBusError: null,
@@ -801,9 +817,45 @@ const goMode = handleActions<GoModeState, any>(
       }
     },
 
+    // Auto (65.2 B2). AUTO_SWITCH is also the record: `held` changes nothing.
+    [AUTO_SWITCH]: (state, action) => {
+      const p = action.payload || {}
+      // A route set left (switched) or refused (undone) — never one the trip
+      // is still on (an aboard stop move keeps the onward route).
+      const add = (set: string | null | undefined) =>
+        set == null ||
+        p.fromRouteSet === p.toRouteSet ||
+        state.auto.leftRouteSets.includes(set)
+          ? state.auto.leftRouteSets
+          : [...state.auto.leftRouteSets, set]
+      if (p.outcome === 'switched') {
+        return {
+          ...state,
+          auto: {
+            ...state.auto,
+            leftRouteSets: add(p.fromRouteSet),
+            switches: state.auto.switches + 1
+          }
+        }
+      }
+      if (p.outcome === 'undone') {
+        return {
+          ...state,
+          auto: {
+            ...state.auto,
+            leftRouteSets: add(p.toRouteSet),
+            undo: null
+          }
+        }
+      }
+      return state
+    },
+
     [BEGIN_ONBOARD_FLOW]: (state, action) => ({
       ...state,
       activeItinerary: null,
+      // "I'm already on the bus" from the planner starts a trip (65.2 Q2 = A).
+      auto: AUTO_OFF,
       boardingPrompt: { ...defaultState.boardingPrompt },
       isActive: true,
       onboard: {
@@ -1017,6 +1069,32 @@ const goMode = handleActions<GoModeState, any>(
       // The dwell has done its job, or the distance did it first (12.17).
       nearDestination: null
     }),
+
+    [SET_AUTO_MODE]: (state, action) => ({
+      ...state,
+      auto: {
+        ...state.auto,
+        on: !!action.payload?.on,
+        preset: action.payload?.preset ?? state.auto.preset,
+        // Turning Auto off takes its Undo with it; the counts stay for the
+        // trip (the cap and the left routes are per trip, not per toggle).
+        undo: action.payload?.on ? state.auto.undo : null
+      }
+    }),
+
+    // The Undo on the card: set after a switch, cleared when it lapses — only
+    // the one it names, so a lapse cannot take a newer switch's Undo.
+    [SET_AUTO_UNDO]: (state, action) => {
+      const undo = action.payload?.undo ?? null
+      if (
+        !undo &&
+        action.payload?.switchId &&
+        state.auto.undo?.switchId !== action.payload.switchId
+      ) {
+        return state
+      }
+      return { ...state, auto: { ...state.auto, undo } }
+    },
 
     [SET_BOARDING_SEARCH_FAILED]: (state, action) => ({
       ...state,
@@ -1327,7 +1405,8 @@ const goMode = handleActions<GoModeState, any>(
     }),
 
     [START_GO_MODE]: (state, action) => {
-      const { itinerary, multiStop, originalFrom, roundTrip } = action.payload
+      const { itinerary, multiStop, newTrip, originalFrom, roundTrip } =
+        action.payload
       const nowMs: number = action.payload?.nowMs ?? Date.now()
       const restart = !state.isActive
       const carried =
@@ -1351,6 +1430,17 @@ const goMode = handleActions<GoModeState, any>(
         activeItinerary: itinerary,
         arrivedAt: null,
         arrivedDelay: null,
+
+        // Auto is per trip (65.2 Q2 = A): off when a trip STARTS — Go Mode
+        // was off, or the rider tapped Start Trip on another route — and kept
+        // across a swap within the trip, its own switch included. The Undo is
+        // about the plan just replaced, so it goes.
+        auto:
+          restart || newTrip
+            ? AUTO_OFF
+            : state.auto.undo
+            ? { ...state.auto, undo: null }
+            : state.auto,
 
         // The departure pick belonged to the plan that has just been replaced
         // (12.14). A mid-trip auto-update IS a START_GO_MODE, so an override

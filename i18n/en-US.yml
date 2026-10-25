@@ -444,6 +444,27 @@ components:
     arrivedDone: Done
     arrivedTitle: 🎉 You've arrived!
     arrivesIn: arrives in {time}
+    auto:
+      chipOff: Auto
+      chipOn: Auto · {preset}
+      close: Close
+      fewerChanges: "{count, plural, one {# fewer transfer} other {# fewer transfers}}"
+      hint:
+        fastest: 3+ min sooner, or 1 km+ less biking
+        leastBike: 1 km+ less biking, up to 2 min later
+        simplest: Fewer transfers, up to 2 min later
+        stayOnRoute: Only earlier buses on your route
+      ok: OK
+      preset:
+        fastest: Fastest
+        leastBike: Least biking
+        simplest: Simplest
+        stayOnRoute: Stay on my route
+      pushTitle: Switched
+      sheetTitle: Auto
+      switchedTitle: Switched · {title}
+      turnOff: Turn off Auto
+      undo: Undo
     boardingAboard: On the {route}
     boardingConfirm: I'm on the bus
     boardingDeny: I'm not on this bus

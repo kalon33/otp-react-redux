@@ -20,8 +20,13 @@ import {
   aboardRouteCheck,
   acceptFasterRoute,
   endGoMode,
-  keepCurrentRoute
+  keepCurrentRoute,
+  undoAutoSwitch
 } from '../../lib/actions/go-mode'
+import {
+  AUTO_OFF,
+  AUTO_SWITCH_NOTICE_ID
+} from '../../lib/util/go-mode/auto-switch'
 import {
   buildFasterRouteNotice,
   fasterRouteCopy
@@ -1083,6 +1088,88 @@ async function replayAboard(
     fclock.uninstall()
   }
 }
+
+/* 65.2 B2: with Auto on, the aboard check takes the preset's pick itself. */
+describe('Auto aboard (65.2, cycle 36 B2)', () => {
+  let clock: FakeTimers.InstalledClock
+  let store: ReturnType<typeof makeStore> | undefined
+  const autoOn = (preset: string) => ({
+    auto: { ...AUTO_OFF, on: true, preset }
+  })
+
+  beforeEach(() => {
+    mockedFetch.mockReset()
+    mockedFetch.mockImplementation((combo: any) => () => answerFor(combo))
+    mockedFindTrip.mockReset()
+    pushed.mockClear()
+    answers = {}
+    asked = []
+    vehicleSeq++
+    visibility = 'visible'
+    clock = FakeTimers.install({ now: NOW, toFake: ['Date'] })
+  })
+  afterEach(() => {
+    store?.run(endGoMode())
+    store = undefined
+    clock.uninstall()
+  })
+
+  it('Fastest: off at Stop 5 for the 14 without a tap, one push while hidden, Undo puts Stop 7 back', async () => {
+    visibility = 'hidden'
+    answers = { 5: [fourteenFrom5()], 7: [plannedFrom7()] }
+    store = makeStore(autoOn('fastest'))
+    await store.run(aboardRouteCheck())
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    const transit = store
+      .goMode()
+      .activeItinerary.legs.filter((l: any) => l.transitLeg)
+    expect(legTripId(transit[0])).toBe(RIDDEN)
+    expect(transit[0].to.stop.gtfsId).toBe(stopId(5))
+    expect(legTripId(transit[1])).toBe('1:t14')
+    expect(store.goMode().riding?.tripId).toBe(RIDDEN)
+    expect(store.of('AUTO_REPLAN').map((a) => a.payload)).toEqual([
+      expect.objectContaining({
+        autoApply: true,
+        reason: 'auto-switch-aboard'
+      })
+    ])
+    // The switch's push, not the card's.
+    expect(pushed).toHaveBeenCalledTimes(1)
+    expect(pushed.mock.calls[0][0]).toMatchObject({
+      id: AUTO_SWITCH_NOTICE_ID,
+      message: '4 min faster · off at Stop 5',
+      title: 'Switched'
+    })
+    const undo = store.goMode().auto.undo
+    expect(undo).toMatchObject({
+      aboard: true,
+      stopName: 'Stop 5',
+      tripId: RIDDEN
+    })
+    // Until a minute before the bus reaches the new stop (or the old one).
+    expect(undo.expiresAtMs).toBeGreaterThan(NOW)
+
+    await store.run(undoAutoSwitch())
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    const back = store
+      .goMode()
+      .activeItinerary.legs.filter((l: any) => l.transitLeg)
+    expect(back[0].to.stop.gtfsId).toBe(stopId(7))
+    expect(store.goMode().riding?.tripId).toBe(RIDDEN)
+    expect(store.goMode().auto).toMatchObject({ on: true, undo: null })
+  })
+
+  it('Stay on my route: a different onward route is never taken — the card stays a tap', async () => {
+    answers = { 5: [fourteenFrom5()], 7: [plannedFrom7()] }
+    store = makeStore(autoOn('stayOnRoute'))
+    const before = store.goMode().activeItinerary
+    await store.run(aboardRouteCheck())
+    expect(store.goMode().activeItinerary).toBe(before)
+    expect(store.of('AUTO_REPLAN')).toHaveLength(0)
+    expect(store.goMode().fasterRoute?.kind).toBe('aboard')
+  })
+})
 
 const NAMED = [
   'orange-alight-rank-0915-1534',

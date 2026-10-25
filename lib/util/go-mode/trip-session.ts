@@ -26,6 +26,7 @@ import type {
   BoardStopDwell,
   EarlyAlightWatch
 } from './riding'
+import type { AutoPending } from './auto-switch'
 import type { DepartureBaselineState } from './departure-drift'
 import type { DestinationProgressState } from './destination-progress'
 import type { DeviatedStreak } from './replan-acceptance'
@@ -57,6 +58,14 @@ export interface TripSession {
    * twenty seconds" is not a question one fix can answer.
    */
   accessBoard: AccessBoardWatch | null
+
+  /**
+   * Auto mode (65.2 B2): the pick still being confirmed off the bus (it must
+   * agree on AUTO_CONFIRM_ANSWERS answers in a row) and aboard, the timer that
+   * lapses the Undo, and the counter behind each switch's id.
+   */
+  autoAboardPending: AutoPending | null
+
   /**
    * The one-way arrival dwell, armed from the WALL CLOCK rather than from the
    * position tick. `AUTO_END_AFTER_ARRIVAL_MS` used to be checked in the
@@ -70,6 +79,13 @@ export interface TripSession {
    * clock (`getCurrentTime`), which a wall-clock timeout knows nothing about.
    */
   autoEndTimeoutId: ReturnType<typeof setTimeout> | null
+
+  autoPending: AutoPending | null
+
+  /** An Auto switch push went out this trip (taken back at the end). */
+  autoPushSent: boolean
+  autoSwitchSeq: number
+  autoUndoTimerId: ReturnType<typeof setTimeout> | null
 
   /**
    * The background route check's request is out (56.1). One interval, one
@@ -482,7 +498,12 @@ export function createTripSession(): TripSession {
     aboardCheckLastAtMs: 0,
     aboardCheckTripId: null,
     accessBoard: null,
+    autoAboardPending: null,
     autoEndTimeoutId: null,
+    autoPending: null,
+    autoPushSent: false,
+    autoSwitchSeq: 0,
+    autoUndoTimerId: null,
     backgroundCheckInFlight: false,
     boardStopDwell: null,
     clearedRiding: null,

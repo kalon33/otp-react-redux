@@ -435,6 +435,30 @@ withFixture('catch the run (23.3 + 53.2, 2026-10-15 17:47)', () => {
     expect(legs[0].distance).toBe(swap.itinerary.legs[0].distance)
   })
 
+  it('17:52:42 with Auto on (Stay on my route, 65.2 B2): the same re-target still applies', async () => {
+    const swap = fixture.itinerarySwaps[0]
+    start(swap.itinerary, swap.tMs)
+    store?.run((dispatch: any) =>
+      dispatch({
+        payload: { on: true, preset: 'stayOnRoute', source: 'chip' },
+        type: 'SET_AUTO_MODE'
+      })
+    )
+    expect(store?.goMode().auto).toMatchObject({
+      on: true,
+      preset: 'stayOnRoute'
+    })
+    replayFixes(swap.tMs, RETARGET - 1)
+    await runAt(RETARGET, retargetPlanToDeparture(HELD_BOARD_MS, 'anchor'))
+    const [r] = retargets()
+    expect(r).toMatchObject({ tripId: HELD_TRIP, verdict: 'applied' })
+    const legs = store?.goMode().activeItinerary.legs
+    expect(legs[1].trip.gtfsId).toBe(HELD_TRIP)
+    expect(clock(legs[1].startTime)).toBe('17:53:08')
+    // ...and Auto is still on: the retarget is a swap within the trip.
+    expect(store?.goMode().auto.on).toBe(true)
+  })
+
   it('17:57:03: the bus is past Penn, so the same run is offered further along (53.2b)', async () => {
     serveLaterStop = synthesizeStreetPlan
     // From the start of the ride, so the app has the rider's own pace (the

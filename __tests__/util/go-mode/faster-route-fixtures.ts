@@ -10,6 +10,10 @@ import {
   rankAlightForPreset
 } from '../../../lib/util/go-mode/auto-priority'
 import {
+  AUTO_OFF,
+  decideOffBusAutoSwitch
+} from '../../../lib/util/go-mode/auto-switch'
+import {
   bikeMetersOf,
   bikeSpeedOf,
   classifyFasterRoute,
@@ -129,6 +133,24 @@ interface AutoSwitch {
   t: number
 }
 const autoSwitches: AutoSwitch[] = []
+/* 65.2 B2 — the same answers through B2's real rules (decideOffBusAutoSwitch:
+ * 2-answer confirmation, own-next-trip refused, never back to a left route
+ * set, cap 3), the held plan following each switch. */
+interface B2Switch {
+  bikeSavedM: number
+  changesFewer: number
+  endMs: number
+  hindsight: number
+  hindsightSrc: string
+  preset: AutoPreset
+  reversal: boolean
+  ride: string
+  routeSet: string
+  savingMs: number
+  t: number
+}
+const b2Switches: B2Switch[] = []
+const b2Held: Record<string, Record<string, number>> = {}
 const autoPins = {
   aboardFastestDiff: 0,
   aboardStay: 0,
@@ -455,6 +477,69 @@ function measureFixture(file: string): void {
       }
     }
   }
+  for (const preset of AUTO_PRESETS) {
+    let simHeld: any = null
+    let auto = { ...AUTO_OFF, on: true, preset }
+    let pending: any = null
+    const heldSets: string[] = [routeSetOf(heldAt(fx, -Infinity))]
+    for (const snap of snaps) {
+      const t = snap.tMs
+      const held = simHeld ?? heldAt(fx, t)
+      const remaining = remainingTransitLegs(held, t)
+      if (!remaining.length) continue
+      if (Number(remaining[0].startTime) <= t) continue
+      const from = snap.request?.from
+      const fix =
+        track.find((f) => f.lat === from?.lat && f.lon === from?.lon) ||
+        fixAt(track, t)
+      const a = autoPresetVerdict(
+        {
+          answer: itinsOf(snap.response),
+          current: held,
+          headingDeg: fix?.heading ?? null,
+          nowMs: t,
+          position: fix ? ([fix.lat, fix.lon] as [number, number]) : null,
+          referenceBikeSpeedMps: refMps,
+          riding: false,
+          speedMps: fix?.speed ?? null
+        },
+        preset
+      )
+      const d = decideOffBusAutoSwitch(a, auto, pending)
+      pending = d.pending
+      if (d.why !== 'switch') {
+        if (d.pick) {
+          b2Held[preset] = b2Held[preset] || {}
+          b2Held[preset][d.why] = (b2Held[preset][d.why] || 0) + 1
+        }
+        continue
+      }
+      const pick = d.pick as any
+      const routeSet = routeSetOf(pick.itinerary)
+      b2Switches.push({
+        bikeSavedM: Math.round(pick.bikeSavedM),
+        changesFewer: changesOf(a.pool?.bar) - pick.changes,
+        endMs: Number(pick.itinerary.endTime),
+        hindsight,
+        hindsightSrc,
+        preset,
+        reversal: heldSets.includes(routeSet),
+        ride,
+        routeSet: routeSet || 'bike',
+        savingMs: pick.savingMs,
+        t
+      })
+      auto = {
+        ...auto,
+        leftRouteSets: auto.leftRouteSets.includes(a.pool!.heldSet)
+          ? auto.leftRouteSets
+          : [...auto.leftRouteSets, a.pool!.heldSet],
+        switches: auto.switches + 1
+      }
+      heldSets.push(routeSet)
+      simHeld = pick.itinerary
+    }
+  }
   if (offers.length || suppressed) rideOffers.push({ offers, ride, suppressed })
 
   // Aboard: onboard optimizer answers, batched by run.
@@ -735,8 +820,58 @@ afterAll(() => {
       }
     }
   }
+  lines.push(
+    '',
+    '=== 65.2 B2 rules (decideOffBusAutoSwitch), off-bus answers ==='
+  )
+  for (const preset of AUTO_PRESETS) {
+    const sw = b2Switches.filter((x) => x.preset === preset)
+    lines.push(
+      `--- ${preset}: ${sw.length} switches on ${
+        new Set(sw.map((x) => x.ride)).size
+      } rides, ${
+        sw.filter((x) => x.reversal).length
+      } reversals; held picks ${JSON.stringify(b2Held[preset] || {})} ---`
+    )
+    for (const x of sw) {
+      lines.push(
+        `  ${x.ride.padEnd(30)} ${hm(x.t)} → ${x.routeSet.padEnd(
+          14
+        )} saving=${min(x.savingMs).padStart(5)}m bike-${
+          x.bikeSavedM
+        }m changes-${x.changesFewer} arr=${hm(x.endMs)} hindsight=${hm(
+          x.hindsight
+        )}(${x.hindsightSrc}) vs=${min(x.hindsight - x.endMs)}m${
+          x.reversal ? ' REVERSAL' : ''
+        }`
+      )
+    }
+  }
   // eslint-disable-next-line no-console
   console.log(lines.join('\n'))
+})
+
+describe('util > go-mode > Auto switching rules on the fixtures (65.2 B2)', () => {
+  it('no preset ever switches back to a route set it left', () => {
+    expect(
+      b2Switches
+        .filter((x) => x.reversal)
+        .map((x) => `${x.preset} ${x.ride} ${hm(x.t)}`)
+    ).toEqual([])
+  })
+  it('never more than 3 switches in a ride', () => {
+    const per: Record<string, number> = {}
+    b2Switches.forEach((x) => {
+      per[`${x.preset} ${x.ride}`] = (per[`${x.preset} ${x.ride}`] || 0) + 1
+    })
+    expect(Object.entries(per).filter(([, n]) => n > 3)).toEqual([])
+  })
+  it('Stay on my route never switches; Simplest never adds more than 1 km of biking', () => {
+    expect(b2Switches.filter((x) => x.preset === 'stayOnRoute')).toEqual([])
+    expect(
+      b2Switches.filter((x) => x.preset === 'simplest' && x.bikeSavedM < -1000)
+    ).toEqual([])
+  })
 })
 
 describe('util > go-mode > auto presets fixture sweep (65.2 B1)', () => {
