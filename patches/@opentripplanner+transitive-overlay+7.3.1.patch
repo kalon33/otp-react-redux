@@ -1,8 +1,8 @@
 diff --git a/node_modules/@opentripplanner/transitive-overlay/esm/index.js b/node_modules/@opentripplanner/transitive-overlay/esm/index.js
-index 0d45537..518b775 100644
+index 0d45537..f2e30f2 100644
 --- a/node_modules/@opentripplanner/transitive-overlay/esm/index.js
 +++ b/node_modules/@opentripplanner/transitive-overlay/esm/index.js
-@@ -133,7 +133,54 @@ var loadImages = function loadImages(map, images) {
+@@ -133,7 +133,65 @@ var loadImages = function loadImages(map, images) {
      if (!map.hasImage(img.id)) {
        // Only load if the image hasn't already been added
        map.loadImage(img.url).then(function (response) {
@@ -31,9 +31,18 @@ index 0d45537..518b775 100644
 +            if (map.hasImage(img.id)) return;
 +            var w = bitmap && (bitmap.width || bitmap.naturalWidth);
 +            var h = bitmap && (bitmap.height || bitmap.naturalHeight);
-+            if (!w || !h) {
++            // maplibre resolves an EMPTY image response (asset that
++            // 404'd or a failed fetch) as a silent 1x1 ImageBitmap
++            // placeholder, not an error. Dimensions exist, but a content
++            // box like [0, 40, 500, 460] cannot fit a 1x1 image and
++            // addImage rejects it ('Image ... has invalid "content"
++            // value'). Require the image to actually cover its content
++            // box before adding it.
++            var content = img.options && img.options.content;
++            var contentFits = !content || (w >= content[2] && h >= content[3]);
++            if (!w || !h || !contentFits) {
 +              // eslint-disable-next-line no-console
-+              console.error("Skipping image ".concat(img.id, ": no intrinsic dimensions"));
++              console.error("Skipping image ".concat(img.id, ": invalid dimensions ").concat(w, "x").concat(h));
 +              return;
 +            }
 +            map.addImage(img.id, bitmap !== response.data && bitmap ? bitmap : response.data, img.options);
@@ -48,7 +57,9 @@ index 0d45537..518b775 100644
 +            // drop the content/stretch paddings otherwise.
 +            var w = response.data && (response.data.width || response.data.naturalWidth);
 +            var h = response.data && (response.data.height || response.data.naturalHeight);
-+            if (!w || !h) return;
++            var content2 = img.options && img.options.content;
++            var contentFits2 = !content2 || (w >= content2[2] && h >= content2[3]);
++            if (!w || !h || !contentFits2) return;
 +            map.addImage(img.id, response.data, img.options);
 +          });
 +        })["catch"](function (error) {
@@ -59,10 +70,10 @@ index 0d45537..518b775 100644
          // eslint-disable-next-line no-console
          console.error("Error loading image ".concat(img.id, ":"), error);
 diff --git a/node_modules/@opentripplanner/transitive-overlay/lib/index.js b/node_modules/@opentripplanner/transitive-overlay/lib/index.js
-index 5af2e61..68f5f64 100644
+index 5af2e61..a7d97db 100644
 --- a/node_modules/@opentripplanner/transitive-overlay/lib/index.js
 +++ b/node_modules/@opentripplanner/transitive-overlay/lib/index.js
-@@ -145,7 +145,77 @@ const loadImages = (map, images) => {
+@@ -145,7 +145,90 @@ const loadImages = (map, images) => {
      if (!map.hasImage(img.id)) {
        // Only load if the image hasn't already been added
        map.loadImage(img.url).then(response => {
@@ -104,10 +115,20 @@ index 5af2e61..68f5f64 100644
 +                  bitmap && (bitmap.width || bitmap.naturalWidth);
 +                const h =
 +                  bitmap && (bitmap.height || bitmap.naturalHeight);
-+                if (!w || !h) {
++                // maplibre resolves an EMPTY image response (asset that
++                // 404'd or a failed fetch) as a silent 1x1 ImageBitmap
++                // placeholder, not an error. Dimensions exist, but a
++                // content box like [0, 40, 500, 460] cannot fit a 1x1
++                // image and addImage rejects it ('Image ... has invalid
++                // "content" value'). Require the image to actually cover
++                // its content box before adding it.
++                const content = img.options && img.options.content;
++                const contentFits =
++                  !content || (w >= content[2] && h >= content[3]);
++                if (!w || !h || !contentFits) {
 +                  // eslint-disable-next-line no-console
 +                  console.error(
-+                    `Skipping image ${img.id}: no intrinsic dimensions`
++                    `Skipping image ${img.id}: invalid dimensions ${w}x${h}`
 +                  );
 +                  return;
 +                }
@@ -130,7 +151,10 @@ index 5af2e61..68f5f64 100644
 +                  response.data && (response.data.width || response.data.naturalWidth);
 +                const h =
 +                  response.data && (response.data.height || response.data.naturalHeight);
-+                if (!w || !h) return;
++                const content = img.options && img.options.content;
++                const contentFits =
++                  !content || (w >= content[2] && h >= content[3]);
++                if (!w || !h || !contentFits) return;
 +                map.addImage(img.id, response.data, img.options);
 +              });
 +          })
@@ -142,10 +166,10 @@ index 5af2e61..68f5f64 100644
          // eslint-disable-next-line no-console
          console.error(`Error loading image ${img.id}:`, error);
 diff --git a/node_modules/@opentripplanner/transitive-overlay/src/index.tsx b/node_modules/@opentripplanner/transitive-overlay/src/index.tsx
-index 5e3e06b..fec9cb5 100644
+index 5e3e06b..2d333b0 100644
 --- a/node_modules/@opentripplanner/transitive-overlay/src/index.tsx
 +++ b/node_modules/@opentripplanner/transitive-overlay/src/index.tsx
-@@ -193,7 +193,76 @@ const loadImages = (map: MapRef, images: MapImage[]) => {
+@@ -193,7 +193,89 @@ const loadImages = (map: MapRef, images: MapImage[]) => {
        map
          .loadImage(img.url)
          .then(response => {
@@ -187,10 +211,20 @@ index 5e3e06b..fec9cb5 100644
 +                    bitmap && (bitmap.width || (bitmap as HTMLImageElement).naturalWidth);
 +                  const h =
 +                    bitmap && (bitmap.height || (bitmap as HTMLImageElement).naturalHeight);
-+                  if (!w || !h) {
++                  // maplibre resolves an EMPTY image response (asset that
++                  // 404'd or a failed fetch) as a silent 1x1 ImageBitmap
++                  // placeholder, not an error. Dimensions exist, but a
++                  // content box like [0, 40, 500, 460] cannot fit a 1x1
++                  // image and addImage rejects it ('Image ... has invalid
++                  // "content" value'). Require the image to actually cover
++                  // its content box before adding it.
++                  const content = img.options && img.options.content;
++                  const contentFits =
++                    !content || (w >= content[2] && h >= content[3]);
++                  if (!w || !h || !contentFits) {
 +                    // eslint-disable-next-line no-console
 +                    console.error(
-+                      `Skipping image ${img.id}: no intrinsic dimensions`
++                      `Skipping image ${img.id}: invalid dimensions ${w}x${h}`
 +                    );
 +                    return;
 +                  }
@@ -212,7 +246,10 @@ index 5e3e06b..fec9cb5 100644
 +                    response.data && (response.data.width || response.data.naturalWidth);
 +                  const h =
 +                    response.data && (response.data.height || response.data.naturalHeight);
-+                  if (!w || !h) return;
++                  const content = img.options && img.options.content;
++                  const contentFits =
++                    !content || (w >= content[2] && h >= content[3]);
++                  if (!w || !h || !contentFits) return;
 +                  map.addImage(img.id, response.data, img.options);
 +                });
 +            })
