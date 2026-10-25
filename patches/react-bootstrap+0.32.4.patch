@@ -1,0 +1,39 @@
+diff --git a/node_modules/react-bootstrap/lib/Carousel.js b/node_modules/react-bootstrap/lib/Carousel.js
+index 889f05b..089e205 100644
+--- a/node_modules/react-bootstrap/lib/Carousel.js
++++ b/node_modules/react-bootstrap/lib/Carousel.js
+@@ -128,7 +128,7 @@ function (_React$Component) {
+     this.waitForNext();
+   };
+ 
+-  _proto.componentWillReceiveProps = function componentWillReceiveProps(nextProps) {
++  _proto.UNSAFE_componentWillReceiveProps = function componentWillReceiveProps(nextProps) {
+     var activeIndex = this.getActiveIndex();
+ 
+     if (nextProps.activeIndex != null && nextProps.activeIndex !== activeIndex) {
+diff --git a/node_modules/react-bootstrap/lib/CarouselItem.js b/node_modules/react-bootstrap/lib/CarouselItem.js
+index a5adfdc..4b9e9c5 100644
+--- a/node_modules/react-bootstrap/lib/CarouselItem.js
++++ b/node_modules/react-bootstrap/lib/CarouselItem.js
+@@ -56,7 +56,7 @@ function (_React$Component) {
+ 
+   var _proto = CarouselItem.prototype;
+ 
+-  _proto.componentWillReceiveProps = function componentWillReceiveProps(nextProps) {
++  _proto.UNSAFE_componentWillReceiveProps = function componentWillReceiveProps(nextProps) {
+     if (this.props.active !== nextProps.active) {
+       this.setState({
+         direction: null
+diff --git a/node_modules/react-bootstrap/lib/TabContent.js b/node_modules/react-bootstrap/lib/TabContent.js
+index 189d8ad..3568803 100644
+--- a/node_modules/react-bootstrap/lib/TabContent.js
++++ b/node_modules/react-bootstrap/lib/TabContent.js
+@@ -114,7 +114,7 @@ function (_React$Component) {
+     };
+   };
+ 
+-  _proto.componentWillReceiveProps = function componentWillReceiveProps(nextProps) {
++  _proto.UNSAFE_componentWillReceiveProps = function componentWillReceiveProps(nextProps) {
+     if (!nextProps.animation && this.state.activeChild) {
+       this.setState({
+         activeKey: null,

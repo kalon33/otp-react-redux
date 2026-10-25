@@ -1,0 +1,91 @@
+diff --git a/node_modules/react-overlays/lib/Affix.js b/node_modules/react-overlays/lib/Affix.js
+index d69d8d4..e725649 100644
+--- a/node_modules/react-overlays/lib/Affix.js
++++ b/node_modules/react-overlays/lib/Affix.js
+@@ -186,7 +186,7 @@ var Affix = function (_React$Component) {
+     this.onUpdate();
+   };
+ 
+-  Affix.prototype.componentWillReceiveProps = function componentWillReceiveProps() {
++  Affix.prototype.UNSAFE_componentWillReceiveProps = function componentWillReceiveProps() {
+     this._needPositionUpdate = true;
+   };
+ 
+diff --git a/node_modules/react-overlays/lib/AutoAffix.js b/node_modules/react-overlays/lib/AutoAffix.js
+index 52792bb..b48273d 100644
+--- a/node_modules/react-overlays/lib/AutoAffix.js
++++ b/node_modules/react-overlays/lib/AutoAffix.js
+@@ -172,7 +172,7 @@ var AutoAffix = function (_React$Component) {
+     this.onUpdate();
+   };
+ 
+-  AutoAffix.prototype.componentWillReceiveProps = function componentWillReceiveProps() {
++  AutoAffix.prototype.UNSAFE_componentWillReceiveProps = function componentWillReceiveProps() {
+     this._needPositionUpdate = true;
+   };
+ 
+diff --git a/node_modules/react-overlays/lib/LegacyPortal.js b/node_modules/react-overlays/lib/LegacyPortal.js
+index e1b066d..3536cc0 100644
+--- a/node_modules/react-overlays/lib/LegacyPortal.js
++++ b/node_modules/react-overlays/lib/LegacyPortal.js
+@@ -101,7 +101,7 @@ var Portal = function (_React$Component) {
+     this._renderOverlay();
+   };
+ 
+-  Portal.prototype.componentWillReceiveProps = function componentWillReceiveProps(nextProps) {
++  Portal.prototype.UNSAFE_componentWillReceiveProps = function componentWillReceiveProps(nextProps) {
+     if (this._overlayTarget && nextProps.container !== this.props.container) {
+       this._portalContainerNode.removeChild(this._overlayTarget);
+       this._portalContainerNode = (0, _getContainer2.default)(nextProps.container, (0, _ownerDocument2.default)(this).body);
+diff --git a/node_modules/react-overlays/lib/Modal.js b/node_modules/react-overlays/lib/Modal.js
+index f320b46..e9305b5 100644
+--- a/node_modules/react-overlays/lib/Modal.js
++++ b/node_modules/react-overlays/lib/Modal.js
+@@ -211,7 +211,7 @@ var Modal = function (_React$Component) {
+     );
+   };
+ 
+-  Modal.prototype.componentWillReceiveProps = function componentWillReceiveProps(nextProps) {
++  Modal.prototype.UNSAFE_componentWillReceiveProps = function componentWillReceiveProps(nextProps) {
+     if (nextProps.show) {
+       this.setState({ exited: false });
+     } else if (!nextProps.transition) {
+diff --git a/node_modules/react-overlays/lib/Overlay.js b/node_modules/react-overlays/lib/Overlay.js
+index 3b0b98f..d76d018 100644
+--- a/node_modules/react-overlays/lib/Overlay.js
++++ b/node_modules/react-overlays/lib/Overlay.js
+@@ -64,7 +64,7 @@ var Overlay = function (_React$Component) {
+     return _this;
+   }
+ 
+-  Overlay.prototype.componentWillReceiveProps = function componentWillReceiveProps(nextProps) {
++  Overlay.prototype.UNSAFE_componentWillReceiveProps = function componentWillReceiveProps(nextProps) {
+     if (nextProps.show) {
+       this.setState({ exited: false });
+     } else if (!nextProps.transition) {
+diff --git a/node_modules/react-overlays/lib/Portal.js b/node_modules/react-overlays/lib/Portal.js
+index 8fc18a2..f905c67 100644
+--- a/node_modules/react-overlays/lib/Portal.js
++++ b/node_modules/react-overlays/lib/Portal.js
+@@ -69,7 +69,7 @@ var Portal = function (_React$Component) {
+     this.forceUpdate(this.props.onRendered);
+   };
+ 
+-  Portal.prototype.componentWillReceiveProps = function componentWillReceiveProps(nextProps) {
++  Portal.prototype.UNSAFE_componentWillReceiveProps = function componentWillReceiveProps(nextProps) {
+     if (nextProps.container !== this.props.container) {
+       this.setContainer(nextProps);
+     }
+diff --git a/node_modules/react-overlays/lib/Position.js b/node_modules/react-overlays/lib/Position.js
+index 53363f4..1480ee6 100644
+--- a/node_modules/react-overlays/lib/Position.js
++++ b/node_modules/react-overlays/lib/Position.js
+@@ -96,7 +96,7 @@ var Position = function (_React$Component) {
+     this.updatePosition(this.getTarget());
+   };
+ 
+-  Position.prototype.componentWillReceiveProps = function componentWillReceiveProps() {
++  Position.prototype.UNSAFE_componentWillReceiveProps = function componentWillReceiveProps() {
+     this._needsFlush = true;
+   };
+ 
