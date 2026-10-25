@@ -1,3 +1,16 @@
+diff --git a/node_modules/@opentripplanner/trip-form/esm/MetroModeSelector/AdvancedModeSubsettingsContainer.js b/node_modules/@opentripplanner/trip-form/esm/MetroModeSelector/AdvancedModeSubsettingsContainer.js
+index a007ed5..e783368 100644
+--- a/node_modules/@opentripplanner/trip-form/esm/MetroModeSelector/AdvancedModeSubsettingsContainer.js
++++ b/node_modules/@opentripplanner/trip-form/esm/MetroModeSelector/AdvancedModeSubsettingsContainer.js
+@@ -20,7 +20,7 @@ var AdvancedModeSubsettingsContainer = function AdvancedModeSubsettingsContainer
+     return /*#__PURE__*/React.createElement(AdvancedModeSettingsButton, {
+       accentColor: accentColor,
+       fillModeIcons: fillModeIcons,
+-      key: button.label,
++      key: button.key,
+       modeButton: button,
+       onSettingsUpdate: onSettingsUpdate,
+       onAllSubmodesDisabled: onAllSubmodesDisabled,
 diff --git a/node_modules/@opentripplanner/trip-form/esm/MetroModeSelector/index.js b/node_modules/@opentripplanner/trip-form/esm/MetroModeSelector/index.js
 index d1abd81..3c50d70 100644
 --- a/node_modules/@opentripplanner/trip-form/esm/MetroModeSelector/index.js
@@ -11,6 +24,19 @@ index d1abd81..3c50d70 100644
        modeButton: button,
        onSettingsUpdate: onSettingsUpdate,
        onToggle: useCallback(function () {
+diff --git a/node_modules/@opentripplanner/trip-form/lib/MetroModeSelector/AdvancedModeSubsettingsContainer.js b/node_modules/@opentripplanner/trip-form/lib/MetroModeSelector/AdvancedModeSubsettingsContainer.js
+index 9a7b25d..ba8c69a 100644
+--- a/node_modules/@opentripplanner/trip-form/lib/MetroModeSelector/AdvancedModeSubsettingsContainer.js
++++ b/node_modules/@opentripplanner/trip-form/lib/MetroModeSelector/AdvancedModeSubsettingsContainer.js
+@@ -31,7 +31,7 @@ const AdvancedModeSubsettingsContainer = ({
+     return /*#__PURE__*/_react.default.createElement(_AdvancedModeSettingsButton.default, {
+       accentColor: accentColor,
+       fillModeIcons: fillModeIcons,
+-      key: button.label,
++      key: button.key,
+       modeButton: button,
+       onSettingsUpdate: onSettingsUpdate,
+       onAllSubmodesDisabled: onAllSubmodesDisabled,
 diff --git a/node_modules/@opentripplanner/trip-form/lib/MetroModeSelector/index.js b/node_modules/@opentripplanner/trip-form/lib/MetroModeSelector/index.js
 index db92398..d5a0fca 100644
 --- a/node_modules/@opentripplanner/trip-form/lib/MetroModeSelector/index.js
@@ -24,6 +50,19 @@ index db92398..d5a0fca 100644
      modeButton: button,
      onSettingsUpdate: onSettingsUpdate,
      onToggle: (0, _react.useCallback)(() => {
+diff --git a/node_modules/@opentripplanner/trip-form/src/MetroModeSelector/AdvancedModeSubsettingsContainer.tsx b/node_modules/@opentripplanner/trip-form/src/MetroModeSelector/AdvancedModeSubsettingsContainer.tsx
+index 515bf28..308d71d 100644
+--- a/node_modules/@opentripplanner/trip-form/src/MetroModeSelector/AdvancedModeSubsettingsContainer.tsx
++++ b/node_modules/@opentripplanner/trip-form/src/MetroModeSelector/AdvancedModeSubsettingsContainer.tsx
+@@ -62,7 +62,7 @@ const AdvancedModeSubsettingsContainer = ({
+           <AdvancedModeSettingsButton
+             accentColor={accentColor}
+             fillModeIcons={fillModeIcons}
+-            key={button.label}
++            key={button.key}
+             modeButton={button}
+             onSettingsUpdate={onSettingsUpdate}
+             onAllSubmodesDisabled={onAllSubmodesDisabled}
 diff --git a/node_modules/@opentripplanner/trip-form/src/MetroModeSelector/index.tsx b/node_modules/@opentripplanner/trip-form/src/MetroModeSelector/index.tsx
 index 58fefaa..6f58b5c 100644
 --- a/node_modules/@opentripplanner/trip-form/src/MetroModeSelector/index.tsx
