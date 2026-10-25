@@ -42,6 +42,7 @@ Object {
   "goMode": Object {
     "activeItinerary": null,
     "alightedFrom": null,
+    "arm": null,
     "arrivedAt": null,
     "arrivedDelay": null,
     "auto": Object {

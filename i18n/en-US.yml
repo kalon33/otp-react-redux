@@ -465,6 +465,15 @@ components:
       switchedTitle: Switched · {title}
       turnOff: Turn off Auto
       undo: Undo
+    autoArm:
+      banner: Starts when you leave · Auto · {preset} — tap to change
+      bannerStarting: Starting your trip…
+      cancel: Cancel
+      disarm: Don't start
+      setupHint: The trip starts in Auto when you head out. Keep the app open.
+      starting: Finding the best route from here…
+      title: Start when I leave
+      waitingUntil: Waiting for you to leave · until {time}
     boardingAboard: On the {route}
     boardingConfirm: I'm on the bus
     boardingDeny: I'm not on this bus
@@ -726,6 +735,7 @@ components:
     otherStopsNone: No other stops
     singleModeItineraryDescription: "{time} {mode} itinerary"
     startTrip: Start Trip
+    startWhenILeave: Start when I leave
     switchTrip: Switch to this trip
     timeBiking: "{time} biking"
     timeWalking: "{time} walking"

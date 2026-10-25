@@ -99,6 +99,12 @@ import {
   offBusUndoExpiresAt,
   saveAutoPreset
 } from '../util/go-mode/auto-switch'
+import { CLEAR_AUTO_ARM, saveArm } from '../util/go-mode/auto-arm'
+import {
+  armGpsActive,
+  releaseArmGps,
+  stopArmGps
+} from '../util/go-mode/auto-arm-gps'
 import {
   autoPresetVerdict,
   changesOf,
@@ -1215,6 +1221,9 @@ export const recordBoardTimeDisagreement = (info: {
  * behind 17.11) matches on these names, so they must not be free-form.
  */
 export type GoModeControl =
+  | 'auto-arm'
+  | 'auto-arm-cancel'
+  | 'auto-arm-preset'
   | 'auto-ok'
   | 'auto-off'
   | 'auto-on'
@@ -2383,6 +2392,12 @@ export function beginGoMode(
   rawItinerary: Itinerary,
   options: {
     /**
+     * Start this trip with Auto ON in this preset — the armed start ("Start
+     * when I leave", 65.2 B4), where turning Auto on was the rider's own tap
+     * on the arm card. Absent: Auto as `newTrip` leaves it.
+     */
+    autoPreset?: AutoPreset
+    /**
      * A trip through the rider's stops (43.1): `itinerary` is the segment
      * `multiStop.index`. Sticky the same way `roundTrip` is — absent keeps the
      * live trip's plan (every internal re-plan of the segment calls with no
@@ -2463,6 +2478,22 @@ export function beginGoMode(
       session.autoAboardPending = null
       clearAutoUndoTimer()
     }
+    // "Start when I leave" (65.2 B4): a trip started any other way — Start
+    // Trip tapped while armed — replaces the armed one. The armed start
+    // clears its own arm before it gets here. Either way the arm watcher's
+    // GPS is let go now and is gone before this trip's tracking starts below
+    // (one native watcher per page, see auto-arm-gps.ts).
+    const priorArm = priorGoMode?.arm ?? null
+    if (priorArm) {
+      dispatch({
+        payload: { id: priorArm.id, why: 'manual-start' },
+        type: CLEAR_AUTO_ARM
+      })
+      saveArm(null)
+    }
+    // Only awaited when it was running: an ordinary start stays synchronous
+    // up to its tracking, as every other caller expects.
+    const armGpsStopped = armGpsActive() ? stopArmGps() : null
     dispatch(
       startGoMode({
         itinerary,
@@ -2472,6 +2503,13 @@ export function beginGoMode(
         roundTrip
       })
     )
+    // The armed start's Auto: on, in the arm card's preset (B4).
+    if (options.autoPreset) {
+      dispatch({
+        payload: { on: true, preset: options.autoPreset, source: 'arm' },
+        type: SET_AUTO_MODE
+      })
+    }
     // A plan has been installed, so its origin is owed a look (12.13). Armed
     // here rather than asked on every tick because "the plan starts somewhere
     // the rider is not" is only a defect at INSTALLATION: a rider three
@@ -2517,6 +2555,7 @@ export function beginGoMode(
       dispatch(setMobileScreen(MobileScreens.GO_MODE))
     }
 
+    if (armGpsStopped) await armGpsStopped
     await dispatch(startGoModeTracking(itinerary))
 
     // If the rider is already aboard a known vehicle (sticky riding state —
@@ -6690,6 +6729,15 @@ export function beginOnboardFlow() {
         ? priorMultiStop.stopNames.slice(0, priorMultiStop.index)
         : []
     )
+    // "I'm already on the bus" starts a trip: an armed one is off (65.2 B4).
+    const armed = before.otp.goMode?.arm ?? null
+    if (armed) {
+      dispatch({
+        payload: { id: armed.id, why: 'onboard' },
+        type: CLEAR_AUTO_ARM
+      })
+      saveArm(null)
+    }
     dispatch(beginOnboardFlowAction({ keepRouteId, originalFrom, stops }))
     dispatch(setMobileScreen(MobileScreens.GO_MODE))
     dispatch(updateTrackingInterval({ interval: 5000 }))
@@ -9470,6 +9518,12 @@ export function replanFromAboard(
  */
 export function startPositionTracking() {
   return function (dispatch: any, getState: any) {
+    // The armed trip's watcher (65.2 B4) is let go here whatever path got a
+    // trip this far — the armed start and beginGoMode stop it first; this is
+    // the backstop (the onboard flow comes straight here). On the native
+    // stream its handlers stay bound to the one watcher, so it is RE-armed
+    // below with Go Mode's own; start/set-filter would keep the arm's.
+    const armGps = releaseArmGps()
     // Native iOS shell: a continuous background-location stream replaces the
     // browser poll entirely. It keeps delivering fixes with the screen locked
     // (the whole reason the shell exists) at ~1/s — see native-gps.ts.
@@ -9493,7 +9547,11 @@ export function startPositionTracking() {
       const desiredFilter = nativeGpsDistanceFilterFor(
         getState().otp?.goMode?.arrivedAt != null
       )
-      if (nativeGpsDistanceFilter() == null) {
+      if (armGps.heldNative) {
+        restartNativeGps(onNativePosition, onNativeError, {
+          distanceFilter: desiredFilter
+        })
+      } else if (nativeGpsDistanceFilter() == null) {
         startNativeGps(onNativePosition, onNativeError, {
           distanceFilter: desiredFilter
         })

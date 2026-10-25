@@ -41,6 +41,7 @@ import { localizeGradationMap } from '../utils'
 import { lookupOtherStops } from '../../../actions/other-stops-lookup'
 import { MobileScreens } from '../../../actions/ui-constants'
 import { outboundKeyOf, ReturnPlanState } from '../../../actions/round-trip'
+import AutoArmControl from '../../go-mode/AutoArmControl'
 import FormattedDuration from '../../util/formatted-duration'
 import ItineraryBody from '../line-itin/connected-itinerary-body'
 import NarrativeItinerary from '../narrative-itinerary'
@@ -252,7 +253,7 @@ const LoadingBlurred = styled.span<{ loading: boolean }>`
   transition: all 0.2s ease-in-out;
 `
 
-const StartTripButton = styled.button`
+export const StartTripButton = styled.button`
   background-color: #4caf50;
   border: none;
   border-radius: 8px;
@@ -273,6 +274,16 @@ const StartTripButton = styled.button`
     background-color: #3d8b40;
   }
 `
+
+// "Start when I leave" (65.2 B4): Start Trip's own button, in outline — the
+// second way to start the same trip, not a competing action. Inline rather
+// than a new styled component, so no other component's generated class moves.
+export const START_WHEN_I_LEAVE_STYLE: React.CSSProperties = {
+  backgroundColor: '#fff',
+  border: '2px solid #4caf50',
+  color: '#2e7d32',
+  marginTop: 0
+}
 
 type Props = {
   LegIcon: React.ReactNode
@@ -875,6 +886,29 @@ export class MetroItinerary extends NarrativeItinerary {
                 )}
               </StartTripButton>
             )}
+            {/* "Start when I leave" (65.2 B4): a one-way trip planned with
+                no trip running — not a trip through stops, nor a round trip
+                (both are built around the plan as tapped). */}
+            {beginGoMode &&
+              !tripActive &&
+              !roundTripEnabled &&
+              !buildMultiStopPlan(itinerary, null) && (
+                <AutoArmControl itinerary={itinerary}>
+                  {(open) => (
+                    <StartTripButton
+                      className="start-when-i-leave"
+                      onClick={open}
+                      style={START_WHEN_I_LEAVE_STYLE}
+                      type="button"
+                    >
+                      <FormattedMessage
+                        defaultMessage="Start when I leave"
+                        id="components.MetroUI.startWhenILeave"
+                      />
+                    </StartTripButton>
+                  )}
+                </AutoArmControl>
+              )}
           </>
         )}
       </div>
