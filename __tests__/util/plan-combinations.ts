@@ -26,7 +26,9 @@ describe('util > plan-combinations > toPlanModesInput', () => {
       transit: {
         access: ['FLEX', 'WALK'],
         egress: ['FLEX', 'WALK'],
-        transfer: []
+        // No PlanTransferMode takes FLEX, and an EMPTY list is a server-side
+        // error ("Transfer modes must not be empty.") — the slot is omitted.
+        transfer: undefined
       },
       transitOnly: true
     })
@@ -55,7 +57,7 @@ describe('util > plan-combinations > toPlanModesInput', () => {
       transit: {
         access: ['BICYCLE_RENTAL', 'WALK'],
         egress: ['BICYCLE_RENTAL', 'WALK'],
-        transfer: []
+        transfer: undefined
       },
       transitOnly: true
     })
@@ -68,7 +70,7 @@ describe('util > plan-combinations > toPlanModesInput', () => {
       transit: {
         access: ['CAR_PARKING'],
         egress: ['WALK'],
-        transfer: []
+        transfer: undefined
       },
       transitOnly: true
     })
@@ -86,7 +88,7 @@ describe('util > plan-combinations > toPlanModesInput', () => {
       transit: {
         access: ['CAR_RENTAL', 'WALK'],
         egress: ['CAR_RENTAL', 'WALK'],
-        transfer: []
+        transfer: undefined
       },
       transitOnly: true
     })
@@ -133,7 +135,9 @@ describe('util > plan-combinations > toPlanModesInput', () => {
       transit: {
         access: ['FLEX', 'WALK'],
         egress: ['FLEX', 'WALK'],
-        transfer: []
+        // No PlanTransferMode takes FLEX, and an EMPTY list is a server-side
+        // error ("Transfer modes must not be empty.") — the slot is omitted.
+        transfer: undefined
       },
       transitOnly: true
     })
@@ -173,5 +177,22 @@ describe('util > plan-combinations > generateModeSubsets', () => {
       .map((c) => c.modes.map((m) => m.mode).sort().join('+'))
       .sort()
     expect(modeSets).toEqual(['FLEX+TRANSIT', 'TRANSIT'])
+  })
+})
+describe('util > plan-combinations > wire shape', () => {
+  it('omits an empty transfer list from the wire JSON', () => {
+    // The server rejects a mode list that is present but empty ("Transfer
+    // modes must not be empty."); an omitted slot keeps the server default.
+    // JSON.stringify drops undefined, so the FLEX transit block rides as
+    // access + egress with no transfer key at all.
+    const flex = toPlanModesInput([
+      { mode: 'TRANSIT' },
+      { mode: 'FLEX' }
+    ])
+    expect(JSON.stringify(flex)).not.toContain('"transfer"')
+    expect(JSON.parse(JSON.stringify(flex))).toEqual({
+      transit: { access: ['FLEX', 'WALK'], egress: ['FLEX', 'WALK'] },
+      transitOnly: true
+    })
   })
 })

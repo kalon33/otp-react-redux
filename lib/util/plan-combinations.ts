@@ -251,12 +251,20 @@ export function toPlanModesInput(
   // (StreetModeMapper), or the whole query is rejected.
   const accessWithWalk = withWalkIfRequired(access)
   const egressWithWalk = withWalkIfRequired(egress)
+  // A mode list the server receives must not be EMPTY ("Transfer modes must
+  // not be empty." / access / egress alike); an omitted slot is fine, and the
+  // rider keeps the server default there. FLEX and the rentals filter out of
+  // the transfer slot (the PlanTransferMode enum takes BICYCLE, CAR and WALK
+  // only), so their transit block names access and egress and no transfer.
+  const omitIfEmpty = (modes: string[]) =>
+    modes.length > 0 ? modes : undefined
   return {
-    // Only name the access/egress/transfer modes when the subset carries a
-    // street mode; a walk-access transit plan needs none of them (OTP adds
-    // walking itself) and an empty transfer list is just wire noise.
     ...(access.length > 0 && {
-      transit: { access: accessWithWalk, egress: egressWithWalk, transfer }
+      transit: {
+        access: omitIfEmpty(accessWithWalk),
+        egress: omitIfEmpty(egressWithWalk),
+        transfer: omitIfEmpty(transfer)
+      }
     }),
     transitOnly: true
   }
