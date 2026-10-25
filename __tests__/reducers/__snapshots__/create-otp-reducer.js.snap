@@ -42,8 +42,16 @@ Object {
   "goMode": Object {
     "activeItinerary": null,
     "alightedFrom": null,
+    "arm": null,
     "arrivedAt": null,
     "arrivedDelay": null,
+    "auto": Object {
+      "leftRouteSets": Array [],
+      "on": false,
+      "preset": "fastest",
+      "switches": 0,
+      "undo": null,
+    },
     "boardingPrompt": Object {
       "chooseBus": false,
       "chooseBusError": null,
