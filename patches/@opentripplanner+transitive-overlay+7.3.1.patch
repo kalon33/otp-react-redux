@@ -1,12 +1,53 @@
 diff --git a/node_modules/@opentripplanner/transitive-overlay/esm/index.js b/node_modules/@opentripplanner/transitive-overlay/esm/index.js
-index 0d45537..f2e30f2 100644
+index 0d45537..6e674c7 100644
 --- a/node_modules/@opentripplanner/transitive-overlay/esm/index.js
 +++ b/node_modules/@opentripplanner/transitive-overlay/esm/index.js
-@@ -133,7 +133,65 @@ var loadImages = function loadImages(map, images) {
+@@ -128,12 +128,106 @@ var defaultBoldTextLayoutParams = function defaultBoldTextLayoutParams(boldFonts
+ var routeFilter = ["==", "type", "route"];
+ var stopFilter = ["==", "type", "stop"];
+ var accessLegFilter = ["match", ["get", "type"], ["BICYCLE", "SCOOTER", "MICROMOBILITY", "MICROMOBILITY_RENT", "CAR"], true, false];
++// maplibre-gl resolves an EMPTY image response (a 404, or a stale
++// service-worker precache serving nothing for the new build's hashed
++// asset URL) as a silent 1x1 ImageBitmap, not an error. That is not the
++// real image: refetch the URL once, bypassing caches, and only fall back
++// to what maplibre returned when the refetch has nothing either.
++var refetchIfPlaceholder = function refetchIfPlaceholder(response, url) {
++  if (
++    !(
++      response &&
++      response.data &&
++      response.data.width === 1 &&
++      response.data.height === 1 &&
++      typeof fetch === "function" &&
++      typeof createImageBitmap === "function"
++    )
++  ) {
++    return Promise.resolve(response);
++  }
++  return fetch(url, { cache: "reload" })
++    .then(function (r) {
++      return r.ok ? r.blob() : null;
++    })
++    .then(function (blob) {
++      return blob && blob.size > 0
++        ? createImageBitmap(blob).then(function (data) {
++            return Object.assign({}, response, { data: data });
++          })
++        : response;
++    })
++    .catch(function () {
++      return response;
++    });
++};
++
+ var loadImages = function loadImages(map, images) {
+   images.forEach(function (img) {
      if (!map.hasImage(img.id)) {
        // Only load if the image hasn't already been added
        map.loadImage(img.url).then(function (response) {
 -        map.addImage(img.id, response.data, img.options);
++        return refetchIfPlaceholder(response, img.url);
++      }).then(function (response) {
 +        // The guard above ran synchronously and this runs a microtask
 +        // later, so two effects mounting in the same frame both pass it
 +        // and the second addImage throws "An image named ... already
@@ -70,14 +111,44 @@ index 0d45537..f2e30f2 100644
          // eslint-disable-next-line no-console
          console.error("Error loading image ".concat(img.id, ":"), error);
 diff --git a/node_modules/@opentripplanner/transitive-overlay/lib/index.js b/node_modules/@opentripplanner/transitive-overlay/lib/index.js
-index 5af2e61..a7d97db 100644
+index 5af2e61..df93d48 100644
 --- a/node_modules/@opentripplanner/transitive-overlay/lib/index.js
 +++ b/node_modules/@opentripplanner/transitive-overlay/lib/index.js
-@@ -145,7 +145,90 @@ const loadImages = (map, images) => {
+@@ -140,12 +140,119 @@ const defaultBoldTextLayoutParams = boldFonts => {
+ const routeFilter = ["==", "type", "route"];
+ const stopFilter = ["==", "type", "stop"];
+ const accessLegFilter = ["match", ["get", "type"], ["BICYCLE", "SCOOTER", "MICROMOBILITY", "MICROMOBILITY_RENT", "CAR"], true, false];
++// maplibre-gl resolves an EMPTY image response (a 404, or a stale
++// service-worker precache serving nothing for the new build's hashed
++// asset URL) as a silent 1x1 ImageBitmap, not an error. That is not the
++// real image: refetch the URL once, bypassing caches, and only fall back
++// to what maplibre returned when the refetch has nothing either.
++const refetchIfPlaceholder = (response, url) =>
++  response &&
++  response.data &&
++  response.data.width === 1 &&
++  response.data.height === 1 &&
++  typeof fetch === "function" &&
++  typeof createImageBitmap === "function"
++    ? fetch(url, { cache: "reload" })
++        .then(r => (r.ok ? r.blob() : null))
++        .then(blob =>
++          blob && blob.size > 0
++            ? createImageBitmap(blob).then(data => ({ ...response, data }))
++            : response
++        )
++        .catch(() => response)
++    : Promise.resolve(response);
++
+ const loadImages = (map, images) => {
+   images.forEach(img => {
      if (!map.hasImage(img.id)) {
        // Only load if the image hasn't already been added
-       map.loadImage(img.url).then(response => {
+-      map.loadImage(img.url).then(response => {
 -        map.addImage(img.id, response.data, img.options);
++      map.loadImage(img.url).then(response =>
++        refetchIfPlaceholder(response, img.url)
++      ).then(response => {
 +        // The guard above ran synchronously and this runs a microtask
 +        // later, so two effects mounting in the same frame both pass it
 +        // and the second addImage throws "An image named ... already
@@ -166,12 +237,51 @@ index 5af2e61..a7d97db 100644
          // eslint-disable-next-line no-console
          console.error(`Error loading image ${img.id}:`, error);
 diff --git a/node_modules/@opentripplanner/transitive-overlay/src/index.tsx b/node_modules/@opentripplanner/transitive-overlay/src/index.tsx
-index 5e3e06b..2d333b0 100644
+index 5e3e06b..e714474 100644
 --- a/node_modules/@opentripplanner/transitive-overlay/src/index.tsx
 +++ b/node_modules/@opentripplanner/transitive-overlay/src/index.tsx
-@@ -193,7 +193,89 @@ const loadImages = (map: MapRef, images: MapImage[]) => {
+@@ -186,14 +186,128 @@ type MapImage = {
+   options: { sdf?: boolean; content?: [number, number, number, number] };
+ };
+ 
++// maplibre-gl resolves an EMPTY image response (a 404, or a stale
++// service-worker precache serving nothing for the new build's hashed
++// asset URL) as a silent 1x1 ImageBitmap, not an error. That is not the
++// real image: refetch the URL once, bypassing caches, and only fall back
++// to what maplibre returned when the refetch has nothing either.
++const refetchIfPlaceholder = (
++  response: Awaited<ReturnType<MapRef['loadImage']>>,
++  url: string
++): Promise<Awaited<ReturnType<MapRef['loadImage']>>> => {
++  if (
++    !(
++      response &&
++      response.data &&
++      (response.data as ImageBitmap).width === 1 &&
++      (response.data as ImageBitmap).height === 1 &&
++      typeof fetch === 'function' &&
++      typeof createImageBitmap === 'function'
++    )
++  ) {
++    return Promise.resolve(response)
++  }
++  return fetch(url, { cache: 'reload' })
++    .then((r) => (r.ok ? r.blob() : null))
++    .then((blob) =>
++      blob && blob.size > 0
++        ? createImageBitmap(blob).then((data) => ({ ...response, data }))
++        : response
++    )
++    .catch(() => response)
++}
++
+ const loadImages = (map: MapRef, images: MapImage[]) => {
+   images.forEach(img => {
+     if (!map.hasImage(img.id)) {
+       // Only load if the image hasn't already been added
        map
          .loadImage(img.url)
++        .then(response => refetchIfPlaceholder(response, img.url))
          .then(response => {
 -          map.addImage(img.id, response.data, img.options);
 +          // The guard above ran synchronously and this runs a microtask
