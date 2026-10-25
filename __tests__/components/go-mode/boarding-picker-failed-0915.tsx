@@ -22,7 +22,7 @@ function flatten(node: any, prefix = '', out: Record<string, string> = {}) {
   return out
 }
 const messages = flatten(
-  yaml.safeLoad(
+  yaml.load(
     readFileSync(path.join(__dirname, '../../../i18n/en-US.yml'), 'utf8')
   )
 )

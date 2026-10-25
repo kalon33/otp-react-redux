@@ -65,7 +65,7 @@ function flatten(node: any, prefix = '', out: Record<string, string> = {}) {
 }
 function loadYaml(relative: string) {
   return flatten(
-    yaml.safeLoad(readFileSync(path.join(__dirname, relative), 'utf8'))
+    yaml.load(readFileSync(path.join(__dirname, relative), 'utf8'))
   )
 }
 // Merged the way lib/util/i18n-loader.js does it: the library's messages

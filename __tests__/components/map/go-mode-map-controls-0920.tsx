@@ -61,7 +61,7 @@ function flatten(node: any, prefix = '', out: Record<string, string> = {}) {
 }
 const loadMessages = (file: string) =>
   flatten(
-    yaml.safeLoad(
+    yaml.load(
       readFileSync(path.join(__dirname, '../../../i18n/', file), 'utf8')
     )
   )

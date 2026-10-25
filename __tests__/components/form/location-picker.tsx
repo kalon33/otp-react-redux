@@ -29,7 +29,7 @@ function flatten(node: any, prefix = '', out: Record<string, string> = {}) {
 }
 const messages = {
   ...flatten(
-    yaml.safeLoad(
+    yaml.load(
       readFileSync(path.join(__dirname, '../../../i18n/en-US.yml'), 'utf8')
     )
   ),
@@ -37,7 +37,7 @@ const messages = {
   // the library's message file, which jest maps to an empty object; load it too
   // so the assertions (and the screenshot harness) read real copy.
   ...flatten(
-    yaml.safeLoad(
+    yaml.load(
       readFileSync(
         path.join(
           __dirname,

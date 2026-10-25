@@ -48,7 +48,7 @@ function flatten(node: any, prefix = '', out: Record<string, string> = {}) {
 }
 function loadYaml(relative: string) {
   return flatten(
-    yaml.safeLoad(readFileSync(path.join(__dirname, relative), 'utf8'))
+    yaml.load(readFileSync(path.join(__dirname, relative), 'utf8'))
   )
 }
 const messages = {

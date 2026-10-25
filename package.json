@@ -14,7 +14,7 @@
     "test": "yarn run lint && yarn run typecheck && yarn check:i18n-en-fr && yarn run unit",
     "typecheck": "yarn tsc",
     "semantic-release": "semantic-release",
-    "start": "yarn && patch-package && node scripts/postinstall-patch-compile.js && vite",
+    "start": "yarn && vite",
     "percy-preview": "vite preview",
     "percy-har-express": "har-express",
     "percy-combined-mock-server": "node ./percy/mock-server.js",
@@ -235,9 +235,7 @@
     "@leeoniya/ufuzzy": "npm:dry-uninstall",
     "@types/react": "^17.0.45",
     "@types/react-dom": "^17.0.17",
-    "chroma-js": "2.4.2",
-    "cheerio": "1.0.0-rc.10",
-    "js-yaml": "3.14.1"
+    "cheerio": "1.0.0-rc.10"
   },
   "browserslist": [
     ">0.2%",
@@ -265,7 +263,8 @@
       "i18n-loader": "<rootDir>__tests__/test-utils/mock-data/i18n-loader.js",
       "\\.graphql$": "<rootDir>__tests__/test-utils/mock-data/empty-string.js",
       "\\.css$": "<rootDir>__tests__/test-utils/mock-data/empty-string.js",
-      "\\.(jpg|ico|jpeg|png|gif|eot|otf|webp|svg|ttf|woff|woff2|mp4|webm|wav|mp3|m4a|aac|oga)$": "<rootDir>__tests__/test-utils/mock-data/fileMock.js"
+      "\\.(jpg|ico|jpeg|png|gif|eot|otf|webp|svg|ttf|woff|woff2|mp4|webm|wav|mp3|m4a|aac|oga)$": "<rootDir>__tests__/test-utils/mock-data/fileMock.js",
+      "^chroma-js$": "chroma-js/dist/chroma.cjs"
     },
     "transform": {
       "\\.[jt]sx?$": "babel-jest"
