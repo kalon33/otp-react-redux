@@ -730,6 +730,7 @@ components:
     switchTrip: "Basculer sur ce trajet"
     timeBiking: "{time} de vélo"
     timeWalking: "{time} de marche"
+    timeWaiting: "{time} d’attente"
     variantBiking: "{distance} à vélo"
     variantArrives: arrivée à {time}
     variantLeaves: départ à {time}
