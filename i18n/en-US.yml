@@ -739,6 +739,7 @@ components:
     startWhenILeave: Start when I leave
     switchTrip: Switch to this trip
     timeBiking: "{time} biking"
+    timeWaiting: "{time} wait"
     timeWalking: "{time} walking"
     variantArrives: arrives {time}
     variantBiking: "{distance} biking"

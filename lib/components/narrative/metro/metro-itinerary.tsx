@@ -690,6 +690,26 @@ export class MetroItinerary extends NarrativeItinerary {
                   )}
                   <SecondaryInfo>
                     {(() => {
+                      // Wait between buses (OTP waitingTime, stay-adjusted),
+                      // only when there is at least a minute of it.
+                      const waitSeconds = Number(itinerary.waitingTime)
+                      const waitNote =
+                        Number.isFinite(waitSeconds) && waitSeconds >= 60 ? (
+                          <>
+                            {' · '}
+                            <FormattedMessage
+                              id="components.MetroUI.timeWaiting"
+                              values={{
+                                time: (
+                                  <FormattedDuration
+                                    duration={waitSeconds}
+                                    includeSeconds={false}
+                                  />
+                                )
+                              }}
+                            />
+                          </>
+                        ) : null
                       const bikeTime = itinerary.legs
                         .filter((leg: Leg) => leg.mode === 'BICYCLE')
                         .reduce(
@@ -698,36 +718,44 @@ export class MetroItinerary extends NarrativeItinerary {
                         )
                       if (bikeTime > 0) {
                         return (
+                          <>
+                            <FormattedMessage
+                              defaultMessage="{time} biking"
+                              id="components.MetroUI.timeBiking"
+                              values={{
+                                time: (
+                                  <FormattedDuration
+                                    duration={ensureAtLeastOneMinute(bikeTime)}
+                                    includeSeconds={false}
+                                  />
+                                )
+                              }}
+                            />
+                            {waitNote}
+                          </>
+                        )
+                      }
+                      return (
+                        <>
                           <FormattedMessage
-                            defaultMessage="{time} biking"
-                            id="components.MetroUI.timeBiking"
+                            id="components.MetroUI.timeWalking"
                             values={{
                               time: (
                                 <FormattedDuration
-                                  duration={ensureAtLeastOneMinute(bikeTime)}
+                                  duration={
+                                    itinerary.walkTime > 0
+                                      ? ensureAtLeastOneMinute(
+                                          itinerary.walkTime
+                                        )
+                                      : itinerary.walkTime
+                                  }
                                   includeSeconds={false}
                                 />
                               )
                             }}
                           />
-                        )
-                      }
-                      return (
-                        <FormattedMessage
-                          id="components.MetroUI.timeWalking"
-                          values={{
-                            time: (
-                              <FormattedDuration
-                                duration={
-                                  itinerary.walkTime > 0
-                                    ? ensureAtLeastOneMinute(itinerary.walkTime)
-                                    : itinerary.walkTime
-                                }
-                                includeSeconds={false}
-                              />
-                            )
-                          }}
-                        />
+                          {waitNote}
+                        </>
                       )
                     })()}
                   </SecondaryInfo>
