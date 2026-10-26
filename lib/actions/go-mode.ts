@@ -89,6 +89,40 @@ import {
   turnCuesEnabledForLeg
 } from '../util/go-mode/turn-cue-settings'
 import {
+  aboardUndoExpiresAt,
+  AUTO_OFF,
+  AUTO_SWITCH_NOTICE_ID,
+  autoHeadline,
+  autoUndoLive,
+  decideAboardAutoSwitch,
+  decideOffBusAutoSwitch,
+  loadAutoPreset,
+  offBusUndoExpiresAt,
+  saveAutoPreset
+} from '../util/go-mode/auto-switch'
+import { CLEAR_AUTO_ARM, saveArm } from '../util/go-mode/auto-arm'
+import {
+  armGpsActive,
+  releaseArmGps,
+  stopArmGps
+} from '../util/go-mode/auto-arm-gps'
+import {
+  autoPresetVerdict,
+  changesOf,
+  rankAlightForPreset
+} from '../util/go-mode/auto-priority'
+import type {
+  AutoDecision,
+  AutoState,
+  AutoUndo
+} from '../util/go-mode/auto-switch'
+import type {
+  AutoAlightScore,
+  AutoPreset,
+  AutoScore
+} from '../util/go-mode/auto-priority'
+import {
+  buildAutoSwitchNotice,
   buildFasterRouteNotice,
   buildMissedBusOutcomeNotice,
   checkBoardVehicleApproach,
@@ -264,6 +298,7 @@ import {
   offerSubKind,
   recorderSettledAboard,
   remainingBikeMeters,
+  routeLabelOf,
   shouldAskLowBike
 } from '../util/go-mode/faster-route-offer'
 import {
@@ -278,6 +313,7 @@ import {
   routeSetOf
 } from '../util/go-mode/faster-route'
 import type {
+  AlightOfferInput,
   AlightOfferVerdict,
   FasterRouteInput,
   FasterRouteVerdict
@@ -958,6 +994,25 @@ export const CLEAR_FASTER_ROUTE_OFFER = 'CLEAR_FASTER_ROUTE_OFFER'
  * what its storm rule looks for.
  */
 export const FASTER_ROUTE_OFFER = 'FASTER_ROUTE_OFFER'
+/**
+ * Auto mode (65.2, cycle 36 B2), all three handled by the goMode reducer and
+ * so in create-otp-reducer's delegation list:
+ *
+ *   SET_AUTO_MODE  the rider's chip / preset sheet: { on, preset, source }
+ *   AUTO_SWITCH    one entry per no-tap decision that had a pick — scalars,
+ *                  so the debug log keeps it on every ride:
+ *     outcome   switched | undone | held
+ *     why       (held) confirming | weak-bar | cap | switch-back;
+ *               (undone) rider
+ *     preset, aboard, fromRouteSet, toRouteSet, route, stop, savingMin,
+ *     bikeSavedKm, changesSaved, switches, push (sent | none), undoUntilMs,
+ *     switchId
+ *   SET_AUTO_UNDO  the Undo on the card ({ undo }), or its lapse
+ *                  ({ undo: null, switchId })
+ */
+export const SET_AUTO_MODE = 'SET_AUTO_MODE'
+export const AUTO_SWITCH = 'AUTO_SWITCH'
+export const SET_AUTO_UNDO = 'SET_AUTO_UNDO'
 export const REPAIR_LEG_GEOMETRY = 'REPAIR_LEG_GEOMETRY'
 export const RESUME_GO_MODE = 'RESUME_GO_MODE'
 export const RESUME_GPS_SIMULATION = 'RESUME_GPS_SIMULATION'
@@ -1080,6 +1135,8 @@ export const startGoMode = createAction<{
   itinerary: Itinerary
   /** The rider's stops, when this is one segment of a multi-stop trip (43.1). */
   multiStop?: MultiStopPlan | null
+  /** The rider started this trip (Start Trip), not a swap within one (65.2). */
+  newTrip?: boolean
   /** Clock for the reducer's riding-fact age check (tests); Date.now otherwise. */
   nowMs?: number
   originalFrom?: any
@@ -1171,6 +1228,14 @@ export const recordBoardTimeDisagreement = (info: {
  * behind 17.11) matches on these names, so they must not be free-form.
  */
 export type GoModeControl =
+  | 'auto-arm'
+  | 'auto-arm-cancel'
+  | 'auto-arm-preset'
+  | 'auto-ok'
+  | 'auto-off'
+  | 'auto-on'
+  | 'auto-preset'
+  | 'auto-undo'
   | 'choose-bus-open'
   | 'choose-bus-pick'
   | 'faster-route-keep'
@@ -2334,12 +2399,25 @@ export function beginGoMode(
   rawItinerary: Itinerary,
   options: {
     /**
+     * Start this trip with Auto ON in this preset — the armed start ("Start
+     * when I leave", 65.2 B4), where turning Auto on was the rider's own tap
+     * on the arm card. Absent: Auto as `newTrip` leaves it.
+     */
+    autoPreset?: AutoPreset
+    /**
      * A trip through the rider's stops (43.1): `itinerary` is the segment
      * `multiStop.index`. Sticky the same way `roundTrip` is — absent keeps the
      * live trip's plan (every internal re-plan of the segment calls with no
      * options), an explicit null clears it.
      */
     multiStop?: MultiStopPlan | null
+    /**
+     * The rider started this trip — Start Trip on a route, including one
+     * that replaces a live trip — rather than a swap within one. Auto mode
+     * (65.2) is per trip: it goes off here. A trip started with Go Mode off is
+     * new whatever this says.
+     */
+    newTrip?: boolean
     /**
      * This plan re-uses the access legs the trip is already running on, so its
      * origin is exactly as old as it was a tick ago and the 12.13 stale-origin
@@ -2411,9 +2489,45 @@ export function beginGoMode(
         'plan-changed'
       )
     }
+    // Auto's pending confirmations belong to the trip; a new one starts clean.
+    if (options.newTrip || !priorGoMode?.isActive) {
+      session.autoPending = null
+      session.autoAboardPending = null
+      clearAutoUndoTimer()
+    }
+    // "Start when I leave" (65.2 B4): a trip started any other way — Start
+    // Trip tapped while armed — replaces the armed one. The armed start
+    // clears its own arm before it gets here. Either way the arm watcher's
+    // GPS is let go now and is gone before this trip's tracking starts below
+    // (one native watcher per page, see auto-arm-gps.ts).
+    const priorArm = priorGoMode?.arm ?? null
+    if (priorArm) {
+      dispatch({
+        payload: { id: priorArm.id, why: 'manual-start' },
+        type: CLEAR_AUTO_ARM
+      })
+      saveArm(null)
+    }
+    // Only awaited when it was running: an ordinary start stays synchronous
+    // up to its tracking, as every other caller expects.
+    const armGpsStopped = armGpsActive() ? stopArmGps() : null
     dispatch(
-      startGoMode({ itinerary, multiStop, originalFrom, roundTrip, units })
+      startGoMode({
+        itinerary,
+        multiStop,
+        newTrip: options.newTrip || undefined,
+        originalFrom,
+        roundTrip,
+        units
+      })
     )
+    // The armed start's Auto: on, in the arm card's preset (B4).
+    if (options.autoPreset) {
+      dispatch({
+        payload: { on: true, preset: options.autoPreset, source: 'arm' },
+        type: SET_AUTO_MODE
+      })
+    }
     // A plan has been installed, so its origin is owed a look (12.13). Armed
     // here rather than asked on every tick because "the plan starts somewhere
     // the rider is not" is only a defect at INSTALLATION: a rider three
@@ -2459,6 +2573,7 @@ export function beginGoMode(
       dispatch(setMobileScreen(MobileScreens.GO_MODE))
     }
 
+    if (armGpsStopped) await armGpsStopped
     await dispatch(startGoModeTracking(itinerary))
 
     // If the rider is already aboard a known vehicle (sticky riding state —
@@ -3087,6 +3202,9 @@ export function endGoMode() {
         why: 'trip-ended'
       })
     }
+    // Auto (65.2): the Undo's lapse timer, and its push if one went out.
+    clearAutoUndoTimer()
+    if (session.autoPushSent) cancelPush(AUTO_SWITCH_NOTICE_ID)
     // ...and the updater's clock starts. NOT a release: "Stop" is routinely a
     // step inside a ride — the rider taps it to re-run "I'm on the bus" — and
     // releasing here installed a queued bundle 18 ms later on 2026-09-13,
@@ -5064,7 +5182,7 @@ function backgroundRouteTick(options: { manual: boolean }) {
           // best-effort
         }
       }
-      settleFasterRouteCheck(dispatch, getState, {
+      await settleFasterRouteCheck(dispatch, getState, {
         answer,
         lowBike,
         sent
@@ -5106,7 +5224,7 @@ function settleFasterRouteCheck(
     lowBike: Itinerary[]
     sent: { fix: GeolocationPosition; nowMs: number; planSig: string }
   }
-): void {
+): Promise<void> | void {
   const goMode = getState().otp?.goMode
   const held: Itinerary | null = goMode?.activeItinerary ?? null
   const nowMs = getCurrentTime().getTime()
@@ -5155,6 +5273,15 @@ function settleFasterRouteCheck(
     riding: goMode?.riding?.tripId != null,
     speedMps: coords?.speed ?? null
   }
+  // Auto (65.2 B2): with Auto on and a preset that changes routes, this same
+  // answer may switch the trip without a tap. With Auto off — or on Stay on my
+  // route — nothing below changes: the card offers, the rider taps.
+  const auto: AutoState = goMode?.auto ?? AUTO_OFF
+  const autoRoutes = auto.on && auto.preset !== 'stayOnRoute'
+  if (autoRoutes) {
+    const switching = autoSwitchOffBus(dispatch, getState, input, auto)
+    if (switching) return switching
+  }
   const verdict = classifyFasterRoute(input)
   const lowSet = new Set(ctx.lowBike)
   const offerOf = (v: FasterRouteVerdict, offerId: string) =>
@@ -5180,7 +5307,14 @@ function settleFasterRouteCheck(
     if (fresh) {
       const gate = latchAllows(session.fasterRouteLatch, offerKeyOf(fresh))
       if (gate.allow) {
-        raiseFasterRouteOffer(dispatch, getState, fresh, gate.push, shown)
+        // With Auto switching, the push is for the switch, not the card.
+        raiseFasterRouteOffer(
+          dispatch,
+          getState,
+          fresh,
+          gate.push && !autoRoutes,
+          shown
+        )
         return
       }
     }
@@ -5442,6 +5576,351 @@ export function viewFasterRoute() {
 }
 
 /* ------------------------------------------------------------------------ */
+/* Auto mode: switch by the rider's preset (65.2, cycle 36 B2)              */
+/* ------------------------------------------------------------------------ */
+
+/** The scalar record of one Auto decision (AUTO_SWITCH). */
+function recordAutoSwitch(
+  dispatch: any,
+  fields: {
+    aboard: boolean
+    bikeSavedM?: number
+    changesSaved?: number
+    fromRouteSet?: string | null
+    outcome: 'held' | 'switched' | 'undone'
+    preset: AutoPreset
+    push?: 'none' | 'sent'
+    route?: string
+    savingMs?: number
+    stop?: string | null
+    switchId?: string | null
+    /** The trip's running total once this entry is applied. */
+    switches: number
+    toRouteSet?: string | null
+    undoUntilMs?: number | null
+    why?: string | null
+  }
+): void {
+  dispatch({
+    payload: {
+      aboard: fields.aboard,
+      bikeSavedKm:
+        fields.bikeSavedM != null
+          ? Math.round(fields.bikeSavedM / 100) / 10
+          : null,
+      changesSaved: fields.changesSaved ?? null,
+      fromRouteSet: fields.fromRouteSet ?? null,
+      outcome: fields.outcome,
+      preset: fields.preset,
+      push: fields.push ?? null,
+      route: fields.route ?? null,
+      savingMin:
+        fields.savingMs != null
+          ? Math.round(fields.savingMs / 6000) / 10
+          : null,
+      stop: fields.stop ?? null,
+      switches: fields.switches,
+      switchId: fields.switchId ?? null,
+      tMs: getCurrentTime().getTime(),
+      toRouteSet: fields.toRouteSet ?? null,
+      undoUntilMs: fields.undoUntilMs ?? null,
+      why: fields.why ?? null
+    },
+    type: AUTO_SWITCH
+  })
+}
+
+/** A pick Auto would have taken but may not (yet): one scalar record. */
+function recordAutoHeld(
+  dispatch: any,
+  auto: AutoState,
+  d: AutoDecision<any>,
+  aboard: boolean
+): void {
+  if (!d.pick || d.why === 'switch') return
+  const itin: Itinerary = aboard ? d.pick.option.itinerary : d.pick.itinerary
+  recordAutoSwitch(dispatch, {
+    aboard,
+    bikeSavedM: d.pick.bikeSavedM,
+    outcome: 'held',
+    preset: auto.preset,
+    route: routeLabelOf(itin) || 'bike',
+    savingMs: d.pick.savingMs,
+    stop: aboard ? d.pick.option.stopName ?? null : null,
+    switches: auto.switches,
+    toRouteSet: routeSetOf(itin),
+    why: d.why
+  })
+}
+
+function clearAutoUndoTimer(): void {
+  if (session.autoUndoTimerId) {
+    clearTimeout(session.autoUndoTimerId)
+    session.autoUndoTimerId = null
+  }
+}
+
+/** Lapse the Undo at its time, to the second. */
+function armAutoUndoExpiry(dispatch: any, undo: AutoUndo): void {
+  clearAutoUndoTimer()
+  const delay = Math.max(0, undo.expiresAtMs - getCurrentTime().getTime())
+  session.autoUndoTimerId = setTimeout(() => {
+    session.autoUndoTimerId = null
+    dispatch({
+      payload: { switchId: undo.switchId, undo: null },
+      type: SET_AUTO_UNDO
+    })
+  }, delay)
+}
+
+/** The push for a switch, only while the app is not on screen. */
+function sendAutoSwitchPush(undo: AutoUndo): 'none' | 'sent' {
+  const hidden =
+    typeof document !== 'undefined' && document.visibilityState !== 'visible'
+  if (!hidden || isReplayActive()) return 'none'
+  sendPush(buildAutoSwitchNotice(undo))
+  session.autoPushSent = true
+  return 'sent'
+}
+
+/**
+ * Off the bus: decide on this answer and, when Auto may, switch. Returns the
+ * switch in progress, or null (the caller goes on to today's card logic).
+ */
+function autoSwitchOffBus(
+  dispatch: any,
+  getState: any,
+  input: FasterRouteInput,
+  auto: AutoState
+): Promise<void> | null {
+  const verdict = autoPresetVerdict(input, auto.preset)
+  const d = decideOffBusAutoSwitch(verdict, auto, session.autoPending)
+  session.autoPending = d.pending
+  if (d.why !== 'switch' || !d.pick || !verdict.pool) {
+    recordAutoHeld(dispatch, auto, d, false)
+    return null
+  }
+  const pick: AutoScore = d.pick
+  const pool = verdict.pool
+  const held = input.current as Itinerary
+  const nowMs = input.nowMs
+  const next = pool.remaining[0]
+  const oldBoardMs =
+    input.liveBoardEpochMs != null &&
+    input.liveBoardTripId &&
+    next &&
+    tripIdsMatch(legTripId(next), input.liveBoardTripId)
+      ? Number(input.liveBoardEpochMs)
+      : Number(next?.startTime)
+  const changesSaved = Math.max(0, changesOf(pool.bar) - pick.changes)
+  const undo: AutoUndo = {
+    aboard: false,
+    addedBikeM: Math.max(0, Math.round(-pick.bikeSavedM)),
+    bikeSavedM: Math.max(0, Math.round(pick.bikeSavedM)),
+    changesSaved,
+    expiresAtMs: offBusUndoExpiresAt(nowMs, oldBoardMs),
+    fromItinerary: held,
+    fromRouteSet: pool.heldSet,
+    headline: autoHeadline(auto.preset, {
+      bikeSavedM: pick.bikeSavedM,
+      changesSaved,
+      savingMs: pick.savingMs
+    }),
+    laterMs: Math.max(0, -pick.savingMs),
+    preset: auto.preset,
+    routeLabel: routeLabelOf(pick.itinerary),
+    savingMs: pick.savingMs,
+    switchId: `as-${++session.autoSwitchSeq}`,
+    toRouteSet: routeSetOf(pick.itinerary)
+  }
+  return (async () => {
+    const coords = getState().otp?.goMode?.tracking?.lastPosition?.coords
+    dispatch({
+      payload: {
+        accepted: true,
+        // The app's choice, on the rider's standing instruction (Auto on).
+        autoApply: true,
+        heldBoardMissed: false,
+        originGapM: coords
+          ? originGapMeters(pick.itinerary, [coords.latitude, coords.longitude])
+          : null,
+        planLeftByRider: false,
+        projectedAtMs: null,
+        projectedM: 0,
+        reason: 'auto-switch',
+        refusedBecause: null,
+        tMs: getCurrentTime().getTime()
+      },
+      type: AUTO_REPLAN
+    })
+    await dispatch(beginGoMode(pick.itinerary))
+    finishAutoSwitch(dispatch, getState, undo)
+  })()
+}
+
+/** After the swap: the record, the push, the Undo on the card. */
+function finishAutoSwitch(dispatch: any, getState: any, undo: AutoUndo): void {
+  const push = sendAutoSwitchPush(undo)
+  recordAutoSwitch(dispatch, {
+    aboard: undo.aboard,
+    bikeSavedM: undo.bikeSavedM - undo.addedBikeM,
+    changesSaved: undo.changesSaved,
+    fromRouteSet: undo.fromRouteSet,
+    outcome: 'switched',
+    preset: undo.preset,
+    push,
+    route: undo.routeLabel || 'bike',
+    savingMs: undo.savingMs,
+    stop: undo.stopName ?? null,
+    switches: (getState().otp?.goMode?.auto?.switches ?? 0) + 1,
+    switchId: undo.switchId,
+    toRouteSet: undo.toRouteSet,
+    undoUntilMs: undo.expiresAtMs
+  })
+  dispatch({ payload: { undo }, type: SET_AUTO_UNDO })
+  armAutoUndoExpiry(dispatch, undo)
+}
+
+/**
+ * The chip, off: one tap turns Auto on with the preset last picked on this
+ * device (Fastest on first use).
+ */
+export function turnAutoOn() {
+  return function (dispatch: any) {
+    const preset = loadAutoPreset()
+    dispatch(recordGoModeControlTap('auto-on', { preset }))
+    session.autoPending = null
+    session.autoAboardPending = null
+    dispatch({
+      payload: { on: true, preset, source: 'chip' },
+      type: SET_AUTO_MODE
+    })
+  }
+}
+
+/**
+ * A preset picked in the sheet: Auto on with it, and it becomes the device's
+ * remembered preset for the next trip's one-tap on.
+ */
+export function setAutoPreset(preset: AutoPreset) {
+  return function (dispatch: any) {
+    saveAutoPreset(preset)
+    dispatch(recordGoModeControlTap('auto-preset', { preset }))
+    session.autoPending = null
+    session.autoAboardPending = null
+    dispatch({
+      payload: { on: true, preset, source: 'sheet' },
+      type: SET_AUTO_MODE
+    })
+  }
+}
+
+/** The sheet's "Turn off": tap cards only, as before; the preset stays. */
+export function turnAutoOff() {
+  return function (dispatch: any, getState: any) {
+    const auto: AutoState = getState().otp?.goMode?.auto ?? AUTO_OFF
+    dispatch(recordGoModeControlTap('auto-off', { preset: auto.preset }))
+    session.autoPending = null
+    session.autoAboardPending = null
+    clearAutoUndoTimer()
+    dispatch({
+      payload: { on: false, preset: auto.preset, source: 'sheet' },
+      type: SET_AUTO_MODE
+    })
+  }
+}
+
+/** OK on the Undo card: the switch stands, the card goes. */
+export function dismissAutoUndo() {
+  return function (dispatch: any, getState: any) {
+    const undo: AutoUndo | null = getState().otp?.goMode?.auto?.undo ?? null
+    if (!undo) return
+    dispatch(recordGoModeControlTap('auto-ok', { preset: undo.preset }))
+    clearAutoUndoTimer()
+    dispatch({
+      payload: { switchId: undo.switchId, undo: null },
+      type: SET_AUTO_UNDO
+    })
+  }
+}
+
+/**
+ * Undo on the card: back to the plan Auto left, exactly as it was. Auto stays
+ * on (65.2 Q2) and never switches to the undone route again this trip.
+ */
+export function undoAutoSwitch() {
+  return async function (dispatch: any, getState: any) {
+    const goMode = getState().otp?.goMode
+    const undo: AutoUndo | null = goMode?.auto?.undo ?? null
+    if (!goMode?.isActive || !undo) return
+    dispatch(
+      recordGoModeControlTap('auto-undo', {
+        preset: undo.preset,
+        routeSet: undo.toRouteSet
+      })
+    )
+    clearAutoUndoTimer()
+    const nowMs = getCurrentTime().getTime()
+    const riding: RidingState | null = goMode?.riding ?? null
+    const lapsed =
+      !autoUndoLive(undo, nowMs) ||
+      (undo.aboard &&
+        !(riding?.tripId && tripIdsMatch(riding.tripId, undo.tripId)))
+    if (lapsed) {
+      dispatch({
+        payload: { switchId: undo.switchId, undo: null },
+        type: SET_AUTO_UNDO
+      })
+      return
+    }
+    if (session.autoPushSent) cancelPush(AUTO_SWITCH_NOTICE_ID)
+    session.autoPending = null
+    session.autoAboardPending = null
+    recordAutoSwitch(dispatch, {
+      aboard: undo.aboard,
+      fromRouteSet: undo.fromRouteSet,
+      outcome: 'undone',
+      preset: undo.preset,
+      route: undo.routeLabel || 'bike',
+      stop: undo.stopName ?? null,
+      switches: goMode?.auto?.switches ?? 0,
+      switchId: undo.switchId,
+      toRouteSet: undo.toRouteSet,
+      why: 'rider'
+    })
+    dispatch({
+      payload: {
+        accepted: true,
+        autoApply: false,
+        heldBoardMissed: false,
+        originGapM: null,
+        planLeftByRider: false,
+        projectedAtMs: null,
+        projectedM: 0,
+        reason: 'auto-switch-undo',
+        refusedBecause: null,
+        tMs: nowMs
+      },
+      type: AUTO_REPLAN
+    })
+    if (undo.aboard && riding?.tripId) {
+      const state = getState()
+      const vehicle = aboardVehicleContext(state, riding, riding.tripId)
+      await dispatch(beginGoMode(undo.fromItinerary))
+      await reassertAboardAfterSplice(
+        dispatch,
+        getState,
+        undo.fromItinerary,
+        riding,
+        vehicle
+      )
+      return
+    }
+    await dispatch(beginGoMode(undo.fromItinerary))
+  }
+}
+
+/* ------------------------------------------------------------------------ */
 /* Aboard: "4 min faster · off at 30th Ave" (56.1, cycle 25 B4)              */
 /* ------------------------------------------------------------------------ */
 
@@ -5676,7 +6155,7 @@ export function aboardRouteCheck() {
         })
       )
       if (!settled) return
-      settleAboardCheck(dispatch, getState, {
+      await settleAboardCheck(dispatch, getState, {
         aboardLegIndex,
         sentSig,
         settled,
@@ -5710,7 +6189,7 @@ function settleAboardCheck(
     tripId: string
     vehicle: any
   }
-): void {
+): Promise<void> | void {
   const goMode = getState().otp?.goMode
   const held: Itinerary | null = goMode?.activeItinerary ?? null
   const nowMs = getCurrentTime().getTime()
@@ -5797,22 +6276,23 @@ function settleAboardCheck(
     return
   }
 
+  const alightInput = (rs: AlightCandidateResult[]): AlightOfferInput => ({
+    boarded: { routeId: ctx.vehicle?.routeId ?? null, tripId: ctx.tripId },
+    downstream,
+    nowMs: ctx.settled.nowMs,
+    // 56.1: the onward leg as the card shows it (route, stop, board time),
+    // not only its trip id — which a retarget once left stale.
+    plannedOnward: plannedOnwardOf(
+      held,
+      ctx.aboardLegIndex,
+      goMode?.liveLegTimes
+    ),
+    plannedOnwardTripId: onward ? legTripId(onward) : null,
+    plannedStopId,
+    results: rs
+  })
   const judge = (rs: AlightCandidateResult[]) =>
-    compareAlightOffer({
-      boarded: { routeId: ctx.vehicle?.routeId ?? null, tripId: ctx.tripId },
-      downstream,
-      nowMs: ctx.settled.nowMs,
-      // 56.1: the onward leg as the card shows it (route, stop, board time),
-      // not only its trip id — which a retarget once left stale.
-      plannedOnward: plannedOnwardOf(
-        held,
-        ctx.aboardLegIndex,
-        goMode?.liveLegTimes
-      ),
-      plannedOnwardTripId: onward ? legTripId(onward) : null,
-      plannedStopId,
-      results: rs
-    })
+    compareAlightOffer(alightInput(rs))
   const lastPosition = goMode?.tracking?.lastPosition || null
   const offerOf = (v: ReturnType<typeof judge>, offerId: string) => {
     if (v.why !== 'offer' || !v.candidate) return null
@@ -5834,6 +6314,24 @@ function settleAboardCheck(
   }
   const verdict = judge(results)
   recordVerdict(verdict.why, verdict)
+  // Auto (65.2 B2): with Auto on, the get-off pick of the rider's preset may
+  // be taken without a tap. Off, nothing below changes.
+  const auto: AutoState = goMode?.auto ?? AUTO_OFF
+  if (auto.on) {
+    const switching = autoSwitchAboard(dispatch, getState, {
+      aboardLegIndex: ctx.aboardLegIndex,
+      auto,
+      held,
+      input: alightInput(results),
+      lastPosition,
+      nowMs,
+      plannedStopArrivalMs,
+      trip: ctx.trip,
+      tripId: ctx.tripId,
+      vehicle: ctx.vehicle
+    })
+    if (switching) return switching
+  }
   const fresh = offerOf(verdict, `fr-${session.fasterRouteOfferSeq + 1}`)
   if (fresh) {
     if (shown?.kind === 'aboard' && shown.routeSet === fresh.routeSet) {
@@ -5843,7 +6341,14 @@ function settleAboardCheck(
     const gate = latchAllows(session.fasterRouteLatch, offerKeyOf(fresh))
     if (gate.allow) {
       session.fasterRouteOfferSeq++
-      raiseFasterRouteOffer(dispatch, getState, fresh, gate.push, shown)
+      // With Auto on, the push is for a switch, not the card.
+      raiseFasterRouteOffer(
+        dispatch,
+        getState,
+        fresh,
+        gate.push && !auto.on,
+        shown
+      )
       return
     }
     // The winner may not be raised (the latch). The card up stands if this
@@ -5869,6 +6374,115 @@ function settleAboardCheck(
   }
   // A later check no longer sees the offer on screen.
   endShownAboard('not-seen')
+}
+
+/**
+ * Aboard: decide on this check's get-off answers and, when Auto may, splice
+ * the ride onto the preset's pick — the aboard offer's Switch, without the
+ * tap. Returns the switch in progress, or null (today's card logic follows).
+ */
+function autoSwitchAboard(
+  dispatch: any,
+  getState: any,
+  a: {
+    aboardLegIndex: number
+    auto: AutoState
+    held: Itinerary
+    input: AlightOfferInput
+    lastPosition: any
+    nowMs: number
+    plannedStopArrivalMs: number | null
+    trip: any
+    tripId: string
+    vehicle: any
+  }
+): Promise<void> | null {
+  const v = rankAlightForPreset(a.input, a.auto.preset)
+  // A stop the bus reaches within the minute has no time to ring the bell for
+  // (the card's own ABOARD_OFFER_LEAD_MS rule).
+  const ranked = v.ranked.filter(
+    (s) => Number(s.option.busArrivalEpoch) - a.nowMs >= ABOARD_OFFER_LEAD_MS
+  )
+  const d = decideAboardAutoSwitch(
+    { ...v, pick: ranked[0] ?? null, ranked },
+    a.auto,
+    session.autoAboardPending
+  )
+  session.autoAboardPending = d.pending
+  const riding: RidingState | null = getState().otp?.goMode?.riding ?? null
+  if (d.why !== 'switch' || !d.pick || !riding?.tripId) {
+    recordAutoHeld(dispatch, a.auto, d, true)
+    return null
+  }
+  const pick: AutoAlightScore = d.pick
+  const heldTail = ((a.held.legs || []) as Leg[]).slice(a.aboardLegIndex + 1)
+  const tailBoardings = heldTail.filter(
+    (l: any) => l.transitLeg && !l.interlineWithPreviousLeg
+  ).length
+  const changesSaved = Math.max(0, tailBoardings - pick.changes)
+  const spliced = buildOnboardItinerary(
+    a.trip,
+    a.vehicle,
+    {
+      arrivalIsFloor: pick.option.arrivalIsFloor,
+      busArrivalEpoch: pick.option.busArrivalEpoch,
+      itinerary: pick.option.itinerary,
+      stopId: pick.option.stopId,
+      stopName: pick.option.stopName
+    },
+    a.lastPosition
+  )
+  const undo: AutoUndo = {
+    aboard: true,
+    addedBikeM: Math.max(0, Math.round(-pick.bikeSavedM)),
+    bikeSavedM: Math.max(0, Math.round(pick.bikeSavedM)),
+    changesSaved,
+    expiresAtMs: aboardUndoExpiresAt(
+      pick.option.busArrivalEpoch,
+      a.plannedStopArrivalMs
+    ),
+    fromItinerary: a.held,
+    fromRouteSet: routeSetOf({ legs: heldTail } as Itinerary),
+    headline: autoHeadline(a.auto.preset, {
+      bikeSavedM: pick.bikeSavedM,
+      changesSaved,
+      savingMs: pick.savingMs
+    }),
+    laterMs: Math.max(0, -pick.savingMs),
+    preset: a.auto.preset,
+    routeLabel: routeLabelOf(pick.option.itinerary),
+    savingMs: pick.savingMs,
+    stopName: pick.option.stopName ?? null,
+    switchId: `as-${++session.autoSwitchSeq}`,
+    toRouteSet: routeSetOf(pick.option.itinerary),
+    tripId: a.tripId
+  }
+  return (async () => {
+    dispatch({
+      payload: {
+        accepted: true,
+        autoApply: true,
+        heldBoardMissed: false,
+        originGapM: null,
+        planLeftByRider: false,
+        projectedAtMs: null,
+        projectedM: 0,
+        reason: 'auto-switch-aboard',
+        refusedBecause: null,
+        tMs: getCurrentTime().getTime()
+      },
+      type: AUTO_REPLAN
+    })
+    await dispatch(beginGoMode(spliced))
+    await reassertAboardAfterSplice(
+      dispatch,
+      getState,
+      spliced,
+      riding,
+      a.vehicle
+    )
+    finishAutoSwitch(dispatch, getState, undo)
+  })()
 }
 
 /**
@@ -5932,6 +6546,22 @@ async function acceptAboardFasterRoute(
   })
   endFasterRouteOffer(dispatch, offer, 'switched')
   await dispatch(beginGoMode(spliced))
+  await reassertAboardAfterSplice(dispatch, getState, spliced, riding, vehicle)
+}
+
+/**
+ * After a ride spliced onto the bus the rider is on has gone in (the aboard
+ * offer's Switch, Auto's aboard switch and its Undo): re-lock the bus,
+ * re-assert the riding fact on its leg and anchor the live leg times.
+ */
+async function reassertAboardAfterSplice(
+  dispatch: any,
+  getState: any,
+  spliced: Itinerary,
+  riding: RidingState,
+  vehicle: any
+): Promise<void> {
+  if (!riding.tripId) return
   // beginGoMode resets the vehicle match; re-lock the boarded bus.
   reconfirmBoardedVehicle(dispatch, vehicle)
   // ...and re-assert the riding fact on the spliced bus leg, as the aboard
@@ -6116,6 +6746,15 @@ export function beginOnboardFlow() {
         ? priorMultiStop.stopNames.slice(0, priorMultiStop.index)
         : []
     )
+    // "I'm already on the bus" starts a trip: an armed one is off (65.2 B4).
+    const armed = before.otp.goMode?.arm ?? null
+    if (armed) {
+      dispatch({
+        payload: { id: armed.id, why: 'onboard' },
+        type: CLEAR_AUTO_ARM
+      })
+      saveArm(null)
+    }
     dispatch(beginOnboardFlowAction({ keepRouteId, originalFrom, stops }))
     dispatch(setMobileScreen(MobileScreens.GO_MODE))
     dispatch(updateTrackingInterval({ interval: 5000 }))
@@ -8896,6 +9535,12 @@ export function replanFromAboard(
  */
 export function startPositionTracking() {
   return function (dispatch: any, getState: any) {
+    // The armed trip's watcher (65.2 B4) is let go here whatever path got a
+    // trip this far — the armed start and beginGoMode stop it first; this is
+    // the backstop (the onboard flow comes straight here). On the native
+    // stream its handlers stay bound to the one watcher, so it is RE-armed
+    // below with Go Mode's own; start/set-filter would keep the arm's.
+    const armGps = releaseArmGps()
     // Native iOS shell: a continuous background-location stream replaces the
     // browser poll entirely. It keeps delivering fixes with the screen locked
     // (the whole reason the shell exists) at ~1/s — see native-gps.ts.
@@ -8919,7 +9564,11 @@ export function startPositionTracking() {
       const desiredFilter = nativeGpsDistanceFilterFor(
         getState().otp?.goMode?.arrivedAt != null
       )
-      if (nativeGpsDistanceFilter() == null) {
+      if (armGps.heldNative) {
+        restartNativeGps(onNativePosition, onNativeError, {
+          distanceFilter: desiredFilter
+        })
+      } else if (nativeGpsDistanceFilter() == null) {
         startNativeGps(onNativePosition, onNativeError, {
           distanceFilter: desiredFilter
         })

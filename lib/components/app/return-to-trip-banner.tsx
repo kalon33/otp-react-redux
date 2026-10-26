@@ -6,11 +6,15 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import styled from 'styled-components'
 import type { IntlShape } from 'react-intl'
 
+import * as autoArmActions from '../../actions/auto-arm'
 import * as goModeActions from '../../actions/go-mode'
+import { autoPresetLabel } from '../go-mode/auto-preset-copy'
 import { isWaitingForDeparture } from '../../util/go-mode/waiting-at-stop'
 import { legBoard, liveArrivalMs } from '../../util/go-mode/live-itinerary'
 import { MobileScreens } from '../../actions/ui-constants'
+import AutoArmCard from '../go-mode/AutoArmCard'
 import useActiveTripGuards from '../go-mode/use-active-trip-guards'
+import type { AutoPreset } from '../../util/go-mode/auto-priority'
 import type { GoModeState } from '../../reducers/go-mode'
 
 /**
@@ -139,9 +143,11 @@ function waitingMessage(
 }
 
 interface Props {
+  cancelArm: () => void
   goMode: GoModeState
   mobileScreen: number
   returnToGoMode: () => void
+  setArmPreset: (preset: AutoPreset) => void
 }
 
 /**
@@ -152,13 +158,16 @@ interface Props {
  * warning) alive while the Go Mode screen is unmounted.
  */
 const ReturnToTripBanner = ({
+  cancelArm,
   goMode,
   mobileScreen,
-  returnToGoMode
+  returnToGoMode,
+  setArmPreset
 }: Props): JSX.Element => {
   const intl = useIntl()
   const bannerRef = useRef<HTMLButtonElement>(null)
   const [bannerHeight, setBannerHeight] = useState(0)
+  const [armCardOpen, setArmCardOpen] = useState(false)
 
   // `backgrounded` is the deliberate step-out (backgroundGoMode, the app menu,
   // browseFromCurrentPosition) and stays the primary signal. The second clause
@@ -171,11 +180,16 @@ const ReturnToTripBanner = ({
   // `isActive && !backgrounded` (responsive-webapp), not by mobileScreen, so
   // reading mobileScreen there would show the banner over the trip screen.
   const strandedOnMobile = isMobile() && mobileScreen !== MobileScreens.GO_MODE
-  const visible = Boolean(
+  const tripVisible = Boolean(
     goMode?.isActive &&
       goMode.activeItinerary &&
       (goMode.ui?.backgrounded || strandedOnMobile)
   )
+  // "Start when I leave" (65.2 B4): with no trip running, an armed one holds
+  // the same strip on every screen, and the same guards — the screen stays on
+  // (foreground arming only) and a stray reload asks first.
+  const arm = !goMode?.isActive ? goMode?.arm ?? null : null
+  const visible = tripVisible || !!arm
   useActiveTripGuards(visible)
 
   const { activeItinerary, arrivedAt, liveLegTimes, progress } = goMode || {}
@@ -223,7 +237,22 @@ const ReturnToTripBanner = ({
   const wait = arrivedAt == null ? platformWait(goMode) : null
 
   let message: string
-  if (arrivedAt != null) {
+  if (arm) {
+    message =
+      arm.status === 'starting'
+        ? intl.formatMessage({
+            defaultMessage: 'Starting your trip…',
+            id: 'components.GoMode.autoArm.bannerStarting'
+          })
+        : intl.formatMessage(
+            {
+              defaultMessage:
+                'Starts when you leave · Auto · {preset} — tap to change',
+              id: 'components.GoMode.autoArm.banner'
+            },
+            { preset: autoPresetLabel(arm.preset, intl) }
+          )
+  } else if (arrivedAt != null) {
     message = intl.formatMessage({
       defaultMessage: "You've arrived — tap to finish",
       id: 'components.GoMode.returnBannerArrived'
@@ -291,8 +320,10 @@ const ReturnToTripBanner = ({
           >
             <button
               className={containerClassname}
-              onClick={returnToGoMode}
+              onClick={arm ? () => setArmCardOpen(true) : returnToGoMode}
               ref={bannerRef}
+              // The armed strip opens a card: a full 40 px target (B4).
+              style={arm ? { minHeight: 40 } : undefined}
               type="button"
             >
               {message}
@@ -300,6 +331,21 @@ const ReturnToTripBanner = ({
           </CSSTransition>
         )}
       </TransitionGroup>
+      {arm && armCardOpen && (
+        <AutoArmCard
+          armed={{
+            expiresAtMs: arm.expiresAtMs,
+            starting: arm.status === 'starting'
+          }}
+          onCancel={() => {
+            setArmCardOpen(false)
+            cancelArm()
+          }}
+          onClose={() => setArmCardOpen(false)}
+          onPick={setArmPreset}
+          preset={arm.preset}
+        />
+      )}
     </TransitionStyles>
   )
 }
@@ -310,7 +356,9 @@ const mapStateToProps = (state: any) => ({
 })
 
 const mapDispatchToProps = {
-  returnToGoMode: goModeActions.returnToGoMode
+  cancelArm: autoArmActions.cancelArm,
+  returnToGoMode: goModeActions.returnToGoMode,
+  setArmPreset: autoArmActions.setArmPreset
 }
 
 export default connect(mapStateToProps, mapDispatchToProps)(ReturnToTripBanner)

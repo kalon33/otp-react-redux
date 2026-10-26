@@ -42,6 +42,8 @@ import {
   SimToolbar
 } from './styled'
 import AlightRecommendation from './AlightRecommendation'
+import AutoSwitchCard from './AutoSwitchCard'
+import AutoToggle from './AutoToggle'
 import BoardingPrompt from './BoardingPrompt'
 import CurrentLegPanel from './CurrentLegPanel'
 import FasterRouteCard from './FasterRouteCard'
@@ -428,7 +430,10 @@ const GoModeScreen = ({
           onSetFollow={setMapFollow}
           onToggleFollow={toggleMapFollow}
           routeMatch={goMode.routeMatch}
-        />
+        >
+          {/* Auto (65.2): its own connected component, over the map. */}
+          {goMode.arrivedAt == null && <AutoToggle />}
+        </GoModeMap>
 
         {goMode.tracking.error && (
           <GpsWarningBanner>
@@ -482,6 +487,8 @@ const GoModeScreen = ({
 
         {/* "6 min faster · 14" (56.1): only an offer, above the handle. */}
         {!sheetOpen && goMode.arrivedAt == null && <FasterRouteCard />}
+        {/* ...and in its place, once Auto has switched: Undo (65.2). */}
+        {!sheetOpen && goMode.arrivedAt == null && <AutoSwitchCard />}
 
         {!sheetOpen && goMode.arrivedAt == null && (
           <SheetHandle

@@ -59,7 +59,7 @@ exports[`components > viewers > nearby view renders nothing on a blank page 1`] 
           className="nearby-view base-color-bg"
         >
           <div
-            className="sc-JrDLc cvaKN nearby-view base-color-bg"
+            className="sc-eNSrOW iyKDvc nearby-view base-color-bg"
           >
             <Connect(PageTitle)
               title="components.NearbyView.header"
@@ -102,7 +102,7 @@ exports[`components > viewers > nearby view renders nothing on a blank page 1`] 
               nearbyFilters={false}
             >
               <div
-                className="sc-eBMEME edtayi"
+                className="sc-SrznA kpYCR"
               >
                 <LocationField
                   LocationIconComponent={[Function]}
@@ -367,7 +367,7 @@ exports[`components > viewers > nearby view renders nothing on a blank page 1`] 
               }
             >
               <ol
-                className="sc-cWSHoV iPykfP base-color-bg"
+                className="sc-fThUAz OuCzB base-color-bg"
                 style={
                   Object {
                     "marginBottom": 0,
@@ -4442,7 +4442,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
           className="nearby-view base-color-bg"
         >
           <div
-            className="sc-JrDLc cvaKN nearby-view base-color-bg"
+            className="sc-eNSrOW iyKDvc nearby-view base-color-bg"
           >
             <Connect(PageTitle)
               title="components.NearbyView.header"
@@ -4485,7 +4485,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
               nearbyFilters={false}
             >
               <div
-                className="sc-eBMEME edtayi"
+                className="sc-SrznA kpYCR"
               >
                 <LocationField
                   LocationIconComponent={[Function]}
@@ -4750,7 +4750,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
               }
             >
               <ol
-                className="sc-cWSHoV iPykfP base-color-bg"
+                className="sc-fThUAz OuCzB base-color-bg"
                 style={
                   Object {
                     "marginBottom": 0,
@@ -4858,15 +4858,15 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                       >
                         <styled.div>
                           <div
-                            className="sc-dCFHLb khEPKT"
+                            className="sc-czkgLR fbafCb"
                           >
                             <styled.div>
                               <div
-                                className="sc-fhzFiK jyvWjP"
+                                className="sc-dycYrt jIbRyC"
                               >
                                 <styled.p>
                                   <p
-                                    className="sc-jxOSlx fKoKuN"
+                                    className="sc-hTUWRQ eldzdK"
                                   >
                                     <IconWithText
                                       icon={
@@ -4925,7 +4925,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                 >
                                   <styled.p>
                                     <p
-                                      className="sc-kdBSHD kfGWGa"
+                                      className="sc-eoVZPG hNhdGZ"
                                     >
                                       <FormattedMessage
                                         id="components.NearbyView.distanceAway"
@@ -4946,7 +4946,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                             </styled.div>
                             <styled.div>
                               <div
-                                className="sc-tagGq cBbbMr"
+                                className="sc-dWZqqJ ephhlY"
                               >
                                 <Connect(FromToPicker)
                                   place={
@@ -5280,15 +5280,15 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                       >
                         <styled.div>
                           <div
-                            className="sc-dCFHLb khEPKT"
+                            className="sc-czkgLR fbafCb"
                           >
                             <styled.div>
                               <div
-                                className="sc-fhzFiK jyvWjP"
+                                className="sc-dycYrt jIbRyC"
                               >
                                 <styled.p>
                                   <p
-                                    className="sc-jxOSlx fKoKuN"
+                                    className="sc-hTUWRQ eldzdK"
                                   >
                                     <IconWithText
                                       icon={
@@ -5347,7 +5347,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                 >
                                   <styled.p>
                                     <p
-                                      className="sc-kdBSHD kfGWGa"
+                                      className="sc-eoVZPG hNhdGZ"
                                     >
                                       <FormattedMessage
                                         id="components.NearbyView.distanceAway"
@@ -5368,7 +5368,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                             </styled.div>
                             <styled.div>
                               <div
-                                className="sc-tagGq cBbbMr"
+                                className="sc-dWZqqJ ephhlY"
                               >
                                 <Connect(FromToPicker)
                                   place={
@@ -5702,15 +5702,15 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                       >
                         <styled.div>
                           <div
-                            className="sc-dCFHLb khEPKT"
+                            className="sc-czkgLR fbafCb"
                           >
                             <styled.div>
                               <div
-                                className="sc-fhzFiK jyvWjP"
+                                className="sc-dycYrt jIbRyC"
                               >
                                 <styled.p>
                                   <p
-                                    className="sc-jxOSlx fKoKuN"
+                                    className="sc-hTUWRQ eldzdK"
                                   >
                                     <IconWithText
                                       icon={
@@ -5769,7 +5769,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                 >
                                   <styled.p>
                                     <p
-                                      className="sc-kdBSHD kfGWGa"
+                                      className="sc-eoVZPG hNhdGZ"
                                     >
                                       <FormattedMessage
                                         id="components.NearbyView.distanceAway"
@@ -5790,7 +5790,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                             </styled.div>
                             <styled.div>
                               <div
-                                className="sc-tagGq cBbbMr"
+                                className="sc-dWZqqJ ephhlY"
                               >
                                 <Connect(FromToPicker)
                                   place={
@@ -8314,7 +8314,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                       >
                         <styled.div>
                           <div
-                            className="sc-dCFHLb khEPKT"
+                            className="sc-czkgLR fbafCb"
                           >
                             <Connect(StopCardHeader)
                               actionIcon={
@@ -10630,11 +10630,11 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                               >
                                 <styled.div>
                                   <div
-                                    className="sc-fhzFiK jyvWjP"
+                                    className="sc-dycYrt jIbRyC"
                                   >
                                     <styled.p>
                                       <p
-                                        className="sc-jxOSlx fKoKuN"
+                                        className="sc-hTUWRQ eldzdK"
                                       >
                                         <TransitOperatorLogos
                                           stopData={
@@ -11214,7 +11214,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                     >
                                       <styled.p>
                                         <p
-                                          className="sc-kdBSHD kfGWGa"
+                                          className="sc-eoVZPG hNhdGZ"
                                         >
                                           <FormattedMessage
                                             id="components.NearbyView.distanceAway"
@@ -11235,7 +11235,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                 </styled.div>
                                 <styled.div>
                                   <div
-                                    className="sc-tagGq cBbbMr"
+                                    className="sc-dWZqqJ ephhlY"
                                   >
                                     <div
                                       style={
@@ -11280,7 +11280,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                         }
                                       >
                                         <Connect(LinkComponent)
-                                          className="sc-fjvvzt gvwMsl stop-header-action"
+                                          className="sc-fsvrbR iRiAaW stop-header-action"
                                           style={
                                             Object {
                                               "gridRow": 1,
@@ -11295,7 +11295,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                           }
                                         >
                                           <LinkComponent
-                                            className="sc-fjvvzt gvwMsl stop-header-action"
+                                            className="sc-fsvrbR iRiAaW stop-header-action"
                                             href="#/schedule/kcm:36940"
                                             style={
                                               Object {
@@ -11311,7 +11311,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                             }
                                           >
                                             <a
-                                              className="sc-fjvvzt gvwMsl stop-header-action"
+                                              className="sc-fsvrbR iRiAaW stop-header-action"
                                               href="#/schedule/kcm:36940"
                                               style={
                                                 Object {
@@ -12719,7 +12719,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                             <div>
                               <styled.ul>
                                 <ul
-                                  className="sc-fXSgeo bddtgc"
+                                  className="sc-satoz cvoiaz"
                                 >
                                   <PatternRow
                                     homeTimezone="America/Los_Angeles"
@@ -12894,7 +12894,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                       className="pattern-row-item"
                                     >
                                       <li
-                                        className="sc-hRJfrW cMzmVl pattern-row-item"
+                                        className="sc-bkSUFG foqOfg pattern-row-item"
                                       >
                                         <div
                                           className="header stop-view"
@@ -12953,7 +12953,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                                   title="45"
                                                 >
                                                   <span
-                                                    className="sc-bbSZdi huHfyP"
+                                                    className="sc-jOnpCo PQwJU"
                                                     color="333333"
                                                     style={
                                                       Object {
@@ -12991,7 +12991,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                             className="departure-times"
                                           >
                                             <ol
-                                              className="sc-iHbSHJ efQFGg departure-times"
+                                              className="sc-deXhhX DCYkD departure-times"
                                             >
                                               <p
                                                 aria-hidden={true}
@@ -13731,7 +13731,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                       className="pattern-row-item"
                                     >
                                       <li
-                                        className="sc-hRJfrW cMzmVl pattern-row-item"
+                                        className="sc-bkSUFG foqOfg pattern-row-item"
                                       >
                                         <div
                                           className="header stop-view"
@@ -13790,7 +13790,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                                   title="62"
                                                 >
                                                   <span
-                                                    className="sc-bbSZdi huHfyP"
+                                                    className="sc-jOnpCo PQwJU"
                                                     color="333333"
                                                     style={
                                                       Object {
@@ -13828,7 +13828,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                             className="departure-times"
                                           >
                                             <ol
-                                              className="sc-iHbSHJ efQFGg departure-times"
+                                              className="sc-deXhhX DCYkD departure-times"
                                             >
                                               <p
                                                 aria-hidden={true}
@@ -14498,7 +14498,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                       className="pattern-row-item"
                                     >
                                       <li
-                                        className="sc-hRJfrW cMzmVl pattern-row-item"
+                                        className="sc-bkSUFG foqOfg pattern-row-item"
                                       >
                                         <div
                                           className="header stop-view"
@@ -14557,7 +14557,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                                   title="79"
                                                 >
                                                   <span
-                                                    className="sc-bbSZdi huHfyP"
+                                                    className="sc-jOnpCo PQwJU"
                                                     color="333333"
                                                     style={
                                                       Object {
@@ -14595,7 +14595,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                             className="departure-times"
                                           >
                                             <ol
-                                              className="sc-iHbSHJ efQFGg departure-times"
+                                              className="sc-deXhhX DCYkD departure-times"
                                             >
                                               <p
                                                 aria-hidden={true}
@@ -16653,7 +16653,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                       >
                         <styled.div>
                           <div
-                            className="sc-dCFHLb khEPKT"
+                            className="sc-czkgLR fbafCb"
                           >
                             <Connect(StopCardHeader)
                               actionIcon={
@@ -18165,11 +18165,11 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                               >
                                 <styled.div>
                                   <div
-                                    className="sc-fhzFiK jyvWjP"
+                                    className="sc-dycYrt jIbRyC"
                                   >
                                     <styled.p>
                                       <p
-                                        className="sc-jxOSlx fKoKuN"
+                                        className="sc-hTUWRQ eldzdK"
                                       >
                                         <TransitOperatorLogos
                                           stopData={
@@ -18548,7 +18548,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                     >
                                       <styled.p>
                                         <p
-                                          className="sc-kdBSHD kfGWGa"
+                                          className="sc-eoVZPG hNhdGZ"
                                         >
                                           <FormattedMessage
                                             id="components.NearbyView.distanceAway"
@@ -18569,7 +18569,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                 </styled.div>
                                 <styled.div>
                                   <div
-                                    className="sc-tagGq cBbbMr"
+                                    className="sc-dWZqqJ ephhlY"
                                   >
                                     <div
                                       style={
@@ -18595,7 +18595,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                         }
                                       >
                                         <Connect(LinkComponent)
-                                          className="sc-fjvvzt gvwMsl stop-header-action"
+                                          className="sc-fsvrbR iRiAaW stop-header-action"
                                           style={
                                             Object {
                                               "gridRow": 1,
@@ -18610,7 +18610,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                           }
                                         >
                                           <LinkComponent
-                                            className="sc-fjvvzt gvwMsl stop-header-action"
+                                            className="sc-fsvrbR iRiAaW stop-header-action"
                                             href="#/schedule/40:990003"
                                             style={
                                               Object {
@@ -18626,7 +18626,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                             }
                                           >
                                             <a
-                                              className="sc-fjvvzt gvwMsl stop-header-action"
+                                              className="sc-fsvrbR iRiAaW stop-header-action"
                                               href="#/schedule/40:990003"
                                               style={
                                                 Object {
@@ -19632,7 +19632,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                             <div>
                               <styled.ul>
                                 <ul
-                                  className="sc-fXSgeo bddtgc"
+                                  className="sc-satoz cvoiaz"
                                 >
                                   <PatternRow
                                     homeTimezone="America/Los_Angeles"
@@ -19742,7 +19742,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                       className="pattern-row-item"
                                     >
                                       <li
-                                        className="sc-hRJfrW cMzmVl pattern-row-item"
+                                        className="sc-bkSUFG foqOfg pattern-row-item"
                                       >
                                         <div
                                           className="header stop-view"
@@ -19801,7 +19801,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                                   title="1 Line"
                                                 >
                                                   <span
-                                                    className="sc-bbSZdi fPgyfv"
+                                                    className="sc-jOnpCo jDJhuQ"
                                                     color="28813F"
                                                     style={
                                                       Object {
@@ -19839,7 +19839,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                             className="departure-times"
                                           >
                                             <ol
-                                              className="sc-iHbSHJ efQFGg departure-times"
+                                              className="sc-deXhhX DCYkD departure-times"
                                             >
                                               <p
                                                 aria-hidden={true}
@@ -20452,7 +20452,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                       className="pattern-row-item"
                                     >
                                       <li
-                                        className="sc-hRJfrW cMzmVl pattern-row-item"
+                                        className="sc-bkSUFG foqOfg pattern-row-item"
                                       >
                                         <div
                                           className="header stop-view"
@@ -20511,7 +20511,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                                   title="1 Line"
                                                 >
                                                   <span
-                                                    className="sc-bbSZdi fPgyfv"
+                                                    className="sc-jOnpCo jDJhuQ"
                                                     color="28813F"
                                                     style={
                                                       Object {
@@ -20549,7 +20549,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                             className="departure-times"
                                           >
                                             <ol
-                                              className="sc-iHbSHJ efQFGg departure-times"
+                                              className="sc-deXhhX DCYkD departure-times"
                                             >
                                               <p
                                                 aria-hidden={true}
@@ -20965,7 +20965,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                       className="pattern-row-item"
                                     >
                                       <li
-                                        className="sc-hRJfrW cMzmVl pattern-row-item"
+                                        className="sc-bkSUFG foqOfg pattern-row-item"
                                       >
                                         <div
                                           className="header stop-view"
@@ -21024,7 +21024,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                                   title="1 Line"
                                                 >
                                                   <span
-                                                    className="sc-bbSZdi fPgyfv"
+                                                    className="sc-jOnpCo jDJhuQ"
                                                     color="28813F"
                                                     style={
                                                       Object {
@@ -21062,7 +21062,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                             className="departure-times"
                                           >
                                             <ol
-                                              className="sc-iHbSHJ efQFGg departure-times"
+                                              className="sc-deXhhX DCYkD departure-times"
                                             >
                                               <p
                                                 aria-hidden={true}
@@ -21729,15 +21729,15 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                       >
                         <styled.div>
                           <div
-                            className="sc-dCFHLb khEPKT"
+                            className="sc-czkgLR fbafCb"
                           >
                             <styled.div>
                               <div
-                                className="sc-fhzFiK jyvWjP"
+                                className="sc-dycYrt jIbRyC"
                               >
                                 <styled.p>
                                   <p
-                                    className="sc-jxOSlx fKoKuN"
+                                    className="sc-hTUWRQ eldzdK"
                                   >
                                     <IconWithText
                                       icon={
@@ -21796,7 +21796,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                 >
                                   <styled.p>
                                     <p
-                                      className="sc-kdBSHD kfGWGa"
+                                      className="sc-eoVZPG hNhdGZ"
                                     >
                                       <FormattedMessage
                                         id="components.NearbyView.distanceAway"
@@ -21817,7 +21817,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                             </styled.div>
                             <styled.div>
                               <div
-                                className="sc-tagGq cBbbMr"
+                                className="sc-dWZqqJ ephhlY"
                               >
                                 <Connect(FromToPicker)
                                   place={
@@ -22151,15 +22151,15 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                       >
                         <styled.div>
                           <div
-                            className="sc-dCFHLb khEPKT"
+                            className="sc-czkgLR fbafCb"
                           >
                             <styled.div>
                               <div
-                                className="sc-fhzFiK jyvWjP"
+                                className="sc-dycYrt jIbRyC"
                               >
                                 <styled.p>
                                   <p
-                                    className="sc-jxOSlx fKoKuN"
+                                    className="sc-hTUWRQ eldzdK"
                                   >
                                     <IconWithText
                                       icon={
@@ -22218,7 +22218,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                 >
                                   <styled.p>
                                     <p
-                                      className="sc-kdBSHD kfGWGa"
+                                      className="sc-eoVZPG hNhdGZ"
                                     >
                                       <FormattedMessage
                                         id="components.NearbyView.distanceAway"
@@ -22239,7 +22239,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                             </styled.div>
                             <styled.div>
                               <div
-                                className="sc-tagGq cBbbMr"
+                                className="sc-dWZqqJ ephhlY"
                               >
                                 <Connect(FromToPicker)
                                   place={
@@ -22573,15 +22573,15 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                       >
                         <styled.div>
                           <div
-                            className="sc-dCFHLb khEPKT"
+                            className="sc-czkgLR fbafCb"
                           >
                             <styled.div>
                               <div
-                                className="sc-fhzFiK jyvWjP"
+                                className="sc-dycYrt jIbRyC"
                               >
                                 <styled.p>
                                   <p
-                                    className="sc-jxOSlx fKoKuN"
+                                    className="sc-hTUWRQ eldzdK"
                                   >
                                     <IconWithText
                                       icon={
@@ -22640,7 +22640,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                 >
                                   <styled.p>
                                     <p
-                                      className="sc-kdBSHD kfGWGa"
+                                      className="sc-eoVZPG hNhdGZ"
                                     >
                                       <FormattedMessage
                                         id="components.NearbyView.distanceAway"
@@ -22661,7 +22661,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                             </styled.div>
                             <styled.div>
                               <div
-                                className="sc-tagGq cBbbMr"
+                                className="sc-dWZqqJ ephhlY"
                               >
                                 <Connect(FromToPicker)
                                   place={
@@ -25493,7 +25493,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                       >
                         <styled.div>
                           <div
-                            className="sc-dCFHLb khEPKT"
+                            className="sc-czkgLR fbafCb"
                           >
                             <Connect(StopCardHeader)
                               actionIcon={
@@ -28117,11 +28117,11 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                               >
                                 <styled.div>
                                   <div
-                                    className="sc-fhzFiK jyvWjP"
+                                    className="sc-dycYrt jIbRyC"
                                   >
                                     <styled.p>
                                       <p
-                                        className="sc-jxOSlx fKoKuN"
+                                        className="sc-hTUWRQ eldzdK"
                                       >
                                         <TransitOperatorLogos
                                           stopData={
@@ -28778,7 +28778,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                     >
                                       <styled.p>
                                         <p
-                                          className="sc-kdBSHD kfGWGa"
+                                          className="sc-eoVZPG hNhdGZ"
                                         >
                                           <FormattedMessage
                                             id="components.NearbyView.distanceAway"
@@ -28799,7 +28799,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                 </styled.div>
                                 <styled.div>
                                   <div
-                                    className="sc-tagGq cBbbMr"
+                                    className="sc-dWZqqJ ephhlY"
                                   >
                                     <div
                                       style={
@@ -28844,7 +28844,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                         }
                                       >
                                         <Connect(LinkComponent)
-                                          className="sc-fjvvzt gvwMsl stop-header-action"
+                                          className="sc-fsvrbR iRiAaW stop-header-action"
                                           style={
                                             Object {
                                               "gridRow": 1,
@@ -28859,7 +28859,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                           }
                                         >
                                           <LinkComponent
-                                            className="sc-fjvvzt gvwMsl stop-header-action"
+                                            className="sc-fsvrbR iRiAaW stop-header-action"
                                             href="#/schedule/kcm:16430"
                                             style={
                                               Object {
@@ -28875,7 +28875,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                             }
                                           >
                                             <a
-                                              className="sc-fjvvzt gvwMsl stop-header-action"
+                                              className="sc-fsvrbR iRiAaW stop-header-action"
                                               href="#/schedule/kcm:16430"
                                               style={
                                                 Object {
@@ -30437,7 +30437,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                             <div>
                               <styled.ul>
                                 <ul
-                                  className="sc-fXSgeo bddtgc"
+                                  className="sc-satoz cvoiaz"
                                 >
                                   <PatternRow
                                     homeTimezone="America/Los_Angeles"
@@ -30612,7 +30612,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                       className="pattern-row-item"
                                     >
                                       <li
-                                        className="sc-hRJfrW cMzmVl pattern-row-item"
+                                        className="sc-bkSUFG foqOfg pattern-row-item"
                                       >
                                         <div
                                           className="header stop-view"
@@ -30671,7 +30671,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                                   title="45"
                                                 >
                                                   <span
-                                                    className="sc-bbSZdi huHfyP"
+                                                    className="sc-jOnpCo PQwJU"
                                                     color="333333"
                                                     style={
                                                       Object {
@@ -30709,7 +30709,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                             className="departure-times"
                                           >
                                             <ol
-                                              className="sc-iHbSHJ efQFGg departure-times"
+                                              className="sc-deXhhX DCYkD departure-times"
                                             >
                                               <p
                                                 aria-hidden={true}
@@ -31462,7 +31462,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                       className="pattern-row-item"
                                     >
                                       <li
-                                        className="sc-hRJfrW cMzmVl pattern-row-item"
+                                        className="sc-bkSUFG foqOfg pattern-row-item"
                                       >
                                         <div
                                           className="header stop-view"
@@ -31521,7 +31521,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                                   title="62"
                                                 >
                                                   <span
-                                                    className="sc-bbSZdi huHfyP"
+                                                    className="sc-jOnpCo PQwJU"
                                                     color="333333"
                                                     style={
                                                       Object {
@@ -31559,7 +31559,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                             className="departure-times"
                                           >
                                             <ol
-                                              className="sc-iHbSHJ efQFGg departure-times"
+                                              className="sc-deXhhX DCYkD departure-times"
                                             >
                                               <p
                                                 aria-hidden={true}
@@ -32234,7 +32234,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                       className="pattern-row-item"
                                     >
                                       <li
-                                        className="sc-hRJfrW cMzmVl pattern-row-item"
+                                        className="sc-bkSUFG foqOfg pattern-row-item"
                                       >
                                         <div
                                           className="header stop-view"
@@ -32293,7 +32293,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                                   title="79"
                                                 >
                                                   <span
-                                                    className="sc-bbSZdi huHfyP"
+                                                    className="sc-jOnpCo PQwJU"
                                                     color="333333"
                                                     style={
                                                       Object {
@@ -32331,7 +32331,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                             className="departure-times"
                                           >
                                             <ol
-                                              className="sc-iHbSHJ efQFGg departure-times"
+                                              className="sc-deXhhX DCYkD departure-times"
                                             >
                                               <p
                                                 aria-hidden={true}
@@ -32944,7 +32944,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                       className="pattern-row-item"
                                     >
                                       <li
-                                        className="sc-hRJfrW cMzmVl pattern-row-item"
+                                        className="sc-bkSUFG foqOfg pattern-row-item"
                                       >
                                         <div
                                           className="header stop-view"
@@ -33003,7 +33003,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                                   title="988"
                                                 >
                                                   <span
-                                                    className="sc-bbSZdi huHfyP"
+                                                    className="sc-jOnpCo PQwJU"
                                                     color="333333"
                                                     style={
                                                       Object {
@@ -33041,7 +33041,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                             className="departure-times"
                                           >
                                             <ol
-                                              className="sc-iHbSHJ efQFGg departure-times"
+                                              className="sc-deXhhX DCYkD departure-times"
                                             >
                                               <p
                                                 aria-hidden={true}
@@ -33394,15 +33394,15 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                       >
                         <styled.div>
                           <div
-                            className="sc-dCFHLb khEPKT"
+                            className="sc-czkgLR fbafCb"
                           >
                             <styled.div>
                               <div
-                                className="sc-fhzFiK jyvWjP"
+                                className="sc-dycYrt jIbRyC"
                               >
                                 <styled.p>
                                   <p
-                                    className="sc-jxOSlx fKoKuN"
+                                    className="sc-hTUWRQ eldzdK"
                                   >
                                     <IconWithText
                                       icon={
@@ -33461,7 +33461,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                 >
                                   <styled.p>
                                     <p
-                                      className="sc-kdBSHD kfGWGa"
+                                      className="sc-eoVZPG hNhdGZ"
                                     >
                                       <FormattedMessage
                                         id="components.NearbyView.distanceAway"
@@ -33482,7 +33482,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                             </styled.div>
                             <styled.div>
                               <div
-                                className="sc-tagGq cBbbMr"
+                                className="sc-dWZqqJ ephhlY"
                               >
                                 <Connect(FromToPicker)
                                   place={
@@ -33816,15 +33816,15 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                       >
                         <styled.div>
                           <div
-                            className="sc-dCFHLb khEPKT"
+                            className="sc-czkgLR fbafCb"
                           >
                             <styled.div>
                               <div
-                                className="sc-fhzFiK jyvWjP"
+                                className="sc-dycYrt jIbRyC"
                               >
                                 <styled.p>
                                   <p
-                                    className="sc-jxOSlx fKoKuN"
+                                    className="sc-hTUWRQ eldzdK"
                                   >
                                     <IconWithText
                                       icon={
@@ -33883,7 +33883,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                 >
                                   <styled.p>
                                     <p
-                                      className="sc-kdBSHD kfGWGa"
+                                      className="sc-eoVZPG hNhdGZ"
                                     >
                                       <FormattedMessage
                                         id="components.NearbyView.distanceAway"
@@ -33904,7 +33904,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                             </styled.div>
                             <styled.div>
                               <div
-                                className="sc-tagGq cBbbMr"
+                                className="sc-dWZqqJ ephhlY"
                               >
                                 <Connect(FromToPicker)
                                   place={
@@ -34238,15 +34238,15 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                       >
                         <styled.div>
                           <div
-                            className="sc-dCFHLb khEPKT"
+                            className="sc-czkgLR fbafCb"
                           >
                             <styled.div>
                               <div
-                                className="sc-fhzFiK jyvWjP"
+                                className="sc-dycYrt jIbRyC"
                               >
                                 <styled.p>
                                   <p
-                                    className="sc-jxOSlx fKoKuN"
+                                    className="sc-hTUWRQ eldzdK"
                                   >
                                     <IconWithText
                                       icon={
@@ -34305,7 +34305,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                 >
                                   <styled.p>
                                     <p
-                                      className="sc-kdBSHD kfGWGa"
+                                      className="sc-eoVZPG hNhdGZ"
                                     >
                                       <FormattedMessage
                                         id="components.NearbyView.distanceAway"
@@ -34326,7 +34326,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                             </styled.div>
                             <styled.div>
                               <div
-                                className="sc-tagGq cBbbMr"
+                                className="sc-dWZqqJ ephhlY"
                               >
                                 <Connect(FromToPicker)
                                   place={
@@ -34660,15 +34660,15 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                       >
                         <styled.div>
                           <div
-                            className="sc-dCFHLb khEPKT"
+                            className="sc-czkgLR fbafCb"
                           >
                             <styled.div>
                               <div
-                                className="sc-fhzFiK jyvWjP"
+                                className="sc-dycYrt jIbRyC"
                               >
                                 <styled.p>
                                   <p
-                                    className="sc-jxOSlx fKoKuN"
+                                    className="sc-hTUWRQ eldzdK"
                                   >
                                     <IconWithText
                                       icon={
@@ -34727,7 +34727,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                 >
                                   <styled.p>
                                     <p
-                                      className="sc-kdBSHD kfGWGa"
+                                      className="sc-eoVZPG hNhdGZ"
                                     >
                                       <FormattedMessage
                                         id="components.NearbyView.distanceAway"
@@ -34748,7 +34748,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                             </styled.div>
                             <styled.div>
                               <div
-                                className="sc-tagGq cBbbMr"
+                                className="sc-dWZqqJ ephhlY"
                               >
                                 <Connect(FromToPicker)
                                   place={
@@ -35082,15 +35082,15 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                       >
                         <styled.div>
                           <div
-                            className="sc-dCFHLb khEPKT"
+                            className="sc-czkgLR fbafCb"
                           >
                             <styled.div>
                               <div
-                                className="sc-fhzFiK jyvWjP"
+                                className="sc-dycYrt jIbRyC"
                               >
                                 <styled.p>
                                   <p
-                                    className="sc-jxOSlx fKoKuN"
+                                    className="sc-hTUWRQ eldzdK"
                                   >
                                     <IconWithText
                                       icon={
@@ -35149,7 +35149,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                 >
                                   <styled.p>
                                     <p
-                                      className="sc-kdBSHD kfGWGa"
+                                      className="sc-eoVZPG hNhdGZ"
                                     >
                                       <FormattedMessage
                                         id="components.NearbyView.distanceAway"
@@ -35170,7 +35170,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                             </styled.div>
                             <styled.div>
                               <div
-                                className="sc-tagGq cBbbMr"
+                                className="sc-dWZqqJ ephhlY"
                               >
                                 <Connect(FromToPicker)
                                   place={
@@ -36890,7 +36890,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                       >
                         <styled.div>
                           <div
-                            className="sc-dCFHLb khEPKT"
+                            className="sc-czkgLR fbafCb"
                           >
                             <Connect(StopCardHeader)
                               actionIcon={
@@ -38402,11 +38402,11 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                               >
                                 <styled.div>
                                   <div
-                                    className="sc-fhzFiK jyvWjP"
+                                    className="sc-dycYrt jIbRyC"
                                   >
                                     <styled.p>
                                       <p
-                                        className="sc-jxOSlx fKoKuN"
+                                        className="sc-hTUWRQ eldzdK"
                                       >
                                         <TransitOperatorLogos
                                           stopData={
@@ -38785,7 +38785,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                     >
                                       <styled.p>
                                         <p
-                                          className="sc-kdBSHD kfGWGa"
+                                          className="sc-eoVZPG hNhdGZ"
                                         >
                                           <FormattedMessage
                                             id="components.NearbyView.distanceAway"
@@ -38806,7 +38806,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                 </styled.div>
                                 <styled.div>
                                   <div
-                                    className="sc-tagGq cBbbMr"
+                                    className="sc-dWZqqJ ephhlY"
                                   >
                                     <div
                                       style={
@@ -38851,7 +38851,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                         }
                                       >
                                         <Connect(LinkComponent)
-                                          className="sc-fjvvzt gvwMsl stop-header-action"
+                                          className="sc-fsvrbR iRiAaW stop-header-action"
                                           style={
                                             Object {
                                               "gridRow": 1,
@@ -38866,7 +38866,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                           }
                                         >
                                           <LinkComponent
-                                            className="sc-fjvvzt gvwMsl stop-header-action"
+                                            className="sc-fsvrbR iRiAaW stop-header-action"
                                             href="#/schedule/kcm:16440"
                                             style={
                                               Object {
@@ -38882,7 +38882,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                             }
                                           >
                                             <a
-                                              className="sc-fjvvzt gvwMsl stop-header-action"
+                                              className="sc-fsvrbR iRiAaW stop-header-action"
                                               href="#/schedule/kcm:16440"
                                               style={
                                                 Object {
@@ -39888,7 +39888,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                             <div>
                               <styled.ul>
                                 <ul
-                                  className="sc-fXSgeo bddtgc"
+                                  className="sc-satoz cvoiaz"
                                 >
                                   <PatternRow
                                     homeTimezone="America/Los_Angeles"
@@ -39998,7 +39998,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                       className="pattern-row-item"
                                     >
                                       <li
-                                        className="sc-hRJfrW cMzmVl pattern-row-item"
+                                        className="sc-bkSUFG foqOfg pattern-row-item"
                                       >
                                         <div
                                           className="header stop-view"
@@ -40057,7 +40057,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                                   title="67"
                                                 >
                                                   <span
-                                                    className="sc-bbSZdi huHfyP"
+                                                    className="sc-jOnpCo PQwJU"
                                                     color="333333"
                                                     style={
                                                       Object {
@@ -40095,7 +40095,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                             className="departure-times"
                                           >
                                             <ol
-                                              className="sc-iHbSHJ efQFGg departure-times"
+                                              className="sc-deXhhX DCYkD departure-times"
                                             >
                                               <p
                                                 aria-hidden={true}
@@ -40830,7 +40830,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                       className="pattern-row-item"
                                     >
                                       <li
-                                        className="sc-hRJfrW cMzmVl pattern-row-item"
+                                        className="sc-bkSUFG foqOfg pattern-row-item"
                                       >
                                         <div
                                           className="header stop-view"
@@ -40889,7 +40889,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                                   title="73"
                                                 >
                                                   <span
-                                                    className="sc-bbSZdi huHfyP"
+                                                    className="sc-jOnpCo PQwJU"
                                                     color="333333"
                                                     style={
                                                       Object {
@@ -40927,7 +40927,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                             className="departure-times"
                                           >
                                             <ol
-                                              className="sc-iHbSHJ efQFGg departure-times"
+                                              className="sc-deXhhX DCYkD departure-times"
                                             >
                                               <p
                                                 aria-hidden={true}
@@ -41540,7 +41540,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                       className="pattern-row-item"
                                     >
                                       <li
-                                        className="sc-hRJfrW cMzmVl pattern-row-item"
+                                        className="sc-bkSUFG foqOfg pattern-row-item"
                                       >
                                         <div
                                           className="header stop-view"
@@ -41599,7 +41599,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                                   title="984"
                                                 >
                                                   <span
-                                                    className="sc-bbSZdi huHfyP"
+                                                    className="sc-jOnpCo PQwJU"
                                                     color="333333"
                                                     style={
                                                       Object {
@@ -41637,7 +41637,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                             className="departure-times"
                                           >
                                             <ol
-                                              className="sc-iHbSHJ efQFGg departure-times"
+                                              className="sc-deXhhX DCYkD departure-times"
                                             >
                                               <p
                                                 aria-hidden={true}
@@ -41990,15 +41990,15 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                       >
                         <styled.div>
                           <div
-                            className="sc-dCFHLb khEPKT"
+                            className="sc-czkgLR fbafCb"
                           >
                             <styled.div>
                               <div
-                                className="sc-fhzFiK jyvWjP"
+                                className="sc-dycYrt jIbRyC"
                               >
                                 <styled.p>
                                   <p
-                                    className="sc-jxOSlx fKoKuN"
+                                    className="sc-hTUWRQ eldzdK"
                                   >
                                     <IconWithText
                                       icon={
@@ -42057,7 +42057,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                 >
                                   <styled.p>
                                     <p
-                                      className="sc-kdBSHD kfGWGa"
+                                      className="sc-eoVZPG hNhdGZ"
                                     >
                                       <FormattedMessage
                                         id="components.NearbyView.distanceAway"
@@ -42078,7 +42078,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                             </styled.div>
                             <styled.div>
                               <div
-                                className="sc-tagGq cBbbMr"
+                                className="sc-dWZqqJ ephhlY"
                               >
                                 <Connect(FromToPicker)
                                   place={
@@ -44498,7 +44498,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                       >
                         <styled.div>
                           <div
-                            className="sc-dCFHLb khEPKT"
+                            className="sc-czkgLR fbafCb"
                           >
                             <Connect(StopCardHeader)
                               actionIcon={
@@ -46710,11 +46710,11 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                               >
                                 <styled.div>
                                   <div
-                                    className="sc-fhzFiK jyvWjP"
+                                    className="sc-dycYrt jIbRyC"
                                   >
                                     <styled.p>
                                       <p
-                                        className="sc-jxOSlx fKoKuN"
+                                        className="sc-hTUWRQ eldzdK"
                                       >
                                         <TransitOperatorLogos
                                           stopData={
@@ -47268,7 +47268,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                     >
                                       <styled.p>
                                         <p
-                                          className="sc-kdBSHD kfGWGa"
+                                          className="sc-eoVZPG hNhdGZ"
                                         >
                                           <FormattedMessage
                                             id="components.NearbyView.distanceAway"
@@ -47289,7 +47289,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                 </styled.div>
                                 <styled.div>
                                   <div
-                                    className="sc-tagGq cBbbMr"
+                                    className="sc-dWZqqJ ephhlY"
                                   >
                                     <div
                                       style={
@@ -47315,7 +47315,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                         }
                                       >
                                         <Connect(LinkComponent)
-                                          className="sc-fjvvzt gvwMsl stop-header-action"
+                                          className="sc-fsvrbR iRiAaW stop-header-action"
                                           style={
                                             Object {
                                               "gridRow": 1,
@@ -47330,7 +47330,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                           }
                                         >
                                           <LinkComponent
-                                            className="sc-fjvvzt gvwMsl stop-header-action"
+                                            className="sc-fsvrbR iRiAaW stop-header-action"
                                             href="#/schedule/40:990004"
                                             style={
                                               Object {
@@ -47346,7 +47346,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                             }
                                           >
                                             <a
-                                              className="sc-fjvvzt gvwMsl stop-header-action"
+                                              className="sc-fsvrbR iRiAaW stop-header-action"
                                               href="#/schedule/40:990004"
                                               style={
                                                 Object {
@@ -48702,7 +48702,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                             <div>
                               <styled.ul>
                                 <ul
-                                  className="sc-fXSgeo bddtgc"
+                                  className="sc-satoz cvoiaz"
                                 >
                                   <PatternRow
                                     homeTimezone="America/Los_Angeles"
@@ -48968,7 +48968,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                       className="pattern-row-item"
                                     >
                                       <li
-                                        className="sc-hRJfrW cMzmVl pattern-row-item"
+                                        className="sc-bkSUFG foqOfg pattern-row-item"
                                       >
                                         <div
                                           className="header stop-view"
@@ -49027,7 +49027,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                                   title="1 Line"
                                                 >
                                                   <span
-                                                    className="sc-bbSZdi fPgyfv"
+                                                    className="sc-jOnpCo jDJhuQ"
                                                     color="28813F"
                                                     style={
                                                       Object {
@@ -49065,7 +49065,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                             className="departure-times"
                                           >
                                             <ol
-                                              className="sc-iHbSHJ efQFGg departure-times"
+                                              className="sc-deXhhX DCYkD departure-times"
                                             >
                                               <p
                                                 aria-hidden={true}
@@ -52245,7 +52245,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                       >
                         <styled.div>
                           <div
-                            className="sc-dCFHLb khEPKT"
+                            className="sc-czkgLR fbafCb"
                           >
                             <Connect(StopCardHeader)
                               actionIcon={
@@ -54869,11 +54869,11 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                               >
                                 <styled.div>
                                   <div
-                                    className="sc-fhzFiK jyvWjP"
+                                    className="sc-dycYrt jIbRyC"
                                   >
                                     <styled.p>
                                       <p
-                                        className="sc-jxOSlx fKoKuN"
+                                        className="sc-hTUWRQ eldzdK"
                                       >
                                         <TransitOperatorLogos
                                           stopData={
@@ -55530,7 +55530,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                     >
                                       <styled.p>
                                         <p
-                                          className="sc-kdBSHD kfGWGa"
+                                          className="sc-eoVZPG hNhdGZ"
                                         >
                                           <FormattedMessage
                                             id="components.NearbyView.distanceAway"
@@ -55551,7 +55551,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                 </styled.div>
                                 <styled.div>
                                   <div
-                                    className="sc-tagGq cBbbMr"
+                                    className="sc-dWZqqJ ephhlY"
                                   >
                                     <div
                                       style={
@@ -55596,7 +55596,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                         }
                                       >
                                         <Connect(LinkComponent)
-                                          className="sc-fjvvzt gvwMsl stop-header-action"
+                                          className="sc-fsvrbR iRiAaW stop-header-action"
                                           style={
                                             Object {
                                               "gridRow": 1,
@@ -55611,7 +55611,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                           }
                                         >
                                           <LinkComponent
-                                            className="sc-fjvvzt gvwMsl stop-header-action"
+                                            className="sc-fsvrbR iRiAaW stop-header-action"
                                             href="#/schedule/kcm:23561"
                                             style={
                                               Object {
@@ -55627,7 +55627,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                             }
                                           >
                                             <a
-                                              className="sc-fjvvzt gvwMsl stop-header-action"
+                                              className="sc-fsvrbR iRiAaW stop-header-action"
                                               href="#/schedule/kcm:23561"
                                               style={
                                                 Object {
@@ -57189,7 +57189,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                             <div>
                               <styled.ul>
                                 <ul
-                                  className="sc-fXSgeo bddtgc"
+                                  className="sc-satoz cvoiaz"
                                 >
                                   <PatternRow
                                     homeTimezone="America/Los_Angeles"
@@ -57299,7 +57299,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                       className="pattern-row-item"
                                     >
                                       <li
-                                        className="sc-hRJfrW cMzmVl pattern-row-item"
+                                        className="sc-bkSUFG foqOfg pattern-row-item"
                                       >
                                         <div
                                           className="header stop-view"
@@ -57358,7 +57358,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                                   title="522"
                                                 >
                                                   <span
-                                                    className="sc-bbSZdi kOgmEH"
+                                                    className="sc-jOnpCo kbmEyk"
                                                     color="2B376E"
                                                     style={
                                                       Object {
@@ -57396,7 +57396,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                             className="departure-times"
                                           >
                                             <ol
-                                              className="sc-iHbSHJ efQFGg departure-times"
+                                              className="sc-deXhhX DCYkD departure-times"
                                             >
                                               <p
                                                 aria-hidden={true}
@@ -58061,7 +58061,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                       className="pattern-row-item"
                                     >
                                       <li
-                                        className="sc-hRJfrW cMzmVl pattern-row-item"
+                                        className="sc-bkSUFG foqOfg pattern-row-item"
                                       >
                                         <div
                                           className="header stop-view"
@@ -58120,7 +58120,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                                   title="67"
                                                 >
                                                   <span
-                                                    className="sc-bbSZdi huHfyP"
+                                                    className="sc-jOnpCo PQwJU"
                                                     color="333333"
                                                     style={
                                                       Object {
@@ -58158,7 +58158,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                             className="departure-times"
                                           >
                                             <ol
-                                              className="sc-iHbSHJ efQFGg departure-times"
+                                              className="sc-deXhhX DCYkD departure-times"
                                             >
                                               <p
                                                 aria-hidden={true}
@@ -58828,7 +58828,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                       className="pattern-row-item"
                                     >
                                       <li
-                                        className="sc-hRJfrW cMzmVl pattern-row-item"
+                                        className="sc-bkSUFG foqOfg pattern-row-item"
                                       >
                                         <div
                                           className="header stop-view"
@@ -58887,7 +58887,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                                   title="522"
                                                 >
                                                   <span
-                                                    className="sc-bbSZdi kOgmEH"
+                                                    className="sc-jOnpCo kbmEyk"
                                                     color="2B376E"
                                                     style={
                                                       Object {
@@ -58925,7 +58925,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                             className="departure-times"
                                           >
                                             <ol
-                                              className="sc-iHbSHJ efQFGg departure-times"
+                                              className="sc-deXhhX DCYkD departure-times"
                                             >
                                               <p
                                                 aria-hidden={true}
@@ -59655,7 +59655,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                       className="pattern-row-item"
                                     >
                                       <li
-                                        className="sc-hRJfrW cMzmVl pattern-row-item"
+                                        className="sc-bkSUFG foqOfg pattern-row-item"
                                       >
                                         <div
                                           className="header stop-view"
@@ -59714,7 +59714,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                                   title="73"
                                                 >
                                                   <span
-                                                    className="sc-bbSZdi huHfyP"
+                                                    className="sc-jOnpCo PQwJU"
                                                     color="333333"
                                                     style={
                                                       Object {
@@ -59752,7 +59752,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                             className="departure-times"
                                           >
                                             <ol
-                                              className="sc-iHbSHJ efQFGg departure-times"
+                                              className="sc-deXhhX DCYkD departure-times"
                                             >
                                               <p
                                                 aria-hidden={true}
@@ -60417,7 +60417,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                       className="pattern-row-item"
                                     >
                                       <li
-                                        className="sc-hRJfrW cMzmVl pattern-row-item"
+                                        className="sc-bkSUFG foqOfg pattern-row-item"
                                       >
                                         <div
                                           className="header stop-view"
@@ -60476,7 +60476,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                                   title="322"
                                                 >
                                                   <span
-                                                    className="sc-bbSZdi huHfyP"
+                                                    className="sc-jOnpCo PQwJU"
                                                     color="333333"
                                                     style={
                                                       Object {
@@ -60514,7 +60514,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                             className="departure-times"
                                           >
                                             <ol
-                                              className="sc-iHbSHJ efQFGg departure-times"
+                                              className="sc-deXhhX DCYkD departure-times"
                                             >
                                               <p
                                                 aria-hidden={true}
@@ -61153,7 +61153,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                       className="pattern-row-item"
                                     >
                                       <li
-                                        className="sc-hRJfrW cMzmVl pattern-row-item"
+                                        className="sc-bkSUFG foqOfg pattern-row-item"
                                       >
                                         <div
                                           className="header stop-view"
@@ -61212,7 +61212,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                                   title="322"
                                                 >
                                                   <span
-                                                    className="sc-bbSZdi huHfyP"
+                                                    className="sc-jOnpCo PQwJU"
                                                     color="333333"
                                                     style={
                                                       Object {
@@ -61250,7 +61250,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                             className="departure-times"
                                           >
                                             <ol
-                                              className="sc-iHbSHJ efQFGg departure-times"
+                                              className="sc-deXhhX DCYkD departure-times"
                                             >
                                               <p
                                                 aria-hidden={true}
@@ -61917,15 +61917,15 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                       >
                         <styled.div>
                           <div
-                            className="sc-dCFHLb khEPKT"
+                            className="sc-czkgLR fbafCb"
                           >
                             <styled.div>
                               <div
-                                className="sc-fhzFiK jyvWjP"
+                                className="sc-dycYrt jIbRyC"
                               >
                                 <styled.p>
                                   <p
-                                    className="sc-jxOSlx fKoKuN"
+                                    className="sc-hTUWRQ eldzdK"
                                   >
                                     <IconWithText
                                       icon={
@@ -61984,7 +61984,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                 >
                                   <styled.p>
                                     <p
-                                      className="sc-kdBSHD kfGWGa"
+                                      className="sc-eoVZPG hNhdGZ"
                                     >
                                       <FormattedMessage
                                         id="components.NearbyView.distanceAway"
@@ -62005,7 +62005,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                             </styled.div>
                             <styled.div>
                               <div
-                                className="sc-tagGq cBbbMr"
+                                className="sc-dWZqqJ ephhlY"
                               >
                                 <Connect(FromToPicker)
                                   place={
@@ -64529,7 +64529,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                       >
                         <styled.div>
                           <div
-                            className="sc-dCFHLb khEPKT"
+                            className="sc-czkgLR fbafCb"
                           >
                             <Connect(StopCardHeader)
                               actionIcon={
@@ -66845,11 +66845,11 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                               >
                                 <styled.div>
                                   <div
-                                    className="sc-fhzFiK jyvWjP"
+                                    className="sc-dycYrt jIbRyC"
                                   >
                                     <styled.p>
                                       <p
-                                        className="sc-jxOSlx fKoKuN"
+                                        className="sc-hTUWRQ eldzdK"
                                       >
                                         <TransitOperatorLogos
                                           stopData={
@@ -67429,7 +67429,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                     >
                                       <styled.p>
                                         <p
-                                          className="sc-kdBSHD kfGWGa"
+                                          className="sc-eoVZPG hNhdGZ"
                                         >
                                           <FormattedMessage
                                             id="components.NearbyView.distanceAway"
@@ -67450,7 +67450,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                 </styled.div>
                                 <styled.div>
                                   <div
-                                    className="sc-tagGq cBbbMr"
+                                    className="sc-dWZqqJ ephhlY"
                                   >
                                     <div
                                       style={
@@ -67495,7 +67495,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                         }
                                       >
                                         <Connect(LinkComponent)
-                                          className="sc-fjvvzt gvwMsl stop-header-action"
+                                          className="sc-fsvrbR iRiAaW stop-header-action"
                                           style={
                                             Object {
                                               "gridRow": 1,
@@ -67510,7 +67510,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                           }
                                         >
                                           <LinkComponent
-                                            className="sc-fjvvzt gvwMsl stop-header-action"
+                                            className="sc-fsvrbR iRiAaW stop-header-action"
                                             href="#/schedule/kcm:36931"
                                             style={
                                               Object {
@@ -67526,7 +67526,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                             }
                                           >
                                             <a
-                                              className="sc-fjvvzt gvwMsl stop-header-action"
+                                              className="sc-fsvrbR iRiAaW stop-header-action"
                                               href="#/schedule/kcm:36931"
                                               style={
                                                 Object {
@@ -68934,7 +68934,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                             <div>
                               <styled.ul>
                                 <ul
-                                  className="sc-fXSgeo bddtgc"
+                                  className="sc-satoz cvoiaz"
                                 >
                                   <PatternRow
                                     homeTimezone="America/Los_Angeles"
@@ -69109,7 +69109,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                       className="pattern-row-item"
                                     >
                                       <li
-                                        className="sc-hRJfrW cMzmVl pattern-row-item"
+                                        className="sc-bkSUFG foqOfg pattern-row-item"
                                       >
                                         <div
                                           className="header stop-view"
@@ -69168,7 +69168,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                                   title="45"
                                                 >
                                                   <span
-                                                    className="sc-bbSZdi huHfyP"
+                                                    className="sc-jOnpCo PQwJU"
                                                     color="333333"
                                                     style={
                                                       Object {
@@ -69206,7 +69206,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                             className="departure-times"
                                           >
                                             <ol
-                                              className="sc-iHbSHJ efQFGg departure-times"
+                                              className="sc-deXhhX DCYkD departure-times"
                                             >
                                               <p
                                                 aria-hidden={true}
@@ -69946,7 +69946,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                       className="pattern-row-item"
                                     >
                                       <li
-                                        className="sc-hRJfrW cMzmVl pattern-row-item"
+                                        className="sc-bkSUFG foqOfg pattern-row-item"
                                       >
                                         <div
                                           className="header stop-view"
@@ -70005,7 +70005,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                                   title="62"
                                                 >
                                                   <span
-                                                    className="sc-bbSZdi huHfyP"
+                                                    className="sc-jOnpCo PQwJU"
                                                     color="333333"
                                                     style={
                                                       Object {
@@ -70043,7 +70043,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                             className="departure-times"
                                           >
                                             <ol
-                                              className="sc-iHbSHJ efQFGg departure-times"
+                                              className="sc-deXhhX DCYkD departure-times"
                                             >
                                               <p
                                                 aria-hidden={true}
@@ -70713,7 +70713,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                       className="pattern-row-item"
                                     >
                                       <li
-                                        className="sc-hRJfrW cMzmVl pattern-row-item"
+                                        className="sc-bkSUFG foqOfg pattern-row-item"
                                       >
                                         <div
                                           className="header stop-view"
@@ -70772,7 +70772,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                                   title="79"
                                                 >
                                                   <span
-                                                    className="sc-bbSZdi huHfyP"
+                                                    className="sc-jOnpCo PQwJU"
                                                     color="333333"
                                                     style={
                                                       Object {
@@ -70810,7 +70810,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                             className="departure-times"
                                           >
                                             <ol
-                                              className="sc-iHbSHJ efQFGg departure-times"
+                                              className="sc-deXhhX DCYkD departure-times"
                                             >
                                               <p
                                                 aria-hidden={true}

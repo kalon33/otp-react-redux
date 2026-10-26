@@ -114,6 +114,10 @@ const mapStateToProps = (state: any, ownProps: OwnProps) => ({
   offer:
     ownProps.offer !== undefined
       ? ownProps.offer
+      : // Auto's Undo card (65.2) holds this spot while it is up; with Auto
+      // off there is never one.
+      state.otp?.goMode?.auto?.undo
+      ? null
       : state.otp?.goMode?.fasterRoute ?? null
 })
 

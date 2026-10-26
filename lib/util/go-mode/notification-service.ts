@@ -7,6 +7,7 @@ import {
   offerSubKind
 } from './faster-route-offer'
 import { asContinuation, formatCueDistance } from './turn-by-turn'
+import { AUTO_SWITCH_NOTICE_ID } from './auto-switch'
 import {
   calculateDistance,
   MATCH_CORRIDOR_TRANSIT_M
@@ -21,6 +22,7 @@ import {
   VEHICLE_RECORD_STALE_SEC,
   vehicleShortOfBoardStop
 } from './transit-trust'
+import type { AutoUndo } from './auto-switch'
 import type { BoardVehicleEvidence } from './transit-trust'
 import type { FasterRouteOffer } from './faster-route-offer'
 import type { PushPayload } from './native-notify'
@@ -2654,5 +2656,86 @@ export function buildFasterRouteNotice(
             defaultMessage: 'Faster route',
             id: 'components.GoMode.fasterRoute.pushTitle'
           })
+  }
+}
+
+/**
+ * The words of one Auto switch (65.2 B2), shared by the Undo card and the
+ * push. The same numbers-only copy as the offer it would have been —
+ * "6 min faster · 14", "1.4 km less biking · 14 · +1 min", "off at 30th Ave"
+ * aboard — led by the preset's reason for switching; Simplest's fewer-change
+ * switch reads "1 fewer transfer · 14".
+ */
+export function autoSwitchCopy(
+  undo: Pick<
+    AutoUndo,
+    | 'aboard'
+    | 'addedBikeM'
+    | 'bikeSavedM'
+    | 'changesSaved'
+    | 'headline'
+    | 'laterMs'
+    | 'routeLabel'
+    | 'savingMs'
+    | 'stopName'
+  >,
+  intl: IntlShape = notifyIntl()
+): { detail: string; title: string } {
+  const sub = undo.headline === 'lessBike' ? 'lessBike' : 'faster'
+  const base = fasterRouteCopy(
+    {
+      aboard: undo.aboard ? ({ kind: sub } as any) : null,
+      addedBikeM: undo.headline === 'lessBike' ? 0 : undo.addedBikeM,
+      bikeSavedM: undo.bikeSavedM,
+      kind: undo.aboard ? 'aboard' : sub,
+      laterMs: undo.laterMs,
+      routeLabel: undo.routeLabel,
+      savingMs: undo.savingMs,
+      stopName: undo.stopName ?? null
+    },
+    intl
+  )
+  if (undo.headline !== 'fewerChanges') return base
+  const laterMin = Math.round(undo.laterMs / 60000)
+  return {
+    detail:
+      laterMin >= 1
+        ? `${base.detail} · ${intl.formatMessage(
+            {
+              defaultMessage: '+{minutes} min',
+              id: 'components.GoMode.fasterRoute.later'
+            },
+            { minutes: laterMin }
+          )}`
+        : base.detail,
+    title: intl.formatMessage(
+      {
+        defaultMessage:
+          '{count, plural, one {# fewer transfer} other {# fewer transfers}}',
+        id: 'components.GoMode.auto.fewerChanges'
+      },
+      { count: Math.max(1, undo.changesSaved) }
+    )
+  }
+}
+
+/**
+ * The one push for an Auto switch, only while the app is hidden: its own id
+ * (AUTO_SWITCH_NOTICE_ID), so a faster-route card lapsing cannot take it
+ * back. "Switched" / "6 min faster · 14".
+ */
+export function buildAutoSwitchNotice(
+  undo: Parameters<typeof autoSwitchCopy>[0]
+): PushPayload & { id: number } {
+  const intl = notifyIntl()
+  const { detail, title } = autoSwitchCopy(undo, intl)
+  return {
+    id: AUTO_SWITCH_NOTICE_ID,
+    message: `${title} · ${detail}`,
+    priority: 1,
+    title: intl.formatMessage({
+      defaultMessage: 'Switched',
+      id: 'components.GoMode.auto.pushTitle'
+    })
   }
 }
