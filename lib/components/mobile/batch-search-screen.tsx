@@ -15,6 +15,8 @@ import {
   TransitionStyles
 } from '../form/styled'
 import { alertUserTripPlan } from '../form/util'
+import { formQueryMatchesSearch } from '../../util/search-query-match'
+import { getActiveSearch } from '../../util/state'
 import { MobileScreens } from '../../actions/ui-constants'
 import { RoutingQueryCallResult } from '../../actions/api-constants'
 import ActiveRoutingPreferences from '../form/active-routing-preferences'
@@ -69,6 +71,8 @@ const OnBusButton = styled.button`
 interface Props {
   beginOnboardFlow: () => void
   currentQuery: any
+  /** The kept search still answers this form (70.1): offer the way back. */
+  formMatchesActiveSearch: boolean
   intl: IntlShape
   map: React.ReactElement
   mapPickActive: boolean
@@ -100,6 +104,9 @@ class BatchSearchScreen extends Component<Props> {
     }
     beginOnboardFlow()
   }
+
+  _backToResultsClicked = () =>
+    this.props.setMobileScreen(MobileScreens.RESULTS_SUMMARY)
 
   _mainPanelContentRef = React.createRef<HTMLDivElement>()
   _advancedSettingRef = React.createRef<HTMLDivElement>()
@@ -155,7 +162,7 @@ class BatchSearchScreen extends Component<Props> {
   }
 
   render() {
-    const { intl, mapPickActive } = this.props
+    const { formMatchesActiveSearch, intl, mapPickActive } = this.props
     const { planTripClicked, showAdvancedModeSettings } = this.state
     const { departArrive } = this.props.currentQuery
     const dateTimeSelectorOpen = departArrive !== 'NOW'
@@ -223,6 +230,21 @@ class BatchSearchScreen extends Component<Props> {
                           onPlanTripClick={this.handlePlanTripClick}
                           openAdvancedSettings={this.openAdvancedSettings}
                         />
+                        {/* Edit keeps the search (backlog 70.1): while the
+                            form still asks for it, the rider can go back to
+                            its results without planning again. */}
+                        {formMatchesActiveSearch && (
+                          <OnBusButton
+                            className="back-to-results"
+                            onClick={this._backToResultsClicked}
+                            type="button"
+                          >
+                            {intl.formatMessage({
+                              defaultMessage: 'Back to results',
+                              id: 'components.BatchSearchScreen.backToResults'
+                            })}
+                          </OnBusButton>
+                        )}
                         <ActiveRoutingPreferences />
                         <SavePlaceButton />
                         <OnBusButton onClick={this._onBusClicked} type="button">
@@ -274,8 +296,13 @@ class BatchSearchScreen extends Component<Props> {
 
 const mapStateToProps = (state: any) => {
   const currentQuery = state.otp.currentQuery
+  const activeSearch: any = getActiveSearch(state)
   return {
     currentQuery,
+    formMatchesActiveSearch: formQueryMatchesSearch(
+      currentQuery,
+      activeSearch?.query
+    ),
     mapPickActive: Boolean(state.otp.ui.mapPickLocationType)
   }
 }
