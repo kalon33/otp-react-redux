@@ -1230,3 +1230,40 @@ export const StopDot = styled.span<{ $next?: boolean; $passed?: boolean }>`
   height: ${(p) => (p.$next ? 10 : 7)}px;
   width: ${(p) => (p.$next ? 10 : 7)}px;
 `
+
+// Auto mode (65.2, cycle 36 B2): the chip over the map's top-right corner —
+// the reroute chip's pill, at a thumb-sized height and with the map controls'
+// shadow, below the deviation banner's row — and the preset sheet's rows,
+// which are the vehicle list's rows as radio labels.
+export const AutoChip = styled(RerouteChip)<{ $on: boolean }>`
+  background: ${(p) => (p.$on ? '#1565c0' : '#fff')};
+  border-color: ${(p) => (p.$on ? '#1565c0' : '#ccc')};
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
+  color: ${(p) => (p.$on ? '#fff' : '#333')};
+  font-weight: 600;
+  max-width: calc(100% - 20px);
+  min-height: 44px;
+  overflow: hidden;
+  position: absolute;
+  right: 10px;
+  text-overflow: ellipsis;
+  top: 52px;
+  white-space: nowrap;
+  z-index: 1001;
+`
+
+export const AutoPresetRow = styled(VehicleOptionRow)<{ $selected: boolean }>`
+  border-color: ${(p) => (p.$selected ? '#2196f3' : '#e0e0e0')};
+  cursor: pointer;
+  gap: 12px;
+  justify-content: flex-start;
+  min-height: 44px;
+
+  input {
+    accent-color: #2196f3;
+    flex-shrink: 0;
+    height: 20px;
+    margin: 0;
+    width: 20px;
+  }
+`

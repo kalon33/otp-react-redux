@@ -76,6 +76,12 @@ interface Props {
   activeLegIndex: number | null
   /** Trip over (goMode.arrivedAt set): no turn to show (44.3). */
   arrived?: boolean
+  /**
+   * Controls drawn over the map's corner by the screen — the Auto chip
+   * (65.2), its own connected component so the map's per-tick render never
+   * reaches it.
+   */
+  children?: React.ReactNode
   currentLegIndex: number
   currentLegMode: string | null
   currentPosition: GeolocationPosition | null
@@ -912,6 +918,7 @@ const GoModeMap = ({
   aboardBeforeLeg = false,
   activeLegIndex,
   arrived = false,
+  children,
   currentLegIndex,
   currentLegMode,
   currentPosition,
@@ -1033,6 +1040,7 @@ const GoModeMap = ({
             )}
           </DeviationWarning>
         )}
+      {children}
     </MapContainer>
   )
 }

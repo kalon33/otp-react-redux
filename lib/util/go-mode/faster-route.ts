@@ -380,28 +380,49 @@ const empty = (
 })
 
 /**
- * Should the rider, off the bus, be offered a different route?
- *
- * Faster: the best catchable itinerary on a DIFFERENT route set from the
- * rider's remaining plan arrives ≥ 3 min before the rider's own trips in the
- * same answer. Less bike: a catchable different-route-set itinerary within
- * ±2 min of that arrival bikes ≥ 1 km less. Faster wins when both apply.
+ * What every off-bus judgement measures against (56.1's, shared with Auto's
+ * presets, 65.2): the rider's remaining legs, their own trips in the answer,
+ * the bar those trips set — or an earlier catchable run of their own route set
+ * in the same answer, which catch-the-run moves them onto without an offer —
+ * and the answer's itineraries on a DIFFERENT route set (the candidates).
  */
-export function classifyFasterRoute(
+export interface FasterRoutePool {
+  /** The rider's own trips in the answer, or an earlier catchable own run. */
+  bar: Itinerary
+  barSource: BaselineSource
+  /** The rider's own trips (findBaseline) — the catchability reference. */
+  baseline: Itinerary
+  baselineSource: BaselineSource
+  bestRawSavingMs: number | null
+  heldSet: string
+  nextTripId: string | null
+  /** The answer's itineraries on a different route set, in answer order. */
+  others: Itinerary[]
+  remaining: Leg[]
+}
+
+/**
+ * The pool, or the verdict that ends the question before any candidate is
+ * scored (no transit left, aboard, no baseline, plan dead, no candidate).
+ */
+export function fasterRoutePool(
   input: FasterRouteInput
-): FasterRouteVerdict {
+):
+  | { early: null; pool: FasterRoutePool }
+  | { early: FasterRouteVerdict; pool: null } {
+  const stop = (early: FasterRouteVerdict) => ({ early, pool: null })
   const remaining = remainingTransitLegs(
     input.current,
     input.nowMs,
     input.currentLegIndex
   )
-  if (!remaining.length) return empty('no-transit-left')
-  if (input.riding) return empty('aboard')
+  if (!remaining.length) return stop(empty('no-transit-left'))
+  if (input.riding) return stop(empty('aboard'))
   const found = findBaseline(input.answer, remaining)
   if (!found && input.missedBusRecoveryActive) {
-    return empty('plan-dead', { planDead: 'missed-bus-recovery' })
+    return stop(empty('plan-dead', { planDead: 'missed-bus-recovery' }))
   }
-  if (!found) return empty('no-baseline')
+  if (!found) return stop(empty('no-baseline'))
   const baseline = found.itinerary
   const base = {
     baseline,
@@ -418,13 +439,15 @@ export function classifyFasterRoute(
   )
   const dead = planDeadWhy(remaining, baseline, input)
   if (dead) {
-    return empty('plan-dead', {
-      ...base,
-      bestRawSavingMs: bestRaw,
-      planDead: dead
-    })
+    return stop(
+      empty('plan-dead', {
+        ...base,
+        bestRawSavingMs: bestRaw,
+        planDead: dead
+      })
+    )
   }
-  if (!others.length) return empty('no-candidate', base)
+  if (!others.length) return stop(empty('no-candidate', base))
 
   // The rider's own route set may have an earlier catchable run in the same
   // answer (the held plan sits on a later bus). Moving the rider onto it is the
@@ -441,8 +464,73 @@ export function classifyFasterRoute(
     bar = it
     barSource = 'own-route-earlier-run'
   }
+  return {
+    early: null,
+    pool: {
+      bar,
+      barSource,
+      baseline,
+      baselineSource: found.source,
+      bestRawSavingMs: bestRaw,
+      heldSet,
+      nextTripId: legTripId(remaining[0]),
+      others,
+      remaining
+    }
+  }
+}
+
+/**
+ * Why a pool candidate cannot be switched to now, or null when it can:
+ * `same-bus` (the rider's own next bus with a different tail — the aboard
+ * get-off offer's question), else candidateNotCatchable's reason.
+ */
+export function poolCandidateBlock(
+  pool: FasterRoutePool,
+  it: Itinerary,
+  input: FasterRouteInput
+): string | null {
+  // Boarding the rider's own next bus and changing only the tail (a bus hop
+  // instead of the closing bike, an earlier alight onto another route) is
+  // not a different route to switch to now: it is the aboard get-off
+  // offer's question, asked on that bus with live times (2026-09-15 09:43:
+  // "Orange Line + 546" offered 15 min faster at a 2.47 m/s observed pace;
+  // the rider rode the plan and arrived 10:27:44, level with it). A FEEDER
+  // bus that reaches the same bus instead of the access bike stays — that
+  // is the "Blue Line -> 539" less-biking case the rider asked for (55.1).
+  if (
+    pool.nextTripId &&
+    tripIdsMatch(legTripId(transitLegs(it)[0]), pool.nextTripId)
+  ) {
+    return 'same-bus'
+  }
+  return candidateNotCatchable(it, pool.baseline, input)
+}
+
+/** Saving of `candidate` over `bar` (savingOf, exported for Auto's presets). */
+export function savingOverBar(
+  bar: Itinerary,
+  candidate: Itinerary,
+  refMps: number | null | undefined
+): number {
+  return savingOf(bar, candidate, refMps)
+}
+
+/**
+ * Should the rider, off the bus, be offered a different route?
+ *
+ * Faster: the best catchable itinerary on a DIFFERENT route set from the
+ * rider's remaining plan arrives ≥ 3 min before the rider's own trips in the
+ * same answer. Less bike: a catchable different-route-set itinerary within
+ * ±2 min of that arrival bikes ≥ 1 km less. Faster wins when both apply.
+ */
+export function classifyFasterRoute(
+  input: FasterRouteInput
+): FasterRouteVerdict {
+  const { early, pool } = fasterRoutePool(input)
+  if (!pool) return early as FasterRouteVerdict
+  const { bar, barSource, bestRawSavingMs: bestRaw, others } = pool
   const baseBike = bikeMetersOf(bar)
-  const nextTripId = legTripId(remaining[0])
 
   const rejected: string[] = []
   let sameBus = 0
@@ -456,19 +544,11 @@ export function classifyFasterRoute(
       Math.abs(saving) <= LESS_BIKE_ARRIVAL_BAND_MS &&
       bikeSaved >= LESS_BIKE_MIN_METERS
     if (!isFaster && !isLessBike) continue
-    // Boarding the rider's own next bus and changing only the tail (a bus hop
-    // instead of the closing bike, an earlier alight onto another route) is
-    // not a different route to switch to now: it is the aboard get-off
-    // offer's question, asked on that bus with live times (2026-09-15 09:43:
-    // "Orange Line + 546" offered 15 min faster at a 2.47 m/s observed pace;
-    // the rider rode the plan and arrived 10:27:44, level with it). A FEEDER
-    // bus that reaches the same bus instead of the access bike stays — that
-    // is the "Blue Line -> 539" less-biking case the rider asked for (55.1).
-    if (nextTripId && tripIdsMatch(legTripId(transitLegs(it)[0]), nextTripId)) {
+    const why = poolCandidateBlock(pool, it, input)
+    if (why === 'same-bus') {
       sameBus++
       continue
     }
-    const why = candidateNotCatchable(it, baseline, input)
     if (why) {
       rejected.push(why)
       continue
@@ -606,7 +686,7 @@ export interface AlightOfferVerdict {
  * planned trip itself (still a real run of the plan; the earliest wins in the
  * caller). Without one, by trip id alone, as before.
  */
-function isPlannedOnward(
+export function isPlannedOnward(
   itin: Itinerary,
   input: Pick<AlightOfferInput, 'plannedOnward' | 'plannedOnwardTripId'>
 ): boolean {

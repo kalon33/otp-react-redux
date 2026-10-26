@@ -40,6 +40,7 @@ import { localizeGradationMap } from '../utils'
 import { lookupOtherStops } from '../../../actions/other-stops-lookup'
 import { MobileScreens } from '../../../actions/ui-constants'
 import { outboundKeyOf, ReturnPlanState } from '../../../actions/round-trip'
+import AutoArmControl from '../../go-mode/AutoArmControl'
 import FormattedDuration from '../../util/formatted-duration'
 import ItineraryBody from '../line-itin/connected-itinerary-body'
 import NarrativeItinerary from '../narrative-itinerary'
@@ -261,7 +262,7 @@ const FlexNoticeWrapper = styled.span`
     content: ' ';
   }
 `
-const StartTripButton = styled.button`
+export const StartTripButton = styled.button`
   background-color: #4caf50;
   border: none;
   border-radius: 8px;
@@ -280,8 +281,17 @@ const StartTripButton = styled.button`
 
   &:active {
     background-color: #3d8b40;
-
+  }
 `
+// "Start when I leave" (65.2 B4): Start Trip's own button, in outline — the
+// second way to start the same trip, not a competing action. Inline rather
+// than a new styled component, so no other component's generated class moves.
+export const START_WHEN_I_LEAVE_STYLE: React.CSSProperties = {
+  backgroundColor: '#fff',
+  border: '2px solid #4caf50',
+  color: '#2e7d32',
+  marginTop: 0
+}
 type Props = {
   LegIcon: React.ReactNode
   accessibilityScoreGradationMap: { [value: number]: string }
@@ -290,6 +300,7 @@ type Props = {
     itinerary: Itinerary,
     options?: {
       multiStop?: MultiStopPlan | null
+      newTrip?: boolean
       roundTrip?: RoundTripPlan | null
     }
   ) => void
@@ -454,9 +465,11 @@ export class MetroItinerary extends NarrativeItinerary {
     // waits for the last segment.
     const multiStop = buildMultiStopPlan(itinerary, roundTripPlan)
     const startItinerary = multiStop ? multiStop.segments[0] : itinerary
+    // Start Trip starts a trip — Auto (65.2) goes off even when this route
+    // replaces one already running.
     const startOptions = multiStop
-      ? { multiStop, roundTrip: null }
-      : { multiStop: null, roundTrip: roundTripPlan }
+      ? { multiStop, newTrip: true, roundTrip: null }
+      : { multiStop: null, newTrip: true, roundTrip: roundTripPlan }
     if (tripActive) {
       // A trip is already running (backgrounded behind the planner):
       // adopting an alternate is an explicit switch, so confirm — the current
@@ -897,6 +910,29 @@ export class MetroItinerary extends NarrativeItinerary {
                 )}
               </StartTripButton>
             )}
+            {/* "Start when I leave" (65.2 B4): a one-way trip planned with
+                no trip running — not a trip through stops, nor a round trip
+                (both are built around the plan as tapped). */}
+            {beginGoMode &&
+              !tripActive &&
+              !roundTripEnabled &&
+              !buildMultiStopPlan(itinerary, null) && (
+                <AutoArmControl itinerary={itinerary}>
+                  {(open) => (
+                    <StartTripButton
+                      className="start-when-i-leave"
+                      onClick={open}
+                      style={START_WHEN_I_LEAVE_STYLE}
+                      type="button"
+                    >
+                      <FormattedMessage
+                        defaultMessage="Start when I leave"
+                        id="components.MetroUI.startWhenILeave"
+                      />
+                    </StartTripButton>
+                  )}
+                </AutoArmControl>
+              )}
           </>
         )}
       </div>

@@ -87,16 +87,34 @@ const VARIANTS: Record<string, Variant> = {
   },
   arrivedAt: { goMode: (g) => ({ ...g, arrivedAt: 222 }) },
   arrivedDelay: { goMode: (g) => ({ ...g, arrivedDelay: 99 }) },
+  // Auto (65.2 B2): saved while on.
+  auto: {
+    goMode: (g) => ({
+      ...g,
+      auto: {
+        leftRouteSets: [],
+        on: true,
+        preset: 'fastest',
+        switches: 0,
+        undo: null
+      }
+    })
+  },
+
   backgrounded: {
     goMode: (g) => ({ ...g, ui: { ...g.ui, backgrounded: true } })
   },
+
   debugSessionId: { args: ['other-session', 1] },
+
   departureOverride: {
     goMode: (g) => ({ ...g, departureOverride: T0 + 1 })
   },
+
   departureOverrideSource: {
     goMode: (g) => ({ ...g, departureOverrideSource: 'anchor' })
   },
+
   departureOverrideTripId: {
     goMode: (g) => ({ ...g, departureOverrideTripId: 'trip-2' })
   },

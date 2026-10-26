@@ -430,6 +430,36 @@ components:
     arrivedDone: Done
     arrivedTitle: 🎉 You've arrived!
     arrivesIn: arrives in {time}
+    auto:
+      chipOff: Auto
+      chipOn: Auto · {preset}
+      close: Close
+      fewerChanges: "{count, plural, one {# fewer transfer} other {# fewer transfers}}"
+      hint:
+        fastest: 3+ min sooner, or 1 km+ less biking
+        leastBike: 1 km+ less biking, up to 2 min later
+        simplest: Fewer transfers, up to 2 min later
+        stayOnRoute: Only earlier buses on your route
+      ok: OK
+      preset:
+        fastest: Fastest
+        leastBike: Least biking
+        simplest: Simplest
+        stayOnRoute: Stay on my route
+      pushTitle: Switched
+      sheetTitle: Auto
+      switchedTitle: Switched · {title}
+      turnOff: Turn off Auto
+      undo: Undo
+    autoArm:
+      banner: Starts when you leave · Auto · {preset} — tap to change
+      bannerStarting: Starting your trip…
+      cancel: Cancel
+      disarm: Don't start
+      setupHint: The trip starts in Auto when you head out. Keep the app open.
+      starting: Finding the best route from here…
+      title: Start when I leave
+      waitingUntil: Waiting for you to leave · until {time}
     avoidBiking: Avoid Biking
     avoidbiking: Avoid Biking
     bikeforward: Bike Forward
@@ -724,6 +754,7 @@ components:
     otherStopsNone: No other stops
     singleModeItineraryDescription: '{time} {mode} itinerary'
     startTrip: Start Trip
+    startWhenILeave: Start when I leave
     switchTrip: Switch to this trip
     timeBiking: '{time} biking'
     timeWalking: '{time} walking'
