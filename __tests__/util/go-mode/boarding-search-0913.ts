@@ -1,3 +1,5 @@
+import FakeTimers from '@sinonjs/fake-timers'
+
 import { boardingPromptBody } from '../../../lib/util/go-mode/boarding-confirmation'
 import {
   confirmBoardingByRider,
@@ -133,16 +135,22 @@ const makeStore = (
   }
 }
 
+let clock: ReturnType<typeof FakeTimers.install> | null = null
+
 beforeEach(() => {
   // The recorded frames are from 2026-09-13; the picker drops a frame older
   // than 10 min (54.6), so the clock stays at the recorded tap (11:36:29).
-  jest.spyOn(Date, 'now').mockReturnValue(1789317389000)
+  // Only Date is faked — both Date.now() and new Date(), since the boarding
+  // search reads Go Mode's tick clock (54.6) — timers stay real.
+  clock = FakeTimers.install({ now: 1789317389000, toFake: ['Date'] })
   mockFeedRoutes = {}
   mockPolledRoutes = []
   mockPollLands = {}
 })
 
 afterEach(() => {
+  clock?.uninstall()
+  clock = null
   jest.restoreAllMocks()
 })
 

@@ -72,9 +72,11 @@ jest.mock('@opentripplanner/core-utils', () => {
  * tap dispatched at its recorded moment. The replay reproduces the ride on
  * main (`913b86589`): ROUTE_DEVIATION high 16:23:02, CLEAR_RIDING 16:24:31,
  * `deviated` 16:23:01-16:31:43, SET_RIDING 16:31:43 with boardedAt 16:31:44.
- * (The replay's own riding fact is established by the matcher at 16:17:16, ten
- * seconds before the tap, so its board time is 16:17:17 — the tap keeps an
- * evidenced board time, as on the phone.)
+ * (The replay's own riding fact is established by the matcher before the
+ * tap, so its board time is 16:17:16 — the tap keeps an evidenced board
+ * time, as on the phone. It read 16:17:17 until 54.6 aged the replay's frames
+ * against the sim clock, which lets the matcher age-correct them as it does
+ * on a live ride.)
  */
 const FIXTURE = path.join(
   __dirname,
@@ -193,7 +195,7 @@ jest.setTimeout(600000)
   () => {
     it('without the hold reproduces the ride (and keeps the board time)', async () => {
       // Today's riding decision exactly: nothing ever reads as held. Item (7)
-      // is independent of the hold, so the re-established fact keeps 16:17:17
+      // is independent of the hold, so the re-established fact keeps 16:17:16
       // here where main re-stamped it 16:31:44.
       const spy = jest
         .spyOn(vehicleCompany, 'ridingHeldByVehicle')
@@ -208,7 +210,7 @@ jest.setTimeout(600000)
       const back = r.sets.find((e) => e.t > at('16:24:31'))
       expect(hhmmss(back?.t)).toBe('16:31:43')
       expect(back?.p.vehicleId).toBe(VEHICLE)
-      expect(hhmmss(back?.p.boardedAt)).toBe('16:17:17')
+      expect(hhmmss(back?.p.boardedAt)).toBe('16:17:16')
       expect(r.holds).toEqual([])
     })
 
@@ -218,11 +220,11 @@ jest.setTimeout(600000)
       expect(r.clears).toEqual([])
       const bike = r.transitions.find((e) => e.p?.legIndex === 2)
       expect(hhmmss(bike?.t)).toBe('16:45:34')
-      // Every riding fact the trip wrote is 8143, boarded at 16:17:17.
+      // Every riding fact the trip wrote is 8143, boarded at 16:17:16.
       for (const s of r.sets) {
         expect(s.p.vehicleId).toBe(VEHICLE)
         expect(s.p.tripId).toBe(TRIP)
-        expect(hhmmss(s.p.boardedAt)).toBe('16:17:17')
+        expect(hhmmss(s.p.boardedAt)).toBe('16:17:16')
       }
       // The hold engages as the bus leaves the shape and lets go as it
       // rejoins, with the bus a few metres from the rider both times.
