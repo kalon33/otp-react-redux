@@ -49,6 +49,7 @@ import {
   BOARD_AUTO_CONFIRM_MIN_CONSECUTIVE,
   decideRiding,
   onboardConfirmRidingFact,
+  riderLeftRiddenLeg,
   riderStopOnLeg,
   ridingFactIsEvidenced,
   ridingFactStaleReason,
@@ -66,6 +67,7 @@ import {
 } from '../util/go-mode/onboard-confirm'
 import type { OnboardConfirmCheck } from '../util/go-mode/onboard-confirm'
 import { stopOriginAboard } from '../util/go-mode/stop-origin'
+import { registerGoModeClock } from '../util/go-mode/clock'
 import type { EarlyAlightRecord } from '../util/go-mode/riding'
 import {
   estimateBikeSpeedMps,
@@ -814,6 +816,9 @@ function getCurrentTime(): Date {
   }
   return new Date()
 }
+
+// The same clock for modules that cannot import this one (apiV2, 70.3).
+registerGoModeClock(() => getCurrentTime().getTime())
 
 /**
  * The tick's clock, for display code that must agree with it. Real ride: the
@@ -3800,7 +3805,9 @@ function currentPositionOrigin(
  * getting off it). Those requests hand off to replanFromAboard's explicit
  * path, which drives the existing onboard alight-stop UI. One gate here
  * covers all three TripSheet entries (profile chips, "Search from here", the
- * NL box). A route-only riding fact (no tripId) keeps today's planner search.
+ * NL box). A route-only riding fact (no tripId) keeps today's planner search,
+ * and so does a rider who has stepped off at the leg's alight stop while the
+ * fact waits for the next bus (`riderLeftRiddenLeg`, 70.3).
  */
 export function browseFromCurrentPosition(
   options: { preferences?: any; profileId?: string } = {}
@@ -3812,8 +3819,14 @@ export function browseFromCurrentPosition(
     const legs = itinerary?.legs || []
     const destLeg = legs[legs.length - 1]
     const origin = currentPositionOrigin(state)
+    // At a transfer stop the riding fact still names the bus just left (it
+    // clears only on TRANSITION_LEG, held while the next bus is > 5 min out).
+    // A rider standing at the alight stop while that bus has moved on is not
+    // aboard: no get-off list, no stay-seated levers (70.3). The fact itself
+    // is left alone.
+    const leftRiddenLeg = riderLeftRiddenLeg(state, getCurrentTime().getTime())
 
-    if (goMode?.riding?.tripId && itinerary) {
+    if (goMode?.riding?.tripId && itinerary && !leftRiddenLeg) {
       dispatch(
         replanFromAboard({
           autoApply: false,
@@ -3838,7 +3851,7 @@ export function browseFromCurrentPosition(
     const profile = options.profileId
       ? getRoutingProfile(options.profileId)
       : undefined
-    const riding = goMode?.riding
+    const riding = leftRiddenLeg ? null : goMode?.riding
     const nextStop = riding ? getNextStopOnRide(state) : null
     const routingPreferences =
       profile?.prefs ??
