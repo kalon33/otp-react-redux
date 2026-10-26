@@ -7,6 +7,7 @@ import {
   NotificationLatches
 } from './notification-service'
 import { hasNextSegment } from '../multi-stop'
+import type { AutoState } from './auto-switch'
 import type { DepartureOverrideSource } from './types'
 import type { NearDestination } from './arrival-dwell'
 
@@ -89,6 +90,13 @@ export interface GoModeSession {
   // froze that instead — 534.7 s against a true 495.99 s on the 2026-09-01
   // ride (mtin0l9c-yieexg), from a re-mount 61 s after the arrival.
   arrivedDelay?: number | null
+  /**
+   * Auto mode while it is on (65.2): a reload within the trip keeps it, and
+   * its switch count and left routes with it. The goMode slice's own object,
+   * so an unchanged Auto never defeats sameAsLastSave. restoreAutoState
+   * drops the Undo and anything from a finished trip.
+   */
+  auto?: Partial<AutoState> | null
   // Whether the rider had stepped out to the planner (ReturnToTripBanner
   // showing) — restored so a reload doesn't force the Go Mode screen back.
   backgrounded?: boolean
@@ -276,6 +284,7 @@ export function saveGoModeSession(
     alightedFrom: goMode.alightedFrom ?? null,
     arrivedAt: goMode.arrivedAt ?? null,
     arrivedDelay: goMode.arrivedDelay ?? null,
+    auto: goMode.auto?.on ? goMode.auto : null,
     backgrounded: !!goMode.ui?.backgrounded,
     debugSessionId: savedDebugSessionId,
     departureOverride: goMode.departureOverride ?? null,

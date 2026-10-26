@@ -4,6 +4,7 @@ import type { Itinerary } from '@opentripplanner/types'
 import {
   ADD_NOTIFICATION,
   ANSWER_ONBOARD_STOP_CHOICE,
+  AUTO_SWITCH,
   BEGIN_ONBOARD_FLOW,
   CLEAR_FASTER_ROUTE_OFFER,
   CLEAR_ONBOARD,
@@ -19,6 +20,8 @@ import {
   REPAIR_LEG_GEOMETRY,
   RESUME_GPS_SIMULATION,
   SET_ARRIVED,
+  SET_AUTO_MODE,
+  SET_AUTO_UNDO,
   SET_BOARDING_SEARCH_FAILED,
   SET_BOARDING_SEARCHING,
   SET_CHOOSE_BUS_ERROR,
@@ -64,6 +67,12 @@ import {
   UPDATE_VEHICLE_MATCH
 } from '../actions/go-mode'
 import {
+  AUTO_ARM_TRIGGER,
+  CLEAR_AUTO_ARM,
+  SET_AUTO_ARM
+} from '../util/go-mode/auto-arm'
+import { AUTO_OFF } from '../util/go-mode/auto-switch'
+import {
   DEFAULT_TURN_CUE_SETTINGS,
   TurnCueSettings
 } from '../util/go-mode/turn-cue-settings'
@@ -73,6 +82,8 @@ import {
   ridingKeptTooLong
 } from '../util/go-mode/riding'
 import { sameOnboardStop } from '../util/go-mode/onboard-stops'
+import type { AutoArm } from '../util/go-mode/auto-arm'
+import type { AutoState } from '../util/go-mode/auto-switch'
 import type {
   DepartureOverrideSource,
   LiveLegTime,
@@ -279,6 +290,14 @@ export interface GoModeState {
    */
   alightedFrom: { tripId: string | null; vehicleId: string | null } | null
 
+  /**
+   * "Start when I leave" (65.2, cycle 36 B4): a trip armed to start in Auto
+   * when the rider heads out, with Go Mode itself still off. Null when none.
+   * Cleared by its own start, a cancel, its 2 h lapse — and by any trip that
+   * starts some other way (START_GO_MODE, BEGIN_ONBOARD_FLOW).
+   */
+  arm: AutoArm | null
+
   /** Epoch ms when trip progress first read completed; null while en route.
    * While set, position ticks quiesce and the arrival card is shown. */
   arrivedAt: number | null
@@ -300,6 +319,15 @@ export interface GoModeState {
    * Recorded here instead so the fact travels with the trip.
    */
   arrivedDelay: number | null
+
+  /**
+   * Auto mode (65.2, cycle 36 B2): on, which preset, the no-tap switches made
+   * this trip, the route sets it has left or undone, and the Undo on the card.
+   * OFF at every new trip — START_GO_MODE that starts one (not a swap within
+   * it), BEGIN_ONBOARD_FLOW and STOP_GO_MODE — and kept across every swap
+   * within the trip (its own switch is one). The Undo goes with any swap.
+   */
+  auto: AutoState
 
   boardingPrompt: {
     /**
@@ -558,9 +586,13 @@ const defaultState: GoModeState = {
 
   alightedFrom: null,
 
+  arm: null,
+
   arrivedAt: null,
 
   arrivedDelay: null,
+
+  auto: AUTO_OFF,
 
   boardingPrompt: {
     chooseBus: false,
@@ -801,9 +833,54 @@ const goMode = handleActions<GoModeState, any>(
       }
     },
 
+    // "Start when I leave" (65.2 B4): the rider has left and the start is
+    // being made. Also the record.
+    [AUTO_ARM_TRIGGER]: (state, action) =>
+      state.arm && action.payload?.id === state.arm.id
+        ? { ...state, arm: { ...state.arm, status: 'starting' } }
+        : state,
+
+    // Auto (65.2 B2). AUTO_SWITCH is also the record: `held` changes nothing.
+    [AUTO_SWITCH]: (state, action) => {
+      const p = action.payload || {}
+      // A route set left (switched) or refused (undone) — never one the trip
+      // is still on (an aboard stop move keeps the onward route).
+      const add = (set: string | null | undefined) =>
+        set == null ||
+        p.fromRouteSet === p.toRouteSet ||
+        state.auto.leftRouteSets.includes(set)
+          ? state.auto.leftRouteSets
+          : [...state.auto.leftRouteSets, set]
+      if (p.outcome === 'switched') {
+        return {
+          ...state,
+          auto: {
+            ...state.auto,
+            leftRouteSets: add(p.fromRouteSet),
+            switches: state.auto.switches + 1
+          }
+        }
+      }
+      if (p.outcome === 'undone') {
+        return {
+          ...state,
+          auto: {
+            ...state.auto,
+            leftRouteSets: add(p.toRouteSet),
+            undo: null
+          }
+        }
+      }
+      return state
+    },
+
     [BEGIN_ONBOARD_FLOW]: (state, action) => ({
       ...state,
       activeItinerary: null,
+      // A trip is starting the rider's own way: the armed one is off (B4).
+      arm: null,
+      // "I'm already on the bus" from the planner starts a trip (65.2 Q2 = A).
+      auto: AUTO_OFF,
       boardingPrompt: { ...defaultState.boardingPrompt },
       isActive: true,
       onboard: {
@@ -830,6 +907,14 @@ const goMode = handleActions<GoModeState, any>(
           ? state.vehicleMatch
           : { ...defaultState.vehicleMatch }
     }),
+
+    // The arm goes: its start, a cancel, its lapse, or a trip started some
+    // other way. Only the arm it names, when it names one.
+    [CLEAR_AUTO_ARM]: (state, action) =>
+      !state.arm ||
+      (action.payload?.id != null && action.payload.id !== state.arm.id)
+        ? state
+        : { ...state, arm: null },
 
     [CLEAR_FASTER_ROUTE_OFFER]: (state, action) =>
       // Only the offer it names, when it names one: a clear for an offer that
@@ -1017,6 +1102,45 @@ const goMode = handleActions<GoModeState, any>(
       // The dwell has done its job, or the distance did it first (12.17).
       nearDestination: null
     }),
+
+    // "Start when I leave" (65.2 B4). SET_AUTO_ARM installs an arm ({ arm })
+    // or patches the one installed ({ id, point } / { id, preset }) — never
+    // another arm's.
+    [SET_AUTO_ARM]: (state, action) => {
+      const p = action.payload || {}
+      if (p.arm) return { ...state, arm: p.arm }
+      if (!state.arm || p.id !== state.arm.id) return state
+      const patch: Partial<AutoArm> = {}
+      if (p.point !== undefined) patch.point = p.point
+      if (p.preset) patch.preset = p.preset
+      return { ...state, arm: { ...state.arm, ...patch } }
+    },
+
+    [SET_AUTO_MODE]: (state, action) => ({
+      ...state,
+      auto: {
+        ...state.auto,
+        on: !!action.payload?.on,
+        preset: action.payload?.preset ?? state.auto.preset,
+        // Turning Auto off takes its Undo with it; the counts stay for the
+        // trip (the cap and the left routes are per trip, not per toggle).
+        undo: action.payload?.on ? state.auto.undo : null
+      }
+    }),
+
+    // The Undo on the card: set after a switch, cleared when it lapses — only
+    // the one it names, so a lapse cannot take a newer switch's Undo.
+    [SET_AUTO_UNDO]: (state, action) => {
+      const undo = action.payload?.undo ?? null
+      if (
+        !undo &&
+        action.payload?.switchId &&
+        state.auto.undo?.switchId !== action.payload.switchId
+      ) {
+        return state
+      }
+      return { ...state, auto: { ...state.auto, undo } }
+    },
 
     [SET_BOARDING_SEARCH_FAILED]: (state, action) => ({
       ...state,
@@ -1327,7 +1451,8 @@ const goMode = handleActions<GoModeState, any>(
     }),
 
     [START_GO_MODE]: (state, action) => {
-      const { itinerary, multiStop, originalFrom, roundTrip } = action.payload
+      const { itinerary, multiStop, newTrip, originalFrom, roundTrip } =
+        action.payload
       const nowMs: number = action.payload?.nowMs ?? Date.now()
       const restart = !state.isActive
       const carried =
@@ -1349,8 +1474,22 @@ const goMode = handleActions<GoModeState, any>(
       return {
         ...state,
         activeItinerary: itinerary,
+        // Any trip that starts ends an arm (65.2 B4): its own start cleared
+        // it already; a Start Trip tapped while armed replaces it.
+        arm: null,
         arrivedAt: null,
         arrivedDelay: null,
+
+        // Auto is per trip (65.2 Q2 = A): off when a trip STARTS — Go Mode
+        // was off, or the rider tapped Start Trip on another route — and kept
+        // across a swap within the trip, its own switch included. The Undo is
+        // about the plan just replaced, so it goes.
+        auto:
+          restart || newTrip
+            ? AUTO_OFF
+            : state.auto.undo
+            ? { ...state.auto, undo: null }
+            : state.auto,
 
         // The departure pick belonged to the plan that has just been replaced
         // (12.14). A mid-trip auto-update IS a START_GO_MODE, so an override
@@ -1554,11 +1693,15 @@ const goMode = handleActions<GoModeState, any>(
 
     [STOP_GO_MODE]: (state, action) => ({
       ...defaultState,
+
       // Getting OFF a bus is just as physical, and it has to survive alongside
       // the confirmed match below — otherwise exiting Go Mode after an alight
       // hands the next onboard flow the match without the fact that disproves
       // it, which is the 8/9 hole through a different door.
       alightedFrom: state.alightedFrom,
+
+      // Not the trip's to end (65.2 B4): an arm is made with Go Mode off.
+      arm: state.arm,
       // Being aboard a bus is a physical fact; exiting the Go Mode screen
       // doesn't change it. On 7/12 the rider backed out and immediately
       // reopened "I'm on the bus" — with riding wiped here, the flow forgot
