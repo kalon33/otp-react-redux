@@ -6995,7 +6995,7 @@ export function discoverVehiclesOnNearbyRoutes(pos: GeolocationPosition) {
       lon,
       allVehicles,
       PICKER_RADIUS_METERS,
-      { userSpeedMps: pos.coords.speed }
+      { nowMs: getCurrentTime().getTime(), userSpeedMps: pos.coords.speed }
     ).map((v) => ({ ...v, ...(vehicleDetails[v.vehicleId] || {}) }))
 
     dispatch({ payload: nearby, type: UPDATE_NEARBY_VEHICLES })
@@ -12575,7 +12575,13 @@ export function performVehicleMatching(routeId: string) {
       // The bus the rider is riding keeps the match unless it is truly gone
       // (35.1, 12.11): held in range through a heading-less or turn-stale
       // frame, and ranked by its corridor as well as its projected point.
-      { ridingVehicleId: goMode.riding?.vehicleId ?? null }
+      // Frames are aged against the tick's clock (54.6): the wall clock on a
+      // ride, the sim clock in a replay — where Date.now() made every
+      // recorded frame read as hours old and the matcher drop it.
+      {
+        nowMs: getCurrentTime().getTime(),
+        ridingVehicleId: goMode.riding?.vehicleId ?? null
+      }
     )
 
     // Track consecutive matches — per tick, and per distinct feed frame. The
@@ -12615,7 +12621,7 @@ export function performVehicleMatching(routeId: string) {
       userPos.coords.longitude,
       vehicles,
       200,
-      { userSpeedMps: riderSpeed }
+      { nowMs: getCurrentTime().getTime(), userSpeedMps: riderSpeed }
     )
     dispatch({ payload: nearby, type: UPDATE_NEARBY_VEHICLES })
 
@@ -12745,7 +12751,7 @@ export function searchBoardingVehicles() {
         pos.coords.longitude,
         vehicles,
         PICKER_RADIUS_METERS,
-        { userSpeedMps: pos.coords.speed }
+        { nowMs: getCurrentTime().getTime(), userSpeedMps: pos.coords.speed }
       )
       dispatch({ payload: nearby, type: UPDATE_NEARBY_VEHICLES })
     } catch {
@@ -13329,7 +13335,7 @@ export function confirmOnboardRoute(
         choosing
           ? speedAdjustedRadius(PICKER_RADIUS_METERS, pos.coords.speed)
           : Infinity,
-        { userSpeedMps: pos.coords.speed }
+        { nowMs: getCurrentTime().getTime(), userSpeedMps: pos.coords.speed }
       )[0]
     } else if (vehicles.length && !choosing) {
       chosen = vehicles[0]
