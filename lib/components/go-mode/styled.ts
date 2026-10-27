@@ -700,7 +700,7 @@ export const DeviationWarning = styled.div`
 `
 
 // GoModeScreen styles
-export const FullScreenWrapper = styled.div`
+export const FullScreenWrapper = styled.div.attrs({ className: 'tn-gomode' })`
   background-color: var(--tn-bg);
   bottom: 0;
   color: var(--tn-text);

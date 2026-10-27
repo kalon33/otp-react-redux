@@ -43,7 +43,8 @@ const HeaderRow = styled.div`
   display: flex;
   flex-wrap: wrap;
 
-  .otp.mobile && {
+  .otp.mobile &&,
+  .tn-gomode && {
     align-items: center;
     font-size: 14px;
     gap: var(--tn-space-1);
@@ -51,7 +52,8 @@ const HeaderRow = styled.div`
     padding: var(--tn-space-2) var(--tn-space-3) 0;
   }
 
-  .otp.mobile && .sort-direction-button {
+  .otp.mobile && .sort-direction-button,
+  .tn-gomode && .sort-direction-button {
     align-items: center;
     border-radius: var(--tn-radius-pill);
     color: var(--tn-text-2);
@@ -60,17 +62,20 @@ const HeaderRow = styled.div`
     justify-content: center;
     width: var(--tn-tap);
   }
-  .otp.mobile && .sort-direction-button:active {
+  .otp.mobile && .sort-direction-button:active,
+  .tn-gomode && .sort-direction-button:active {
     background-color: var(--tn-surface-2);
   }
-  .otp.mobile && .sort-direction-button svg {
+  .otp.mobile && .sort-direction-button svg,
+  .tn-gomode && .sort-direction-button svg {
     height: 16px;
     width: 16px;
   }
 
   /* The chip: a surface pill on the page ground (surface-2 would vanish on
      --tn-bg), 36 px with a 44 px hit area, 14 px 500 and a small caret. */
-  .otp.mobile && button[aria-haspopup='listbox'] {
+  .otp.mobile && button[aria-haspopup='listbox'],
+  .tn-gomode && button[aria-haspopup='listbox'] {
     align-items: center;
     background-color: var(--tn-surface);
     border: 0;
@@ -85,7 +90,8 @@ const HeaderRow = styled.div`
     position: relative;
     white-space: nowrap;
   }
-  .otp.mobile && button[aria-haspopup='listbox']::after {
+  .otp.mobile && button[aria-haspopup='listbox']::after,
+  .tn-gomode && button[aria-haspopup='listbox']::after {
     bottom: -4px;
     content: '';
     left: 0;
@@ -93,16 +99,19 @@ const HeaderRow = styled.div`
     right: 0;
     top: -4px;
   }
-  .otp.mobile && button[aria-haspopup='listbox']:focus-visible {
+  .otp.mobile && button[aria-haspopup='listbox']:focus-visible,
+  .tn-gomode && button[aria-haspopup='listbox']:focus-visible {
     outline: 2px solid var(--tn-accent);
     outline-offset: 2px;
   }
-  .otp.mobile && button[aria-haspopup='listbox'][aria-expanded='true'] {
+  .otp.mobile && button[aria-haspopup='listbox'][aria-expanded='true'],
+  .tn-gomode && button[aria-haspopup='listbox'][aria-expanded='true'] {
     background-color: var(--tn-accent-soft);
     box-shadow: none;
     color: var(--tn-accent);
   }
-  .otp.mobile && button[aria-haspopup='listbox'] .caret {
+  .otp.mobile && button[aria-haspopup='listbox'] .caret,
+  .tn-gomode && button[aria-haspopup='listbox'] .caret {
     border-top-width: 5px;
     border-left-width: 4px;
     border-right-width: 4px;
@@ -110,7 +119,8 @@ const HeaderRow = styled.div`
   }
 
   /* Its menu: 44 px rows, the selected one in accent. */
-  .otp.mobile && button[aria-haspopup='listbox'] + * {
+  .otp.mobile && button[aria-haspopup='listbox'] + *,
+  .tn-gomode && button[aria-haspopup='listbox'] + * {
     border: 0;
     border-radius: var(--tn-radius-sm);
     box-shadow: var(--tn-shadow);
@@ -118,18 +128,21 @@ const HeaderRow = styled.div`
     min-width: 200px;
     padding: var(--tn-space-1) 0;
   }
-  .otp.mobile && .sort-option button {
+  .otp.mobile && .sort-option button,
+  .tn-gomode && .sort-option button {
     color: var(--tn-text);
     font: var(--tn-type-body);
     min-height: var(--tn-tap);
     padding: 0 var(--tn-space-4);
   }
-  .otp.mobile && .sort-option button[aria-selected='true'] {
+  .otp.mobile && .sort-option button[aria-selected='true'],
+  .tn-gomode && .sort-option button[aria-selected='true'] {
     color: var(--tn-accent);
     font-weight: 600;
   }
 
-  .otp.mobile && .view-all-options {
+  .otp.mobile && .view-all-options,
+  .tn-gomode && .view-all-options {
     align-items: center;
     border-radius: var(--tn-radius-pill);
     color: var(--tn-accent);
@@ -138,10 +151,12 @@ const HeaderRow = styled.div`
     min-height: var(--tn-tap);
     padding: 0 var(--tn-space-2);
   }
-  .otp.mobile && .view-all-options:active {
+  .otp.mobile && .view-all-options:active,
+  .tn-gomode && .view-all-options:active {
     background-color: var(--tn-accent-soft);
   }
-  .otp.mobile && .view-all-options svg {
+  .otp.mobile && .view-all-options svg,
+  .tn-gomode && .view-all-options svg {
     height: 16px;
     width: 16px;
   }

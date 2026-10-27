@@ -51,6 +51,9 @@ const PlaceRow = styled(TnListRow)`
 
 /** "Add another place": an accent row of its own, under the list. */
 const AddRow = styled(TnListRow)`
+  /* Alone in its card: carry the card's corners, since the card itself
+     does not clip (settings-list.ts). */
+  border-radius: var(--tn-radius);
   color: var(--tn-accent);
   font: 600 16px/22px var(--tn-font);
 

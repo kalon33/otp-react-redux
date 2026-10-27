@@ -74,7 +74,7 @@ const { ensureAtLeastOneMinute } = coreUtils.time
 // arrives, with the row's other departures as small chips; row 3 is the
 // biking / walking and wait line. Colours are the design tokens, so the card
 // follows the phone's dark mode; the card chrome itself (surface, radius 16,
-// shadow, one card per result) is applied under `.otp.mobile` only, so the
+// shadow, one card per result) is applied under `:is(.otp.mobile, .tn-gomode)` only, so the
 // desktop sidebar and Go Mode's lists keep their own framing.
 const ItineraryWrapper = styled.div.attrs((props) => {
   return { 'aria-label': props['aria-label'] }
@@ -87,16 +87,19 @@ const ItineraryWrapper = styled.div.attrs((props) => {
 
   /* itinerary.css frames the rows as one joined list (white, 10 px corners on
      the first and last); on the phone every result is its own card. */
-  .otp.mobile .option.metro-itin div.header && {
+  .otp.mobile .option.metro-itin div.header &&,
+  .tn-gomode .option.metro-itin div.header && {
     background-color: var(--tn-surface);
     border: 0;
     border-radius: var(--tn-radius);
     box-shadow: var(--tn-shadow);
   }
-  .otp.mobile .option.metro-itin div.header &&:hover {
+  .otp.mobile .option.metro-itin div.header &&:hover,
+  .tn-gomode .option.metro-itin div.header &&:hover {
     background-color: var(--tn-surface);
   }
-  .otp.mobile .option.metro-itin.expanded div.header && {
+  .otp.mobile .option.metro-itin.expanded div.header &&,
+  .tn-gomode .option.metro-itin.expanded div.header && {
     border-radius: 0;
     box-shadow: none;
   }

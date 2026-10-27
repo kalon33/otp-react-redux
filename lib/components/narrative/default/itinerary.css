@@ -420,10 +420,10 @@
    sticks above the safe area while the body scrolls under it; "Start when I
    leave" is the secondary pill after it (its inline outline style is the
    desktop's, hence the !important). */
-.otp.mobile .option.metro-itin.expanded {
+:is(.otp.mobile, .tn-gomode) .option.metro-itin.expanded {
   background-color: var(--tn-surface);
 }
-.otp.mobile .option.metro-itin.expanded > button {
+:is(.otp.mobile, .tn-gomode) .option.metro-itin.expanded > button {
   align-items: center;
   border: 0;
   border-radius: var(--tn-radius-pill);
@@ -436,7 +436,7 @@
   transition: filter 120ms ease;
   width: calc(100% - 2 * var(--tn-space-4));
 }
-.otp.mobile .option.metro-itin.expanded > button:not(.start-when-i-leave) {
+:is(.otp.mobile, .tn-gomode) .option.metro-itin.expanded > button:not(.start-when-i-leave) {
   background-color: var(--tn-accent);
   bottom: calc(var(--tn-safe-bottom) + var(--tn-space-3));
   box-shadow: var(--tn-shadow);
@@ -445,17 +445,17 @@
   position: sticky;
   z-index: 5;
 }
-.otp.mobile .option.metro-itin.expanded > button.start-when-i-leave {
+:is(.otp.mobile, .tn-gomode) .option.metro-itin.expanded > button.start-when-i-leave {
   background-color: var(--tn-surface-2) !important;
   border: 0 !important;
   color: var(--tn-text) !important;
   margin-bottom: calc(var(--tn-safe-bottom) + var(--tn-space-4));
   margin-top: var(--tn-space-2) !important;
 }
-.otp.mobile .option.metro-itin.expanded > button:active {
+:is(.otp.mobile, .tn-gomode) .option.metro-itin.expanded > button:active {
   filter: brightness(0.92);
 }
-.otp.mobile .option.metro-itin.expanded > button:focus-visible {
+:is(.otp.mobile, .tn-gomode) .option.metro-itin.expanded > button:focus-visible {
   outline: 2px solid var(--tn-accent);
   outline-offset: 2px;
 }

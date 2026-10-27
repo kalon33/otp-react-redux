@@ -746,6 +746,7 @@ const GoModeDemo = (): JSX.Element => (
     onError={() => undefined}
   >
     <div
+      className="tn-gomode"
       style={{
         background: 'var(--tn-surface)',
         color: 'var(--tn-text)',

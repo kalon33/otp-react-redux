@@ -647,3 +647,27 @@
   height: 20px;
   width: 20px;
 }
+
+/* --- Integration fixes (2026-10-27) ------------------------------------- */
+
+/* Opened-itinerary header row: "Log in to save trip" / "Save trip" sit beside
+   the 44 px "View all options" row; give them the same height and the token
+   colours (itinerary.css leaves them as bare text). */
+html.tn-mobile .otp .options .pull-right,
+html.tn-mobile .otp .options .pull-right > a,
+html.tn-mobile .otp .options .pull-right > button {
+  align-items: center;
+  color: var(--tn-text-2);
+  display: inline-flex;
+  font: 500 14px/18px var(--tn-font);
+  min-height: var(--tn-tap);
+}
+
+/* Loading placeholders while a search is pending: itinerary.css paints the
+   default-itin card white, which glows in dark mode. */
+html.tn-mobile .otp .option.default-itin {
+  background-color: var(--tn-surface);
+  border-color: var(--tn-border);
+  border-radius: var(--tn-radius);
+  color: var(--tn-text);
+}

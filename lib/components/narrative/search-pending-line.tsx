@@ -63,7 +63,8 @@ const Line = styled.div`
     color: var(--tn-accent);
   }
 
-  .otp.mobile && {
+  .otp.mobile &&,
+  .tn-gomode && {
     padding: var(--tn-space-1) var(--tn-space-4) var(--tn-space-2);
   }
 `
