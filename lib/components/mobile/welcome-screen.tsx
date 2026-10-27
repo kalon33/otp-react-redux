@@ -25,11 +25,8 @@ const MobileWelcomeScreen = ({ setMobileScreen }: Props) => {
 
   return (
     <MobileContainer>
-      <MobileNavigationBar
-        headerText={intl.formatMessage({
-          id: 'components.BatchSearchScreen.header'
-        })}
-      />
+      {/* No headerText: the home screen's bar carries the product name. */}
+      <MobileNavigationBar />
       <main tabIndex={-1}>
         <div className="welcome-location mobile-padding">
           <LocationField

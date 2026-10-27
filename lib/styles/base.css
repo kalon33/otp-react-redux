@@ -1,0 +1,649 @@
+/*
+ * TransitNav base styles (mobile overhaul, 2026-10-26).
+ *
+ * Imported LAST from index.css, so on equal specificity it wins over
+ * bootstrap, react-sliding-pane, every component stylesheet and
+ * tmp/custom-styles.css (the config copy of example/example.css, which paints
+ * the #444 navbar). Values come from lib/styles/tokens.css.
+ *
+ * Scopes — nothing here may reach the desktop layout:
+ * - `.otp.mobile`          the phone screens (MobileContainer).
+ * - `.tn-mobile .otp`      the same, plus the AppFrame pages (/settings,
+ *                          /feedback, saved places) the phone routes to.
+ * - `.tn-mobile`           <html> on the phone (lib/util/tn-root-classes.ts):
+ *                          portals such as the app-menu drawer and modals.
+ * Go Mode renders outside any `.otp` element and keeps its own header styles
+ * (go-mode/styled.ts FullScreenWrapper); only the drawer reaches it.
+ *
+ * Shared primitives: prefer the styled-components in
+ * lib/components/util/tn-styled.ts; the .tn-* classes at the bottom are the
+ * same recipes for plain .js components and markup without a styled wrapper.
+ */
+
+/* ---------- Root + page ground ---------- */
+
+:root.tn-mobile {
+  accent-color: var(--tn-accent);
+  color-scheme: light dark;
+}
+:root.tn-mobile[data-theme='light'] {
+  color-scheme: light;
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+}
+
+.tn-mobile body,
+.otp.mobile {
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-font-smoothing: antialiased;
+  background-color: var(--tn-bg);
+  font-family: var(--tn-font);
+}
+
+.tn-mobile body {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Text colour flips only where the surfaces flip with it. <body> keeps
+   bootstrap's #333 on purpose: Go Mode sits outside .otp on hard-coded white
+   cards that inherit their text colour, and a light --tn-text there would be
+   white on white in dark mode until Go Mode moves onto the tokens. */
+.tn-mobile .otp {
+  color: var(--tn-text);
+}
+
+/* Low-specificity defaults (0,0,1 via :where) so any component rule wins. */
+:where(.tn-mobile .otp) a {
+  color: var(--tn-accent);
+}
+:where(.tn-mobile .otp) hr {
+  border-top-color: var(--tn-border);
+}
+:where(.tn-mobile .otp)
+  input:where(
+    :not([type]),
+    [type='text'],
+    [type='search'],
+    [type='email'],
+    [type='tel'],
+    [type='url'],
+    [type='number'],
+    [type='password'],
+    [type='date'],
+    [type='time']
+  ),
+:where(.tn-mobile .otp) select,
+:where(.tn-mobile .otp) textarea {
+  background-color: var(--tn-surface-2);
+  border: 0;
+  border-radius: var(--tn-radius-sm);
+  color: var(--tn-text);
+  font-family: inherit;
+  /* 16px: anything smaller makes iOS zoom the page on focus. */
+  font-size: 16px;
+}
+:where(.tn-mobile .otp) input::placeholder,
+:where(.tn-mobile .otp) textarea::placeholder {
+  color: var(--tn-text-3);
+  opacity: 1;
+}
+
+/* ---------- App bar (navigation-bar.js) ----------
+   Height stays 50px (--tn-appbar-h): every fixed mobile screen offsets its
+   top from that number. */
+
+.otp.mobile .navbar.mobile-navbar-container {
+  background: var(--tn-surface);
+  border: 0;
+  border-radius: 0;
+  /* Hairline inside the 50px box, so nothing below moves. */
+  box-shadow: inset 0 -1px 0 var(--tn-border);
+  color: var(--tn-text);
+  height: var(--tn-appbar-h);
+  margin: 0;
+  min-height: var(--tn-appbar-h);
+}
+
+/* Three columns: buttons | title | actions. The side columns are equal (1fr)
+   but never narrower than their buttons, so a short title sits dead centre
+   and a long one takes the free width and ellipsizes. */
+.otp.mobile .mobile-navbar-container .container-fluid {
+  align-items: center;
+  display: grid;
+  grid-template-columns:
+    minmax(max-content, 1fr) minmax(0, auto)
+    minmax(max-content, 1fr);
+  grid-template-rows: var(--tn-appbar-h);
+  height: var(--tn-appbar-h);
+  padding: 0 var(--tn-space-1);
+}
+/* Bootstrap's clearfix pseudo-elements would become grid items. */
+.otp.mobile .mobile-navbar-container .container-fluid::before,
+.otp.mobile .mobile-navbar-container .container-fluid::after {
+  display: none;
+}
+
+.otp.mobile .mobile-navbar-container .navbar-header {
+  display: block;
+  float: none;
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: start;
+  margin: 0;
+  width: auto !important;
+}
+
+.otp.mobile .mobile-navbar-container .navbar-brand {
+  align-items: center;
+  display: flex;
+  float: none;
+  gap: 0;
+  height: var(--tn-appbar-h);
+  margin: 0;
+  padding: 0;
+  width: auto;
+}
+
+.otp.mobile .mobile-navbar-container .mobile-header {
+  grid-column: 2;
+  grid-row: 1;
+  justify-content: center;
+  min-width: 0;
+  padding: 0 var(--tn-space-1);
+}
+
+.otp.mobile .navbar .mobile-header-text,
+.otp.mobile .navbar .navbar-title {
+  color: var(--tn-text);
+  font: var(--tn-type-lg) !important;
+  letter-spacing: -0.01em;
+  margin: 0;
+  overflow: hidden;
+  padding: 0;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 100%;
+}
+
+.otp.mobile .mobile-navbar-container .locale-selector-and-login {
+  align-items: center;
+  display: flex;
+  grid-column: 3;
+  grid-row: 1;
+  justify-self: end;
+}
+
+/* Hamburger: a 44px target drawing a 20x16 glyph of three 2px lines. */
+.otp.mobile .navbar .app-menu-icon {
+  border-radius: var(--tn-radius-pill);
+  box-sizing: border-box;
+  color: var(--tn-text);
+  height: var(--tn-tap);
+  padding: 14px 12px;
+  transition: background-color 150ms ease;
+  width: var(--tn-tap);
+}
+.otp.mobile .navbar .app-menu-icon .menu-line {
+  border-bottom: 2px solid currentColor;
+  transition: transform 250ms ease, top 250ms ease, bottom 250ms ease;
+}
+.otp.mobile .navbar .app-menu-icon[aria-expanded='true'] .menu-line.top {
+  top: 7px;
+}
+.otp.mobile .navbar .app-menu-icon[aria-expanded='true'] .menu-line.bottom {
+  bottom: 7px;
+}
+
+.otp.mobile .navbar .mobile-back,
+.otp.mobile .navbar .mobile-header-action > button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: var(--tn-radius-pill);
+  color: var(--tn-text);
+  display: inline-flex;
+  font-size: 20px;
+  justify-content: center;
+  min-height: var(--tn-tap);
+  min-width: var(--tn-tap);
+  padding: 0;
+}
+.otp.mobile .navbar .mobile-back svg {
+  height: 20px;
+  width: 20px;
+}
+.otp.mobile .navbar .app-menu-icon:active,
+.otp.mobile .navbar .mobile-back:active,
+.otp.mobile .navbar .mobile-header-action > button:active {
+  background-color: var(--tn-surface-2);
+}
+
+.otp.mobile .navbar .mobile-close {
+  align-items: center;
+  color: var(--tn-text);
+  display: flex;
+  height: var(--tn-appbar-h);
+  right: var(--tn-space-1);
+  top: 0;
+}
+
+/* The AppFrame pages' bar on the phone (DesktopNav, navbar-inverse #222). */
+.tn-mobile .otp:not(.mobile) .navbar {
+  background: var(--tn-surface);
+  border: 0;
+  border-radius: 0;
+  box-shadow: inset 0 -1px 0 var(--tn-border);
+  color: var(--tn-text);
+}
+.tn-mobile .otp:not(.mobile) .navbar .app-menu-icon .menu-line {
+  border-bottom-color: var(--tn-text);
+}
+
+/* ---------- App-menu drawer (react-sliding-pane, app-menu.tsx) ----------
+   The pane is a react-modal portal on <body>, hence the .tn-mobile scope. */
+
+.tn-mobile .slide-pane__overlay.overlay-after-open {
+  background-color: var(--tn-scrim);
+}
+
+.tn-mobile .slide-pane {
+  background: var(--tn-surface);
+  box-shadow: var(--tn-shadow);
+  color: var(--tn-text);
+  font-family: var(--tn-font);
+  max-width: calc(100vw - 48px);
+}
+
+.tn-mobile .slide-pane_from_left {
+  border-top-right-radius: var(--tn-radius);
+  height: calc(100% - var(--tn-appbar-h));
+  margin-top: var(--tn-appbar-h);
+}
+
+.tn-mobile .slide-pane__content {
+  padding: var(--tn-space-2) 0 calc(var(--tn-space-4) + var(--tn-safe-bottom));
+}
+
+.tn-mobile .app-menu {
+  padding: 0;
+}
+
+/* Rows: 52px, 20px side padding, 22px icon in text-2, 17px label. */
+.tn-mobile .app-menu a,
+.tn-mobile .app-menu button {
+  align-items: center;
+  color: var(--tn-text);
+  gap: var(--tn-space-4);
+  font: 400 17px/22px var(--tn-font);
+  min-height: var(--tn-row-h);
+  padding: 0 20px;
+  text-align: start;
+}
+.tn-mobile .app-menu :is(a, button) > span[aria-hidden] {
+  color: var(--tn-text-2);
+  display: inline-flex;
+  flex: none;
+  justify-content: center;
+  width: 22px;
+}
+.tn-mobile .app-menu img,
+.tn-mobile .app-menu svg {
+  height: 22px;
+  margin: 0;
+  max-height: none;
+  width: 22px;
+}
+.tn-mobile .app-menu .expand-menu-chevron {
+  color: var(--tn-text-3);
+}
+.tn-mobile .app-menu .expand-menu-chevron svg {
+  height: 16px;
+  width: 16px;
+}
+.tn-mobile .app-menu a:focus,
+.tn-mobile .app-menu button:focus {
+  background-color: transparent;
+  outline: none;
+}
+.tn-mobile .app-menu a:focus-visible,
+.tn-mobile .app-menu button:focus-visible {
+  outline: 2px solid var(--tn-accent);
+  outline-offset: -2px;
+}
+.tn-mobile .app-menu a:active,
+.tn-mobile .app-menu button:active {
+  background-color: var(--tn-surface-2);
+}
+@media (hover: hover) {
+  .tn-mobile .app-menu a:hover,
+  .tn-mobile .app-menu button:hover {
+    color: var(--tn-accent);
+  }
+}
+.tn-mobile .app-menu .sub-menu-container {
+  border-top: 1px solid var(--tn-border);
+  margin-top: 0;
+  padding-left: 38px;
+}
+.tn-mobile .app-menu .app-menu-divider {
+  border-bottom: 1px solid var(--tn-border);
+  padding: 0 20px;
+}
+.tn-mobile .app-menu .app-menu-build-info {
+  color: var(--tn-text-3);
+  font: var(--tn-type-xs);
+  font-variant-numeric: var(--tn-tabular);
+  padding: var(--tn-space-4) 20px;
+}
+
+/* ---------- Bootstrap, neutralised on the phone ---------- */
+
+.tn-mobile .otp .btn {
+  border-radius: var(--tn-radius-sm);
+  box-shadow: none;
+  font-family: inherit;
+  font-weight: 500;
+}
+.tn-mobile .otp .btn-default {
+  background-color: var(--tn-surface-2);
+  border-color: transparent;
+  color: var(--tn-text);
+}
+.tn-mobile .otp .btn-default:hover,
+.tn-mobile .otp .btn-default:focus,
+.tn-mobile .otp .btn-default:active,
+.tn-mobile .otp .btn-default.active,
+.tn-mobile .otp .open > .dropdown-toggle.btn-default {
+  background-color: var(--tn-border);
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--tn-text);
+}
+.tn-mobile .otp .btn-primary {
+  background-color: var(--tn-accent);
+  border-color: transparent;
+  color: var(--tn-accent-ink);
+}
+.tn-mobile .otp .btn-primary:hover,
+.tn-mobile .otp .btn-primary:focus,
+.tn-mobile .otp .btn-primary:active,
+.tn-mobile .otp .btn-primary.active {
+  background-color: var(--tn-accent);
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--tn-accent-ink);
+  filter: brightness(0.92);
+}
+.tn-mobile .otp .btn-link {
+  color: var(--tn-accent);
+}
+.tn-mobile .otp .btn:focus-visible {
+  outline: 2px solid var(--tn-accent);
+  outline-offset: 2px;
+}
+
+.tn-mobile .otp .form-control {
+  background-color: var(--tn-surface-2);
+  border: 0;
+  border-radius: var(--tn-radius-sm);
+  box-shadow: none;
+  color: var(--tn-text);
+  font-size: 16px;
+  height: var(--tn-control-h);
+  padding: 0 var(--tn-space-3);
+}
+.tn-mobile .otp textarea.form-control {
+  height: auto;
+  padding: var(--tn-space-3);
+}
+.tn-mobile .otp .form-control:focus {
+  box-shadow: inset 0 0 0 2px var(--tn-accent);
+}
+.tn-mobile .otp .form-control::placeholder {
+  color: var(--tn-text-3);
+}
+
+.tn-mobile .otp .panel {
+  background-color: var(--tn-surface);
+  border: 0;
+  border-radius: var(--tn-radius);
+  box-shadow: none;
+  color: var(--tn-text);
+}
+.tn-mobile .otp .panel > .panel-heading,
+.tn-mobile .otp .panel-default > .panel-heading {
+  background-color: transparent;
+  border-color: var(--tn-border);
+  color: var(--tn-text);
+}
+.tn-mobile .otp .panel-footer {
+  background-color: var(--tn-surface-2);
+  border-color: var(--tn-border);
+}
+.tn-mobile .otp .well {
+  background-color: var(--tn-surface-2);
+  border: 0;
+  border-radius: var(--tn-radius);
+  box-shadow: none;
+}
+.tn-mobile .otp .list-group-item {
+  background-color: var(--tn-surface);
+  border-color: var(--tn-border);
+  color: var(--tn-text);
+}
+.tn-mobile .otp .list-group-item:first-child {
+  border-top-left-radius: var(--tn-radius);
+  border-top-right-radius: var(--tn-radius);
+}
+.tn-mobile .otp .list-group-item:last-child {
+  border-bottom-left-radius: var(--tn-radius);
+  border-bottom-right-radius: var(--tn-radius);
+}
+.tn-mobile .otp .text-muted,
+.tn-mobile .otp .help-block {
+  color: var(--tn-text-2);
+}
+
+.tn-mobile .dropdown-menu {
+  background-color: var(--tn-surface);
+  border: 1px solid var(--tn-border);
+  border-radius: var(--tn-radius-sm);
+  box-shadow: var(--tn-shadow);
+  color: var(--tn-text);
+}
+.tn-mobile .dropdown-menu > li > a,
+.tn-mobile .dropdown-menu > li > button {
+  color: var(--tn-text);
+}
+.tn-mobile .dropdown-menu > li > a:hover,
+.tn-mobile .dropdown-menu > li > a:focus {
+  background-color: var(--tn-surface-2);
+  color: var(--tn-text);
+}
+.tn-mobile .dropdown-menu .divider {
+  background-color: var(--tn-border);
+}
+
+.tn-mobile .modal-content {
+  background-color: var(--tn-surface);
+  border: 0;
+  border-radius: var(--tn-radius);
+  box-shadow: var(--tn-shadow);
+  color: var(--tn-text);
+}
+.tn-mobile .modal-header,
+.tn-mobile .modal-footer {
+  border-color: var(--tn-border);
+}
+.tn-mobile .close {
+  color: var(--tn-text);
+  text-shadow: none;
+}
+
+/* The 3px sidebar shadows and the old search sheet's drop shadow. */
+.tn-mobile .otp .sidebar,
+.otp.mobile .search-settings {
+  box-shadow: none;
+}
+
+/* ---------- Location field (@opentripplanner/location-field) ----------
+   48px pill-cornered field on surface-2 instead of the 1px black underline.
+   Matched structurally ([role=group] holding the combobox input), because the
+   package's class names are generated. Screen agents restyle the form layout
+   around it; this is only the field itself. */
+
+.tn-mobile .otp [role='group']:has(> input[role='combobox']) {
+  align-items: center;
+  background-color: var(--tn-surface-2);
+  border-bottom: 0;
+  border-radius: var(--tn-radius-sm);
+  margin-bottom: var(--tn-space-2);
+  min-height: var(--tn-control-h);
+}
+.tn-mobile .otp [role='group'] > input[role='combobox'] {
+  background: transparent;
+  border: 0;
+  color: var(--tn-text);
+  font-size: 16px;
+  height: var(--tn-control-h);
+  min-width: 0;
+  padding: 0 var(--tn-space-3) 0 var(--tn-space-1);
+  width: 100%;
+}
+.tn-mobile .otp [role='group'] > input[role='combobox']::placeholder {
+  color: var(--tn-text-3);
+}
+.tn-mobile .otp [role='group']:has(> input[role='combobox']) > button {
+  align-self: stretch;
+  color: var(--tn-text-2);
+}
+
+/* Its suggestion list: token colours (it hard-codes #fff / #333 / #337ab7). */
+.tn-mobile .otp ul[role='listbox'] {
+  background-color: var(--tn-surface);
+  border-color: var(--tn-border);
+  border-radius: var(--tn-radius-sm);
+  color: var(--tn-text);
+}
+.tn-mobile .otp ul[role='listbox'] > li {
+  color: var(--tn-text);
+}
+.tn-mobile .otp ul[role='listbox'] > li:hover {
+  background-color: var(--tn-surface-2);
+}
+
+/* Group headers inside it ("Recent", "Stops"): eyebrow, not a #333 bar. */
+.tn-mobile .otp ul[role='listbox'] > :is(h1, h2, h3, h4, h5, h6) {
+  background-color: transparent;
+  color: var(--tn-text-2);
+  font: var(--tn-type-xs);
+  letter-spacing: var(--tn-tracking-xs);
+  padding: var(--tn-space-3) var(--tn-space-4) var(--tn-space-1);
+  text-align: start;
+  text-transform: uppercase;
+}
+
+/* @opentripplanner/building-blocks Dropdown (sort control, depart/arrive):
+   hard-codes a white face and a black 1px border. Its toggle is the only
+   button with aria-haspopup="listbox"; its menu is the div right after it. */
+.tn-mobile .otp button[aria-haspopup='listbox'] {
+  background-color: var(--tn-surface-2);
+  border: 0;
+  border-radius: var(--tn-radius-pill);
+  color: var(--tn-text);
+}
+.tn-mobile .otp button[aria-haspopup='listbox']:hover,
+.tn-mobile .otp button[aria-haspopup='listbox'][aria-expanded='true'] {
+  background-color: var(--tn-border);
+  color: var(--tn-text);
+}
+.tn-mobile .otp button[aria-haspopup='listbox'] + div {
+  background-color: var(--tn-surface);
+  border-color: var(--tn-border);
+  border-radius: var(--tn-radius-sm);
+  box-shadow: var(--tn-shadow);
+  color: var(--tn-text);
+}
+.tn-mobile .otp button[aria-haspopup='listbox'] + div :is(a, button):hover {
+  background-color: var(--tn-surface-2);
+}
+
+/* ---------- Shared recipes as classes (mirror tn-styled.ts) ---------- */
+
+.tn-tabular {
+  font-variant-numeric: var(--tn-tabular);
+}
+
+.tn-eyebrow {
+  color: var(--tn-text-2);
+  font: var(--tn-type-xs);
+  letter-spacing: var(--tn-tracking-xs);
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.tn-card {
+  background-color: var(--tn-surface);
+  border-radius: var(--tn-radius);
+  box-shadow: var(--tn-shadow);
+  color: var(--tn-text);
+  padding: var(--tn-space-4);
+}
+
+/* .tn-btn (primary), .tn-btn.tn-btn-secondary, .tn-btn.tn-btn-ghost,
+   + .tn-btn-block for full width. */
+.tn-btn {
+  align-items: center;
+  appearance: none;
+  background-color: var(--tn-accent);
+  border: 0;
+  border-radius: var(--tn-radius-pill);
+  color: var(--tn-accent-ink);
+  cursor: pointer;
+  display: inline-flex;
+  font: 600 16px/20px var(--tn-font);
+  gap: var(--tn-space-2);
+  justify-content: center;
+  min-height: var(--tn-control-h);
+  padding: 0 var(--tn-space-5);
+  text-decoration: none;
+  transition: filter 120ms ease, background-color 120ms ease;
+  user-select: none;
+}
+.tn-btn:active {
+  filter: brightness(0.92);
+}
+.tn-btn:focus-visible {
+  outline: 2px solid var(--tn-accent);
+  outline-offset: 2px;
+}
+.tn-btn:disabled,
+.tn-btn[aria-disabled='true'] {
+  cursor: default;
+  filter: none;
+  opacity: 0.45;
+}
+.tn-btn.tn-btn-secondary {
+  background-color: var(--tn-surface-2);
+  color: var(--tn-text);
+}
+.tn-btn.tn-btn-ghost {
+  background-color: transparent;
+  color: var(--tn-accent);
+  padding: 0 var(--tn-space-3);
+}
+.tn-btn.tn-btn-ghost:active {
+  background-color: var(--tn-accent-soft);
+  filter: none;
+}
+.tn-btn.tn-btn-block {
+  display: flex;
+  width: 100%;
+}
+.tn-btn svg {
+  flex: none;
+  height: 20px;
+  width: 20px;
+}

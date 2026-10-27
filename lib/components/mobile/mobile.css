@@ -37,46 +37,16 @@
   text-align: center;
 }
 
-.otp .navbar .mobile-header-text {
-  color: white;
-  font-size: 11px !important;
-  font-weight: 400;
-  line-height: 1.1;
-  margin: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  width: 100%;
-}
-
-@media (max-width: 768px) {
-  .otp .navbar .mobile-header-text {
-    font-size: 10px !important;
-  }
-}
-
 .otp .navbar .mobile-header-action {
   display: inline-block;
 }
 
-.otp .navbar .mobile-header-action > button {
-  color: white;
-}
-
-.otp .navbar .mobile-back {
-  background: transparent;
-  border: none;
-  color: white;
-  font-size: 18px;
-}
-
 .otp .navbar .mobile-close {
-  color: white;
-  font-size: 18px;
   position: fixed;
-  right: 6px;
-  top: 4px;
 }
+
+/* Title, back button, menu button and colours: lib/styles/base.css
+   ("App bar"), which replaced the white-on-#444 bar on 2026-10-26. */
 
 /* Welcome screen */
 

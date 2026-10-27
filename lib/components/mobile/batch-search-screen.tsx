@@ -38,8 +38,8 @@ const MobileSearchSettings = styled.div<{
   transitionDelay: number
   transitionDuration: number
 }>`
-  background: white;
-  box-shadow: 3px 0px 12px #00000052;
+  background: var(--tn-surface);
+  box-shadow: var(--tn-shadow);
   height: ${(props) =>
     props.advancedPanelOpen
       ? 'calc(100% - 50px - var(--return-to-trip-banner-height, 0px))'

@@ -9,7 +9,7 @@ import * as uiActions from '../../actions/ui'
 import { accountLinks, getAuth0Config } from '../../util/auth'
 import { AppConfig } from '../../util/config-types'
 import { AppReduxState } from '../../util/state-types'
-import { DEFAULT_APP_TITLE } from '../../util/constants'
+import { getBrandTitle } from '../../util/brand'
 import InvisibleA11yLabel from '../util/invisible-a11y-label'
 import NavLoginButtonAuth0 from '../user/nav-login-button-auth0'
 
@@ -77,7 +77,8 @@ export type Props = {
  * 1. If `branding` is defined, it is shown, and no title is displayed.
  *    (The title is still rendered for screen readers and browsers that lack image support.)
  * 2. If `branding` is not defined but if `title` is, then `title` is shown.
- * 3. If neither is defined, just show 'OpenTripPlanner' (DEFAULT_APP_TITLE).
+ * 3. If neither is defined (or `title` is the OTP default 'OpenTripPlanner'),
+ *    show 'TransitNav' (see util/brand.ts).
  *
  * TODO: merge with the mobile navigation bar.
  */
@@ -88,13 +89,8 @@ const DesktopNav = ({
   popupTarget,
   setPopupContent
 }: Props) => {
-  const {
-    brandClickable,
-    branding,
-    extraMenuItems,
-    persistence,
-    title = DEFAULT_APP_TITLE
-  } = otpConfig
+  const { brandClickable, branding, extraMenuItems, persistence } = otpConfig
+  const title = getBrandTitle(otpConfig.title)
   const intl = useIntl()
   const showLogin = Boolean(getAuth0Config(persistence))
 

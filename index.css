@@ -1,4 +1,6 @@
 @import url(node_modules/bootstrap/dist/css/bootstrap.min.css);
+/* TransitNav design tokens: before every component stylesheet (they read them). */
+@import url(lib/styles/tokens.css);
 @import url(react-sliding-pane/dist/react-sliding-pane.css);
 @import url(node_modules/maplibre-gl/dist/maplibre-gl.css);
 
@@ -13,6 +15,9 @@
 @import url(lib/components/viewers/viewers.css);
 
 @import url(tmp/custom-styles.css);
+
+/* TransitNav base styles: LAST, so they win over everything above. */
+@import url(lib/styles/base.css);
 
 /* Hide IE/Edge clear button in text input fields. */
 input[type="text"]::-ms-clear {
