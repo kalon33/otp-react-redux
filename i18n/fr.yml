@@ -541,6 +541,7 @@ components:
     locatingBus: "Localisation de votre bus..."
     nextBusesAtStop: "Prochains bus à {stop}"
     nextDeparture: "Prochain : {time} (dans {mins} min)"
+    nextStopLine: "Prochain arrêt : {stop}"
     noBusesNearby: "Aucun bus détecté à proximité"
     noLiveVehicleData: "Pas de données en temps réel — suivi par GPS"
     notYet: "Pas encore"

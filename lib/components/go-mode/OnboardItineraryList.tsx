@@ -21,10 +21,27 @@ import type { OnboardAlightOption } from '../../reducers/go-mode'
 // past it (see decorateAlightOptions). Captioning the anchor there promised a
 // stop the rider is carried straight through — 6.44, live 2026-09-02.
 const OffAtLabel = styled.div`
-  color: #2e7d32;
-  font-size: 13px;
-  font-weight: 700;
-  padding: 8px 4px 0;
+  color: var(--tn-text);
+  font: var(--tn-type-lg);
+  padding: 12px 4px 0;
+`
+
+// Each option is a card on the page ground (the rows themselves are the
+// planner's ItineraryBody and keep its own styling; this is only the chrome
+// around them).
+const OptionsList = styled(S.ULContainer)`
+  margin: var(--tn-space-3) 0 var(--tn-space-2);
+  padding: 0 var(--tn-space-3);
+
+  & > li.result {
+    background-color: var(--tn-surface);
+    border-radius: var(--tn-radius);
+    box-shadow: var(--tn-shadow);
+    color: var(--tn-text);
+    margin-bottom: var(--tn-space-3);
+    overflow: hidden;
+    padding: 0 var(--tn-space-3) var(--tn-space-1);
+  }
 `
 
 // The drill-down sits OUTSIDE the tap target below, so opening it cannot be
@@ -105,7 +122,7 @@ const OnboardItineraryList = ({
   if (!ItineraryBody) return null
 
   return (
-    <S.ULContainer role="list">
+    <OptionsList role="list">
       {groups.map((group, i) => {
         const { option, variants } = group
         const itinerary = option.displayItinerary || option.itinerary
@@ -178,7 +195,7 @@ const OnboardItineraryList = ({
           </li>
         )
       })}
-    </S.ULContainer>
+    </OptionsList>
   )
 }
 

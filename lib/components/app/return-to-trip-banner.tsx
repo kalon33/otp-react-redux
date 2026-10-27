@@ -3,7 +3,7 @@ import { CSSTransition, TransitionGroup } from 'react-transition-group'
 import { isMobile } from '@opentripplanner/core-utils/lib/ui'
 import { useIntl } from 'react-intl'
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import styled from 'styled-components'
+import styled, { keyframes } from 'styled-components'
 import type { IntlShape } from 'react-intl'
 
 import * as autoArmActions from '../../actions/auto-arm'
@@ -31,17 +31,31 @@ export const BANNER_HEIGHT_VAR = '--return-to-trip-banner-height'
 const containerClassname = 'return-to-trip-banner'
 const timeout = 250
 
-// Same slide-in recipe as network-connection-banner, in Go Mode live green.
+// Same slide-in recipe as network-connection-banner: a 40px live-tint strip
+// under the app bar with a pulsing live dot (Go Mode is running).
+const pulseDot = keyframes`
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+`
+
 const TransitionStyles = styled.div`
   .${containerClassname} {
-    background: #2e7d32;
+    align-items: center;
+    background-color: var(--tn-live-soft);
     border: 0;
-    border-left: 1px solid #e7e7e7;
-    border-right: 1px solid #e7e7e7;
-    color: #fff;
+    box-shadow: inset 0 -1px 0 var(--tn-border);
+    color: var(--tn-text);
     cursor: pointer;
-    font-weight: 600;
-    padding: 8px 5px;
+    display: flex;
+    font: 600 14px/18px var(--tn-font);
+    gap: 8px;
+    justify-content: center;
+    min-height: 40px;
+    padding: 8px 16px;
     /* Absolute so the banner sits in the strip directly under the fixed nav
        bar. It does NOT get to overlap what is below it: its measured height is
        published as --return-to-trip-banner-height and every screen below adds
@@ -54,8 +68,21 @@ const TransitionStyles = styled.div`
     // When banner is fully loaded, set z-index higher than nav so we're not seeing the nav border.
     z-index: 26;
 
-    @media (max-width: 768px) {
-      border: 0;
+    &::before {
+      animation: ${pulseDot} 2s ease-in-out infinite;
+      background-color: var(--tn-live);
+      border-radius: 50%;
+      content: '';
+      flex: none;
+      height: 8px;
+      width: 8px;
+    }
+    &:active {
+      filter: brightness(0.96);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--tn-accent);
+      outline-offset: -2px;
     }
   }
   .${containerClassname}-enter {
