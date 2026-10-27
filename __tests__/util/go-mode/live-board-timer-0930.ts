@@ -496,4 +496,27 @@ describe('38.2 — the timer does not outlive the trip', () => {
     )
     expect(intervals.cleared()).not.toContain(armed[2])
   })
+
+  it('a plan swap polls the new plan at once, not after the old plan’s 20 s (72.1)', async () => {
+    // The old plan's in-flight refresh is dropped by the swap, so the shared
+    // throttle it claimed must not hold the new plan's first poll back. On
+    // 2026-10-26 12:14 that wait was 24 s of the old plan's times on screen.
+    const store = makeStore()
+    await arm(store)
+    const t0 = waitFixes[0].tMs
+    replay(store, [waitFixes[0]], t0)
+    expect(mockPolls.filter((p) => p.kind === 'trip').length).toBe(1)
+    advanceTo(t0 + 3000)
+    await store.run(startGoModeTracking(f.itinerary))
+    await flush()
+    mockPolls.length = 0
+    const next = waitFixes.filter(
+      (p: { tMs: number }) => p.tMs > t0 + 3000 && p.tMs <= t0 + 10000
+    )
+    expect(next.length).toBeGreaterThan(0)
+    replay(store, next, t0 + 10000)
+    const trips = mockPolls.filter((p) => p.kind === 'trip')
+    expect(trips.length).toBe(1)
+    expect(trips[0].t).toBeLessThan(t0 + 20000)
+  })
 })

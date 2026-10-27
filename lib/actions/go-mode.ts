@@ -240,6 +240,7 @@ import {
   itinerarySignature,
   onwardTransitRouteId
 } from '../util/go-mode/reroute-candidates'
+import { liveTimesPlanStillCurrent } from '../util/go-mode/live-times-plan'
 import {
   getActiveItinerary,
   pickAccessReplanCandidate,
@@ -2869,6 +2870,11 @@ export function startGoModeTracking(
     // A reroute or missed-bus auto-update swaps the itinerary without going
     // through endGoMode, so clear the per-leg transition guard here too.
     session.lastTransitionedLegIndex = null
+    // ...and the live-times throttle: the old plan's poll claimed it, and the
+    // refresh it started is dropped by the swap (72.1), so without this the
+    // new plan shows no live times until the 20 s window runs out — on
+    // 2026-10-26 its first came 24 s after the swap.
+    session.lastLiveLegTimesAt = 0
     // ...and the deviation smoother's memory. smoothDistanceFromRoute takes the
     // MINIMUM of this tick and the last, so a distance measured against the old
     // geometry damps the first tick against the new — the one tick where the
@@ -10240,6 +10246,13 @@ export function refreshLiveLegTimes() {
     const goMode = getState().otp?.goMode
     const itinerary: Itinerary | null = goMode?.activeItinerary
     if (!goMode?.isActive || !itinerary) return
+    // Everything below is stored by leg INDEX after one await per leg, so a
+    // plan swapped in meanwhile would receive this plan's times (and geometry
+    // repairs) — 2026-10-26 12:14, the 12:53 D Line's times on the 12:20
+    // plan's legs (backlog 72.1). Re-checked after every await.
+    const planSig = itinerarySignature(itinerary)
+    const stillCurrent = () =>
+      liveTimesPlanStillCurrent(getState().otp?.goMode, planSig)
 
     const legs = itinerary.legs || []
     const currentLegIndex = goMode.routeMatch?.legIndex ?? 0
@@ -10269,6 +10282,9 @@ export function refreshLiveLegTimes() {
       // findTrip is noThrottle and idempotent; it refreshes the cached trip
       // (with current realtimeArrival) in transitIndex.trips[tripId].
       await dispatch(findTrip({ tripId }))
+      // The plan changed (or the trip ended) while this answer was in flight:
+      // nothing gathered here belongs to what is installed now.
+      if (!stillCurrent()) return
       const trip = getState().otp?.transitIndex?.trips?.[tripId]
 
       // Heal a leg whose plan geometry is missing (the onboard flow builds one
@@ -10453,6 +10469,7 @@ export function refreshLiveLegTimes() {
       }
     }
 
+    if (!stillCurrent()) return
     dispatch(setLiveLegTimes(liveTimes))
   }
 }
