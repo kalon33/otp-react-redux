@@ -64,6 +64,8 @@ export type Props = {
   locale: string
   networkConnectionLost: boolean
   otpConfig: AppConfig
+  /** The AppFrame page's own name, shown as the bar title on a phone. */
+  pageTitle?: string
   popupTarget?: string
   setPopupContent: (url: string) => void
 }
@@ -86,6 +88,7 @@ const DesktopNav = ({
   locale,
   networkConnectionLost,
   otpConfig,
+  pageTitle,
   popupTarget,
   setPopupContent
 }: Props) => {
@@ -134,6 +137,16 @@ const DesktopNav = ({
               </>
             )}
           </Navbar.Brand>
+
+          {/* On a phone the brand is hidden (above) and the bar is the page's
+              only header, so it names the page — "Settings", "Saved places" —
+              or the product on pages that pass no title. aria-hidden: the
+              page's own <h1> is what a screen reader announces. */}
+          {isMobile() && (
+            <div aria-hidden className="navbar-title tn-appbar-title">
+              {pageTitle || title}
+            </div>
+          )}
 
           <ViewSwitcher />
 

@@ -37,6 +37,18 @@ const Bar = styled.div`
   /* Above the map and the sheets, below any modal that needs a decision. */
   top: 0;
   z-index: 1200;
+
+  /* The phone: a 40px danger-tinted strip directly under the 50px app bar,
+     like the other banners, rather than over the bar's menu button. */
+  .tn-mobile & {
+    background: var(--tn-danger-soft);
+    box-shadow: inset 0 -1px 0 var(--tn-border);
+    color: var(--tn-danger);
+    font: 500 14px/18px var(--tn-font);
+    min-height: 40px;
+    padding: var(--tn-space-2) var(--tn-space-4);
+    top: var(--tn-appbar-h);
+  }
 `
 
 const Dot = styled.span`
@@ -59,6 +71,10 @@ const Dot = styled.span`
 
   @media (prefers-reduced-motion: reduce) {
     animation: none;
+  }
+
+  .tn-mobile & {
+    background: var(--tn-danger);
   }
 `
 

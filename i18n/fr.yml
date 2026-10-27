@@ -219,6 +219,7 @@ components:
     openMenu: Ouvrir le menu
     settings: "Paramètres"
     shareFeedback: "Envoyer un commentaire"
+    shareDiagnostics: "Partage des diagnostics"
     shareDiagnosticsOff: "Partage des diagnostics : désactivé"
     shareDiagnosticsOn: "Partage des diagnostics : activé"
     skipNavigation: Sauter la navigation
