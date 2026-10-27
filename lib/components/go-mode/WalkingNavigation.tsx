@@ -38,9 +38,11 @@ import {
   NavEyebrowRow,
   NavFoot,
   NavHero,
+  NavRoutePill,
   NavSub,
   NavTurnRow,
   ResetButton,
+  routePillColors,
   TurnDistance,
   TurnWords,
   UseNextButton,
@@ -208,6 +210,14 @@ const WalkingNavigation = ({
   )
 
   const route = nextLeg?.routeShortName || nextLeg?.routeLongName || ''
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const nextLegAny = nextLeg as any
+  const headsign: string =
+    nextLegAny?.headsign || nextLegAny?.trip?.tripHeadsign || ''
+  // The card's left stripe and pill: the bus's GTFS colour while this card
+  // leads to a boarding, the accent on a walk/bike-only leg.
+  const pill = routePillColors(isNextLegTransit ? nextLeg : null)
+  const stripe = isNextLegTransit ? pill.bg : undefined
   const stopName = nextLeg?.from?.name || leg.to.name
   const isBike = leg.mode === 'BICYCLE'
   const accessEmoji = isBike ? '🚲' : '🚶'
@@ -543,8 +553,10 @@ const WalkingNavigation = ({
   let foot: string | null = null
 
   if (isNextLegTransit) {
-    // Bus facts as the headline; ride-to-stop fact below.
-    eyebrow = `${transitEmoji(nextLeg?.mode)} ${route}`
+    // Bus facts as the headline; ride-to-stop fact below. The eyebrow is the
+    // route pill (rendered below) and the headsign beside it; with no
+    // headsign the mode glyph keeps the row from reading as empty.
+    eyebrow = headsign || transitEmoji(nextLeg?.mode)
     hero = effectiveDepartureMs ? formatClockTime(effectiveDepartureMs) : ''
     // The clock time stays the headline — it is the departure the rider was
     // told about — and the line under it says whether it is still ahead. A bus
@@ -602,7 +614,7 @@ const WalkingNavigation = ({
 
   return (
     <WalkingContainer>
-      <NavCard>
+      <NavCard $stripe={stripe}>
         <NavEyebrowRow>
           {onExit && (
             <CardBackButton
@@ -612,6 +624,11 @@ const WalkingNavigation = ({
             >
               ←
             </CardBackButton>
+          )}
+          {isNextLegTransit && route && (
+            <NavRoutePill $bg={pill.bg} $fg={pill.fg}>
+              {route}
+            </NavRoutePill>
           )}
           <NavEyebrow>{eyebrow}</NavEyebrow>
         </NavEyebrowRow>

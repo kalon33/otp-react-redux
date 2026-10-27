@@ -34,18 +34,22 @@ import {
   AlertBanner,
   CardBackButton,
   ChooseBusLink,
-  InfoCard,
-  InfoCardLabel,
-  InfoCardValue,
   LocatingIndicator,
-  ModeIcon,
+  NavCard,
   NavExtras,
+  NavEyebrow,
+  NavEyebrowRow,
   NavHero,
+  NavRoutePill,
+  NextStopLine,
+  ProgressBarFill,
+  ProgressBarTrack,
   ResetButton,
   RouteDirection,
-  RouteHeader,
-  RouteName,
+  routePillColors,
+  StatusChipRow,
   StopsCount,
+  StopsHero,
   StopsLabel,
   TransitContainer,
   VehicleTrackingBadge
@@ -224,74 +228,129 @@ const TransitProgress = ({
       ? formatMinutes((departureMs - nowMs) / 1000)
       : null
 
+  // The card is the route's: its GTFS colour paints the left stripe, the
+  // pill and the ride bar.
+  const pill = routePillColors(leg)
+  const routeLabel = leg.routeShortName || leg.routeLongName
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const legAny = leg as any
+  const headsign: string = legAny?.headsign || legAny?.trip?.tripHeadsign || ''
+  // Compact stops remaining — never shown from an untrusted count; an
+  // approximate substitute would just be fake data.
+  const showStops =
+    !waiting &&
+    stopsTrusted &&
+    progress.stopsRemaining !== undefined &&
+    progress.stopsRemaining > 0
+  const stopsText = showStops
+    ? intl.formatMessage(
+        {
+          defaultMessage:
+            '{count, plural, one {1 stop} other {# stops}} remaining',
+          id: 'components.GoMode.stopsRemainingCompact'
+        },
+        { count: progress.stopsRemaining }
+      )
+    : null
+  // "4 stops remaining" as hero + label: the count phrase (number and the
+  // word after it) at hero size, the rest beside it. The text the rider and
+  // the tests read is unchanged; a locale that does not lead with the number
+  // keeps the whole sentence at the label size.
+  const stopsParts = stopsText
+    ? /^(\S*\d\S*\s+\S+)\s+(.+)$/.exec(stopsText)
+    : null
+  const rideFraction = Math.max(
+    0,
+    Math.min(100, Number(progress.currentLegProgress) || 0)
+  )
+  const noLiveData =
+    !(waiting && emptyPolls < NO_LIVE_VEHICLE_POLLS) &&
+    !(beforeDeparture && !boardTime.isFloor) &&
+    emptyPolls >= NO_LIVE_VEHICLE_POLLS
+
   return (
     <TransitContainer>
-      {/* Route Header */}
-      <RouteHeader>
-        {onExit && (
-          <CardBackButton
-            aria-label={intl.formatMessage({ id: 'common.forms.back' })}
-            onClick={onExit}
-            type="button"
-          >
-            ←
-          </CardBackButton>
-        )}
-        <ModeIcon>{getModeIcon(leg.mode)}</ModeIcon>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <RouteName>{leg.routeShortName || leg.routeLongName}</RouteName>
-          {waitCountdown && (
-            <NavHero>
-              <RealtimeTime live={boardTime.realtime}>
-                {waitCountdown}
-              </RealtimeTime>
-            </NavHero>
+      <NavCard $stripe={pill.bg}>
+        <NavEyebrowRow>
+          {onExit && (
+            <CardBackButton
+              aria-label={intl.formatMessage({ id: 'common.forms.back' })}
+              onClick={onExit}
+              type="button"
+            >
+              ←
+            </CardBackButton>
           )}
-          {/* Standing at the stop: where the rider is and when the bus goes.
+          {routeLabel && (
+            <NavRoutePill $bg={pill.bg} $fg={pill.fg}>
+              {routeLabel}
+            </NavRoutePill>
+          )}
+          <NavEyebrow>{headsign || getModeIcon(leg.mode)}</NavEyebrow>
+        </NavEyebrowRow>
+        {waitCountdown && (
+          <NavHero>
+            <RealtimeTime live={boardTime.realtime}>
+              {waitCountdown}
+            </RealtimeTime>
+          </NavHero>
+        )}
+        {/* Standing at the stop: where the rider is and when the bus goes.
               The stop count below is a ride fact and says nothing true here —
               its "next stop" is the one after the boarding stop (13.9). */}
-          {waiting && (
-            <RouteDirection>
-              {departureMs != null && !boardTime.isFloor
-                ? intl.formatMessage(
-                    {
-                      defaultMessage: 'Waiting at {stop} · {time}',
-                      id: 'components.GoMode.waitingAtStopTime'
-                    },
-                    {
-                      stop: leg.from?.name,
-                      time: intl.formatTime(departureMs, {
-                        hour: 'numeric',
-                        minute: '2-digit'
-                      })
-                    }
-                  )
-                : intl.formatMessage(
-                    {
-                      defaultMessage: 'Waiting at {stop}',
-                      id: 'components.GoMode.waitingAtStop'
-                    },
-                    { stop: leg.from?.name }
-                  )}
-            </RouteDirection>
-          )}
-          {/* Compact stops remaining — never shown from an untrusted count;
-              an approximate substitute would just be fake data. */}
-          {!waiting &&
-            stopsTrusted &&
-            progress.stopsRemaining !== undefined &&
-            progress.stopsRemaining > 0 && (
-              <RouteDirection>
-                {intl.formatMessage(
+        {waiting && (
+          <RouteDirection>
+            {departureMs != null && !boardTime.isFloor
+              ? intl.formatMessage(
                   {
-                    defaultMessage:
-                      '{count, plural, one {1 stop} other {# stops}} remaining',
-                    id: 'components.GoMode.stopsRemainingCompact'
+                    defaultMessage: 'Waiting at {stop} · {time}',
+                    id: 'components.GoMode.waitingAtStopTime'
                   },
-                  { count: progress.stopsRemaining }
+                  {
+                    stop: leg.from?.name,
+                    time: intl.formatTime(departureMs, {
+                      hour: 'numeric',
+                      minute: '2-digit'
+                    })
+                  }
+                )
+              : intl.formatMessage(
+                  {
+                    defaultMessage: 'Waiting at {stop}',
+                    id: 'components.GoMode.waitingAtStop'
+                  },
+                  { stop: leg.from?.name }
                 )}
-              </RouteDirection>
+          </RouteDirection>
+        )}
+        {stopsText &&
+          (stopsParts ? (
+            <StopsHero>
+              <StopsCount $alert={alertLevel === 'urgent'}>
+                {stopsParts[1]}
+              </StopsCount>{' '}
+              <StopsLabel>{stopsParts[2]}</StopsLabel>
+            </StopsHero>
+          ) : (
+            <RouteDirection>{stopsText}</RouteDirection>
+          ))}
+        {showStops && progress.nextStopName && (
+          <NextStopLine>
+            {intl.formatMessage(
+              {
+                defaultMessage: 'Next stop: {stop}',
+                id: 'components.GoMode.nextStopLine'
+              },
+              { stop: progress.nextStopName }
             )}
+          </NextStopLine>
+        )}
+        {!waiting && (
+          <ProgressBarTrack aria-hidden>
+            <ProgressBarFill $color={pill.bg} $width={rideFraction} />
+          </ProgressBarTrack>
+        )}
+        <StatusChipRow>
           {/* The trip's own bus, while the rider waits for it (26.4).
               Same badge as "Tracking Bus #" — the claim is the same kind. */}
           {busStatus && (
@@ -371,7 +430,7 @@ const TransitProgress = ({
               else — including a confirmed match gone stale — gets the honest
               status line. */}
           {!busStatus && !isTracking && leg.transitLeg && (
-            <LocatingIndicator>
+            <LocatingIndicator $tone={noLiveData ? 'warn' : undefined}>
               {waiting && emptyPolls < NO_LIVE_VEHICLE_POLLS
                 ? // Waiting, and the feed has nothing for this trip: the bus
                   // is not broadcasting yet. The header above already prints
@@ -411,27 +470,26 @@ const TransitProgress = ({
                   })}
             </LocatingIndicator>
           )}
-        </div>
-      </RouteHeader>
+        </StatusChipRow>
 
-      {/* Get Ready Alert — an alight warning is a ride fact. On the platform
+        {/* Get Ready Alert — an alight warning is a ride fact. On the platform
           "GET READY! Next stop is yours!" is about a stop the rider has not
           boarded for yet (13.9). */}
-      {!waiting && alertLevel && (
-        <AlertBanner $severity={alertLevel}>
-          {alertLevel === 'urgent'
-            ? intl.formatMessage({
-                defaultMessage: '🔔 GET READY! Next stop is yours!',
-                id: 'components.GoMode.getReadyNow'
-              })
-            : intl.formatMessage({
-                defaultMessage: '⚠️ Get Ready - 2 stops away',
-                id: 'components.GoMode.getReady'
-              })}
-        </AlertBanner>
-      )}
+        {!waiting && alertLevel && (
+          <AlertBanner $severity={alertLevel}>
+            {alertLevel === 'urgent'
+              ? intl.formatMessage({
+                  defaultMessage: '🔔 GET READY! Next stop is yours!',
+                  id: 'components.GoMode.getReadyNow'
+                })
+              : intl.formatMessage({
+                  defaultMessage: '⚠️ Get Ready - 2 stops away',
+                  id: 'components.GoMode.getReady'
+                })}
+          </AlertBanner>
+        )}
 
-      {/* Getting off before the planned stop (an early transfer, say) leaves
+        {/* Getting off before the planned stop (an early transfer, say) leaves
           the app tracking a bus the rider is no longer on — position matching
           keeps them pinned to this leg while they walk along the same corridor,
           so no boarding alerts fire for the next bus. This is the rider saying
@@ -442,58 +500,59 @@ const TransitProgress = ({
           away the very bus they are standing there for (13.9). It returns the
           moment the departure time passes, so a rider aboard a bus the feed
           never confirmed still has it. */}
-      {/* Waiting at the stop, the rider can still board a different bus than
+        {/* Waiting at the stop, the rider can still board a different bus than
           the one this card is about (51.1: a 546 at 98th St Station while
           the card waited for the 539). The other half of the "I got off here"
           slot below, which is hidden for exactly this stretch. */}
-      {waiting && onChooseBus && (
-        <NavExtras>
-          <ChooseBusLink
-            data-testid="choose-bus-link"
-            onClick={onChooseBus}
-            type="button"
-          >
-            {intl.formatMessage({
-              defaultMessage: 'On a different bus?',
-              id: 'components.GoMode.chooseBusLink'
-            })}
-          </ChooseBusLink>
-        </NavExtras>
-      )}
+        {waiting && onChooseBus && (
+          <NavExtras>
+            <ChooseBusLink
+              data-testid="choose-bus-link"
+              onClick={onChooseBus}
+              type="button"
+            >
+              {intl.formatMessage({
+                defaultMessage: 'On a different bus?',
+                id: 'components.GoMode.chooseBusLink'
+              })}
+            </ChooseBusLink>
+          </NavExtras>
+        )}
 
-      {!waiting && (
-        <NavExtras>
-          {/* 54.1: "I'm on the bus" on the plan's own train went straight to
+        {!waiting && (
+          <NavExtras>
+            {/* 54.1: "I'm on the bus" on the plan's own train went straight to
               this card for the plan's stop instead of the get-off list; this
               is the rider's way to that list (their Q4 answer, 2026-10-16).
               Only on the ride it was offered for, and only aboard. */}
-          {aboard &&
-            pickAnotherAlightStop &&
-            planStopOffer != null &&
-            planStopOffer.tripId === tripId && (
-              <ChooseBusLink
-                data-testid="pick-another-stop"
-                onClick={pickAnotherAlightStop}
-                style={{ marginRight: 16 }}
-                type="button"
-              >
-                {intl.formatMessage({
-                  defaultMessage: 'Pick another stop',
-                  id: 'components.GoMode.pickAnotherStop'
-                })}
-              </ChooseBusLink>
-            )}
-          <ResetButton
-            onClick={() => advanceToLeg((progress.currentLegIndex ?? 0) + 1)}
-            type="button"
-          >
-            {intl.formatMessage({
-              defaultMessage: 'I got off here',
-              id: 'components.GoMode.gotOffHere'
-            })}
-          </ResetButton>
-        </NavExtras>
-      )}
+            {aboard &&
+              pickAnotherAlightStop &&
+              planStopOffer != null &&
+              planStopOffer.tripId === tripId && (
+                <ChooseBusLink
+                  data-testid="pick-another-stop"
+                  onClick={pickAnotherAlightStop}
+                  style={{ marginRight: 16 }}
+                  type="button"
+                >
+                  {intl.formatMessage({
+                    defaultMessage: 'Pick another stop',
+                    id: 'components.GoMode.pickAnotherStop'
+                  })}
+                </ChooseBusLink>
+              )}
+            <ResetButton
+              onClick={() => advanceToLeg((progress.currentLegIndex ?? 0) + 1)}
+              type="button"
+            >
+              {intl.formatMessage({
+                defaultMessage: 'I got off here',
+                id: 'components.GoMode.gotOffHere'
+              })}
+            </ResetButton>
+          </NavExtras>
+        )}
+      </NavCard>
     </TransitContainer>
   )
 }

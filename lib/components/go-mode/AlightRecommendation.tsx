@@ -6,6 +6,7 @@ import * as goModeActions from '../../actions/go-mode'
 import type { GoModeState } from '../../reducers/go-mode'
 
 import {
+  AlightTitle,
   GoModeLiveBanner,
   OnboardResultsScroll,
   RerouteActions,
@@ -325,12 +326,12 @@ const AlightRecommendation = ({
           {assumedVehicle}
         </VehicleTrackingBadge>
       )}
-      <RerouteCardTitle style={{ padding: '12px 16px 0' }}>
+      <AlightTitle>
         {intl.formatMessage({
           defaultMessage: 'Where do you want to get off?',
           id: 'components.GoMode.whereToAlight'
         })}
-      </RerouteCardTitle>
+      </AlightTitle>
       {stillChecking > 0 && (
         <RerouteSummary
           data-testid="onboard-still-checking"

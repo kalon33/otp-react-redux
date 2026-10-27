@@ -8,6 +8,7 @@ import { getModeIcon } from '../../util/go-mode/mode-icon'
 import type { OnboardAlightPreview as PreviewState } from '../../reducers/go-mode'
 
 import {
+  AlightTitle,
   GoModeLiveBanner,
   LegIcon,
   LegInfo,
@@ -16,6 +17,7 @@ import {
   LegTitle,
   OnboardResultsScroll,
   RerouteActions,
+  RerouteCard,
   RerouteCardTitle,
   RerouteKeepButton,
   RerouteSummary,
@@ -144,7 +146,7 @@ const OnboardAlightPreview = ({
           id: 'components.GoMode.liveBanner'
         })}
       </GoModeLiveBanner>
-      <RerouteCardTitle style={{ padding: '12px 16px 0' }}>
+      <AlightTitle>
         {intl.formatMessage(
           {
             defaultMessage: 'Off at {stop}',
@@ -152,7 +154,7 @@ const OnboardAlightPreview = ({
           },
           { stop: option.alightStopName || option.stopName }
         )}
-      </RerouteCardTitle>
+      </AlightTitle>
       {summary.length > 0 && (
         <RerouteSummary
           data-testid="onboard-preview-summary"
@@ -161,7 +163,7 @@ const OnboardAlightPreview = ({
           {summary.join(' · ')}
         </RerouteSummary>
       )}
-      <div style={{ padding: '8px 16px 0' }}>
+      <RerouteCard style={{ margin: '12px 16px 0', padding: '8px 12px' }}>
         {legs.map((leg, i) => {
           const waitMins = waitMinutesBeforeLeg(legs, i)
           const isTransit = TRANSIT_MODES.has(leg.mode)
@@ -204,7 +206,7 @@ const OnboardAlightPreview = ({
             </LegRow>
           )
         })}
-      </div>
+      </RerouteCard>
       <RerouteActions style={{ padding: '16px' }}>
         {/* While the Confirm re-checks the stop against where the rider is
             now (64.1) the button holds, the way MultiStopArrivalCard's does,
