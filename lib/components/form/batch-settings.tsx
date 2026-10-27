@@ -6,9 +6,11 @@ import {
 } from '@opentripplanner/trip-form'
 import { ModeButtonDefinition } from '@opentripplanner/types'
 import { Search } from '@styled-icons/fa-solid/Search'
+import { Sliders } from '@styled-icons/fa-solid/Sliders'
 import { SyncAlt } from '@styled-icons/fa-solid/SyncAlt'
 import { useIntl } from 'react-intl'
-import React, { useCallback, useContext, useEffect } from 'react'
+import React, { ReactNode, useCallback, useContext, useEffect } from 'react'
+import styled from 'styled-components'
 
 import * as apiActions from '../../actions/api'
 import * as formActions from '../../actions/form'
@@ -17,6 +19,7 @@ import { ComponentContext } from '../../util/contexts'
 import { getActiveSearch, hasValidLocation } from '../../util/state'
 import { getBaseColor, getDarkenedBaseColor } from '../util/colors'
 import { StyledIconWrapper } from '../util/styledIcon'
+import { TnButton, TnChip } from '../util/tn-styled'
 import AnimateHeight from 'react-animate-height'
 
 import {
@@ -29,7 +32,13 @@ import {
 } from './util'
 import {
   AdvancedOptionsContainer,
+  formChipCss,
   MainSettingsRow,
+  MobileActions,
+  MobileChipRow,
+  MobileDateTimeCard,
+  MobileModeSegments,
+  MobileSettingsColumn,
   ModeSelectorContainer,
   PlanTripButton
 } from './batch-styled'
@@ -48,15 +57,27 @@ type Props = {
   enabledModeButtons: string[]
   fillModeIcons?: boolean
   homeTimezone: string
+  /**
+   * The phone layout (batch-search-screen): chips row, segmented modes and a
+   * full-width "Plan trip" pill. Off (the desktop routing panel) renders the
+   * original row unchanged.
+   */
+  mobile?: boolean
   modeButtonOptions: ModeButtonDefinition[]
   onPlanTripClick: () => void
   openAdvancedSettings: () => void
   routingQuery: any
+  /** Phone layout only: a full-width action shown directly above Plan trip. */
+  secondaryAction?: ReactNode
   setQueryParam: (evt: any) => void
   sort: any
   syncSortWithDepartArrive: any
   updateItineraryFilter: any
 }
+
+const OptionsChip = styled(TnChip)`
+  ${formChipCss}
+`
 
 export function setModeButtonEnabled(enabledKeys: string[]) {
   return (modeButton: ModeButtonDefinition): ModeButtonDefinition => {
@@ -77,10 +98,12 @@ function BatchSettings({
   enabledModeButtons,
   fillModeIcons,
   homeTimezone,
+  mobile,
   modeButtonOptions,
   onPlanTripClick,
   openAdvancedSettings,
   routingQuery,
+  secondaryAction,
   setQueryParam,
   sort,
   syncSortWithDepartArrive,
@@ -125,6 +148,77 @@ function BatchSettings({
     }
   }, [dtSelectorOpen, departArrive])
 
+  const modeSelector = (
+    <MetroModeSelector
+      accentColor={baseColor}
+      activeHoverColor={accentColor.toHexString()}
+      fillModeIcons={fillModeIcons}
+      label={intl.formatMessage({
+        id: 'components.BatchSearchScreen.modeSelectorLabel'
+      })}
+      modeButtons={processedModeButtons}
+      onSettingsUpdate={onSettingsUpdate(setQueryParam)}
+      onToggleModeButton={setModeButton(
+        enabledModeButtons,
+        onSettingsUpdate(setQueryParam)
+      )}
+    />
+  )
+
+  const planTripLabel = intl.formatMessage({
+    id: 'components.BatchSettings.planTripTooltip'
+  })
+
+  if (mobile) {
+    return (
+      <MobileSettingsColumn className="main-settings-row">
+        <MobileChipRow className="tn-form-chips">
+          <DepartArriveDropdown
+            departArrive={departArrive}
+            onQueryParamChange={onQueryParamChange}
+            timeZone={homeTimezone}
+          />
+          <RoundTripSettings />
+          <OptionsChip
+            id="open-advanced-settings-button"
+            onClick={openAdvancedSettings}
+            type="button"
+          >
+            <Sliders aria-hidden />
+            {intl.formatMessage({
+              id: 'components.BatchSearchScreen.options'
+            })}
+          </OptionsChip>
+        </MobileChipRow>
+        <AnimateHeight
+          duration={200}
+          height={dtSelectorOpen ? 'auto' : 0}
+          // Closed, it takes back the column gap it would otherwise leave.
+          style={{
+            marginTop: dtSelectorOpen ? 0 : 'calc(-1 * var(--tn-space-3))',
+            transition: 'ease all 200ms'
+          }}
+        >
+          <MobileDateTimeCard>
+            <DateTimeModal />
+          </MobileDateTimeCard>
+        </AnimateHeight>
+        <MobileModeSegments>{modeSelector}</MobileModeSegments>
+        <MobileActions>
+          {secondaryAction}
+          <TnButton
+            $block
+            id="plan-trip"
+            onClick={onPlanTripClick}
+            type="button"
+          >
+            {planTripLabel}
+          </TnButton>
+        </MobileActions>
+      </MobileSettingsColumn>
+    )
+  }
+
   return (
     <MainSettingsRow className="main-settings-row">
       <AdvancedOptionsContainer>
@@ -151,26 +245,11 @@ function BatchSettings({
       <RoundTripSettings />
 
       <ModeSelectorContainer>
-        <MetroModeSelector
-          accentColor={baseColor}
-          activeHoverColor={accentColor.toHexString()}
-          fillModeIcons={fillModeIcons}
-          label={intl.formatMessage({
-            id: 'components.BatchSearchScreen.modeSelectorLabel'
-          })}
-          modeButtons={processedModeButtons}
-          onSettingsUpdate={onSettingsUpdate(setQueryParam)}
-          onToggleModeButton={setModeButton(
-            enabledModeButtons,
-            onSettingsUpdate(setQueryParam)
-          )}
-        />
+        {modeSelector}
         <PlanTripButton
           id="plan-trip"
           onClick={onPlanTripClick}
-          title={intl.formatMessage({
-            id: 'components.BatchSettings.planTripTooltip'
-          })}
+          title={planTripLabel}
         >
           <StyledIconWrapper style={{ fontSize: '1.6em' }}>
             {hasValidLocation(currentQuery, 'from') &&

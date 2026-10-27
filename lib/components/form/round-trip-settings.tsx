@@ -61,9 +61,12 @@ function RoundTripSettings({
     [setOptions]
   )
 
+  // The class names let the phone form's chip row (batch-styled
+  // MobileChipRow) lay the toggle in with Leave now / Options and drop the
+  // readout and stays onto their own line; the desktop panel ignores them.
   return (
-    <div>
-      <Row>
+    <div className="round-trip-settings">
+      <Row className="round-trip-toggle-row">
         <SmallButton
           aria-pressed={roundTrip}
           className={roundTrip ? 'active' : ''}
@@ -76,7 +79,10 @@ function RoundTripSettings({
           })}
         </SmallButton>
         {roundTrip && (
-          <span style={{ color: '#666', fontSize: '13px' }}>
+          <span
+            className="round-trip-stay-readout"
+            style={{ color: '#666', fontSize: '13px' }}
+          >
             {intl.formatMessage(
               {
                 defaultMessage: '{stay}+ there',
@@ -88,6 +94,7 @@ function RoundTripSettings({
         )}
       </Row>
       <AnimateHeight
+        className="round-trip-stays"
         duration={200}
         height={roundTrip ? 'auto' : 0}
         style={{ transition: 'ease all 200ms' }}

@@ -9,7 +9,7 @@ import * as uiActions from '../../actions/ui'
 import { accountLinks, getAuth0Config } from '../../util/auth'
 import { AppConfig } from '../../util/config-types'
 import { AppReduxState } from '../../util/state-types'
-import { DEFAULT_APP_TITLE } from '../../util/constants'
+import { getBrandTitle } from '../../util/brand'
 import InvisibleA11yLabel from '../util/invisible-a11y-label'
 import NavLoginButtonAuth0 from '../user/nav-login-button-auth0'
 
@@ -64,6 +64,8 @@ export type Props = {
   locale: string
   networkConnectionLost: boolean
   otpConfig: AppConfig
+  /** The AppFrame page's own name, shown as the bar title on a phone. */
+  pageTitle?: string
   popupTarget?: string
   setPopupContent: (url: string) => void
 }
@@ -77,7 +79,8 @@ export type Props = {
  * 1. If `branding` is defined, it is shown, and no title is displayed.
  *    (The title is still rendered for screen readers and browsers that lack image support.)
  * 2. If `branding` is not defined but if `title` is, then `title` is shown.
- * 3. If neither is defined, just show 'OpenTripPlanner' (DEFAULT_APP_TITLE).
+ * 3. If neither is defined (or `title` is the OTP default 'OpenTripPlanner'),
+ *    show 'TransitNav' (see util/brand.ts).
  *
  * TODO: merge with the mobile navigation bar.
  */
@@ -85,16 +88,12 @@ const DesktopNav = ({
   locale,
   networkConnectionLost,
   otpConfig,
+  pageTitle,
   popupTarget,
   setPopupContent
 }: Props) => {
-  const {
-    brandClickable,
-    branding,
-    extraMenuItems,
-    persistence,
-    title = DEFAULT_APP_TITLE
-  } = otpConfig
+  const { brandClickable, branding, extraMenuItems, persistence } = otpConfig
+  const title = getBrandTitle(otpConfig.title)
   const intl = useIntl()
   const showLogin = Boolean(getAuth0Config(persistence))
 
@@ -138,6 +137,16 @@ const DesktopNav = ({
               </>
             )}
           </Navbar.Brand>
+
+          {/* On a phone the brand is hidden (above) and the bar is the page's
+              only header, so it names the page — "Settings", "Saved places" —
+              or the product on pages that pass no title. aria-hidden: the
+              page's own <h1> is what a screen reader announces. */}
+          {isMobile() && (
+            <div aria-hidden className="navbar-title tn-appbar-title">
+              {pageTitle || title}
+            </div>
+          )}
 
           <ViewSwitcher />
 

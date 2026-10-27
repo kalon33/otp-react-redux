@@ -12,6 +12,7 @@ import TransitiveOverlay, {
 import { AppConfig } from '../../util/config-types'
 import { AppReduxState } from '../../util/state-types'
 import { ComponentContext } from '../../util/contexts'
+import { tnBaseLayerUrl } from '../../util/tn-theme'
 
 interface Props {
   config: AppConfig
@@ -32,7 +33,7 @@ const SimpleMap = ({ config, itinerary }: Props): JSX.Element => {
     navigationControlPosition = 'bottom-right',
     transitive
   } = config.map || {}
-  const baseLayerUrls = baseLayers?.map((bl) => bl.url)
+  const baseLayerUrls = baseLayers?.map((bl) => tnBaseLayerUrl(bl.url))
   const { disableFlexArc } = transitive || {}
   const { legs = [] } = itinerary || {}
 

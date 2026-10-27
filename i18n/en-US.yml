@@ -207,6 +207,7 @@ components:
     networkConnectionRestored: Network connection restored
     openMenu: Open Menu
     settings: Settings
+    shareDiagnostics: Share diagnostics
     shareDiagnosticsOff: "Share diagnostics: Off"
     shareDiagnosticsOn: "Share diagnostics: On"
     shareFeedback: Share feedback
@@ -253,6 +254,7 @@ components:
     noTransfersLabel: No transfers
     numItinerariesLabel: How many options to look for
     numItinerariesOption: "{count} options"
+    options: Options
     routeLockChip: Only {route}
     routeLockDetail: Only trips on {route}, biking to and from it
     routeLockHeader: Routes
@@ -549,6 +551,7 @@ components:
     locatingBus: Locating your bus...
     nextBusesAtStop: Next buses at {stop}
     nextDeparture: "Next: {time} ({mins} min away)"
+    nextStopLine: "Next stop: {stop}"
     noBusesNearby: No buses detected nearby
     noLiveVehicleData: No live bus data — tracking by GPS
     notYet: Not yet
@@ -719,13 +722,13 @@ components:
   MapillaryFrame:
     title: Imagery of the street
   MetroUI:
-    arriveAt: You arrive
+    arriveAt: Arrives
     confirmLaterDeparture: Start {chosen} instead of {row}?
     confirmSwitchTrip: Switch your active trip to this route? Your current guidance will update.
     fare: "{fare}"
     itineraryDescription: "{time} itinerary using {routes}"
     itinerarySummary: from {stopName} | {cost}
-    leaveAt: You leave
+    leaveAt: Leaves
     multipleOptions: Multiple Options
     orAlternatives: or other routes in the same direction
     originallyScheduledTime: (originally {originalTime})
@@ -1139,6 +1142,8 @@ components:
       Optional: I consent to the Trip Planner storing my historical planned
       trips in order to improve transit services in my area.
       <termsOfStorageLink>More info...</termsOfStorageLink>
+  TransitLegSummary:
+    rideAndStops: "Ride {duration}{numStops, plural, =1 {} other { · # stops}}"
   TransitVehicleOverlay:
     in_transit_to: "Next stop: {stop}"
     incoming_at: "Approaching: {stop}"
@@ -1305,11 +1310,10 @@ components:
     rememberSearches: Remember recent searches/places?
     stopId: "Stop ID: {stopId}"
     storageDisclaimer: >
-      Any preferences, places, or settings you opt  to save will be stored in
-      the local storage of your browser.  TriMet will not have access to
-      knowledge about your home, work,  or any other location. At any point you
-      can opt to turn off  remembering recent places/searches and clear your
-      saved home/work locations and favorite stops.
+      Any preferences, places, or settings you choose to save are kept in the
+      local storage of your browser. At any point you can turn off remembering
+      recent places/searches and clear your saved home/work locations and
+      favorite stops.
   VerifyEmailPane:
     emailIsVerified: My email is verified!
     instructions1: >

@@ -219,6 +219,7 @@ components:
     openMenu: Ouvrir le menu
     settings: "Paramètres"
     shareFeedback: "Envoyer un commentaire"
+    shareDiagnostics: "Partage des diagnostics"
     shareDiagnosticsOff: "Partage des diagnostics : désactivé"
     shareDiagnosticsOn: "Partage des diagnostics : activé"
     skipNavigation: Sauter la navigation
@@ -266,6 +267,7 @@ components:
     noTransfersLabel: "Sans correspondance"
     numItinerariesLabel: "Nombre d'options à rechercher"
     numItinerariesOption: "{count} options"
+    options: Options
     routeLockHeader: "Lignes"
     routeLockNoneStarted: "Aucun trajet ici ne commence par {route} — tous les trajets sont affichés."
     routeLockNoneUsed: "Aucun trajet ici n'emprunte {route} : voici les options à vélo."
@@ -540,6 +542,7 @@ components:
     locatingBus: "Localisation de votre bus..."
     nextBusesAtStop: "Prochains bus à {stop}"
     nextDeparture: "Prochain : {time} (dans {mins} min)"
+    nextStopLine: "Prochain arrêt : {stop}"
     noBusesNearby: "Aucun bus détecté à proximité"
     noLiveVehicleData: "Pas de données en temps réel — suivi par GPS"
     notYet: "Pas encore"
@@ -710,13 +713,13 @@ components:
     titleFrom: Choisissez votre point de départ
     titleTo: Choisissez votre destination
   MetroUI:
-    arriveAt: Vous arrivez à
+    arriveAt: Arrivée
     confirmLaterDeparture: "Partir à {chosen} au lieu de {row} ?"
     confirmSwitchTrip: "Basculer votre trajet actif sur cette ligne ? Vos indications seront mises à jour."
     fare: "{fare}"
     itineraryDescription: Trajet de {time} par les lignes {routes}
     itinerarySummary: Partez à {stopName} | {cost}
-    leaveAt: Partez à
+    leaveAt: Départ
     multipleOptions: Plusieurs options
     orAlternatives: ou autres lignes dans la même direction
     originallyScheduledTime: (initialement {originalTime})
@@ -1137,6 +1140,8 @@ components:
       Facultatif: Je consens à ce que le Planificateur de trajets sauvegarde mes
       recherches afin d'améliorer les transports publics dans ma region.
       <termsOfStorageLink>Plus d'informations...</termsOfStorageLink>
+  TransitLegSummary:
+    rideAndStops: "Trajet : {duration}{numStops, plural, =1 {} other { · # arrêts}}"
   TransitVehicleOverlay:
     in_transit_to: "Prochain arrêt : {stop}"
     incoming_at: Approchant {stop}
@@ -1312,11 +1317,10 @@ components:
     rememberSearches: Enregistrer les recherches/lieux récents ?
     stopId: Arrêt n° {stopId}
     storageDisclaimer: >
-      En activant cette option, tous vos lieux, préférences et paramètres seront
-      enregistrés dans le cache de votre navigateur. TriMet n'aura pas accès aux
-      données concernant votre domicile, lieu de travail, ou autre endroit. Vous
-      pouvez à tout moment désactiver la collecte de vos recherches/lieux
-      récents et effacer vos domicile, lieu de travail, et arrêts favoris.
+      Les lieux, préférences et paramètres que vous choisissez d'enregistrer
+      sont conservés dans le cache de votre navigateur. Vous pouvez à tout
+      moment désactiver la collecte de vos recherches/lieux récents et effacer
+      vos domicile, lieu de travail, et arrêts favoris.
   VerifyEmailPane:
     emailIsVerified: Mon email est vérifié
     instructions1: >

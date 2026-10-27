@@ -1,3 +1,4 @@
+import { Bus } from '@styled-icons/fa-solid/Bus'
 import { connect } from 'react-redux'
 import { CSSTransition, TransitionGroup } from 'react-transition-group'
 import { injectIntl, IntlShape } from 'react-intl'
@@ -19,6 +20,7 @@ import { formQueryMatchesSearch } from '../../util/search-query-match'
 import { getActiveSearch } from '../../util/state'
 import { MobileScreens } from '../../actions/ui-constants'
 import { RoutingQueryCallResult } from '../../actions/api-constants'
+import { TnButton, TnCard } from '../util/tn-styled'
 import ActiveRoutingPreferences from '../form/active-routing-preferences'
 import AdvancedSettingsPanel from '../form/advanced-settings-panel'
 import BatchSettings from '../form/batch-settings'
@@ -33,13 +35,19 @@ import MobileNavigationBar from './navigation-bar'
 
 const { SET_FROM_LOCATION, SET_TO_LOCATION } = MobileScreens
 
+/** The measured form height, read by `.batch-search-map` (mobile.css). */
+const FORM_HEIGHT_VAR = '--tn-search-form-height'
+
 const MobileSearchSettings = styled.div<{
   advancedPanelOpen: boolean
   transitionDelay: number
   transitionDuration: number
 }>`
-  background: white;
-  box-shadow: 3px 0px 12px #00000052;
+  /* The grey ground of an Apple-Maps-style sheet: the route card, chips,
+     mode segments and buttons are surface faces on it. */
+  background: var(--tn-bg);
+  border-radius: 0 0 var(--tn-radius) var(--tn-radius);
+  box-shadow: var(--tn-shadow);
   height: ${(props) =>
     props.advancedPanelOpen
       ? 'calc(100% - 50px - var(--return-to-trip-banner-height, 0px))'
@@ -54,18 +62,52 @@ const MobileSearchSettings = styled.div<{
   /* Must appear under the 'hamburger' dropdown which has z-index of 1000, and the "network lost"
     banner which has a z-index of 10 */
   z-index: 9;
+
+  .otp.mobile &.mobile-padding {
+    padding: var(--tn-space-3) var(--tn-space-4) var(--tn-space-1);
+  }
+  &.advanced-mode-open {
+    border-radius: 0;
+    box-shadow: none;
+  }
 `
 
-const OnBusButton = styled.button`
-  background: #fff;
-  border: 2px solid #0b6ea8;
-  border-radius: 8px;
-  color: #0b6ea8;
-  cursor: pointer;
-  font-weight: 600;
-  margin-top: 10px;
-  padding: 12px;
-  width: 100%;
+/**
+ * From, any stops, To in ONE card: a dotted connector runs down the icon
+ * column from the origin dot to the destination pin, and the swap button
+ * sits on the card's right edge. The field look itself is base.css's; the
+ * in-card overrides (transparent rows, hairlines) are in mobile.css under
+ * `.tn-route-card`.
+ */
+const RouteCard = styled(TnCard)`
+  position: relative;
+`
+
+/** Save this place · I'm already on the bus: quiet ghost rows. */
+const FormFooter = styled.div`
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  margin: var(--tn-space-1) calc(-1 * var(--tn-space-2)) 0;
+`
+
+/** Secondary pill on the grey ground: a surface face, like the chips. */
+const BackToResultsButton = styled(TnButton)`
+  background-color: var(--tn-surface);
+  box-shadow: var(--tn-shadow);
+`
+
+const OnBusButton = styled(TnButton)`
+  font-size: 15px;
+  gap: 6px;
+  min-height: var(--tn-tap);
+  padding: 0 var(--tn-space-2);
+
+  svg {
+    height: 18px;
+    width: 18px;
+  }
 `
 
 interface Props {
@@ -110,6 +152,46 @@ class BatchSearchScreen extends Component<Props> {
 
   _mainPanelContentRef = React.createRef<HTMLDivElement>()
   _advancedSettingRef = React.createRef<HTMLDivElement>()
+  _settingsRef = React.createRef<HTMLDivElement>()
+  _mapRef = React.createRef<HTMLDivElement>()
+  _formObserver: ResizeObserver | null = null
+
+  /**
+   * The map strip starts where the form ends. The form's height moves with
+   * the chips (round trip's stays, the depart/arrive card, a stop, the footer
+   * wrapping at 360 px), so it is measured and handed to `.batch-search-map`
+   * as --tn-search-form-height rather than hard-coded per state. While the
+   * options panel covers the screen the last closed height is kept, so the
+   * map is already in place when the panel closes.
+   */
+  _measureForm = () => {
+    const form = this._settingsRef.current
+    const map = this._mapRef.current
+    if (!form || !map || this.state.showAdvancedModeSettings) return
+    map.style.setProperty(FORM_HEIGHT_VAR, `${form.offsetHeight}px`)
+  }
+
+  componentDidMount() {
+    const Observer = (
+      window as unknown as { ResizeObserver?: typeof ResizeObserver }
+    ).ResizeObserver
+    if (Observer && this._settingsRef.current) {
+      this._formObserver = new Observer(this._measureForm)
+      this._formObserver.observe(this._settingsRef.current)
+    }
+    this._measureForm()
+  }
+
+  componentDidUpdate() {
+    // The form unmounts while a point is picked off the map; re-attach.
+    const form = this._settingsRef.current
+    if (form && this._formObserver) this._formObserver.observe(form)
+    this._measureForm()
+  }
+
+  componentWillUnmount() {
+    this._formObserver?.disconnect()
+  }
 
   handlePlanTripClick = () => {
     const {
@@ -186,6 +268,7 @@ class BatchSearchScreen extends Component<Props> {
               className={`batch-search-settings mobile-padding ${
                 showAdvancedModeSettings && 'advanced-mode-open'
               }`}
+              ref={this._settingsRef}
               transitionDelay={transitionDelay}
               transitionDuration={transitionDuration}
             >
@@ -202,57 +285,72 @@ class BatchSearchScreen extends Component<Props> {
                         ref={this._mainPanelContentRef}
                         style={{ display: 'content' }}
                       >
-                        <LocationField
-                          inputPlaceholder={intl.formatMessage({
-                            id: 'components.LocationSearch.setOrigin'
-                          })}
-                          isRequired
-                          locationType="from"
-                          onTextInputClick={this._fromFieldClicked}
-                          selfValidate={planTripClicked}
-                          showClearButton={false}
-                        />
-                        <IntermediateStops />
-                        <LocationField
-                          inputPlaceholder={intl.formatMessage({
-                            id: 'components.LocationSearch.setDestination'
-                          })}
-                          isRequired
-                          locationType="to"
-                          onTextInputClick={this._toFieldClicked}
-                          selfValidate={planTripClicked}
-                          showClearButton={false}
-                        />
-                        <div className="switch-button-container-mobile">
-                          <SwitchButton />
-                        </div>
+                        <RouteCard $padding="none" className="tn-route-card">
+                          <LocationField
+                            inputPlaceholder={intl.formatMessage({
+                              id: 'components.LocationSearch.setOrigin'
+                            })}
+                            isRequired
+                            locationType="from"
+                            onTextInputClick={this._fromFieldClicked}
+                            selfValidate={planTripClicked}
+                            showClearButton={false}
+                          />
+                          <IntermediateStops />
+                          <LocationField
+                            inputPlaceholder={intl.formatMessage({
+                              id: 'components.LocationSearch.setDestination'
+                            })}
+                            isRequired
+                            locationType="to"
+                            onTextInputClick={this._toFieldClicked}
+                            selfValidate={planTripClicked}
+                            showClearButton={false}
+                          />
+                          <div className="switch-button-container-mobile">
+                            <SwitchButton />
+                          </div>
+                        </RouteCard>
                         <BatchSettings
+                          mobile
                           onPlanTripClick={this.handlePlanTripClick}
                           openAdvancedSettings={this.openAdvancedSettings}
+                          // Edit keeps the search (backlog 70.1): while the
+                          // form still asks for it, the rider can go back to
+                          // its results without planning again.
+                          secondaryAction={
+                            formMatchesActiveSearch && (
+                              <BackToResultsButton
+                                $block
+                                $variant="secondary"
+                                className="back-to-results"
+                                onClick={this._backToResultsClicked}
+                                type="button"
+                              >
+                                {intl.formatMessage({
+                                  defaultMessage: 'Back to results',
+                                  id: 'components.BatchSearchScreen.backToResults'
+                                })}
+                              </BackToResultsButton>
+                            )
+                          }
                         />
-                        {/* Edit keeps the search (backlog 70.1): while the
-                            form still asks for it, the rider can go back to
-                            its results without planning again. */}
-                        {formMatchesActiveSearch && (
+                        <ActiveRoutingPreferences />
+                        <FormFooter className="search-form-footer">
+                          <SavePlaceButton />
                           <OnBusButton
-                            className="back-to-results"
-                            onClick={this._backToResultsClicked}
+                            $variant="ghost"
+                            className="on-bus-button"
+                            onClick={this._onBusClicked}
                             type="button"
                           >
+                            <Bus aria-hidden />
                             {intl.formatMessage({
-                              defaultMessage: 'Back to results',
-                              id: 'components.BatchSearchScreen.backToResults'
+                              defaultMessage: "I'm already on the bus",
+                              id: 'components.GoMode.onBusButton'
                             })}
                           </OnBusButton>
-                        )}
-                        <ActiveRoutingPreferences />
-                        <SavePlaceButton />
-                        <OnBusButton onClick={this._onBusClicked} type="button">
-                          {intl.formatMessage({
-                            defaultMessage: "I'm already on the bus",
-                            id: 'components.GoMode.onBusButton'
-                          })}
-                        </OnBusButton>
+                        </FormFooter>
                       </div>
                     </CSSTransition>
                   )}
@@ -283,6 +381,7 @@ class BatchSearchScreen extends Component<Props> {
             className={`batch-search-map ${
               mapPickActive ? 'map-pick-open' : ''
             } ${dateTimeSelectorOpen && !mapPickActive ? 'dt-open' : ''}`}
+            ref={this._mapRef}
           >
             <DefaultMap />
           </div>
