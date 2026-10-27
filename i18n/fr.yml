@@ -266,6 +266,7 @@ components:
     noTransfersLabel: "Sans correspondance"
     numItinerariesLabel: "Nombre d'options à rechercher"
     numItinerariesOption: "{count} options"
+    options: Options
     routeLockHeader: "Lignes"
     routeLockNoneStarted: "Aucun trajet ici ne commence par {route} — tous les trajets sont affichés."
     routeLockNoneUsed: "Aucun trajet ici n'emprunte {route} : voici les options à vélo."
@@ -1312,11 +1313,10 @@ components:
     rememberSearches: Enregistrer les recherches/lieux récents ?
     stopId: Arrêt n° {stopId}
     storageDisclaimer: >
-      En activant cette option, tous vos lieux, préférences et paramètres seront
-      enregistrés dans le cache de votre navigateur. TriMet n'aura pas accès aux
-      données concernant votre domicile, lieu de travail, ou autre endroit. Vous
-      pouvez à tout moment désactiver la collecte de vos recherches/lieux
-      récents et effacer vos domicile, lieu de travail, et arrêts favoris.
+      Les lieux, préférences et paramètres que vous choisissez d'enregistrer
+      sont conservés dans le cache de votre navigateur. Vous pouvez à tout
+      moment désactiver la collecte de vos recherches/lieux récents et effacer
+      vos domicile, lieu de travail, et arrêts favoris.
   VerifyEmailPane:
     emailIsVerified: Mon email est vérifié
     instructions1: >

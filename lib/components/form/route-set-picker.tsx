@@ -102,6 +102,11 @@ const RouteRow = styled.label`
     margin: 0;
     width: 20px;
   }
+
+  .tn-mobile & {
+    border-bottom-color: var(--tn-border);
+    color: var(--tn-text);
+  }
 `
 
 const RouteName = styled.span`
@@ -111,6 +116,10 @@ const RouteName = styled.span`
 const RouteLongName = styled.span`
   color: #666;
   font-size: 13px;
+
+  .tn-mobile & {
+    color: var(--tn-text-2);
+  }
 `
 
 // Done stays on screen however far the list is scrolled.
@@ -127,6 +136,11 @@ const SheetFooter = styled.div`
 
   select {
     min-height: 44px;
+  }
+
+  .tn-mobile & {
+    background: var(--tn-surface);
+    border-top-color: var(--tn-border);
   }
 `
 
@@ -149,6 +163,15 @@ const OpenButton = styled.button`
   padding: 8px;
   text-align: left;
   width: 100%;
+
+  /* Phone: the panel's 44px surface-2 field look (dark-mode safe). */
+  .tn-mobile & {
+    background-color: var(--tn-surface-2);
+    border: 0;
+    border-radius: var(--tn-radius-sm);
+    color: var(--tn-text);
+    padding: 0 var(--tn-space-3);
+  }
 `
 
 /** One row of the checklist. */
