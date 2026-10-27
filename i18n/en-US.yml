@@ -1139,6 +1139,8 @@ components:
       Optional: I consent to the Trip Planner storing my historical planned
       trips in order to improve transit services in my area.
       <termsOfStorageLink>More info...</termsOfStorageLink>
+  TransitLegSummary:
+    rideAndStops: "Ride {duration}{numStops, plural, =1 {} other { · # stops}}"
   TransitVehicleOverlay:
     in_transit_to: "Next stop: {stop}"
     incoming_at: "Approaching: {stop}"

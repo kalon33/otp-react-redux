@@ -1137,6 +1137,8 @@ components:
       Facultatif: Je consens à ce que le Planificateur de trajets sauvegarde mes
       recherches afin d'améliorer les transports publics dans ma region.
       <termsOfStorageLink>Plus d'informations...</termsOfStorageLink>
+  TransitLegSummary:
+    rideAndStops: "Trajet : {duration}{numStops, plural, =1 {} other { · # arrêts}}"
   TransitVehicleOverlay:
     in_transit_to: "Prochain arrêt : {stop}"
     incoming_at: Approchant {stop}
