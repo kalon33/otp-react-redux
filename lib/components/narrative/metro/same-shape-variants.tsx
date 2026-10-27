@@ -78,45 +78,65 @@ type Props = {
   setActiveItinerary: SetActiveItineraryHandler
 }
 
+/**
+ * A disclosure row (mobile overhaul, 2026-10-26): 14 px accent text and a
+ * chevron, no box of its own — the card around it is the box. Still a 44 px
+ * row, "a thumb on a handlebar, not a 90%-size grey link".
+ */
 const Toggle = styled.button`
   align-items: center;
-  background: #eef1f6;
-  border: 1px solid #c9d0dc;
-  border-radius: 8px;
-  color: #17314d;
+  background: transparent;
+  border: 0;
+  border-radius: var(--tn-radius-sm);
+  color: var(--tn-accent);
   cursor: pointer;
   display: flex;
-  font-size: 14px;
-  font-weight: 600;
+  font: 600 14px/18px var(--tn-font);
   gap: 8px;
   justify-content: space-between;
-  /* A thumb on a handlebar, not a 90%-size grey link. */
-  min-height: 44px;
-  padding: 8px 12px;
+  min-height: var(--tn-tap);
+  padding: 0 var(--tn-space-3);
   text-align: left;
   width: 100%;
 
-  &:hover,
-  &[aria-expanded='true'] {
-    background: #e2e7f0;
+  &:active {
+    background: var(--tn-accent-soft);
+  }
+  &:focus-visible {
+    outline: 2px solid var(--tn-accent);
+    outline-offset: -2px;
   }
 `
 
+/**
+ * The ▶ stays in the DOM (it is the control's text in tests and in the
+ * accessibility tree it is aria-hidden); what shows is a 7 px chevron drawn
+ * from two borders, pointing down, and up once open.
+ */
 const Chevron = styled.span`
   flex: 0 0 auto;
-  font-size: 11px;
-  line-height: 1;
-  transition: transform 0.15s ease-out;
+  font-size: 0;
+  line-height: 0;
 
-  &.open {
-    transform: rotate(90deg);
+  &::before {
+    border-bottom: 2px solid currentColor;
+    border-right: 2px solid currentColor;
+    content: '';
+    display: inline-block;
+    height: 7px;
+    transform: translateY(-2px) rotate(45deg);
+    transition: transform 0.15s ease-out;
+    width: 7px;
+  }
+  &.open::before {
+    transform: translateY(2px) rotate(-135deg);
   }
 `
 
 /** "Looking…" / "No other stops": one small muted line, nothing more. */
 const LookupLine = styled.p`
-  color: #767676;
-  font-size: 13px;
+  color: var(--tn-text-2);
+  font: var(--tn-type-sm);
   margin: 6px 0 0 0;
   padding: 0 10px;
 `
@@ -133,51 +153,53 @@ const VariantList = styled.ul`
   /* itinerary.css strips a result row's button padding to 2 px, so the gap
      between two ON/OFF entries has to come from the list items. */
   li + li {
-    margin-top: 8px;
+    margin-top: 6px;
   }
 
-  button {
+  && button {
     background: none;
-    border: 1px solid transparent;
-    border-radius: 6px;
+    border: 0;
+    border-radius: var(--tn-radius-sm);
+    color: var(--tn-text);
     cursor: pointer;
     display: block;
     font-size: 13px;
     /* Same thumb target as the control that opened the list. */
-    min-height: 44px;
-    padding: 6px 10px;
+    min-height: var(--tn-tap);
+    padding: 8px 10px;
     text-align: left;
     width: 100%;
   }
 
-  button:hover {
-    background: #f4f6fa;
+  && button:active {
+    background: var(--tn-surface-2);
   }
 
-  button.active {
-    border-color: #c9d0dc;
+  && button.active {
+    background: var(--tn-surface-2);
+    box-shadow: inset 0 0 0 1px var(--tn-border);
     font-weight: 600;
   }
 
   .variant-detail {
-    color: #555;
+    color: var(--tn-text-2);
     display: block;
     font-size: 13px;
+    font-variant-numeric: var(--tn-tabular);
+    font-weight: 400;
     margin-top: 2px;
   }
 `
 
 /**
- * ON / OFF, in the onboard list's "Off at" caption style (OffAtLabel in
- * OnboardItineraryList.tsx: green, 13 px, bold), because that list is the one
- * the rider pointed at: "just like you can choose other egress stops in the
- * 'already on the bus' flow".
+ * ON / OFF captions: the role as a small eyebrow, the stop name 14 px 600.
+ * (They were the onboard list's green "Off at" caption; green is the realtime
+ * colour now.)
  */
 const StopCaption = styled.span`
-  color: #2e7d32;
+  color: var(--tn-text);
   display: block;
-  font-size: 13px;
-  font-weight: 700;
+  font: 600 14px/19px var(--tn-font);
 
   .stop-line {
     display: flex;
@@ -185,12 +207,11 @@ const StopCaption = styled.span`
   }
 
   .stop-role {
-    color: #767676;
-    flex: 0 0 34px;
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    line-height: 17px;
+    color: var(--tn-text-3);
+    flex: 0 0 30px;
+    font: var(--tn-type-xs);
+    letter-spacing: var(--tn-tracking-xs);
+    line-height: 19px;
     text-transform: uppercase;
   }
 
@@ -199,13 +220,12 @@ const StopCaption = styled.span`
   }
 `
 
-/** A group's heading in the planner's list, as small and muted as "Looking…". */
+/** A group's heading in the planner's list: an eyebrow. */
 const GroupHeading = styled.h4`
-  color: #555;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  margin: 12px 0 0 0;
+  color: var(--tn-text-2);
+  font: var(--tn-type-xs);
+  letter-spacing: var(--tn-tracking-xs);
+  margin: 12px 0 2px 0;
   padding: 0 10px;
   text-transform: uppercase;
 `

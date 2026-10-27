@@ -719,13 +719,13 @@ components:
   MapillaryFrame:
     title: Imagery of the street
   MetroUI:
-    arriveAt: You arrive
+    arriveAt: Arrives
     confirmLaterDeparture: Start {chosen} instead of {row}?
     confirmSwitchTrip: Switch your active trip to this route? Your current guidance will update.
     fare: "{fare}"
     itineraryDescription: "{time} itinerary using {routes}"
     itinerarySummary: from {stopName} | {cost}
-    leaveAt: You leave
+    leaveAt: Leaves
     multipleOptions: Multiple Options
     orAlternatives: or other routes in the same direction
     originallyScheduledTime: (originally {originalTime})

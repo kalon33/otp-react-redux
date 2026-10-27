@@ -51,6 +51,16 @@ const Routes = styled.div<{ enableDot?: boolean }>`
   `}
 `
 
+/**
+ * One leg of the chain (its divider dot, icon and pill). `display: contents`
+ * leaves every existing layout of the chain as it was; the results card
+ * (metro-itinerary.tsx) makes it an inline-flex unit so a long chain wraps a
+ * whole leg at a time rather than between a bus icon and its route pill.
+ */
+const ChainItem = styled.span`
+  display: contents;
+`
+
 // Invisible header rendered for screen readers and a11y technologies.
 // HACK: This grid/column places the invisible header into an unused
 // grid-cell to stop it from adding an additional row.
@@ -62,6 +72,8 @@ const InvisibleHeader = styled(InvisibleA11yLabel)`
 type Props = {
   // TODO: create and reuse type for LegIcon.
   LegIcon: ({ height, leg }: { height: number; leg: Leg }) => React.ReactElement
+  /** Lets a caller restyle the chain (styled(MetroItineraryRoutes)). */
+  className?: string
   enableDot?: boolean
   /** This is true when there is only one itinerary being shown and the itinerary-body is visible */
   expanded: boolean
@@ -71,6 +83,7 @@ type Props = {
 }
 
 const MetroItineraryRoutes = ({
+  className,
   enableDot,
   expanded,
   itinerary,
@@ -105,28 +118,29 @@ const MetroItineraryRoutes = ({
           />
         )}
       </InvisibleHeader>
-      <Routes aria-hidden enableDot={enableDot}>
+      <Routes aria-hidden className={className} enableDot={enableDot}>
         {routeLegs.map((leg: Leg, index: number, filteredLegs: Leg[]) => {
           const previousLegMode =
             (index > 0 && filteredLegs[index - 1].mode) || undefined
           return (
-            <RouteBlock
-              aria-hidden
-              footer={
-                showLegDurations && (
-                  <FormattedDuration
-                    duration={leg.duration}
-                    includeSeconds={false}
-                  />
-                )
-              }
-              hideLongName
-              key={index}
-              leg={leg}
-              LegIcon={LegIcon}
-              previousLegMode={previousLegMode}
-              showDivider={enableDot}
-            />
+            <ChainItem className="route-chain-item" key={index}>
+              <RouteBlock
+                aria-hidden
+                footer={
+                  showLegDurations && (
+                    <FormattedDuration
+                      duration={leg.duration}
+                      includeSeconds={false}
+                    />
+                  )
+                }
+                hideLongName
+                leg={leg}
+                LegIcon={LegIcon}
+                previousLegMode={previousLegMode}
+                showDivider={enableDot}
+              />
+            </ChainItem>
           )
         })}
       </Routes>
