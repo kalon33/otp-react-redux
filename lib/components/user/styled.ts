@@ -137,7 +137,11 @@ export const UnstyledLink = styled(Link)`
 
 /* --- "Share feedback" screen -------------------------------------------- */
 
-/** The comment box. Sized so the whole of a 500-character note is visible. */
+/**
+ * The comment box. Sized so the whole of a 500-character note is visible.
+ * On the phone it is the page's card: surface on the --tn-bg ground, no
+ * border, an accent ring while typing.
+ */
 export const FeedbackTextarea = styled.textarea`
   border: 1px solid #adadad;
   border-radius: 4px;
@@ -147,6 +151,20 @@ export const FeedbackTextarea = styled.textarea`
   padding: 10px;
   resize: vertical;
   width: 100%;
+
+  .tn-mobile & {
+    background-color: var(--tn-surface);
+    border: 0;
+    border-radius: var(--tn-radius);
+    color: var(--tn-text);
+    font: var(--tn-type-body);
+    min-height: 10em;
+    padding: var(--tn-space-4);
+  }
+  .tn-mobile &:focus {
+    box-shadow: inset 0 0 0 2px var(--tn-accent);
+    outline: none;
+  }
 `
 
 /**
@@ -173,6 +191,23 @@ export const FeedbackAttachRow = styled.div`
   input[type='file'] {
     ${invisibleCss}
     position: absolute;
+  }
+
+  .tn-mobile & {
+    gap: var(--tn-space-2) var(--tn-space-3);
+    margin: var(--tn-space-4) 0 0;
+  }
+`
+
+/** "One screenshot per report." beside the attach button. */
+export const FeedbackAttachHint = styled.p`
+  color: #666;
+  font-size: 13px;
+  margin: 0;
+
+  .tn-mobile & {
+    color: var(--tn-text-2);
+    font: var(--tn-type-sm);
   }
 `
 
@@ -209,6 +244,11 @@ export const FeedbackThumbnail = styled.img`
   height: 96px;
   object-fit: cover;
   width: 96px;
+
+  .tn-mobile & {
+    border: 1px solid var(--tn-border);
+    border-radius: var(--tn-radius-sm);
+  }
 `
 
 /**
@@ -216,28 +256,57 @@ export const FeedbackThumbnail = styled.img`
  *
  * It used to be a full-width-ish bootstrap button floating at the vertical
  * middle of a 160 px thumbnail with nothing tying the two together; on the
- * rider's screenshot it reads as an unrelated control. Sized to the 44 px
- * touch target Apple asks for, minus the 8 px of overhang.
+ * rider's screenshot it reads as an unrelated control. The button is the
+ * 44 px touch target Apple asks for, centred on the tile's corner; the
+ * 28 px disc it draws (::before) is what the rider sees.
  */
 export const FeedbackRemoveButton = styled.button`
   align-items: center;
-  background: #fff;
-  border: 1px solid #adadad;
-  border-radius: 50%;
+  background: transparent;
+  border: 0;
   color: #333;
   display: flex;
   font-size: 18px;
-  height: 28px;
+  height: 44px;
   justify-content: center;
   line-height: 1;
   padding: 0;
   position: absolute;
-  right: -8px;
-  top: -8px;
-  width: 28px;
+  right: -16px;
+  top: -16px;
+  width: 44px;
 
+  &::before {
+    background: #fff;
+    border: 1px solid #adadad;
+    border-radius: 50%;
+    content: '';
+    height: 28px;
+    left: 8px;
+    position: absolute;
+    top: 8px;
+    width: 28px;
+  }
+  > span {
+    position: relative;
+  }
   &:focus {
+    outline: none;
+  }
+  &:focus-visible::before {
     outline: 2px solid ${baseColor};
+  }
+
+  .tn-mobile & {
+    color: var(--tn-text);
+  }
+  .tn-mobile &::before {
+    background: var(--tn-surface);
+    border: 0;
+    box-shadow: var(--tn-shadow);
+  }
+  .tn-mobile &:focus-visible::before {
+    outline-color: var(--tn-accent);
   }
 `
 
@@ -247,4 +316,15 @@ export const FeedbackStatus = styled.p<{ $failed?: boolean }>`
   font-size: 14px;
   font-weight: 700;
   margin: 1em 0 0 0;
+
+  .tn-mobile & {
+    background-color: ${(props) =>
+      props.$failed ? 'var(--tn-danger-soft)' : 'var(--tn-live-soft)'};
+    border-radius: var(--tn-radius-sm);
+    color: ${(props) =>
+      props.$failed ? 'var(--tn-danger)' : 'var(--tn-live)'};
+    font: 500 14px/18px var(--tn-font);
+    margin: var(--tn-space-3) 0 0;
+    padding: var(--tn-space-3) var(--tn-space-4);
+  }
 `

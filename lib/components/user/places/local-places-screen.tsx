@@ -1,9 +1,11 @@
+import { ChevronRight } from '@styled-icons/fa-solid/ChevronRight'
 import { connect } from 'react-redux'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { Plus } from '@styled-icons/fa-solid/Plus'
-import React from 'react'
+import React, { useContext } from 'react'
+import styled from 'styled-components'
 
-import * as userActions from '../../../actions/user'
+import { ComponentContext } from '../../../util/contexts'
 import {
   getPlaceDetail,
   getPlaceMainText,
@@ -15,25 +17,66 @@ import {
 import { isBlank } from '../../../util/ui'
 import { isCustomPlace } from '../../../util/saved-places'
 import { LOCAL_PLACES_PATH } from '../../../util/constants'
-import { UnpaddedList } from '../../form/styled'
+import {
+  SettingsCard,
+  SettingsList,
+  SettingsPage,
+  SettingsSection
+} from '../settings-list'
+import {
+  TnListRow,
+  TnListRowBody,
+  TnListRowIcon,
+  TnListRowSubtitle,
+  TnListRowTitle,
+  TnListRowTrail
+} from '../../util/tn-styled'
 import { UserSavedLocation } from '../types'
 import AppFrame from '../../app/app-frame'
+import InvisibleA11yLabel from '../../util/invisible-a11y-label'
+import Link from '../../util/link'
 import PageTitle from '../../util/page-title'
 
-import { NewPlaceButton, StyledFavoritePlace } from './styled'
-
 interface Props {
-  deleteUserPlace: (place: UserSavedLocation | string, intl: unknown) => void
   savedLocations: UserSavedLocation[]
 }
 
+/** A saved place as a list row: the whole row opens its editor. */
+const PlaceRow = styled(TnListRow)`
+  /* A place with no address yet reads as a prompt, not a value. */
+  &[data-unset] ${TnListRowSubtitle} {
+    color: var(--tn-accent);
+  }
+`
+
+/** "Add another place": an accent row of its own, under the list. */
+const AddRow = styled(TnListRow)`
+  color: var(--tn-accent);
+  font: 600 16px/22px var(--tn-font);
+
+  &[href]:hover,
+  &[href]:focus {
+    color: var(--tn-accent);
+  }
+  ${TnListRowIcon} {
+    color: var(--tn-accent);
+  }
+  ${TnListRowIcon} svg {
+    height: 16px;
+    width: 16px;
+  }
+`
+
 /**
  * Lists the local user's saved places (Home, Work, and custom named ones)
- * for editing, adding, and deleting. Unlike FavoritePlaceList, this screen
- * works entirely on-device: no account, no login.
+ * for editing and adding; deleting is on each place's own editor screen.
+ * Unlike FavoritePlaceList, this screen works entirely on-device: no account,
+ * no login.
  */
-const LocalPlacesScreen = ({ deleteUserPlace, savedLocations }: Props) => {
+const LocalPlacesScreen = ({ savedLocations }: Props) => {
   const intl = useIntl()
+  // @ts-expect-error TODO: Add types to ComponentContext
+  const { SvgIcon } = useContext(ComponentContext)
   const heading = intl.formatMessage({
     id: 'components.SavedPlacesScreen.heading'
   })
@@ -50,50 +93,71 @@ const LocalPlacesScreen = ({ deleteUserPlace, savedLocations }: Props) => {
     ...savedLocations.filter(isCustomPlace)
   ]
 
-  const handleDelete = (place: UserSavedLocation) => {
-    if (
-      window.confirm(
-        intl.formatMessage({ id: 'actions.user.confirmDeletePlace' })
-      )
-    ) {
-      deleteUserPlace(place, intl)
-    }
-  }
-
   return (
-    <AppFrame>
+    <AppFrame title={heading}>
       <PageTitle title={heading} />
-      <h1>{heading}</h1>
-      <UnpaddedList>
-        {places.map((place: UserSavedLocation, index: number) => (
-          <StyledFavoritePlace
-            actionText={editActionText}
-            detailText={getPlaceDetail(place, intl)}
-            icon={
-              // Entries saved by the legacy map-popup path carry no icon.
-              place.icon ||
-              (PLACE_TYPES[place.type as keyof typeof PLACE_TYPES] || {}).icon
-            }
-            key={place.id || place.type || index}
-            mainText={getPlaceMainText(place, intl)}
-            onDelete={
-              !isBlank(place.address) ? () => handleDelete(place) : undefined
-            }
-            path={`${LOCAL_PLACES_PATH}/${
-              isHomeOrWork(place) ? place.type : place.id
-            }`}
-            title={editActionText}
-          />
-        ))}
-      </UnpaddedList>
+      <h1 className="tn-page-title">{heading}</h1>
+      <SettingsPage>
+        <SettingsSection>
+          <SettingsList>
+            {places.map((place: UserSavedLocation, index: number) => {
+              const mainText = getPlaceMainText(place, intl)
+              const detailText = getPlaceDetail(place, intl)
+              return (
+                <li key={place.id || place.type || index}>
+                  <PlaceRow
+                    as={Link}
+                    data-unset={isBlank(place.address) || undefined}
+                    title={editActionText}
+                    to={`${LOCAL_PLACES_PATH}/${
+                      isHomeOrWork(place) ? place.type : place.id
+                    }`}
+                  >
+                    <TnListRowIcon aria-hidden>
+                      <SvgIcon
+                        iconName={
+                          // Entries saved by the legacy map-popup path carry no icon.
+                          place.icon ||
+                          (
+                            PLACE_TYPES[
+                              place.type as keyof typeof PLACE_TYPES
+                            ] || {}
+                          ).icon
+                        }
+                      />
+                    </TnListRowIcon>
+                    <TnListRowBody>
+                      <TnListRowTitle>{mainText}</TnListRowTitle>
+                      <TnListRowSubtitle>
+                        <InvisibleA11yLabel> - </InvisibleA11yLabel>
+                        {detailText}
+                      </TnListRowSubtitle>
+                      <InvisibleA11yLabel>
+                        {' '}
+                        [{editActionText}]
+                      </InvisibleA11yLabel>
+                    </TnListRowBody>
+                    <TnListRowTrail aria-hidden>
+                      <ChevronRight />
+                    </TnListRowTrail>
+                  </PlaceRow>
+                </li>
+              )
+            })}
+          </SettingsList>
+        </SettingsSection>
 
-      <NewPlaceButton
-        className="btn btn-primary"
-        to={`${LOCAL_PLACES_PATH}/new`}
-      >
-        <Plus size={10} />
-        <FormattedMessage id="components.FavoritePlaceList.addAnotherPlace" />
-      </NewPlaceButton>
+        <SettingsSection>
+          <SettingsCard>
+            <AddRow as={Link} to={`${LOCAL_PLACES_PATH}/new`}>
+              <TnListRowIcon aria-hidden>
+                <Plus />
+              </TnListRowIcon>
+              <FormattedMessage id="components.FavoritePlaceList.addAnotherPlace" />
+            </AddRow>
+          </SettingsCard>
+        </SettingsSection>
+      </SettingsPage>
     </AppFrame>
   )
 }
@@ -104,8 +168,4 @@ const mapStateToProps = (state: any) => ({
   savedLocations: state.user.localUser?.savedLocations || []
 })
 
-const mapDispatchToProps = {
-  deleteUserPlace: userActions.deleteUserPlace
-}
-
-export default connect(mapStateToProps, mapDispatchToProps)(LocalPlacesScreen)
+export default connect(mapStateToProps)(LocalPlacesScreen)

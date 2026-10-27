@@ -22,6 +22,21 @@ const CloseModalButton = styled.button`
     right: 0.75em;
     top: 0.5em;
   }
+
+  /* The phone: a 44px round target on the sheet's surface. */
+  .tn-mobile &.close-button {
+    align-items: center;
+    background: var(--tn-surface-2);
+    border-radius: 50%;
+    color: var(--tn-text);
+    display: flex;
+    height: var(--tn-tap);
+    justify-content: center;
+    padding: 0;
+    right: var(--tn-space-2);
+    top: var(--tn-space-2);
+    width: var(--tn-tap);
+  }
 `
 
 const isMobile = coreUtils.ui.isMobile()

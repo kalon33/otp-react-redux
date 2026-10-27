@@ -14,6 +14,12 @@ interface Props extends HTMLAttributes<HTMLElement> {
   subItems?: JSX.Element[]
   text: JSX.Element | string
   to?: string
+  /**
+   * Shown at the row's far end: a chevron on rows that open a page of their
+   * own, a switch on rows that toggle a setting. Decorative — the row's role
+   * and label carry the meaning.
+   */
+  trailing?: JSX.Element
 }
 
 interface State {
@@ -59,7 +65,8 @@ export default class AppMenuItem extends Component<Props, State> {
   }
 
   render(): JSX.Element {
-    const { icon, id, onClick, subItems, text, ...otherProps } = this.props
+    const { icon, id, onClick, subItems, text, trailing, ...otherProps } =
+      this.props
     const { isExpanded } = this.state
     const hasHref = !!otherProps.href
     const isAbsolute = otherProps.href?.startsWith('http')
@@ -76,10 +83,11 @@ export default class AppMenuItem extends Component<Props, State> {
           onKeyDown={this._handleKeyDown}
           {...otherProps}
           target={hasHref && isAbsolute ? '_blank' : undefined}
-          title={typeof text === 'string' ? text : ''}
+          title={otherProps.title ?? (typeof text === 'string' ? text : '')}
         >
           <span aria-hidden>{icon}</span>
-          <span>{text}</span>
+          <span className="app-menu-item-label">{text}</span>
+          {trailing && <span className="app-menu-item-trail">{trailing}</span>}
           {subItems && (
             <span className="expand-menu-chevron">
               {isExpanded ? <ChevronUp /> : <ChevronDown />}

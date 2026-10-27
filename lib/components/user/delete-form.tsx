@@ -28,6 +28,20 @@ export const DeleteFormButton = styled(Button)`
   }
   float: right;
   margin-right: 10px;
+
+  /* The phone: a destructive pill — danger text on its soft tint. */
+  .tn-mobile && {
+    background-color: var(--tn-danger-soft);
+    border: 0;
+    color: var(--tn-danger);
+  }
+  .tn-mobile &&:active,
+  .tn-mobile &&:focus,
+  .tn-mobile &&:hover {
+    background-color: var(--tn-danger-soft);
+    color: var(--tn-danger);
+    filter: brightness(0.96);
+  }
 `
 
 const DeleteForm: React.FC<DeleteFormProps> = ({

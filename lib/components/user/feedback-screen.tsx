@@ -1,4 +1,5 @@
 import { Button } from 'react-bootstrap'
+import { Camera } from '@styled-icons/fa-solid/Camera'
 import { connect } from 'react-redux'
 import { useIntl } from 'react-intl'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
@@ -21,11 +22,11 @@ import {
   queueFeedback,
   sendFeedback
 } from '../../util/feedback'
-import { HelperText } from '../form/styled'
 import AppFrame from '../app/app-frame'
 import PageTitle from '../util/page-title'
 
 import {
+  FeedbackAttachHint,
   FeedbackAttachment,
   FeedbackAttachments,
   FeedbackAttachRow,
@@ -34,6 +35,7 @@ import {
   FeedbackTextarea,
   FeedbackThumbnail
 } from './styled'
+import { SettingsLead, SettingsPage } from './settings-list'
 
 const ENDPOINT = apiUrl('/api/ride-note')
 
@@ -365,109 +367,113 @@ const FeedbackScreen = ({ tripId }: Props): JSX.Element => {
   const nothingToSend = !text.trim() && !image
 
   return (
-    <AppFrame>
+    <AppFrame title={heading}>
       <PageTitle title={heading} />
-      <h1>{heading}</h1>
-      <HelperText>
-        {intl.formatMessage({
-          defaultMessage:
-            'Tell us what went wrong. A screenshot says more than a sentence.',
-          id: 'components.FeedbackScreen.intro'
-        })}
-      </HelperText>
-
-      <FeedbackTextarea
-        aria-label={intl.formatMessage({
-          defaultMessage: 'Your comment',
-          id: 'components.FeedbackScreen.commentLabel'
-        })}
-        maxLength={FEEDBACK_MAX_CHARS}
-        onChange={onTextChange}
-        placeholder={intl.formatMessage({
-          defaultMessage: 'What happened?',
-          id: 'components.FeedbackScreen.commentPlaceholder'
-        })}
-        value={text}
-      />
-
-      <FeedbackAttachRow>
-        {/* accept="image/*" is what puts the camera, the photo library and the
-            screenshot album in front of the rider on iOS and Android alike.
-            No `multiple`: /api/ride-note takes exactly one `image` per POST
-            (transitnav preferences_api.py), so offering a multi-select would
-            be offering choices the screen would then throw away. */}
-        <input
-          accept="image/*"
-          aria-hidden
-          onChange={onPickImage}
-          ref={fileRef}
-          tabIndex={-1}
-          type="file"
-        />
-        <Button bsSize="small" onClick={onOpenPicker}>
-          {image
-            ? intl.formatMessage({
-                defaultMessage: 'Replace screenshot',
-                id: 'components.FeedbackScreen.replaceImage'
-              })
-            : intl.formatMessage({
-                defaultMessage: 'Add a screenshot',
-                id: 'components.FeedbackScreen.attachLabel'
-              })}
-        </Button>
-        <HelperText>
+      <h1 className="tn-page-title">{heading}</h1>
+      <SettingsPage>
+        <SettingsLead>
           {intl.formatMessage({
-            defaultMessage: 'One screenshot per report.',
-            id: 'components.FeedbackScreen.oneImageOnly'
+            defaultMessage:
+              'Tell us what went wrong. A screenshot says more than a sentence.',
+            id: 'components.FeedbackScreen.intro'
           })}
-        </HelperText>
-      </FeedbackAttachRow>
+        </SettingsLead>
 
-      {image && (
-        <FeedbackAttachments>
-          <FeedbackAttachment>
-            <FeedbackThumbnail
-              alt={intl.formatMessage({
-                defaultMessage: 'The picture you attached',
-                id: 'components.FeedbackScreen.thumbnailAlt'
-              })}
-              src={image}
-            />
-            <FeedbackRemoveButton
-              aria-label={intl.formatMessage({
-                defaultMessage: 'Remove the screenshot',
-                id: 'components.FeedbackScreen.removeImage'
-              })}
-              onClick={onRemoveImage}
-              type="button"
-            >
-              {'\u00d7'}
-            </FeedbackRemoveButton>
-          </FeedbackAttachment>
-        </FeedbackAttachments>
-      )}
+        <FeedbackTextarea
+          aria-label={intl.formatMessage({
+            defaultMessage: 'Your comment',
+            id: 'components.FeedbackScreen.commentLabel'
+          })}
+          maxLength={FEEDBACK_MAX_CHARS}
+          onChange={onTextChange}
+          placeholder={intl.formatMessage({
+            defaultMessage: 'What happened?',
+            id: 'components.FeedbackScreen.commentPlaceholder'
+          })}
+          value={text}
+        />
 
-      <Button
-        bsStyle="primary"
-        disabled={nothingToSend || status === 'sending'}
-        onClick={onSend}
-        style={{ marginTop: '1em' }}
-      >
-        {intl.formatMessage({
-          defaultMessage: 'Send',
-          id: 'components.FeedbackScreen.send'
-        })}
-      </Button>
+        <FeedbackAttachRow>
+          {/* accept="image/*" is what puts the camera, the photo library and the
+              screenshot album in front of the rider on iOS and Android alike.
+              No `multiple`: /api/ride-note takes exactly one `image` per POST
+              (transitnav preferences_api.py), so offering a multi-select would
+              be offering choices the screen would then throw away. */}
+          <input
+            accept="image/*"
+            aria-hidden
+            onChange={onPickImage}
+            ref={fileRef}
+            tabIndex={-1}
+            type="file"
+          />
+          <Button bsSize="small" onClick={onOpenPicker}>
+            <Camera aria-hidden size={16} />
+            {image
+              ? intl.formatMessage({
+                  defaultMessage: 'Replace screenshot',
+                  id: 'components.FeedbackScreen.replaceImage'
+                })
+              : intl.formatMessage({
+                  defaultMessage: 'Add a screenshot',
+                  id: 'components.FeedbackScreen.attachLabel'
+                })}
+          </Button>
+          <FeedbackAttachHint>
+            {intl.formatMessage({
+              defaultMessage: 'One screenshot per report.',
+              id: 'components.FeedbackScreen.oneImageOnly'
+            })}
+          </FeedbackAttachHint>
+        </FeedbackAttachRow>
 
-      {detail && (
-        <FeedbackStatus
-          $failed={status === 'failed' || status === 'held'}
-          className="feedback-status"
-          role="status"
+        {image && (
+          <FeedbackAttachments>
+            <FeedbackAttachment>
+              <FeedbackThumbnail
+                alt={intl.formatMessage({
+                  defaultMessage: 'The picture you attached',
+                  id: 'components.FeedbackScreen.thumbnailAlt'
+                })}
+                src={image}
+              />
+              <FeedbackRemoveButton
+                aria-label={intl.formatMessage({
+                  defaultMessage: 'Remove the screenshot',
+                  id: 'components.FeedbackScreen.removeImage'
+                })}
+                onClick={onRemoveImage}
+                type="button"
+              >
+                <span aria-hidden>{'\u00d7'}</span>
+              </FeedbackRemoveButton>
+            </FeedbackAttachment>
+          </FeedbackAttachments>
+        )}
+
+        <Button
+          block
+          bsStyle="primary"
+          disabled={nothingToSend || status === 'sending'}
+          onClick={onSend}
+          style={{ marginTop: '24px' }}
         >
-          {detail}
-        </FeedbackStatus>
-      )}
+          {intl.formatMessage({
+            defaultMessage: 'Send',
+            id: 'components.FeedbackScreen.send'
+          })}
+        </Button>
+
+        {detail && (
+          <FeedbackStatus
+            $failed={status === 'failed' || status === 'held'}
+            className="feedback-status"
+            role="status"
+          >
+            {detail}
+          </FeedbackStatus>
+        )}
+      </SettingsPage>
     </AppFrame>
   )
 }

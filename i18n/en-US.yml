@@ -207,6 +207,7 @@ components:
     networkConnectionRestored: Network connection restored
     openMenu: Open Menu
     settings: Settings
+    shareDiagnostics: Share diagnostics
     shareDiagnosticsOff: "Share diagnostics: Off"
     shareDiagnosticsOn: "Share diagnostics: On"
     shareFeedback: Share feedback
