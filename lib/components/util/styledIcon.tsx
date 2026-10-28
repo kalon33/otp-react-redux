@@ -94,13 +94,16 @@ export const IconWithText = ({
   styleProps = { display: 'contents' }
 }: IconPropsWithText): React.ReactElement => {
   return (
-    <div style={styleProps}>
+    // A span, not a div: IconWithText also renders inside <p> (e.g. the
+    // pattern row's day label), and a div there trips React's DOM nesting
+    // validation. Default display:contents keeps every layout unchanged.
+    <span style={styleProps}>
       <StyledIconWrapperTextAlign size={size} spin={spin}>
         {Icon && <Icon />}
         {icon}
       </StyledIconWrapperTextAlign>
       <span>{children}</span>
-    </div>
+    </span>
   )
 }
 

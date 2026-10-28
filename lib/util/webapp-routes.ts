@@ -2,11 +2,24 @@ import { lazy } from 'react'
 
 import withSuspense from '../components/util/with-suspense'
 
-import { TIMETABLE_PATH } from './constants'
+import {
+  FEEDBACK_PATH,
+  LOCAL_PLACES_PATH,
+  SETTINGS_PATH,
+  TIMETABLE_PATH
+} from './constants'
 
 const TimetableWrapper = lazy(
   () => import('../components/viewers/timetable-wrapper')
 )
+const LocalPlacesScreen = lazy(
+  () => import('../components/user/places/local-places-screen')
+)
+const LocalPlaceEditorScreen = lazy(
+  () => import('../components/user/places/local-place-editor-screen')
+)
+const SettingsScreen = lazy(() => import('../components/user/settings-screen'))
+const FeedbackScreen = lazy(() => import('../components/user/feedback-screen'))
 
 /**
  * Contains mapping of the component(s) to display for each URL route.
@@ -46,6 +59,33 @@ const routes = [
     a11yIgnore: true,
     component: withSuspense(TimetableWrapper),
     path: TIMETABLE_PATH(':routeId')
+  },
+  {
+    // Saved places managed on-device: no account, no login.
+    a11yIgnore: true,
+    component: withSuspense(LocalPlacesScreen),
+    exact: true,
+    path: LOCAL_PLACES_PATH
+  },
+  {
+    a11yIgnore: true,
+    component: withSuspense(LocalPlaceEditorScreen),
+    path: `${LOCAL_PLACES_PATH}/:id`
+  },
+  {
+    // The rider's own settings (routing levers, turn-by-turn, appearance),
+    // on-device.
+    a11yIgnore: true,
+    component: withSuspense(SettingsScreen),
+    exact: true,
+    path: SETTINGS_PATH
+  },
+  {
+    // "Share feedback": a comment and a screenshot into the ride-note sink.
+    a11yIgnore: true,
+    component: withSuspense(FeedbackScreen),
+    exact: true,
+    path: FEEDBACK_PATH
   }
 ]
 
