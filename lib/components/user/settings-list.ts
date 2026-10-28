@@ -209,3 +209,41 @@ export const ToggleRow = styled.div`
     order: 2;
   }
 `
+
+/**
+ * A segmented control that fills its card (Appearance: System / Light /
+ * Dark): a `role="radiogroup"` row of equal-width 44px segments, inset 4px so
+ * the selected one (--tn-accent-soft, --tn-accent text) follows the card's
+ * corners. The card is the track. Tokens only, so both themes come for free.
+ */
+export const SegmentedControl = styled.div`
+  display: flex;
+  gap: var(--tn-space-1);
+  padding: var(--tn-space-1);
+`
+
+export const SegmentedOption = styled.button<{ $selected: boolean }>`
+  appearance: none;
+  background-color: ${(p) =>
+    p.$selected ? 'var(--tn-accent-soft)' : 'transparent'};
+  border: 0;
+  border-radius: calc(var(--tn-radius) - var(--tn-space-1));
+  color: ${(p) => (p.$selected ? 'var(--tn-accent)' : 'var(--tn-text)')};
+  cursor: pointer;
+  flex: 1 1 0;
+  font: var(--tn-type-body);
+  font-weight: ${(p) => (p.$selected ? 600 : 400)};
+  margin: 0;
+  min-height: var(--tn-tap);
+  min-width: 0;
+  padding: 0 var(--tn-space-2);
+  transition: background-color 160ms ease;
+
+  &:focus-visible {
+    outline: 2px solid var(--tn-accent);
+    outline-offset: 1px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+  }
+`

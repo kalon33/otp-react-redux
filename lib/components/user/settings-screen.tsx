@@ -1,8 +1,9 @@
 import { connect } from 'react-redux'
+import { IntlShape, useIntl } from 'react-intl'
 import { QueryParamChangeEvent } from '@opentripplanner/trip-form/lib/types'
 import { Styled as TripFormStyled } from '@opentripplanner/trip-form'
-import { useIntl } from 'react-intl'
-import React, { useCallback, useEffect, useRef } from 'react'
+import coreUtils from '@opentripplanner/core-utils'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 
 import * as goModeActions from '../../actions/go-mode'
 import * as routingProfileActions from '../../actions/routing-profiles'
@@ -22,6 +23,11 @@ import {
   SERVER_WALK_SPEED_MPS,
   speedMph
 } from '../../util/routing-profiles'
+import {
+  getTnThemePref,
+  setTnThemePref,
+  TnThemePref
+} from '../../util/tn-theme'
 import { LeverSlider, SettingCheckbox } from '../form/styled'
 import AppFrame from '../app/app-frame'
 import PageTitle from '../util/page-title'
@@ -29,6 +35,8 @@ import PageTitle from '../util/page-title'
 import {
   LeverBlock,
   LeverHelp,
+  SegmentedControl,
+  SegmentedOption,
   SettingsCard,
   SettingsFootnote,
   SettingsPage,
@@ -60,6 +68,106 @@ function samePreferences(
   const bKeys = Object.keys(b) as (keyof RoutingPreferences)[]
   if (aKeys.length !== bKeys.length) return false
   return aKeys.every((key) => a[key] === b[key])
+}
+
+const THEME_PREFS: TnThemePref[] = ['system', 'light', 'dark']
+
+function themeLabel(intl: IntlShape, pref: TnThemePref): string {
+  switch (pref) {
+    case 'light':
+      return intl.formatMessage({
+        defaultMessage: 'Light',
+        id: 'components.SettingsScreen.appearanceLight'
+      })
+    case 'dark':
+      return intl.formatMessage({
+        defaultMessage: 'Dark',
+        id: 'components.SettingsScreen.appearanceDark'
+      })
+    default:
+      return intl.formatMessage({
+        defaultMessage: 'System',
+        id: 'components.SettingsScreen.appearanceSystem'
+      })
+  }
+}
+
+/**
+ * Appearance: System / Light / Dark as a segmented radio group. The choice is
+ * stored on the device (util/tn-theme) and applied to <html> at once, so the
+ * page flips under the rider's thumb. Phone layout only — the desktop layout
+ * is light-only and the store refuses to force dark there anyway.
+ */
+const AppearanceSection = ({ intl }: { intl: IntlShape }): JSX.Element => {
+  const [pref, setPref] = useState<TnThemePref>(getTnThemePref)
+  const buttons = useRef<(HTMLButtonElement | null)[]>([])
+
+  const choose = useCallback((next: TnThemePref) => {
+    setTnThemePref(next)
+    setPref(next)
+  }, [])
+
+  const onKeyDown = useCallback(
+    (evt: React.KeyboardEvent<HTMLDivElement>) => {
+      const step =
+        evt.key === 'ArrowRight' || evt.key === 'ArrowDown'
+          ? 1
+          : evt.key === 'ArrowLeft' || evt.key === 'ArrowUp'
+          ? -1
+          : 0
+      if (!step) return
+      evt.preventDefault()
+      const index = THEME_PREFS.indexOf(pref)
+      const nextIndex = (index + step + THEME_PREFS.length) % THEME_PREFS.length
+      choose(THEME_PREFS[nextIndex])
+      buttons.current[nextIndex]?.focus()
+    },
+    [choose, pref]
+  )
+
+  return (
+    <SettingsSection>
+      <SettingsSectionTitle id="tn-settings-appearance">
+        {intl.formatMessage({
+          defaultMessage: 'Appearance',
+          id: 'components.SettingsScreen.appearanceHeader'
+        })}
+      </SettingsSectionTitle>
+      <SettingsCard>
+        <SegmentedControl
+          aria-labelledby="tn-settings-appearance"
+          onKeyDown={onKeyDown}
+          role="radiogroup"
+        >
+          {THEME_PREFS.map((option, index) => {
+            const selected = option === pref
+            return (
+              <SegmentedOption
+                $selected={selected}
+                aria-checked={selected}
+                key={option}
+                onClick={() => choose(option)}
+                ref={(el: HTMLButtonElement | null) => {
+                  buttons.current[index] = el
+                }}
+                role="radio"
+                tabIndex={selected ? 0 : -1}
+                type="button"
+              >
+                {themeLabel(intl, option)}
+              </SegmentedOption>
+            )
+          })}
+        </SegmentedControl>
+      </SettingsCard>
+      <SettingsFootnote>
+        {intl.formatMessage({
+          defaultMessage: "System follows your phone's Light or Dark setting.",
+          id: 'components.SettingsScreen.appearanceHelp'
+        })}
+      </SettingsFootnote>
+    </SettingsSection>
+  )
 }
 
 interface Props {
@@ -216,6 +324,8 @@ const SettingsScreen = ({
       <h1 className="tn-page-title">{heading}</h1>
 
       <SettingsPage>
+        {coreUtils.ui.isMobile() && <AppearanceSection intl={intl} />}
+
         <SettingsSection>
           <SettingsSectionTitle>
             {intl.formatMessage({

@@ -1058,6 +1058,11 @@ components:
   SequentialPaneDisplay:
     stepNumber: Étape {step} sur {total}
   SettingsScreen:
+    appearanceDark: "Sombre"
+    appearanceHeader: "Apparence"
+    appearanceHelp: "Système suit le réglage Clair ou Sombre de votre téléphone."
+    appearanceLight: "Clair"
+    appearanceSystem: "Système"
     bikeSpeedHelp: "Le temps que l'application attribue à vos étapes à vélo. Une fois réglée, cette vitesse est utilisée par tous les itinéraires, y compris avant que vous ayez roulé assez longtemps pour que l'application mesure votre allure."
     bikeSpeedLabel: "Votre vitesse à vélo : {speed} mph"
     bikeSpeedSlider: "Vitesse à vélo"
