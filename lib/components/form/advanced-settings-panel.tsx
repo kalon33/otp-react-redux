@@ -55,8 +55,8 @@ import {
   BIKE_WILLINGNESS_STEP,
   bikeCeilingMiles,
   bikeReluctanceToWillingness,
-  bikeSpeedMph,
   bikeWillingnessToReluctance,
+  effectiveBikeSpeedMps,
   clampStopCap,
   DEFAULT_PROFILE_ID,
   effectiveStopCap,
@@ -68,6 +68,7 @@ import {
   stopCapMessageId,
   ViaStop
 } from '../../util/routing-profiles'
+import { formatDistance, formatSpeed, Units } from '../../util/units'
 import { blue, getBaseColor } from '../util/colors'
 import { ComponentContext } from '../../util/contexts'
 import {
@@ -567,6 +568,7 @@ const AdvancedSettingsPanel = ({
   setRoutingPreferences,
   setSearchOptions,
   toggleRouteLockRoute,
+  units,
   user
 }: {
   applyPreferencesFromText: (text: string) => Promise<any>
@@ -633,6 +635,8 @@ const AdvancedSettingsPanel = ({
     routeId: string,
     options?: RouteLockWriteOptions
   ) => void
+  /** The app's unit system (otpConfig.units): metric speeds read km/h. */
+  units: Units
   user: User
 }): JSX.Element => {
   const intl = useIntl()
@@ -864,10 +868,13 @@ const AdvancedSettingsPanel = ({
   // The ceiling is a duration, so its mileage moves with the bikeSpeed lever.
   // Read it back out of the live preferences every render so the number beside
   // the slider can never describe a speed the rider is no longer using.
-  const ceilingMiles = Math.round(
-    bikeCeilingMiles(routingPreferences.bikeSpeed)
+  const ceilingMeters =
+    bikeCeilingMiles(routingPreferences.bikeSpeed) * 1609.344
+  const bikeSpeedText = formatSpeed(
+    intl,
+    effectiveBikeSpeedMps(routingPreferences.bikeSpeed),
+    units
   )
-  const bikeMph = bikeSpeedMph(routingPreferences.bikeSpeed)
 
   const onBikeWillingnessChange = useCallback(
     (evt: QueryParamChangeEvent) => {
@@ -1160,9 +1167,9 @@ const AdvancedSettingsPanel = ({
           <FormattedMessage
             id="components.BatchSearchScreen.bikeCeilingHelp"
             values={{
-              miles: ceilingMiles,
+              distance: formatDistance(intl, ceilingMeters, units),
               minutes: BIKE_ACCESS_CEILING_MINUTES,
-              speed: bikeMph.toFixed(1)
+              speed: bikeSpeedText
             }}
           />
         </HelperText>
@@ -1446,7 +1453,8 @@ const mapStateToProps = (state: AppReduxState) => {
     routeSets: state.user?.localUser?.routeSets,
     saveAndReturnButton,
     searches: state.otp.searches as Record<string, SearchLike> | undefined,
-    user: state.user.loggedInUser
+    user: state.user.loggedInUser,
+    units: (state.otp.config?.units as Units) || 'imperial'
   }
 }
 

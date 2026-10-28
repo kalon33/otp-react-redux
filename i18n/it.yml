@@ -285,7 +285,7 @@ components:
       che il più velocemente possibile.
     arriveOnTimeLabel: Arriva appena prima dell'autobus
     bikeCeilingHelp: Un viaggio può contenere fino a {minutes} minuti di bici — circa
-      {miles} mi alla tua velocità attuale di {speed} mph. Questo limite è impostato
+      {distance} alla tua velocità attuale di {speed}. Questo limite è impostato
       sul server; questo cursore modifica la propensione del pianificatore a usare
       la bici entro tale limite.
     bikeWillingnessHeader: Bici
@@ -1189,7 +1189,7 @@ components:
     bikeSpeedHelp: Quanto l'app pensa che durino le tue tratte in bici. Impostalo
       e ogni piano lo userà, anche prima che tu abbia pedalato abbastanza perché l'app
       misuri il tuo ritmo.
-    bikeSpeedLabel: 'La tua velocità in bici: {speed} mph'
+    bikeSpeedLabel: 'La tua velocità in bici: {speed}'
     bikeSpeedSlider: Velocità in bici
     gettingAroundHeader: Spostarsi
     heading: Impostazioni
@@ -1204,7 +1204,7 @@ components:
     turnByTurnLabel: Indicazioni passo-passo
     walkSpeedHelp: Quanto l'app pensa che durino le tue tratte a piedi, inclusa la
       camminata fino alla fermata.
-    walkSpeedLabel: 'La tua velocità a piedi: {speed} mph'
+    walkSpeedLabel: 'La tua velocità a piedi: {speed}'
     walkSpeedSlider: Velocità a piedi
   Timetable:
     errorLoadingStopClosures: Errore nel caricamento delle fermate chiuse

@@ -20,9 +20,9 @@ import {
   RoutingPreferences,
   SERVER_BIKE_RELUCTANCE,
   SERVER_BIKE_SPEED_MPS,
-  SERVER_WALK_SPEED_MPS,
-  speedMph
+  SERVER_WALK_SPEED_MPS
 } from '../../util/routing-profiles'
+import { formatDistance, formatSpeed, Units } from '../../util/units'
 import {
   getTnThemePref,
   setTnThemePref,
@@ -171,6 +171,8 @@ const AppearanceSection = ({ intl }: { intl: IntlShape }): JSX.Element => {
 }
 
 interface Props {
+  /** The app's unit system (otpConfig.units): metric speeds read km/h. */
+  units: Units
   bikeSpeed?: number
   bikeWillingness: number
   routingPreferences: RoutingPreferences
@@ -203,6 +205,7 @@ interface Props {
  */
 const SettingsScreen = ({
   bikeSpeed,
+  units,
   bikeWillingness,
   routingPreferences,
   setRoutingPreferences,
@@ -260,7 +263,7 @@ const SettingsScreen = ({
   // read it back out of the live preferences every render, exactly as the
   // advanced panel does, so the number can never describe a speed the rider is
   // no longer using.
-  const ceilingMiles = Math.round(bikeCeilingMiles(bikeSpeed))
+  const ceilingMeters = bikeCeilingMiles(bikeSpeed) * 1609.344
 
   const onBikeWillingnessChange = useCallback(
     (evt: QueryParamChangeEvent) => {
@@ -364,9 +367,9 @@ const SettingsScreen = ({
                 {intl.formatMessage(
                   { id: 'components.BatchSearchScreen.bikeCeilingHelp' },
                   {
-                    miles: ceilingMiles,
+                    distance: formatDistance(intl, ceilingMeters, units),
                     minutes: BIKE_ACCESS_CEILING_MINUTES,
-                    speed: speedMph(bikeSpeedMps).toFixed(1)
+                    speed: formatSpeed(intl, bikeSpeedMps, units)
                   }
                 )}
               </LeverHelp>
@@ -382,7 +385,7 @@ const SettingsScreen = ({
                     defaultMessage: 'Your biking speed: {speed} mph',
                     id: 'components.SettingsScreen.bikeSpeedLabel'
                   },
-                  { speed: speedMph(bikeSpeedMps).toFixed(1) }
+                  { speed: formatSpeed(intl, bikeSpeedMps, units) }
                 )}
               </TripFormStyled.SettingLabel>
               <LeverSlider
@@ -424,7 +427,7 @@ const SettingsScreen = ({
                     defaultMessage: 'Your walking speed: {speed} mph',
                     id: 'components.SettingsScreen.walkSpeedLabel'
                   },
-                  { speed: speedMph(walkSpeedMps).toFixed(1) }
+                  { speed: formatSpeed(intl, walkSpeedMps, units) }
                 )}
               </TripFormStyled.SettingLabel>
               <LeverSlider
@@ -505,6 +508,7 @@ const mapStateToProps = (state: any) => {
   const routingPreferences: RoutingPreferences =
     currentQuery.routingPreferences || {}
   return {
+    units: (state.otp.config?.units as Units) || 'imperial',
     bikeSpeed: routingPreferences.bikeSpeed,
     bikeWillingness: bikeReluctanceToWillingness(
       routingPreferences.bikeReluctance

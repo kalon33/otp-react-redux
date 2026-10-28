@@ -11,7 +11,7 @@
  */
 
 import { connect } from 'react-redux'
-import { FormattedMessage, FormattedNumber, useIntl } from 'react-intl'
+import { FormattedMessage, useIntl } from 'react-intl'
 import { TransitVehicle } from '@opentripplanner/types'
 import React from 'react'
 import TransitVehicleOverlay, {
@@ -19,6 +19,7 @@ import TransitVehicleOverlay, {
 } from '@opentripplanner/transit-vehicle-overlay'
 
 import { AppReduxState } from '../../util/state-types'
+import { formatSpeed, Units } from '../../util/units'
 import { capitalizeFirst } from '../../util/ui'
 import { DEFAULT_ROUTE_COLOR } from '../util/colors'
 import { formatDuration } from '../util/formatted-duration'
@@ -35,10 +36,13 @@ interface TransitVehicleExt extends TransitVehicle {
 }
 
 function VehicleTooltip({
+  units,
   vehicle
 }: {
+  /** The app's unit system (otpConfig.units): metric riders read km/h. */
+  units: Units
   vehicle: TransitVehicleExt
-}): React.ReactNode {
+}): React.ReactElement | null {
   const intl = useIntl()
   const { label, nextStopName, seconds, speed, stopStatus, vehicleId } =
     vehicle || {}
@@ -79,15 +83,11 @@ function VehicleTooltip({
           id="components.TransitVehicleOverlay.travelingAt"
           tagName="div"
           values={{
-            milesPerHour: (
-              <FormattedNumber
-                // Not a "real" style prop
-                // eslint-disable-next-line react/style-prop-object
-                style="unit"
-                unit="mile-per-hour"
-                value={Math.round(speed)}
-              />
-            )
+            // A localised speed that carries its own unit (km/h metric,
+            // mph imperial), as the settings screen's levers do.
+            milesPerHour: formatSpeed(intl, speed, units, {
+              maximumFractionDigits: 0
+            })
           }}
         />
       )}
@@ -123,6 +123,7 @@ const mapStateToProps = (state: AppReduxState) => {
   const route = state.otp.transitIndex?.routes?.[routeId]
   const { maxRealtimeVehicleAge, vehicleIconHighlight, vehicleIconPadding } =
     state.otp.config.routeViewer || {}
+  const units = (state.otp.config?.units as Units) || 'imperial'
 
   const ConfiguredIconContainer =
     vehicleIconHighlight === false ? CaretTouchingBorder : IconContainer
@@ -162,7 +163,9 @@ const mapStateToProps = (state: AppReduxState) => {
     maxVehicleAge: maxRealtimeVehicleAge,
     // Note: with OTP2, we are showing route stops along with the route alignment,
     // and vehicle direction arrows become difficult to distinguish from the stop circles.
-    TooltipSlot: VehicleTooltip,
+    TooltipSlot: (props: { vehicle: TransitVehicleExt }) => (
+      <VehicleTooltip units={units} vehicle={props.vehicle} />
+    ),
     vehicles: vehicleList
   }
 }

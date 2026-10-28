@@ -13,12 +13,12 @@ import {
   RoutingPreferences,
   SERVER_BIKE_SPEED_MPS,
   SERVER_WALK_SPEED_MPS,
-  speedMph,
   stopCapMessageId,
   summarizePreferences,
   ViaStop
 } from '../../util/routing-profiles'
 import { getDefaultNumItineraries } from '../../util/api'
+import { formatSpeed, Units } from '../../util/units'
 import { matchSavedSet, RouteSet } from '../../util/route-sets'
 import { routeLockRoutes, routeLockScope } from '../../util/route-lock'
 import type { AnyRouteLock, RouteLockScope } from '../../util/route-lock'
@@ -93,19 +93,25 @@ const RemoveButton = styled.button`
 
 type SpeedKey = 'bikeSpeed' | 'walkSpeed'
 
-/** The speed levers the rider has moved off the server's value, as chips. */
+/**
+ * The speed levers the rider has moved off the server's value, as chips.
+ * The numbers carry their own unit via the app's unit system, so a metric
+ * rider reads "Vélo 24,1 km/h".
+ */
 function customSpeeds(
+  intl: ReturnType<typeof useIntl>,
+  units: Units,
   preferences?: RoutingPreferences
-): { defaultMph: string; key: SpeedKey; mph: string }[] {
+): { defaultSpeed: string; key: SpeedKey; speed: string }[] {
   const clamped = clampPreferences(preferences)
-  const out: { defaultMph: string; key: SpeedKey; mph: string }[] = []
+  const out: { defaultSpeed: string; key: SpeedKey; speed: string }[] = []
   const add = (key: SpeedKey, serverMps: number) => {
     const value = clamped[key]
     if (typeof value !== 'number' || Math.abs(value - serverMps) < 1e-6) return
     out.push({
-      defaultMph: speedMph(serverMps).toFixed(1),
+      defaultSpeed: formatSpeed(intl, serverMps, units),
       key,
-      mph: speedMph(value).toFixed(1)
+      speed: formatSpeed(intl, value, units)
     })
   }
   add('bikeSpeed', SERVER_BIKE_SPEED_MPS)
@@ -187,6 +193,7 @@ const ActiveRoutingPreferences = ({
   preferences,
   routeLock,
   routeSets,
+  units,
   viaStop
 }: {
   clearLever: (key: SpeedKey) => void
@@ -201,11 +208,13 @@ const ActiveRoutingPreferences = ({
   preferences?: RoutingPreferences
   routeLock?: AnyRouteLock | null
   routeSets?: RouteSet[]
+  /** The app's unit system (otpConfig.units): metric speeds read km/h. */
+  units: Units
   viaStop?: ViaStop | null
 }): JSX.Element | null => {
   const intl = useIntl()
   const summary: PreferenceSummary[] = summarizePreferences(preferences)
-  const speeds = customSpeeds(preferences)
+  const speeds = customSpeeds(intl, units, preferences)
   // The count only counts as "customized" when the rider moved it off whatever
   // the config ships, so an untouched app shows no chip for it.
   const customCount =
@@ -296,7 +305,7 @@ const ActiveRoutingPreferences = ({
           {intl.formatMessage({ id: item.phrase })}
         </Chip>
       ))}
-      {speeds.map(({ defaultMph, key, mph }) => {
+      {speeds.map(({ defaultSpeed, key, speed }) => {
         const isBike = key === 'bikeSpeed'
         return (
           <RemovableChip
@@ -307,12 +316,12 @@ const ActiveRoutingPreferences = ({
             {isBike ? (
               <FormattedMessage
                 id="components.ActiveRoutingPreferences.bikeSpeedChip"
-                values={{ speed: mph }}
+                values={{ speed }}
               />
             ) : (
               <FormattedMessage
                 id="components.ActiveRoutingPreferences.walkSpeedChip"
-                values={{ speed: mph }}
+                values={{ speed }}
               />
             )}
             <RemoveButton
@@ -322,13 +331,13 @@ const ActiveRoutingPreferences = ({
                       {
                         id: 'components.ActiveRoutingPreferences.resetBikeSpeed'
                       },
-                      { speed: defaultMph }
+                      { speed: defaultSpeed }
                     )
                   : intl.formatMessage(
                       {
                         id: 'components.ActiveRoutingPreferences.resetWalkSpeed'
                       },
-                      { speed: defaultMph }
+                      { speed: defaultSpeed }
                     )
               }
               onClick={() => clearLever(key)}
@@ -409,6 +418,7 @@ const mapStateToProps = (state: AppReduxState) => ({
   preferences: state.otp.currentQuery?.routingPreferences,
   routeLock: state.otp.currentQuery?.routeLock,
   routeSets: state.user?.localUser?.routeSets,
+  units: (state.otp.config?.units as Units) || 'imperial',
   viaStop: state.otp.currentQuery?.viaStop
 })
 

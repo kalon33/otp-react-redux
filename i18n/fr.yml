@@ -208,7 +208,7 @@ components:
     skipNavigation: Sauter la navigation
   ActiveRoutingPreferences:
     avoidingBiking: "\xE9viter le v\xE9lo"
-    bikeSpeedChip: "Vélo {speed} mph"
+    bikeSpeedChip: "Vélo {speed}"
     briskerWalking: marche plus rapide
     clear: Effacer
     fasterBiking: "v\xE9lo plus rapide"
@@ -225,12 +225,12 @@ components:
     noWalkTransit: Sans marche + transports
     okayWaiting: attente acceptable
     optionCount: '{count} options'
-    resetBikeSpeed: "Remettre la vitesse à vélo à la normale ({speed} mph)"
-    resetWalkSpeed: "Remettre la vitesse de marche à la normale ({speed} mph)"
+    resetBikeSpeed: "Remettre la vitesse à vélo à la normale ({speed})"
+    resetWalkSpeed: "Remettre la vitesse de marche à la normale ({speed})"
     shorterTransferBuffer: marge de correspondance plus courte
     slowerBiking: "v\xE9lo plus lent"
     viaStop: Via {stop}
-    walkSpeedChip: "Marche {speed} mph"
+    walkSpeedChip: "Marche {speed}"
   BackToTripPlanner:
     backToTripPlanner: Retour au planificateur de trajets
   BatchResultsScreen:
@@ -244,7 +244,7 @@ components:
     arriveOnTimeHelp: "Lorsque votre trajet jusqu'à l'arrêt est recalculé en cours de route, il vise à vous y amener {minutes} minutes avant le bus plutôt que le plus vite possible."
     arriveOnTimeLabel: "Arriver juste avant le bus"
     backToResults: "Retour aux résultats"
-    bikeCeilingHelp: "Un trajet peut contenir jusqu'à {minutes} minutes de vélo — environ {miles} mi à votre vitesse actuelle de {speed} mph. Cette limite est fixée sur le serveur ; ce curseur règle la propension du planificateur à utiliser le vélo à l'intérieur de cette limite."
+    bikeCeilingHelp: "Un trajet peut contenir jusqu'à {minutes} minutes de vélo — environ {distance} à votre vitesse actuelle de {speed}. Cette limite est fixée sur le serveur ; ce curseur règle la propension du planificateur à utiliser le vélo à l'intérieur de cette limite."
     bikeWillingnessHeader: "Vélo"
     bikeWillingnessHigh: "Plus"
     bikeWillingnessLabel: "Distance que vous acceptez de faire à vélo"
@@ -1106,7 +1106,7 @@ components:
     appearanceLight: "Clair"
     appearanceSystem: "Système"
     bikeSpeedHelp: "Le temps que l'application attribue à vos étapes à vélo. Une fois réglée, cette vitesse est utilisée par tous les itinéraires, y compris avant que vous ayez roulé assez longtemps pour que l'application mesure votre allure."
-    bikeSpeedLabel: "Votre vitesse à vélo : {speed} mph"
+    bikeSpeedLabel: "Votre vitesse à vélo : {speed}"
     bikeSpeedSlider: "Vitesse à vélo"
     gettingAroundHeader: "Vos déplacements"
     heading: "Paramètres"
@@ -1117,7 +1117,7 @@ components:
     turnByTurnHelp: "Désactivée par défaut. Même désactivée, vous pouvez l'activer pour une seule étape à pied ou à vélo depuis l'aperçu du trajet, une fois le trajet commencé."
     turnByTurnLabel: "Navigation détaillée"
     walkSpeedHelp: "Le temps que l'application attribue à vos étapes à pied, y compris la marche jusqu'à votre arrêt."
-    walkSpeedLabel: "Votre vitesse de marche : {speed} mph"
+    walkSpeedLabel: "Votre vitesse de marche : {speed}"
     walkSpeedSlider: "Vitesse de marche"
   SessionTimeout:
     body: Votre session va expirer d'ici une minute. Appuyez sur 'Prolonger ma session'

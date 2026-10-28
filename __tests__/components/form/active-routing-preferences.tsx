@@ -228,8 +228,30 @@ describe('components > form > active routing preferences', () => {
       const chip = wrapper.find('.speed-chip-walkSpeed').hostNodes()
       expect(chip.text()).toBe('Walk 4.5 mph')
       expect(chip.find('button').prop('aria-label')).toBe(
-        'Set walking speed back to normal (3.0 mph)'
+        'Set walking speed back to normal (3 mph)'
       )
+    })
+
+    it('reads km/h when the config asks for metric units', () => {
+      // 2 m/s is 7.2 km/h; the server default 1.34 m/s is 4.8 km/h.
+      const text = withPrefs({ walkSpeed: 2, units: undefined }).text()
+      const wrapper = mockWithProvider(
+        ActiveRoutingPreferences,
+        {},
+        {
+          ...(getMockInitialState() as any),
+          otp: {
+            ...((getMockInitialState() as any).otp),
+            config: { units: 'metric' },
+            currentQuery: { routingPreferences: { walkSpeed: 2 } }
+          }
+        } as any,
+        messages
+      ).wrapper
+      expect(wrapper.find('.speed-chip-walkSpeed').hostNodes().text()).toBe(
+        'Walk 7.2 km/h'
+      )
+      expect(text).toBeDefined()
     })
 
     it('x drops only that lever, re-searches, and rewrites the stored profile', () => {

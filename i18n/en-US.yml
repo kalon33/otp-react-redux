@@ -168,7 +168,7 @@ components:
       to return to trip planner.
   ActiveRoutingPreferences:
     avoidingBiking: avoiding biking
-    bikeSpeedChip: Bike {speed} mph
+    bikeSpeedChip: Bike {speed}
     briskerWalking: brisker walking
     clear: Clear
     fasterBiking: faster biking
@@ -185,12 +185,12 @@ components:
     noWalkTransit: No walk + transit
     okayWaiting: okay with waiting
     optionCount: '{count} options'
-    resetBikeSpeed: Set bike speed back to normal ({speed} mph)
-    resetWalkSpeed: Set walking speed back to normal ({speed} mph)
+    resetBikeSpeed: Set bike speed back to normal ({speed})
+    resetWalkSpeed: Set walking speed back to normal ({speed})
     shorterTransferBuffer: shorter transfer buffer
     slowerBiking: slower biking
     viaStop: Via {stop}
-    walkSpeedChip: Walk {speed} mph
+    walkSpeedChip: Walk {speed}
   AddPlaceButton:
     addPlace: Add place
     needOriginDestination: Define origin/destination to add intermediate places
@@ -232,8 +232,8 @@ components:
     arriveOnTimeLabel: Arrive just before the bus
     backToResults: Back to results
     bikeCeilingHelp: >-
-      One trip can hold up to {minutes} minutes of biking — about {miles} mi at
-      your current speed of {speed} mph. That limit is set on the server; this
+      One trip can hold up to {minutes} minutes of biking — about {distance} at
+      your current speed of {speed}. That limit is set on the server; this
       slider changes how readily the planner reaches for the bike inside it.
 
     bikeWillingnessHeader: Biking
@@ -1071,7 +1071,7 @@ components:
       How long the app thinks your bike legs take. Set it and every plan uses
       it, including before you have ridden far enough for the app to measure
       your pace.
-    bikeSpeedLabel: "Your biking speed: {speed} mph"
+    bikeSpeedLabel: "Your biking speed: {speed}"
 
     bikeSpeedSlider: Biking speed
     gettingAroundHeader: Getting around
@@ -1084,7 +1084,7 @@ components:
       or biking leg from the trip overview once a trip has started.
     turnByTurnLabel: Turn-by-turn directions
     walkSpeedHelp: How long the app thinks your walking legs take, including the walk to your bus stop.
-    walkSpeedLabel: 'Your walking speed: {speed} mph'
+    walkSpeedLabel: 'Your walking speed: {speed}'
     walkSpeedSlider: Walking speed
   SimpleRealtimeAnnotation:
     usingRealtimeInfo: This trip uses real-time traffic and delay information
