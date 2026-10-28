@@ -1060,6 +1060,11 @@ components:
     header: Session about to timeout!
     keepSession: Continue Session
   SettingsScreen:
+    appearanceDark: Dark
+    appearanceHeader: Appearance
+    appearanceHelp: System follows your phone's Light or Dark setting.
+    appearanceLight: Light
+    appearanceSystem: System
     bikeSpeedHelp: >-
       How long the app thinks your bike legs take. Set it and every plan uses
       it, including before you have ridden far enough for the app to measure
