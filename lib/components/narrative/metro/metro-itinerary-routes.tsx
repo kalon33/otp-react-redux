@@ -74,7 +74,8 @@ const InvisibleHeader = styled(InvisibleA11yLabel)`
 
 type Props = {
   // TODO: create and reuse type for LegIcon.
-  LegIcon: ({ height, leg }: { height: number; leg: Leg }) => React.ReactElement
+  /** Optional override; callers that don't pass it get the context's LegIcon. */
+  LegIcon?: ({ height, leg }: { height: number; leg: Leg }) => React.ReactElement
   /** Lets a caller restyle the chain (styled(MetroItineraryRoutes)). */
   className?: string
   enableDot?: boolean
@@ -90,12 +91,16 @@ const MetroItineraryRoutes = ({
   enableDot,
   expanded,
   itinerary,
+  LegIcon: LegIconProp,
   showAllWalkLegs,
   showLegDurations
 }: Props): JSX.Element => {
   const intl = useIntl()
   // @ts-expect-error No type on ComponentContext
-  const { LegIcon } = useContext(ComponentContext)
+  const { LegIcon: ContextLegIcon } = useContext(ComponentContext)
+  // Callers that pass the prop (go-mode overhaul callers) win; the rest
+  // (map overlays, saved trips, summary panes) ride the component context.
+  const LegIcon = LegIconProp ?? ContextLegIcon
   const routeLegs = itinerary.legs
     .filter(showAllWalkLegs ? () => true : removeInsignificantWalkLegs)
     .filter((leg) => !leg.interlineWithPreviousLeg)

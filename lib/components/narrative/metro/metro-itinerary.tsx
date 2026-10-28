@@ -764,7 +764,8 @@ export class MetroItinerary extends NarrativeItinerary {
     const stopsText = this._stopsText(itinerary, stopNames)
     const Route = RouteRenderer || DefaultRouteRenderer
 
-    const { isCallAhead, isFlexItinerary } = getFlexAttributes(itinerary)
+    const { isCallAhead, isContinuousDropoff, isFlexItinerary, phone } =
+      getFlexAttributes(itinerary)
 
     const { fareCurrency, transitFare } = getFare(itinerary, defaultFareType)
 

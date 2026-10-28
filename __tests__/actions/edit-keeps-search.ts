@@ -19,8 +19,8 @@ jest.mock('@opentripplanner/core-utils', () => {
     ...core,
     queryGen: {
       ...core.queryGen,
-      generateOtp2Query: (params: unknown) =>
-        core.queryGen.generateOtp2Query(params, stub)
+      generateOtp2Query: (params: unknown, homeTimezone?: string) =>
+        core.queryGen.generateOtp2Query(params, homeTimezone, stub)
     }
   }
   return { ...actual, __esModule: true, default: patched }
@@ -103,10 +103,17 @@ describe('backlog 70.1 > Edit mid-load keeps the search', () => {
   const plan = (itineraries: any[]) => ({
     data: { plan: { itineraries, routingErrors: [] } }
   })
+  // The variables go out in the planConnection PlanModesInput shape (see
+  // util/plan-combinations): a direct-mode list carries the street-only
+  // combinations, and a transit block names its access modes.
   const kindOf = (v: Record<string, any>) => {
-    const modes = (v.modes || []).map((m: any) => m.mode)
-    if (!modes.includes('TRANSIT')) return 'bike'
-    return modes.includes('BICYCLE') ? 'bikeTransit' : 'walkTransit'
+    const modes: string[] = v.modes || {}
+    const direct = (modes.direct || []).map((m: any) => (typeof m === 'string' ? m : m.mode))
+    if (direct.length > 0 && !modes.transit) {
+      return direct.includes('BICYCLE') || direct.includes('BICYCLE_RENT') ? 'bike' : 'walk'
+    }
+    const access: string[] = (modes.transit?.access || []).map((m: any) => (typeof m === 'string' ? m : m.mode))
+    return access.includes('BICYCLE') || access.includes('BICYCLE_RENT') ? 'bikeTransit' : 'walkTransit'
   }
   const answer = (v: Record<string, any>) => {
     const kind = kindOf(v)

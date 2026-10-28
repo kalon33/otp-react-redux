@@ -43,6 +43,11 @@ const getFontSize = (size?: string) => {
 export const PulsingRss = styled(Rss)`
   animation: pulse-opacity 2s ease-in-out infinite;
   transform: scaleX(-1);
+
+  /* Phone layout: the live glyph in the realtime green. */
+  .tn-mobile & {
+    color: var(--tn-live);
+  }
 `
 
 const rotateAnimation = keyframes`

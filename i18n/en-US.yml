@@ -113,7 +113,6 @@ common:
     noItineraryToDisplay: No itinerary to display.
     relativeCo2: |
       {co2} {isMore, select, true {more} other {less} } CO₂ than driving alone
-    reservationRequired: Reservation required.
     timeStartEnd: '{start} – {end}'
   linkOpensNewWindow: (Opens new window)
   modes:
@@ -551,7 +550,6 @@ components:
     nextBusesAtStop: Next buses at {stop}
     nextDeparture: "Next: {time} ({mins} min away)"
     nextStopLine: "Next stop: {stop}"
-    noBusesNearby: No buses detected nearby
     noBusesOrRoutesNearby: No bus or route detected nearby. Try moving closer to a bus stop.
 
     noLiveVehicleData: No live bus data — tracking by GPS
@@ -746,11 +744,9 @@ components:
     title: Imagery of the street
   MetroUI:
     arriveAt: You arrive
-    arrivesAtTime: arrives {time}
 
     confirmLaterDeparture: Start {chosen} instead of {row}?
     confirmSwitchTrip: Switch your active trip to this route? Your current guidance will update.
-    departsAtTime: departs {time}
     fare: '{fare}'
     itineraryDescription: '{time} itinerary using {routes}'
     itinerarySummary: from {stopName} | {cost}

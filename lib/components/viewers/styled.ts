@@ -2,6 +2,14 @@ import styled, { css } from 'styled-components'
 
 import { DARK_TEXT_GREY, getBaseColor } from '../util/colors'
 
+interface RenderProps {
+  backgroundColor?: string
+  full?: boolean
+  routeColor?: string
+  textColor?: string
+  useRouteColorAsBg?: boolean
+}
+
 /** Route Details */
 export const Container = styled.div<{ full?: boolean }>`
   background-color: inherit;

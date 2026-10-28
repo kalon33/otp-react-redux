@@ -22,16 +22,6 @@ import DepartureTime from './departure-time'
 const { getUserTimezone } = coreUtils.time
 const ONE_HOUR_IN_SECONDS = 3600
 
-const PulsingRss = styled(Rss)`
-  animation: pulse-opacity 2s ease-in-out infinite;
-  transform: scaleX(-1);
-
-  /* Phone layout: the live glyph in the realtime green. */
-  .tn-mobile & {
-    color: var(--tn-live);
-  }
-`
-
 type Props = {
   /** If configured, the timezone of the area */
   homeTimezone?: string
