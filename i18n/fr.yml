@@ -1380,6 +1380,10 @@ config:
     flex-service: Service Flex
     flex-service-colon: "Service Flex :"
 otpUi:
+  coreUtils:
+    legRouteName:
+      # Route name with trip short name added
+      withTripShortName: '{routeName} ({tripShortName})'
   LocationField:
     geocoderTimeout: Impossible de joindre le serveur
     recentPlaces: Récents

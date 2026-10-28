@@ -1300,6 +1300,10 @@ otpUi:
   AccessLegBody:
     RentedVehicleSubheader:
       dropoffRental: Drop off {company} {vehicleType} {vehicleName} at {dropoffLocation}
+  coreUtils:
+    legRouteName:
+      # Route name with trip short name added
+      withTripShortName: '{routeName} ({tripShortName})'
   ItineraryBody:
     canceledMessage: The following trip has been canceled
   LocationField:

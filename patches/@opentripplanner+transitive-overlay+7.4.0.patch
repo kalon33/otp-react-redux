@@ -110,6 +110,19 @@ index 0d45537..6e674c7 100644
        })["catch"](function (error) {
          // eslint-disable-next-line no-console
          console.error("Error loading image ".concat(img.id, ":"), error);
+diff --git a/node_modules/@opentripplanner/transitive-overlay/esm/util.js b/node_modules/@opentripplanner/transitive-overlay/esm/util.js
+index 2a7a695..f2e858f 100644
+--- a/node_modules/@opentripplanner/transitive-overlay/esm/util.js
++++ b/node_modules/@opentripplanner/transitive-overlay/esm/util.js
+@@ -350,7 +350,7 @@ export function itineraryToTransitive(itin, options) {
+ 
+       // add route to the route dictionary
+       // with a custom route label if specified.
+-      var routeLabel = (typeof getRouteLabel === "function" ? getRouteLabel(leg) : getLegRouteShortName(leg, intl)) || "";
++      var routeLabel = (typeof getRouteLabel === "function" ? getRouteLabel(leg, intl) : getLegRouteShortName(leg, intl)) || "";
+       var basicRouteAttributes = {
+         agency_id: (_leg$agencyId = leg.agencyId) !== null && _leg$agencyId !== void 0 ? _leg$agencyId : "",
+         route_id: routeId !== null && routeId !== void 0 ? routeId : "",
 diff --git a/node_modules/@opentripplanner/transitive-overlay/lib/index.js b/node_modules/@opentripplanner/transitive-overlay/lib/index.js
 index 5af2e61..df93d48 100644
 --- a/node_modules/@opentripplanner/transitive-overlay/lib/index.js
@@ -236,6 +249,19 @@ index 5af2e61..df93d48 100644
        }).catch(error => {
          // eslint-disable-next-line no-console
          console.error(`Error loading image ${img.id}:`, error);
+diff --git a/node_modules/@opentripplanner/transitive-overlay/lib/util.js b/node_modules/@opentripplanner/transitive-overlay/lib/util.js
+index 89f7cc0..e74d795 100644
+--- a/node_modules/@opentripplanner/transitive-overlay/lib/util.js
++++ b/node_modules/@opentripplanner/transitive-overlay/lib/util.js
+@@ -365,7 +365,7 @@ function itineraryToTransitive(itin, options) {
+ 
+       // add route to the route dictionary
+       // with a custom route label if specified.
+-      const routeLabel = (typeof getRouteLabel === "function" ? getRouteLabel(leg) : getLegRouteShortName(leg, intl)) || "";
++      const routeLabel = (typeof getRouteLabel === "function" ? getRouteLabel(leg, intl) : getLegRouteShortName(leg, intl)) || "";
+       const basicRouteAttributes = {
+         agency_id: (_leg$agencyId = leg.agencyId) !== null && _leg$agencyId !== void 0 ? _leg$agencyId : "",
+         route_id: routeId !== null && routeId !== void 0 ? routeId : "",
 diff --git a/node_modules/@opentripplanner/transitive-overlay/src/index.tsx b/node_modules/@opentripplanner/transitive-overlay/src/index.tsx
 index 5e3e06b..e714474 100644
 --- a/node_modules/@opentripplanner/transitive-overlay/src/index.tsx
@@ -370,3 +396,16 @@ index 5e3e06b..e714474 100644
          })
          .catch(error => {
            // eslint-disable-next-line no-console
+diff --git a/node_modules/@opentripplanner/transitive-overlay/src/util.ts b/node_modules/@opentripplanner/transitive-overlay/src/util.ts
+index c5e2aae..6937001 100644
+--- a/node_modules/@opentripplanner/transitive-overlay/src/util.ts
++++ b/node_modules/@opentripplanner/transitive-overlay/src/util.ts
+@@ -450,7 +450,7 @@ export function itineraryToTransitive(
+       // with a custom route label if specified.
+       const routeLabel =
+         (typeof getRouteLabel === "function"
+-          ? getRouteLabel(leg)
++          ? getRouteLabel(leg, intl)
+           : getLegRouteShortName(leg, intl)) || "";
+ 
+       const basicRouteAttributes = {

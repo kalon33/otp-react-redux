@@ -1,5 +1,5 @@
 diff --git a/node_modules/@opentripplanner/location-field/esm/index.js b/node_modules/@opentripplanner/location-field/esm/index.js
-index 153c58e..68bea12 100644
+index 4509506..b3a50e6 100644
 --- a/node_modules/@opentripplanner/location-field/esm/index.js
 +++ b/node_modules/@opentripplanner/location-field/esm/index.js
 @@ -50,6 +50,10 @@ function filter(list, layers, include, limit) {
@@ -13,7 +13,7 @@ index 153c58e..68bea12 100644
  /**
   * Puts the given geocoded features into several categories with upper bounds.
   */
-@@ -229,6 +233,8 @@ var LocationField = function LocationField(_ref4) {
+@@ -230,6 +234,8 @@ var LocationField = function LocationField(_ref4) {
      _ref4$LocationIconCom = _ref4.LocationIconComponent,
      LocationIconComponent = _ref4$LocationIconCom === void 0 ? DefaultLocationIcon : _ref4$LocationIconCom,
      locationType = _ref4.locationType,
@@ -22,7 +22,7 @@ index 153c58e..68bea12 100644
      _ref4$nearbyStops = _ref4.nearbyStops,
      nearbyStops = _ref4$nearbyStops === void 0 ? [] : _ref4$nearbyStops,
      _ref4$onBlur = _ref4.onBlur,
-@@ -240,6 +246,10 @@ var LocationField = function LocationField(_ref4) {
+@@ -241,6 +247,10 @@ var LocationField = function LocationField(_ref4) {
      onTextInputClick = _ref4$onTextInputClic === void 0 ? null : _ref4$onTextInputClic,
      _ref4$operatorIconMap = _ref4.operatorIconMap,
      operatorIconMap = _ref4$operatorIconMap === void 0 ? {} : _ref4$operatorIconMap,
@@ -33,7 +33,7 @@ index 153c58e..68bea12 100644
      _ref4$preferredLayers = _ref4.preferredLayers,
      preferredLayers = _ref4$preferredLayers === void 0 ? [] : _ref4$preferredLayers,
      _ref4$sessionOptionIc = _ref4.sessionOptionIcon,
-@@ -270,7 +280,9 @@ var LocationField = function LocationField(_ref4) {
+@@ -271,7 +281,9 @@ var LocationField = function LocationField(_ref4) {
      _ref4$UserLocationIco = _ref4.UserLocationIconComponent,
      UserLocationIconComponent = _ref4$UserLocationIco === void 0 ? UserLocationIcon : _ref4$UserLocationIco,
      _ref4$userLocationsAn = _ref4.userLocationsAndRecentPlaces,
@@ -44,7 +44,7 @@ index 153c58e..68bea12 100644
    /**
     * Gets the initial value to place in the input field.
     */
-@@ -338,6 +350,27 @@ var LocationField = function LocationField(_ref4) {
+@@ -339,6 +351,27 @@ var LocationField = function LocationField(_ref4) {
      }));
      var newController = new AbortController();
      setAbortController([].concat(_toConsumableArray(abortControllers), [newController]));
@@ -69,10 +69,10 @@ index 153c58e..68bea12 100644
 +      }));
 +      setFetching(false);
 +    }, GEOCODER_DEADLINE_MS);
-     getGeocoder(geocoderConfig).autocomplete({
-       text: text,
-       options: {
-@@ -346,6 +379,8 @@ var LocationField = function LocationField(_ref4) {
+     getGeocoder(geocoderConfig)
+     // Other options such as headers will also be included in the autocomplete call.
+     .autocomplete({
+@@ -349,6 +382,8 @@ var LocationField = function LocationField(_ref4) {
      })
      // TODO: Better type?
      .then(function (result) {
@@ -81,7 +81,7 @@ index 153c58e..68bea12 100644
        var message;
        // If no features found in response, default to empty array.
        var geocodedFeatures = result === null || result === void 0 ? void 0 : result.features;
-@@ -418,9 +453,12 @@ var LocationField = function LocationField(_ref4) {
+@@ -421,9 +456,12 @@ var LocationField = function LocationField(_ref4) {
        setMessage(message);
        setFetching(false);
      })["catch"](function (err) {
@@ -94,7 +94,7 @@ index 153c58e..68bea12 100644
      });
    }, {
      wait: 300
-@@ -631,15 +669,41 @@ var LocationField = function LocationField(_ref4) {
+@@ -634,15 +672,41 @@ var LocationField = function LocationField(_ref4) {
    // array of menu item ids and associated locationSelected handlers for onKeyDown
    // (does not include non-selectable items e.g. dividers/headings)
    var indexedOptionLookup = [];
@@ -139,7 +139,7 @@ index 153c58e..68bea12 100644
  
    /* 0) Include user saved locations if the typed text contains those locations name. */
    if (showUserSettings) {
-@@ -785,15 +849,49 @@ var LocationField = function LocationField(_ref4) {
+@@ -788,15 +852,49 @@ var LocationField = function LocationField(_ref4) {
        // Create and return the option menu item
        return /*#__PURE__*/React.createElement(TransitStopOption, {
          id: stopId,
@@ -189,7 +189,7 @@ index 153c58e..68bea12 100644
    /* 3) Process recent search history options */
    if (sessionSearches.length > 0) {
      // Add the menu sub-heading (not a selectable item)
-@@ -834,7 +932,7 @@ var LocationField = function LocationField(_ref4) {
+@@ -837,7 +935,7 @@ var LocationField = function LocationField(_ref4) {
    }
  
    /* 3b) Process stored user locations */
@@ -198,7 +198,7 @@ index 153c58e..68bea12 100644
      // Add the menu sub-heading (not a selectable item)
      menuItems.push(/*#__PURE__*/React.createElement(S.MenuGroupHeader, {
        as: headingType,
-@@ -879,12 +977,17 @@ var LocationField = function LocationField(_ref4) {
+@@ -882,12 +980,17 @@ var LocationField = function LocationField(_ref4) {
    }
    var optionId = "current-position";
  
@@ -219,7 +219,7 @@ index 153c58e..68bea12 100644
        disabled: positionUnavailable,
        icon: optionIcon,
        id: optionId,
-@@ -894,6 +997,20 @@ var LocationField = function LocationField(_ref4) {
+@@ -897,6 +1000,20 @@ var LocationField = function LocationField(_ref4) {
        title: optionTitle
      }));
    }
@@ -240,7 +240,7 @@ index 153c58e..68bea12 100644
    if (message && !message.includes("AbortError")) {
      if (geocodedFeatures.length === 0) {
        var icon = isFetching ? /*#__PURE__*/React.createElement(S.Spinner, {
-@@ -911,6 +1028,12 @@ var LocationField = function LocationField(_ref4) {
+@@ -914,6 +1031,12 @@ var LocationField = function LocationField(_ref4) {
      statusMessages.push(message);
    }
  
@@ -315,7 +315,7 @@ index bb1b2ce..a759b6d 100644
      return /*#__PURE__*/React.createElement(S.RouteName, {
        key: "route-".concat(name)
 diff --git a/node_modules/@opentripplanner/location-field/lib/index.js b/node_modules/@opentripplanner/location-field/lib/index.js
-index 1b70e99..0454dc1 100644
+index cdf0eae..e60404a 100644
 --- a/node_modules/@opentripplanner/location-field/lib/index.js
 +++ b/node_modules/@opentripplanner/location-field/lib/index.js
 @@ -55,6 +55,10 @@ function filter(list, layers, include, limit) {
@@ -329,7 +329,7 @@ index 1b70e99..0454dc1 100644
  /**
   * Puts the given geocoded features into several categories with upper bounds.
   */
-@@ -216,12 +220,15 @@ const LocationField = ({
+@@ -217,12 +221,15 @@ const LocationField = ({
    location = null,
    LocationIconComponent = DefaultLocationIcon,
    locationType,
@@ -345,7 +345,7 @@ index 1b70e99..0454dc1 100644
    preferredLayers = [],
    sessionOptionIcon = /*#__PURE__*/_react.default.createElement(_Search.Search, {
      size: _options.ICON_SIZE
-@@ -239,7 +246,9 @@ const LocationField = ({
+@@ -240,7 +247,9 @@ const LocationField = ({
    suggestionHeadingType: headingType,
    suppressNearby = false,
    UserLocationIconComponent = _options.UserLocationIcon,
@@ -356,35 +356,7 @@ index 1b70e99..0454dc1 100644
  }) => {
    var _indexedOptionLookup$7;
    /**
-@@ -288,6 +297,27 @@ const LocationField = ({
-     }));
-     const newController = new AbortController();
-     setAbortController([...abortControllers, newController]);
-+
-+    // TransitNav fork (backlog 20.1): a stalled geocoder fetch never settles, so
-+    // the row under the field used to spin "Fetching suggestions…" forever. Give
-+    // each autocomplete request a 10 s deadline: on expiry, abort it, stop the
-+    // spinner and say so in the same row (the exclamation-icon row the failed-
-+    // search message already uses; the text has no "AbortError" in it, so it is
-+    // not hidden). A request a keystroke already aborted is left alone: its
-+    // successor owns the row, and that abort stays silent as before.
-+    let timedOut = false;
-+    const deadline = setTimeout(() => {
-+      if (newController.signal.aborted) return;
-+      timedOut = true;
-+      newController.abort();
-+      setGeocodedFeatures([]);
-+      setMessage(intl.formatMessage({
-+        defaultMessage: "Can't reach the server",
-+        description: "Shown when geocoder suggestions have not arrived after 10 seconds",
-+        id: "otpUi.LocationField.geocoderTimeout"
-+      }));
-+      setFetching(false);
-+    }, GEOCODER_DEADLINE_MS);
-     (0, _geocoder.default)(geocoderConfig).autocomplete({
-       text,
-       options: {
-@@ -296,6 +326,8 @@ const LocationField = ({
+@@ -299,6 +308,8 @@ const LocationField = ({
      })
      // TODO: Better type?
      .then(result => {
@@ -393,7 +365,7 @@ index 1b70e99..0454dc1 100644
        let message;
        // If no features found in response, default to empty array.
        let geocodedFeatures = result === null || result === void 0 ? void 0 : result.features;
-@@ -369,9 +401,12 @@ const LocationField = ({
+@@ -372,9 +383,12 @@ const LocationField = ({
        setMessage(message);
        setFetching(false);
      }).catch(err => {
@@ -406,7 +378,7 @@ index 1b70e99..0454dc1 100644
      });
    }, {
      wait: 300
-@@ -583,13 +618,37 @@ const LocationField = ({
+@@ -586,13 +600,37 @@ const LocationField = ({
    // array of menu item ids and associated locationSelected handlers for onKeyDown
    // (does not include non-selectable items e.g. dividers/headings)
    const indexedOptionLookup = [];
@@ -445,7 +417,7 @@ index 1b70e99..0454dc1 100644
  
    /* 0) Include user saved locations if the typed text contains those locations name. */
    if (showUserSettings) {
-@@ -733,15 +792,45 @@ const LocationField = ({
+@@ -736,15 +774,45 @@ const LocationField = ({
        // Create and return the option menu item
        return /*#__PURE__*/_react.default.createElement(_options.TransitStopOption, {
          id: stopId,
@@ -491,7 +463,7 @@ index 1b70e99..0454dc1 100644
    /* 3) Process recent search history options */
    if (sessionSearches.length > 0) {
      // Add the menu sub-heading (not a selectable item)
-@@ -782,7 +871,7 @@ const LocationField = ({
+@@ -785,7 +853,7 @@ const LocationField = ({
    }
  
    /* 3b) Process stored user locations */
@@ -500,7 +472,7 @@ index 1b70e99..0454dc1 100644
      // Add the menu sub-heading (not a selectable item)
      menuItems.push(/*#__PURE__*/_react.default.createElement(S.MenuGroupHeader, {
        as: headingType,
-@@ -825,12 +914,17 @@ const LocationField = ({
+@@ -828,12 +896,17 @@ const LocationField = ({
    }
    const optionId = `current-position`;
  
@@ -521,7 +493,7 @@ index 1b70e99..0454dc1 100644
        disabled: positionUnavailable,
        icon: optionIcon,
        id: optionId,
-@@ -840,6 +934,20 @@ const LocationField = ({
+@@ -843,6 +916,20 @@ const LocationField = ({
        title: optionTitle
      }));
    }
@@ -542,7 +514,7 @@ index 1b70e99..0454dc1 100644
    if (message && !message.includes("AbortError")) {
      if (geocodedFeatures.length === 0) {
        const icon = isFetching ? /*#__PURE__*/_react.default.createElement(S.Spinner, {
-@@ -857,6 +965,12 @@ const LocationField = ({
+@@ -860,6 +947,12 @@ const LocationField = ({
      statusMessages.push(message);
    }
  
@@ -617,10 +589,10 @@ index 80348d8..70ec03e 100644
      return /*#__PURE__*/_react.default.createElement(S.RouteName, {
        key: `route-${name}`
 diff --git a/node_modules/@opentripplanner/location-field/lib/types.d.ts b/node_modules/@opentripplanner/location-field/lib/types.d.ts
-index f520750..edfc973 100644
+index 90dfc55..df1c714 100644
 --- a/node_modules/@opentripplanner/location-field/lib/types.d.ts
 +++ b/node_modules/@opentripplanner/location-field/lib/types.d.ts
-@@ -273,6 +273,25 @@ export interface LocationFieldProps {
+@@ -279,6 +279,25 @@ export interface LocationFieldProps {
       * If true, do not show nearbyStops or current location as options
       */
      suppressNearby?: boolean;
@@ -646,7 +618,7 @@ index f520750..edfc973 100644
      /**
       * A custom component for rendering the icon for options that are either saved
       * user locations or recent places. The component will be sent a single prop
-@@ -283,6 +302,17 @@ export interface LocationFieldProps {
+@@ -289,6 +308,17 @@ export interface LocationFieldProps {
       * An array of recent locations and places a user has searched for.
       */
      userLocationsAndRecentPlaces?: UserLocation[];
@@ -665,7 +637,7 @@ index f520750..edfc973 100644
  export interface Properties {
      accuracy: string;
 diff --git a/node_modules/@opentripplanner/location-field/src/index.tsx b/node_modules/@opentripplanner/location-field/src/index.tsx
-index 61d3576..f676cd0 100644
+index d579a64..4346011 100644
 --- a/node_modules/@opentripplanner/location-field/src/index.tsx
 +++ b/node_modules/@opentripplanner/location-field/src/index.tsx
 @@ -79,6 +79,10 @@ function filter(
@@ -679,7 +651,7 @@ index 61d3576..f676cd0 100644
  /**
   * Puts the given geocoded features into several categories with upper bounds.
   */
-@@ -326,7 +330,9 @@ const LocationField = ({
+@@ -327,7 +331,9 @@ const LocationField = ({
    suggestionHeadingType: headingType,
    suppressNearby = false,
    UserLocationIconComponent = UserLocationIcon,
@@ -690,7 +662,7 @@ index 61d3576..f676cd0 100644
  }: LocationFieldProps): React.ReactElement => {
    /**
     * Gets the initial value to place in the input field.
-@@ -390,6 +396,30 @@ const LocationField = ({
+@@ -391,6 +397,30 @@ const LocationField = ({
          const newController = new AbortController();
          setAbortController([...abortControllers, newController]);
  
@@ -719,9 +691,9 @@ index 61d3576..f676cd0 100644
 +        }, GEOCODER_DEADLINE_MS);
 +
          getGeocoder(geocoderConfig)
+           // Other options such as headers will also be included in the autocomplete call.
            .autocomplete({ text, options: { signal: newController.signal } })
-           // TODO: Better type?
-@@ -398,6 +428,8 @@ const LocationField = ({
+@@ -400,6 +430,8 @@ const LocationField = ({
                features: Location[];
                results: { error: { message: string } };
              }) => {
@@ -730,7 +702,7 @@ index 61d3576..f676cd0 100644
                let message: ReactNode;
                // If no features found in response, default to empty array.
                let geocodedFeatures = result?.features;
-@@ -489,9 +521,12 @@ const LocationField = ({
+@@ -491,9 +523,12 @@ const LocationField = ({
              }
            )
            .catch((err: unknown) => {
@@ -743,7 +715,7 @@ index 61d3576..f676cd0 100644
            });
        },
        {
-@@ -720,16 +755,50 @@ const LocationField = ({
+@@ -722,16 +757,50 @@ const LocationField = ({
    // array of menu item ids and associated locationSelected handlers for onKeyDown
    // (does not include non-selectable items e.g. dividers/headings)
    const indexedOptionLookup: IndexedOptionLookup = [];
@@ -799,7 +771,7 @@ index 61d3576..f676cd0 100644
    /* 0) Include user saved locations if the typed text contains those locations name. */
    if (showUserSettings) {
      const matchingLocations = getMatchingLocations(
-@@ -920,6 +989,56 @@ const LocationField = ({
+@@ -922,6 +991,56 @@ const LocationField = ({
      );
    }
  
@@ -856,7 +828,7 @@ index 61d3576..f676cd0 100644
    /* 3) Process recent search history options */
    if (sessionSearches.length > 0) {
      // Add the menu sub-heading (not a selectable item)
-@@ -966,7 +1085,11 @@ const LocationField = ({
+@@ -968,7 +1087,11 @@ const LocationField = ({
    }
  
    /* 3b) Process stored user locations */
@@ -869,7 +841,7 @@ index 61d3576..f676cd0 100644
      // Add the menu sub-heading (not a selectable item)
      menuItems.push(
        <S.MenuGroupHeader as={headingType} key="mp-header">
-@@ -1027,12 +1150,17 @@ const LocationField = ({
+@@ -1029,12 +1152,17 @@ const LocationField = ({
  
    const optionId = `current-position`;
  
@@ -890,7 +862,7 @@ index 61d3576..f676cd0 100644
        <Option
          disabled={positionUnavailable}
          icon={optionIcon}
-@@ -1044,6 +1172,22 @@ const LocationField = ({
+@@ -1046,6 +1174,22 @@ const LocationField = ({
        />
      );
    }
@@ -913,7 +885,7 @@ index 61d3576..f676cd0 100644
    if (message && !message.includes("AbortError")) {
      if (geocodedFeatures.length === 0) {
        const icon = isFetching ? (
-@@ -1058,6 +1202,12 @@ const LocationField = ({
+@@ -1060,6 +1204,12 @@ const LocationField = ({
      statusMessages.push(message);
    }
  
@@ -927,10 +899,10 @@ index 61d3576..f676cd0 100644
    let menuItemCount = indexedOptionLookup.length;
  
 diff --git a/node_modules/@opentripplanner/location-field/src/types.ts b/node_modules/@opentripplanner/location-field/src/types.ts
-index 51c88b3..9b9e44c 100644
+index 3ef1739..e2c7e69 100644
 --- a/node_modules/@opentripplanner/location-field/src/types.ts
 +++ b/node_modules/@opentripplanner/location-field/src/types.ts
-@@ -278,6 +278,20 @@ export interface LocationFieldProps {
+@@ -284,6 +284,20 @@ export interface LocationFieldProps {
    /**
     * If true, do not show nearbyStops or current location as options
     */
@@ -951,7 +923,7 @@ index 51c88b3..9b9e44c 100644
    suppressNearby?: boolean;
    /**
     * A custom component for rendering the icon for options that are either saved
-@@ -289,6 +303,17 @@ export interface LocationFieldProps {
+@@ -295,6 +309,17 @@ export interface LocationFieldProps {
     * An array of recent locations and places a user has searched for.
     */
    userLocationsAndRecentPlaces?: UserLocation[];
