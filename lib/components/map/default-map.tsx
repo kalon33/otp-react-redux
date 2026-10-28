@@ -37,6 +37,7 @@ import { MapLayerErrorBoundary } from '../util/error-boundary'
 import { setLocation, setMapPopupLocationAndGeocode } from '../../actions/map'
 import { SetLocationHandler, SetViewedStopHandler } from '../util/types'
 import { setViewedStop } from '../../actions/ui'
+import { tnBaseLayerUrl } from '../../util/tn-theme'
 import { updateOverlayVisibility } from '../../actions/config'
 import TransitOperatorIcons from '../util/connected-transit-operator-icons'
 
@@ -434,7 +435,9 @@ export class DefaultMap extends Component<DefaultMapProps> {
       ...baseLayer,
       name: getLayerName(baseLayer, config, intl)
     }))
-    const baseLayerUrls = baseLayersWithNames?.map((bl) => bl.url)
+    const baseLayerUrls = baseLayersWithNames?.map((bl) =>
+      tnBaseLayerUrl(bl.url)
+    )
     const baseLayerNames = baseLayersWithNames?.map((bl) => bl.name)
 
     const routeBasedTransitVehicleOverlayNameOverride =

@@ -150,7 +150,7 @@ const RouteBlock = ({
       )}
       <Wrapper className="route-block-wrapper">
         {leg.mode !== previousLegMode && (
-          <LegIconWrapper>
+          <LegIconWrapper className="route-block-leg-icon">
             <LegIcon height={28} leg={leg} />
           </LegIconWrapper>
         )}

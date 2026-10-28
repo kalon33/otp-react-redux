@@ -37,55 +37,43 @@
   text-align: center;
 }
 
-.otp .navbar .mobile-header-text {
-  color: white;
-  font-size: 11px !important;
-  font-weight: 400;
-  line-height: 1.1;
-  margin: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  width: 100%;
-}
-
-@media (max-width: 768px) {
-  .otp .navbar .mobile-header-text {
-    font-size: 10px !important;
-  }
-}
-
 .otp .navbar .mobile-header-action {
   display: inline-block;
 }
 
-.otp .navbar .mobile-header-action > button {
-  color: white;
-}
-
-.otp .navbar .mobile-back {
-  background: transparent;
-  border: none;
-  color: white;
-  font-size: 18px;
-}
-
 .otp .navbar .mobile-close {
-  color: white;
-  font-size: 18px;
   position: fixed;
-  right: 6px;
-  top: 4px;
 }
 
-/* Welcome screen */
+/* Title, back button, menu button and colours: lib/styles/base.css
+   ("App bar"), which replaced the white-on-#444 bar on 2026-10-26. */
+
+/* Welcome screen: the map runs from the bar to the bottom and the one field
+   floats over it as a surface card (Apple Maps / Transit), in the same
+   language as the search form's route card. */
 
 .otp.mobile .welcome-location {
-  height: 60px;
   left: 0;
+  pointer-events: none;
   position: fixed;
   right: 0;
   top: calc(50px + var(--return-to-trip-banner-height, 0px));
+  z-index: 5;
+}
+.otp.mobile .welcome-location.mobile-padding {
+  padding: var(--tn-space-3) var(--tn-space-4) 0;
+}
+.tn-mobile .otp .welcome-location [role='group']:has(> input[role='combobox']) {
+  background-color: var(--tn-surface);
+  border-radius: var(--tn-radius);
+  box-shadow: var(--tn-shadow);
+  margin: 0;
+  min-height: 52px;
+  pointer-events: auto;
+}
+.tn-mobile .otp .welcome-location [role='group'] > input[role='combobox'] {
+  font-size: 17px;
+  height: 52px;
 }
 
 .otp.mobile .welcome-map {
@@ -93,17 +81,120 @@
   left: 0;
   position: fixed;
   right: 0;
-  top: calc(110px + var(--return-to-trip-banner-height, 0px));
+  top: calc(50px + var(--return-to-trip-banner-height, 0px));
+}
+/* The map's top controls clear the floating field (12 + 52 + 8). */
+.otp.mobile .welcome-map .maplibregl-ctrl-top-left,
+.otp.mobile .welcome-map .maplibregl-ctrl-top-right,
+.otp.mobile .welcome-map .filter-group {
+  top: 72px;
 }
 
-/* Location search screen */
+/* Location search screen: the 48px field under the bar, then its static
+   suggestion list as one card of rows — Current location, Choose on map,
+   Home, Work, then Recent / geocoder results (icon 22px, name 16px, address
+   14px text-2). The list markup is @opentripplanner/location-field's. */
 
 .otp.mobile .location-search {
   bottom: 0;
   left: 0;
+  overflow-y: auto;
   position: fixed;
   right: 0;
   top: calc(50px + var(--return-to-trip-banner-height, 0px));
+}
+.otp.mobile .location-search.mobile-padding {
+  padding: var(--tn-space-3) var(--tn-space-4)
+    calc(var(--tn-space-4) + var(--tn-safe-bottom));
+}
+.tn-mobile .otp .location-search [role='group']:has(> input[role='combobox']) {
+  background-color: var(--tn-surface);
+  border-radius: var(--tn-radius-sm);
+  box-shadow: var(--tn-shadow);
+  margin-bottom: var(--tn-space-3);
+}
+.tn-mobile .otp .location-search ul[role='listbox'] {
+  background-color: var(--tn-surface);
+  border: 0;
+  border-radius: var(--tn-radius);
+  box-shadow: var(--tn-shadow);
+  margin: var(--tn-space-3) 0 0;
+  overflow: hidden;
+  padding: 0;
+}
+.tn-mobile .otp .location-search ul[role='listbox'] > li {
+  align-items: center;
+  display: flex;
+  font: var(--tn-type-body);
+  min-height: var(--tn-row-h);
+  padding: 0;
+  position: relative;
+  white-space: normal;
+}
+/* Hairline between rows, inset past the icon column. */
+.tn-mobile .otp .location-search ul[role='listbox'] > li + li::before {
+  background-color: var(--tn-border);
+  content: '';
+  height: 1px;
+  left: 50px;
+  position: absolute;
+  right: 0;
+  top: 0;
+}
+.tn-mobile .otp .location-search ul[role='listbox'] > li:active {
+  background-color: var(--tn-surface-2);
+}
+/* Option row: [icon column][name / address]. The package floats the icon
+   and lets a long name drop under it; here it is a flex row that ellipsizes. */
+.tn-mobile .otp .location-search ul[role='listbox'] > li > span:first-child {
+  align-items: center;
+  display: flex;
+  flex: 1;
+  min-height: var(--tn-row-h);
+  min-width: 0;
+  padding: var(--tn-space-1) var(--tn-space-4) var(--tn-space-1) 0;
+}
+.tn-mobile .otp .location-search ul[role='listbox'] > li > span:first-child > span:first-child {
+  align-items: center;
+  color: var(--tn-text-2);
+  display: flex;
+  flex: none;
+  float: none;
+  justify-content: center;
+  width: 50px;
+}
+.tn-mobile .otp .location-search ul[role='listbox'] > li svg {
+  height: 20px;
+  max-height: none;
+  width: 20px;
+}
+.tn-mobile .otp .location-search ul[role='listbox'] > li > span:first-child > span + span {
+  color: var(--tn-text);
+  flex: 1;
+  font: var(--tn-type-body);
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Geocoder result: the address under the name, 14px text-2. */
+.tn-mobile .otp .location-search ul[role='listbox'] > li > span:first-child > span + span > span:not([class*='HiddenContent']) {
+  color: var(--tn-text-2);
+  display: block;
+  font: var(--tn-type-sm);
+  margin: 2px 0 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* A section header ("Recent") starts a new group inside the card. */
+.tn-mobile .otp .location-search ul[role='listbox'] > :is(h1, h2, h3, h4, h5, h6) {
+  border-top: 1px solid var(--tn-border);
+  margin: 0;
+  padding: var(--tn-space-4) var(--tn-space-4) var(--tn-space-1);
+}
+.tn-mobile .otp .location-search ul[role='listbox'] > :is(h1, h2, h3, h4, h5, h6):first-child {
+  border-top: 0;
 }
 
 /* Main search screen */
@@ -127,19 +218,134 @@
 
 /* Batch routing search screen */
 
+/* The map strip starts where the form ends. batch-search-screen measures the
+   form (ResizeObserver) and sets --tn-search-form-height on this element, so
+   the strip tracks every form height — round trip on, the depart/arrive card,
+   a stop, the footer wrapping at 360 px. The fallbacks are the 360-430 px
+   closed heights for the first frame before the measure lands. */
 .otp.mobile .batch-search-map {
   bottom: 0;
   left: 0;
   position: fixed;
   right: 0;
-  top: calc(270px + var(--return-to-trip-banner-height, 0px));
+  top: calc(
+    50px + var(--return-to-trip-banner-height, 0px) +
+      var(--tn-search-form-height, 348px)
+  );
   transition: all 225ms ease;
   transition-delay: 50ms;
 }
 
 .otp.mobile .batch-search-map.dt-open {
-  top: calc(325px + var(--return-to-trip-banner-height, 0px));
+  top: calc(
+    50px + var(--return-to-trip-banner-height, 0px) +
+      var(--tn-search-form-height, 416px)
+  );
   transition: all 200ms ease;
+}
+
+/* The route card (batch-search-screen RouteCard): base.css draws each
+   location field as its own surface-2 box; inside the card they become
+   transparent rows split by a hairline, with a dotted connector down the
+   icon column and the swap button on the right edge. */
+.tn-mobile .otp .tn-route-card [role='group']:has(> input[role='combobox']) {
+  background-color: transparent;
+  border-radius: 0;
+  margin: 0;
+}
+/* Room for the swap button, which straddles the from/to hairline. */
+.tn-mobile .otp .tn-route-card [role='group'] > input[role='combobox'] {
+  padding-right: 56px;
+}
+/* A stop's row sits under the swap button: it ends left of it, so its own
+   clear (x) button is never covered. */
+.tn-mobile
+  .otp
+  .tn-route-card
+  [role='group']:has(> input:not(.from-form-control):not(.to-form-control)) {
+  margin-right: 52px;
+}
+.tn-mobile
+  .otp
+  .tn-route-card
+  [role='group']:has(> input:not(.from-form-control):not(.to-form-control))
+  > input[role='combobox'] {
+  padding-right: var(--tn-space-1);
+}
+.otp.mobile .tn-route-card > :not(.switch-button-container-mobile) {
+  position: relative;
+}
+.otp.mobile
+  .tn-route-card
+  > :not(:first-child):not(.switch-button-container-mobile)::before {
+  background-color: var(--tn-border);
+  content: '';
+  height: 1px;
+  left: 44px;
+  position: absolute;
+  right: 56px;
+  top: 0;
+}
+.otp.mobile .tn-route-card::before {
+  border-left: 2px dotted var(--tn-text-3);
+  bottom: 36px;
+  content: '';
+  left: 21px;
+  position: absolute;
+  top: 36px;
+}
+.otp.mobile .tn-route-card .switch-button-container-mobile {
+  position: absolute;
+  right: var(--tn-space-2);
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+}
+.tn-mobile .otp .tn-route-card .switch-button.btn {
+  align-items: center;
+  background-color: var(--tn-surface-2);
+  border: 0;
+  border-radius: var(--tn-radius-pill);
+  color: var(--tn-text-2);
+  display: inline-flex;
+  height: var(--tn-tap);
+  justify-content: center;
+  padding: 0;
+  width: var(--tn-tap);
+}
+.tn-mobile .otp .tn-route-card .switch-button.btn:active {
+  background-color: var(--tn-border);
+}
+.tn-mobile .otp .tn-route-card .switch-button svg {
+  height: 18px;
+  width: 18px;
+}
+/* "Add stop": a small ghost row in the card, its + in the icon column. */
+.tn-mobile .otp .tn-route-card .add-place-button {
+  align-items: center;
+  color: var(--tn-accent);
+  display: flex;
+  font: 500 15px/20px var(--tn-font);
+  gap: 0;
+  min-height: var(--tn-tap);
+  padding: 0 !important;
+  width: calc(100% - 56px);
+}
+.tn-mobile .otp .tn-route-card .add-place-button > div > span:first-child {
+  display: inline-flex;
+  justify-content: center;
+  margin: 0;
+  width: 44px;
+}
+.tn-mobile .otp .tn-route-card .add-place-button > div > span:last-child {
+  padding-left: var(--tn-space-1);
+}
+.tn-mobile .otp .tn-route-card .add-place-button svg {
+  height: 16px;
+  width: 16px;
+}
+.tn-mobile .otp .tn-route-card .multi-stop-stay {
+  padding: 0 var(--tn-space-3) var(--tn-space-2) 44px;
 }
 
 /* Choosing a point off the map (backlog 3.9): the search form is not rendered,
@@ -166,6 +372,31 @@
   left: 0;
   position: fixed;
   right: 0;
+}
+
+/* Date/time screen (date-time-screen.tsx): segmented Leave/Depart/Arrive and
+   the pickers card on the ground, the Plan trip pill above the safe area. */
+.otp.mobile .options-main-content.date-time-screen {
+  background-color: var(--tn-bg);
+  bottom: calc(72px + var(--tn-safe-bottom));
+  padding: var(--tn-space-4);
+}
+.otp.mobile .date-time-screen + .options-lower-tray {
+  background-color: var(--tn-bg);
+  height: auto;
+  padding: var(--tn-space-3) var(--tn-space-4)
+    calc(var(--tn-space-3) + var(--tn-safe-bottom));
+}
+.tn-mobile .otp .date-time-screen + .options-lower-tray .plan-trip-button.btn {
+  background-color: var(--tn-accent);
+  border: 0;
+  border-radius: var(--tn-radius-pill);
+  color: var(--tn-accent-ink);
+  font: 600 16px/20px var(--tn-font);
+  height: var(--tn-control-h);
+}
+.tn-mobile .otp .date-time-screen + .options-lower-tray .plan-trip-button.btn[disabled] {
+  opacity: 0.45;
 }
 
 /* Results screen: normal display */

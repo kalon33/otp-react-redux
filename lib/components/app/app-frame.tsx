@@ -6,16 +6,21 @@ import NotFound from './not-found'
 
 interface Props extends HTMLAttributes<HTMLDivElement> {
   SubNav?: ComponentType
+  /**
+   * The page's name for the phone's app bar ("Settings", "Saved places").
+   * DesktopNav shows the brand on desktop and this on a phone, where the bar
+   * is the only header the page has room for.
+   */
+  title?: string
 }
 
 /**
  * This component defines the general application frame, to which
  * content and an optional sub-navigation component can be inserted.
  */
-const AppFrame = ({ children, SubNav }: Props): JSX.Element => (
+const AppFrame = ({ children, SubNav, title }: Props): JSX.Element => (
   <div className="otp" id="otp">
-    {/* TODO: Do mobile view. */}
-    <DesktopNav />
+    <DesktopNav pageTitle={title} />
     {SubNav && <SubNav />}
     {/* Create a main region here so that the DesktopNav, which contains a "banner" landmark,
         is not contained within the main or other landmark

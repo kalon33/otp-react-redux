@@ -4,9 +4,12 @@ import { bearingBetween } from './turn-view'
 import { calculateDistance, decodeLegGeometry } from './position-matching'
 import {
   findVehicleById,
+  FIX_ACCURACY_MAX_M,
+  FIX_STALE_MS,
   shouldRebindRidingTrip,
   VEHICLE_RECORD_STALE_SEC
 } from './transit-trust'
+import { hasUsablePosition } from './vehicle-matching'
 import type { RidingState } from './types'
 import type { RouteMatchResult } from './position-matching'
 import type { VehicleMatchResult, VehiclePosition } from './vehicle-matching'
@@ -403,6 +406,126 @@ export function ridingFactIsCurrent(
   input: Parameters<typeof ridingFactStaleReason>[0]
 ): boolean {
   return !!input.riding && ridingFactStaleReason(input) == null
+}
+
+/**
+ * ─── Has the rider stepped off the leg the riding fact is about? (70.3) ─────
+ *
+ * The riding fact clears only on TRANSITION_LEG, and the board-time gate in
+ * `shouldTransitionToNextLeg` holds that back — by design — while the next
+ * bus is more than 5 min out. So at a bus-to-bus transfer stop the fact still
+ * names the bus the rider just left, and its readers take it literally: the
+ * reroute button hands off to the aboard flow and offers that bus's stops,
+ * and a planner search is biased toward that bus's route.
+ *
+ * 2026-10-20, session `mvh6ypt8-rtb6ih`: the rider got off Gold Line bus 8233
+ * at 6th St & Washington (leg 0 at 100 %, stopsRemaining 0 from 16:30:52) and
+ * stood 3-22 m from the stop at 0-0.3 m/s. The 94 was 16:37:28, so no
+ * transition. Bus 8233's frame 16:31:16 (received 16:31:51) named Smith Ave &
+ * 5th St as its next stop — past the alight stop. The 16:32:03.962 reroute tap
+ * opened the Gold Line's get-off list; the pick started a trip 431 m up the
+ * line.
+ *
+ * True only when ALL hold:
+ * - Go Mode active, an evidenced riding fact anchored to a leg;
+ * - the trip's progress is on that leg and the leg is finished
+ *   (stopsRemaining 0, or progress ≥ RIDDEN_LEG_DONE_PROGRESS);
+ * - the rider's own fix is fresh (< FIX_STALE_MS), usable (accuracy ≤
+ *   FIX_ACCURACY_MAX_M), within EARLY_ALIGHT_STOP_RADIUS_M of the leg's alight
+ *   stop, and slower than RIDING_ESTABLISH_MIN_SPEED_MPS — a fix with no speed
+ *   does not qualify;
+ * - the ridden vehicle's feed record has a KNOWN age ≤ VEHICLE_RECORD_STALE_SEC,
+ *   a position more than RIDING_ESTABLISH_MAX_DISTANCE_M from the rider's fix,
+ *   and either names a different trip, or names a next stop that is none of
+ *   this leg's calls (boarding stop through alight stop) — i.e. the bus has
+ *   served the alight stop and left it without the rider.
+ *
+ * Unknown data never makes it true: no record, a record with no timestamp, no
+ * next stop, an alight stop with no id. The safe direction is today's
+ * behaviour (treat the rider as aboard).
+ *
+ * The bus dwelling at the alight stop with the rider still on it is NOT this:
+ * its record names the alight stop itself (STOPPED_AT 6th St & Washington,
+ * frames 16:30:36 and 16:30:44 on the same ride). A rider dwelling aboard at
+ * an intermediate stop is not this either — the leg is not finished.
+ *
+ * This decides nothing about the fact itself — it is never cleared here, and
+ * the TRANSITION_LEG lifecycle is unchanged. Readers that would act on "aboard"
+ * ask this first.
+ */
+export const RIDDEN_LEG_DONE_PROGRESS = 99.5
+
+export function riderLeftRiddenLeg(state: any, nowMs: number): boolean {
+  const goMode = state?.otp?.goMode
+  const riding: RidingState | null | undefined = goMode?.riding
+  if (!goMode?.isActive || !riding || !(riding.legIndex >= 0)) return false
+  if (!ridingFactIsEvidenced(riding)) return false
+  const leg: any = goMode.activeItinerary?.legs?.[riding.legIndex]
+  if (!leg?.transitLeg || leg.to?.lat == null || leg.to?.lon == null) {
+    return false
+  }
+
+  const progress = goMode.progress
+  if (!progress || progress.currentLegIndex !== riding.legIndex) return false
+  const finished =
+    progress.stopsRemaining === 0 ||
+    (typeof progress.currentLegProgress === 'number' &&
+      progress.currentLegProgress >= RIDDEN_LEG_DONE_PROGRESS)
+  if (!finished) return false
+
+  const fix: GeolocationPosition | null = goMode.tracking?.lastPosition ?? null
+  const at = Number(fix?.timestamp)
+  if (!fix?.coords || !Number.isFinite(at)) return false
+  if (!(nowMs - at < FIX_STALE_MS)) return false
+  const accuracy = fix.coords.accuracy
+  if (accuracy != null && !(accuracy <= FIX_ACCURACY_MAX_M)) return false
+  const speed = fix.coords.speed
+  if (speed == null || !(speed < RIDING_ESTABLISH_MIN_SPEED_MPS)) return false
+  const toStop = calculateDistance(
+    fix.coords.latitude,
+    fix.coords.longitude,
+    leg.to.lat,
+    leg.to.lon
+  )
+  if (!(toStop <= EARLY_ALIGHT_STOP_RADIUS_M)) return false
+
+  const vehicles: VehiclePosition[] | null =
+    (riding.routeId &&
+      state?.otp?.transitIndex?.routes?.[riding.routeId]?.vehicles) ||
+    null
+  const record = findVehicleById(vehicles, riding.vehicleId, nowMs)
+  if (
+    !record ||
+    record.ageSec == null ||
+    record.ageSec > VEHICLE_RECORD_STALE_SEC
+  ) {
+    return false
+  }
+  // The bus must also be somewhere the rider is not. A record that lags a bus
+  // the rider is still on — pulling out of the alight stop, next stop already
+  // the one after — sits at or behind the rider; one that is gone sits ahead
+  // (bus 8233's 16:31:16 frame: ~190 m up 6th St). Same figure that says how
+  // close a vehicle must be to establish riding it. No position: no evidence.
+  const v = record.vehicle
+  if (!hasUsablePosition(v)) return false
+  const apart = calculateDistance(
+    fix.coords.latitude,
+    fix.coords.longitude,
+    v.lat,
+    v.lon
+  )
+  if (!(apart > RIDING_ESTABLISH_MAX_DISTANCE_M)) return false
+
+  const feedTrip = v.tripId ?? null
+  if (feedTrip && riding.tripId && feedTrip !== riding.tripId) return true
+
+  const next = stopKey(v.nextStopId)
+  if (next == null) return false
+  const calls = legStopsInOrder(leg).map((s) => stopKey(s.stopId))
+  // The alight stop must be identifiable, or "none of the leg's calls" would
+  // read a bus still heading for it as gone.
+  if (calls[calls.length - 1] == null) return false
+  return !calls.includes(next)
 }
 
 /**

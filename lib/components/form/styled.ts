@@ -5,7 +5,12 @@ import {
   SliderSelector,
   Styled as TripFormClasses
 } from '@opentripplanner/trip-form'
-import { Input, MenuItemLi } from '@opentripplanner/location-field/lib/styled'
+import {
+  ClearButton,
+  DropdownButton,
+  Input,
+  MenuItemLi
+} from '@opentripplanner/location-field/lib/styled'
 import LocationField from '@opentripplanner/location-field'
 import styled, { css } from 'styled-components'
 
@@ -105,6 +110,37 @@ export const StyledLocationField = styled(LocationField)`
       color: inherit;
     }
   }
+
+  /* Phone: the leading icon is a 44px column (the route card's connector
+     runs down its centre) and the origin dot is the accent blue — its
+     package colour is #333, invisible on the dark surface. */
+  .tn-mobile & {
+    grid-template-columns: 44px 1fr auto;
+  }
+  .tn-mobile & > ${ClearButton} {
+    color: var(--tn-text-3);
+    min-height: var(--tn-control-h);
+    min-width: 44px;
+  }
+  .tn-mobile & > ${DropdownButton} {
+    align-items: center;
+    display: flex;
+    justify-content: center;
+    min-height: var(--tn-control-h);
+    padding: 0;
+    width: 44px;
+  }
+  .tn-mobile & > ${DropdownButton} svg {
+    color: var(--tn-text-2);
+    height: 18px;
+    width: 18px;
+  }
+  .tn-mobile &:has(> input.from-form-control) > ${DropdownButton} svg {
+    color: var(--tn-accent);
+  }
+  .tn-mobile &:has(> input.to-form-control) > ${DropdownButton} svg {
+    color: #f44256;
+  }
 `
 
 export const advancedPanelClassName = 'advanced-panel'
@@ -179,6 +215,28 @@ export const styledCheckboxCss = css`
       }
     }
   }
+
+  /* Phone: thumb-sized rows and a 22px box in the accent. */
+  .tn-mobile & div {
+    min-height: var(--tn-tap);
+
+    /* The whole row is the target: the label stretches to the box. */
+    label {
+      align-items: center;
+      align-self: stretch;
+      display: flex;
+      flex: 1;
+      font: var(--tn-type-body);
+      min-height: var(--tn-tap);
+      padding-left: 0;
+    }
+    input[type='checkbox'] {
+      accent-color: var(--tn-accent);
+      flex: none;
+      height: 22px;
+      width: 22px;
+    }
+  }
 `
 
 /*
@@ -209,6 +267,12 @@ export const VisibleSubheader = styled.h2`
   margin: 1em 0;
   position: static;
   width: auto;
+
+  .tn-mobile & {
+    color: var(--tn-text);
+    font: var(--tn-type-lg);
+    margin: 0 0 var(--tn-space-2);
+  }
 `
 
 /** The sentence under a control that explains what it does. */
@@ -216,6 +280,11 @@ export const HelperText = styled.p`
   color: #666;
   font-size: 13px;
   margin: 0;
+
+  .tn-mobile & {
+    color: var(--tn-text-2);
+    font: var(--tn-type-sm);
+  }
 `
 
 /**
@@ -250,6 +319,15 @@ export const LeverContainer = styled.div`
 // than sitting in its own rhythm.
 export const LeverSlider = styled(SliderSelector)`
   margin: 20px 0px;
+
+  /* Phone: a 44px-tall track area so the thumb is easy to catch. */
+  .tn-mobile & {
+    margin: var(--tn-space-2) 0;
+  }
+  .tn-mobile & input[type='range'] {
+    accent-color: var(--tn-accent);
+    height: var(--tn-tap);
+  }
 `
 
 /** The panel's dropdown: trip-form's selector, label flush left. */
@@ -257,6 +335,24 @@ export const SettingDropdown = styled(DropdownSelector)`
   margin: 20px 0px;
   label {
     padding-left: 0;
+  }
+
+  /* Phone: label above a full-width 44px select (the 50/50 split clipped
+     "Nearby stops only (faster)" and long labels wrapped to two lines). */
+  .tn-mobile & {
+    margin: var(--tn-space-3) 0;
+  }
+  .tn-mobile & > div {
+    display: block;
+    width: 100%;
+  }
+  .tn-mobile & label {
+    font: var(--tn-type-body);
+    margin-bottom: var(--tn-space-1);
+  }
+  .tn-mobile & select {
+    min-height: var(--tn-tap);
+    padding: 0 var(--tn-space-3);
   }
 `
 
@@ -274,6 +370,18 @@ export const PanelPrimaryButton = styled.button`
 
   &:disabled {
     opacity: 0.6;
+  }
+
+  .tn-mobile & {
+    background-color: var(--tn-accent);
+    border-radius: var(--tn-radius-pill);
+    color: var(--tn-accent-ink);
+    font: 600 15px/20px var(--tn-font);
+    min-height: var(--tn-tap);
+    padding: 0 var(--tn-space-5);
+  }
+  .tn-mobile &:disabled {
+    opacity: 0.45;
   }
 `
 
@@ -303,6 +411,18 @@ export const RouteChip = styled.button`
     border-color: #d32f2f;
     color: #d32f2f;
   }
+
+  .tn-mobile & {
+    background-color: var(--tn-surface-2);
+    border: 0;
+    color: var(--tn-text);
+    font: 500 14px/18px var(--tn-font);
+    min-height: 36px;
+    padding: 0 var(--tn-space-3);
+  }
+  .tn-mobile &:hover {
+    color: var(--tn-danger);
+  }
 `
 
 /** The panel's plain text field (the via-stop name, the route filter). */
@@ -312,6 +432,16 @@ export const PanelTextInput = styled.input`
   font: inherit;
   padding: 8px;
   width: 100%;
+
+  .tn-mobile & {
+    background-color: var(--tn-surface-2);
+    border: 0;
+    border-radius: var(--tn-radius-sm);
+    color: var(--tn-text);
+    font: var(--tn-type-body);
+    height: var(--tn-tap);
+    padding: 0 var(--tn-space-3);
+  }
 `
 
 /**
@@ -332,6 +462,13 @@ export const SavedSetChip = styled(RouteChip)`
     cursor: default;
     opacity: 0.5;
   }
+
+  .tn-mobile & {
+    min-height: var(--tn-tap);
+  }
+  .tn-mobile &:hover {
+    color: var(--tn-accent);
+  }
 `
 
 /** The panel's outlined button, beside a PanelPrimaryButton. */
@@ -348,5 +485,14 @@ export const PanelSecondaryButton = styled.button`
 
   &:disabled {
     opacity: 0.6;
+  }
+
+  .tn-mobile & {
+    background-color: var(--tn-surface-2);
+    border: 0;
+    border-radius: var(--tn-radius-pill);
+    color: var(--tn-text);
+    font: 600 15px/20px var(--tn-font);
+    padding: 0 var(--tn-space-4);
   }
 `

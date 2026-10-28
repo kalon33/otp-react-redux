@@ -219,6 +219,7 @@ components:
     openMenu: Ouvrir le menu
     settings: "Paramètres"
     shareFeedback: "Envoyer un commentaire"
+    shareDiagnostics: "Partage des diagnostics"
     shareDiagnosticsOff: "Partage des diagnostics : désactivé"
     shareDiagnosticsOn: "Partage des diagnostics : activé"
     skipNavigation: Sauter la navigation
@@ -245,6 +246,7 @@ components:
     arriveOnTimeHeader: "Rejoindre le bus"
     arriveOnTimeHelp: "Lorsque votre trajet jusqu'à l'arrêt est recalculé en cours de route, il vise à vous y amener {minutes} minutes avant le bus plutôt que le plus vite possible."
     arriveOnTimeLabel: "Arriver juste avant le bus"
+    backToResults: "Retour aux résultats"
     bikeCeilingHelp: "Un trajet peut contenir jusqu'à {minutes} minutes de vélo — environ {miles} mi à votre vitesse actuelle de {speed} mph. Cette limite est fixée sur le serveur ; ce curseur règle la propension du planificateur à utiliser le vélo à l'intérieur de cette limite."
     bikeWillingnessHeader: "Vélo"
     bikeWillingnessHigh: "Plus"
@@ -265,6 +267,7 @@ components:
     noTransfersLabel: "Sans correspondance"
     numItinerariesLabel: "Nombre d'options à rechercher"
     numItinerariesOption: "{count} options"
+    options: Options
     routeLockHeader: "Lignes"
     routeLockNoneStarted: "Aucun trajet ici ne commence par {route} — tous les trajets sont affichés."
     routeLockNoneUsed: "Aucun trajet ici n'emprunte {route} : voici les options à vélo."
@@ -539,6 +542,7 @@ components:
     locatingBus: "Localisation de votre bus..."
     nextBusesAtStop: "Prochains bus à {stop}"
     nextDeparture: "Prochain : {time} (dans {mins} min)"
+    nextStopLine: "Prochain arrêt : {stop}"
     noBusesNearby: "Aucun bus détecté à proximité"
     noLiveVehicleData: "Pas de données en temps réel — suivi par GPS"
     notYet: "Pas encore"
@@ -709,13 +713,13 @@ components:
     titleFrom: Choisissez votre point de départ
     titleTo: Choisissez votre destination
   MetroUI:
-    arriveAt: Vous arrivez à
+    arriveAt: Arrivée
     confirmLaterDeparture: "Partir à {chosen} au lieu de {row} ?"
     confirmSwitchTrip: "Basculer votre trajet actif sur cette ligne ? Vos indications seront mises à jour."
     fare: "{fare}"
     itineraryDescription: Trajet de {time} par les lignes {routes}
     itinerarySummary: Partez à {stopName} | {cost}
-    leaveAt: Partez à
+    leaveAt: Départ
     multipleOptions: Plusieurs options
     orAlternatives: ou autres lignes dans la même direction
     originallyScheduledTime: (initialement {originalTime})
@@ -730,6 +734,7 @@ components:
     switchTrip: "Basculer sur ce trajet"
     timeBiking: "{time} de vélo"
     timeWalking: "{time} de marche"
+    timeWaiting: "{time} d’attente"
     variantBiking: "{distance} à vélo"
     variantArrives: arrivée à {time}
     variantLeaves: départ à {time}
@@ -1053,6 +1058,11 @@ components:
   SequentialPaneDisplay:
     stepNumber: Étape {step} sur {total}
   SettingsScreen:
+    appearanceDark: "Sombre"
+    appearanceHeader: "Apparence"
+    appearanceHelp: "Système suit le réglage Clair ou Sombre de votre téléphone."
+    appearanceLight: "Clair"
+    appearanceSystem: "Système"
     bikeSpeedHelp: "Le temps que l'application attribue à vos étapes à vélo. Une fois réglée, cette vitesse est utilisée par tous les itinéraires, y compris avant que vous ayez roulé assez longtemps pour que l'application mesure votre allure."
     bikeSpeedLabel: "Votre vitesse à vélo : {speed} mph"
     bikeSpeedSlider: "Vitesse à vélo"
@@ -1135,6 +1145,8 @@ components:
       Facultatif: Je consens à ce que le Planificateur de trajets sauvegarde mes
       recherches afin d'améliorer les transports publics dans ma region.
       <termsOfStorageLink>Plus d'informations...</termsOfStorageLink>
+  TransitLegSummary:
+    rideAndStops: "Trajet : {duration}{numStops, plural, =1 {} other { · # arrêts}}"
   TransitVehicleOverlay:
     in_transit_to: "Prochain arrêt : {stop}"
     incoming_at: Approchant {stop}
@@ -1310,11 +1322,10 @@ components:
     rememberSearches: Enregistrer les recherches/lieux récents ?
     stopId: Arrêt n° {stopId}
     storageDisclaimer: >
-      En activant cette option, tous vos lieux, préférences et paramètres seront
-      enregistrés dans le cache de votre navigateur. TriMet n'aura pas accès aux
-      données concernant votre domicile, lieu de travail, ou autre endroit. Vous
-      pouvez à tout moment désactiver la collecte de vos recherches/lieux
-      récents et effacer vos domicile, lieu de travail, et arrêts favoris.
+      Les lieux, préférences et paramètres que vous choisissez d'enregistrer
+      sont conservés dans le cache de votre navigateur. Vous pouvez à tout
+      moment désactiver la collecte de vos recherches/lieux récents et effacer
+      vos domicile, lieu de travail, et arrêts favoris.
   VerifyEmailPane:
     emailIsVerified: Mon email est vérifié
     instructions1: >

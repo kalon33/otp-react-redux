@@ -1,6 +1,7 @@
 import '../../test-utils/mock-window-matchMedia'
 import '../../test-utils/mock-window-url'
 
+import coreUtils from '@opentripplanner/core-utils'
 import React from 'react'
 
 import {
@@ -174,5 +175,52 @@ describe('components > user > settings screen (backlog 9.1)', () => {
     expect(ofType(store, 'SET_TURN_CUE_DEFAULT')).toHaveLength(1)
     wrapper.unmount()
     expect(ofType(store, 'ROUTING_REQUEST')).toHaveLength(0)
+  })
+})
+
+describe('components > user > settings screen > appearance', () => {
+  const root = document.documentElement
+
+  beforeEach(() => {
+    window.localStorage.clear()
+    root.removeAttribute('data-theme')
+  })
+
+  afterEach(() => {
+    jest.restoreAllMocks()
+    root.classList.remove('tn-mobile')
+    root.removeAttribute('data-theme')
+  })
+
+  it('is not offered on the desktop layout', () => {
+    jest.spyOn(coreUtils.ui, 'isMobile').mockReturnValue(false)
+    const { wrapper } = renderScreen()
+    expect(wrapper.find('[role="radiogroup"]')).toHaveLength(0)
+  })
+
+  it('offers System / Light / Dark on the phone and applies a choice at once', () => {
+    jest.spyOn(coreUtils.ui, 'isMobile').mockReturnValue(true)
+    root.classList.add('tn-mobile')
+    const { wrapper } = renderScreen()
+    const radios = () => wrapper.find('button[role="radio"]')
+    expect(radios().map((r: any) => r.text())).toEqual([
+      'System',
+      'Light',
+      'Dark'
+    ])
+    expect(radios().at(0).prop('aria-checked')).toBe(true)
+
+    radios().at(2).simulate('click')
+    expect(root.getAttribute('data-theme')).toBe('dark')
+    expect(window.localStorage.getItem('tnTheme')).toBe('dark')
+    expect(radios().at(2).prop('aria-checked')).toBe(true)
+
+    // Arrow keys move the selection (wrapping) like a native radio group.
+    wrapper
+      .find('[role="radiogroup"]')
+      .first()
+      .simulate('keydown', { key: 'ArrowRight' })
+    expect(root.getAttribute('data-theme')).toBeNull()
+    expect(radios().at(0).prop('aria-checked')).toBe(true)
   })
 })

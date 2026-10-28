@@ -38,31 +38,38 @@ const ToastContainer = styled.div`
   pointer-events: none;
   position: absolute;
   right: 0;
-  top: 0;
+  top: var(--tn-safe-top);
   z-index: 2000;
 `
 
-const Toast = styled.div<{ $dismissing: boolean; $priority: string }>`
+// A toast is a surface card dropped from the top edge, its priority carried
+// by the left stripe (danger / accent / tertiary) rather than a solid fill, so
+// it reads the same in both themes.
+export const NotificationToast = styled.div<{
+  $dismissing: boolean
+  $priority: string
+}>`
   animation: ${(props) => (props.$dismissing ? slideOut : slideIn)} 0.3s
     ease-in-out forwards;
-  background-color: ${(props) => {
-    switch (props.$priority) {
-      case 'high':
-        return '#F44336'
-      case 'medium':
-        return '#2196F3'
-      default:
-        return '#757575'
-    }
-  }};
-  border-radius: 0 0 8px 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-  color: white;
-  font-size: 14px;
-  font-weight: 500;
-  margin: 0 8px 8px;
+  background-color: var(--tn-surface);
+  border-radius: var(--tn-radius);
+  box-shadow: inset 4px 0 0
+      ${(props) => {
+        switch (props.$priority) {
+          case 'high':
+            return 'var(--tn-danger)'
+          case 'medium':
+            return 'var(--tn-accent)'
+          default:
+            return 'var(--tn-text-3)'
+        }
+      }},
+    var(--tn-shadow);
+  color: var(--tn-text);
+  font: 600 15px/20px var(--tn-font);
+  margin: 8px 12px 0;
   overflow-wrap: break-word;
-  padding: 12px 16px;
+  padding: 12px 16px 12px 20px;
   pointer-events: auto;
   word-wrap: break-word;
 `
@@ -117,14 +124,14 @@ const GoModeNotifications = ({ recentNotifications }: Props) => {
   return (
     <ToastContainer>
       {toasts.map((toast) => (
-        <Toast
+        <NotificationToast
           $dismissing={dismissing.has(toast.id)}
           $priority={toast.priority}
           key={toast.id}
           onClick={() => dismissToast(toast.id)}
         >
           {toast.message}
-        </Toast>
+        </NotificationToast>
       ))}
     </ToastContainer>
   )

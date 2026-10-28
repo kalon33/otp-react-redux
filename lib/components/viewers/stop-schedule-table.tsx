@@ -1,6 +1,7 @@
 import { FormattedMessage } from 'react-intl'
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore TYPESCRIPT TODO: wait for typescripted core-utils
+import { getMostReadableTextColor } from '@opentripplanner/core-utils/lib/route'
 import coreUtils from '@opentripplanner/core-utils'
 import React, { Component, createRef } from 'react'
 import styled from 'styled-components'
@@ -157,7 +158,25 @@ class StopScheduleTable extends Component<{
                 {showBlockIds && (
                   <BlockCell title={blockId}>{blockId}</BlockCell>
                 )}
-                <RouteCell>{routeName}</RouteCell>
+                <RouteCell>
+                  {/* The phone layout draws this as a route pill. */}
+                  <span
+                    className="route-pill"
+                    style={
+                      route?.color
+                        ? ({
+                            '--tn-route-color': `#${route.color}`,
+                            '--tn-route-text': getMostReadableTextColor(
+                              route.color,
+                              route.textColor
+                            )
+                          } as React.CSSProperties)
+                        : undefined
+                    }
+                  >
+                    {routeName}
+                  </span>
+                </RouteCell>
                 <td>{headsign}</td>
                 <TimeCell>
                   <DepartureTime stopTime={stopTime} />

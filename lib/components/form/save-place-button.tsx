@@ -8,18 +8,21 @@ import styled from 'styled-components'
 import * as uiActions from '../../actions/ui'
 import { getUserLocations } from '../../util/user'
 import { LOCAL_PLACES_PATH } from '../../util/constants'
+import { TnButton } from '../util/tn-styled'
 
 const { matchLatLon } = coreUtils.map
 
-const StyledSaveButton = styled.button`
-  align-items: center;
-  background: none;
-  border: none;
-  color: #0b6ea8;
-  display: flex;
-  font-weight: 600;
+/** A ghost row on the phone search form (TnButton ghost, 44px, 15px). */
+const StyledSaveButton = styled(TnButton)`
+  font-size: 15px;
   gap: 6px;
-  padding: 6px 0;
+  min-height: var(--tn-tap);
+  padding: 0 var(--tn-space-2);
+
+  svg {
+    height: 18px;
+    width: 18px;
+  }
 `
 
 interface QueryLocation {
@@ -51,8 +54,13 @@ const SavePlaceButton = ({ place, routeTo }: Props) => {
       )}`
     )
   return (
-    <StyledSaveButton onClick={handleClick} type="button">
-      <Star size={14} />
+    <StyledSaveButton
+      $variant="ghost"
+      className="save-place-button"
+      onClick={handleClick}
+      type="button"
+    >
+      <Star aria-hidden />
       {intl.formatMessage({
         defaultMessage: 'Save this place',
         id: 'components.SavedPlacesScreen.saveThisPlace'

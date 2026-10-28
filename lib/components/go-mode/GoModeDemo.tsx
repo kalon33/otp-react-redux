@@ -8,9 +8,21 @@ import { ComponentContext } from '../../util/contexts'
 import DefaultItinerary from '../narrative/default/default-itinerary'
 import type { TripProgress } from '../../util/go-mode/progress-calculator'
 
-import { SheetHandle, SheetHandleLabel } from './styled'
+import { NotificationToast } from './GoModeNotifications'
+import {
+  RerouteActions,
+  RerouteBar,
+  RerouteCard,
+  RerouteCardTitle,
+  RerouteSummary,
+  RerouteSwitchButton,
+  SheetHandle,
+  SheetHandleLabel
+} from './styled'
 import AlightRecommendation from './AlightRecommendation'
+import AutoSwitchCard from './AutoSwitchCard'
 import FasterRouteCard from './FasterRouteCard'
+import MultiStopArrivalCard from './MultiStopArrivalCard'
 import ReturnCountdownCard from './ReturnCountdownCard'
 import TransitProgress from './TransitProgress'
 import TripSheet from './TripSheet'
@@ -124,18 +136,24 @@ const walkLeg = {
 
 const busNextLeg = {
   from: { name: 'Lake St & Hennepin Ave', stop: { gtfsId: '1:1001' } },
+  headsign: 'Uptown',
   mode: 'BUS',
   route: { id: '1:21' },
+  routeColor: '0053A0',
   routeShortName: '21',
+  routeTextColor: 'FFFFFF',
   transitLeg: true
 } as any
 
 const onBusLeg = {
   duration: 900,
   from: { name: 'Lake St & Hennepin Ave' },
+  headsign: 'Uptown',
   mode: 'BUS',
   route: { id: '1:21', shortName: '21' },
+  routeColor: '0053A0',
   routeShortName: '21',
+  routeTextColor: 'FFFFFF',
   to: { name: 'Nicollet Mall' },
   transitLeg: true
 } as any
@@ -586,7 +604,13 @@ const demoOffer = (extra: Record<string, unknown>): any => ({
 /** The card above the "View trip & other ways" handle, as on the screen. */
 const FasterRouteFrame = ({ offer }: { offer: any }) => (
   <Provider store={fasterRouteStore}>
-    <div style={{ background: '#e8ecef', height: 230, position: 'relative' }}>
+    <div
+      style={{
+        background: 'var(--tn-surface-2)',
+        height: 250,
+        position: 'relative'
+      }}
+    >
       <FasterRouteCard offer={offer} />
       <SheetHandle type="button">
         <SheetHandleLabel>View trip &amp; other ways</SheetHandleLabel>
@@ -608,28 +632,65 @@ const Frame = ({
 }) => (
   <div style={{ marginBottom: 28 }}>
     <div
-      style={{ color: '#333', fontSize: 14, fontWeight: 700, marginBottom: 2 }}
+      style={{
+        color: 'var(--tn-text)',
+        fontSize: 14,
+        fontWeight: 700,
+        marginBottom: 2
+      }}
     >
       {title}
     </div>
     {note && (
-      <div style={{ color: '#888', fontSize: 12, marginBottom: 6 }}>{note}</div>
+      <div style={{ color: 'var(--tn-text-2)', fontSize: 12, marginBottom: 6 }}>
+        {note}
+      </div>
     )}
     <div
       style={{
-        background: '#f2f3f5',
-        border: '1px solid #ccc',
+        background: 'var(--tn-bg)',
+        border: '1px solid var(--tn-border)',
         borderRadius: 12,
+        maxWidth: 390,
         minHeight,
         overflow: 'hidden',
         position: 'relative',
-        width: 390
+        width: '100%'
       }}
     >
       {children}
     </div>
   </div>
 )
+
+// Multi-stop arrival (43.1): at stop 1 of 2, a 20-minute planned stay.
+const demoMultiStopPlan: any = {
+  index: 0,
+  segments: [
+    { endTime: NOW, legs: [] },
+    { legs: [{ startTime: NOW + 20 * 60000 }] },
+    { legs: [] }
+  ],
+  stopNames: ['Perennial Cycle', 'Micro Center', 'Home']
+}
+
+// Auto's Undo card (65.2), as the switch leaves it.
+const demoAutoUndo: any = {
+  aboard: false,
+  addedBikeM: 0,
+  bikeSavedM: 0,
+  changesSaved: 0,
+  expiresAtMs: NOW + 5 * 60000,
+  fromItinerary: { legs: [] },
+  fromRouteSet: '1:A',
+  headline: 'faster',
+  laterMs: 0,
+  preset: 'fastest',
+  routeLabel: '14',
+  savingMs: 6 * 60000,
+  switchId: 'demo',
+  toRouteSet: '1:14'
+}
 
 const GoModeDemo = (): JSX.Element => (
   <IntlProvider
@@ -673,18 +734,25 @@ const GoModeDemo = (): JSX.Element => (
       'components.MetroUI.variantOn': 'On',
       'components.MetroUI.variantShown': 'currently shown',
       'components.MetroUI.variantWalking': '{distance} walking',
+      'components.MultiStop.arrivedAtStop':
+        "You're at stop {number} of {total}",
+      'components.MultiStop.continueTo': 'Continue to {destination}',
+      'components.MultiStop.endTrip': 'End trip',
+      'components.MultiStop.finding': 'Finding the next ride…',
+      'components.MultiStop.plannedStay': 'Planned stay until {time}',
       'components.StopTimeCell.realtime': 'Realtime',
       'components.StopTimeCell.scheduled': 'Scheduled'
     }}
     onError={() => undefined}
   >
     <div
+      className="tn-gomode"
       style={{
-        background: '#fff',
-        fontFamily:
-          '-apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif',
+        background: 'var(--tn-surface)',
+        color: 'var(--tn-text)',
+        fontFamily: 'var(--tn-font)',
         minHeight: '100vh',
-        padding: 24
+        padding: 16
       }}
     >
       <h1 style={{ fontSize: 20, marginBottom: 16 }}>Go Mode — card gallery</h1>
@@ -1025,13 +1093,80 @@ const GoModeDemo = (): JSX.Element => (
       </Frame>
 
       <Frame
-        minHeight={220}
+        minHeight={320}
         note="Round trip, arrived: the countdown to the return departure replaces the plain arrival card, in the same RerouteCard primitives and the same place."
         title="Return countdown"
       >
         <Provider store={roundTripStore}>
           <ReturnCountdownCard onDone={() => undefined} />
         </Provider>
+      </Frame>
+
+      <Frame
+        minHeight={200}
+        note="One-way trip, arrived: the card GoModeScreen shows until Done."
+        title="Arrived"
+      >
+        <RerouteBar>
+          <RerouteCard role="status">
+            <RerouteCardTitle>{"\u{1F389} You've arrived!"}</RerouteCardTitle>
+            <RerouteSummary>Union Depot</RerouteSummary>
+            <RerouteActions>
+              <RerouteSwitchButton type="button">Done</RerouteSwitchButton>
+            </RerouteActions>
+          </RerouteCard>
+        </RerouteBar>
+      </Frame>
+
+      <Frame
+        minHeight={220}
+        note="43.1: arrived at one of the rider's stops; the trip goes on."
+        title="Multi-stop arrival"
+      >
+        <Provider store={fasterRouteStore}>
+          <MultiStopArrivalCard
+            onDone={() => undefined}
+            plan={demoMultiStopPlan}
+          />
+        </Provider>
+      </Frame>
+
+      <Frame
+        note="65.2: Auto switched the trip with no tap; OK keeps it, Undo puts the old plan back."
+        title="Auto switched (Undo)"
+      >
+        <Provider store={fasterRouteStore}>
+          <div
+            style={{
+              background: 'var(--tn-surface-2)',
+              height: 250,
+              position: 'relative'
+            }}
+          >
+            <AutoSwitchCard undo={demoAutoUndo} />
+            <SheetHandle type="button">
+              <SheetHandleLabel>View trip &amp; other ways</SheetHandleLabel>
+            </SheetHandle>
+          </div>
+        </Provider>
+      </Frame>
+
+      <Frame
+        minHeight={180}
+        note="Toasts from the notification service, by priority: high, medium, low. Tap dismisses."
+        title="Notification toasts"
+      >
+        <div style={{ paddingBottom: 8 }}>
+          <NotificationToast $dismissing={false} $priority="high">
+            Get off at the next stop
+          </NotificationToast>
+          <NotificationToast $dismissing={false} $priority="medium">
+            21 · 3 min · Lake St &amp; Hennepin Ave
+          </NotificationToast>
+          <NotificationToast $dismissing={false} $priority="low">
+            Back on route
+          </NotificationToast>
+        </div>
       </Frame>
     </div>
   </IntlProvider>

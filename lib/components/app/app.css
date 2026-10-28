@@ -398,3 +398,404 @@
 #otp > main {
   padding-top: var(--return-to-trip-banner-height, 0px);
 }
+
+/* ======================================================================
+   Phone chrome (mobile overhaul, 2026-10-26): the drawer's markup-level
+   finish, the AppFrame pages' bar and grouped lists, the banners and the
+   modals. Everything below is scoped to `.tn-mobile` (<html> on the phone,
+   lib/util/tn-root-classes.ts) so the desktop layout never sees it, and
+   reads only lib/styles/tokens.css. lib/styles/base.css is imported after
+   this file, so where both style one property the selectors here are made
+   more specific on purpose.
+   ====================================================================== */
+
+/* ---------- Drawer ---------- */
+
+.tn-mobile .app-menu .app-menu-title {
+  color: var(--tn-text);
+  font: var(--tn-type-title);
+  letter-spacing: -0.01em;
+  overflow: hidden;
+  padding: var(--tn-space-2) 20px var(--tn-space-3);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Hairline between the views, the pages and the actions. Inset to the label
+   column, like an iOS list. Desktop shows only the last two groups and no
+   title, so neither the title nor the separators render there. */
+.app-menu .app-menu-title,
+.app-menu .app-menu-separator {
+  display: none;
+}
+.tn-mobile .app-menu .app-menu-title {
+  display: block;
+}
+.tn-mobile .app-menu .app-menu-separator {
+  border-top: 1px solid var(--tn-border);
+  display: block;
+  margin: var(--tn-space-1) 0 var(--tn-space-1) 58px;
+}
+
+/* Labels wrap rather than ellipsize: at 360px the switch row leaves the
+   label ~165px, and "Share diagnostics" (longer still in French) would be
+   cut. A wrapped row just grows past its 52px minimum. */
+.tn-mobile .app-menu .app-menu-item-label {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding: var(--tn-space-2) 0;
+}
+
+/* Trailing chevron / switch: pushed to the row's end (desktop too). */
+.app-menu .app-menu-item-trail {
+  align-items: center;
+  display: inline-flex;
+  margin-inline: auto 1rem;
+}
+.app-menu .app-menu-item-trail > svg {
+  margin: 0;
+}
+
+.tn-mobile .app-menu .app-menu-item-trail {
+  align-items: center;
+  color: var(--tn-text-3);
+  display: inline-flex;
+  flex: none;
+  margin-inline: auto 0;
+}
+.tn-mobile .app-menu .app-menu-item-trail > svg {
+  height: 14px;
+  width: 14px;
+}
+
+/* The switch drawn in the drawer's diagnostics row (the row is the
+   role="switch" button; this is only its picture). Same 51x31 recipe as the
+   settings pages' switch (user/settings-list.ts switchCss). */
+.tn-switch {
+  background-color: var(--tn-border);
+  border-radius: var(--tn-radius-pill);
+  display: inline-block;
+  flex: none;
+  height: 31px;
+  position: relative;
+  transition: background-color 160ms ease;
+  width: 51px;
+}
+.tn-switch::before {
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  content: '';
+  height: 27px;
+  left: 2px;
+  position: absolute;
+  top: 2px;
+  transition: transform 160ms ease;
+  width: 27px;
+}
+.tn-switch[data-on] {
+  background-color: var(--tn-accent);
+}
+.tn-switch[data-on]::before {
+  transform: translateX(20px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .tn-switch,
+  .tn-switch::before {
+    transition: none;
+  }
+}
+/* A switch row is not a link: no accent hover colour on its label. */
+@media (hover: hover) {
+  .tn-mobile .app-menu .app-menu-switch-row:hover {
+    color: var(--tn-text);
+  }
+}
+
+/* The build line: a quiet footer under a hairline. */
+.tn-mobile .app-menu .app-menu-build-info {
+  border-top: 1px solid var(--tn-border);
+  margin-top: var(--tn-space-2);
+  padding: var(--tn-space-3) 20px;
+}
+
+/* ---------- AppFrame pages' bar (DesktopNav on a phone) ----------
+   The same three columns as the mobile bar (base.css): menu | title | spare,
+   50px tall, and sticky, so the page's name and the way to the menu stay on
+   screen while a long settings page scrolls. Sticky also makes <header> the
+   containing block of the banners inside it, which are absolute at top: 50px
+   — so they still sit directly under the bar, and still publish their
+   height for `#otp > main` below. */
+
+.tn-mobile .otp:not(.mobile) > header {
+  position: sticky;
+  top: 0;
+  z-index: 25;
+}
+
+.tn-mobile .otp:not(.mobile) .navbar {
+  margin: 0;
+  min-height: var(--tn-appbar-h);
+}
+.tn-mobile .otp:not(.mobile) .navbar > .container-fluid {
+  padding: 0 var(--tn-space-1);
+}
+.tn-mobile .otp:not(.mobile) .navbar .navbar-header {
+  align-items: center;
+  display: grid;
+  float: none;
+  grid-template-columns:
+    minmax(var(--tn-tap), 1fr) minmax(0, auto)
+    minmax(var(--tn-tap), 1fr);
+  height: var(--tn-appbar-h);
+  margin: 0;
+}
+.tn-mobile .otp:not(.mobile) .navbar .navbar-header::before,
+.tn-mobile .otp:not(.mobile) .navbar .navbar-header::after {
+  display: none;
+}
+.tn-mobile .otp:not(.mobile) .navbar .navbar-brand {
+  float: none;
+  grid-column: 1;
+  grid-row: 1;
+  height: var(--tn-appbar-h);
+  margin: 0;
+  padding: 0;
+  width: auto;
+}
+.tn-mobile .otp:not(.mobile) .navbar .tn-appbar-title {
+  color: var(--tn-text);
+  font: var(--tn-type-lg);
+  grid-column: 2;
+  grid-row: 1;
+  letter-spacing: -0.01em;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0 var(--tn-space-1);
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tn-mobile .otp:not(.mobile) .navbar .navbar-nav {
+  grid-column: 3;
+  grid-row: 1;
+  justify-self: end;
+  margin: 0;
+}
+
+/* Hamburger: the same 44px target and 20x16 glyph as the mobile bar. */
+.tn-mobile .otp:not(.mobile) .navbar .app-menu-icon {
+  border-radius: var(--tn-radius-pill);
+  box-sizing: border-box;
+  height: var(--tn-tap);
+  padding: 14px 12px;
+  width: var(--tn-tap);
+}
+.tn-mobile .otp:not(.mobile) .navbar .app-menu-icon .menu-line {
+  border-bottom-width: 2px;
+}
+.tn-mobile .otp:not(.mobile) .navbar .app-menu-icon:active {
+  background-color: var(--tn-surface-2);
+}
+.tn-mobile .otp:not(.mobile) .navbar .app-menu-icon[aria-expanded='true'] .menu-line.top {
+  top: 7px;
+}
+.tn-mobile .otp:not(.mobile) .navbar .app-menu-icon[aria-expanded='true'] .menu-line.bottom {
+  bottom: 7px;
+}
+
+/* ---------- AppFrame pages' body ---------- */
+
+/* The bar names the page; its <h1> stays for screen readers (and desktop). */
+.tn-mobile .otp .tn-page-title {
+  border: 0;
+  clip: rect(0 0 0 0);
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+.tn-mobile .otp:not(.mobile) > main {
+  background-color: var(--tn-bg);
+  min-height: calc(100vh - var(--tn-appbar-h));
+}
+.tn-mobile .otp:not(.mobile) > main > .container {
+  padding-left: var(--tn-space-4);
+  padding-right: var(--tn-space-4);
+}
+.tn-mobile .otp:not(.mobile) > main > .container > .row {
+  margin-left: calc(-1 * var(--tn-space-4));
+  margin-right: calc(-1 * var(--tn-space-4));
+}
+.tn-mobile .otp:not(.mobile) > main > .container > .row > [class*='col-'] {
+  padding-left: var(--tn-space-4);
+  padding-right: var(--tn-space-4);
+}
+
+/* Buttons on these pages: 44px pills (48px when full width). */
+.tn-mobile .otp:not(.mobile) > main .btn {
+  align-items: center;
+  border-radius: var(--tn-radius-pill);
+  display: inline-flex;
+  font: 600 16px/20px var(--tn-font);
+  gap: var(--tn-space-2);
+  justify-content: center;
+  min-height: var(--tn-tap);
+  padding: 0 var(--tn-space-5);
+}
+.tn-mobile .otp:not(.mobile) > main .btn.btn-block {
+  display: flex;
+  min-height: var(--tn-control-h);
+}
+.tn-mobile .otp:not(.mobile) > main .btn:disabled,
+.tn-mobile .otp:not(.mobile) > main .btn.disabled {
+  opacity: 0.45;
+}
+.tn-mobile .otp:not(.mobile) > main .btn svg {
+  height: 16px;
+  width: 16px;
+}
+
+/* On the --tn-bg ground a surface-2 control all but vanishes: secondary
+   buttons and fields sit on the card surface instead. */
+.tn-mobile .otp:not(.mobile) > main .btn-default {
+  background-color: var(--tn-surface);
+}
+.tn-mobile .otp:not(.mobile) > main .btn-default:active {
+  background-color: var(--tn-surface-2);
+}
+.tn-mobile .otp:not(.mobile) > main .form-control,
+.tn-mobile .otp:not(.mobile) > main [role='group']:has(> input[role='combobox']) {
+  background-color: var(--tn-surface);
+}
+
+/* The place editor's type picker (radio labels drawn as .btn): 44px round
+   choices, accent-soft when picked. */
+.tn-mobile .otp:not(.mobile) > main fieldset label.btn {
+  border-radius: 50%;
+  height: var(--tn-tap);
+  margin: 0 var(--tn-space-2) var(--tn-space-2) 0;
+  padding: 0;
+  width: var(--tn-tap);
+}
+.tn-mobile .otp:not(.mobile) > main fieldset label.btn.active {
+  background-color: var(--tn-accent-soft);
+  color: var(--tn-accent);
+  filter: none;
+}
+
+/* Form labels and fields (the place editor). */
+.tn-mobile .otp:not(.mobile) > main .control-label,
+.tn-mobile .otp:not(.mobile) > main legend {
+  color: var(--tn-text-2);
+  font: var(--tn-type-xs);
+  letter-spacing: var(--tn-tracking-xs);
+  margin-bottom: var(--tn-space-2);
+  text-transform: uppercase;
+}
+.tn-mobile .otp:not(.mobile) > main .help-block {
+  font: var(--tn-type-sm);
+}
+.tn-mobile .otp:not(.mobile) > main .has-error .help-block,
+.tn-mobile .otp:not(.mobile) > main .has-error .control-label {
+  color: var(--tn-danger);
+}
+
+/* ---------- Banners ----------
+   40px tinted strips, full width under the app bar, 14px 500. The return-
+   to-trip banner's component (return-to-trip-banner.tsx) belongs to the Go
+   Mode work and is restyled from here by class; it keeps measuring itself
+   and publishing --return-to-trip-banner-height, so it may wrap to a second
+   line on a narrow phone and everything below still moves by the real
+   height. */
+
+html.tn-mobile .network-connection-banner,
+html.tn-mobile .return-to-trip-banner {
+  align-items: center;
+  border: 0;
+  box-shadow: inset 0 -1px 0 var(--tn-border);
+  display: flex;
+  font: 500 14px/18px var(--tn-font);
+  justify-content: center;
+  min-height: 40px;
+  padding: var(--tn-space-2) var(--tn-space-4);
+  text-align: center;
+}
+html.tn-mobile .network-connection-banner {
+  background: var(--tn-warn-soft);
+  color: var(--tn-warn);
+}
+html.tn-mobile .return-to-trip-banner {
+  background: var(--tn-accent-soft);
+  color: var(--tn-accent);
+  font-weight: 600;
+  /* Stated, not inherited: it is a <button>. */
+  left: 0;
+  right: 0;
+  width: 100%;
+}
+html.tn-mobile .return-to-trip-banner:active {
+  filter: brightness(0.96);
+}
+html.tn-mobile .return-to-trip-banner:focus-visible {
+  outline: 2px solid var(--tn-accent);
+  outline-offset: -2px;
+}
+
+/* ---------- Modals (bootstrap: session timeout, confirmations) ---------- */
+
+html.tn-mobile .modal-backdrop.in {
+  background-color: #000;
+  opacity: 0.45;
+}
+html.tn-mobile .modal-dialog {
+  margin: calc(var(--tn-safe-top) + 72px) var(--tn-space-4) var(--tn-space-4);
+}
+html.tn-mobile .modal-header {
+  border-bottom: 0;
+  padding: var(--tn-space-5) var(--tn-space-5) var(--tn-space-2);
+}
+html.tn-mobile .modal-title {
+  font: var(--tn-type-lg);
+}
+html.tn-mobile .modal-body {
+  color: var(--tn-text-2);
+  font: var(--tn-type-body);
+  padding: 0 var(--tn-space-5) var(--tn-space-4);
+}
+html.tn-mobile .modal-footer {
+  border-top: 0;
+  display: flex;
+  flex-wrap: wrap-reverse;
+  gap: var(--tn-space-2);
+  justify-content: flex-end;
+  padding: 0 var(--tn-space-5) var(--tn-space-5);
+}
+html.tn-mobile .modal-footer .btn {
+  border-radius: var(--tn-radius-pill);
+  flex: 1 1 auto;
+  font: 600 16px/20px var(--tn-font);
+  margin: 0;
+  min-height: var(--tn-tap);
+  padding: 0 var(--tn-space-4);
+}
+
+/* The config popup's full-screen modal (desktop opens it in an iframe; on
+   the phone it is a window.open, but a tablet UA can still land here). */
+html.tn-mobile .fullscreen-modal {
+  height: auto;
+  margin: calc(var(--tn-safe-top) + 16px) var(--tn-space-2) var(--tn-space-2);
+  width: auto;
+}
+html.tn-mobile .fullscreen-modal .modal-content {
+  height: calc(100vh - var(--tn-safe-top) - 32px);
+  overflow: hidden;
+}
+html.tn-mobile .fullscreen-modal iframe {
+  border: 0;
+}

@@ -58,6 +58,27 @@ const Bar = styled.div`
     outline: 2px solid #fff;
     outline-offset: 2px;
   }
+
+  /* The phone: a tinted strip on the tokens, its button a 44px pill. */
+  .tn-mobile & {
+    align-items: center;
+    background: var(--tn-accent-soft);
+    box-shadow: inset 0 -1px 0 var(--tn-border);
+    color: var(--tn-text);
+    font: var(--tn-type-sm);
+    padding: var(--tn-space-3) var(--tn-space-4);
+  }
+  .tn-mobile & button {
+    background: var(--tn-accent);
+    border-radius: var(--tn-radius-pill);
+    color: var(--tn-accent-ink);
+    font: 600 14px/18px var(--tn-font);
+    min-height: var(--tn-tap);
+    padding: 0 var(--tn-space-4);
+  }
+  .tn-mobile & button:focus-visible {
+    outline-color: var(--tn-accent);
+  }
 `
 
 const DiagnosticsNotice = (): JSX.Element | null => {

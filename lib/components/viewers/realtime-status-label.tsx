@@ -24,16 +24,55 @@ const Container = styled.div<{ withBackground?: boolean }>`
     props.withBackground
       ? `background-color: ${props.color};`
       : `color: ${props.color};`}
+
+  /* Phone layout (mobile overhaul): the status colours from the tokens, so
+     they read in dark mode. */
+  .tn-mobile &[data-status='late'] {
+    ${(props) =>
+      props.withBackground
+        ? 'background-color: var(--tn-danger); color: #fff;'
+        : 'color: var(--tn-danger);'}
+  }
+  .tn-mobile &[data-status='early'] {
+    ${(props) =>
+      props.withBackground
+        ? 'background-color: var(--tn-accent); color: var(--tn-accent-ink);'
+        : 'color: var(--tn-accent);'}
+  }
+  .tn-mobile &[data-status='onTime'] {
+    ${(props) =>
+      props.withBackground
+        ? 'background-color: var(--tn-live); color: #fff;'
+        : 'color: var(--tn-live);'}
+  }
 `
 
 const TimeStruck = styled.div`
   text-decoration: line-through;
   opacity: 0.5;
+
+  .tn-mobile & {
+    color: var(--tn-text-3);
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 16px;
+    opacity: 1;
+  }
 `
 
 const TimeBlock = styled.div`
   line-height: 1em;
   margin-bottom: 4px;
+
+  /* Phone layout: the live time and its delay only — the struck schedule
+     time is read out by the invisible "originally" label instead. */
+  .tn-mobile & {
+    line-height: inherit;
+    margin: 0;
+  }
+  .tn-mobile & ${TimeStruck} {
+    display: none;
+  }
 `
 
 const STATUS = {
@@ -121,6 +160,8 @@ const RealtimeStatusLabel = ({
     <Container
       className={className}
       color={color}
+      // @ts-ignore getTripStatus is not typed yet
+      data-status={STATUS[status].label}
       withBackground={withBackground}
     >
       <div className={isRealtime ? 'itin-time-realtime' : ''}>
