@@ -413,10 +413,11 @@ function samePlace(a?: PlaceLike | null, b?: PlaceLike | null): boolean {
  * The routes of the most recent search between these two places — what the
  * route sheet offers on top as "In your last results".
  *
- * Read from the search history rather than the active search: on the phone the
- * results are cleared (CLEAR_ACTIVE_SEARCH, showMobileSearchScreen) before
- * Settings can be opened, so the active search is empty exactly when the rider
- * is choosing routes. Searches for any other pair of places are ignored — the
+ * Read from the search history rather than the active search: the active
+ * search can be empty, or another pair's, when the rider is choosing routes
+ * (a changed place clears it, formChanged). The results screen's Edit no
+ * longer clears it (backlog 70.1); the history covers both cases. Searches
+ * for any other pair of places are ignored — the
  * routes of yesterday's trip to work are no help on the way to the dentist.
  */
 export function lastResultsRouteIds(

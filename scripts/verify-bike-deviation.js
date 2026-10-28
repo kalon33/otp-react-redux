@@ -39,6 +39,11 @@ const TO = { lat: 44.9346, lon: -93.2624, name: 'Test destination' }
 const TO2 = { lat: 44.9778, lon: -93.2698, name: 'Phase 2 destination' }
 
 const TICKS = 12
+// Phase 2: a held bus leaving sooner than this after the rider leaves the line
+// may be out of reach from the off-route point (a ~3.5 min detour measured on
+// 2026-10-26), so only "never earlier" is asserted there. At or beyond it the
+// re-plan must keep the boarding and every downstream leg.
+const HELD_RUN_REACH_MS = 10 * 60 * 1000
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -586,6 +591,55 @@ async function main() {
       )
   )
 
+  // Phase 2's event trail (backlog 41.4), printed whatever the verdict: every
+  // boarding change with the action that caused it. The plan can legitimately
+  // move twice in this phase — the auto-anchor re-target (23.3) onto the
+  // soonest run the rider can catch, and the 46.1 move when the deviation puts
+  // that run out of reach — and a red row that cannot say which one moved it
+  // sent eight nights of triage after the wrong mechanism. Action payloads are
+  // read off redux-logger's "action" line (the dev server :9967 runs with
+  // NODE_ENV=development), which this also keeps out of the browser console.
+  // Without the logger only the swaps are recorded.
+  await page.evaluate(() => {
+    window.__p2log = []
+    const clock = (ms) =>
+      new Date(Number(ms)).toLocaleTimeString('en-US', {
+        hour12: false,
+        timeZone: 'America/Chicago'
+      })
+    window.__boardOf = (it) => {
+      const b = (it?.legs || []).find((l) => l.transitLeg)
+      return b ? `${b.from?.stop?.gtfsId} @ ${clock(b.startTime)}` : 'none'
+    }
+    let lastItin = window.store.getState().otp.goMode.activeItinerary
+    window.store.subscribe(() => {
+      const it = window.store.getState().otp.goMode.activeItinerary
+      if (it === lastItin) return
+      window.__p2log.push({
+        p: `${window.__boardOf(lastItin)} -> ${window.__boardOf(it)}`,
+        t: Date.now(),
+        type: 'boarding'
+      })
+      lastItin = it
+    })
+    const TRAIL =
+      /^(PLAN_RETARGET|SET_DEPARTURE_OVERRIDE|AUTO_REPLAN|HELD_RUN_VERDICT|HELD_RUN_LATER_STOP)$/
+    const orig = console.log.bind(console)
+    console.log = (...args) => {
+      if (typeof args[0] !== 'string' || !args[0].includes('action    ')) {
+        return orig(...args)
+      }
+      const a = args[args.length - 1]
+      if (a && TRAIL.test(a.type)) {
+        let p = ''
+        try {
+          p = JSON.stringify(a.payload).slice(0, 400)
+        } catch {}
+        window.__p2log.push({ p, t: Date.now(), type: a.type })
+      }
+    }
+  })
+
   await page.evaluate(async (at) => {
     // eslint-disable-next-line import/no-absolute-path
     const goMode = await import('/lib/actions/go-mode.js')
@@ -664,6 +718,36 @@ async function main() {
   // replan on its first ROUTE_DEVIATION rather than the 120s dedup retry.
   await sleep(61000)
 
+  // The plan the rider holds when they go off route — NOT the one this phase
+  // picked. 41.4 (measured 2026-10-26, four hand runs): ~20 s into the trip
+  // the auto-anchor re-targets the plan onto the soonest same-route run the
+  // rider can still catch (23.3, `retargetPlanToDeparture`; PLAN_RETARGET
+  // verdict "applied"), and the itinerary above — the SHORTEST one, which is
+  // usually a later run — is rarely that run. 4:23 PM -> 3:51 PM on three of
+  // the runs, 05:55 -> 05:38 on the nightlies that went red 8 of 9 nights:
+  // designed behaviour, measured against a boarding the rider no longer
+  // held. The deviation contract is about what the re-plan does to THIS plan.
+  const held2 = await page.evaluate(() => {
+    const g = window.store.getState().otp.goMode
+    window.__held2 = g.activeItinerary
+    const legs = g.activeItinerary?.legs || []
+    const b = legs.findIndex((l) => l.transitLeg)
+    return {
+      boardStartTime: b >= 0 ? Number(legs[b].startTime) : null,
+      boardStopId: b >= 0 ? legs[b].from?.stop?.gtfsId || null : null,
+      downstream: b >= 0 ? legs.slice(b).map(window.__legSig) : [],
+      label: window.__boardOf(g.activeItinerary)
+    }
+  })
+  const offRouteAtMs = Date.now()
+  console.log(
+    `[phase2 held] boarding ${held2.label} when the rider goes off route` +
+      (held2.boardStartTime !== chosen2.boardStartTime ||
+      held2.boardStopId !== chosen2.boardStopId
+        ? ' (re-targeted from the picked itinerary — see the trail)'
+        : '')
+  )
+
   await page.setGeolocation({
     accuracy: 10,
     latitude: chosen2.offAt.lat,
@@ -679,11 +763,13 @@ async function main() {
 
   // The scoped replan lands as a whole-itinerary swap (new object) whose
   // suffix must be byte-identical — wait for the swap, then check the suffix.
+  // Against the HELD plan: after a re-target the picked one is already gone,
+  // and waiting on it returned before the deviation's re-plan had landed.
   await page
     .waitForFunction(
       () => {
         const g = window.store.getState().otp.goMode
-        return g.isActive && g.activeItinerary !== window.__itin2
+        return g.isActive && g.activeItinerary !== window.__held2
       },
       { polling: 500, timeout: 20000 }
     )
@@ -705,9 +791,18 @@ async function main() {
           : [],
       mobileScreen: window.store.getState().otp.ui?.mobileScreen,
       originLat: legs[0]?.from?.lat,
-      swapped: g.activeItinerary !== window.__itin2
+      swapped: g.activeItinerary !== window.__held2
     }
   })
+
+  const p2log = await page.evaluate(() => window.__p2log)
+  for (const e of p2log) {
+    const at = new Date(e.t).toLocaleTimeString('en-US', {
+      hour12: false,
+      timeZone: 'America/Chicago'
+    })
+    console.log(`[phase2 trail] ${at} ${e.type} ${e.p}`)
+  }
 
   await browser.close()
 
@@ -734,6 +829,56 @@ async function main() {
       `FAIL: phase 2 changed the screen ${after.mobileScreen} -> ${after2.mobileScreen}`
     )
   }
+  const fmt = (stop, ms) =>
+    `${stop} @ ${new Date(ms).toLocaleTimeString('en-US', {
+      hour12: false,
+      timeZone: 'America/Chicago'
+    })}`
+  const boardingMoved =
+    after2.boardStopId !== held2.boardStopId ||
+    after2.boardStartTime !== held2.boardStartTime
+  // Near-departure: not this contract's case. The anchor holds a run with as
+  // little as a few seconds to spare (13.8 s on the 2026-10-26 15:35 hand
+  // run), and 0.005° off the line is a ~3.5 min detour, so from the off-route
+  // point the held bus may be out of reach. Measured outcomes there, all on
+  // 2026-10-26 hand runs: 46.1 moved the rider LATER (scoped re-plan refused
+  // "access-misses-board", then quiet-replan-full with heldBoardMissed,
+  // 3:36:26 PM -> a later stop at 3:39:24 PM); or no swap at all within 20 s
+  // (scoped refused "access-misses-board" while HELD_RUN_VERDICT said the
+  // rider still makes the bus, "bus-upstream"). Either way the one thing
+  // still asserted is the shape this row was opened for: the boarding never
+  // moves EARLIER. A near-departure re-plan that DID keep the boarding falls
+  // through to the full contract below. Weekday nightlies go off route ~05:05
+  // holding the 05:38 (~32 min out): strict branch. The Sunday shape (10-18,
+  // 10-25: a different stop at ~05:10, minutes after going off route) was not
+  // measurable on a weekday afternoon — the trail above will name it.
+  const heldSlackMs = held2.boardStartTime - offRouteAtMs
+  if (
+    !(heldSlackMs >= HELD_RUN_REACH_MS) &&
+    (boardingMoved || !after2.swapped)
+  ) {
+    if (boardingMoved && after2.boardStartTime < held2.boardStartTime) {
+      throw new Error(
+        'FAIL: phase 2 moved the boarding EARLIER — ' +
+          `${fmt(held2.boardStopId, held2.boardStartTime)} -> ` +
+          `${fmt(after2.boardStopId, after2.boardStartTime)}`
+      )
+    }
+    const outcome = boardingMoved
+      ? `boarding moved later ${fmt(
+          held2.boardStopId,
+          held2.boardStartTime
+        )} -> ${fmt(after2.boardStopId, after2.boardStartTime)}`
+      : 'no re-plan landed within 20 s'
+    console.log(
+      '\nPASS phase 2 (near-departure): the held bus left ' +
+        `${Math.round(heldSlackMs / 1000)} s after the rider went off route ` +
+        `(< ${HELD_RUN_REACH_MS / 60000} min), so the access-only contract ` +
+        `was not exercised; ${outcome}. Never earlier, no MISSED_BUS during ` +
+        'deviation, no search machinery, still on GO_MODE.'
+    )
+    return
+  }
   if (!after2.swapped) {
     throw new Error(
       'FAIL: phase 2 itinerary was not quietly re-planned from the rider position'
@@ -744,20 +889,17 @@ async function main() {
       'FAIL: phase 2 replanned itinerary does not start at the rider position'
     )
   }
-  // The complaint-1 contract: the replan touched ONLY the access chain.
-  if (
-    after2.boardStopId !== chosen2.boardStopId ||
-    after2.boardStartTime !== chosen2.boardStartTime
-  ) {
+  // The complaint-1 contract: the replan touched ONLY the access chain —
+  // measured against the held plan (see held2 above).
+  if (boardingMoved) {
     throw new Error(
-      `FAIL: phase 2 moved the boarding — ${chosen2.boardStopId} @ ` +
-        `${chosen2.boardStartTime} -> ${after2.boardStopId} @ ` +
-        `${after2.boardStartTime}`
+      'FAIL: phase 2 moved the boarding — ' +
+        `${fmt(held2.boardStopId, held2.boardStartTime)} -> ` +
+        `${fmt(after2.boardStopId, after2.boardStartTime)} ` +
+        `(held bus was ${Math.round(heldSlackMs / 60000)} min away)`
     )
   }
-  if (
-    JSON.stringify(after2.downstream) !== JSON.stringify(chosen2.downstream)
-  ) {
+  if (JSON.stringify(after2.downstream) !== JSON.stringify(held2.downstream)) {
     throw new Error(
       'FAIL: phase 2 changed a downstream leg — the transit suffix must be untouched'
     )

@@ -28,7 +28,7 @@ import React, {
   useMemo,
   useState
 } from 'react'
-import styled from 'styled-components'
+import styled, { css } from 'styled-components'
 
 import * as apiActions from '../../actions/api'
 import * as formActions from '../../actions/form'
@@ -123,6 +123,21 @@ const DependentSelector = withSuspense(
   lazy(() => import('../user/mobility-profile/dependent-selector'))
 )
 
+/**
+ * Phone (mobile overhaul, 2026-10-26): each section of the panel is a surface
+ * card on the --tn-bg ground, Apple-Maps-preferences style. Desktop keeps the
+ * plain column.
+ */
+const sectionCardCss = css`
+  .tn-mobile & {
+    background-color: var(--tn-surface);
+    border-radius: var(--tn-radius);
+    box-shadow: var(--tn-shadow);
+    margin: 0 0 var(--tn-space-3);
+    padding: var(--tn-space-4);
+  }
+`
+
 const PanelOverlay = styled.div`
   height: 100%;
   left: 0;
@@ -136,6 +151,100 @@ const PanelOverlay = styled.div`
   @media (max-width: 768px) {
     padding: 1em;
   }
+
+  .tn-mobile & {
+    background-color: var(--tn-bg);
+    color: var(--tn-text);
+    padding: var(--tn-space-1) var(--tn-space-4)
+      calc(var(--tn-space-5) + var(--tn-safe-bottom));
+  }
+  .tn-mobile & > ${LeverContainer}, .tn-mobile & > .arrive-on-time-container {
+    background-color: var(--tn-surface);
+    border-radius: var(--tn-radius);
+    box-shadow: var(--tn-shadow);
+    margin: 0 0 var(--tn-space-3);
+    padding: var(--tn-space-4);
+  }
+  .tn-mobile & > .arrive-on-time-container h2 {
+    font: var(--tn-type-lg);
+    margin: 0 0 var(--tn-space-2);
+  }
+  .tn-mobile & > .arrive-on-time-container p {
+    color: var(--tn-text-2);
+    font: var(--tn-type-sm);
+  }
+
+  /* trip-form's per-mode sub-settings (Transit ✓ / Bike ✓ / Drive): one
+     grouped card of rows, a chosen mode tinted accent-soft instead of the
+     solid accent bar, the sub-mode checkboxes thumb-sized. */
+  .tn-mobile & fieldset:has(> .advanced-submode-container) {
+    background-color: var(--tn-surface);
+    border-radius: var(--tn-radius);
+    box-shadow: var(--tn-shadow);
+    margin: 0 0 var(--tn-space-3);
+    overflow: hidden;
+  }
+  .tn-mobile & .advanced-submode-container + .advanced-submode-container {
+    border-top: 1px solid var(--tn-border);
+  }
+  .tn-mobile & .advanced-submode-mode-button > label {
+    background-color: var(--tn-surface);
+    border: 0;
+    border-radius: 0 !important;
+    color: var(--tn-text);
+    font: var(--tn-type-lg);
+    height: var(--tn-row-h);
+    margin: 0;
+  }
+  .tn-mobile & .advanced-submode-mode-button > label svg {
+    fill: var(--tn-text-2);
+    height: 22px;
+    width: 22px;
+  }
+  .tn-mobile & .advanced-submode-mode-button > input:checked + label {
+    background-color: var(--tn-accent-soft);
+    color: var(--tn-accent);
+  }
+  .tn-mobile & .advanced-submode-mode-button > input:checked + label svg {
+    fill: var(--tn-accent);
+  }
+  .tn-mobile & .advanced-submode-mode-button > input:focus + label {
+    outline: 2px solid var(--tn-accent);
+    outline-offset: -2px;
+  }
+  .tn-mobile & .subsettings-container {
+    border: 0;
+    border-top: 1px solid var(--tn-border);
+    padding: var(--tn-space-1) var(--tn-space-4);
+  }
+  .tn-mobile & .subsettings-container div {
+    align-items: center;
+    display: flex;
+    gap: var(--tn-space-2);
+    min-height: var(--tn-tap);
+    padding: 0;
+  }
+  .tn-mobile & .subsettings-container label {
+    color: var(--tn-text);
+    flex: 1;
+    font: var(--tn-type-body);
+    margin: 0;
+  }
+  .tn-mobile & .subsettings-container input[type='checkbox'] {
+    accent-color: var(--tn-accent);
+    flex: none;
+    height: 22px;
+    margin: 0;
+    width: 22px;
+  }
+  .tn-mobile & > ${LeverContainer} > label {
+    display: block;
+    font: var(--tn-type-body);
+    margin-bottom: var(--tn-space-1);
+  }
+  .tn-mobile & > ${GlobalSettingsContainer} {
+    margin-bottom: var(--tn-space-3);
+  }
 `
 
 const HeaderContainer = styled.div`
@@ -143,6 +252,26 @@ const HeaderContainer = styled.div`
   display: flex;
   gap: 10px;
   height: 30px;
+
+  .tn-mobile & {
+    gap: var(--tn-space-1);
+    height: auto;
+    margin: 0 0 var(--tn-space-2) calc(-1 * var(--tn-space-3));
+    min-height: 52px;
+  }
+  .tn-mobile & > button {
+    align-items: center;
+    border-radius: var(--tn-radius-pill);
+    color: var(--tn-text);
+    display: inline-flex;
+    justify-content: center;
+    min-height: var(--tn-tap);
+    min-width: var(--tn-tap);
+  }
+  .tn-mobile & .header-text {
+    font: var(--tn-type-title);
+    margin: 0;
+  }
 `
 
 const InvisibleSubheader = styled.h2`
@@ -165,10 +294,69 @@ const ReturnToTripPlanButton = styled.button`
   svg {
     margin-bottom: 7px;
   }
+
+  /* Phone: the primary pill. */
+  .tn-mobile & {
+    background-color: var(--tn-accent);
+    border-radius: var(--tn-radius-pill);
+    color: var(--tn-accent-ink);
+    font: 600 16px/20px var(--tn-font);
+    height: var(--tn-control-h);
+    margin-top: var(--tn-space-4);
+  }
+  .tn-mobile & svg {
+    margin: 0;
+  }
 `
 
 const DtSelectorContainer = styled.div`
   margin: 2em 0;
+  ${sectionCardCss}
+
+  /* Phone: Leave now ▾ on its own line, then time | date as two 48px
+     surface-2 fields (the search form's date-time card). */
+  .tn-mobile & .date-time-selector {
+    background: transparent;
+    flex-wrap: wrap;
+    gap: var(--tn-space-2);
+    height: auto;
+    justify-content: flex-start;
+  }
+  .tn-mobile & .date-time-selector > div {
+    flex: 1 1 0;
+    max-width: none;
+    min-width: 0;
+  }
+  .tn-mobile & .date-time-selector > div:first-child {
+    flex-basis: 100%;
+  }
+  .tn-mobile & .date-time-selector input {
+    background-color: var(--tn-surface-2);
+    border-radius: var(--tn-radius-sm);
+    color: var(--tn-text);
+    font: 500 16px/20px var(--tn-font);
+    font-variant-numeric: var(--tn-tabular);
+    height: var(--tn-control-h);
+    padding: 0 var(--tn-space-3);
+  }
+  .tn-mobile & #date-time-depart-arrive-label {
+    align-items: center;
+    background-color: var(--tn-surface-2) !important;
+    border-radius: var(--tn-radius-pill);
+    color: var(--tn-text) !important;
+    display: inline-flex;
+    font: 500 15px/20px var(--tn-font);
+    gap: 6px;
+    min-height: var(--tn-tap);
+    padding: 0 var(--tn-space-4) !important;
+    white-space: nowrap;
+  }
+  .tn-mobile & #date-time-depart-arrive-label + div button {
+    min-height: var(--tn-tap);
+    padding: 0 var(--tn-space-4);
+    text-align: start;
+    width: 100%;
+  }
 
   .date-time-modal {
     padding: 0;
@@ -200,10 +388,12 @@ const MobilityProfileDropdown = styled(DropdownSelector)`
 
 const RoutingProfileContainer = styled.div`
   margin: 2em 0;
+  ${sectionCardCss}
 `
 
 const NlPreferencesContainer = styled.div`
   margin: 2em 0;
+  ${sectionCardCss}
 `
 
 const NlTextarea = styled.textarea`
@@ -214,6 +404,15 @@ const NlTextarea = styled.textarea`
   padding: 8px;
   resize: vertical;
   width: 100%;
+
+  .tn-mobile & {
+    background-color: var(--tn-surface-2);
+    border: 0;
+    border-radius: var(--tn-radius-sm);
+    color: var(--tn-text);
+    font: var(--tn-type-body);
+    padding: var(--tn-space-3);
+  }
 `
 const NlApplyButton = styled.button`
   background-color: var(--main-base-color, ${blue[900]});
@@ -253,10 +452,12 @@ const NlStatus = styled.div`
 
 const SearchOptionsContainer = styled.div`
   margin: 2em 0;
+  ${sectionCardCss}
 `
 
 const RouteLockContainer = styled.div`
   margin: 2em 0;
+  ${sectionCardCss}
 `
 
 // One toggle (or field) and the sentence that explains it, as one block.
@@ -265,6 +466,18 @@ const RouteLockContainer = styled.div`
 // control instead of under its own.
 const SearchOptionBlock = styled.div`
   margin-bottom: 2em;
+
+  .tn-mobile & {
+    margin-bottom: var(--tn-space-4);
+  }
+  .tn-mobile &:last-child {
+    margin-bottom: 0;
+  }
+  .tn-mobile & > label {
+    font: var(--tn-type-body);
+    margin-bottom: var(--tn-space-1);
+    padding-left: 0;
+  }
 
   > div {
     margin-bottom: 6px;
@@ -279,6 +492,12 @@ const StopSuggestions = styled.ul`
   max-height: 180px;
   overflow-y: auto;
   padding: 0;
+
+  .tn-mobile & {
+    background-color: var(--tn-surface-2);
+    border: 0;
+    border-radius: var(--tn-radius-sm);
+  }
 `
 
 const StopSuggestion = styled.button`
@@ -293,6 +512,16 @@ const StopSuggestion = styled.button`
 
   &:hover {
     background: #f1f1f1;
+  }
+
+  .tn-mobile & {
+    color: var(--tn-text);
+    min-height: var(--tn-tap);
+    padding: 0 var(--tn-space-3);
+  }
+  .tn-mobile &:hover,
+  .tn-mobile &:active {
+    background: var(--tn-border);
   }
 `
 

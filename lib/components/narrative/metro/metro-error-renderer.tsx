@@ -3,7 +3,8 @@ import { ExclamationCircle } from '@styled-icons/fa-solid/ExclamationCircle'
 import { FormattedMessage, useIntl } from 'react-intl'
 import { InfoCircle } from '@styled-icons/fa-solid/InfoCircle'
 import { isTransitLeg } from '@opentripplanner/core-utils/lib/itinerary'
-import React from 'react'
+import { Times } from '@styled-icons/fa-solid/Times'
+import React, { useState } from 'react'
 import styled from 'styled-components'
 
 import { AppReduxState } from '../../../util/state-types'
@@ -153,6 +154,160 @@ const Container = styled.li`
   }
 `
 
+/**
+ * The results list's notices (mobile overhaul, 2026-10-26). `Container` above
+ * stays as it was for the other IconMessageContainer callers (nearby view).
+ *
+ * - advisory: one line, accent tint — a fact about the trip, not a failure.
+ * - compact: a failure while options ARE listed (one combination's search
+ *   failed): one warn-tinted line, header then body, ellipsized until
+ *   tapped, with a 44 px dismiss. It used to be a 230 px grey block above
+ *   the options.
+ */
+const Notice = styled.li`
+  align-items: center;
+  background-color: var(--tn-accent-soft);
+  border-radius: var(--tn-radius-sm);
+  color: var(--tn-text);
+  display: flex;
+  font: var(--tn-type-sm);
+  gap: var(--tn-space-2);
+  list-style-type: none;
+  margin: var(--tn-space-2) var(--tn-space-3) 0;
+  min-height: 40px;
+  padding: var(--tn-space-2) var(--tn-space-3);
+
+  > span:first-child {
+    color: var(--tn-accent);
+    display: inline-flex;
+    flex: none;
+  }
+  svg {
+    height: 16px;
+    margin: 0;
+    width: 16px;
+  }
+  p {
+    flex: 1;
+    margin: 0;
+    min-width: 0;
+  }
+
+  &.compact {
+    background-color: var(--tn-warn-soft);
+    padding-right: 0;
+  }
+  &.compact > span:first-child {
+    color: var(--tn-warn);
+  }
+  &.compact p {
+    cursor: pointer;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  &.compact p.open {
+    cursor: auto;
+    white-space: normal;
+  }
+  &.compact strong {
+    font-weight: 600;
+  }
+`
+
+const DismissButton = styled.button`
+  align-items: center;
+  align-self: stretch;
+  background: transparent;
+  border: 0;
+  border-radius: var(--tn-radius-sm);
+  color: var(--tn-text-2);
+  display: inline-flex;
+  flex: none;
+  justify-content: center;
+  margin: -8px 0;
+  min-height: var(--tn-tap);
+  width: var(--tn-tap);
+
+  svg {
+    height: 14px;
+    width: 14px;
+  }
+  &:active {
+    background-color: var(--tn-border);
+  }
+`
+
+/** Nothing to show: the full-size card, on the tokens. */
+const ErrorCard = styled.li`
+  background-color: var(--tn-surface);
+  border-radius: var(--tn-radius);
+  box-shadow: var(--tn-shadow);
+  color: var(--tn-text);
+  column-gap: var(--tn-space-3);
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  list-style-type: none;
+  margin: var(--tn-space-3);
+  padding: var(--tn-space-4);
+
+  > span {
+    color: var(--tn-danger);
+    grid-row: 1 / span 2;
+  }
+  svg {
+    height: 24px;
+    margin: 0;
+    width: 24px;
+  }
+  h2 {
+    font: var(--tn-type-lg);
+    margin: 1px 0 4px;
+  }
+  p {
+    color: var(--tn-text-2);
+    font: var(--tn-type-sm);
+    grid-column: 2;
+    margin: 0;
+  }
+`
+
+/** A failure that sits above listed options: see Notice. */
+const CompactError = ({
+  body,
+  header,
+  onDismiss
+}: {
+  body: React.ReactNode
+  header: React.ReactNode
+  onDismiss: () => void
+}): JSX.Element => {
+  const intl = useIntl()
+  const [open, setOpen] = useState(false)
+  return (
+    <Notice className="compact results-error-notice" role="status">
+      <Icon Icon={ExclamationCircle} size="lg" />
+      <p
+        className={open ? 'open' : undefined}
+        onClick={() => setOpen(true)}
+        // eslint-disable-next-line @typescript-eslint/no-empty-function
+        onKeyDown={() => {}}
+        role="presentation"
+      >
+        <strong>{header}</strong> {body}
+      </p>
+      <DismissButton
+        aria-label={intl.formatMessage({ id: 'common.forms.close' })}
+        className="results-error-dismiss"
+        onClick={onDismiss}
+        type="button"
+      >
+        <Times aria-hidden />
+      </DismissButton>
+    </Notice>
+  )
+}
+
 export const IconMessageContainer = ({
   body,
   header,
@@ -184,9 +339,12 @@ const ErrorRenderer = ({
 }): JSX.Element => {
   const intl = useIntl()
   const minutesFaster = streetFasterThanTransitByMinutes(itineraries)
+  // Failures the rider closed. The list is keyed on the search
+  // (narrative-itineraries.js), so a new search brings them back.
+  const [dismissed, setDismissed] = useState<string[]>([])
 
   return (
-    <List>
+    <List className="results-errors">
       {Object.keys(errors)
         .filter((error: string) => {
           // The search window is hardcoded in otp-rr and can't be changed by the user.
@@ -197,6 +355,8 @@ const ErrorRenderer = ({
 
           // Don't show errors that have been muted in the config
           if (mutedErrors?.includes(error)) return false
+
+          if (dismissed.includes(error)) return false
 
           // "not near any transit stops" is a claim about the address, and the
           // fan-out raises it from whichever single combination could not
@@ -222,10 +382,10 @@ const ErrorRenderer = ({
           // routes at this hour).
           if (error in ADVISORY_LINES) {
             return (
-              <Container className="advisory" key={error}>
+              <Notice className="advisory" key={error}>
                 <Icon Icon={InfoCircle} size="lg" />
                 <p>{ADVISORY_LINES[error]}</p>
-              </Container>
+              </Notice>
             )
           }
 
@@ -235,7 +395,7 @@ const ErrorRenderer = ({
           // nine buses behind it.
           if (ADVISORY_ERRORS.includes(error) && itineraries.length > 0) {
             return (
-              <Container className="advisory" key={error}>
+              <Notice className="advisory" key={error}>
                 <Icon Icon={InfoCircle} size="lg" />
                 <p>
                   {minutesFaster === null ? (
@@ -247,7 +407,7 @@ const ErrorRenderer = ({
                     />
                   )}
                 </p>
-              </Container>
+              </Notice>
             )
           }
 
@@ -262,35 +422,50 @@ const ErrorRenderer = ({
               })
             )
 
-          return (
-            <IconMessageContainer
-              body={
-                <FormattedMessage
-                  id={`components.OTP2ErrorRenderer.${error}.body`}
-                  values={{
-                    inputFields: intl.formatList(localizedInputFieldList),
-                    inputFieldsCount: localizedInputFieldList.length,
-                    link: (contents: JSX.Element) => (
-                      <LinkOpensNewWindow
-                        contents={contents}
-                        inline
-                        style={{ color: 'inherit' }}
-                        url={intl.formatMessage({
-                          id: `components.OTP2ErrorRenderer.${error}.link`
-                        })}
-                      />
-                    )
-                  }}
-                />
-              }
-              header={
-                <FormattedMessage
-                  id={`components.OTP2ErrorRenderer.${error}.header`}
-                />
-              }
-              icon={ExclamationCircle}
-              key={error}
+          const body = (
+            <FormattedMessage
+              id={`components.OTP2ErrorRenderer.${error}.body`}
+              values={{
+                inputFields: intl.formatList(localizedInputFieldList),
+                inputFieldsCount: localizedInputFieldList.length,
+                link: (contents: JSX.Element) => (
+                  <LinkOpensNewWindow
+                    contents={contents}
+                    inline
+                    style={{ color: 'inherit' }}
+                    url={intl.formatMessage({
+                      id: `components.OTP2ErrorRenderer.${error}.link`
+                    })}
+                  />
+                )
+              }}
             />
+          )
+          const header = (
+            <FormattedMessage
+              id={`components.OTP2ErrorRenderer.${error}.header`}
+            />
+          )
+
+          // Options are listed: the failure is one line above them, and the
+          // rider can close it.
+          if (itineraries.length > 0) {
+            return (
+              <CompactError
+                body={body}
+                header={header}
+                key={error}
+                onDismiss={() => setDismissed([...dismissed, error])}
+              />
+            )
+          }
+
+          return (
+            <ErrorCard className="results-error-card" key={error}>
+              <Icon Icon={ExclamationCircle} size="lg" />
+              <h2>{header}</h2>
+              <p>{body}</p>
+            </ErrorCard>
           )
         })}
     </List>

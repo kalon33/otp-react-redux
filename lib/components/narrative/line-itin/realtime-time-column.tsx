@@ -25,12 +25,35 @@ const StyledStatusLabel = styled(RealtimeStatusLabel)`
   ${DelayText} {
     display: block;
   }
+
+  /* Phone layout: the time 14px tabular, the delay 12px under it. */
+  .tn-mobile & {
+    font-variant-numeric: var(--tn-tabular);
+  }
+  .tn-mobile & .realtime-icon {
+    font-weight: 600;
+  }
+  .tn-mobile & ${MainContent} {
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 16px;
+    white-space: nowrap;
+  }
+  .tn-mobile & ${DelayText} {
+    display: inline;
+  }
 `
 /** The "leave 11:19 AM" line under a rider's stop's arrival time. */
 const LeaveLine = styled.div`
   color: #666;
   font-size: 80%;
   line-height: 1.1em;
+
+  .tn-mobile & {
+    color: var(--tn-text-2);
+    font-size: 12px;
+    line-height: 16px;
+  }
 `
 
 /**
@@ -57,6 +80,12 @@ const MissLine = styled.div`
   color: ${RED_ON_WHITE};
   font-size: 80%;
   line-height: 1.1em;
+
+  .tn-mobile & {
+    color: var(--tn-danger);
+    font-size: 12px;
+    line-height: 16px;
+  }
 `
 
 /**

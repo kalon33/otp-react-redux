@@ -37,8 +37,8 @@ import type { AlightOption } from './alight-optimizer'
  * - leastBike: ≥ 1 km less biking and at most the allowance after the bar;
  *   or no more biking and ≥ 3 min earlier.
  * - simplest: fewer vehicle changes and at most the allowance after the bar;
- *   or the same changes and ≥ 3 min earlier — never more than
- *   SIMPLEST_MAX_ADDED_BIKE_M more biking than the bar.
+ *   or the same changes and ≥ 3 min earlier. No biking limit (the rider
+ *   chose that on 2026-10-26; see SIMPLEST_MAX_ADDED_BIKE_M).
  * - stayOnRoute: never a different route.
  */
 
@@ -63,13 +63,13 @@ export const AUTO_PRESETS: AutoPreset[] = [
 export const AUTO_LATER_ALLOWANCE_MS = 120000
 
 /**
- * Simplest's biking guard (cycle 36 Q3, default yes at 1 km pending the
- * rider's answer): a Simplest pick may bike at most this much MORE than the
- * bar. B1's sweep found the one hindsight-wrong Simplest switch without it:
- * h5he2i-0931 09:32:57 → route 4, one fewer change for +4.8 km of biking and
- * +16.5 min in hindsight. A "no" answer is `Infinity` here.
+ * Simplest's biking limit: how much MORE than the bar a Simplest pick may
+ * bike. The rider chose NO limit on 2026-10-26 (cycle 36 Q3 = "fewer changes
+ * wins, any biking"), so this is `Infinity`; B1's sweep had found
+ * h5he2i-0931 09:32:57 → route 4 (one fewer change, +4.8 km of biking). Set a
+ * number here to bring the guard back.
  */
-export const SIMPLEST_MAX_ADDED_BIKE_M = 1000
+export const SIMPLEST_MAX_ADDED_BIKE_M = Infinity
 
 /** Vehicle changes: transit legs − 1, a stay-seated interline not counted
  * (equals OTP's `transfers` on all 15,113 fixture itineraries). */

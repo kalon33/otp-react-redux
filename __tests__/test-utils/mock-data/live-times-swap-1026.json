@@ -1,0 +1,4300 @@
+{
+ "_source": "lib/util/go-mode/replay/fixtures/1026-1214.json (ride mvpik996-01erej, 2026-10-26); slimmed by hand for backlog 72.1",
+ "plan1": {
+  "duration": 2325,
+  "startTime": 1793036886000,
+  "endTime": 1793039211000,
+  "legs": [
+   {
+    "mode": "BICYCLE",
+    "transitLeg": false,
+    "trip": null,
+    "from": {
+     "lat": 44.9159852,
+     "lon": -93.2622324,
+     "name": "(Current Location)"
+    },
+    "to": {
+     "lat": 44.908921,
+     "lon": -93.267273,
+     "name": "Portland Ave & 52nd St E",
+     "stop": {
+      "gtfsId": "1:81120"
+     }
+    },
+    "startTime": 1793036886000,
+    "endTime": 1793037223000,
+    "legGeometry": {
+     "length": 65,
+     "points": "gtcqG~gfxP?R?HK?AV@T?^AfB?fB?R?P?fB?~A?F?ZJ?lIBL?N?jGB|@?L?L?v@BL?H?FBPFK^KHGLO`@Sp@M`@Gb@CJARAJ?j@?T@Z@R?X@N@X?N?P?D?B@NZ?|@?R?`A?pCCH?J?`D@J?^M\\ORK`A{@LKDL"
+    },
+    "realTime": false,
+    "headsign": null,
+    "duration": 337,
+    "distance": 1309.46,
+    "interlineWithPreviousLeg": false
+   },
+   {
+    "mode": "BUS",
+    "transitLeg": true,
+    "trip": {
+     "gtfsId": "1:1397642"
+    },
+    "tripId": "1:1397642",
+    "routeId": "1:924",
+    "route": {
+     "gtfsId": "1:924",
+     "longName": "METRO D Line",
+     "shortName": null
+    },
+    "from": {
+     "lat": 44.908921,
+     "lon": -93.267273,
+     "name": "Portland Ave & 52nd St E",
+     "stop": {
+      "gtfsId": "1:81120"
+     }
+    },
+    "to": {
+     "lat": 44.871059,
+     "lon": -93.268161,
+     "name": "Portland & 73rd St Station",
+     "stop": {
+      "gtfsId": "1:444"
+     }
+    },
+    "startTime": 1793037223000,
+    "endTime": 1793037683000,
+    "legGeometry": {
+     "length": 139,
+     "points": "ihbqGjggxPLI??NITMRITITGVCTCTAfAIf@?`Bb@~An@lG??@pANH@XDF?L@FAL@\\@ZAF?LAXEJATETGRIRKLKLK\\Y\\YRMTKTITITGVETE|BSVCXCJAj@AXAJ@X@L?bAkCPa@DIDGBGDGbDcET]Ve@@GDK@CFU@EF[F[@I@SJeBhC@??N?T@dJFfJD@tF?tF?xF?vF^???N?tHB|C?zB@dA@J?J?dA?R?|JBhF@pNBz@An@@??P@?ATAF?D@B@BBHDHH@@BBBBD@B@F?B?DCBADERKJAFAH?d@@t@@`AEdC@tG@rA@jHBz@?zHB??D?J?V?hJDfJBtHD"
+    },
+    "realTime": true,
+    "headsign": "Chicago-Fremont / Mall of America",
+    "duration": 460,
+    "distance": 4783.41,
+    "interlineWithPreviousLeg": false
+   },
+   {
+    "mode": "BUS",
+    "transitLeg": true,
+    "trip": {
+     "gtfsId": "1:1381262"
+    },
+    "tripId": "1:1381262",
+    "routeId": "1:18",
+    "route": {
+     "gtfsId": "1:18",
+     "longName": null,
+     "shortName": "18"
+    },
+    "from": {
+     "lat": 44.871059,
+     "lon": -93.268161,
+     "name": "Portland & 73rd St Station",
+     "stop": {
+      "gtfsId": "1:444"
+     }
+    },
+    "to": {
+     "lat": 44.824653,
+     "lon": -93.288781,
+     "name": "Lyndale Ave S & 99th St W",
+     "stop": {
+      "gtfsId": "1:42099"
+     }
+    },
+    "startTime": 1793038009000,
+    "endTime": 1793038635000,
+    "legGeometry": {
+     "length": 167,
+     "points": "k{zpGllgxPH?^?bIBb@?dJ@dJBbH@??J?`@??h@?rE?`G?xA?lB?|B?nB?|H?zB?jC?nG?xB?dBV?fC???H?b@?jB@~A?Z@nA?nA@nC@|A?`@@`AA??J?fA?pH@??J?`@?bIB??J?X?|GB??J?R?h@?lA@rF@??J?Z?hI@??J?P?bIB??J?X?pA?bF@??J?R?rB?hF?Z?^???J?xB?|C@??L?V?hG?|A?`A@??L?lE?jA?p@???L?bG@??L?T?hJ???L?Z?r@?hG@????L?hL?D?^@??L?pA?|B???L?V?rC@Z?VH^@\\@b@?t@Bb@?t@?f@?p@?t@?b@???L?x@??pA?jB?p@?bB?nA?dA?rAA|C???F?J@~@AxC?V?lE?vB?jA?hA?v@???R?H?xD?n@@bC?bA?L?NZ?\\@V?Z?F?n@?|C@"
+    },
+    "realTime": true,
+    "headsign": "Nicollet Ave / 104-Humboldt",
+    "duration": 626,
+    "distance": 6753.35,
+    "interlineWithPreviousLeg": false
+   },
+   {
+    "mode": "BICYCLE",
+    "transitLeg": false,
+    "trip": null,
+    "from": {
+     "lat": 44.824653,
+     "lon": -93.288781,
+     "name": "Lyndale Ave S & 99th St W",
+     "stop": {
+      "gtfsId": "1:42099"
+     }
+    },
+    "to": {
+     "lat": 44.825297,
+     "lon": -93.290616,
+     "name": "I-35W & 98th Street Station Gate D",
+     "stop": {
+      "gtfsId": "1:51824"
+     }
+    },
+    "startTime": 1793038635000,
+    "endTime": 1793038719000,
+    "legGeometry": {
+     "length": 30,
+     "points": "ayqpG|mkxP?QD?XO?f@?fB?R?lA?J?|B?z@M?E?KDC@M@G?U?EAc@?M?U?i@BA??MNAFADGHO@I"
+    },
+    "realTime": false,
+    "headsign": null,
+    "duration": 84,
+    "distance": 338.76,
+    "interlineWithPreviousLeg": false
+   },
+   {
+    "mode": "BUS",
+    "transitLeg": true,
+    "trip": {
+     "gtfsId": "1:1134930"
+    },
+    "tripId": "1:1134930",
+    "routeId": "1:546",
+    "route": {
+     "gtfsId": "1:546",
+     "longName": null,
+     "shortName": "546"
+    },
+    "from": {
+     "lat": 44.825297,
+     "lon": -93.290616,
+     "name": "I-35W & 98th Street Station Gate D",
+     "stop": {
+      "gtfsId": "1:51824"
+     }
+    },
+    "to": {
+     "lat": 44.817201,
+     "lon": -93.310367,
+     "name": "Old Shakopee Rd & Queen Ave S",
+     "stop": {
+      "gtfsId": "1:3452"
+     }
+    },
+    "startTime": 1793038860000,
+    "endTime": 1793039160000,
+    "legGeometry": {
+     "length": 76,
+     "points": "{|qpG`ykxP?@PHpAANMf@??jAsC?mB?yA@[?@jB?d@?h@Ap@CxH?P?lD?????`NNb@?fA?????P?pC?`A?|C?|A?fB?????pC?tEA~C?????~B?zG?rGAfMt@???@?fB?bE?bAAhH?????hEA`E???@?vA?lB?z@?????Z?J?JAHAHAJEHGFGHGFKHOt@x@zEtFJJ^`@DD"
+    },
+    "realTime": false,
+    "headsign": "Valley West / Norm Village / Norm Coll",
+    "duration": 300,
+    "distance": 2818.62,
+    "interlineWithPreviousLeg": false
+   },
+   {
+    "mode": "BICYCLE",
+    "transitLeg": false,
+    "trip": null,
+    "from": {
+     "lat": 44.817201,
+     "lon": -93.310367,
+     "name": "Old Shakopee Rd & Queen Ave S",
+     "stop": {
+      "gtfsId": "1:3452"
+     }
+    },
+    "to": {
+     "lat": 44.816546,
+     "lon": -93.30986,
+     "name": "2345 Old Shakopee Road West, Bloomington, MN"
+    },
+    "startTime": 1793039160000,
+    "endTime": 1793039211000,
+    "legGeometry": {
+     "length": 11,
+     "points": "ojppGxtoxPCJBBFHHWOQJQFKXe@FOJa@"
+    },
+    "realTime": false,
+    "headsign": null,
+    "duration": 51,
+    "distance": 91.02,
+    "interlineWithPreviousLeg": false
+   }
+  ]
+ },
+ "swap": {
+  "tMs": 1793034840947,
+  "itinerary": {
+   "duration": 4370.057,
+   "startTime": 1793034840943,
+   "endTime": 1793039211000,
+   "legs": [
+    {
+     "mode": "BICYCLE",
+     "transitLeg": false,
+     "trip": null,
+     "from": {
+      "lat": 44.9159852,
+      "lon": -93.2622324,
+      "name": "(Current Location)"
+     },
+     "to": {
+      "lat": 44.908921,
+      "lon": -93.267273,
+      "name": "Portland Ave & 52nd St E",
+      "stop": {
+       "gtfsId": "1:81120"
+      }
+     },
+     "startTime": 1793034840943,
+     "endTime": 1793035177620.9968,
+     "legGeometry": {
+      "length": 65,
+      "points": "gtcqG~gfxP?R?HK?AV@T?^AfB?fB?R?P?fB?~A?F?ZJ?lIBL?N?jGB|@?L?L?v@BL?H?FBPFK^KHGLO`@Sp@M`@Gb@CJARAJ?j@?T@Z@R?X@N@X?N?P?D?B@NZ?|@?R?`A?pCCH?J?`D@J?^M\\ORK`A{@LKDL"
+     },
+     "realTime": false,
+     "headsign": null,
+     "duration": 336.67799682617186,
+     "distance": 1309.46,
+     "interlineWithPreviousLeg": false
+    },
+    {
+     "mode": "BUS",
+     "transitLeg": true,
+     "trip": {
+      "gtfsId": "1:1384516"
+     },
+     "tripId": "1:1384516",
+     "routeId": "1:924",
+     "route": {
+      "gtfsId": "1:924",
+      "longName": "METRO D Line",
+      "shortName": null
+     },
+     "from": {
+      "lat": 44.908921,
+      "lon": -93.267273,
+      "name": "Portland Ave & 52nd St E",
+      "stop": {
+       "gtfsId": "1:81120"
+      }
+     },
+     "to": {
+      "lat": 44.871059,
+      "lon": -93.268161,
+      "name": "Portland & 73rd St Station",
+      "stop": {
+       "gtfsId": "1:444"
+      }
+     },
+     "startTime": 1793035243000,
+     "endTime": 1793035703000,
+     "legGeometry": {
+      "length": 139,
+      "points": "ihbqGjggxPLI??NITMRITITGVCTCTAfAIf@?`Bb@~An@lG??@pANH@XDF?L@FAL@\\@ZAF?LAXEJATETGRIRKLKLK\\Y\\YRMTKTITITGVETE|BSVCXCJAj@AXAJ@X@L?bAkCPa@DIDGBGDGbDcET]Ve@@GDK@CFU@EF[F[@I@SJeBhC@??N?T@dJFfJD@tF?tF?xF?vF^???N?tHB|C?zB@dA@J?J?dA?R?|JBhF@pNBz@An@@??P@?ATAF?D@B@BBHDHH@@BBBBD@B@F?B?DCBADERKJAFAH?d@@t@@`AEdC@tG@rA@jHBz@?zHB??D?J?V?hJDfJBtHD"
+     },
+     "realTime": true,
+     "headsign": "Chicago-Fremont / Mall of America",
+     "duration": 460,
+     "distance": 4783.41,
+     "interlineWithPreviousLeg": false
+    },
+    {
+     "mode": "BUS",
+     "transitLeg": true,
+     "trip": {
+      "gtfsId": "1:1381301"
+     },
+     "tripId": "1:1381301",
+     "routeId": "1:18",
+     "route": {
+      "gtfsId": "1:18",
+      "longName": null,
+      "shortName": "18"
+     },
+     "from": {
+      "lat": 44.871059,
+      "lon": -93.268161,
+      "name": "Portland & 73rd St Station",
+      "stop": {
+       "gtfsId": "1:444"
+      }
+     },
+     "to": {
+      "lat": 44.824653,
+      "lon": -93.288781,
+      "name": "Lyndale Ave S & 99th St W",
+      "stop": {
+       "gtfsId": "1:42099"
+      }
+     },
+     "startTime": 1793036427000,
+     "endTime": 1793037053000,
+     "legGeometry": {
+      "length": 167,
+      "points": "k{zpGllgxPH?^?bIBb@?dJ@dJBbH@??J?`@??h@?rE?`G?xA?lB?|B?nB?|H?zB?jC?nG?xB?dBV?fC???H?b@?jB@~A?Z@nA?nA@nC@|A?`@@`AA??J?fA?pH@??J?`@?bIB??J?X?|GB??J?R?h@?lA@rF@??J?Z?hI@??J?P?bIB??J?X?pA?bF@??J?R?rB?hF?Z?^???J?xB?|C@??L?V?hG?|A?`A@??L?lE?jA?p@???L?bG@??L?T?hJ???L?Z?r@?hG@????L?hL?D?^@??L?pA?|B???L?V?rC@Z?VH^@\\@b@?t@Bb@?t@?f@?p@?t@?b@???L?x@??pA?jB?p@?bB?nA?dA?rAA|C???F?J@~@AxC?V?lE?vB?jA?hA?v@???R?H?xD?n@@bC?bA?L?NZ?\\@V?Z?F?n@?|C@"
+     },
+     "realTime": true,
+     "headsign": "Nicollet Ave / 104-Humboldt",
+     "duration": 626,
+     "distance": 6753.35,
+     "interlineWithPreviousLeg": false
+    },
+    {
+     "mode": "BICYCLE",
+     "transitLeg": false,
+     "trip": null,
+     "from": {
+      "lat": 44.824653,
+      "lon": -93.288781,
+      "name": "Lyndale Ave S & 99th St W",
+      "stop": {
+       "gtfsId": "1:42099"
+      }
+     },
+     "to": {
+      "lat": 44.825297,
+      "lon": -93.290616,
+      "name": "I-35W & 98th Street Station Gate D",
+      "stop": {
+       "gtfsId": "1:51824"
+      }
+     },
+     "startTime": 1793037053000,
+     "endTime": 1793037137000,
+     "legGeometry": {
+      "length": 30,
+      "points": "ayqpG|mkxP?QD?XO?f@?fB?R?lA?J?|B?z@M?E?KDC@M@G?U?EAc@?M?U?i@BA??MNAFADGHO@I"
+     },
+     "realTime": false,
+     "headsign": null,
+     "duration": 84,
+     "distance": 338.76,
+     "interlineWithPreviousLeg": false
+    },
+    {
+     "mode": "BUS",
+     "transitLeg": true,
+     "trip": {
+      "gtfsId": "1:1134930"
+     },
+     "tripId": "1:1134930",
+     "routeId": "1:546",
+     "route": {
+      "gtfsId": "1:546",
+      "longName": null,
+      "shortName": "546"
+     },
+     "from": {
+      "lat": 44.825297,
+      "lon": -93.290616,
+      "name": "I-35W & 98th Street Station Gate D",
+      "stop": {
+       "gtfsId": "1:51824"
+      }
+     },
+     "to": {
+      "lat": 44.817201,
+      "lon": -93.310367,
+      "name": "Old Shakopee Rd & Queen Ave S",
+      "stop": {
+       "gtfsId": "1:3452"
+      }
+     },
+     "startTime": 1793038860000,
+     "endTime": 1793039160000,
+     "legGeometry": {
+      "length": 76,
+      "points": "{|qpG`ykxP?@PHpAANMf@??jAsC?mB?yA@[?@jB?d@?h@Ap@CxH?P?lD?????`NNb@?fA?????P?pC?`A?|C?|A?fB?????pC?tEA~C?????~B?zG?rGAfMt@???@?fB?bE?bAAhH?????hEA`E???@?vA?lB?z@?????Z?J?JAHAHAJEHGFGHGFKHOt@x@zEtFJJ^`@DD"
+     },
+     "realTime": false,
+     "headsign": "Valley West / Norm Village / Norm Coll",
+     "duration": 300,
+     "distance": 2818.62,
+     "interlineWithPreviousLeg": false
+    },
+    {
+     "mode": "BICYCLE",
+     "transitLeg": false,
+     "trip": null,
+     "from": {
+      "lat": 44.817201,
+      "lon": -93.310367,
+      "name": "Old Shakopee Rd & Queen Ave S",
+      "stop": {
+       "gtfsId": "1:3452"
+      }
+     },
+     "to": {
+      "lat": 44.816546,
+      "lon": -93.30986,
+      "name": "2345 Old Shakopee Road West, Bloomington, MN"
+     },
+     "startTime": 1793039160000,
+     "endTime": 1793039211000,
+     "legGeometry": {
+      "length": 11,
+      "points": "ojppGxtoxPCJBBFHHWOQJQFKXe@FOJa@"
+     },
+     "realTime": false,
+     "headsign": null,
+     "duration": 51,
+     "distance": 91.02,
+     "interlineWithPreviousLeg": false
+    }
+   ]
+  }
+ },
+ "tripSnapshots": [
+  {
+   "tMs": 1793034841008,
+   "tripId": "1:1397642",
+   "payload": {
+    "id": "1:1397642",
+    "stopTimes": [
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 42780,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 42780,
+      "scheduledDeparture": 42780,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:56823",
+       "name": "Brooklyn Ctr Transit Ctr Gate F"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 42840,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 42840,
+      "scheduledDeparture": 42840,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:9087",
+       "name": "Xerxes & 56th Ave Station"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 43020,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 43020,
+      "scheduledDeparture": 43020,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:9173",
+       "name": "Brooklyn & 51st Ave Station"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 43140,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 43140,
+      "scheduledDeparture": 43140,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:9577",
+       "name": "Osseo & 47th Ave Station"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 43200,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 43200,
+      "scheduledDeparture": 43200,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:9589",
+       "name": "44th Ave & Penn Station"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 43320,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 43320,
+      "scheduledDeparture": 43320,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:56903",
+       "name": "44th Ave & Girard Station"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 43380,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 43380,
+      "scheduledDeparture": 43380,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:9611",
+       "name": "Fremont & 42nd Ave Station"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 43500,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 43500,
+      "scheduledDeparture": 43500,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:56904",
+       "name": "Fremont & Dowling Station"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 43560,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 43560,
+      "scheduledDeparture": 43560,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:56905",
+       "name": "Fremont & 35th Ave Station"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 43680,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 43680,
+      "scheduledDeparture": 43680,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:11146",
+       "name": "Fremont & Lowry Station"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 43740,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 43740,
+      "scheduledDeparture": 43740,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:56906",
+       "name": "Fremont & 26th Ave Station"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 43860,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 43860,
+      "scheduledDeparture": 43860,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:56907",
+       "name": "Fremont & West Broadway Station"
+      }
+     },
+     {
+      "arrivalDelay": 153,
+      "realtimeArrival": 44133,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 43980,
+      "scheduledDeparture": 43980,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:11161",
+       "name": "Plymouth & Fremont Station"
+      }
+     },
+     {
+      "arrivalDelay": 111,
+      "realtimeArrival": 44211,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 44100,
+      "scheduledDeparture": 44100,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:56908",
+       "name": "7th St & Bryant Station"
+      }
+     },
+     {
+      "arrivalDelay": 111,
+      "realtimeArrival": 44331,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 44220,
+      "scheduledDeparture": 44220,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:56317",
+       "name": "7th St & Olson Station"
+      }
+     },
+     {
+      "arrivalDelay": 224,
+      "realtimeArrival": 44684,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 44460,
+      "scheduledDeparture": 44460,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:17905",
+       "name": "Ramp A/7th St Transit Center"
+      }
+     },
+     {
+      "arrivalDelay": 224,
+      "realtimeArrival": 44744,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 44520,
+      "scheduledDeparture": 44520,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:17906",
+       "name": "8th St & Hennepin Station"
+      }
+     },
+     {
+      "arrivalDelay": 253,
+      "realtimeArrival": 44833,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 44580,
+      "scheduledDeparture": 44580,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:17907",
+       "name": "8th St & Nicollet Station"
+      }
+     },
+     {
+      "arrivalDelay": 309,
+      "realtimeArrival": 45009,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 44700,
+      "scheduledDeparture": 44700,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:17910",
+       "name": "8th St & 3rd/4th Ave Station"
+      }
+     },
+     {
+      "arrivalDelay": 307,
+      "realtimeArrival": 45127,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 44820,
+      "scheduledDeparture": 44820,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:17912",
+       "name": "8th St & Park Station"
+      }
+     },
+     {
+      "arrivalDelay": 307,
+      "realtimeArrival": 45247,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 44940,
+      "scheduledDeparture": 44940,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:56909",
+       "name": "Chicago & 14th St Station"
+      }
+     },
+     {
+      "arrivalDelay": 311,
+      "realtimeArrival": 45371,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 45060,
+      "scheduledDeparture": 45060,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:56910",
+       "name": "Chicago & Franklin Station"
+      }
+     },
+     {
+      "arrivalDelay": 265,
+      "realtimeArrival": 45445,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 45180,
+      "scheduledDeparture": 45180,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:56911",
+       "name": "Chicago & 24th St Station"
+      }
+     },
+     {
+      "arrivalDelay": 265,
+      "realtimeArrival": 45505,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 45240,
+      "scheduledDeparture": 45240,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:56912",
+       "name": "Chicago & 26th St Station"
+      }
+     },
+     {
+      "arrivalDelay": 275,
+      "realtimeArrival": 45635,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 45360,
+      "scheduledDeparture": 45360,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:56913",
+       "name": "Chicago & Lake Station"
+      }
+     },
+     {
+      "arrivalDelay": 275,
+      "realtimeArrival": 45755,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 45480,
+      "scheduledDeparture": 45480,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:56914",
+       "name": "Chicago & 34th St Station"
+      }
+     },
+     {
+      "arrivalDelay": 287,
+      "realtimeArrival": 45947,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 45660,
+      "scheduledDeparture": 45660,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:80139",
+       "name": "Portland & 38th St Station"
+      }
+     },
+     {
+      "arrivalDelay": 264,
+      "realtimeArrival": 46104,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 45840,
+      "scheduledDeparture": 45840,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:56916",
+       "name": "Chicago & 42nd St Station"
+      }
+     },
+     {
+      "arrivalDelay": 256,
+      "realtimeArrival": 46216,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 45960,
+      "scheduledDeparture": 45960,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:80325",
+       "name": "46th St E & Chicago Ave"
+      }
+     },
+     {
+      "arrivalDelay": 256,
+      "realtimeArrival": 46216,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 45960,
+      "scheduledDeparture": 45960,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:17815",
+       "name": "46th St E & Park Ave S"
+      }
+     },
+     {
+      "arrivalDelay": 265,
+      "realtimeArrival": 46285,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 46020,
+      "scheduledDeparture": 46020,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:81119",
+       "name": "Portland Ave & 48th St E"
+      }
+     },
+     {
+      "arrivalDelay": 260,
+      "realtimeArrival": 46400,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 46140,
+      "scheduledDeparture": 46140,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:81120",
+       "name": "Portland Ave & 52nd St E"
+      }
+     },
+     {
+      "arrivalDelay": 260,
+      "realtimeArrival": 46520,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 46260,
+      "scheduledDeparture": 46260,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:77",
+       "name": "Chicago Ave S & 58th St E"
+      }
+     },
+     {
+      "arrivalDelay": 264,
+      "realtimeArrival": 46644,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 46380,
+      "scheduledDeparture": 46380,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:431",
+       "name": "Portland & 60th St Station"
+      }
+     },
+     {
+      "arrivalDelay": 253,
+      "realtimeArrival": 46753,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 46500,
+      "scheduledDeparture": 46500,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:436",
+       "name": "Portland & 66th St Station"
+      }
+     },
+     {
+      "arrivalDelay": 253,
+      "realtimeArrival": 46813,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 46560,
+      "scheduledDeparture": 46560,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:441",
+       "name": "Portland & 70th St Station"
+      }
+     },
+     {
+      "arrivalDelay": 239,
+      "realtimeArrival": 46859,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 46620,
+      "scheduledDeparture": 46620,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:444",
+       "name": "Portland & 73rd St Station"
+      }
+     },
+     {
+      "arrivalDelay": 239,
+      "realtimeArrival": 46919,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 46680,
+      "scheduledDeparture": 46680,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:449",
+       "name": "Portland & 77th St Station"
+      }
+     },
+     {
+      "arrivalDelay": 242,
+      "realtimeArrival": 47042,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 46800,
+      "scheduledDeparture": 46800,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:56920",
+       "name": "American & Chicago Station"
+      }
+     },
+     {
+      "arrivalDelay": 249,
+      "realtimeArrival": 47169,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 46920,
+      "scheduledDeparture": 46920,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:42318",
+       "name": "American & Bloomington Station"
+      }
+     },
+     {
+      "arrivalDelay": 185,
+      "realtimeArrival": 47225,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 47040,
+      "scheduledDeparture": 47040,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:4530",
+       "name": "American & Thunderbird Station"
+      }
+     },
+     {
+      "arrivalDelay": 226,
+      "realtimeArrival": 47386,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 47160,
+      "scheduledDeparture": 47160,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:56873",
+       "name": "MOA Transit Station Gate A"
+      }
+     }
+    ],
+    "geometry": {
+     "length": 705,
+     "points": "ot_rGxjqxPADAJA@IHM@I?KGEOGo@AWAuA?Y?k@BWHi@F[FOHILIt@G?PAnA?vD?|A?p@AZAVAZCXEh@CVETb@V~CfBlGhD@?RJTNNFNDNDNBN@N?P?NA`@ILCn@KbAOb@In@Mr@Mx@O?LDlABnAFlABt@Dt@B^REb@Kr@Od@M`@Kr@Qt@Un@St@Sb@OdBi@RGzAg@XI`@MTIhBk@b@MPGRG`@Mp@Qt@Ot@QPCPENEr@Sr@Up@U@A@APOpJyCfIiCf@M~@c@b@S`@Sb@U`@W^Y~DsDnBeBx@w@tCiD`B}Bf@{@@AbC_EtAaCtA}BfCeEVe@`@o@jAmBfAqBhCuEFOFODI@KBK?M?kA?}@?C?mA@oB?gC?sBAgC?wB?cC@{B?_C?_CA{B@aC?}B?cC?uBAgC?aG?c@?E@uEfK?\\B`DCnD?B?P?|@?hIAfJC^Ej@C|HEjJCn@AB?tHChJCfJAR?D?pI?dJ?hJ?dA?B?~G?bJ?fJAfJBR@D?fED|E@zEAt@?fD?vF@zECP@F?~@?hB?xC@zEAvE@vE@xE?xEA?}A?I?iElAHLALAJCNCNALAV?d@?He@?k@@e@Bc@Dc@D_@D]F[H]JYJWJWHOHKxAwBfA_BJO??DGh@s@n@{@`@e@`@c@f@k@n@q@h@o@`@g@X]Xa@Xa@PWt@iAz@}AZm@v@_BLW^w@No@nAcC`GmJp@gADGhFyItBiDnAkALMLKLINILGNGNCnB]JAJALELCJEJENGd@Yz@m@ZWBCPKPQHELIHEFCDABALEPCRCRAlCDAMHOD]@c@?}A?A?KAYI_@EI`@yAjCyDDGT]FGDEFKFKDKFMvAwEv@cCBK|@oCpBoGnBmGtBqGx@gCDMr@_CrBiGpBoGfAkDDKd@wApBqG`E`DVITIRKTMTOHGJEJCJALAJ?lBAL?J?pC?jD@nDAp@@j@?X?l@?j@?N?rFAtF@L?H?xC?rD@fJ@L?H?lB?~E?fJBJ?J?jIDdJ@`I@~D@L@J?rD@lIAZAjJEvHAdJEJ?J?rICA|FA|F?xF?|FhJEfJEhIEL?N?@?dJ@jJ?fJ?fJ??yF?_G?yF?{FH?L?pIBfJDjJ@fJD?L?R?zE?dE?R?b@A~F?~FhJBdIDN?P?fJDzHBx@?n@?pCA|CAbD?NAPCNENGNGNINMTSNONK@CLI??NITMRITITGVCTCTAfAIf@?`Bb@~An@lG??@pANH@XDF?L@FAL@\\@ZAF?LAXEJATETGRIRKLKLK\\Y\\YRMTKTITITGVETE|BSVCXCJAj@AXAJ@X@L?bAkCPa@DIDGBGDGbDcET]Ve@@GDK@CFU@EF[F[@I@SJeBhC@N?T@dJFfJD@tF?tF?xF?vF^?N?tHB|C?zB@dA@J?J?dA?R?|JBhF@pNBz@An@@P@?ATAF?D@B@BBHDHH@@BBBBD@B@F?B?DCBADERKJAFAH?d@@t@@`AEdC@tG@rA@jHBz@?zHBD?J?V?hJDfJBtHD@?P?^?bIBb@?dJ@dJBzG@R?`@?V?tD@|@@p@?Z?l@?z@@|I@`@??s@CqACmAEkAAa@Ac@?uB?kF@iA?[?s@?oC?o@?i@@qA@gA?iA?mF?yC?uH?qAAuC@qAA_@Ak@Ck@GkBIsBAa@?g@?}C?uB?iA?]?uA?_J?aB?eB?mABm@AcBAe@?y@?_@?q@AaA?_@?[?g@AWBsC@aB?cACcF?A?]Ak@AsBAo@?w@Ay@?u@AW?eA?O@]BS@QBMBQDODOFSHUDIDIFMLQVYNSJMHMN[N]Ja@NcADe@XaABIBIFKDGFEFEn@]T?|@CtAE\\A`@?`@?Z?r@@V?t@?lB@hA?\\?z@?n@?T\\FVCBEHEFCRAN@PBRJLHJz@Dd@C"
+    }
+   }
+  },
+  {
+   "tMs": 1793034841609,
+   "tripId": "1:1381262",
+   "payload": {
+    "id": "1:1381262",
+    "stopTimes": [
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 44160,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 44160,
+      "scheduledDeparture": 44160,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:56800",
+       "name": "Gateway Ramp Layover"
+      }
+     },
+     {
+      "arrivalDelay": -17,
+      "realtimeArrival": 44203,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 44220,
+      "scheduledDeparture": 44220,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:19294",
+       "name": "4th Ave S & 3rd St S"
+      }
+     },
+     {
+      "arrivalDelay": -17,
+      "realtimeArrival": 44323,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 44340,
+      "scheduledDeparture": 44340,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:17976",
+       "name": "Nicollet Mall & 3rd St"
+      }
+     },
+     {
+      "arrivalDelay": 24,
+      "realtimeArrival": 44484,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 44460,
+      "scheduledDeparture": 44460,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:17978",
+       "name": "Nicollet Mall & 5th St S"
+      }
+     },
+     {
+      "arrivalDelay": 24,
+      "realtimeArrival": 44604,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 44580,
+      "scheduledDeparture": 44580,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:17980",
+       "name": "Nicollet Mall & 7th St S"
+      }
+     },
+     {
+      "arrivalDelay": 46,
+      "realtimeArrival": 44746,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 44700,
+      "scheduledDeparture": 44700,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:17982",
+       "name": "Nicollet Mall & 9th St S"
+      }
+     },
+     {
+      "arrivalDelay": 45,
+      "realtimeArrival": 44865,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 44820,
+      "scheduledDeparture": 44820,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:17984",
+       "name": "Nicollet Mall & 11th St S"
+      }
+     },
+     {
+      "arrivalDelay": 45,
+      "realtimeArrival": 44985,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 44940,
+      "scheduledDeparture": 44940,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:17986",
+       "name": "Nicollet Mall & Alice Rainville Place"
+      }
+     },
+     {
+      "arrivalDelay": 57,
+      "realtimeArrival": 45057,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 45000,
+      "scheduledDeparture": 45000,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1197",
+       "name": "Nicollet Ave S & Grant St E"
+      }
+     },
+     {
+      "arrivalDelay": 35,
+      "realtimeArrival": 45155,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 45120,
+      "scheduledDeparture": 45120,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1199",
+       "name": "Nicollet Ave S & 16th St / Hwy 94"
+      }
+     },
+     {
+      "arrivalDelay": 35,
+      "realtimeArrival": 45155,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 45120,
+      "scheduledDeparture": 45120,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1200",
+       "name": "Nicollet Ave S & 18th St W"
+      }
+     },
+     {
+      "arrivalDelay": 58,
+      "realtimeArrival": 45298,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 45240,
+      "scheduledDeparture": 45240,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1202",
+       "name": "Nicollet Ave S & Franklin Ave W"
+      }
+     },
+     {
+      "arrivalDelay": 39,
+      "realtimeArrival": 45399,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 45360,
+      "scheduledDeparture": 45360,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1204",
+       "name": "Nicollet Ave S & 24th St W"
+      }
+     },
+     {
+      "arrivalDelay": 39,
+      "realtimeArrival": 45459,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 45420,
+      "scheduledDeparture": 45420,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:81077",
+       "name": "Nicollet Ave & 26th St E"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 45540,
+      "realtimeState": "CANCELED",
+      "scheduledArrival": 45540,
+      "scheduledDeparture": 45540,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1208",
+       "name": "Nicollet Ave S & 28th St W"
+      }
+     },
+     {
+      "arrivalDelay": 50,
+      "realtimeArrival": 45710,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 45660,
+      "scheduledDeparture": 45660,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:14850",
+       "name": "Blaisdell Ave S & Lake St"
+      }
+     },
+     {
+      "arrivalDelay": 50,
+      "realtimeArrival": 45770,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 45720,
+      "scheduledDeparture": 45720,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:42211",
+       "name": "31st St W & Blaisdell / Nicollet"
+      }
+     },
+     {
+      "arrivalDelay": 46,
+      "realtimeArrival": 45826,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 45780,
+      "scheduledDeparture": 45780,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1212",
+       "name": "Nicollet Ave S & 32nd St W"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 45840,
+      "realtimeState": "CANCELED",
+      "scheduledArrival": 45840,
+      "scheduledDeparture": 45840,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1214",
+       "name": "Nicollet Ave S & 33rd St W"
+      }
+     },
+     {
+      "arrivalDelay": 46,
+      "realtimeArrival": 45886,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 45840,
+      "scheduledDeparture": 45840,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:81114",
+       "name": "Nicollet Ave & 34th St E"
+      }
+     },
+     {
+      "arrivalDelay": 13,
+      "realtimeArrival": 45913,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 45900,
+      "scheduledDeparture": 45900,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1216",
+       "name": "Nicollet Ave S & 35th St W"
+      }
+     },
+     {
+      "arrivalDelay": -12,
+      "realtimeArrival": 45948,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 45960,
+      "scheduledDeparture": 45960,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1217",
+       "name": "Nicollet Ave S & 36th St W"
+      }
+     },
+     {
+      "arrivalDelay": -12,
+      "realtimeArrival": 46008,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 46020,
+      "scheduledDeparture": 46020,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1219",
+       "name": "Nicollet Ave S & 38th St W"
+      }
+     },
+     {
+      "arrivalDelay": -7,
+      "realtimeArrival": 46073,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 46080,
+      "scheduledDeparture": 46080,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1221",
+       "name": "Nicollet Ave S & 40th St W"
+      }
+     },
+     {
+      "arrivalDelay": -22,
+      "realtimeArrival": 46118,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 46140,
+      "scheduledDeparture": 46140,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1223",
+       "name": "Nicollet Ave S & 42nd St W"
+      }
+     },
+     {
+      "arrivalDelay": -66,
+      "realtimeArrival": 46134,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 46200,
+      "scheduledDeparture": 46200,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1224",
+       "name": "Nicollet Ave S & 43rd St W"
+      }
+     },
+     {
+      "arrivalDelay": -66,
+      "realtimeArrival": 46134,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 46200,
+      "scheduledDeparture": 46200,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1225",
+       "name": "Nicollet Ave S & 44th St W"
+      }
+     },
+     {
+      "arrivalDelay": -44,
+      "realtimeArrival": 46216,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 46260,
+      "scheduledDeparture": 46260,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1227",
+       "name": "Nicollet Ave S & 46th St W"
+      }
+     },
+     {
+      "arrivalDelay": -41,
+      "realtimeArrival": 46279,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 46320,
+      "scheduledDeparture": 46320,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1229",
+       "name": "Nicollet Ave S & 48th St W"
+      }
+     },
+     {
+      "arrivalDelay": -41,
+      "realtimeArrival": 46279,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 46320,
+      "scheduledDeparture": 46320,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1230",
+       "name": "Nicollet Ave S & 49th St W"
+      }
+     },
+     {
+      "arrivalDelay": -57,
+      "realtimeArrival": 46323,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 46380,
+      "scheduledDeparture": 46380,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1231",
+       "name": "Nicollet Ave S & 50th St W"
+      }
+     },
+     {
+      "arrivalDelay": -102,
+      "realtimeArrival": 46458,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 46560,
+      "scheduledDeparture": 46560,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:135",
+       "name": "Lyndale Ave S & Minnehaha Pkwy"
+      }
+     },
+     {
+      "arrivalDelay": -102,
+      "realtimeArrival": 46458,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 46560,
+      "scheduledDeparture": 46560,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:136",
+       "name": "Lyndale Ave S & 53rd St W"
+      }
+     },
+     {
+      "arrivalDelay": -69,
+      "realtimeArrival": 46611,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 46680,
+      "scheduledDeparture": 46680,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:3386",
+       "name": "Diamond Lake Rd & Wentworth Ave"
+      }
+     },
+     {
+      "arrivalDelay": -69,
+      "realtimeArrival": 46671,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 46740,
+      "scheduledDeparture": 46740,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1339",
+       "name": "Nicollet Ave S & 56th St W"
+      }
+     },
+     {
+      "arrivalDelay": -60,
+      "realtimeArrival": 46740,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 46800,
+      "scheduledDeparture": 46800,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1341",
+       "name": "Nicollet Ave S & 58th St W"
+      }
+     },
+     {
+      "arrivalDelay": -78,
+      "realtimeArrival": 46782,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 46860,
+      "scheduledDeparture": 46860,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1342",
+       "name": "Nicollet Ave S & 59th St W"
+      }
+     },
+     {
+      "arrivalDelay": -78,
+      "realtimeArrival": 46842,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 46920,
+      "scheduledDeparture": 46920,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1344",
+       "name": "Nicollet Ave S & 61st St W"
+      }
+     },
+     {
+      "arrivalDelay": -72,
+      "realtimeArrival": 46848,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 46920,
+      "scheduledDeparture": 46920,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1345",
+       "name": "Nicollet Ave S & 62nd St E"
+      }
+     },
+     {
+      "arrivalDelay": -101,
+      "realtimeArrival": 46879,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 46980,
+      "scheduledDeparture": 46980,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1346",
+       "name": "Nicollet Ave S & 63rd St W"
+      }
+     },
+     {
+      "arrivalDelay": -101,
+      "realtimeArrival": 46879,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 46980,
+      "scheduledDeparture": 46980,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1347",
+       "name": "Nicollet Ave S & 64th St W"
+      }
+     },
+     {
+      "arrivalDelay": -85,
+      "realtimeArrival": 46895,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 46980,
+      "scheduledDeparture": 46980,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1348",
+       "name": "Nicollet Ave S & 65th St W"
+      }
+     },
+     {
+      "arrivalDelay": -63,
+      "realtimeArrival": 46977,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 47040,
+      "scheduledDeparture": 47040,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1349",
+       "name": "Nicollet Ave S & 66th St W"
+      }
+     },
+     {
+      "arrivalDelay": -46,
+      "realtimeArrival": 46994,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 47040,
+      "scheduledDeparture": 47040,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1350",
+       "name": "Nicollet Ave S & 67th St W"
+      }
+     },
+     {
+      "arrivalDelay": -22,
+      "realtimeArrival": 47018,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 47040,
+      "scheduledDeparture": 47040,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1351",
+       "name": "Nicollet Ave S & 68th St W"
+      }
+     },
+     {
+      "arrivalDelay": -55,
+      "realtimeArrival": 47045,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 47100,
+      "scheduledDeparture": 47100,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1352",
+       "name": "Nicollet Ave S & 69th St W"
+      }
+     },
+     {
+      "arrivalDelay": -55,
+      "realtimeArrival": 47105,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 47160,
+      "scheduledDeparture": 47160,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:444",
+       "name": "Portland & 73rd St Station"
+      }
+     },
+     {
+      "arrivalDelay": 43,
+      "realtimeArrival": 47263,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 47220,
+      "scheduledDeparture": 47220,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:449",
+       "name": "Portland & 77th St Station"
+      }
+     },
+     {
+      "arrivalDelay": 44,
+      "realtimeArrival": 47324,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 47280,
+      "scheduledDeparture": 47280,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1361",
+       "name": "Nicollet Ave S & 78th St W (Frontage Rd)"
+      }
+     },
+     {
+      "arrivalDelay": 66,
+      "realtimeArrival": 47406,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 47340,
+      "scheduledDeparture": 47340,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:48129",
+       "name": "Nicollet Ave S & American Blvd"
+      }
+     },
+     {
+      "arrivalDelay": 27,
+      "realtimeArrival": 47427,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 47400,
+      "scheduledDeparture": 47400,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1364",
+       "name": "Nicollet Ave S & 81st St W"
+      }
+     },
+     {
+      "arrivalDelay": -9,
+      "realtimeArrival": 47451,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 47460,
+      "scheduledDeparture": 47460,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1365",
+       "name": "Nicollet Ave S & 82nd St W"
+      }
+     },
+     {
+      "arrivalDelay": -9,
+      "realtimeArrival": 47451,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 47460,
+      "scheduledDeparture": 47460,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1366",
+       "name": "Nicollet Ave S & 83rd St W"
+      }
+     },
+     {
+      "arrivalDelay": -37,
+      "realtimeArrival": 47483,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 47520,
+      "scheduledDeparture": 47520,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1367",
+       "name": "Nicollet Ave S & 84th St W"
+      }
+     },
+     {
+      "arrivalDelay": -37,
+      "realtimeArrival": 47483,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 47520,
+      "scheduledDeparture": 47520,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1368",
+       "name": "Nicollet Ave S & 85th St W"
+      }
+     },
+     {
+      "arrivalDelay": -64,
+      "realtimeArrival": 47516,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 47580,
+      "scheduledDeparture": 47580,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1369",
+       "name": "Nicollet Ave S & 86th St W"
+      }
+     },
+     {
+      "arrivalDelay": -64,
+      "realtimeArrival": 47516,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 47580,
+      "scheduledDeparture": 47580,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1370",
+       "name": "Nicollet Ave S & 87th St W"
+      }
+     },
+     {
+      "arrivalDelay": -95,
+      "realtimeArrival": 47545,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 47640,
+      "scheduledDeparture": 47640,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:56867",
+       "name": "Nicollet Ave S & 88th St"
+      }
+     },
+     {
+      "arrivalDelay": -143,
+      "realtimeArrival": 47557,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 47700,
+      "scheduledDeparture": 47700,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1372",
+       "name": "Nicollet Ave S & 89th St W"
+      }
+     },
+     {
+      "arrivalDelay": -143,
+      "realtimeArrival": 47557,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 47700,
+      "scheduledDeparture": 47700,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1373",
+       "name": "Nicollet Ave S & 90th St W"
+      }
+     },
+     {
+      "arrivalDelay": -165,
+      "realtimeArrival": 47595,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 47760,
+      "scheduledDeparture": 47760,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1374",
+       "name": "Nicollet Ave S & 91st St W"
+      }
+     },
+     {
+      "arrivalDelay": -165,
+      "realtimeArrival": 47595,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 47760,
+      "scheduledDeparture": 47760,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1375",
+       "name": "Nicollet Ave S & 92nd St W"
+      }
+     },
+     {
+      "arrivalDelay": -195,
+      "realtimeArrival": 47625,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 47820,
+      "scheduledDeparture": 47820,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1376",
+       "name": "Nicollet Ave S & 93rd St W"
+      }
+     },
+     {
+      "arrivalDelay": -240,
+      "realtimeArrival": 47640,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 47880,
+      "scheduledDeparture": 47880,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1377",
+       "name": "Nicollet Ave S & 94th St W"
+      }
+     },
+     {
+      "arrivalDelay": -282,
+      "realtimeArrival": 47658,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 47940,
+      "scheduledDeparture": 47940,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:56868",
+       "name": "Nicollet Ave S & 95th St W"
+      }
+     },
+     {
+      "arrivalDelay": -282,
+      "realtimeArrival": 47658,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 47940,
+      "scheduledDeparture": 47940,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1379",
+       "name": "Nicollet Ave S & 96th St W"
+      }
+     },
+     {
+      "arrivalDelay": -288,
+      "realtimeArrival": 47712,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 48000,
+      "scheduledDeparture": 48000,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:56869",
+       "name": "Nicollet Ave S & 98th St W"
+      }
+     },
+     {
+      "arrivalDelay": -320,
+      "realtimeArrival": 47740,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 48060,
+      "scheduledDeparture": 48060,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:43614",
+       "name": "98th St W & Pillsbury Ave S"
+      }
+     },
+     {
+      "arrivalDelay": -351,
+      "realtimeArrival": 47769,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 48120,
+      "scheduledDeparture": 48120,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:43616",
+       "name": "98th St W & Grand Ave / Garfield Ave"
+      }
+     },
+     {
+      "arrivalDelay": -351,
+      "realtimeArrival": 47829,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 48180,
+      "scheduledDeparture": 48180,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:42099",
+       "name": "Lyndale Ave S & 99th St W"
+      }
+     },
+     {
+      "arrivalDelay": -306,
+      "realtimeArrival": 47934,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 48240,
+      "scheduledDeparture": 48540,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:51821",
+       "name": "I-35W & 98th Street Station Gate A"
+      }
+     },
+     {
+      "arrivalDelay": -52,
+      "realtimeArrival": 48548,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 48600,
+      "scheduledDeparture": 48600,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:51854",
+       "name": "Lyndale Ave S & #10031"
+      }
+     },
+     {
+      "arrivalDelay": -52,
+      "realtimeArrival": 48548,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 48600,
+      "scheduledDeparture": 48600,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:42514",
+       "name": "Lyndale Ave S & 102nd St W"
+      }
+     },
+     {
+      "arrivalDelay": -72,
+      "realtimeArrival": 48588,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 48660,
+      "scheduledDeparture": 48660,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:42515",
+       "name": "Lyndale Ave S & #10320"
+      }
+     },
+     {
+      "arrivalDelay": -72,
+      "realtimeArrival": 48588,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 48660,
+      "scheduledDeparture": 48660,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:42516",
+       "name": "Lyndale Ave S & 104th St W"
+      }
+     },
+     {
+      "arrivalDelay": -112,
+      "realtimeArrival": 48608,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 48720,
+      "scheduledDeparture": 48720,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1391",
+       "name": "Lyndale Ave S & Mission Rd"
+      }
+     },
+     {
+      "arrivalDelay": -112,
+      "realtimeArrival": 48608,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 48720,
+      "scheduledDeparture": 48720,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1393",
+       "name": "106th St & Lyndale / Bloomington Frwy Rd"
+      }
+     },
+     {
+      "arrivalDelay": -114,
+      "realtimeArrival": 48666,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 48780,
+      "scheduledDeparture": 48780,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:57127",
+       "name": "106th St W & Verdi Rd"
+      }
+     },
+     {
+      "arrivalDelay": -114,
+      "realtimeArrival": 48666,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 48780,
+      "scheduledDeparture": 48780,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:57128",
+       "name": "106th St W & Humboldt Ave S"
+      }
+     },
+     {
+      "arrivalDelay": -99,
+      "realtimeArrival": 48741,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 48840,
+      "scheduledDeparture": 48840,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:57129",
+       "name": "Humboldt Ave S & 104th St W"
+      }
+     },
+     {
+      "arrivalDelay": -99,
+      "realtimeArrival": 48741,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 48840,
+      "scheduledDeparture": 48840,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:57130",
+       "name": "104th St W & Oak Grove Elementary"
+      }
+     },
+     {
+      "arrivalDelay": -108,
+      "realtimeArrival": 48792,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 48900,
+      "scheduledDeparture": 48900,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:57131",
+       "name": "104th St W & Bloomington Fwy W"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "tMs": 1793034841719,
+   "tripId": "1:1134930",
+   "payload": {
+    "id": "1:1134930",
+    "stopTimes": [
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 48060,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 48060,
+      "scheduledDeparture": 48060,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:51824",
+       "name": "I-35W & 98th Street Station Gate D"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 48120,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 48120,
+      "scheduledDeparture": 48120,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1616",
+       "name": "98th St W & Dupont Ave / Fremont Ave"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 48120,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 48120,
+      "scheduledDeparture": 48120,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1617",
+       "name": "98th St W & Girard Ave S"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 48180,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 48180,
+      "scheduledDeparture": 48180,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1620",
+       "name": "98th St W & James Ave S"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 48180,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 48180,
+      "scheduledDeparture": 48180,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1621",
+       "name": "98th St W & Logan Ave S"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 48240,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 48240,
+      "scheduledDeparture": 48240,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:57097",
+       "name": "Penn Ave S & 98th St W"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 48300,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 48300,
+      "scheduledDeparture": 48300,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:3443",
+       "name": "Penn Ave S & Gideon Pond Apts"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 48300,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 48300,
+      "scheduledDeparture": 48300,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:3445",
+       "name": "Penn Ave S & #10040"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 48300,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 48300,
+      "scheduledDeparture": 48300,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:3446",
+       "name": "Penn Ave S & 102nd St W"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 48360,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 48360,
+      "scheduledDeparture": 48360,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:3452",
+       "name": "Old Shakopee Rd & Queen Ave S"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 48420,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 48420,
+      "scheduledDeparture": 48420,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:3454",
+       "name": "Old Shakopee Rd & Thomas Ave S"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 48420,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 48420,
+      "scheduledDeparture": 48420,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:3456",
+       "name": "Old Shakopee Rd & Vincent Ave S"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 48480,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 48480,
+      "scheduledDeparture": 48480,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:3458",
+       "name": "Old Shakopee Rd & Xerxes Ave S"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 48480,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 48480,
+      "scheduledDeparture": 48480,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:3460",
+       "name": "Old Shakopee Rd & Zenith Ave S"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 48540,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 48540,
+      "scheduledDeparture": 48540,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:3462",
+       "name": "Old Shakopee Rd & Beard Ave S"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 48540,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 48540,
+      "scheduledDeparture": 48540,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:3464",
+       "name": "Old Shakopee Rd & Drew Ave S"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 48540,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 48540,
+      "scheduledDeparture": 48540,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:43621",
+       "name": "Old Shakopee Rd & France Ave S"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 48600,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 48600,
+      "scheduledDeparture": 48600,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:43622",
+       "name": "Valley West Ctr & Cub Foods"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 48660,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 48660,
+      "scheduledDeparture": 48660,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:52212",
+       "name": "Old Shakopee Rd & Valley West Center"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 48660,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 48660,
+      "scheduledDeparture": 48660,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:52210",
+       "name": "Old Shakopee Rd & Kell Ave S"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 48720,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 48720,
+      "scheduledDeparture": 48720,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:52208",
+       "name": "Old Shakopee Rd & Nord Ave S"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 48780,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 48780,
+      "scheduledDeparture": 48780,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:52206",
+       "name": "Old Shakopee Rd & Rich Ave S"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 48780,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 48780,
+      "scheduledDeparture": 48780,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:52204",
+       "name": "Old Shakopee Rd & Toledo / Normandale"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 48900,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 48900,
+      "scheduledDeparture": 48900,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:57527",
+       "name": "Normandale Blvd & Heritage Hills Dr"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 48960,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 48960,
+      "scheduledDeparture": 48960,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:57528",
+       "name": "Normandale Blvd & Scarborough Rd"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 48960,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 48960,
+      "scheduledDeparture": 48960,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:57529",
+       "name": "Normandale Blvd & 102nd St W"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 49020,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 49020,
+      "scheduledDeparture": 49020,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:57530",
+       "name": "Normandale Blvd & Normandale Hghlnds Dr"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 49080,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 49080,
+      "scheduledDeparture": 49080,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:2073",
+       "name": "Normandale Village"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 49140,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 49140,
+      "scheduledDeparture": 49140,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:2074",
+       "name": "98th St W & Rich Rd"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 49260,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 49260,
+      "scheduledDeparture": 49260,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:2075",
+       "name": "98th St W & Little Rd"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 49380,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 49380,
+      "scheduledDeparture": 49380,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:56725",
+       "name": "Normandale Community College"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "tMs": 1793034865031,
+   "tripId": "1:1384516",
+   "payload": {
+    "id": "1:1384516",
+    "stopTimes": [
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 40980,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 40980,
+      "scheduledDeparture": 40980,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:56823",
+       "name": "Brooklyn Ctr Transit Ctr Gate F"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 41040,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 41040,
+      "scheduledDeparture": 41040,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:9087",
+       "name": "Xerxes & 56th Ave Station"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 41220,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 41220,
+      "scheduledDeparture": 41220,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:9173",
+       "name": "Brooklyn & 51st Ave Station"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 41340,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 41340,
+      "scheduledDeparture": 41340,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:9577",
+       "name": "Osseo & 47th Ave Station"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 41400,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 41400,
+      "scheduledDeparture": 41400,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:9589",
+       "name": "44th Ave & Penn Station"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 41520,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 41520,
+      "scheduledDeparture": 41520,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:56903",
+       "name": "44th Ave & Girard Station"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 41580,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 41580,
+      "scheduledDeparture": 41580,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:9611",
+       "name": "Fremont & 42nd Ave Station"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 41700,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 41700,
+      "scheduledDeparture": 41700,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:56904",
+       "name": "Fremont & Dowling Station"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 41760,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 41760,
+      "scheduledDeparture": 41760,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:56905",
+       "name": "Fremont & 35th Ave Station"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 41880,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 41880,
+      "scheduledDeparture": 41880,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:11146",
+       "name": "Fremont & Lowry Station"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 41940,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 41940,
+      "scheduledDeparture": 41940,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:56906",
+       "name": "Fremont & 26th Ave Station"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 42060,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 42060,
+      "scheduledDeparture": 42060,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:56907",
+       "name": "Fremont & West Broadway Station"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 42180,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 42180,
+      "scheduledDeparture": 42180,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:11161",
+       "name": "Plymouth & Fremont Station"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 42300,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 42300,
+      "scheduledDeparture": 42300,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:56908",
+       "name": "7th St & Bryant Station"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 42420,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 42420,
+      "scheduledDeparture": 42420,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:56317",
+       "name": "7th St & Olson Station"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 42660,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 42660,
+      "scheduledDeparture": 42660,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:17905",
+       "name": "Ramp A/7th St Transit Center"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 42720,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 42720,
+      "scheduledDeparture": 42720,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:17906",
+       "name": "8th St & Hennepin Station"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 42780,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 42780,
+      "scheduledDeparture": 42780,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:17907",
+       "name": "8th St & Nicollet Station"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 42900,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 42900,
+      "scheduledDeparture": 42900,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:17910",
+       "name": "8th St & 3rd/4th Ave Station"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 43020,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 43020,
+      "scheduledDeparture": 43020,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:17912",
+       "name": "8th St & Park Station"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 43140,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 43140,
+      "scheduledDeparture": 43140,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:56909",
+       "name": "Chicago & 14th St Station"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 43260,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 43260,
+      "scheduledDeparture": 43260,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:56910",
+       "name": "Chicago & Franklin Station"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 43380,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 43380,
+      "scheduledDeparture": 43380,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:56911",
+       "name": "Chicago & 24th St Station"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 43440,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 43440,
+      "scheduledDeparture": 43440,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:56912",
+       "name": "Chicago & 26th St Station"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 43560,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 43560,
+      "scheduledDeparture": 43560,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:56913",
+       "name": "Chicago & Lake Station"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 43680,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 43680,
+      "scheduledDeparture": 43680,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:56914",
+       "name": "Chicago & 34th St Station"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 43860,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 43860,
+      "scheduledDeparture": 43860,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:80139",
+       "name": "Portland & 38th St Station"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 44040,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 44040,
+      "scheduledDeparture": 44040,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:56916",
+       "name": "Chicago & 42nd St Station"
+      }
+     },
+     {
+      "arrivalDelay": 51,
+      "realtimeArrival": 44211,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 44160,
+      "scheduledDeparture": 44160,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:80325",
+       "name": "46th St E & Chicago Ave"
+      }
+     },
+     {
+      "arrivalDelay": 51,
+      "realtimeArrival": 44211,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 44160,
+      "scheduledDeparture": 44160,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:17815",
+       "name": "46th St E & Park Ave S"
+      }
+     },
+     {
+      "arrivalDelay": 72,
+      "realtimeArrival": 44292,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 44220,
+      "scheduledDeparture": 44220,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:81119",
+       "name": "Portland Ave & 48th St E"
+      }
+     },
+     {
+      "arrivalDelay": 59,
+      "realtimeArrival": 44399,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 44340,
+      "scheduledDeparture": 44340,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:81120",
+       "name": "Portland Ave & 52nd St E"
+      }
+     },
+     {
+      "arrivalDelay": 59,
+      "realtimeArrival": 44519,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 44460,
+      "scheduledDeparture": 44460,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:77",
+       "name": "Chicago Ave S & 58th St E"
+      }
+     },
+     {
+      "arrivalDelay": 69,
+      "realtimeArrival": 44649,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 44580,
+      "scheduledDeparture": 44580,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:431",
+       "name": "Portland & 60th St Station"
+      }
+     },
+     {
+      "arrivalDelay": 69,
+      "realtimeArrival": 44769,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 44700,
+      "scheduledDeparture": 44700,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:436",
+       "name": "Portland & 66th St Station"
+      }
+     },
+     {
+      "arrivalDelay": 73,
+      "realtimeArrival": 44833,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 44760,
+      "scheduledDeparture": 44760,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:441",
+       "name": "Portland & 70th St Station"
+      }
+     },
+     {
+      "arrivalDelay": 58,
+      "realtimeArrival": 44878,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 44820,
+      "scheduledDeparture": 44820,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:444",
+       "name": "Portland & 73rd St Station"
+      }
+     },
+     {
+      "arrivalDelay": 58,
+      "realtimeArrival": 44938,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 44880,
+      "scheduledDeparture": 44880,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:449",
+       "name": "Portland & 77th St Station"
+      }
+     },
+     {
+      "arrivalDelay": 78,
+      "realtimeArrival": 45078,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 45000,
+      "scheduledDeparture": 45000,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:56920",
+       "name": "American & Chicago Station"
+      }
+     },
+     {
+      "arrivalDelay": 106,
+      "realtimeArrival": 45226,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 45120,
+      "scheduledDeparture": 45120,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:42318",
+       "name": "American & Bloomington Station"
+      }
+     },
+     {
+      "arrivalDelay": 54,
+      "realtimeArrival": 45294,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 45240,
+      "scheduledDeparture": 45240,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:4530",
+       "name": "American & Thunderbird Station"
+      }
+     },
+     {
+      "arrivalDelay": 124,
+      "realtimeArrival": 45484,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 45360,
+      "scheduledDeparture": 45360,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:56873",
+       "name": "MOA Transit Station Gate A"
+      }
+     }
+    ],
+    "geometry": {
+     "length": 705,
+     "points": "ot_rGxjqxPADAJA@IHM@I?KGEOGo@AWAuA?Y?k@BWHi@F[FOHILIt@G?PAnA?vD?|A?p@AZAVAZCXEh@CVETb@V~CfBlGhD@?RJTNNFNDNDNBN@N?P?NA`@ILCn@KbAOb@In@Mr@Mx@O?LDlABnAFlABt@Dt@B^REb@Kr@Od@M`@Kr@Qt@Un@St@Sb@OdBi@RGzAg@XI`@MTIhBk@b@MPGRG`@Mp@Qt@Ot@QPCPENEr@Sr@Up@U@A@APOpJyCfIiCf@M~@c@b@S`@Sb@U`@W^Y~DsDnBeBx@w@tCiD`B}Bf@{@@AbC_EtAaCtA}BfCeEVe@`@o@jAmBfAqBhCuEFOFODI@KBK?M?kA?}@?C?mA@oB?gC?sBAgC?wB?cC@{B?_C?_CA{B@aC?}B?cC?uBAgC?aG?c@?E@uEfK?\\B`DCnD?B?P?|@?hIAfJC^Ej@C|HEjJCn@AB?tHChJCfJAR?D?pI?dJ?hJ?dA?B?~G?bJ?fJAfJBR@D?fED|E@zEAt@?fD?vF@zECP@F?~@?hB?xC@zEAvE@vE@xE?xEA?}A?I?iElAHLALAJCNCNALAV?d@?He@?k@@e@Bc@Dc@D_@D]F[H]JYJWJWHOHKxAwBfA_BJO??DGh@s@n@{@`@e@`@c@f@k@n@q@h@o@`@g@X]Xa@Xa@PWt@iAz@}AZm@v@_BLW^w@No@nAcC`GmJp@gADGhFyItBiDnAkALMLKLINILGNGNCnB]JAJALELCJEJENGd@Yz@m@ZWBCPKPQHELIHEFCDABALEPCRCRAlCDAMHOD]@c@?}A?A?KAYI_@EI`@yAjCyDDGT]FGDEFKFKDKFMvAwEv@cCBK|@oCpBoGnBmGtBqGx@gCDMr@_CrBiGpBoGfAkDDKd@wApBqG`E`DVITIRKTMTOHGJEJCJALAJ?lBAL?J?pC?jD@nDAp@@j@?X?l@?j@?N?rFAtF@L?H?xC?rD@fJ@L?H?lB?~E?fJBJ?J?jIDdJ@`I@~D@L@J?rD@lIAZAjJEvHAdJEJ?J?rICA|FA|F?xF?|FhJEfJEhIEL?N?@?dJ@jJ?fJ?fJ??yF?_G?yF?{FH?L?pIBfJDjJ@fJD?L?R?zE?dE?R?b@A~F?~FhJBdIDN?P?fJDzHBx@?n@?pCA|CAbD?NAPCNENGNGNINMTSNONK@CLI??NITMRITITGVCTCTAfAIf@?`Bb@~An@lG??@pANH@XDF?L@FAL@\\@ZAF?LAXEJATETGRIRKLKLK\\Y\\YRMTKTITITGVETE|BSVCXCJAj@AXAJ@X@L?bAkCPa@DIDGBGDGbDcET]Ve@@GDK@CFU@EF[F[@I@SJeBhC@N?T@dJFfJD@tF?tF?xF?vF^?N?tHB|C?zB@dA@J?J?dA?R?|JBhF@pNBz@An@@P@?ATAF?D@B@BBHDHH@@BBBBD@B@F?B?DCBADERKJAFAH?d@@t@@`AEdC@tG@rA@jHBz@?zHBD?J?V?hJDfJBtHD@?P?^?bIBb@?dJ@dJBzG@R?`@?V?tD@|@@p@?Z?l@?z@@|I@`@??s@CqACmAEkAAa@Ac@?uB?kF@iA?[?s@?oC?o@?i@@qA@gA?iA?mF?yC?uH?qAAuC@qAA_@Ak@Ck@GkBIsBAa@?g@?}C?uB?iA?]?uA?_J?aB?eB?mABm@AcBAe@?y@?_@?q@AaA?_@?[?g@AWBsC@aB?cACcF?A?]Ak@AsBAo@?w@Ay@?u@AW?eA?O@]BS@QBMBQDODOFSHUDIDIFMLQVYNSJMHMN[N]Ja@NcADe@XaABIBIFKDGFEFEn@]T?|@CtAE\\A`@?`@?Z?r@@V?t@?lB@hA?\\?z@?n@?T\\FVCBEHEFCRAN@PBRJLHJz@Dd@C"
+    }
+   }
+  },
+  {
+   "tMs": 1793034865076,
+   "tripId": "1:1381301",
+   "payload": {
+    "id": "1:1381301",
+    "stopTimes": [
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 42360,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 42360,
+      "scheduledDeparture": 42360,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:56800",
+       "name": "Gateway Ramp Layover"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 42420,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 42420,
+      "scheduledDeparture": 42420,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:19294",
+       "name": "4th Ave S & 3rd St S"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 42540,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 42540,
+      "scheduledDeparture": 42540,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:17976",
+       "name": "Nicollet Mall & 3rd St"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 42660,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 42660,
+      "scheduledDeparture": 42660,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:17978",
+       "name": "Nicollet Mall & 5th St S"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 42780,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 42780,
+      "scheduledDeparture": 42780,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:17980",
+       "name": "Nicollet Mall & 7th St S"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 42900,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 42900,
+      "scheduledDeparture": 42900,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:17982",
+       "name": "Nicollet Mall & 9th St S"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 43020,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 43020,
+      "scheduledDeparture": 43020,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:17984",
+       "name": "Nicollet Mall & 11th St S"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 43140,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 43140,
+      "scheduledDeparture": 43140,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:17986",
+       "name": "Nicollet Mall & Alice Rainville Place"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 43200,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 43200,
+      "scheduledDeparture": 43200,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1197",
+       "name": "Nicollet Ave S & Grant St E"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 43320,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 43320,
+      "scheduledDeparture": 43320,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1199",
+       "name": "Nicollet Ave S & 16th St / Hwy 94"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 43320,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 43320,
+      "scheduledDeparture": 43320,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1200",
+       "name": "Nicollet Ave S & 18th St W"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 43440,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 43440,
+      "scheduledDeparture": 43440,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1202",
+       "name": "Nicollet Ave S & Franklin Ave W"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 43560,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 43560,
+      "scheduledDeparture": 43560,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1204",
+       "name": "Nicollet Ave S & 24th St W"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 43620,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 43620,
+      "scheduledDeparture": 43620,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:81077",
+       "name": "Nicollet Ave & 26th St E"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 43740,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 43740,
+      "scheduledDeparture": 43740,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1208",
+       "name": "Nicollet Ave S & 28th St W"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 43860,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 43860,
+      "scheduledDeparture": 43860,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:14850",
+       "name": "Blaisdell Ave S & Lake St"
+      }
+     },
+     {
+      "arrivalDelay": 247,
+      "realtimeArrival": 44167,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 43920,
+      "scheduledDeparture": 43920,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:42211",
+       "name": "31st St W & Blaisdell / Nicollet"
+      }
+     },
+     {
+      "arrivalDelay": 247,
+      "realtimeArrival": 44227,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 43980,
+      "scheduledDeparture": 43980,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1212",
+       "name": "Nicollet Ave S & 32nd St W"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 44040,
+      "realtimeState": "CANCELED",
+      "scheduledArrival": 44040,
+      "scheduledDeparture": 44040,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1214",
+       "name": "Nicollet Ave S & 33rd St W"
+      }
+     },
+     {
+      "arrivalDelay": 247,
+      "realtimeArrival": 44287,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 44040,
+      "scheduledDeparture": 44040,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:81114",
+       "name": "Nicollet Ave & 34th St E"
+      }
+     },
+     {
+      "arrivalDelay": 250,
+      "realtimeArrival": 44350,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 44100,
+      "scheduledDeparture": 44100,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1216",
+       "name": "Nicollet Ave S & 35th St W"
+      }
+     },
+     {
+      "arrivalDelay": 241,
+      "realtimeArrival": 44401,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 44160,
+      "scheduledDeparture": 44160,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1217",
+       "name": "Nicollet Ave S & 36th St W"
+      }
+     },
+     {
+      "arrivalDelay": 241,
+      "realtimeArrival": 44461,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 44220,
+      "scheduledDeparture": 44220,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1219",
+       "name": "Nicollet Ave S & 38th St W"
+      }
+     },
+     {
+      "arrivalDelay": 265,
+      "realtimeArrival": 44545,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 44280,
+      "scheduledDeparture": 44280,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1221",
+       "name": "Nicollet Ave S & 40th St W"
+      }
+     },
+     {
+      "arrivalDelay": 248,
+      "realtimeArrival": 44588,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 44340,
+      "scheduledDeparture": 44340,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1223",
+       "name": "Nicollet Ave S & 42nd St W"
+      }
+     },
+     {
+      "arrivalDelay": 206,
+      "realtimeArrival": 44606,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 44400,
+      "scheduledDeparture": 44400,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1224",
+       "name": "Nicollet Ave S & 43rd St W"
+      }
+     },
+     {
+      "arrivalDelay": 206,
+      "realtimeArrival": 44606,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 44400,
+      "scheduledDeparture": 44400,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1225",
+       "name": "Nicollet Ave S & 44th St W"
+      }
+     },
+     {
+      "arrivalDelay": 221,
+      "realtimeArrival": 44681,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 44460,
+      "scheduledDeparture": 44460,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1227",
+       "name": "Nicollet Ave S & 46th St W"
+      }
+     },
+     {
+      "arrivalDelay": 226,
+      "realtimeArrival": 44746,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 44520,
+      "scheduledDeparture": 44520,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1229",
+       "name": "Nicollet Ave S & 48th St W"
+      }
+     },
+     {
+      "arrivalDelay": 226,
+      "realtimeArrival": 44746,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 44520,
+      "scheduledDeparture": 44520,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1230",
+       "name": "Nicollet Ave S & 49th St W"
+      }
+     },
+     {
+      "arrivalDelay": 207,
+      "realtimeArrival": 44787,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 44580,
+      "scheduledDeparture": 44580,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1231",
+       "name": "Nicollet Ave S & 50th St W"
+      }
+     },
+     {
+      "arrivalDelay": 170,
+      "realtimeArrival": 44930,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 44760,
+      "scheduledDeparture": 44760,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:135",
+       "name": "Lyndale Ave S & Minnehaha Pkwy"
+      }
+     },
+     {
+      "arrivalDelay": 170,
+      "realtimeArrival": 44930,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 44760,
+      "scheduledDeparture": 44760,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:136",
+       "name": "Lyndale Ave S & 53rd St W"
+      }
+     },
+     {
+      "arrivalDelay": 198,
+      "realtimeArrival": 45078,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 44880,
+      "scheduledDeparture": 44880,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:3386",
+       "name": "Diamond Lake Rd & Wentworth Ave"
+      }
+     },
+     {
+      "arrivalDelay": 198,
+      "realtimeArrival": 45138,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 44940,
+      "scheduledDeparture": 44940,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1339",
+       "name": "Nicollet Ave S & 56th St W"
+      }
+     },
+     {
+      "arrivalDelay": 188,
+      "realtimeArrival": 45188,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 45000,
+      "scheduledDeparture": 45000,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1341",
+       "name": "Nicollet Ave S & 58th St W"
+      }
+     },
+     {
+      "arrivalDelay": 169,
+      "realtimeArrival": 45229,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 45060,
+      "scheduledDeparture": 45060,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1342",
+       "name": "Nicollet Ave S & 59th St W"
+      }
+     },
+     {
+      "arrivalDelay": 169,
+      "realtimeArrival": 45289,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 45120,
+      "scheduledDeparture": 45120,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1344",
+       "name": "Nicollet Ave S & 61st St W"
+      }
+     },
+     {
+      "arrivalDelay": 169,
+      "realtimeArrival": 45289,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 45120,
+      "scheduledDeparture": 45120,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1345",
+       "name": "Nicollet Ave S & 62nd St E"
+      }
+     },
+     {
+      "arrivalDelay": 140,
+      "realtimeArrival": 45320,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 45180,
+      "scheduledDeparture": 45180,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1346",
+       "name": "Nicollet Ave S & 63rd St W"
+      }
+     },
+     {
+      "arrivalDelay": 140,
+      "realtimeArrival": 45320,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 45180,
+      "scheduledDeparture": 45180,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1347",
+       "name": "Nicollet Ave S & 64th St W"
+      }
+     },
+     {
+      "arrivalDelay": 157,
+      "realtimeArrival": 45337,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 45180,
+      "scheduledDeparture": 45180,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1348",
+       "name": "Nicollet Ave S & 65th St W"
+      }
+     },
+     {
+      "arrivalDelay": 177,
+      "realtimeArrival": 45417,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 45240,
+      "scheduledDeparture": 45240,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1349",
+       "name": "Nicollet Ave S & 66th St W"
+      }
+     },
+     {
+      "arrivalDelay": 196,
+      "realtimeArrival": 45436,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 45240,
+      "scheduledDeparture": 45240,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1350",
+       "name": "Nicollet Ave S & 67th St W"
+      }
+     },
+     {
+      "arrivalDelay": 220,
+      "realtimeArrival": 45460,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 45240,
+      "scheduledDeparture": 45240,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1351",
+       "name": "Nicollet Ave S & 68th St W"
+      }
+     },
+     {
+      "arrivalDelay": 185,
+      "realtimeArrival": 45485,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 45300,
+      "scheduledDeparture": 45300,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1352",
+       "name": "Nicollet Ave S & 69th St W"
+      }
+     },
+     {
+      "arrivalDelay": 185,
+      "realtimeArrival": 45545,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 45360,
+      "scheduledDeparture": 45360,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:444",
+       "name": "Portland & 73rd St Station"
+      }
+     },
+     {
+      "arrivalDelay": 284,
+      "realtimeArrival": 45704,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 45420,
+      "scheduledDeparture": 45420,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:449",
+       "name": "Portland & 77th St Station"
+      }
+     },
+     {
+      "arrivalDelay": 289,
+      "realtimeArrival": 45769,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 45480,
+      "scheduledDeparture": 45480,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1361",
+       "name": "Nicollet Ave S & 78th St W (Frontage Rd)"
+      }
+     },
+     {
+      "arrivalDelay": 316,
+      "realtimeArrival": 45856,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 45540,
+      "scheduledDeparture": 45540,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:48129",
+       "name": "Nicollet Ave S & American Blvd"
+      }
+     },
+     {
+      "arrivalDelay": 271,
+      "realtimeArrival": 45871,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 45600,
+      "scheduledDeparture": 45600,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1364",
+       "name": "Nicollet Ave S & 81st St W"
+      }
+     },
+     {
+      "arrivalDelay": 226,
+      "realtimeArrival": 45886,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 45660,
+      "scheduledDeparture": 45660,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1365",
+       "name": "Nicollet Ave S & 82nd St W"
+      }
+     },
+     {
+      "arrivalDelay": 226,
+      "realtimeArrival": 45886,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 45660,
+      "scheduledDeparture": 45660,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1366",
+       "name": "Nicollet Ave S & 83rd St W"
+      }
+     },
+     {
+      "arrivalDelay": 196,
+      "realtimeArrival": 45916,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 45720,
+      "scheduledDeparture": 45720,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1367",
+       "name": "Nicollet Ave S & 84th St W"
+      }
+     },
+     {
+      "arrivalDelay": 196,
+      "realtimeArrival": 45916,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 45720,
+      "scheduledDeparture": 45720,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1368",
+       "name": "Nicollet Ave S & 85th St W"
+      }
+     },
+     {
+      "arrivalDelay": 182,
+      "realtimeArrival": 45962,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 45780,
+      "scheduledDeparture": 45780,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1369",
+       "name": "Nicollet Ave S & 86th St W"
+      }
+     },
+     {
+      "arrivalDelay": 182,
+      "realtimeArrival": 45962,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 45780,
+      "scheduledDeparture": 45780,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1370",
+       "name": "Nicollet Ave S & 87th St W"
+      }
+     },
+     {
+      "arrivalDelay": 150,
+      "realtimeArrival": 45990,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 45840,
+      "scheduledDeparture": 45840,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:56867",
+       "name": "Nicollet Ave S & 88th St"
+      }
+     },
+     {
+      "arrivalDelay": 100,
+      "realtimeArrival": 46000,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 45900,
+      "scheduledDeparture": 45900,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1372",
+       "name": "Nicollet Ave S & 89th St W"
+      }
+     },
+     {
+      "arrivalDelay": 100,
+      "realtimeArrival": 46000,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 45900,
+      "scheduledDeparture": 45900,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1373",
+       "name": "Nicollet Ave S & 90th St W"
+      }
+     },
+     {
+      "arrivalDelay": 100,
+      "realtimeArrival": 46060,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 45960,
+      "scheduledDeparture": 45960,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1374",
+       "name": "Nicollet Ave S & 91st St W"
+      }
+     },
+     {
+      "arrivalDelay": 100,
+      "realtimeArrival": 46060,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 45960,
+      "scheduledDeparture": 45960,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1375",
+       "name": "Nicollet Ave S & 92nd St W"
+      }
+     },
+     {
+      "arrivalDelay": 69,
+      "realtimeArrival": 46089,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 46020,
+      "scheduledDeparture": 46020,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1376",
+       "name": "Nicollet Ave S & 93rd St W"
+      }
+     },
+     {
+      "arrivalDelay": 21,
+      "realtimeArrival": 46101,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 46080,
+      "scheduledDeparture": 46080,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1377",
+       "name": "Nicollet Ave S & 94th St W"
+      }
+     },
+     {
+      "arrivalDelay": -20,
+      "realtimeArrival": 46120,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 46140,
+      "scheduledDeparture": 46140,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:56868",
+       "name": "Nicollet Ave S & 95th St W"
+      }
+     },
+     {
+      "arrivalDelay": -20,
+      "realtimeArrival": 46120,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 46140,
+      "scheduledDeparture": 46140,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1379",
+       "name": "Nicollet Ave S & 96th St W"
+      }
+     },
+     {
+      "arrivalDelay": -26,
+      "realtimeArrival": 46174,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 46200,
+      "scheduledDeparture": 46200,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:56869",
+       "name": "Nicollet Ave S & 98th St W"
+      }
+     },
+     {
+      "arrivalDelay": -60,
+      "realtimeArrival": 46200,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 46260,
+      "scheduledDeparture": 46260,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:43614",
+       "name": "98th St W & Pillsbury Ave S"
+      }
+     },
+     {
+      "arrivalDelay": -94,
+      "realtimeArrival": 46226,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 46320,
+      "scheduledDeparture": 46320,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:43616",
+       "name": "98th St W & Grand Ave / Garfield Ave"
+      }
+     },
+     {
+      "arrivalDelay": -94,
+      "realtimeArrival": 46286,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 46380,
+      "scheduledDeparture": 46380,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:42099",
+       "name": "Lyndale Ave S & 99th St W"
+      }
+     },
+     {
+      "arrivalDelay": -66,
+      "realtimeArrival": 46374,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 46440,
+      "scheduledDeparture": 46740,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:51821",
+       "name": "I-35W & 98th Street Station Gate A"
+      }
+     },
+     {
+      "arrivalDelay": -357,
+      "realtimeArrival": 46443,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 46800,
+      "scheduledDeparture": 46800,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:51854",
+       "name": "Lyndale Ave S & #10031"
+      }
+     },
+     {
+      "arrivalDelay": -357,
+      "realtimeArrival": 46443,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 46800,
+      "scheduledDeparture": 46800,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:42514",
+       "name": "Lyndale Ave S & 102nd St W"
+      }
+     },
+     {
+      "arrivalDelay": -375,
+      "realtimeArrival": 46485,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 46860,
+      "scheduledDeparture": 46860,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:42515",
+       "name": "Lyndale Ave S & #10320"
+      }
+     },
+     {
+      "arrivalDelay": -375,
+      "realtimeArrival": 46485,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 46860,
+      "scheduledDeparture": 46860,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:42516",
+       "name": "Lyndale Ave S & 104th St W"
+      }
+     },
+     {
+      "arrivalDelay": -414,
+      "realtimeArrival": 46506,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 46920,
+      "scheduledDeparture": 46920,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1391",
+       "name": "Lyndale Ave S & Mission Rd"
+      }
+     },
+     {
+      "arrivalDelay": -414,
+      "realtimeArrival": 46506,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 46920,
+      "scheduledDeparture": 46920,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1393",
+       "name": "106th St & Lyndale / Bloomington Frwy Rd"
+      }
+     },
+     {
+      "arrivalDelay": -418,
+      "realtimeArrival": 46562,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 46980,
+      "scheduledDeparture": 46980,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:57127",
+       "name": "106th St W & Verdi Rd"
+      }
+     },
+     {
+      "arrivalDelay": -418,
+      "realtimeArrival": 46562,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 46980,
+      "scheduledDeparture": 46980,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:57128",
+       "name": "106th St W & Humboldt Ave S"
+      }
+     },
+     {
+      "arrivalDelay": -405,
+      "realtimeArrival": 46635,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 47040,
+      "scheduledDeparture": 47040,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:57129",
+       "name": "Humboldt Ave S & 104th St W"
+      }
+     },
+     {
+      "arrivalDelay": -405,
+      "realtimeArrival": 46635,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 47040,
+      "scheduledDeparture": 47040,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:57130",
+       "name": "104th St W & Oak Grove Elementary"
+      }
+     },
+     {
+      "arrivalDelay": -405,
+      "realtimeArrival": 46695,
+      "realtimeState": "UPDATED",
+      "scheduledArrival": 47100,
+      "scheduledDeparture": 47100,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:57131",
+       "name": "104th St W & Bloomington Fwy W"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "tMs": 1793034865105,
+   "tripId": "1:1134930",
+   "payload": {
+    "id": "1:1134930",
+    "stopTimes": [
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 48060,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 48060,
+      "scheduledDeparture": 48060,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:51824",
+       "name": "I-35W & 98th Street Station Gate D"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 48120,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 48120,
+      "scheduledDeparture": 48120,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1616",
+       "name": "98th St W & Dupont Ave / Fremont Ave"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 48120,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 48120,
+      "scheduledDeparture": 48120,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1617",
+       "name": "98th St W & Girard Ave S"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 48180,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 48180,
+      "scheduledDeparture": 48180,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1620",
+       "name": "98th St W & James Ave S"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 48180,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 48180,
+      "scheduledDeparture": 48180,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:1621",
+       "name": "98th St W & Logan Ave S"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 48240,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 48240,
+      "scheduledDeparture": 48240,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:57097",
+       "name": "Penn Ave S & 98th St W"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 48300,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 48300,
+      "scheduledDeparture": 48300,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:3443",
+       "name": "Penn Ave S & Gideon Pond Apts"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 48300,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 48300,
+      "scheduledDeparture": 48300,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:3445",
+       "name": "Penn Ave S & #10040"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 48300,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 48300,
+      "scheduledDeparture": 48300,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:3446",
+       "name": "Penn Ave S & 102nd St W"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 48360,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 48360,
+      "scheduledDeparture": 48360,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:3452",
+       "name": "Old Shakopee Rd & Queen Ave S"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 48420,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 48420,
+      "scheduledDeparture": 48420,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:3454",
+       "name": "Old Shakopee Rd & Thomas Ave S"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 48420,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 48420,
+      "scheduledDeparture": 48420,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:3456",
+       "name": "Old Shakopee Rd & Vincent Ave S"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 48480,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 48480,
+      "scheduledDeparture": 48480,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:3458",
+       "name": "Old Shakopee Rd & Xerxes Ave S"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 48480,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 48480,
+      "scheduledDeparture": 48480,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:3460",
+       "name": "Old Shakopee Rd & Zenith Ave S"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 48540,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 48540,
+      "scheduledDeparture": 48540,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:3462",
+       "name": "Old Shakopee Rd & Beard Ave S"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 48540,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 48540,
+      "scheduledDeparture": 48540,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:3464",
+       "name": "Old Shakopee Rd & Drew Ave S"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 48540,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 48540,
+      "scheduledDeparture": 48540,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:43621",
+       "name": "Old Shakopee Rd & France Ave S"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 48600,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 48600,
+      "scheduledDeparture": 48600,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:43622",
+       "name": "Valley West Ctr & Cub Foods"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 48660,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 48660,
+      "scheduledDeparture": 48660,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:52212",
+       "name": "Old Shakopee Rd & Valley West Center"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 48660,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 48660,
+      "scheduledDeparture": 48660,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:52210",
+       "name": "Old Shakopee Rd & Kell Ave S"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 48720,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 48720,
+      "scheduledDeparture": 48720,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:52208",
+       "name": "Old Shakopee Rd & Nord Ave S"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 48780,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 48780,
+      "scheduledDeparture": 48780,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:52206",
+       "name": "Old Shakopee Rd & Rich Ave S"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 48780,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 48780,
+      "scheduledDeparture": 48780,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:52204",
+       "name": "Old Shakopee Rd & Toledo / Normandale"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 48900,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 48900,
+      "scheduledDeparture": 48900,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:57527",
+       "name": "Normandale Blvd & Heritage Hills Dr"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 48960,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 48960,
+      "scheduledDeparture": 48960,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:57528",
+       "name": "Normandale Blvd & Scarborough Rd"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 48960,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 48960,
+      "scheduledDeparture": 48960,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:57529",
+       "name": "Normandale Blvd & 102nd St W"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 49020,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 49020,
+      "scheduledDeparture": 49020,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:57530",
+       "name": "Normandale Blvd & Normandale Hghlnds Dr"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 49080,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 49080,
+      "scheduledDeparture": 49080,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:2073",
+       "name": "Normandale Village"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 49140,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 49140,
+      "scheduledDeparture": 49140,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:2074",
+       "name": "98th St W & Rich Rd"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 49260,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 49260,
+      "scheduledDeparture": 49260,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:2075",
+       "name": "98th St W & Little Rd"
+      }
+     },
+     {
+      "arrivalDelay": 0,
+      "realtimeArrival": 49380,
+      "realtimeState": "SCHEDULED",
+      "scheduledArrival": 49380,
+      "scheduledDeparture": 49380,
+      "serviceDay": 1792990800,
+      "stop": {
+       "id": "1:56725",
+       "name": "Normandale Community College"
+      }
+     }
+    ]
+   }
+  }
+ ],
+ "stopSnapshot": {
+  "tMs": 1793034840898,
+  "stopId": "1:81120",
+  "payload": {
+   "gtfsId": "1:81120",
+   "code": "81120",
+   "lat": 44.908921,
+   "lon": -93.267273,
+   "locationType": "STOP",
+   "name": "Portland Ave & 52nd St E",
+   "wheelchairBoarding": "NOT_POSSIBLE",
+   "fetchedAtMs": 1793034840898,
+   "fetchStatus": 2,
+   "stopTimesLastUpdated": 1793034840898,
+   "stoptimesForPatterns": [
+    {
+     "pattern": {
+      "desc": "METRO D Line to MOA Transit Station Gate A (1:56873) from Brooklyn Ctr Transit Ctr Gate F (1:56823) via 46th St E & Chicago Ave (1:80325)",
+      "headsign": "Chicago-Fremont / Mall of America",
+      "id": "1:924:1:01",
+      "route": {
+       "agency": {
+        "name": "Metro Transit",
+        "gtfsId": "1:0"
+       },
+       "gtfsId": "1:924"
+      }
+     },
+     "stoptimes": [
+      {
+       "headsign": "Chicago-Fremont / Mall of America",
+       "departureDelay": 260,
+       "realtimeDeparture": 46400,
+       "realtimeState": "UPDATED",
+       "scheduledDeparture": 46140,
+       "serviceDay": 1792990800,
+       "trip": {
+        "blockId": "193458",
+        "id": "VHJpcDoxOjEzOTc2NDI",
+        "pattern": {
+         "id": "UGF0dGVybjoxOjkyNDoxOjAx"
+        },
+        "route": {
+         "gtfsId": "1:924"
+        }
+       }
+      },
+      {
+       "headsign": "Chicago-Fremont / Mall of America",
+       "departureDelay": 103,
+       "realtimeDeparture": 44443,
+       "realtimeState": "UPDATED",
+       "scheduledDeparture": 44340,
+       "serviceDay": 1792990800,
+       "trip": {
+        "blockId": "192170",
+        "id": "VHJpcDoxOjEzODQ1MTY",
+        "pattern": {
+         "id": "UGF0dGVybjoxOjkyNDoxOjAx"
+        },
+        "route": {
+         "gtfsId": "1:924"
+        }
+       }
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

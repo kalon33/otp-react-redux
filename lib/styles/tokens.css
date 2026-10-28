@@ -1,0 +1,133 @@
+/*
+ * TransitNav design tokens (mobile overhaul, 2026-10-26).
+ *
+ * Imported from index.css right after bootstrap and BEFORE every component
+ * stylesheet, so component css and styled-components can read the variables.
+ * The matching global rules live in lib/styles/base.css (imported LAST); the
+ * shared styled primitives in lib/components/util/tn-styled.ts consume these.
+ *
+ * Theme switching
+ * - Light values sit on :root and apply everywhere (desktop included).
+ * - Dark values apply only on the phone layout: <html class="tn-mobile">,
+ *   which lib/util/tn-root-classes.ts sets at boot when coreUtils.ui.isMobile().
+ *   The desktop layout is not dark-mode ready (bootstrap panels, sidebar), so a
+ *   shared component using --tn-surface must not turn dark there.
+ * - <html data-theme="light"> pins light, <html data-theme="dark"> forces dark
+ *   (on any layout) — for screenshots and a future in-app theme setting.
+ *
+ * Rules: there is ONE brand accent (--tn-accent). --tn-live is the realtime
+ * green and never a brand colour. Keep GTFS route colours for transit pills and
+ * stripes; --tn-bike is only the bike-leg accent.
+ */
+
+:root {
+  /* Surfaces */
+  --tn-bg: #f2f3f5; /* page ground */
+  --tn-surface: #ffffff; /* cards, sheets, app bar, drawer */
+  --tn-surface-2: #f7f8fa; /* inset rows, inputs, chips at rest */
+  --tn-border: #e3e5e8; /* hairlines */
+
+  /* Text */
+  --tn-text: #15171a;
+  --tn-text-2: #5b6168; /* secondary */
+  --tn-text-3: #8a9099; /* tertiary, placeholders */
+
+  /* Accent + status */
+  --tn-accent: #0a66c2;
+  --tn-accent-ink: #ffffff; /* text/icons on --tn-accent */
+  --tn-accent-soft: #e6f0fb; /* selected chips/rows, tinted notices */
+  --tn-live: #1e8e3e; /* realtime glyph + "in 2 min" copy */
+  --tn-live-soft: #e6f4ea; /* live-tint chip/pill background */
+  --tn-warn: #b26a00; /* delays, waits */
+  --tn-warn-soft: #fff4e0;
+  --tn-danger: #c62828; /* late, missed, errors, destructive rows */
+  --tn-danger-soft: #fdecec;
+  --tn-bike: #e8710a; /* bike leg accent */
+  --tn-scrim: rgba(0, 0, 0, 0.32); /* behind drawers/modals */
+
+  /* Shape */
+  --tn-radius: 16px; /* cards, sheets */
+  --tn-radius-sm: 10px; /* chips, inputs, small buttons */
+  --tn-radius-pill: 999px;
+  --tn-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 4px 16px rgba(0, 0, 0, 0.08);
+  --tn-shadow-up: 0 -2px 12px rgba(0, 0, 0, 0.12); /* bottom sheets, grabbers */
+
+  /* Spacing scale */
+  --tn-space-1: 4px;
+  --tn-space-2: 8px;
+  --tn-space-3: 12px;
+  --tn-space-4: 16px;
+  --tn-space-5: 24px;
+  --tn-space-6: 32px;
+
+  /* Type. Use the shorthands as `font: var(--tn-type-lg);` and add
+     `font-variant-numeric: var(--tn-tabular);` to every time / duration. */
+  --tn-font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', Roboto,
+    'Segoe UI', system-ui, sans-serif;
+  --tn-tabular: tabular-nums;
+  --tn-type-hero: 700 40px/44px var(--tn-font); /* Go Mode hero, trip duration */
+  --tn-type-title: 700 22px/28px var(--tn-font); /* screen titles */
+  --tn-type-lg: 600 17px/22px var(--tn-font); /* card primary line */
+  --tn-type-body: 400 16px/22px var(--tn-font);
+  --tn-type-sm: 400 14px/18px var(--tn-font); /* secondary */
+  --tn-type-xs: 500 12px/16px var(--tn-font); /* eyebrows: + uppercase, 0.04em */
+  --tn-tracking-xs: 0.04em;
+
+  /* Touch + device */
+  --tn-tap: 44px; /* minimum target */
+  --tn-control-h: 48px; /* inputs, primary buttons */
+  --tn-row-h: 52px; /* list rows, drawer rows */
+  --tn-appbar-h: 50px; /* do NOT change: every fixed screen offsets from it */
+  --tn-safe-top: env(safe-area-inset-top, 0px);
+  --tn-safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Dark values. Kept in one place twice (media query + explicit attribute)
+   because a custom property block cannot be shared between the two. */
+@media (prefers-color-scheme: dark) {
+  :root.tn-mobile:not([data-theme='light']) {
+    --tn-bg: #0f1115;
+    --tn-surface: #1b1e25;
+    --tn-surface-2: #242831;
+    --tn-border: #2e333d;
+    --tn-text: #f2f3f5;
+    --tn-text-2: #a2a8b3;
+    --tn-text-3: #6f7580;
+    --tn-accent: #4c9ff0;
+    --tn-accent-ink: #0b1220;
+    --tn-accent-soft: #17304d;
+    --tn-live: #3ddc84;
+    --tn-live-soft: #133524;
+    --tn-warn: #ffb547;
+    --tn-warn-soft: #3a2a10;
+    --tn-danger: #ff6b6b;
+    --tn-danger-soft: #3d1a1c;
+    --tn-bike: #ffa052;
+    --tn-scrim: rgba(0, 0, 0, 0.55);
+    --tn-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    --tn-shadow-up: 0 -1px 2px rgba(0, 0, 0, 0.5);
+  }
+}
+
+:root[data-theme='dark'] {
+  --tn-bg: #0f1115;
+  --tn-surface: #1b1e25;
+  --tn-surface-2: #242831;
+  --tn-border: #2e333d;
+  --tn-text: #f2f3f5;
+  --tn-text-2: #a2a8b3;
+  --tn-text-3: #6f7580;
+  --tn-accent: #4c9ff0;
+  --tn-accent-ink: #0b1220;
+  --tn-accent-soft: #17304d;
+  --tn-live: #3ddc84;
+  --tn-live-soft: #133524;
+  --tn-warn: #ffb547;
+  --tn-warn-soft: #3a2a10;
+  --tn-danger: #ff6b6b;
+  --tn-danger-soft: #3d1a1c;
+  --tn-bike: #ffa052;
+  --tn-scrim: rgba(0, 0, 0, 0.55);
+  --tn-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --tn-shadow-up: 0 -1px 2px rgba(0, 0, 0, 0.5);
+}

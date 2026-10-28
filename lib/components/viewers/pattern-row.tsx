@@ -86,10 +86,17 @@ const PatternRow = ({
       {/* header row */}
       <div
         className="header stop-view"
-        style={{
-          backgroundColor: routeColor,
-          color: getMostReadableTextColor(routeColor, route?.textColor)
-        }}
+        // The route colours travel as variables: the desktop paints the row
+        // with them, the phone layout (styled.ts) a route pill only.
+        style={
+          {
+            '--pattern-route-color': routeColor,
+            '--pattern-route-text': getMostReadableTextColor(
+              routeColor,
+              route?.textColor
+            )
+          } as React.CSSProperties
+        }
       >
         {/* route name */}
         <div className="route-name">

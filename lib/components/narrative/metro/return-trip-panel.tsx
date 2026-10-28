@@ -6,7 +6,6 @@ import React, { useCallback, useContext, useEffect } from 'react'
 import styled from 'styled-components'
 
 import { ComponentContext } from '../../../util/contexts'
-import { DARK_TEXT_GREY } from '../../util/colors'
 import {
   outboundKeyOf,
   planReturnTrip,
@@ -38,8 +37,8 @@ const { ensureAtLeastOneMinute } = coreUtils.time
  */
 
 const Panel = styled.section`
-  border-top: 0.1ch solid ${DARK_TEXT_GREY}33;
-  color: ${DARK_TEXT_GREY};
+  border-top: 1px solid var(--tn-border);
+  color: var(--tn-text);
   margin: 8px 16px 0;
   padding-top: 10px;
 `
@@ -51,7 +50,7 @@ const Header = styled.h3`
 `
 
 const Subhead = styled.p`
-  color: #666;
+  color: var(--tn-text-2);
   font-size: 13px;
   margin: 2px 0 8px;
 `
@@ -64,12 +63,15 @@ const Options = styled.div`
 
 const OptionButton = styled.button<{ $selected: boolean }>`
   align-items: center;
-  background: ${(props) => (props.$selected ? '#ffffff' : 'transparent')};
-  border-radius: 6px;
+  background: ${(props) =>
+    props.$selected ? 'var(--tn-accent-soft)' : 'var(--tn-surface)'};
+  border-radius: var(--tn-radius-sm);
   border: ${(props) =>
     props.$selected
-      ? '2px solid var(--main-base-color, rgb(173, 216, 230))'
-      : '1px solid rgb(187, 187, 187)'};
+      ? '2px solid var(--tn-accent)'
+      : '1px solid var(--tn-border)'};
+  color: var(--tn-text);
+  min-height: var(--tn-tap);
   display: grid;
   gap: 4px 8px;
   grid-template-columns: 1fr auto;
@@ -102,30 +104,34 @@ const OptionTimes = styled.span`
 
 /** How long this way back leaves the rider there. See timeAtDestinationMs. */
 const OptionStay = styled.span`
-  color: #666;
+  color: var(--tn-text-2);
   font-size: 13px;
   grid-column: 1;
 `
 
 const OptionDuration = styled.span`
   font-size: 14px;
+  font-variant-numeric: var(--tn-tabular);
   grid-column: 2;
   grid-row: 1 / span 2;
   text-align: right;
 `
 
 const Message = styled.p`
-  color: #666;
+  color: var(--tn-text-2);
   font-size: 13px;
   margin: 0 0 6px;
 `
 
 const RetryButton = styled.button`
-  background: none;
-  border-radius: 3px;
-  border: 1px solid rgb(187, 187, 187);
-  font-size: 13px;
-  padding: 4px 10px;
+  background: var(--tn-surface-2);
+  border-radius: var(--tn-radius-pill);
+  border: 0;
+  color: var(--tn-text);
+  font-size: 14px;
+  font-weight: 500;
+  min-height: var(--tn-tap);
+  padding: 0 var(--tn-space-4);
 `
 
 type Props = {

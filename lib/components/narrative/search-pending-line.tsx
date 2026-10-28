@@ -53,11 +53,20 @@ export function getSearchPendingKind(
 
 const Line = styled.div`
   align-items: center;
-  color: #555;
+  color: var(--tn-text-2);
   display: flex;
-  font-size: 14px;
+  font: var(--tn-type-sm);
   gap: 8px;
   padding: 8px 12px;
+
+  svg {
+    color: var(--tn-accent);
+  }
+
+  .otp.mobile &&,
+  .tn-gomode && {
+    padding: var(--tn-space-1) var(--tn-space-4) var(--tn-space-2);
+  }
 `
 
 const SearchPendingLine = ({

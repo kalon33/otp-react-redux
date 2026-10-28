@@ -6,10 +6,11 @@ import {
 } from '@opentripplanner/trip-form'
 import { ModeButtonDefinition } from '@opentripplanner/types'
 import { Search } from '@styled-icons/fa-solid/Search'
+import { Sliders } from '@styled-icons/fa-solid/Sliders'
 import { SyncAlt } from '@styled-icons/fa-solid/SyncAlt'
 import { useIntl } from 'react-intl'
-import AnimateHeight from 'react-animate-height'
-import React, { useCallback, useContext, useEffect, useMemo } from 'react'
+import React, { ReactNode, useCallback, useContext, useEffect } from 'react'
+import styled from 'styled-components'
 
 import * as apiActions from '../../actions/api'
 import * as formActions from '../../actions/form'
@@ -17,12 +18,13 @@ import * as narrativeActions from '../../actions/narrative'
 import { ComponentContext } from '../../util/contexts'
 import { getActiveSearch, hasValidLocation } from '../../util/state'
 import { getBaseColor, getDarkenedBaseColor } from '../util/colors'
-import { getDefaultModeButtons } from '../../util/api'
 import { StyledIconWrapper } from '../util/styledIcon'
-import { User } from '../user/types'
+import { TnButton, TnChip } from '../util/tn-styled'
+import AnimateHeight from 'react-animate-height'
 
 import {
   addModeButtonIcon,
+  alertUserTripPlan,
   modesQueryParamConfig,
   onSettingsUpdate,
   pipe,
@@ -30,7 +32,13 @@ import {
 } from './util'
 import {
   AdvancedOptionsContainer,
+  formChipCss,
   MainSettingsRow,
+  MobileActions,
+  MobileChipRow,
+  MobileDateTimeCard,
+  MobileModeSegments,
+  MobileSettingsColumn,
   ModeSelectorContainer,
   PlanTripButton
 } from './batch-styled'
@@ -49,22 +57,33 @@ type Props = {
   enabledModeButtons: string[]
   fillModeIcons?: boolean
   homeTimezone: string
+  /**
+   * The phone layout (batch-search-screen): chips row, segmented modes and a
+   * full-width "Plan trip" pill. Off (the desktop routing panel) renders the
+   * original row unchanged.
+   */
+  mobile?: boolean
   modeButtonOptions: ModeButtonDefinition[]
   onPlanTripClick: () => void
   openAdvancedSettings: () => void
   routingQuery: any
+  /** Phone layout only: a full-width action shown directly above Plan trip. */
+  secondaryAction?: ReactNode
   setQueryParam: (evt: any) => void
   sort: any
   syncSortWithDepartArrive: any
   updateItineraryFilter: any
-  user: User
 }
+
+const OptionsChip = styled(TnChip)`
+  ${formChipCss}
+`
 
 export function setModeButtonEnabled(enabledKeys: string[]) {
   return (modeButton: ModeButtonDefinition): ModeButtonDefinition => {
     return {
       ...modeButton,
-      enabled: enabledKeys?.includes(modeButton.key)
+      enabled: enabledKeys.includes(modeButton.key)
     }
   }
 }
@@ -79,34 +98,24 @@ function BatchSettings({
   enabledModeButtons,
   fillModeIcons,
   homeTimezone,
+  mobile,
   modeButtonOptions,
   onPlanTripClick,
   openAdvancedSettings,
+  routingQuery,
+  secondaryAction,
   setQueryParam,
   sort,
   syncSortWithDepartArrive,
-  updateItineraryFilter,
-  user
+  updateItineraryFilter
 }: Props) {
   const intl = useIntl()
 
   // @ts-expect-error Context not typed
   const { ModeIcon } = useContext(ComponentContext)
 
-  const processedModeButtons = useMemo(
-    () =>
-      modeButtonOptions.map((button, index) => {
-        const processed = pipe(
-          addModeButtonIcon(ModeIcon),
-          setModeButtonEnabled(enabledModeButtons)
-        )(button)
-        return {
-          ...processed,
-          // Ensure each button has a unique key for React list rendering
-          key: processed.key || `mode-button-${index}`
-        }
-      }),
-    [modeButtonOptions, ModeIcon, enabledModeButtons]
+  const processedModeButtons = modeButtonOptions.map(
+    pipe(addModeButtonIcon(ModeIcon), setModeButtonEnabled(enabledModeButtons))
   )
 
   const baseColor = getBaseColor()
@@ -139,6 +148,77 @@ function BatchSettings({
     }
   }, [dtSelectorOpen, departArrive])
 
+  const modeSelector = (
+    <MetroModeSelector
+      accentColor={baseColor}
+      activeHoverColor={accentColor.toHexString()}
+      fillModeIcons={fillModeIcons}
+      label={intl.formatMessage({
+        id: 'components.BatchSearchScreen.modeSelectorLabel'
+      })}
+      modeButtons={processedModeButtons}
+      onSettingsUpdate={onSettingsUpdate(setQueryParam)}
+      onToggleModeButton={setModeButton(
+        enabledModeButtons,
+        onSettingsUpdate(setQueryParam)
+      )}
+    />
+  )
+
+  const planTripLabel = intl.formatMessage({
+    id: 'components.BatchSettings.planTripTooltip'
+  })
+
+  if (mobile) {
+    return (
+      <MobileSettingsColumn className="main-settings-row">
+        <MobileChipRow className="tn-form-chips">
+          <DepartArriveDropdown
+            departArrive={departArrive}
+            onQueryParamChange={onQueryParamChange}
+            timeZone={homeTimezone}
+          />
+          <RoundTripSettings />
+          <OptionsChip
+            id="open-advanced-settings-button"
+            onClick={openAdvancedSettings}
+            type="button"
+          >
+            <Sliders aria-hidden />
+            {intl.formatMessage({
+              id: 'components.BatchSearchScreen.options'
+            })}
+          </OptionsChip>
+        </MobileChipRow>
+        <AnimateHeight
+          duration={200}
+          height={dtSelectorOpen ? 'auto' : 0}
+          // Closed, it takes back the column gap it would otherwise leave.
+          style={{
+            marginTop: dtSelectorOpen ? 0 : 'calc(-1 * var(--tn-space-3))',
+            transition: 'ease all 200ms'
+          }}
+        >
+          <MobileDateTimeCard>
+            <DateTimeModal />
+          </MobileDateTimeCard>
+        </AnimateHeight>
+        <MobileModeSegments>{modeSelector}</MobileModeSegments>
+        <MobileActions>
+          {secondaryAction}
+          <TnButton
+            $block
+            id="plan-trip"
+            onClick={onPlanTripClick}
+            type="button"
+          >
+            {planTripLabel}
+          </TnButton>
+        </MobileActions>
+      </MobileSettingsColumn>
+    )
+  }
+
   return (
     <MainSettingsRow className="main-settings-row">
       <AdvancedOptionsContainer>
@@ -165,33 +245,11 @@ function BatchSettings({
       <RoundTripSettings />
 
       <ModeSelectorContainer>
-        {/*
-          MetroModeSelector internally uses ModeSelector3 which doesn't properly
-          handle React keys for its children. This warning originates from that
-          external component and cannot be fixed without modifying @opentripplanner/trip-form.
-          The modeButtons passed here have unique keys, but ModeSelector3 doesn't use them.
-        */}
-        <MetroModeSelector
-          accentColor={baseColor}
-          activeHoverColor={accentColor.toHexString()}
-          fillModeIcons={fillModeIcons}
-          label={intl.formatMessage({
-            id: 'components.BatchSearchScreen.modeSelectorLabel'
-          })}
-          modeButtons={processedModeButtons}
-          onSettingsUpdate={onSettingsUpdate(setQueryParam)}
-          onToggleModeButton={setModeButton(
-            enabledModeButtons,
-            onSettingsUpdate(setQueryParam)
-          )}
-        />
+        {modeSelector}
         <PlanTripButton
           id="plan-trip"
           onClick={onPlanTripClick}
-          title={intl.formatMessage({
-            id: 'components.BatchSettings.planTripTooltip'
-          })}
-          type="submit"
+          title={planTripLabel}
         >
           <StyledIconWrapper style={{ fontSize: '1.6em' }}>
             {hasValidLocation(currentQuery, 'from') &&
@@ -214,8 +272,6 @@ const mapStateToProps = (state: any) => {
   const urlSearchParams = new URLSearchParams(state.router.location.search)
   const { homeTimezone, modes } = state.otp.config
   const { departArrive } = state.otp.currentQuery
-  const { loggedInUser } = state.user
-  const defaultEnabledModeButtons = getDefaultModeButtons(state)
   return {
     activeSearch: getActiveSearch(state),
     currentQuery: state.otp.currentQuery,
@@ -224,15 +280,15 @@ const mapStateToProps = (state: any) => {
     enabledModeButtons:
       decodeQueryParams(modesQueryParamConfig, {
         modeButtons: urlSearchParams.get('modeButtons')
-      })?.modeButtons?.filter((mb): mb is string => mb !== null) ??
-      defaultEnabledModeButtons,
+      })?.modeButtons ||
+      modes?.initialState?.enabledModeButtons ||
+      {},
     fillModeIcons: state.otp.config.itinerary?.fillModeIcons,
     homeTimezone,
     modeButtonOptions: modes?.modeButtons || [],
     sort: state.otp.filter.sort,
     syncSortWithDepartArrive:
-      state.otp.config?.itinerary?.syncSortWithDepartArrive,
-    user: loggedInUser
+      state.otp.config?.itinerary?.syncSortWithDepartArrive
   }
 }
 

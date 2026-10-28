@@ -253,3 +253,402 @@
   width: 100% !important;
   background: transparent !important;
 }
+/* =====================================================================
+   Phone layout (mobile overhaul, 2026-10-26). Everything below is scoped
+   to :is(.otp.mobile, .tn-gomode); the desktop rules above are untouched. Values come from
+   lib/styles/tokens.css. The viewers scroll inside .viewer-container under
+   the 200px map strip (mobile.css).
+   ===================================================================== */
+
+:is(.otp.mobile, .tn-gomode) .viewer-container {
+  background-color: var(--tn-bg);
+}
+
+/* ---------- Stop viewer: header card + departures list ---------- */
+
+:is(.otp.mobile, .tn-gomode) .stop-viewer {
+  background-color: var(--tn-bg);
+  min-height: 100%;
+}
+:is(.otp.mobile, .tn-gomode) .stop-viewer-header {
+  background-color: var(--tn-surface);
+  border-radius: var(--tn-radius);
+  box-shadow: var(--tn-shadow);
+  color: var(--tn-text);
+  margin: var(--tn-space-3) var(--tn-space-4) 0;
+  position: relative;
+}
+/* room for the favourite toggle in the top-right corner */
+:is(.otp.mobile, .tn-gomode) .stop-viewer-header h1 {
+  margin: 0;
+  padding-right: 48px;
+}
+:is(.otp.mobile, .tn-gomode) .stop-viewer-header .favorite-stop-toggle {
+  align-items: center;
+  border-radius: var(--tn-radius-pill);
+  color: var(--tn-text-2) !important;
+  display: flex;
+  height: var(--tn-tap);
+  justify-content: center;
+  margin: 0 !important;
+  position: absolute;
+  right: var(--tn-space-2);
+  top: var(--tn-space-2);
+  width: var(--tn-tap);
+}
+:is(.otp.mobile, .tn-gomode) .stop-viewer-header .favorite-stop-toggle[aria-pressed="true"] {
+  color: var(--tn-warn) !important;
+}
+:is(.otp.mobile, .tn-gomode) .stop-viewer-header .favorite-stop-toggle:active {
+  background-color: var(--tn-surface-2);
+}
+:is(.otp.mobile, .tn-gomode) .stop-viewer-header .favorite-stop-toggle svg {
+  height: 22px;
+  width: 22px;
+}
+/* the date picker under From here / To here */
+:is(.otp.mobile, .tn-gomode) .stop-viewer-header input[type="date"] {
+  background-color: var(--tn-surface-2);
+  border-radius: var(--tn-radius-sm);
+  color: var(--tn-text);
+  font: 500 16px/20px var(--tn-font);
+  font-variant-numeric: var(--tn-tabular);
+  min-height: var(--tn-tap);
+  padding: 0 var(--tn-space-3);
+  width: auto;
+}
+:is(.otp.mobile, .tn-gomode) .stop-viewer-body {
+  padding: var(--tn-space-3) var(--tn-space-4)
+    calc(var(--tn-space-4) + var(--tn-safe-bottom));
+}
+:is(.otp.mobile, .tn-gomode) .stop-viewer-body table {
+  background-color: var(--tn-surface);
+  border-collapse: separate;
+  border-radius: var(--tn-radius);
+  border-spacing: 0;
+  box-shadow: var(--tn-shadow);
+  color: var(--tn-text);
+  height: auto;
+}
+:is(.otp.mobile, .tn-gomode) .stop-viewer-body table th {
+  background-color: var(--tn-surface);
+  border-bottom: 1px solid var(--tn-border);
+  box-shadow: none;
+  color: var(--tn-text-2);
+  font: var(--tn-type-xs);
+  letter-spacing: var(--tn-tracking-xs);
+  padding: var(--tn-space-3) var(--tn-space-2);
+  text-transform: uppercase;
+}
+:is(.otp.mobile, .tn-gomode) .stop-viewer-body table th:first-child {
+  border-top-left-radius: var(--tn-radius);
+}
+:is(.otp.mobile, .tn-gomode) .stop-viewer-body table th:last-child {
+  border-top-right-radius: var(--tn-radius);
+  text-align: right;
+}
+:is(.otp.mobile, .tn-gomode) .stop-viewer-body table td {
+  border-bottom: 1px solid var(--tn-border);
+  font: var(--tn-type-body);
+  padding: var(--tn-space-3) var(--tn-space-2);
+  vertical-align: middle;
+}
+:is(.otp.mobile, .tn-gomode) .stop-viewer-body table tr > :first-child {
+  padding-left: var(--tn-space-4);
+}
+:is(.otp.mobile, .tn-gomode) .stop-viewer-body table tr > :last-child {
+  font-variant-numeric: var(--tn-tabular);
+  font-weight: 600;
+  padding-right: var(--tn-space-4);
+}
+:is(.otp.mobile, .tn-gomode) .stop-viewer-body table tr:last-child td {
+  border-bottom: 0;
+}
+:is(.otp.mobile, .tn-gomode) .stop-viewer-body table .route-pill {
+  background-color: var(--tn-route-color, var(--tn-surface-2));
+  border-radius: var(--tn-radius-sm);
+  color: var(--tn-route-text, var(--tn-text));
+  display: inline-block;
+  font: 700 15px/20px var(--tn-font);
+  min-width: 36px;
+  padding: 3px 8px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* ---------- Route viewer: filters + a list of route rows ---------- */
+
+:is(.otp.mobile, .tn-gomode) .route-viewer {
+  background-color: var(--tn-bg);
+}
+:is(.otp.mobile, .tn-gomode) .route-viewer-header {
+  background-color: var(--tn-surface);
+  border-bottom: 1px solid var(--tn-border);
+  color: var(--tn-text-2);
+  font: var(--tn-type-sm);
+  padding: var(--tn-space-3) var(--tn-space-4);
+}
+:is(.otp.mobile, .tn-gomode) .search-and-filter {
+  gap: var(--tn-space-2);
+  margin-top: var(--tn-space-2);
+}
+:is(.otp.mobile, .tn-gomode) .search-and-filter .routeFilter {
+  column-gap: var(--tn-space-2);
+  grid-template-columns: 22px minmax(0, 2fr) minmax(0, 1fr);
+}
+:is(.otp.mobile, .tn-gomode) .search-and-filter select,
+:is(.otp.mobile, .tn-gomode) .search-and-filter .routeSearch input {
+  background-color: var(--tn-surface-2);
+  border: 0;
+  border-radius: var(--tn-radius-sm);
+  color: var(--tn-text);
+  font: var(--tn-type-body);
+  margin-left: 0;
+  min-height: var(--tn-tap);
+  padding: 0 var(--tn-space-3);
+}
+:is(.otp.mobile, .tn-gomode) .search-and-filter .routeSearch {
+  gap: var(--tn-space-2);
+}
+:is(.otp.mobile, .tn-gomode) .search-and-filter svg {
+  color: var(--tn-text-2);
+}
+:is(.otp.mobile, .tn-gomode) .route-viewer-body {
+  background-color: var(--tn-surface);
+  margin: 0;
+  padding: 0 0 var(--tn-safe-bottom);
+}
+:is(.otp.mobile, .tn-gomode) .route-viewer-body > li {
+  box-shadow: inset 0 -1px 0 var(--tn-border);
+  margin: 0;
+  min-height: 60px;
+}
+:is(.otp.mobile, .tn-gomode) .route-viewer-body > li > a.clear-button-formatting {
+  border-radius: 0;
+  color: var(--tn-text) !important;
+  min-height: 60px;
+  padding: var(--tn-space-2) 60px var(--tn-space-2) var(--tn-space-4);
+}
+:is(.otp.mobile, .tn-gomode) .route-viewer-body > li > a.clear-button-formatting:hover {
+  outline: none;
+}
+:is(.otp.mobile, .tn-gomode) .route-viewer-body > li > a.clear-button-formatting.active {
+  background-color: var(--tn-accent-soft);
+}
+:is(.otp.mobile, .tn-gomode) .route-viewer-body > li > a.clear-button-formatting svg {
+  color: var(--tn-text-2);
+  fill: currentColor;
+}
+/* the chevron that opens the pattern (stops) view of the active row */
+:is(.otp.mobile, .tn-gomode) .route-viewer-body > li > a:not(.clear-button-formatting) {
+  align-items: center;
+  color: var(--tn-accent);
+  display: flex;
+  height: var(--tn-tap);
+  justify-content: center;
+  line-height: normal;
+  margin: 0;
+  right: var(--tn-space-2);
+  width: var(--tn-tap);
+}
+:is(.otp.mobile, .tn-gomode) .route-viewer-body > li > a:not(.clear-button-formatting) svg {
+  margin: 0;
+}
+:is(.otp.mobile, .tn-gomode) .route-viewer-body .noRoutesFoundMessage {
+  color: var(--tn-text-2);
+  padding: var(--tn-space-5) var(--tn-space-4);
+}
+
+/* ---------- Pattern viewer: the line's stops as a timeline ---------- */
+
+:is(.otp.mobile, .tn-gomode) .pattern-viewer {
+  background-color: var(--tn-surface) !important;
+  color: var(--tn-text) !important;
+  fill: currentColor !important;
+}
+:is(.otp.mobile, .tn-gomode) .pattern-viewer .pattern-viewer-header {
+  align-items: center;
+  background-color: var(--tn-surface) !important;
+  border-bottom: 1px solid var(--tn-border);
+  gap: var(--tn-space-2);
+  min-height: 60px;
+  padding: var(--tn-space-1) var(--tn-space-4) var(--tn-space-1)
+    var(--tn-space-1);
+}
+:is(.otp.mobile, .tn-gomode) .pattern-viewer .pattern-viewer-header > button {
+  align-items: center;
+  color: var(--tn-text);
+  display: flex;
+  flex: none;
+  height: var(--tn-tap);
+  justify-content: center;
+  padding: 0;
+  width: var(--tn-tap);
+}
+:is(.otp.mobile, .tn-gomode) .pattern-viewer .pattern-picker {
+  gap: var(--tn-space-3);
+  padding: var(--tn-space-3) var(--tn-space-4);
+}
+:is(.otp.mobile, .tn-gomode) .pattern-viewer .pattern-picker label {
+  color: var(--tn-text-2);
+  flex: none;
+  font: var(--tn-type-xs);
+  letter-spacing: var(--tn-tracking-xs);
+  text-transform: uppercase;
+  width: auto;
+}
+:is(.otp.mobile, .tn-gomode) .pattern-viewer .pattern-picker > span {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+}
+:is(.otp.mobile, .tn-gomode) .pattern-viewer .pattern-picker button#headsign-selector-label {
+  min-height: var(--tn-tap);
+  width: 100%;
+}
+:is(.otp.mobile, .tn-gomode) .pattern-viewer .pattern-picker + h2,
+:is(.otp.mobile, .tn-gomode) .pattern-viewer h2 {
+  color: var(--tn-text-2);
+  font: var(--tn-type-xs) !important;
+  letter-spacing: var(--tn-tracking-xs);
+  padding: var(--tn-space-2) var(--tn-space-4) !important;
+  text-transform: uppercase;
+}
+
+/* ---------- Trip viewer: stop list on a rail ---------- */
+
+:is(.otp.mobile, .tn-gomode) .trip-viewer {
+  background-color: var(--tn-surface);
+  color: var(--tn-text);
+}
+:is(.otp.mobile, .tn-gomode) .trip-viewer-header {
+  border-bottom: 1px solid var(--tn-border);
+  padding: var(--tn-space-2) var(--tn-space-4) var(--tn-space-3);
+}
+:is(.otp.mobile, .tn-gomode) .trip-viewer .header-with-back-button button {
+  align-items: center;
+  color: var(--tn-text);
+  display: flex;
+  height: var(--tn-tap);
+  justify-content: center;
+  margin-left: calc(-1 * var(--tn-space-3));
+  width: var(--tn-tap);
+}
+:is(.otp.mobile, .tn-gomode) .trip-viewer-header .alert {
+  background-color: var(--tn-accent-soft);
+  border: 0;
+  border-radius: var(--tn-radius-sm);
+  box-shadow: none;
+  color: var(--tn-text);
+  font: var(--tn-type-sm);
+  margin: var(--tn-space-2) 0;
+  padding: var(--tn-space-3);
+}
+:is(.otp.mobile, .tn-gomode) .trip-viewer-header .label {
+  border-radius: var(--tn-radius-pill);
+  display: inline-flex;
+  font: 600 12px/16px var(--tn-font);
+  padding: 4px 10px;
+}
+:is(.otp.mobile, .tn-gomode) .trip-viewer-header .label-primary {
+  background-color: var(--tn-accent-soft);
+  color: var(--tn-accent);
+}
+:is(.otp.mobile, .tn-gomode) .trip-viewer-body {
+  padding: var(--tn-space-2) var(--tn-space-4)
+    calc(var(--tn-space-4) + var(--tn-safe-bottom));
+}
+:is(.otp.mobile, .tn-gomode) .trip-viewer .stop-time {
+  color: var(--tn-text-2);
+  font: 500 14px/18px var(--tn-font);
+  font-variant-numeric: var(--tn-tabular);
+  padding-top: 13px;
+  white-space: nowrap;
+  width: 72px;
+}
+:is(.otp.mobile, .tn-gomode) .trip-viewer .strip-map-container {
+  height: 44px;
+  width: 24px;
+}
+:is(.otp.mobile, .tn-gomode) .trip-viewer .strip-map-line,
+:is(.otp.mobile, .tn-gomode) .trip-viewer .strip-map-line-first,
+:is(.otp.mobile, .tn-gomode) .trip-viewer .strip-map-line-last {
+  background-color: var(--tn-text-3);
+  left: 10px;
+}
+:is(.otp.mobile, .tn-gomode) .trip-viewer .strip-map-line {
+  height: 44px;
+}
+:is(.otp.mobile, .tn-gomode) .trip-viewer .strip-map-line-first {
+  height: 22px;
+  top: 22px;
+}
+:is(.otp.mobile, .tn-gomode) .trip-viewer .strip-map-line-last {
+  height: 22px;
+}
+:is(.otp.mobile, .tn-gomode) .trip-viewer .strip-map-highlight,
+:is(.otp.mobile, .tn-gomode) .trip-viewer .strip-map-highlight-first,
+:is(.otp.mobile, .tn-gomode) .trip-viewer .strip-map-highlight-last {
+  background-color: var(--tn-accent-soft);
+  width: 24px;
+}
+:is(.otp.mobile, .tn-gomode) .trip-viewer .strip-map-highlight {
+  height: 44px;
+}
+:is(.otp.mobile, .tn-gomode) .trip-viewer .strip-map-highlight-first {
+  height: 40px;
+  top: 4px;
+}
+:is(.otp.mobile, .tn-gomode) .trip-viewer .strip-map-highlight-last {
+  height: 40px;
+}
+:is(.otp.mobile, .tn-gomode) .trip-viewer .strip-map-icon {
+  color: var(--tn-text);
+  left: 6px;
+  top: 14px;
+}
+:is(.otp.mobile, .tn-gomode) .trip-viewer .stop-name {
+  color: var(--tn-text);
+  font: 400 16px/20px var(--tn-font);
+  padding-top: 12px;
+  text-overflow: ellipsis;
+}
+:is(.otp.mobile, .tn-gomode) .trip-viewer .stop-button-container .view-stop-button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  color: var(--tn-accent);
+  display: inline-flex;
+  font: 600 14px/18px var(--tn-font);
+  justify-content: center;
+  min-height: var(--tn-tap);
+  min-width: var(--tn-tap);
+  padding: 0 var(--tn-space-2);
+}
+
+/* ---------- Nearby: cards on the page ground ---------- */
+
+:is(.otp.mobile, .tn-gomode) .nearby-view {
+  background-color: var(--tn-bg);
+}
+:is(.otp.mobile, .tn-gomode) .nearby-view .filter-container {
+  color: var(--tn-text-2);
+}
+
+/* Trip viewer header: back chevron and "Route: 94" on one 44px line. */
+:is(.otp.mobile, .tn-gomode) .trip-viewer-header .header-with-back-button {
+  align-items: center;
+  float: left !important;
+  height: var(--tn-tap);
+}
+:is(.otp.mobile, .tn-gomode) .trip-viewer-header > div:nth-child(2) > :first-child {
+  align-items: center;
+  display: flex;
+  font: var(--tn-type-lg);
+  margin: 0 0 var(--tn-space-2) var(--tn-tap) !important;
+  min-height: var(--tn-tap);
+}
+:is(.otp.mobile, .tn-gomode) .trip-viewer-header > div:nth-child(2) > :first-child strong {
+  margin-left: 0.3ch;
+}

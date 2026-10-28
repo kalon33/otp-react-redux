@@ -46,6 +46,16 @@ const ChildStopHeader = styled.div`
   &:first-of-type {
     border-top: 1px solid rgba(var(--main-base-color), 0.8);
   }
+
+  .tn-mobile & {
+    background-color: var(--tn-surface-2);
+    border-top: 1px solid var(--tn-border);
+    color: var(--tn-text);
+    gap: var(--tn-space-2);
+  }
+  .tn-mobile & .child-stop-code {
+    color: var(--tn-text-2);
+  }
 `
 
 type Props = {

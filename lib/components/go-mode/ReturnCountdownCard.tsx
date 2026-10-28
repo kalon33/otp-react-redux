@@ -55,18 +55,19 @@ interface Props extends OwnProps {
 // Styled here rather than in ./styled because nothing else uses them and they
 // are two lines each: the small caps label above the clock, and the clock.
 const ReturnCountdownLabel = styled.div`
-  color: #555;
-  font-size: 13px;
+  color: var(--tn-text-2);
+  font: var(--tn-type-xs);
+  letter-spacing: var(--tn-tracking-xs);
   margin-bottom: 2px;
+  text-transform: uppercase;
 `
 
 const ReturnCountdownValue = styled.div`
-  color: #222;
-  font-size: 34px;
-  font-variant-numeric: tabular-nums;
-  font-weight: 700;
-  line-height: 1.1;
-  margin-bottom: 8px;
+  color: var(--tn-text);
+  font: var(--tn-type-hero);
+  font-variant-numeric: var(--tn-tabular);
+  letter-spacing: -0.02em;
+  margin-bottom: 4px;
 `
 
 /** The first transit route of the return, for the one-line summary. */

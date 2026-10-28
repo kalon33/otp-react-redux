@@ -201,10 +201,11 @@ components:
     networkConnectionLost: "Erreur de connexion r\xE9seau"
     networkConnectionRestored: "Connexion r\xE9seau restaur\xE9e"
     openMenu: Ouvrir le menu
-    settings: "Param\xE8tres"
-    shareFeedback: Envoyer un commentaire
-    shareDiagnosticsOff: "Partage des diagnostics : d\xE9sactiv\xE9"
-    shareDiagnosticsOn: "Partage des diagnostics : activ\xE9"
+    settings: "Paramètres"
+    shareFeedback: "Envoyer un commentaire"
+    shareDiagnostics: "Partage des diagnostics"
+    shareDiagnosticsOff: "Partage des diagnostics : désactivé"
+    shareDiagnosticsOn: "Partage des diagnostics : activé"
     skipNavigation: Sauter la navigation
   ActiveRoutingPreferences:
     avoidingBiking: "\xE9viter le v\xE9lo"
@@ -239,20 +240,16 @@ components:
   BatchRoutingPanel:
     shortTitle: Planifier un trajet
   BatchSearchScreen:
-    advancedHeader: "Pr\xE9f\xE9rences avanc\xE9es"
-    arriveOnTimeHeader: Rejoindre le bus
-    arriveOnTimeHelp: "Lorsque votre trajet jusqu'\xE0 l'arr\xEAt est recalcul\xE9\
-      \ en cours de route, il vise \xE0 vous y amener {minutes} minutes avant le bus\
-      \ plut\xF4t que le plus vite possible."
-    arriveOnTimeLabel: Arriver juste avant le bus
-    bikeCeilingHelp: "Un trajet peut contenir jusqu'\xE0 {minutes} minutes de v\xE9\
-      lo \u2014 environ {miles} mi \xE0 votre vitesse actuelle de {speed} mph. Cette\
-      \ limite est fix\xE9e sur le serveur ; ce curseur r\xE8gle la propension du\
-      \ planificateur \xE0 utiliser le v\xE9lo \xE0 l'int\xE9rieur de cette limite."
-    bikeWillingnessHeader: "V\xE9lo"
-    bikeWillingnessHigh: Plus
-    bikeWillingnessLabel: "Distance que vous acceptez de faire \xE0 v\xE9lo"
-    bikeWillingnessLow: Moins
+    advancedHeader: Préférences avancées
+    arriveOnTimeHeader: "Rejoindre le bus"
+    arriveOnTimeHelp: "Lorsque votre trajet jusqu'à l'arrêt est recalculé en cours de route, il vise à vous y amener {minutes} minutes avant le bus plutôt que le plus vite possible."
+    arriveOnTimeLabel: "Arriver juste avant le bus"
+    backToResults: "Retour aux résultats"
+    bikeCeilingHelp: "Un trajet peut contenir jusqu'à {minutes} minutes de vélo — environ {miles} mi à votre vitesse actuelle de {speed} mph. Cette limite est fixée sur le serveur ; ce curseur règle la propension du planificateur à utiliser le vélo à l'intérieur de cette limite."
+    bikeWillingnessHeader: "Vélo"
+    bikeWillingnessHigh: "Plus"
+    bikeWillingnessLabel: "Distance que vous acceptez de faire à vélo"
+    bikeWillingnessLow: "Moins"
     header: Votre trajet
     hideWalkTransitHelp: "N'affiche que les options utilisant votre v\xE9lo pour rejoindre\
       \ les transports. Ignor\xE9 lorsque la marche est le seul moyen d'y arriver."
@@ -269,6 +266,7 @@ components:
     noTransfersLabel: "Sans correspondance"
     numItinerariesLabel: "Nombre d'options à rechercher"
     numItinerariesOption: "{count} options"
+    options: Options
     routeLockHeader: "Lignes"
     routeLockAdd: "Ajouter une ligne\u2026"
     routeLockChip: Uniquement {route}
@@ -560,6 +558,8 @@ components:
     locatingBus: "Localisation de votre bus..."
     nextBusesAtStop: "Prochains bus à {stop}"
     nextDeparture: "Prochain : {time} (dans {mins} min)"
+    nextStopLine: "Prochain arrêt : {stop}"
+    noBusesNearby: "Aucun bus détecté à proximité"
     noLiveVehicleData: "Pas de données en temps réel — suivi par GPS"
     notYet: "Pas encore"
     notify:
@@ -771,8 +771,8 @@ components:
     departsAtTime: départ {time}
     fare: "{fare}"
     itineraryDescription: Trajet de {time} par les lignes {routes}
-    itinerarySummary: "Partez \xE0 {stopName} | {cost}"
-    leaveAt: "Partez \xE0"
+    itinerarySummary: Partez à {stopName} | {cost}
+    leaveAt: Départ
     multipleOptions: Plusieurs options
     orAlternatives: "ou autres lignes dans la m\xEAme direction"
     originallyScheduledTime: (initialement {originalTime})
@@ -787,6 +787,7 @@ components:
     switchTrip: "Basculer sur ce trajet"
     timeBiking: "{time} de vélo"
     timeWalking: "{time} de marche"
+    timeWaiting: "{time} d’attente"
     variantBiking: "{distance} à vélo"
     variantArrives: arrivée à {time}
     variantLeaves: départ à {time}
@@ -1103,27 +1104,25 @@ components:
   SequentialPaneDisplay:
     stepNumber: "\xC9tape {step} sur {total}"
   SettingsScreen:
-    bikeSpeedHelp: "Le temps que l'application attribue \xE0 vos \xE9tapes \xE0 v\xE9\
-      lo. Une fois r\xE9gl\xE9e, cette vitesse est utilis\xE9e par tous les itin\xE9\
-      raires, y compris avant que vous ayez roul\xE9 assez longtemps pour que l'application\
-      \ mesure votre allure."
-    bikeSpeedLabel: "Votre vitesse \xE0 v\xE9lo : {speed} mph"
-    bikeSpeedSlider: "Vitesse \xE0 v\xE9lo"
-    gettingAroundHeader: "Vos d\xE9placements"
-    heading: "Param\xE8tres"
-    routingHelp: "Ces r\xE9glages s'appliquent \xE0 tous les itin\xE9raires que vous\
-      \ planifiez, ainsi qu'\xE0 tout trajet recalcul\xE9 en cours de route."
-    speedHigh: Plus vite
-    speedLow: Moins vite
-    turnByTurnHeader: "Navigation d\xE9taill\xE9e"
-    turnByTurnHelp: "D\xE9sactiv\xE9e par d\xE9faut. M\xEAme d\xE9sactiv\xE9e, vous\
-      \ pouvez l'activer pour une seule \xE9tape \xE0 pied ou \xE0 v\xE9lo depuis\
-      \ l'aper\xE7u du trajet, une fois le trajet commenc\xE9."
-    turnByTurnLabel: "Navigation d\xE9taill\xE9e"
-    walkSpeedHelp: "Le temps que l'application attribue \xE0 vos \xE9tapes \xE0 pied,\
-      \ y compris la marche jusqu'\xE0 votre arr\xEAt."
-    walkSpeedLabel: 'Votre vitesse de marche : {speed} mph'
-    walkSpeedSlider: Vitesse de marche
+    appearanceDark: "Sombre"
+    appearanceHeader: "Apparence"
+    appearanceHelp: "Système suit le réglage Clair ou Sombre de votre téléphone."
+    appearanceLight: "Clair"
+    appearanceSystem: "Système"
+    bikeSpeedHelp: "Le temps que l'application attribue à vos étapes à vélo. Une fois réglée, cette vitesse est utilisée par tous les itinéraires, y compris avant que vous ayez roulé assez longtemps pour que l'application mesure votre allure."
+    bikeSpeedLabel: "Votre vitesse à vélo : {speed} mph"
+    bikeSpeedSlider: "Vitesse à vélo"
+    gettingAroundHeader: "Vos déplacements"
+    heading: "Paramètres"
+    routingHelp: "Ces réglages s'appliquent à tous les itinéraires que vous planifiez, ainsi qu'à tout trajet recalculé en cours de route."
+    speedHigh: "Plus vite"
+    speedLow: "Moins vite"
+    turnByTurnHeader: "Navigation détaillée"
+    turnByTurnHelp: "Désactivée par défaut. Même désactivée, vous pouvez l'activer pour une seule étape à pied ou à vélo depuis l'aperçu du trajet, une fois le trajet commencé."
+    turnByTurnLabel: "Navigation détaillée"
+    walkSpeedHelp: "Le temps que l'application attribue à vos étapes à pied, y compris la marche jusqu'à votre arrêt."
+    walkSpeedLabel: "Votre vitesse de marche : {speed} mph"
+    walkSpeedSlider: "Vitesse de marche"
   SessionTimeout:
     body: Votre session va expirer d'ici une minute. Appuyez sur 'Prolonger ma session'
       pour conserver votre recherche.
@@ -1180,23 +1179,25 @@ components:
       \ recherches de trajets, tout l'historique de vos de trajets sera supprim\xE9\
       . Voulez-vous continuer ?\n"
     mustAgreeToTerms: Vous devez accepter les conditions d'utilisation avant de continuer.
-    termsOfServiceStatement: 'J''atteste avoir au moins 18 ans et j''ai lu et consens
-      aux <termsOfUseLink>Conditions de service</termsOfUseLink> pour utiliser the
+    termsOfServiceStatement: >
+      J'atteste avoir au moins 18 ans et j'ai lu et consens aux
+      <termsOfUseLink>Conditions de service</termsOfUseLink> pour utiliser the
       Planificateur de trajets.
-
-      '
-    termsOfStorageStatement: "Facultatif: Je consens \xE0 ce que le Planificateur\
-      \ de trajets sauvegarde mes recherches afin d'am\xE9liorer les transports publics\
-      \ dans ma region. <termsOfStorageLink>Plus d'informations...</termsOfStorageLink>\n"
+    termsOfStorageStatement: >
+      Facultatif: Je consens à ce que le Planificateur de trajets sauvegarde mes
+      recherches afin d'améliorer les transports publics dans ma region.
+      <termsOfStorageLink>Plus d'informations...</termsOfStorageLink>
   Timetable:
-    errorLoadingStopClosures: "Erreur lors du chargement des arr\xEAts ferm\xE9s"
+    errorLoadingStopClosures: "Erreur lors du chargement des arrêts fermés"
     errorLoadingTimetable: Erreur lors du chargement des horaires
     routeInformation: Informations sur la ligne
-    showAllStops: "Afficher tous les arr\xEAts"
-    showTimepointsOnly: "Afficher uniquement les points d'arr\xEAt"
+    showAllStops: "Afficher tous les arrêts"
+    showTimepointsOnly: "Afficher uniquement les points d'arrêt"
     switchDirection: Changer de direction
     timetable: Horaires
-    timetableDate: "S\xE9lectionner la date"
+    timetableDate: "Sélectionner la date"
+  TransitLegSummary:
+    rideAndStops: "Trajet : {duration}{numStops, plural, =1 {} other { · # arrêts}}"
   TransitVehicleOverlay:
     in_transit_to: 'Prochain arrêt : {stop}'
     incoming_at: 'Approche de : {stop}'
@@ -1343,18 +1344,17 @@ components:
     favoriteStops: "Arr\xEAts favoris"
     myPreferences: "Mes pr\xE9f\xE9rences"
     mySavedPlaces: Mes lieux favoris (<manageLink>modifier</manageLink>)
-    noFavoriteStops: "Aucun arr\xEAt favori"
-    recentPlaces: "Lieux r\xE9cents"
-    recentSearchSummary: "{mode} de {from} \xE0 {to}"
-    recentSearches: "Recherches r\xE9centes"
-    rememberSearches: "Enregistrer les recherches/lieux r\xE9cents ?"
-    stopId: "Arr\xEAt n\xB0 {stopId}"
-    storageDisclaimer: "En activant cette option, tous vos lieux, pr\xE9f\xE9rences\
-      \ et param\xE8tres seront enregistr\xE9s dans le cache de votre navigateur.\
-      \ TriMet n'aura pas acc\xE8s aux donn\xE9es concernant votre domicile, lieu\
-      \ de travail, ou autre endroit. Vous pouvez \xE0 tout moment d\xE9sactiver la\
-      \ collecte de vos recherches/lieux r\xE9cents et effacer vos domicile, lieu\
-      \ de travail, et arr\xEAts favoris.\n"
+    noFavoriteStops: Aucun arrêt favori
+    recentPlaces: Lieux récents
+    recentSearchSummary: "{mode} de {from} à {to}"
+    recentSearches: Recherches récentes
+    rememberSearches: Enregistrer les recherches/lieux récents ?
+    stopId: Arrêt n° {stopId}
+    storageDisclaimer: >
+      Les lieux, préférences et paramètres que vous choisissez d'enregistrer
+      sont conservés dans le cache de votre navigateur. Vous pouvez à tout
+      moment désactiver la collecte de vos recherches/lieux récents et effacer
+      vos domicile, lieu de travail, et arrêts favoris.
   VerifyEmailPane:
     emailIsVerified: "Mon email est v\xE9rifi\xE9"
     instructions1: "Vous devriez recevoir un message par e-mail. Cliquez le lien dans\

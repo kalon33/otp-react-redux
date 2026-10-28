@@ -36,6 +36,11 @@ const Container = styled.div`
   @media (max-width: 768px) {
     margin-bottom: 50px;
   }
+
+  .tn-mobile & {
+    margin-bottom: var(--tn-space-4);
+    padding-top: var(--tn-space-4);
+  }
 `
 
 /**
@@ -185,7 +190,7 @@ const LocalPlaceEditorScreen = ({
   }
 
   return (
-    <AppFrame>
+    <AppFrame title={heading}>
       <PageTitle title={heading} />
       <Formik
         initialValues={place || {}}
@@ -198,7 +203,11 @@ const LocalPlaceEditorScreen = ({
         {(formikProps) => (
           <Form noValidate>
             <div>
-              <PageHeading as="h1">{heading}</PageHeading>
+              {/* Named in the phone's app bar; kept for screen readers and
+                  desktop. */}
+              <PageHeading as="h1" className="tn-page-title">
+                {heading}
+              </PageHeading>
             </div>
             <Container>
               {place ? (

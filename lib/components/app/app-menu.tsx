@@ -1,6 +1,7 @@
 import 'react-sliding-pane/dist/react-sliding-pane.css'
 import { Bug } from '@styled-icons/fa-solid/Bug'
 import { Bus } from '@styled-icons/fa-solid/Bus'
+import { ChevronRight } from '@styled-icons/fa-solid/ChevronRight'
 import { Comment } from '@styled-icons/fa-regular/Comment'
 import { connect } from 'react-redux'
 import { Envelope } from '@styled-icons/fa-regular/Envelope'
@@ -31,6 +32,7 @@ import {
   LOCAL_PLACES_PATH,
   SETTINGS_PATH
 } from '../../util/constants'
+import { getBrandTitle } from '../../util/brand'
 import {
   getBuildInfo,
   getDeviceId,
@@ -60,6 +62,8 @@ type MenuItem = {
 type AppMenuProps = {
   activeLocale: string
   backgroundGoMode: () => void
+  /** The drawer's heading: the product name (util/brand). */
+  brandTitle: string
   callTakerEnabled?: boolean
   extraMenuItems?: AppMenuItemConfig[]
   fieldTripEnabled?: boolean
@@ -206,6 +210,7 @@ class AppMenu extends Component<
   render() {
     const {
       activeLocale,
+      brandTitle,
       callTakerEnabled,
       extraMenuItems,
       fieldTripEnabled,
@@ -254,6 +259,7 @@ class AppMenu extends Component<
       ? intl.formatMessage({ id: 'components.AppMenu.closeMenu' })
       : intl.formatMessage({ id: 'components.AppMenu.openMenu' })
     const Bar = 'span'
+    const chevron = <ChevronRight />
 
     return (
       <>
@@ -285,6 +291,11 @@ class AppMenu extends Component<
           width="320px"
         >
           <div className="app-menu" id="app-menu">
+            {/* Not a link or a button: verify-go-mode-menu.js addresses the
+                rows as the pane's a/button elements. */}
+            <div aria-hidden className="app-menu-title">
+              {brandTitle}
+            </div>
             {/* This item is duplicated by the view-switcher, but only shown on mobile
             when the view switcher isn't shown (using css) */}
             <AppMenuItem
@@ -318,6 +329,7 @@ class AppMenu extends Component<
               })}
               to="/nearby"
             />
+            <div className="app-menu-separator" role="separator" />
             <AppMenuItem
               icon={<MapMarkerAlt />}
               onClick={this._handleNavigate}
@@ -326,6 +338,7 @@ class AppMenu extends Component<
                 id: 'components.AppMenu.myPlaces'
               })}
               to={LOCAL_PLACES_PATH}
+              trailing={chevron}
             />
             {/* The rider's routing levers and turn-by-turn default. Before
                 this they existed only inside the search form's advanced
@@ -340,6 +353,7 @@ class AppMenu extends Component<
                 id: 'components.AppMenu.settings'
               })}
               to={SETTINGS_PATH}
+              trailing={chevron}
             />
             {/* Next to Settings, and reachable mid-ride for the same reason:
                 _handleNavigate backgrounds an active trip rather than ending
@@ -353,7 +367,9 @@ class AppMenu extends Component<
                 id: 'components.AppMenu.shareFeedback'
               })}
               to={FEEDBACK_PATH}
+              trailing={chevron}
             />
+            <div className="app-menu-separator" role="separator" />
             <AppMenuItem
               icon={<Undo />}
               onClick={this._startOver}
@@ -395,11 +411,21 @@ class AppMenu extends Component<
                 })}
               />
             )}
+            {/* A switch row: the label names the setting and the switch shows
+                its state (role="switch" + aria-checked for assistive tech),
+                so the label no longer spells out "On"/"Off" — those strings
+                stay as the row's tooltip. */}
             <AppMenuItem
-              aria-pressed={this.state.diagnosticsOn}
+              aria-checked={this.state.diagnosticsOn}
+              className="app-menu-switch-row"
               icon={<Bug />}
               onClick={this._toggleDiagnostics}
-              text={
+              role="switch"
+              text={intl.formatMessage({
+                defaultMessage: 'Share diagnostics',
+                id: 'components.AppMenu.shareDiagnostics'
+              })}
+              title={
                 this.state.diagnosticsOn
                   ? intl.formatMessage({
                       defaultMessage: 'Share diagnostics: On',
@@ -409,6 +435,12 @@ class AppMenu extends Component<
                       defaultMessage: 'Share diagnostics: Off',
                       id: 'components.AppMenu.shareDiagnosticsOff'
                     })
+              }
+              trailing={
+                <span
+                  className="tn-switch"
+                  data-on={this.state.diagnosticsOn || undefined}
+                />
               }
             />
             {/* The ride console is a page on the server, not part of this app,
@@ -458,6 +490,7 @@ const mapStateToProps = (state: AppReduxState) => {
   } = state.otp.config
   return {
     activeLocale: state.otp.ui.locale,
+    brandTitle: getBrandTitle(state.otp.config.title),
     callTakerEnabled: isModuleEnabled(state, Modules.CALL_TAKER),
     extraMenuItems,
     fieldTripEnabled: isModuleEnabled(state, Modules.FIELD_TRIP),

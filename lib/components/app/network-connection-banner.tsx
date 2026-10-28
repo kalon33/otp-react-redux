@@ -10,6 +10,12 @@ const containerClassname = 'network-connection-banner'
 const timeout = 250
 
 const TransitionStyles = styled.div`
+  /* The live-region label is a 0x0 inline-block, but an inline-block still
+     opens a line box: it held a blank 20px band open under the AppFrame
+     pages' bar on the phone. Out of flow, it is still announced. */
+  .tn-mobile & > [role='status'] {
+    position: absolute;
+  }
   .${containerClassname} {
     background: ${RED_ON_WHITE};
     border-left: 1px solid #e7e7e7;

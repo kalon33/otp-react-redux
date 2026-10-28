@@ -866,11 +866,8 @@ describe('util > go-mode > Auto switching rules on the fixtures (65.2 B2)', () =
     })
     expect(Object.entries(per).filter(([, n]) => n > 3)).toEqual([])
   })
-  it('Stay on my route never switches; Simplest never adds more than 1 km of biking', () => {
+  it('Stay on my route never switches', () => {
     expect(b2Switches.filter((x) => x.preset === 'stayOnRoute')).toEqual([])
-    expect(
-      b2Switches.filter((x) => x.preset === 'simplest' && x.bikeSavedM < -1000)
-    ).toEqual([])
   })
 })
 

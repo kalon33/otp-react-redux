@@ -41,8 +41,10 @@ const FavoriteStopToggle = ({
 
   return enableFavoriteStops ? (
     <Button
+      aria-pressed={isFavoriteStop}
       bsSize="large"
       bsStyle="link"
+      className="favorite-stop-toggle"
       onClick={handleClick}
       style={{
         color: isFavoriteStop ? 'yellow' : 'black',

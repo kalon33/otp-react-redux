@@ -1,8 +1,9 @@
 import { connect } from 'react-redux'
+import { IntlShape, useIntl } from 'react-intl'
 import { QueryParamChangeEvent } from '@opentripplanner/trip-form/lib/types'
 import { Styled as TripFormStyled } from '@opentripplanner/trip-form'
-import { useIntl } from 'react-intl'
-import React, { useCallback, useEffect, useRef } from 'react'
+import coreUtils from '@opentripplanner/core-utils'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 
 import * as goModeActions from '../../actions/go-mode'
 import * as routingProfileActions from '../../actions/routing-profiles'
@@ -23,15 +24,26 @@ import {
   speedMph
 } from '../../util/routing-profiles'
 import {
-  GlobalSettingsContainer,
-  HelperText,
-  LeverContainer,
-  LeverSlider,
-  SettingCheckbox,
-  VisibleSubheader
-} from '../form/styled'
+  getTnThemePref,
+  setTnThemePref,
+  TnThemePref
+} from '../../util/tn-theme'
+import { LeverSlider, SettingCheckbox } from '../form/styled'
 import AppFrame from '../app/app-frame'
 import PageTitle from '../util/page-title'
+
+import {
+  LeverBlock,
+  LeverHelp,
+  SegmentedControl,
+  SegmentedOption,
+  SettingsCard,
+  SettingsFootnote,
+  SettingsPage,
+  SettingsSection,
+  SettingsSectionTitle,
+  ToggleRow
+} from './settings-list'
 
 /**
  * Granularity of the two speed sliders. Bike in quarter-metres (0.25 m/s is a
@@ -56,6 +68,106 @@ function samePreferences(
   const bKeys = Object.keys(b) as (keyof RoutingPreferences)[]
   if (aKeys.length !== bKeys.length) return false
   return aKeys.every((key) => a[key] === b[key])
+}
+
+const THEME_PREFS: TnThemePref[] = ['system', 'light', 'dark']
+
+function themeLabel(intl: IntlShape, pref: TnThemePref): string {
+  switch (pref) {
+    case 'light':
+      return intl.formatMessage({
+        defaultMessage: 'Light',
+        id: 'components.SettingsScreen.appearanceLight'
+      })
+    case 'dark':
+      return intl.formatMessage({
+        defaultMessage: 'Dark',
+        id: 'components.SettingsScreen.appearanceDark'
+      })
+    default:
+      return intl.formatMessage({
+        defaultMessage: 'System',
+        id: 'components.SettingsScreen.appearanceSystem'
+      })
+  }
+}
+
+/**
+ * Appearance: System / Light / Dark as a segmented radio group. The choice is
+ * stored on the device (util/tn-theme) and applied to <html> at once, so the
+ * page flips under the rider's thumb. Phone layout only — the desktop layout
+ * is light-only and the store refuses to force dark there anyway.
+ */
+const AppearanceSection = ({ intl }: { intl: IntlShape }): JSX.Element => {
+  const [pref, setPref] = useState<TnThemePref>(getTnThemePref)
+  const buttons = useRef<(HTMLButtonElement | null)[]>([])
+
+  const choose = useCallback((next: TnThemePref) => {
+    setTnThemePref(next)
+    setPref(next)
+  }, [])
+
+  const onKeyDown = useCallback(
+    (evt: React.KeyboardEvent<HTMLDivElement>) => {
+      const step =
+        evt.key === 'ArrowRight' || evt.key === 'ArrowDown'
+          ? 1
+          : evt.key === 'ArrowLeft' || evt.key === 'ArrowUp'
+          ? -1
+          : 0
+      if (!step) return
+      evt.preventDefault()
+      const index = THEME_PREFS.indexOf(pref)
+      const nextIndex = (index + step + THEME_PREFS.length) % THEME_PREFS.length
+      choose(THEME_PREFS[nextIndex])
+      buttons.current[nextIndex]?.focus()
+    },
+    [choose, pref]
+  )
+
+  return (
+    <SettingsSection>
+      <SettingsSectionTitle id="tn-settings-appearance">
+        {intl.formatMessage({
+          defaultMessage: 'Appearance',
+          id: 'components.SettingsScreen.appearanceHeader'
+        })}
+      </SettingsSectionTitle>
+      <SettingsCard>
+        <SegmentedControl
+          aria-labelledby="tn-settings-appearance"
+          onKeyDown={onKeyDown}
+          role="radiogroup"
+        >
+          {THEME_PREFS.map((option, index) => {
+            const selected = option === pref
+            return (
+              <SegmentedOption
+                $selected={selected}
+                aria-checked={selected}
+                key={option}
+                onClick={() => choose(option)}
+                ref={(el: HTMLButtonElement | null) => {
+                  buttons.current[index] = el
+                }}
+                role="radio"
+                tabIndex={selected ? 0 : -1}
+                type="button"
+              >
+                {themeLabel(intl, option)}
+              </SegmentedOption>
+            )
+          })}
+        </SegmentedControl>
+      </SettingsCard>
+      <SettingsFootnote>
+        {intl.formatMessage({
+          defaultMessage: "System follows your phone's Light or Dark setting.",
+          id: 'components.SettingsScreen.appearanceHelp'
+        })}
+      </SettingsFootnote>
+    </SettingsSection>
+  )
 }
 
 interface Props {
@@ -205,170 +317,183 @@ const SettingsScreen = ({
   const walkSpeedMps = effectiveWalkSpeedMps(walkSpeed)
 
   return (
-    <AppFrame>
+    <AppFrame title={heading}>
       <PageTitle title={heading} />
-      <h1>{heading}</h1>
+      {/* The phone's app bar shows the name (AppFrame title); this heading is
+          what a screen reader announces, and what desktop shows. */}
+      <h1 className="tn-page-title">{heading}</h1>
 
-      <VisibleSubheader>
-        {intl.formatMessage({
-          defaultMessage: 'Getting around',
-          id: 'components.SettingsScreen.gettingAroundHeader'
-        })}
-      </VisibleSubheader>
-      <HelperText>
-        {intl.formatMessage({
-          defaultMessage:
-            'These apply to every trip you plan, and to any route the app rebuilds while you ride.',
-          id: 'components.SettingsScreen.routingHelp'
-        })}
-      </HelperText>
+      <SettingsPage>
+        {coreUtils.ui.isMobile() && <AppearanceSection intl={intl} />}
 
-      <LeverContainer>
-        <TripFormStyled.SettingLabel
-          as="label"
-          htmlFor="id-query-param-bikeWillingness"
-        >
-          {intl.formatMessage({
-            id: 'components.BatchSearchScreen.bikeWillingnessLabel'
-          })}
-        </TripFormStyled.SettingLabel>
-        <LeverSlider
-          label={intl.formatMessage({
-            id: 'components.BatchSearchScreen.bikeWillingnessLabel'
-          })}
-          labelHigh={intl.formatMessage({
-            id: 'components.BatchSearchScreen.bikeWillingnessHigh'
-          })}
-          labelLow={intl.formatMessage({
-            id: 'components.BatchSearchScreen.bikeWillingnessLow'
-          })}
-          max={BIKE_WILLINGNESS_RANGE[1]}
-          min={BIKE_WILLINGNESS_RANGE[0]}
-          name="bikeWillingness"
-          onChange={onBikeWillingnessChange}
-          step={BIKE_WILLINGNESS_STEP}
-          value={bikeWillingness}
-        />
-        <HelperText>
-          {intl.formatMessage(
-            { id: 'components.BatchSearchScreen.bikeCeilingHelp' },
-            {
-              miles: ceilingMiles,
-              minutes: BIKE_ACCESS_CEILING_MINUTES,
-              speed: speedMph(bikeSpeedMps).toFixed(1)
-            }
-          )}
-        </HelperText>
-      </LeverContainer>
+        <SettingsSection>
+          <SettingsSectionTitle>
+            {intl.formatMessage({
+              defaultMessage: 'Getting around',
+              id: 'components.SettingsScreen.gettingAroundHeader'
+            })}
+          </SettingsSectionTitle>
+          <SettingsCard>
+            <LeverBlock>
+              <TripFormStyled.SettingLabel
+                as="label"
+                htmlFor="id-query-param-bikeWillingness"
+              >
+                {intl.formatMessage({
+                  id: 'components.BatchSearchScreen.bikeWillingnessLabel'
+                })}
+              </TripFormStyled.SettingLabel>
+              <LeverSlider
+                label={intl.formatMessage({
+                  id: 'components.BatchSearchScreen.bikeWillingnessLabel'
+                })}
+                labelHigh={intl.formatMessage({
+                  id: 'components.BatchSearchScreen.bikeWillingnessHigh'
+                })}
+                labelLow={intl.formatMessage({
+                  id: 'components.BatchSearchScreen.bikeWillingnessLow'
+                })}
+                max={BIKE_WILLINGNESS_RANGE[1]}
+                min={BIKE_WILLINGNESS_RANGE[0]}
+                name="bikeWillingness"
+                onChange={onBikeWillingnessChange}
+                step={BIKE_WILLINGNESS_STEP}
+                value={bikeWillingness}
+              />
+              <LeverHelp>
+                {intl.formatMessage(
+                  { id: 'components.BatchSearchScreen.bikeCeilingHelp' },
+                  {
+                    miles: ceilingMiles,
+                    minutes: BIKE_ACCESS_CEILING_MINUTES,
+                    speed: speedMph(bikeSpeedMps).toFixed(1)
+                  }
+                )}
+              </LeverHelp>
+            </LeverBlock>
 
-      <LeverContainer>
-        <TripFormStyled.SettingLabel
-          as="label"
-          htmlFor="id-query-param-bikeSpeed"
-        >
-          {intl.formatMessage(
-            {
-              defaultMessage: 'Your biking speed: {speed} mph',
-              id: 'components.SettingsScreen.bikeSpeedLabel'
-            },
-            { speed: speedMph(bikeSpeedMps).toFixed(1) }
-          )}
-        </TripFormStyled.SettingLabel>
-        <LeverSlider
-          label={intl.formatMessage({
-            defaultMessage: 'Biking speed',
-            id: 'components.SettingsScreen.bikeSpeedSlider'
-          })}
-          labelHigh={intl.formatMessage({
-            defaultMessage: 'Faster',
-            id: 'components.SettingsScreen.speedHigh'
-          })}
-          labelLow={intl.formatMessage({
-            defaultMessage: 'Slower',
-            id: 'components.SettingsScreen.speedLow'
-          })}
-          max={LEVER_RANGES.bikeSpeed[1]}
-          min={LEVER_RANGES.bikeSpeed[0]}
-          name="bikeSpeed"
-          onChange={onBikeSpeedChange}
-          step={BIKE_SPEED_STEP}
-          value={bikeSpeedMps}
-        />
-        <HelperText>
-          {intl.formatMessage({
-            defaultMessage:
-              'How long the app thinks your bike legs take. Set it and every plan uses it, including before you have ridden far enough for the app to measure your pace.',
-            id: 'components.SettingsScreen.bikeSpeedHelp'
-          })}
-        </HelperText>
-      </LeverContainer>
+            <LeverBlock>
+              <TripFormStyled.SettingLabel
+                as="label"
+                htmlFor="id-query-param-bikeSpeed"
+              >
+                {intl.formatMessage(
+                  {
+                    defaultMessage: 'Your biking speed: {speed} mph',
+                    id: 'components.SettingsScreen.bikeSpeedLabel'
+                  },
+                  { speed: speedMph(bikeSpeedMps).toFixed(1) }
+                )}
+              </TripFormStyled.SettingLabel>
+              <LeverSlider
+                label={intl.formatMessage({
+                  defaultMessage: 'Biking speed',
+                  id: 'components.SettingsScreen.bikeSpeedSlider'
+                })}
+                labelHigh={intl.formatMessage({
+                  defaultMessage: 'Faster',
+                  id: 'components.SettingsScreen.speedHigh'
+                })}
+                labelLow={intl.formatMessage({
+                  defaultMessage: 'Slower',
+                  id: 'components.SettingsScreen.speedLow'
+                })}
+                max={LEVER_RANGES.bikeSpeed[1]}
+                min={LEVER_RANGES.bikeSpeed[0]}
+                name="bikeSpeed"
+                onChange={onBikeSpeedChange}
+                step={BIKE_SPEED_STEP}
+                value={bikeSpeedMps}
+              />
+              <LeverHelp>
+                {intl.formatMessage({
+                  defaultMessage:
+                    'How long the app thinks your bike legs take. Set it and every plan uses it, including before you have ridden far enough for the app to measure your pace.',
+                  id: 'components.SettingsScreen.bikeSpeedHelp'
+                })}
+              </LeverHelp>
+            </LeverBlock>
 
-      <LeverContainer>
-        <TripFormStyled.SettingLabel
-          as="label"
-          htmlFor="id-query-param-walkSpeed"
-        >
-          {intl.formatMessage(
-            {
-              defaultMessage: 'Your walking speed: {speed} mph',
-              id: 'components.SettingsScreen.walkSpeedLabel'
-            },
-            { speed: speedMph(walkSpeedMps).toFixed(1) }
-          )}
-        </TripFormStyled.SettingLabel>
-        <LeverSlider
-          label={intl.formatMessage({
-            defaultMessage: 'Walking speed',
-            id: 'components.SettingsScreen.walkSpeedSlider'
-          })}
-          labelHigh={intl.formatMessage({
-            defaultMessage: 'Faster',
-            id: 'components.SettingsScreen.speedHigh'
-          })}
-          labelLow={intl.formatMessage({
-            defaultMessage: 'Slower',
-            id: 'components.SettingsScreen.speedLow'
-          })}
-          max={LEVER_RANGES.walkSpeed[1]}
-          min={LEVER_RANGES.walkSpeed[0]}
-          name="walkSpeed"
-          onChange={onWalkSpeedChange}
-          step={WALK_SPEED_STEP}
-          value={walkSpeedMps}
-        />
-        <HelperText>
-          {intl.formatMessage({
-            defaultMessage:
-              'How long the app thinks your walking legs take, including the walk to your bus stop.',
-            id: 'components.SettingsScreen.walkSpeedHelp'
-          })}
-        </HelperText>
-      </LeverContainer>
+            <LeverBlock>
+              <TripFormStyled.SettingLabel
+                as="label"
+                htmlFor="id-query-param-walkSpeed"
+              >
+                {intl.formatMessage(
+                  {
+                    defaultMessage: 'Your walking speed: {speed} mph',
+                    id: 'components.SettingsScreen.walkSpeedLabel'
+                  },
+                  { speed: speedMph(walkSpeedMps).toFixed(1) }
+                )}
+              </TripFormStyled.SettingLabel>
+              <LeverSlider
+                label={intl.formatMessage({
+                  defaultMessage: 'Walking speed',
+                  id: 'components.SettingsScreen.walkSpeedSlider'
+                })}
+                labelHigh={intl.formatMessage({
+                  defaultMessage: 'Faster',
+                  id: 'components.SettingsScreen.speedHigh'
+                })}
+                labelLow={intl.formatMessage({
+                  defaultMessage: 'Slower',
+                  id: 'components.SettingsScreen.speedLow'
+                })}
+                max={LEVER_RANGES.walkSpeed[1]}
+                min={LEVER_RANGES.walkSpeed[0]}
+                name="walkSpeed"
+                onChange={onWalkSpeedChange}
+                step={WALK_SPEED_STEP}
+                value={walkSpeedMps}
+              />
+              <LeverHelp>
+                {intl.formatMessage({
+                  defaultMessage:
+                    'How long the app thinks your walking legs take, including the walk to your bus stop.',
+                  id: 'components.SettingsScreen.walkSpeedHelp'
+                })}
+              </LeverHelp>
+            </LeverBlock>
+          </SettingsCard>
+          <SettingsFootnote>
+            {intl.formatMessage({
+              defaultMessage:
+                'These apply to every trip you plan, and to any route the app rebuilds while you ride.',
+              id: 'components.SettingsScreen.routingHelp'
+            })}
+          </SettingsFootnote>
+        </SettingsSection>
 
-      <VisibleSubheader>
-        {intl.formatMessage({
-          defaultMessage: 'Turn-by-turn',
-          id: 'components.SettingsScreen.turnByTurnHeader'
-        })}
-      </VisibleSubheader>
-      <GlobalSettingsContainer>
-        <SettingCheckbox
-          label={intl.formatMessage({
-            defaultMessage: 'Turn-by-turn directions',
-            id: 'components.SettingsScreen.turnByTurnLabel'
-          })}
-          name="turnByTurn"
-          onChange={onTurnCuesChange}
-          value={turnCuesEnabledByDefault}
-        />
-      </GlobalSettingsContainer>
-      <HelperText>
-        {intl.formatMessage({
-          defaultMessage:
-            'Off by default. With this off you can still switch turn-by-turn on for one walking or biking leg from the trip overview once a trip has started.',
-          id: 'components.SettingsScreen.turnByTurnHelp'
-        })}
-      </HelperText>
+        <SettingsSection>
+          <SettingsSectionTitle>
+            {intl.formatMessage({
+              defaultMessage: 'Turn-by-turn',
+              id: 'components.SettingsScreen.turnByTurnHeader'
+            })}
+          </SettingsSectionTitle>
+          <SettingsCard>
+            <ToggleRow>
+              <SettingCheckbox
+                label={intl.formatMessage({
+                  defaultMessage: 'Turn-by-turn directions',
+                  id: 'components.SettingsScreen.turnByTurnLabel'
+                })}
+                name="turnByTurn"
+                onChange={onTurnCuesChange}
+                value={turnCuesEnabledByDefault}
+              />
+            </ToggleRow>
+          </SettingsCard>
+          <SettingsFootnote>
+            {intl.formatMessage({
+              defaultMessage:
+                'Off by default. With this off you can still switch turn-by-turn on for one walking or biking leg from the trip overview once a trip has started.',
+              id: 'components.SettingsScreen.turnByTurnHelp'
+            })}
+          </SettingsFootnote>
+        </SettingsSection>
+      </SettingsPage>
     </AppFrame>
   )
 }

@@ -417,6 +417,66 @@ describe('backlog 23.4 > the form change that follows the URL restore', () => {
     expect(out.state.otp.activeSearchId).toBe('mmzc6wkfw')
   })
 
+  /**
+   * Backlog 70.2 — 2026-10-20 16:04:23, session mvh5pg8t-ypn5ph: the same
+   * feedback return re-ran settled search lj157viok (three OTP calls, list
+   * 20 -> 8 rows) with NO trip running. (a)-(c) above all run with Go Mode
+   * active, where goModeHoldsUrlSearch short-circuits before the query is
+   * compared at all. Here Go Mode is off, so urlSearchAlreadyPlanned alone
+   * decides; the stored search is a leave-now one (NOW) and the URL's
+   * arriveBy=false parses to DEPART for the same date and minute.
+   */
+  describe('planner path, Go Mode off (70.2)', () => {
+    const plannerOtp = (stored: any, current: any = stored): any => ({
+      ...goOtp(stored, current),
+      goMode: { isActive: false }
+    })
+    const nowQuery = () => ({ ...formBuiltQuery(), departArrive: 'NOW' })
+
+    it('(a) stored Current Location origin: no request, no clear, category kept', async () => {
+      const out = await returnFromFeedback(plannerOtp(nowQuery()))
+      expect(out.types).not.toContain('MOCK_ROUTING_QUERY')
+      expect(out.types).not.toContain('ROUTING_REQUEST')
+      expect(out.types).not.toContain('CLEAR_ACTIVE_SEARCH')
+      expect(out.state.otp.activeSearchId).toBe('mmzc6wkfw')
+      expect(out.next.from.category).toBe('CURRENT_LOCATION')
+      expect(out.next.to.type).toBe('recent')
+    })
+
+    it('(b) stored NOW vs URL DEPART: no re-plan, still NOW', async () => {
+      const out = await returnFromFeedback(plannerOtp(nowQuery()))
+      expect(out.types).not.toContain('MOCK_ROUTING_QUERY')
+      expect(out.types).not.toContain('CLEAR_ACTIVE_SEARCH')
+      expect(out.next.departArrive).toBe('NOW')
+    })
+
+    it('(c) form origin moved to a fresh fix: no clear, no re-plan', async () => {
+      const stored = nowQuery()
+      const current = {
+        ...nowQuery(),
+        from: { ...stored.from, lat: stored.from.lat + 0.01 }
+      }
+      const out = await returnFromFeedback(plannerOtp(stored, current))
+      expect(out.types).not.toContain('MOCK_ROUTING_QUERY')
+      expect(out.types).not.toContain('CLEAR_ACTIVE_SEARCH')
+      expect(out.state.otp.activeSearchId).toBe('mmzc6wkfw')
+    })
+
+    it('still plans when a stored NOW search was for another minute', async () => {
+      const stored: any = nowQuery()
+      stored.time = '09:01'
+      const out = await returnFromFeedback(plannerOtp(stored))
+      expect(out.types).toContain('MOCK_ROUTING_QUERY')
+    })
+
+    it('still plans when the stored search arrives-by (ARRIVE vs URL DEPART)', async () => {
+      const stored: any = formBuiltQuery()
+      stored.departArrive = 'ARRIVE'
+      const out = await returnFromFeedback(plannerOtp(stored))
+      expect(out.types).toContain('MOCK_ROUTING_QUERY')
+    })
+  })
+
   it('(d) cold URL with no stored search still plans', async () => {
     const otp = goOtp(formBuiltQuery())
     otp.goMode = { isActive: false }

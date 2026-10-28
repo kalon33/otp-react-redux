@@ -17,6 +17,42 @@ export const SmallButton = styled.button`
   ${commonButtonCss}
   font-size: 13px;
   padding: 4px 10px;
+
+  /* Phone: the TnChip pill (36px face, 44px touch via ::after) on a surface
+     face, accent-soft when chosen. Desktop keeps the bordered button. */
+  .tn-mobile & {
+    align-items: center;
+    background-color: var(--tn-surface);
+    border: 0;
+    border-radius: var(--tn-radius-pill);
+    box-shadow: var(--tn-shadow);
+    color: var(--tn-text);
+    display: inline-flex;
+    font: 500 14px/18px var(--tn-font);
+    min-height: 36px;
+    padding: 0 14px;
+    position: relative;
+    white-space: nowrap;
+  }
+  .tn-mobile &::after {
+    bottom: -4px;
+    content: '';
+    left: 0;
+    position: absolute;
+    right: 0;
+    top: -4px;
+  }
+  .tn-mobile &.active {
+    background-color: var(--tn-accent-soft);
+    border: 0;
+    box-shadow: none;
+    color: var(--tn-accent);
+    font-weight: 600;
+  }
+  .tn-mobile &:focus-visible {
+    outline: 2px solid var(--tn-accent);
+    outline-offset: 2px;
+  }
 `
 
 const ChipRow = styled.div`
@@ -24,11 +60,22 @@ const ChipRow = styled.div`
   flex-wrap: wrap;
   gap: 4px;
   padding-top: 6px;
+
+  .tn-mobile & {
+    align-items: center;
+    gap: var(--tn-space-2);
+    padding-top: var(--tn-space-2);
+  }
 `
 
 const UnitLabel = styled.span`
   color: #666;
   font-size: 13px;
+
+  .tn-mobile & {
+    color: var(--tn-text-2);
+    font: var(--tn-type-sm);
+  }
 `
 
 const CustomInput = styled.input`
@@ -37,6 +84,27 @@ const CustomInput = styled.input`
   font-size: 13px;
   padding: 4px 6px;
   width: 5.5em;
+
+  /* 16px or iOS zooms on focus. A 36px pill like the chips beside it,
+     inside a 44px box: the 4px transparent border is touch area, not paint
+     (background-clip), and the inset hairline draws inside it. */
+  .tn-mobile & {
+    background-clip: padding-box;
+    background-color: var(--tn-surface);
+    border: 4px solid transparent;
+    border-radius: var(--tn-radius-pill);
+    box-shadow: inset 0 0 0 1px var(--tn-border);
+    color: var(--tn-text);
+    font: 500 16px/20px var(--tn-font);
+    height: 44px;
+    margin: -4px 0;
+    padding: 0 12px;
+    width: 7em;
+  }
+  .tn-mobile &:focus {
+    box-shadow: inset 0 0 0 2px var(--tn-accent);
+    outline: none;
+  }
 `
 
 /** "1 h 30 min" for 90 — the round trip's own wording for a stay. */

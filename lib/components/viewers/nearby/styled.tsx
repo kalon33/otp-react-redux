@@ -30,6 +30,14 @@ export const NearbySidebarContainer = styled.ol<{ filters: boolean }>`
   @media (max-width: 768px) {
     min-height: calc(100vh - 50px);
   }
+
+  /* Phone layout (mobile overhaul): cards on the page ground. */
+  .tn-mobile & {
+    background-color: var(--tn-bg);
+    gap: var(--tn-space-3);
+    padding: var(--tn-space-1) var(--tn-space-4)
+      calc(var(--tn-space-4) + var(--tn-safe-bottom));
+  }
 `
 
 export const LocationWrapper = styled.div<{ nearbyFilters: boolean }>`
@@ -57,6 +65,16 @@ export const Card = styled.div`
   }
 
   overflow: hidden;
+
+  .tn-mobile & {
+    background-color: var(--tn-surface);
+    border-radius: var(--tn-radius);
+    box-shadow: var(--tn-shadow);
+    color: var(--tn-text);
+  }
+  .tn-mobile .highlighted & {
+    box-shadow: var(--tn-shadow), 0 0 0 2px var(--tn-accent);
+  }
 `
 
 export const CardHeader = styled.div`
@@ -64,6 +82,12 @@ export const CardHeader = styled.div`
   display: grid;
   grid-template-columns: 25fr 1fr;
   padding: 1rem 1.2rem 0;
+
+  .tn-mobile & {
+    column-gap: var(--tn-space-2);
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding: var(--tn-space-4) var(--tn-space-4) 0;
+  }
 `
 
 export const CardTitle = styled.p`
@@ -77,6 +101,32 @@ export const CardTitle = styled.p`
   svg {
     max-height: 1em;
   }
+
+  /* Phone: the card's primary line, 17px 600 (the stop viewer's h1 is the
+     screen title, 22px 700). */
+  .tn-mobile & {
+    color: var(--tn-text);
+    font: var(--tn-type-lg);
+    gap: var(--tn-space-2);
+    min-width: 0;
+  }
+  .tn-mobile h1& {
+    font: var(--tn-type-title);
+  }
+  .tn-mobile & .link-button {
+    align-items: center;
+    color: var(--tn-text-2);
+    display: inline-flex;
+    flex: none;
+    height: var(--tn-tap);
+    justify-content: center;
+    margin: -10px 0;
+    width: var(--tn-tap);
+  }
+  .tn-mobile & .link-button svg {
+    bottom: 0 !important;
+    margin: 0 !important;
+  }
 `
 
 export const CardSubheader = styled.p`
@@ -88,6 +138,11 @@ export const CardSubheader = styled.p`
 `
 
 export const CardAside = styled.p`
+  .tn-mobile & {
+    color: var(--tn-text-2);
+    font: var(--tn-type-sm);
+    font-variant-numeric: var(--tn-tabular);
+  }
   color: ${grey[900]}ba;
   grid-column: -1;
   grid-row: 1;
@@ -98,6 +153,75 @@ export const CardBody = styled.div`
   margin-bottom: 1rem;
   margin-top: 0.5rem;
   padding: 0rem 1.2rem;
+
+  /* Phone: "Stop ID 17884" eyebrow + the action link on one line, then the
+     From here / To here pair as two 44px chips. */
+  .tn-mobile & {
+    color: var(--tn-text-2);
+    font: var(--tn-type-sm);
+    margin: var(--tn-space-1) 0 var(--tn-space-3);
+    padding: 0 var(--tn-space-4);
+  }
+  .tn-mobile & > div:first-child {
+    align-items: center;
+    height: auto !important;
+    min-height: var(--tn-tap);
+  }
+  .tn-mobile & > div:first-child > span {
+    font: var(--tn-type-xs);
+    letter-spacing: var(--tn-tracking-xs);
+    text-transform: uppercase;
+  }
+  .tn-mobile & > div:first-child > span strong {
+    font-weight: 600;
+  }
+  .tn-mobile & [role='group'] {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--tn-space-2);
+  }
+  /* "Plan a trip:" */
+  .tn-mobile & [role='group'] > strong {
+    color: var(--tn-text-2);
+    font: 500 14px/18px var(--tn-font);
+  }
+  .tn-mobile & [role='group'] > span {
+    display: flex;
+    gap: var(--tn-space-2);
+  }
+  /* Each of From here / To here is a 44px chip: the button is the chip and
+     the location icon sits inside it (absolutely, over the left padding). */
+  .tn-mobile & [role='group'] > span > span {
+    align-items: center;
+    border: 0;
+    display: inline-flex;
+    padding: 0;
+    position: relative;
+  }
+  .tn-mobile & [role='group'] > span > span svg {
+    color: var(--tn-text-2);
+    fill: currentColor;
+    left: var(--tn-space-3);
+    pointer-events: none;
+    position: absolute;
+    z-index: 1;
+  }
+  .tn-mobile & [role='group'] button {
+    background-color: var(--tn-surface-2);
+    border: 0;
+    border-radius: var(--tn-radius-pill);
+    color: var(--tn-text);
+    font: 600 14px/18px var(--tn-font);
+    min-height: var(--tn-tap);
+    padding: 0 var(--tn-space-4) 0 34px;
+  }
+  .tn-mobile & [role='group'] button:hover {
+    text-decoration: none;
+  }
+  .tn-mobile & [role='group'] button:active {
+    filter: brightness(0.94);
+  }
 `
 
 export const StyledAlert = styled.div`
@@ -113,6 +237,10 @@ export const PatternRowContainer = styled.ul`
   list-style-type: none;
   margin: 0;
   padding-left: 0;
+
+  .tn-mobile & {
+    border-radius: 0;
+  }
 `
 export const FullHeightContainer = styled.div`
   height: 100%;
@@ -122,4 +250,14 @@ export const ActionLink = styled(Link)`
   color: inherit;
   font-size: 14px;
   float: right;
+
+  /* Phone: accent text link with a 44px touch target. */
+  .tn-mobile & {
+    align-items: center;
+    color: var(--tn-accent);
+    display: inline-flex;
+    font: 600 14px/18px var(--tn-font);
+    min-height: var(--tn-tap);
+    text-decoration: none;
+  }
 `
