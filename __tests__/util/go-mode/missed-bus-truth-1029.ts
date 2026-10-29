@@ -185,7 +185,7 @@ const GOLD_LEGS: any[] = [
 /** The replay's 16:37:53 tick: the fix, ~530 m west of 6th St & Jackson. */
 const AT_163753 = 1792445873999
 const RIDER_163753: [number, number] = [44.94804480662564, -93.09720205053199]
-/** SET_RIDING 16:33:09, dropped by CLEAR_RIDING 16:37:45. */
+/** SET_RIDING 16:33:09, dropped by CLEAR_RIDING (16:37:45 on main's replay). */
 const RIDDEN_GOLD = { legIndex: 0, tripId: '1:1343603', vehicleId: '1:8173' }
 
 const goldInput = (over: Record<string, any> = {}): any => ({
@@ -330,13 +330,29 @@ const transferMatch = load('transfer-match-1020')
       r = await replay(gold, Date.parse('2026-10-19T16:45:00-05:00'))
     })
 
-    it('rides leg 0, and the riding fact is still dropped at 16:37:45', () => {
+    it('rides leg 0 past its stop, and the riding fact drops at 16:39:24, as on the phone', () => {
       expect(r.sets[0].p).toMatchObject({
         legIndex: 0,
         tripId: '1:1343603',
         vehicleId: '1:8173'
       })
-      expect(r.clears.map((e) => hhmmss(e.t))).toEqual(['16:37:45'])
+      // The rider stayed on 8173 past 6th St & Minnesota, off leg 0's shape.
+      // Since 47.1 holds a `high` rider too (2026-10-29), the bus with them
+      // keeps the fact until it pulls away; the 90 s clock then runs from the
+      // second apart frame. The phone (confirmed match, debug-2026-10-19
+      // `mvfqu4i0-yd2epd`): hold on 16:35:49 at 4 m, off 16:37:54 apart at
+      // 348 m, CLEAR_RIDING 16:39:24.103. Without the hold the clock alone
+      // dropped it at 16:37:45 on 75.3's own tree, 16:37:19 once each fix
+      // plays at its own time (75.29).
+      expect(
+        r.events
+          .filter((e) => e.type === 'RIDING_VEHICLE_HOLD')
+          .map((e) => [hhmmss(e.t), e.p.on, e.p.verdict, e.p.vehicleDistanceM])
+      ).toEqual([
+        ['16:35:48', true, 'together', 4],
+        ['16:37:53', false, 'apart', 348]
+      ])
+      expect(r.clears.map((e) => hhmmss(e.t))).toEqual(['16:39:24'])
       // Leg 0 is behind the rider when it goes: 100 %, nothing left to pass.
       expect(r.clears[0].progress).toMatchObject({
         currentLegIndex: 0,
@@ -370,13 +386,44 @@ const transferMatch = load('transfer-match-1020')
 ;(detour ? describe : describe.skip)(
   '75.3 — the 2026-10-12 detour, replayed with no rider tap (who0wz-1617-detour)',
   () => {
-    it('the riding fact still drops at 16:24:32, and no "missed" follows it', async () => {
-      // The 47.1 bus is off its shape with the rider aboard; without the
-      // rider's confirm the hold never engages and the clock drops the fact.
-      // On main the next 17 s produced "METRO Orange Line missed · next
+    it('the 47.1 hold keeps the riding fact through the detour, and no "missed" follows', async () => {
+      // The bus is off its shape with the rider aboard. On main, with no
+      // rider confirm, the hold never engaged, the clock dropped the fact at
+      // 16:24:32, and the next 17 s produced "METRO Orange Line missed · next
       // departure" and an auto-applied re-plan for the bus the rider was on.
+      // 75.3 removed that tail; since 47.1 holds a `high` rider too
+      // (2026-10-29) there is no drop for it to follow at all.
       const r = await replay(detour, Date.parse('2026-10-12T16:30:00-05:00'))
-      expect(r.clears.map((e) => hhmmss(e.t))).toEqual(['16:24:32'])
+      expect(
+        r.events
+          .filter((e) => e.type === 'RIDING_VEHICLE_HOLD')
+          .map((e) => [hhmmss(e.t), e.p.on, e.p.matchConfidence])
+      ).toEqual([['16:23:00', true, 'high']])
+      expect(r.clears).toEqual([])
+      expect(r.missed).toEqual([])
+      expect(r.missedReplans).toEqual([])
+    })
+
+    it('the rider stepping off mid-detour drops the fact, and still no "missed" follows', async () => {
+      // 47.1's walk-off case (detour-riding-hold-1012.ts): the rider stands
+      // still from 16:24:00 and 8143 goes on. The hold lets go on the second
+      // apart frame and the clock drops the fact on leg 1 at about 5 %, so
+      // only 75.3's dropped-fact arm (the fact named this run, on a real bus)
+      // says the boarding was made.
+      const fx = JSON.parse(JSON.stringify(detour))
+      const off = Date.parse('2026-10-12T16:24:00-05:00')
+      const stand = fx.gpsTrack.reduce((best: any, g: any) =>
+        Math.abs(g.tMs - off) < Math.abs(best.tMs - off) ? g : best
+      )
+      fx.gpsTrack = fx.gpsTrack.map((g: any) =>
+        g.tMs > off
+          ? { ...g, heading: null, lat: stand.lat, lon: stand.lon, speed: 0 }
+          : g
+      )
+      const r = await replay(fx, Date.parse('2026-10-12T16:40:00-05:00'))
+      expect(r.clears.map((e) => hhmmss(e.t))).toEqual(['16:28:29'])
+      expect(r.clears[0].progress).toMatchObject({ currentLegIndex: 1 })
+      expect(r.clears[0].progress.currentLegProgress).toBeLessThan(10)
       expect(r.missed).toEqual([])
       expect(r.missedReplans).toEqual([])
     })

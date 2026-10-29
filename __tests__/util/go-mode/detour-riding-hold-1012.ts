@@ -290,14 +290,18 @@ jest.setTimeout(600000)
         .map((n) => [hhmmss(n.t), n.type])
       expect(pushed).toEqual([])
       expect(r.confirms).toEqual([])
-      // One riding fact, 8143, from 16:17:16 to the BICYCLE transition.
+      // One riding fact, 8143, from 16:17:15 to the BICYCLE transition. Every
+      // time below is one fix earlier than 47.1 measured it on its own tree
+      // (16:17:16, 16:45:34, 16:23:00/16:31:43, 16:23:02): since 75.29 each
+      // fix plays at its own recorded time, the same shift the tapped cases
+      // above took.
       for (const s of r.sets) {
         expect(s.p.vehicleId).toBe(VEHICLE)
         expect(s.p.tripId).toBe(TRIP)
-        expect(hhmmss(s.p.boardedAt)).toBe('16:17:16')
+        expect(hhmmss(s.p.boardedAt)).toBe('16:17:15')
       }
       const bike = r.transitions.find((e) => e.p?.legIndex === 2)
-      expect(hhmmss(bike?.t)).toBe('16:45:34')
+      expect(hhmmss(bike?.t)).toBe('16:45:33')
       // The hold engages and lets go exactly as for the confirmed rider, on a
       // `high` match resting on well over the sustain.
       expect(
@@ -308,8 +312,8 @@ jest.setTimeout(600000)
           h.p.matchConfidence
         ])
       ).toEqual([
-        ['16:23:00', true, 'together', 'high'],
-        ['16:31:43', false, 'together', 'high']
+        ['16:22:59', true, 'together', 'high'],
+        ['16:31:42', false, 'together', 'high']
       ])
       expect(r.holds[0].p.vehicleDistanceM).toBeLessThanOrEqual(30)
       expect(r.holds[0].p.togetherFrames).toBeGreaterThanOrEqual(
@@ -319,7 +323,7 @@ jest.setTimeout(600000)
         r.deviated.filter((t) => t >= at('16:22:00') && t <= at('16:45:00'))
       ).toEqual([])
       expect(r.offRoute.map((n) => [hhmmss(n.t), n.priority])).toEqual([
-        ['16:23:02', 'medium']
+        ['16:23:01', 'medium']
       ])
     })
 

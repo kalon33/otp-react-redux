@@ -276,13 +276,33 @@ const ride1214 = load('1026-1214')
         Math.abs(riding.t - Date.parse('2026-10-26T12:34:39-05:00'))
       ).toBeLessThanOrEqual(5000)
 
-      // None of the abandoned plan's pushes: no "Routing stops here" at
-      // 12:37:12, no D Line "Leave" at 12:52:51, no D Line miss at 12:59:08.
+      // Until 12:17:00 the D Line plan is the one the rider holds, and since
+      // the boarding-feed poll and the departure anchor run under replay
+      // (75.32) the replay says on it what the ride said
+      // (debug-2026-10-26 `mvpik996-01erej`): "Leave in 1 min" once the
+      // anchor has re-targeted the plan onto the 12:20:43 run (the ride's
+      // 12:14:00.958), and "Bus coming" (the ride's 12:16:53.072).
+      const swapAt = (swapped as Recorded).t
+      expect(
+        pushes(events.filter((e) => e.t < swapAt)).filter((p) =>
+          p.includes('D Line')
+        )
+      ).toEqual([
+        '12:14:00 LEAVE_SOON: Leave in 1 min | METRO D Line · 7 min · Portland Ave & 52nd St E',
+        '12:16:55 BOARD_BUS_APPROACHING: Bus coming | METRO D Line · 4 min · Portland Ave & 52nd St E'
+      ])
+      // None of the abandoned plan's pushes after the swap: no "Routing stops
+      // here" at 12:37:12, no D Line "Leave" at 12:52:51, no D Line miss at
+      // 12:59:08.
       const said = pushes(events)
       expect(said.filter((p) => p.includes('DESTINATION_UNREACHABLE'))).toEqual(
         []
       )
-      expect(said.filter((p) => p.includes('D Line'))).toEqual([])
+      expect(
+        pushes(events.filter((e) => e.t >= swapAt)).filter((p) =>
+          p.includes('D Line')
+        )
+      ).toEqual([])
       expect(said.filter((p) => p.includes('MISSED_BUS'))).toEqual([])
 
       // The rider's swap is the one made again; the app's two are left to
@@ -295,7 +315,7 @@ const ride1214 = load('1026-1214')
       expectEveryInstallExplained(events)
     })
 
-    it('leaves a swap nobody recorded the cause of to the app, as before', async () => {
+    it('leaves a swap nobody recorded the cause of to the app, which re-targets the plan itself as the ride did', async () => {
       const startMs = ride1214.meta.startMs
       const events = await replay(withoutCauses(ride1214), {
         speed: 12,
@@ -305,7 +325,33 @@ const ride1214 = load('1026-1214')
         '12:14:00.947 SKIPPED - - (cause-not-recorded)',
         '12:17:00.050 SKIPPED - - (cause-not-recorded)'
       ])
-      expect(of(events, 'START_GO_MODE')).toHaveLength(1)
+      // Nothing is fed in from the fixture. The second install is the replayed
+      // app's own: on the first tick the departure anchor moves the plan from
+      // the 12:53:43 D Line run onto the 12:20:43 one, through
+      // retargetPlanToDeparture -> beginGoMode, now that the anchor runs
+      // under replay (75.32; one START before it). The ride did the same:
+      // START_GO_MODE 12:14:00.795, PLAN_RETARGET anchor applied .944,
+      // START_GO_MODE .947, which is the recorded app swap skipped above, and
+      // its plan is the one the replay already holds.
+      expect(
+        of(events, 'START_GO_MODE').map((e) => [
+          hhmmssms(e.t),
+          tripIds(e.p.itinerary)
+        ])
+      ).toEqual([
+        ['12:14:00.795', ['1:1397642', '1:1381262', '1:1134930']],
+        ['12:14:00.897', ['1:1384516', '1:1381301', '1:1134930']]
+      ])
+      expect(
+        of(events, 'PLAN_RETARGET')
+          .filter((e) => e.p.verdict === 'applied')
+          .map((e) => [hhmmssms(e.t), e.p.source, e.p.tripId])
+      ).toEqual([['12:14:00.897', 'anchor', '1:1384516']])
+      expect(of(events, 'REPLAY_SWAP_SKIPPED')[0].p).toMatchObject({
+        active: '1:1384516|1:1381301|1:1134930',
+        plan: '1:1384516|1:1381301|1:1134930'
+      })
+      expectEveryInstallExplained(events)
     })
   }
 )
