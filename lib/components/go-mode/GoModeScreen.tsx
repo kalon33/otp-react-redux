@@ -5,6 +5,10 @@ import React, { useEffect, useRef, useState } from 'react'
 import * as goModeActions from '../../actions/go-mode'
 import * as uiActions from '../../actions/ui'
 import { aboardBeforeLegStart } from '../../util/go-mode/riding'
+import {
+  canOpenNativeLocationSettings,
+  openNativeLocationSettings
+} from '../../util/go-mode/native-gps'
 import { fetchLegFrequency } from '../../actions/leg-frequency'
 import { hasNextSegment } from '../../util/multi-stop'
 import { isReplayActive } from '../../util/go-mode/replay/replay-engine'
@@ -28,6 +32,7 @@ import {
   RerouteBar,
   RerouteCard,
   RerouteCardTitle,
+  RerouteKeepButton,
   RerouteSummary,
   RerouteSwitchButton,
   RetryButton,
@@ -259,8 +264,17 @@ const GoModeScreen = ({
   // GPS error state with specific messages and retry
   if (goMode.tracking.error && !goMode.progress) {
     const error = goMode.tracking.error
+    // Refused location inside the app shell (75.10): the way back is the OS
+    // Settings page, which the shell can open — not the browser's settings.
+    const offerSettings = error.code === 1 && canOpenNativeLocationSettings()
     let errorMessage: string
-    if (error.code === 1) {
+    if (offerSettings) {
+      errorMessage = intl.formatMessage({
+        defaultMessage:
+          'Location permission denied. Please allow location access in Settings.',
+        id: 'components.GoMode.errorPermissionDeniedApp'
+      })
+    } else if (error.code === 1) {
       errorMessage = intl.formatMessage({
         defaultMessage:
           'Location permission denied. Please enable location access in your browser settings.',
@@ -293,12 +307,34 @@ const GoModeScreen = ({
         />
         <LoadingMessage>
           <ErrorMessage>{errorMessage}</ErrorMessage>
-          <RetryButton onClick={handleRetry} type="button">
-            {intl.formatMessage({
-              defaultMessage: 'Retry',
-              id: 'components.GoMode.retry'
-            })}
-          </RetryButton>
+          {offerSettings ? (
+            // The Switch / Keep mine pair: Settings is the way out, Retry
+            // follows it.
+            <RerouteActions>
+              <RerouteSwitchButton
+                onClick={openNativeLocationSettings}
+                type="button"
+              >
+                {intl.formatMessage({
+                  defaultMessage: 'Open Settings',
+                  id: 'components.GoMode.openSettings'
+                })}
+              </RerouteSwitchButton>
+              <RerouteKeepButton onClick={handleRetry} type="button">
+                {intl.formatMessage({
+                  defaultMessage: 'Retry',
+                  id: 'components.GoMode.retry'
+                })}
+              </RerouteKeepButton>
+            </RerouteActions>
+          ) : (
+            <RetryButton onClick={handleRetry} type="button">
+              {intl.formatMessage({
+                defaultMessage: 'Retry',
+                id: 'components.GoMode.retry'
+              })}
+            </RetryButton>
+          )}
         </LoadingMessage>
       </FullScreenWrapper>
     )
