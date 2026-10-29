@@ -16,11 +16,13 @@ import {
 import {
   COMPANY_APART_FRAMES,
   COMPANY_APART_M,
+  COMPANY_HIGH_SUSTAIN_FRAMES,
   COMPANY_SILENCE_CAP_MS,
   COMPANY_TOGETHER_M,
   pushRiderFix,
   riderPositionAt,
   ridingHeldByVehicle,
+  trackRidingCompany,
   trackVehicleCompany
 } from '../../../lib/util/go-mode/vehicle-company'
 import {
@@ -30,7 +32,11 @@ import {
 } from '../../../lib/actions/go-mode'
 import { decideRiding } from '../../../lib/util/go-mode/riding'
 import { determineTripStatus } from '../../../lib/util/go-mode/progress-calculator'
-import { refreshConfirmedMatch } from '../../../lib/util/go-mode/transit-trust'
+import { matchUserToVehicle } from '../../../lib/util/go-mode/vehicle-matching'
+import {
+  refreshConfirmedMatch,
+  RIDING_REBIND_MIN_FRAMES
+} from '../../../lib/util/go-mode/transit-trust'
 import createOtpReducer from '../../../lib/reducers/create-otp-reducer'
 import type { RidingState } from '../../../lib/util/go-mode/types'
 import type { VehicleMatchResult } from '../../../lib/util/go-mode/vehicle-matching'
@@ -77,6 +83,13 @@ jest.mock('@opentripplanner/core-utils', () => {
  * time, as on the phone. It read 16:17:17 until 54.6 aged the replay's frames
  * against the sim clock, which lets the matcher age-correct them as it does
  * on a live ride.)
+ *
+ * 2026-10-29 (R14 of the isolated stress-test session): replayed WITHOUT the
+ * tap, the match is `high` from 16:17:15 and never `confirmed` — which is
+ * every ordinary boarding — and on main `3a7050816` the hold never engaged:
+ * "Off route" high 16:23:02, CLEAR_RIDING 16:24:31, then "Missed bus · next
+ * departure", an autoApply missed-bus re-plan and "Leave in 1 min" at
+ * 16:24:49-50, all to the rider on the detouring bus. `tap: false` below.
  */
 const FIXTURE = path.join(
   __dirname,
@@ -123,7 +136,7 @@ interface Recorded {
   type: string
 }
 
-async function replay(fx: any) {
+async function replay(fx: any, { tap = true }: { tap?: boolean } = {}) {
   const globalScope: any = global
   globalScope.fetch = jest.fn(() =>
     Promise.resolve({ json: () => Promise.resolve({}), ok: true, status: 200 })
@@ -135,8 +148,10 @@ async function replay(fx: any) {
   const keep = new Set([
     'ADD_NOTIFICATION',
     'CLEAR_RIDING',
+    'CONFIRM_VEHICLE',
     'RIDING_VEHICLE_HOLD',
     'SET_RIDING',
+    'START_REROUTE',
     'TRANSITION_LEG'
   ])
   const recorder = () => (next: any) => (action: any) => {
@@ -149,7 +164,7 @@ async function replay(fx: any) {
     combineReducers({ otp: createOtpReducer(CONFIG as any) }),
     applyMiddleware(thunk, recorder)
   )
-  let tapped = false
+  let tapped = !tap
   store.subscribe(() => {
     const g = store.getState().otp.goMode
     if (!g || g.simulation?.status !== 'running') return
@@ -177,11 +192,21 @@ async function replay(fx: any) {
   const deviated = statuses.filter((s) => s.s === 'deviated').map((s) => s.t)
   return {
     clears: of('CLEAR_RIDING').map((e) => e.t),
+    confirms: of('CONFIRM_VEHICLE').map((e) => e.t),
     deviated,
     holds: of('RIDING_VEHICLE_HOLD'),
+    notifications: of('ADD_NOTIFICATION').map((e) => ({
+      priority: e.p?.priority,
+      t: e.t,
+      type: e.p?.type
+    })),
     offRoute: of('ADD_NOTIFICATION')
       .filter((e) => e.p?.type === 'ROUTE_DEVIATION')
       .map((e) => ({ priority: e.p.priority, t: e.t })),
+    reroutes: of('START_REROUTE').map((e) => ({
+      reason: e.p?.reason,
+      t: e.t
+    })),
     sets: of('SET_RIDING'),
     transitions: of('TRANSITION_LEG')
   }
@@ -244,61 +269,122 @@ jest.setTimeout(600000)
       ])
     })
 
-    it('lets go when the rider walks off the bus off the shape', async () => {
-      // The rider steps off at 16:24:00 mid-detour and stays put; the bus
-      // goes on. The recording after that moment is the bus's alone. 8143
-      // crawled here: its frames against the standing rider read 2 m
-      // (16:24:16), 79, 87, 122 (grey), then 154 m (16:26:05, polled 16:26:40)
-      // and 203 m (16:26:12, polled 16:26:56) — the two apart frames.
-      const fx = clone(fixture)
-      const off = at('16:24:00')
-      const stand = fx.gpsTrack.reduce((best: any, g: any) =>
-        Math.abs(g.tMs - off) < Math.abs(best.tMs - off) ? g : best
+    it('holds a rider the matcher only ever called `high` (R14, 2026-10-29)', async () => {
+      // No tap: the ordinary boarding — nothing confirms 8143 at any point.
+      const r = await replay(fixture, { tap: false })
+      // Main 3a7050816: CLEAR_RIDING 16:24:31, then at 16:24:49-50 MISSED_BUS,
+      // a missed-bus autoApply re-plan, TRIP_UPDATED and LEAVE_SOON.
+      expect(r.clears.map(hhmmss)).toEqual([])
+      expect(r.reroutes.map((e) => [hhmmss(e.t), e.reason])).toEqual([])
+      const pushed = r.notifications
+        .filter((n) =>
+          ['LEAVE_SOON', 'MISSED_BUS', 'TRIP_UPDATED'].includes(n.type)
+        )
+        .map((n) => [hhmmss(n.t), n.type])
+      expect(pushed).toEqual([])
+      expect(r.confirms).toEqual([])
+      // One riding fact, 8143, from 16:17:16 to the BICYCLE transition.
+      for (const s of r.sets) {
+        expect(s.p.vehicleId).toBe(VEHICLE)
+        expect(s.p.tripId).toBe(TRIP)
+        expect(hhmmss(s.p.boardedAt)).toBe('16:17:16')
+      }
+      const bike = r.transitions.find((e) => e.p?.legIndex === 2)
+      expect(hhmmss(bike?.t)).toBe('16:45:34')
+      // The hold engages and lets go exactly as for the confirmed rider, on a
+      // `high` match resting on well over the sustain.
+      expect(
+        r.holds.map((h) => [
+          hhmmss(h.t),
+          h.p.on,
+          h.p.verdict,
+          h.p.matchConfidence
+        ])
+      ).toEqual([
+        ['16:23:00', true, 'together', 'high'],
+        ['16:31:43', false, 'together', 'high']
+      ])
+      expect(r.holds[0].p.vehicleDistanceM).toBeLessThanOrEqual(30)
+      expect(r.holds[0].p.togetherFrames).toBeGreaterThanOrEqual(
+        COMPANY_HIGH_SUSTAIN_FRAMES
       )
-      fx.gpsTrack = fx.gpsTrack.map((g: any) =>
-        g.tMs > off
-          ? { ...g, heading: null, lat: stand.lat, lon: stand.lon, speed: 0 }
-          : g
-      )
-      const r = await replay(fx)
-      const released = r.holds.find((h) => h.p.on === false)
-      expect(released?.p.verdict).toBe('apart')
-      expect(released?.p.vehicleDistanceM).toBeGreaterThan(COMPANY_APART_M)
-      // Within a poll of the second apart frame reaching the feed (the
-      // replay's own poll cadence reads it at 16:26:58).
-      expect(hhmmss(released?.p.tMs)).toBe('16:26:58')
-      // ...and the 90 s clock then clears the fact as it always did.
-      expect(r.clears).toHaveLength(1)
-      expect(r.clears[0] - released!.p.tMs).toBeGreaterThanOrEqual(89000)
-      expect(r.clears[0] - released!.p.tMs).toBeLessThan(95000)
+      expect(
+        r.deviated.filter((t) => t >= at('16:22:00') && t <= at('16:45:00'))
+      ).toEqual([])
+      expect(r.offRoute.map((n) => [hhmmss(n.t), n.priority])).toEqual([
+        ['16:23:02', 'medium']
+      ])
     })
 
-    it('resumes the clock when the bus goes silent past the cap', async () => {
-      // 8143 vanishes from every snapshot from 16:19:30 on. Its last frame
-      // (16:18:42) is older than COMPANY_SILENCE_CAP_MS at 16:28:42, still on
-      // the detour: the hold lets go then and the clock clears at 16:30:12.
-      const fx = clone(fixture)
-      const cutoff = at('16:19:30')
-      for (const s of fx.vehicleSnapshots) {
-        if (s.tMs < cutoff) continue
-        s.payload.vehicles = (s.payload.vehicles || []).filter(
-          (v: any) => v.vehicleId !== VEHICLE
+    // Both release paths hold for a `high` rider exactly as for a confirmed
+    // one (R14): the riding bus's own frames still break company, and its
+    // silence still ages the hold out.
+    const vouches: Array<[string, boolean]> = [
+      ['confirmed (tapped)', true],
+      ['high (never confirmed)', false]
+    ]
+
+    it.each(vouches)(
+      'lets go when the rider walks off the bus off the shape — %s',
+      async (_label, tap) => {
+        // The rider steps off at 16:24:00 mid-detour and stays put; the bus
+        // goes on. The recording after that moment is the bus's alone. 8143
+        // crawled here: its frames against the standing rider read 2 m
+        // (16:24:16), 79, 87, 122 (grey), then 154 m (16:26:05, polled 16:26:40)
+        // and 203 m (16:26:12, polled 16:26:56) — the two apart frames.
+        const fx = clone(fixture)
+        const off = at('16:24:00')
+        const stand = fx.gpsTrack.reduce((best: any, g: any) =>
+          Math.abs(g.tMs - off) < Math.abs(best.tMs - off) ? g : best
         )
+        fx.gpsTrack = fx.gpsTrack.map((g: any) =>
+          g.tMs > off
+            ? { ...g, heading: null, lat: stand.lat, lon: stand.lon, speed: 0 }
+            : g
+        )
+        const r = await replay(fx, { tap })
+        const released = r.holds.find((h) => h.p.on === false)
+        expect(released?.p.verdict).toBe('apart')
+        expect(released?.p.vehicleDistanceM).toBeGreaterThan(COMPANY_APART_M)
+        // Within a poll of the second apart frame reaching the feed (the
+        // replay's own poll cadence reads it at 16:26:58).
+        expect(hhmmss(released?.p.tMs)).toBe('16:26:58')
+        // ...and the 90 s clock then clears the fact as it always did.
+        expect(r.clears).toHaveLength(1)
+        expect(r.clears[0] - released!.p.tMs).toBeGreaterThanOrEqual(89000)
+        expect(r.clears[0] - released!.p.tMs).toBeLessThan(95000)
       }
-      const r = await replay(fx)
-      const released = r.holds.find((h) => h.p.on === false)
-      expect(released).toBeDefined()
-      expect(released!.p.verdict).toBe('together')
-      expect(released!.p.tMs - released!.p.togetherAtMs).toBeGreaterThan(
-        COMPANY_SILENCE_CAP_MS
-      )
-      expect(released!.p.tMs).toBeLessThan(at('16:31:43'))
-      expect(r.clears).toHaveLength(1)
-      expect(r.clears[0] - released!.p.tMs).toBeGreaterThanOrEqual(89000)
-      expect(r.clears[0] - released!.p.tMs).toBeLessThan(95000)
-      expect(hhmmss(released!.p.tMs)).toBe('16:28:42')
-      expect(hhmmss(r.clears[0])).toBe('16:30:12')
-    })
+    )
+
+    it.each(vouches)(
+      'resumes the clock when the bus goes silent past the cap — %s',
+      async (_label, tap) => {
+        // 8143 vanishes from every snapshot from 16:19:30 on. Its last frame
+        // (16:18:42) is older than COMPANY_SILENCE_CAP_MS at 16:28:42, still on
+        // the detour: the hold lets go then and the clock clears at 16:30:12.
+        const fx = clone(fixture)
+        const cutoff = at('16:19:30')
+        for (const s of fx.vehicleSnapshots) {
+          if (s.tMs < cutoff) continue
+          s.payload.vehicles = (s.payload.vehicles || []).filter(
+            (v: any) => v.vehicleId !== VEHICLE
+          )
+        }
+        const r = await replay(fx, { tap })
+        const released = r.holds.find((h) => h.p.on === false)
+        expect(released).toBeDefined()
+        expect(released!.p.verdict).toBe('together')
+        expect(released!.p.tMs - released!.p.togetherAtMs).toBeGreaterThan(
+          COMPANY_SILENCE_CAP_MS
+        )
+        expect(released!.p.tMs).toBeLessThan(at('16:31:43'))
+        expect(r.clears).toHaveLength(1)
+        expect(r.clears[0] - released!.p.tMs).toBeGreaterThanOrEqual(89000)
+        expect(r.clears[0] - released!.p.tMs).toBeLessThan(95000)
+        expect(hhmmss(released!.p.tMs)).toBe('16:28:42')
+        expect(hhmmss(r.clears[0])).toBe('16:30:12')
+      }
+    )
   }
 )
 
@@ -395,11 +481,14 @@ describe('util > go-mode > vehicle-company', () => {
     tripId: TRIP,
     vehicleId: VEHICLE
   } as VehicleMatchResult
+  // One together frame of a bus only ever confirmed: what a tap gives.
   const together = {
     apartFrames: 0,
     lastDistanceM: 8,
     lastFrameSeconds: T0 / 1000,
     lastTogetherAtMs: T0,
+    matchedHigh: true,
+    togetherFrames: 1,
     vehicleId: VEHICLE,
     verdict: 'together' as const
   }
@@ -417,14 +506,199 @@ describe('util > go-mode > vehicle-company', () => {
     // ~330 s silent mid-detour on the ride: still held.
     expect(held({ nowMs: T0 + 330000 })).toBe(true)
     expect(held({ nowMs: T0 + COMPANY_SILENCE_CAP_MS + 1 })).toBe(false)
-    expect(held({ match: { ...match, confidence: 'high' } })).toBe(false)
+    // A confirmed match naming another bus, or none at all (taken away by
+    // "not on the bus", an early alight, a new route): nothing held.
     expect(held({ match: { ...match, vehicleId: '1:8150' } })).toBe(false)
+    expect(held({ match: null })).toBe(false)
     expect(held({ riding: { ...riding, vehicleId: 'route:1:904' } })).toBe(
       false
     )
     expect(held({ riding: { ...riding, tripId: null } })).toBe(false)
     expect(held({ company: { ...together, verdict: 'apart' } })).toBe(false)
     expect(held({ company: null })).toBe(false)
+  })
+
+  it('holds on a `high` match only once the bus is together on the sustain (R14)', () => {
+    // The 35.1 rebind floor, deliberately: keeping a fact on a bus takes no
+    // less evidence than moving it to one.
+    expect(COMPANY_HIGH_SUSTAIN_FRAMES).toBe(RIDING_REBIND_MIN_FRAMES)
+    const high = { ...match, confidence: 'high' as const }
+    const sustained = {
+      ...together,
+      togetherFrames: COMPANY_HIGH_SUSTAIN_FRAMES
+    }
+    const held = (over: any = {}) =>
+      ridingHeldByVehicle({
+        company: sustained,
+        match: high,
+        nowMs: T0 + 60000,
+        riding,
+        ...over
+      })
+    expect(held()).toBe(true)
+    // Under the sustain: not yet.
+    expect(
+      held({
+        company: {
+          ...sustained,
+          togetherFrames: COMPANY_HIGH_SUSTAIN_FRAMES - 1
+        }
+      })
+    ).toBe(false)
+    // A bus the matcher never called better than `medium` vouches for nothing.
+    expect(held({ company: { ...sustained, matchedHigh: false } })).toBe(false)
+    // The poll the bus missed (16:28:32-16:32:48 on the ride): the matcher
+    // names nobody, or another bus, and the record still speaks...
+    const none = {
+      confidence: 'none' as const,
+      distanceMeters: null,
+      label: null,
+      lastSeen: T0,
+      vehicleId: null
+    }
+    expect(held({ match: none })).toBe(true)
+    expect(held({ match: { ...high, vehicleId: '1:8121' } })).toBe(true)
+    // ...until the cap, or until the bus's own frames break company.
+    expect(held({ match: none, nowMs: T0 + COMPANY_SILENCE_CAP_MS + 1 })).toBe(
+      false
+    )
+    expect(held({ company: { ...sustained, verdict: 'apart' } })).toBe(false)
+    // Still a REAL bus only.
+    expect(held({ riding: { ...riding, vehicleId: 'route:1:904' } })).toBe(
+      false
+    )
+  })
+
+  it('counts together frames, and only a broken company starts them again', () => {
+    const ring = ringOf(Array.from({ length: 120 }, (_, i) => fix(i, 0)))
+    const high = (s: number, northM: number) => ({
+      ...frame(s, northM),
+      confidence: 'high' as const
+    })
+    let c = trackVehicleCompany(
+      null,
+      { ...frame(0, 5), confidence: 'medium' },
+      ring
+    )
+    expect(c?.togetherFrames).toBe(1)
+    expect(c?.matchedHigh).toBe(false)
+    c = trackVehicleCompany(c, high(20, 5), ring)
+    expect(c?.togetherFrames).toBe(2)
+    expect(c?.matchedHigh).toBe(true)
+    // The same frame again counts nothing; a grey frame and one apart frame
+    // prove nothing either way.
+    expect(trackVehicleCompany(c, high(20, 5), ring)).toBe(c)
+    c = trackVehicleCompany(c, high(40, 100), ring)
+    c = trackVehicleCompany(c, high(60, 400), ring)
+    expect(c?.verdict).toBe('together')
+    expect(c?.togetherFrames).toBe(2)
+    c = trackVehicleCompany(c, high(80, 5), ring)
+    expect(c?.togetherFrames).toBe(3)
+    // Broken: back to nothing.
+    c = trackVehicleCompany(c, high(100, 400), ring)
+    c = trackVehicleCompany(c, high(110, 400), ring)
+    expect(c?.verdict).toBe('apart')
+    expect(c?.togetherFrames).toBe(0)
+    // A frame with no confidence (read from the feed) does not vouch.
+    const fromFeed = trackVehicleCompany(null, frame(0, 5), ring)
+    expect(fromFeed?.matchedHigh).toBe(false)
+  })
+
+  it("keeps the riding bus's record when the matcher names another bus or none", () => {
+    const ring = ringOf(Array.from({ length: 120 }, (_, i) => fix(i, 0)))
+    const own = (s: number, northM: number) => ({
+      heading: 0,
+      label: '8143',
+      lat: 44.85 + northM / 111_195,
+      lon: -93.28,
+      nextStopId: '1:51110',
+      nextStopName: '',
+      patternId: 'p',
+      seconds: (T0 + s * 1000) / 1000,
+      speed: 14,
+      stopStatus: 'IN_TRANSIT_TO',
+      tripId: TRIP,
+      vehicleId: VEHICLE
+    })
+    const prev = trackVehicleCompany(
+      null,
+      { ...frame(0, 5), confidence: 'high' },
+      ring
+    ) as any
+    const none = {
+      confidence: 'none' as const,
+      distanceMeters: null,
+      label: null,
+      lastSeen: T0,
+      vehicleId: null
+    }
+    const other = {
+      ...none,
+      confidence: 'high' as const,
+      vehicleId: '1:8121'
+    }
+    // Absent from the poll: the record stands as it was.
+    expect(
+      trackRidingCompany(prev, { match: none, riding, ring, vehicles: [] })
+    ).toBe(prev)
+    // In the poll while the matcher names 8121: 8143's own frame is judged,
+    // and its record is not handed to 8121.
+    const judged = trackRidingCompany(prev, {
+      match: other,
+      riding,
+      ring,
+      vehicles: [own(20, 400)]
+    })
+    expect(judged?.vehicleId).toBe(VEHICLE)
+    expect(judged?.apartFrames).toBe(1)
+    expect(judged?.matchedHigh).toBe(true)
+    // A match taken away, or no fact to keep: trackVehicleCompany exactly.
+    expect(
+      trackRidingCompany(prev, { match: null, riding, ring, vehicles: [] })
+    ).toBeNull()
+    expect(
+      trackRidingCompany(prev, {
+        match: other,
+        riding: null,
+        ring,
+        vehicles: [own(20, 5)]
+      })?.vehicleId
+    ).toBe('1:8121')
+  })
+
+  it('carries the frame on a matcher result too (R14)', () => {
+    const v = {
+      directionId: 0,
+      heading: 0,
+      label: '8143',
+      lat: 44.8512,
+      lon: -93.2885,
+      nextStopId: '1:51110',
+      nextStopName: '',
+      patternId: '1:904:0:01',
+      routeId: '1:904',
+      seconds: 1791840150,
+      speed: 0,
+      stopStatus: 'STOPPED_AT',
+      tripId: TRIP,
+      vehicleId: VEHICLE
+    }
+    const m = matchUserToVehicle(
+      44.8512,
+      -93.2886,
+      null,
+      [v],
+      '1:904',
+      null,
+      80,
+      0,
+      null,
+      { nowMs: 1791840160000 }
+    )
+    expect(m.vehicleId).toBe(VEHICLE)
+    expect(m.frameLat).toBe(44.8512)
+    expect(m.frameLon).toBe(-93.2885)
+    expect(m.frameSeconds).toBe(1791840150)
   })
 
   it('carries the frame on a refreshed confirmed match', () => {

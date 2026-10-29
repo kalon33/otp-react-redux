@@ -77,7 +77,10 @@ export interface VehicleMatchResult {
    * (vehicle-company.ts, backlog 47.1). `distanceMeters` is the rider NOW
    * against this frame, which on a feed whose frames are 21-68 s old swings by
    * a kilometre at speed with the rider aboard. Filled by
-   * refreshConfirmedMatch; absent on a frame with no usable `seconds`.
+   * refreshConfirmedMatch and, since 2026-10-29, by matchUserToVehicle too: a
+   * `high` match is what an ordinary boarding rides on, and without its frame
+   * the company could never be judged; absent on a frame with no usable
+   * `seconds`.
    */
   frameLat?: number | null
   frameLon?: number | null
@@ -864,6 +867,15 @@ export function matchUserToVehicle(
     directionId: bestVehicle.directionId ?? null,
     distanceMeters: Math.round(best.distance),
     frameKey: vehicleFrameKey(bestVehicle),
+    // The RAW frame, not the age-corrected one ranked above: the company
+    // reads it against the rider at the frame's own moment (47.1).
+    frameLat: bestVehicle.lat,
+    frameLon: bestVehicle.lon,
+    frameSeconds:
+      typeof bestVehicle.seconds === 'number' &&
+      Number.isFinite(bestVehicle.seconds)
+        ? bestVehicle.seconds
+        : null,
     heading:
       typeof bestVehicle.heading === 'number' &&
       Number.isFinite(bestVehicle.heading)
