@@ -895,8 +895,19 @@ export function matchPositionToRoute(
   // at zero; one that is accepted every tick but barely moves keeps the
   // remainder, which is what stops a stuck-but-locally-best projection from
   // resetting its own evidence and pinning the rider for good.
+  //
+  // Except across a leg boundary (12.17, 2026-10-29 replay R11). Owed ground is
+  // owed along ONE polyline: once the winner is on another leg it has been
+  // placed on that leg's geometry where the rider now is, and what the old leg
+  // still owed says nothing about progress along the new one. Carried over,
+  // the off-corridor check measured the rider's displacement from a start legs
+  // behind: orange-0917-2053 released 0.06 -> 0.985 on its closing bike leg,
+  // 528 m off it, on 14,455 m of displacement from a leg-0 fix. TRANSITION_LEG
+  // clears the same two fields for the re-anchor it makes.
   const accountedM =
-    unaccountedM == null || previousMatch == null
+    unaccountedM == null ||
+    previousMatch == null ||
+    winner.legIndex !== previousMatch.legIndex
       ? 0
       : Math.max(
           0,

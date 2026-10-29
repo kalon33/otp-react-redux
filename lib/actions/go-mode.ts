@@ -33,7 +33,8 @@ import type {
 import {
   accessSecondsToBoardStop,
   calculateTripProgress,
-  hasArrivedAtDestination
+  hasArrivedAtDestination,
+  smoothRiderPace
 } from '../util/go-mode/progress-calculator'
 import {
   nearDestinationApplies,
@@ -11267,6 +11268,18 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       )
     }
 
+    // ...and the smoothed pace the countdown falls back on once the trip's end
+    // anchor has passed (75.7), for walk legs as well as bike legs. Same gate,
+    // for the same reason: a fix taken aboard is the bus's speed, not the
+    // rider's. smoothRiderPace ignores transit modes itself.
+    if (!matchedLeg?.transitLeg && !getState().otp?.goMode?.riding) {
+      session.riderPace = smoothRiderPace(session.riderPace, {
+        mode: matchedLeg?.mode,
+        speedMps: position.coords.speed ?? null,
+        tMs: position.timestamp
+      })
+    }
+
     // Calculate progress — use simulated clock during simulation, real time for live GPS
     const currentTime = getCurrentTime()
     const departureOverride = goMode.departureOverride ?? null
@@ -11389,7 +11402,10 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       goMode.riding?.legIndex ?? null,
       // ...and a bus on a road detour with the rider in it is not the rider
       // off route (47.1): the clock decides, as for 22.1.
-      session.ridingHeldByVehicle
+      session.ridingHeldByVehicle,
+      // ...and the rider's smoothed pace, not this fix's speed, once the end
+      // anchor has passed (75.7).
+      session.riderPace
     )
 
     // The rider's MEASURED pace, and the missed-bus classifier's last verdict.
