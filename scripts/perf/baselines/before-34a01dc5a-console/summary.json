@@ -1,0 +1,238 @@
+{
+  "scenarios": {
+    "multistop-28": {
+      "actions": 114,
+      "errors": [],
+      "longTasks": {
+        "n": 99,
+        "over200": 66,
+        "over500": 65,
+        "sumMs": 274829,
+        "top5": [
+          {
+            "dur": 27592,
+            "t": 67411,
+            "inside": [
+              "ROUTING_RESPONSE",
+              "ITINERARY_VARIANT_ROWS",
+              "ROUTING_EXTRA_REQUEST"
+            ],
+            "precededBy": "POSITION_RESPONSE",
+            "precededByMsBefore": 2272
+          },
+          {
+            "dur": 11594,
+            "t": 119568,
+            "inside": [
+              "LEG_FREQUENCYx4",
+              "SET_VISIBLE_ITINERARY",
+              "SET_ACTIVE_ITINERARY",
+              "SET_ACTIVE_LEG"
+            ],
+            "precededBy": "ROUTING_SILENT_ERROR",
+            "precededByMsBefore": 362
+          },
+          {
+            "dur": 7409,
+            "t": 225309,
+            "inside": [
+              "LEG_FREQUENCYx4",
+              "SET_ACTIVE_ITINERARY",
+              "SET_ACTIVE_LEG"
+            ],
+            "precededBy": "POSITION_RESPONSE",
+            "precededByMsBefore": 1820
+          },
+          {
+            "dur": 7406,
+            "t": 174915,
+            "inside": [
+              "LEG_FREQUENCYx4",
+              "SET_ACTIVE_ITINERARY",
+              "SET_ACTIVE_LEG"
+            ],
+            "precededBy": "POSITION_RESPONSE",
+            "precededByMsBefore": 1882
+          },
+          {
+            "dur": 7313,
+            "t": 314793,
+            "inside": [
+              "SET_ACTIVE_ITINERARY",
+              "SET_ACTIVE_LEG",
+              "LEG_FREQUENCY"
+            ],
+            "precededBy": "POSITION_RESPONSE",
+            "precededByMsBefore": 1916
+          }
+        ],
+        "over500Unexcused": 65,
+        "maxMs": 27592
+      },
+      "network": {
+        "appApi": [
+          "/api/places?deviceId=dev-mvh55pth-8ez3wk51",
+          "/api/places?deviceId=dev-mvh55pth-8ez3wk51"
+        ],
+        "maxConcurrentPlans": 3,
+        "otpRequests": 27,
+        "planRequests": 7
+      },
+      "notes": [],
+      "taps": {
+        "max": 15226,
+        "n": 10,
+        "p50": 8801,
+        "p95": 15226,
+        "each": [
+          {
+            "eventTimingMs": 11720,
+            "label": "results-row-0",
+            "ms": 15226,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 4336,
+            "label": "results-back-0",
+            "ms": 8304,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 7496,
+            "label": "results-row-1",
+            "ms": 10937,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 4144,
+            "label": "results-back-1",
+            "ms": 8207,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 7488,
+            "label": "results-row-2",
+            "ms": 10943,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 4256,
+            "label": "results-back-2",
+            "ms": 8177,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 7312,
+            "label": "results-row-4",
+            "ms": 10753,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 4232,
+            "label": "results-back-4",
+            "ms": 8229,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 7392,
+            "label": "results-row-6",
+            "ms": 10844,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 4776,
+            "label": "results-back-6",
+            "ms": 8801,
+            "via": "click"
+          }
+        ],
+        "unmeasured": []
+      },
+      "wallSeconds": 349,
+      "search": {
+        "responses": [
+          {
+            "index": 1,
+            "itineraries": 1,
+            "longTaskMaxMs": 2610,
+            "longTaskSumMs": 3066,
+            "searchItineraries": 1,
+            "t": 5314
+          },
+          {
+            "index": 0,
+            "itineraries": 17,
+            "longTaskMaxMs": 2610,
+            "longTaskSumMs": 2721,
+            "searchItineraries": 18,
+            "t": 8423
+          },
+          {
+            "index": 3,
+            "itineraries": 17,
+            "longTaskMaxMs": 5345,
+            "longTaskSumMs": 5345,
+            "searchItineraries": 35,
+            "t": 14979
+          },
+          {
+            "index": 4,
+            "itineraries": 40,
+            "longTaskMaxMs": 27592,
+            "longTaskSumMs": 27592,
+            "searchItineraries": 75,
+            "t": 87245
+          }
+        ],
+        "routeRowTimetableFills": [],
+        "variantRows": [
+          {
+            "gapMs": 2,
+            "prevType": "ROUTING_RESPONSE",
+            "rows": 1,
+            "t": 5316,
+            "variants": 0
+          },
+          {
+            "gapMs": 2,
+            "prevType": "ROUTING_RESPONSE",
+            "rows": 13,
+            "t": 8425,
+            "variants": 10
+          },
+          {
+            "gapMs": 2,
+            "prevType": "ROUTING_RESPONSE",
+            "rows": 13,
+            "t": 14982,
+            "variants": 34
+          },
+          {
+            "gapMs": 3,
+            "prevType": "ROUTING_RESPONSE",
+            "rows": 31,
+            "t": 87248,
+            "variants": 64
+          }
+        ]
+      },
+      "host": {
+        "contention": [],
+        "loadavgEnd": 3.24,
+        "loadavgStart": 5.36
+      }
+    }
+  },
+  "appUrl": "http://127.0.0.1:9968/",
+  "chrome": "/opt/google/chrome/chrome",
+  "cpuThrottle": 4,
+  "dpr": 2,
+  "label": "before-34a01dc5a-console",
+  "quietConsole": false,
+  "served": {
+    "dirty": [],
+    "sha": "34a01dc5a",
+    "tree": "/home/rwt/projects/otprr/worktrees/perf-before"
+  },
+  "updated": "2026-10-20T20:34:11.099Z"
+}

@@ -1,0 +1,679 @@
+{
+  "scenarios": {
+    "multistop-28": {
+      "actions": 98,
+      "errors": [],
+      "longTasks": {
+        "n": 47,
+        "over200": 23,
+        "over500": 16,
+        "sumMs": 18997,
+        "top5": [
+          {
+            "dur": 1907,
+            "t": 61931,
+            "inside": [
+              "ROUTING_RESPONSE",
+              "ITINERARY_VARIANT_ROWS",
+              "ROUTING_EXTRA_REQUEST"
+            ],
+            "precededBy": "POSITION_RESPONSE",
+            "precededByMsBefore": 28794
+          },
+          {
+            "dur": 1617,
+            "t": 1020,
+            "inside": [],
+            "precededBy": null,
+            "precededByMsBefore": null
+          },
+          {
+            "dur": 1334,
+            "t": 6022,
+            "inside": [
+              "REMEMBER_LOCAL_USER_PLACEx2",
+              "REMEMBER_SEARCH",
+              "ROUTING_RESPONSE",
+              "ITINERARY_VARIANT_ROWS"
+            ],
+            "precededBy": "ITINERARY_VARIANT_ROWS",
+            "precededByMsBefore": 921
+          },
+          {
+            "dur": 1170,
+            "t": 10129,
+            "inside": [
+              "ROUTING_RESPONSE",
+              "ITINERARY_VARIANT_ROWS"
+            ],
+            "precededBy": "ITINERARY_VARIANT_ROWS",
+            "precededByMsBefore": 2808
+          },
+          {
+            "dur": 1056,
+            "t": 84459,
+            "inside": [
+              "LEG_FREQUENCYx4",
+              "SET_VISIBLE_ITINERARY",
+              "SET_ACTIVE_ITINERARY",
+              "SET_ACTIVE_LEG"
+            ],
+            "precededBy": "ROUTING_SILENT_ERROR",
+            "precededByMsBefore": 356
+          }
+        ],
+        "over500Unexcused": 16,
+        "maxMs": 1907
+      },
+      "network": {
+        "appApi": [
+          "/api/places?deviceId=dev-mvh5wo3m-7aghnrre",
+          "/api/places?deviceId=dev-mvh5wo3m-7aghnrre"
+        ],
+        "maxConcurrentPlans": 3,
+        "otpRequests": 27,
+        "planRequests": 7
+      },
+      "notes": [],
+      "taps": {
+        "max": 1565,
+        "n": 10,
+        "p50": 1274,
+        "p95": 1565,
+        "each": [
+          {
+            "eventTimingMs": 1176,
+            "label": "results-row-0",
+            "ms": 1274,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 1440,
+            "label": "results-back-0",
+            "ms": 1484,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 520,
+            "label": "results-row-1",
+            "ms": 570,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 1352,
+            "label": "results-back-1",
+            "ms": 1396,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 488,
+            "label": "results-row-2",
+            "ms": 531,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 1328,
+            "label": "results-back-2",
+            "ms": 1372,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 560,
+            "label": "results-row-4",
+            "ms": 630,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 1240,
+            "label": "results-back-4",
+            "ms": 1287,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 480,
+            "label": "results-row-6",
+            "ms": 528,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 1520,
+            "label": "results-back-6",
+            "ms": 1565,
+            "via": "click"
+          }
+        ],
+        "unmeasured": []
+      },
+      "wallSeconds": 115,
+      "search": {
+        "responses": [
+          {
+            "index": 1,
+            "itineraries": 1,
+            "longTaskMaxMs": 1334,
+            "longTaskSumMs": 1710,
+            "searchItineraries": 1,
+            "t": 5101
+          },
+          {
+            "index": 0,
+            "itineraries": 17,
+            "longTaskMaxMs": 1334,
+            "longTaskSumMs": 1452,
+            "searchItineraries": 18,
+            "t": 7320
+          },
+          {
+            "index": 3,
+            "itineraries": 17,
+            "longTaskMaxMs": 1170,
+            "longTaskSumMs": 1170,
+            "searchItineraries": 35,
+            "t": 11256
+          },
+          {
+            "index": 4,
+            "itineraries": 40,
+            "longTaskMaxMs": 1907,
+            "longTaskSumMs": 2082,
+            "searchItineraries": 75,
+            "t": 63519
+          }
+        ],
+        "routeRowTimetableFills": [],
+        "variantRows": [
+          {
+            "gapMs": 1,
+            "prevType": "ROUTING_RESPONSE",
+            "rows": 1,
+            "t": 5101,
+            "variants": 0
+          },
+          {
+            "gapMs": 0,
+            "prevType": "ROUTING_RESPONSE",
+            "rows": 13,
+            "t": 7320,
+            "variants": 10
+          },
+          {
+            "gapMs": 0,
+            "prevType": "ROUTING_RESPONSE",
+            "rows": 13,
+            "t": 11256,
+            "variants": 34
+          },
+          {
+            "gapMs": 1,
+            "prevType": "ROUTING_RESPONSE",
+            "rows": 31,
+            "t": 63519,
+            "variants": 64
+          }
+        ]
+      },
+      "host": {
+        "contention": [],
+        "loadavgEnd": 5.18,
+        "loadavgStart": 2.22
+      }
+    },
+    "search-1dest": {
+      "actions": 102,
+      "errors": [],
+      "longTasks": {
+        "n": 55,
+        "over200": 29,
+        "over500": 17,
+        "sumMs": 19966,
+        "top5": [
+          {
+            "dur": 1623,
+            "t": 963,
+            "inside": [],
+            "precededBy": null,
+            "precededByMsBefore": null
+          },
+          {
+            "dur": 989,
+            "t": 39829,
+            "inside": [],
+            "precededBy": "SET_ACTIVE_LEG",
+            "precededByMsBefore": 385
+          },
+          {
+            "dur": 982,
+            "t": 6072,
+            "inside": [
+              "ROUTING_RESPONSE",
+              "ITINERARY_VARIANT_ROWS"
+            ],
+            "precededBy": "ITINERARY_VARIANT_ROWS",
+            "precededByMsBefore": 446
+          },
+          {
+            "dur": 976,
+            "t": 7254,
+            "inside": [
+              "ROUTE_ROW_TIMETABLEx2",
+              "ROUTING_RESPONSE",
+              "ITINERARY_VARIANT_ROWS",
+              "ROUTING_EXTRA_REQUEST"
+            ],
+            "precededBy": "ITINERARY_VARIANT_ROWS",
+            "precededByMsBefore": 234
+          },
+          {
+            "dur": 860,
+            "t": 33845,
+            "inside": [],
+            "precededBy": "SET_ACTIVE_LEG",
+            "precededByMsBefore": 397
+          }
+        ],
+        "over500Unexcused": 13,
+        "maxMs": 1623
+      },
+      "network": {
+        "appApi": [
+          "/api/places?deviceId=dev-mvh5z51i-ke591go7",
+          "/api/places?deviceId=dev-mvh5z51i-ke591go7"
+        ],
+        "maxConcurrentPlans": 3,
+        "otpRequests": 23,
+        "planRequests": 6
+      },
+      "notes": [],
+      "taps": {
+        "max": 1447,
+        "n": 10,
+        "p50": 969,
+        "p95": 1447,
+        "each": [
+          {
+            "eventTimingMs": 888,
+            "label": "results-row-0",
+            "ms": 969,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 1296,
+            "label": "results-back-0",
+            "ms": 1336,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 456,
+            "label": "results-row-1",
+            "ms": 506,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 1416,
+            "label": "results-back-1",
+            "ms": 1447,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 512,
+            "label": "results-row-2",
+            "ms": 559,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 1032,
+            "label": "results-back-2",
+            "ms": 1054,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 416,
+            "label": "results-row-4",
+            "ms": 476,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 1232,
+            "label": "results-back-4",
+            "ms": 1277,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 376,
+            "label": "results-row-6",
+            "ms": 426,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 1176,
+            "label": "results-back-6",
+            "ms": 1213,
+            "via": "click"
+          }
+        ],
+        "unmeasured": []
+      },
+      "wallSeconds": 60,
+      "search": {
+        "responses": [
+          {
+            "index": 1,
+            "itineraries": 1,
+            "longTaskMaxMs": 982,
+            "longTaskSumMs": 2111,
+            "searchItineraries": 1,
+            "t": 4607
+          },
+          {
+            "index": 0,
+            "itineraries": 15,
+            "longTaskMaxMs": 982,
+            "longTaskSumMs": 2885,
+            "searchItineraries": 16,
+            "t": 5626
+          },
+          {
+            "index": 2,
+            "itineraries": 38,
+            "longTaskMaxMs": 982,
+            "longTaskSumMs": 2294,
+            "searchItineraries": 54,
+            "t": 7020
+          },
+          {
+            "index": 3,
+            "itineraries": 15,
+            "longTaskMaxMs": 976,
+            "longTaskSumMs": 2117,
+            "searchItineraries": 69,
+            "t": 7994
+          },
+          {
+            "index": 4,
+            "itineraries": 8,
+            "longTaskMaxMs": 747,
+            "longTaskSumMs": 2299,
+            "searchItineraries": 79,
+            "t": 18262
+          },
+          {
+            "index": 5,
+            "itineraries": 16,
+            "longTaskMaxMs": 799,
+            "longTaskSumMs": 1403,
+            "searchItineraries": 103,
+            "t": 23054
+          }
+        ],
+        "routeRowTimetableFills": [
+          {
+            "key": "1:57456|1:54|1:41258|",
+            "longTaskMaxMs": 440,
+            "longTaskSumMs": 875,
+            "status": "done",
+            "t": 9471
+          },
+          {
+            "key": "2:52097|2:480|2:30672|BICYCLE",
+            "longTaskMaxMs": 435,
+            "longTaskSumMs": 435,
+            "status": "done",
+            "t": 9965
+          },
+          {
+            "key": "2:41248|2:465|2:51825|BICYCLE",
+            "longTaskMaxMs": 526,
+            "longTaskSumMs": 1552,
+            "status": "done",
+            "t": 19121
+          },
+          {
+            "key": "1:43732|1:539|1:1616|BICYCLE",
+            "longTaskMaxMs": 526,
+            "longTaskSumMs": 1030,
+            "status": "done",
+            "t": 19747
+          },
+          {
+            "key": "1:2053|1:534|1:57518|BICYCLE",
+            "longTaskMaxMs": 799,
+            "longTaskSumMs": 1325,
+            "status": "done",
+            "t": 20427
+          },
+          {
+            "key": "1:57456|1:54|1:41253|",
+            "longTaskMaxMs": 604,
+            "longTaskSumMs": 604,
+            "status": "done",
+            "t": 23877
+          }
+        ],
+        "variantRows": [
+          {
+            "gapMs": 0,
+            "prevType": "ROUTING_RESPONSE",
+            "rows": 1,
+            "t": 4607,
+            "variants": 0
+          },
+          {
+            "gapMs": 0,
+            "prevType": "ROUTING_RESPONSE",
+            "rows": 7,
+            "t": 5626,
+            "variants": 12
+          },
+          {
+            "gapMs": 0,
+            "prevType": "ROUTING_RESPONSE",
+            "rows": 16,
+            "t": 7020,
+            "variants": 48
+          },
+          {
+            "gapMs": 0,
+            "prevType": "ROUTING_RESPONSE",
+            "rows": 16,
+            "t": 7994,
+            "variants": 66
+          },
+          {
+            "gapMs": 0,
+            "prevType": "ROUTING_RESPONSE_EXTRA",
+            "rows": 16,
+            "t": 9421,
+            "variants": 67
+          },
+          {
+            "gapMs": 0,
+            "prevType": "ROUTING_RESPONSE_EXTRA",
+            "rows": 16,
+            "t": 9916,
+            "variants": 68
+          },
+          {
+            "gapMs": 0,
+            "prevType": "ROUTING_RESPONSE",
+            "rows": 19,
+            "t": 18262,
+            "variants": 75
+          },
+          {
+            "gapMs": 0,
+            "prevType": "ROUTING_RESPONSE_EXTRA",
+            "rows": 19,
+            "t": 19062,
+            "variants": 78
+          },
+          {
+            "gapMs": 0,
+            "prevType": "ROUTING_RESPONSE_EXTRA",
+            "rows": 19,
+            "t": 19691,
+            "variants": 80
+          },
+          {
+            "gapMs": 0,
+            "prevType": "ROUTING_RESPONSE_EXTRA",
+            "rows": 19,
+            "t": 20373,
+            "variants": 84
+          },
+          {
+            "gapMs": 0,
+            "prevType": "ROUTING_RESPONSE",
+            "rows": 20,
+            "t": 23054,
+            "variants": 101
+          },
+          {
+            "gapMs": 0,
+            "prevType": "ROUTING_RESPONSE_EXTRA",
+            "rows": 20,
+            "t": 23818,
+            "variants": 104
+          }
+        ]
+      },
+      "host": {
+        "contention": [],
+        "loadavgEnd": 6.04,
+        "loadavgStart": 5.18
+      }
+    },
+    "details": {
+      "actions": 8,
+      "errors": [],
+      "longTasks": {
+        "n": 7,
+        "over200": 2,
+        "over500": 0,
+        "sumMs": 944,
+        "top5": [
+          {
+            "dur": 366,
+            "t": 10550,
+            "inside": [
+              "SET_ACTIVE_ITINERARY",
+              "SET_ACTIVE_LEG"
+            ],
+            "precededBy": "POSITION_RESPONSE",
+            "precededByMsBefore": 7222
+          },
+          {
+            "dur": 288,
+            "t": 37,
+            "inside": [
+              "SET_ACTIVE_ITINERARY",
+              "SET_ACTIVE_LEG"
+            ],
+            "precededBy": null,
+            "precededByMsBefore": null
+          },
+          {
+            "dur": 66,
+            "t": 4739,
+            "inside": [],
+            "precededBy": "POSITION_RESPONSE",
+            "precededByMsBefore": 1411
+          },
+          {
+            "dur": 63,
+            "t": 325,
+            "inside": [],
+            "precededBy": "SET_ACTIVE_LEG",
+            "precededByMsBefore": 278
+          },
+          {
+            "dur": 58,
+            "t": 10916,
+            "inside": [],
+            "precededBy": "SET_ACTIVE_LEG",
+            "precededByMsBefore": 360
+          }
+        ],
+        "over500Unexcused": 0,
+        "maxMs": 366
+      },
+      "network": {
+        "appApi": [],
+        "maxConcurrentPlans": 0,
+        "otpRequests": 0,
+        "planRequests": 0
+      },
+      "notes": [
+        "details-other-stops skipped: it fans out ~12 concurrent plan queries (PERF_ALLOW_FANOUT=1 to include)",
+        "details-stop-list-collapse: not present on this itinerary"
+      ],
+      "taps": {
+        "max": 490,
+        "n": 6,
+        "p50": 70,
+        "p95": 490,
+        "each": [
+          {
+            "eventTimingMs": 368,
+            "label": "details-open-row-0",
+            "ms": 422,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 32,
+            "label": "details-frequency-line",
+            "ms": 52,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 96,
+            "label": "details-ride-expander",
+            "ms": 116,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 48,
+            "label": "details-alert-expander",
+            "ms": 64,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 56,
+            "label": "details-walk-expander",
+            "ms": 70,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 448,
+            "label": "details-back",
+            "ms": 490,
+            "via": "click"
+          }
+        ],
+        "unmeasured": []
+      },
+      "wallSeconds": 13,
+      "search": {
+        "responses": [],
+        "routeRowTimetableFills": [],
+        "variantRows": []
+      },
+      "host": {
+        "contention": [],
+        "loadavgEnd": 6.94,
+        "loadavgStart": 6.04
+      }
+    }
+  },
+  "appUrl": "http://127.0.0.1:9969/",
+  "chrome": "/opt/google/chrome/chrome",
+  "cpuThrottle": 4,
+  "dpr": 2,
+  "label": "after-e40041a54",
+  "quietConsole": true,
+  "served": {
+    "dirty": [],
+    "sha": "e40041a54",
+    "tree": "/home/rwt/projects/otprr/worktrees/perf-idle"
+  },
+  "updated": "2026-10-20T20:55:08.519Z"
+}
