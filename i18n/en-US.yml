@@ -491,6 +491,7 @@ components:
     busNotBroadcasting: Bus not broadcasting yet — scheduled {time}
     busNotBroadcastingWaiting: Bus not broadcasting yet
     changeBus: Choose bus
+    changeBusReady: Change bus
     chooseBusCancel: Cancel
     chooseBusDistance: "{distance} m"
     chooseBusFleetNumber: "#{label}"

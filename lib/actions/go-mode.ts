@@ -4987,7 +4987,8 @@ function backgroundAnswerItineraries(
       strictModes: false,
       validModeCombinations: null
     }) as Itinerary[]
-  } catch {
+  } catch (e) {
+    console.warn('[Go Mode] 75.38: itinerary conversion failed', e)
     return (response.data.plan.itineraries || []) as Itinerary[]
   }
 }
@@ -5146,8 +5147,9 @@ function backgroundRouteTick(options: { manual: boolean }) {
           })
         }
         answer = backgroundAnswerItineraries(getState(), response, combo)
-      } catch {
+      } catch (e) {
         // best-effort — never disrupt the trip
+        console.warn('[Go Mode] 75.38: faster-route snapshot failed', e)
       }
       if (!check || !answer) return
 
@@ -5180,8 +5182,9 @@ function backgroundRouteTick(options: { manual: boolean }) {
           )
           lowBike =
             backgroundAnswerItineraries(getState(), response, lowCombo) || []
-        } catch {
+        } catch (e) {
           // best-effort
+          console.warn('[Go Mode] 75.38: less-biking query failed', e)
         }
       }
       await settleFasterRouteCheck(dispatch, getState, {
