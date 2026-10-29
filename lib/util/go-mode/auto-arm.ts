@@ -1,5 +1,6 @@
-import coreUtils from '@opentripplanner/core-utils'
 import type { Itinerary } from '@opentripplanner/types'
+
+import { getItem, removeItem, storeItem } from '../safe-storage'
 
 import { AUTO_REPLAN_ORIGIN_MAX_M } from './replan-acceptance'
 import { haversineDistance } from './geometry'
@@ -256,8 +257,8 @@ function cycleSafe<T>(value: T): T {
 
 export function saveArm(arm: AutoArm | null): void {
   try {
-    if (!arm) coreUtils.storage.removeItem(AUTO_ARM_STORAGE_KEY)
-    else coreUtils.storage.storeItem(AUTO_ARM_STORAGE_KEY, cycleSafe(arm))
+    if (!arm) removeItem(AUTO_ARM_STORAGE_KEY)
+    else storeItem(AUTO_ARM_STORAGE_KEY, cycleSafe(arm))
   } catch {
     // best-effort: a reload while armed then simply drops the arm
   }
@@ -271,7 +272,7 @@ export function saveArm(arm: AutoArm | null): void {
 export function loadArm(nowMs: number): AutoArm | null {
   let saved: any = null
   try {
-    saved = coreUtils.storage.getItem(AUTO_ARM_STORAGE_KEY, null)
+    saved = getItem(AUTO_ARM_STORAGE_KEY, null)
   } catch {
     return null
   }

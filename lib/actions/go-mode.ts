@@ -192,6 +192,7 @@ import {
   resumedDepartureOverride,
   resumedTransitionedLegIndex
 } from '../util/go-mode/session-persistence'
+import { storeItem } from '../util/safe-storage'
 import { createTripSession } from '../util/go-mode/trip-session'
 import {
   pushRiderFix,
@@ -854,7 +855,7 @@ function observedBikeSpeedMps(): number | null {
   )
 }
 
-const { randId, storeItem } = coreUtils.storage
+const { randId } = coreUtils.storage
 
 // Action types
 export const ADD_NOTIFICATION = 'ADD_NOTIFICATION'
