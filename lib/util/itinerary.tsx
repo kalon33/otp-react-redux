@@ -193,6 +193,46 @@ export function hasTokenTransitHop(
 }
 
 /**
+ * The route signatures this itinerary would have without a token hop at
+ * either END of its transit chain — what demoteTokenTransitHops looks for
+ * among the other options. Empty when it has no such hop.
+ *
+ * The closing hop is hasTokenTransitHop's, unchanged (Go Mode's re-plan
+ * guards read that one too). 75.13 adds its mirror for the list only: an
+ * OPENING hop shorter than the street legs that lead into it — bike 1441 m,
+ * then 280 m on the 444; walk 198 m, then 127 m on the 22 and a 120 m walk
+ * the closing rule never looked at, being shorter than the hop. A hop the
+ * rider walks 7 m to has nothing to be folded into and is left alone, as a
+ * closing hop that ends at the door is.
+ */
+function tokenHopFreeSignatures(
+  itinerary: Itinerary,
+  maxHopMeters: number
+): string[] {
+  const legs = itinerary?.legs || []
+  const transitIndexes = legs
+    .map((leg, index) => (leg.transitLeg ? index : -1))
+    .filter((index) => index >= 0)
+  if (transitIndexes.length === 0) return []
+  const routes = transitIndexes.map(
+    (index) => legs[index].routeId ?? legs[index].mode
+  )
+  const signatures: string[] = []
+  if (hasTokenTransitHop(itinerary, maxHopMeters)) {
+    signatures.push(routes.slice(0, -1).join('>'))
+  }
+  const first = transitIndexes[0]
+  const hop = legs[first]
+  if (hop.distance < maxHopMeters) {
+    const before = legs
+      .slice(0, first)
+      .reduce((sum, leg) => sum + (leg.distance || 0), 0)
+    if (before > hop.distance) signatures.push(routes.slice(1).join('>'))
+  }
+  return signatures
+}
+
+/**
  * Demote itineraries whose LAST transit leg is a token hop, when the same
  * journey without that hop is also on offer and arrives within a few minutes.
  *
@@ -209,6 +249,10 @@ export function hasTokenTransitHop(
  * it can never see that `Orange Line > bike > 539(602 m) > bike` is beaten by
  * `Orange Line > bike`. The comparison that matters is against the same trip
  * minus its final hop, and only the client holds both.
+ *
+ * 75.13: the hop may also OPEN the transit chain (bike 1.4 km, then 340 m on
+ * the 444), and in an arrive-by search the comparison is by departure — see
+ * tokenHopFreeSignatures and isDemoted below.
  */
 export function demoteTokenTransitHops<T extends Itinerary>(
   itineraries: T[],
@@ -243,24 +287,53 @@ export function demoteTokenTransitHopsBy<T>(
   // land?" The empty signature (walk/bike the whole way) is a legitimate answer
   // here — it is exactly the "just ride to the destination" option.
   const earliestEndBySignature = new Map<string, number>()
+  // ...and, for an arrive-by search, the latest departure (75.13).
+  const latestStartBySignature = new Map<string, number>()
   itineraries.forEach((item) => {
     const itin = getItinerary(item)
     const signature = transitRouteSignature(itin)
     const end = Number(itin.endTime)
-    if (!Number.isFinite(end)) return
-    const known = earliestEndBySignature.get(signature)
-    if (known === undefined || end < known) {
-      earliestEndBySignature.set(signature, end)
+    if (Number.isFinite(end)) {
+      const known = earliestEndBySignature.get(signature)
+      if (known === undefined || end < known) {
+        earliestEndBySignature.set(signature, end)
+      }
+    }
+    const start = Number(itin.startTime)
+    if (Number.isFinite(start)) {
+      const known = latestStartBySignature.get(signature)
+      if (known === undefined || start > known) {
+        latestStartBySignature.set(signature, start)
+      }
     }
   })
 
   const isDemoted = (item: T): boolean => {
     const itin = getItinerary(item)
-    if (!hasTokenTransitHop(itin, maxHopMeters)) return false
-    const withoutHop = signatureWithoutLastTransitLeg(itin)
-    const alternativeEnd = earliestEndBySignature.get(withoutHop)
-    if (alternativeEnd === undefined) return false
-    return alternativeEnd <= Number(itin.endTime) + toleranceMs
+    const withoutHop = tokenHopFreeSignatures(itin, maxHopMeters)
+    if (withoutHop.length === 0) return false
+    // 75.13: an arrive-by search pins every option to the deadline, so the
+    // hop-free version (the direct bike) ARRIVES later than the hop by design
+    // and the arrival test below never fired: on a Sunday 14:00 arrive-by
+    // the 444 hop leaving 13:45 stayed above the Orange Line though the
+    // direct bike leaves 13:54. There the rider's cost is how early they must
+    // LEAVE, so the same tolerance applies to the departure instead.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if ((itin as any)?.otp2QueryParams?.arriveBy === true) {
+      const start = Number(itin.startTime)
+      return withoutHop.some((signature) => {
+        const alternativeStart = latestStartBySignature.get(signature)
+        return (
+          alternativeStart !== undefined &&
+          alternativeStart >= start - toleranceMs
+        )
+      })
+    }
+    const end = Number(itin.endTime)
+    return withoutHop.some((signature) => {
+      const alternativeEnd = earliestEndBySignature.get(signature)
+      return alternativeEnd !== undefined && alternativeEnd <= end + toleranceMs
+    })
   }
 
   const kept: T[] = []

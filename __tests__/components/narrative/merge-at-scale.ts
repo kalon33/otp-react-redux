@@ -84,7 +84,9 @@ function merge(list: any[]) {
 describe('backlog 66.1 > merging a 185-itinerary search', () => {
   let realNow: () => number
   beforeAll(() => {
-    // The merge folds only departures within a day of now.
+    // The merge used to fold only departures within a day of now; since 75.6
+    // it no longer reads the clock (merge-searched-day.ts), so this stub only
+    // keeps the recorded signature's conditions identical.
     realNow = Date.now
     Date.now = () => nowMs
   })
