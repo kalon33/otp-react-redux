@@ -34,6 +34,7 @@ import type { FasterRouteLatch } from './faster-route'
 import type { MissedBusAttempt } from './missed-bus-recovery'
 import type { PacingCardState } from './pacing-card'
 import type { RiderFix, VehicleCompany } from './vehicle-company'
+import type { RiderPace } from './progress-calculator'
 import type { RiderSpeedAnchorBucket, RiderSpeedSample } from './rider-speed'
 import type { RidingState } from './types'
 import type { TimedSimulationPoint } from './geometry'
@@ -427,6 +428,13 @@ export interface TripSession {
   riderFixRing: RiderFix[]
 
   /**
+   * The rider's smoothed pace per walk/bike mode, which the countdown divides
+   * the ground ahead by once the trip's end anchor has passed — see
+   * smoothRiderPace in progress-calculator.ts (backlog 75.7).
+   */
+  riderPace: RiderPace
+
+  /**
    * The sparse ride-level companion to riderSpeedSamples: one peak moving fix
    * per minute of riding, fed from the same gate. It is what puts a floor under
    * the short-window median so a downtown crawl cannot time a whole access leg
@@ -554,6 +562,7 @@ export function createTripSession(): TripSession {
     riderBoardingMiss: null,
     riderDeniedBoardingAtMs: null,
     riderFixRing: [],
+    riderPace: {},
     riderSpeedAnchor: [],
     riderSpeedSamples: [],
     ridingHeldByVehicle: false,

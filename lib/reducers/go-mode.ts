@@ -1813,7 +1813,19 @@ const goMode = handleActions<GoModeState, any>(
               // until the next GPS tick recomputed honestly.
               progressAlongLeg: 0,
               progressAlongSegment: 0,
-              segmentIndex: 0
+              segmentIndex: 0,
+              // 12.17 (2026-10-29 replay R11): and the ground the OLD leg
+              // still owed goes with it. It is owed along that leg's
+              // polyline; carried over, it licensed jumps on this one. On
+              // orange-0917-2053 an `unaccountedFromFix` set at 21:07:12 on leg
+              // 0 survived two leg changes, and at 21:39:19 the rider's
+              // 14,455 m displacement from it released 0.06 -> 0.985 on the
+              // closing bike leg with the rider 528 m off it (ride-1015-2130
+              // carried the tram leg's 2,302 m the same way). Cleared, the
+              // matcher starts the owed ground afresh from the next fix, as
+              // after START_GO_MODE.
+              unaccountedFromFix: undefined,
+              unaccountedPathM: undefined
             }
           : null
       }

@@ -190,11 +190,119 @@ const PACE_FALLBACK_TRANSIT_MPS = 8
  */
 const PACE_MIN_TRUSTED_MPS = 0.5
 
+/**
+ * How long one fix weighs in the smoothed pace (75.7): an exponential average
+ * over about two minutes of moving fixes, so one fix moves the pace by under a
+ * hundredth of the gap between them.
+ */
+const PACE_SMOOTHING_TAU_MS = 120000
+
+/**
+ * ...and the most time one fix may claim. Stops are not folded in (see
+ * smoothRiderPace), so the first moving fix after a two-minute light would
+ * otherwise carry the whole two minutes and set the pace by itself.
+ */
+const PACE_SMOOTHING_MAX_STEP_MS = 5000
+
+/**
+ * Above this a fix on a walk or bike leg is not the rider's own pace: a GPS
+ * spike, or a vehicle the leg-mode gate failed to exclude. The same figure
+ * rider-speed.ts discards bike samples at (RIDER_SPEED_IMPLAUSIBLE_MPS).
+ */
+const PACE_IMPLAUSIBLE_MPS = 15
+
+/**
+ * The slowest pace the countdown will assume for a rider on a walk or bike leg:
+ * walking. A rider wheeling the bike along a platform at 0.4-1.1 m/s is not
+ * going to take 40 minutes over a kilometre — orange-bike-1013-0831 read
+ * 2,454 s for 1.37 km on a 0.56 m/s fix (75.7).
+ */
+const PACE_FLOOR_MPS = PACE_FALLBACK_MPS.WALK
+
+/** One mode's smoothed pace and the fix it was last moved by. */
+export interface SmoothedPace {
+  mps: number
+  tMs: number
+}
+
+/**
+ * The rider's smoothed pace per active mode (BICYCLE, WALK, ...), held across
+ * ticks by the caller (`session.riderPace`) because this module is pure.
+ * Keyed by mode rather than leg so a re-plan that re-installs the bike leg
+ * keeps the rider's pace, and a bus leg in between neither feeds nor resets it.
+ */
+export type RiderPace = Record<string, SmoothedPace>
+
+/**
+ * Fold one fix into the rider's smoothed pace for the mode of the leg they are
+ * on. Backlog 75.7: once the plan end has passed, the countdown divided the
+ * ground ahead by THIS fix's speed (>= 0.5 m/s) or the mode figure (below it);
+ * a rider rolling at 0.4-1.1 m/s crossed that line every few fixes, so the
+ * arrival thrashed between ~5 and ~41 min from one second to the next
+ * (orange-bike-1013-0831 08:47:07-:19: timeRemaining 1588 -> 304 -> 1941 ->
+ * 2454 -> 302 s; 16 of 81 replays, 166 moves of -10 min or worse).
+ *
+ * - Seeded at the mode's own figure (PACE_FALLBACK_MPS), so with no evidence
+ *   the countdown is exactly what it used to be below 0.5 m/s.
+ * - A fix below PACE_MIN_TRUSTED_MPS is a stop, not a pace, and is not folded
+ *   in: the pace held through a red light, and the clock — not the pace —
+ *   charges the rider for the stop, so the arrival slides by the length of the
+ *   stop and no more. That is the hysteresis: only moving fixes move it.
+ * - Each moving fix moves it by 1 - exp(-dt / PACE_SMOOTHING_TAU_MS), dt capped
+ *   at PACE_SMOOTHING_MAX_STEP_MS, so no single fix can swing it.
+ * - Transit modes are left alone: a rider's own speed on a bus leg is either
+ *   the platform wait or the bus's stop-start, and neither is a pace for the
+ *   ground ahead (see paceRemainingSeconds).
+ *
+ * Judged on the FIX's own timestamp so a replay rebuilds the pace the live
+ * ride had. Returns the previous object unchanged when there is nothing to
+ * fold.
+ */
+export function smoothRiderPace(
+  prev: RiderPace | null | undefined,
+  fix: {
+    mode?: string | null
+    speedMps?: number | null
+    tMs: number
+  }
+): RiderPace {
+  const pace = prev ?? {}
+  const mode = fix.mode || ''
+  const seed = PACE_FALLBACK_MPS[mode]
+  if (seed == null || !Number.isFinite(fix.tMs)) return pace
+  const held: SmoothedPace = pace[mode] ?? { mps: seed, tMs: fix.tMs }
+  const speed = fix.speedMps
+  if (
+    speed == null ||
+    !Number.isFinite(speed) ||
+    speed < PACE_MIN_TRUSTED_MPS ||
+    speed > PACE_IMPLAUSIBLE_MPS
+  ) {
+    return pace[mode] ? pace : { ...pace, [mode]: held }
+  }
+  const stepMs = Math.min(
+    PACE_SMOOTHING_MAX_STEP_MS,
+    Math.max(0, fix.tMs - held.tMs)
+  )
+  const weight = 1 - Math.exp(-stepMs / PACE_SMOOTHING_TAU_MS)
+  return {
+    ...pace,
+    [mode]: { mps: held.mps + weight * (speed - held.mps), tMs: fix.tMs }
+  }
+}
+
 /** How the remaining time is measured when no future arrival time is left. */
 export interface PaceContext {
   distanceRemainingM?: number | null
   /** Mode of the leg the rider is on, for the fallback speed. */
   mode?: string | null
+  /**
+   * The rider's smoothed pace for `mode` (smoothRiderPace), or null while
+   * there is none. Supplying the field at all — null included — selects the
+   * smoothed countdown (75.7); leaving it undefined keeps the old
+   * instantaneous one byte for byte.
+   */
+  smoothedSpeedMps?: number | null
   /** The rider's own ground speed from this fix, when it carries one. */
   speedMps?: number | null
 }
@@ -260,6 +368,25 @@ export function accessSecondsToBoardStop(
   return sawLeg && Number.isFinite(seconds) ? seconds : null
 }
 
+/**
+ * 75.7. On a walk or bike leg: the rider's smoothed pace, never below walking.
+ * On a transit leg: the mode figure, whatever this fix says — a rider on the
+ * platform reads 0-0.6 m/s and a bus between stops 0-15 m/s, and dividing the
+ * whole trip's ground by either printed 27,628 s (orange-stall-0922-0804) and
+ * 1,821 s within three seconds of 6,916 s (who0wz-1617-detour). The ground
+ * ahead still shrinks as the rider moves, so the countdown still counts down
+ * from it (6.4).
+ */
+function smoothedPaceMps(pace: PaceContext): number {
+  const active = PACE_FALLBACK_MPS[pace.mode || '']
+  if (active == null) return PACE_FALLBACK_TRANSIT_MPS
+  const smoothed = pace.smoothedSpeedMps
+  return Math.max(
+    PACE_FLOOR_MPS,
+    smoothed != null && Number.isFinite(smoothed) ? smoothed : active
+  )
+}
+
 function paceRemainingSeconds(pace?: PaceContext | null): number | null {
   if (!pace) return null
   const distance = pace.distanceRemainingM
@@ -268,9 +395,11 @@ function paceRemainingSeconds(pace?: PaceContext | null): number | null {
   }
   const reported = pace.speedMps
   const speed =
-    reported != null &&
-    Number.isFinite(reported) &&
-    reported >= PACE_MIN_TRUSTED_MPS
+    pace.smoothedSpeedMps !== undefined
+      ? smoothedPaceMps(pace)
+      : reported != null &&
+        Number.isFinite(reported) &&
+        reported >= PACE_MIN_TRUSTED_MPS
       ? reported
       : PACE_FALLBACK_MPS[pace.mode || ''] ?? PACE_FALLBACK_TRANSIT_MPS
   const seconds = distance / speed
@@ -1106,7 +1235,13 @@ export function calculateTripProgress(
    */
   ridingLegIndex: number | null = null,
   /** See {@link determineTripStatus}. Defaults false. */
-  ridingHeldByVehicle = false
+  ridingHeldByVehicle = false,
+  /**
+   * The rider's smoothed pace per mode (smoothRiderPace), for the countdown
+   * once the trip's end anchor has passed (75.7). Omitted, the countdown
+   * divides by this fix's own speed as it did before.
+   */
+  riderPace?: RiderPace | null
 ): TripProgress {
   const legs = itinerary.legs
   const currentLegIndex = routeMatch?.legIndex || 0
@@ -1148,6 +1283,10 @@ export function calculateTripProgress(
         progressInCurrentLeg
       ),
       mode: legs[currentLegIndex]?.mode,
+      smoothedSpeedMps:
+        riderPace === undefined
+          ? undefined
+          : riderPace?.[legs[currentLegIndex]?.mode || '']?.mps ?? null,
       speedMps: riderSpeedMps
     }
   )
