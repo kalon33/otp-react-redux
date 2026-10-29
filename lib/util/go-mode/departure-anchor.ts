@@ -177,6 +177,36 @@ export function currentServiceDate(nowMs: number, timeZone: string): string {
 }
 
 /**
+ * The service date to ask `findStopTimesForStop` for when the departures are
+ * wanted for ONE boarding leg: the service day that leg's own departure
+ * belongs to, not the clock's (75.2).
+ *
+ * `findStopTimesForStop` asks OTP for the 24 h from 03:30 on the date it is
+ * given, so `currentServiceDate(now)` between midnight and 03:30 names
+ * YESTERDAY's window — it ends before the first morning runs. 2026-10-29
+ * 00:39 (chaos C21): a trip on the 18 boarding Nicollet & 44th at 04:26 that
+ * morning fetched `date: "2026-10-28"`. That answer lists the same trip,
+ * `1:1361322`, at 04:26 on the 28th — a GTFS trip id recurs every service
+ * day — and the card seeded on it: "4:26 AM · departed · Next: 4:51 AM
+ * (-1189 min away)". The window the leg's own board time falls in holds its
+ * run, once.
+ *
+ * A leg boarding on the clock's service day asks for the same date as before,
+ * so nothing moves in the daytime. No board time on the leg: the clock's.
+ */
+export function legServiceDate(
+  leg: Leg | null | undefined,
+  nowMs: number,
+  timeZone: string
+): string {
+  const boardMs = Number((leg as any)?.startTime)
+  return currentServiceDate(
+    Number.isFinite(boardMs) && boardMs > 0 ? boardMs : nowMs,
+    timeZone
+  )
+}
+
+/**
  * OTP2 returns the route as an object (leg.route.id, aliased to gtfsId);
  * legacy responses use a top-level leg.routeId. Match the stop-time gtfsId.
  */
@@ -505,27 +535,65 @@ export interface CardDepartureDecision {
   reason: CardDepartureReason
 }
 
+/**
+ * How far from the time the card knows for a run another listing of the same
+ * trip id may sit and still be that run (75.2). A GTFS trip id names one run
+ * per service day, so its instances are 24 h apart and the one within half a
+ * day is the one on the plan's day; no bus runs twelve hours late.
+ */
+export const SAME_RUN_MAX_GAP_MS = 12 * 3600000
+
+/**
+ * Of the listings of ONE trip id, the one nearest `nearMs` and within
+ * SAME_RUN_MAX_GAP_MS of it — the trip's run on the day the card is counting
+ * toward. A stop-times answer for another service day lists the same trip id
+ * at the same time of day (75.2: 04:26 on 10-28 for a trip boarding 04:26 on
+ * 10-29), and a match on the id alone took it. With no finite `nearMs`, the
+ * first listing, as before.
+ */
+function sameDayRun(
+  listed: RouteDeparture[],
+  nearMs?: number | null
+): RouteDeparture | null {
+  if (nearMs == null || !Number.isFinite(nearMs)) return listed[0] ?? null
+  let best: RouteDeparture | null = null
+  for (const d of listed) {
+    const gap = Math.abs(d.depMs - nearMs)
+    if (gap > SAME_RUN_MAX_GAP_MS) continue
+    if (!best || gap < Math.abs(best.depMs - nearMs)) best = d
+  }
+  return best
+}
+
 /** The feed's current entry for a held run: by trip id, else by exact epoch. */
 function findHeld(
   departures: RouteDeparture[],
   held: HeldDeparture
 ): RouteDeparture | null {
   if (held.tripId) {
-    return departures.find((d) => d.tripId === held.tripId) ?? null
+    return sameDayRun(
+      departures.filter((d) => d.tripId === held.tripId),
+      held.departureMs
+    )
   }
   return departures.find((d) => d.depMs === held.departureMs) ?? null
 }
 
 /**
  * The run at `tickTripId` in this poll, when the leg names one and the poll
- * lists it (38.1). Null otherwise — and then nothing below changes.
+ * lists it (38.1) on the day `nearMs` falls on (75.2). Null otherwise — and
+ * then nothing below changes.
  */
 function tripRun(
   departures: RouteDeparture[],
-  tickTripId: string | null | undefined
+  tickTripId: string | null | undefined,
+  nearMs?: number | null
 ): RouteDeparture | null {
   if (!tickTripId) return null
-  return departures.find((d) => tripIdsMatch(d.tripId, tickTripId)) ?? null
+  return sameDayRun(
+    departures.filter((d) => tripIdsMatch(d.tripId, tickTripId)),
+    nearMs
+  )
 }
 
 /**
@@ -541,7 +609,7 @@ function holdFor(
 ): HeldDeparture {
   const match = departures.find((d) => d.depMs === departureMs)
   if (match?.tripId) return { departureMs, tripId: match.tripId }
-  const onTrip = tripRun(departures, tickTripId)
+  const onTrip = tripRun(departures, tickTripId, departureMs)
   return { departureMs, tripId: onTrip?.tripId ?? match?.tripId ?? null }
 }
 
@@ -739,7 +807,10 @@ export function resolveCardDeparture(input: {
     // 17:06:44 for 9m40s while the same bus moved to 17:08:55 — no live mark,
     // and neither the 19.1 split test nor leftTheFeed could ever fire. With
     // the trip's run in the poll the hold now names it and follows it.
-    const adopt = held.tripId == null ? tripRun(departures, tickTripId) : null
+    const adopt =
+      held.tripId == null
+        ? tripRun(departures, tickTripId, held.departureMs)
+        : null
     if (adopt?.tripId) {
       held = { departureMs: held.departureMs, tripId: adopt.tripId }
     }
@@ -763,7 +834,11 @@ export function resolveCardDeparture(input: {
       held.tripId != null &&
       !tripIdsMatch(held.tripId, tickTripId)
     if (splitFromTrip && !missed) {
-      const onTrip = departures.find((d) => tripIdsMatch(d.tripId, tickTripId))
+      const onTrip = tripRun(
+        departures,
+        tickTripId,
+        plannedDepartureMs ?? heldMs
+      )
       const next = onTrip?.depMs ?? plannedDepartureMs ?? null
       if (next != null && Number.isFinite(next)) {
         return {
@@ -814,8 +889,13 @@ export function resolveCardDeparture(input: {
   }
 
   // 38.1: with no projection yet, seed on the trip's own run when the poll
-  // lists it — its live time, not the plan's board time.
-  const seedRun = candidateMs == null ? tripRun(departures, tickTripId) : null
+  // lists it — its live time, not the plan's board time. Its run on the
+  // PLAN's day (75.2): 2026-10-29 00:39 seeded on the 10-28 listing of the
+  // same trip id and the card read "departed" with -1189 min to the next.
+  const seedRun =
+    candidateMs == null
+      ? tripRun(departures, tickTripId, plannedDepartureMs)
+      : null
   const seeded = candidateMs ?? seedRun?.depMs ?? plannedDepartureMs ?? null
   if (seeded == null) return { departureMs: null, held: null, reason: 'none' }
   return {
