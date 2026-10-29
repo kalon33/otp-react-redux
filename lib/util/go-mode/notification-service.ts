@@ -13,6 +13,7 @@ import {
   MATCH_CORRIDOR_TRANSIT_M
 } from './position-matching'
 import { hasArrivedAtDestination } from './progress-calculator'
+import { legFinishedBehindRider, ridingFactIsEvidenced } from './riding'
 import { MISSED_BUS_NOTICE_ID } from './native-notify'
 import { notifyIntl } from './notify-i18n'
 import {
@@ -26,6 +27,7 @@ import type { AutoUndo } from './auto-switch'
 import type { BoardVehicleEvidence } from './transit-trust'
 import type { FasterRouteOffer } from './faster-route-offer'
 import type { PushPayload } from './native-notify'
+import type { RidingState } from './types'
 import type { TripProgress } from './progress-calculator'
 
 export type NotificationType =
@@ -1006,6 +1008,11 @@ export interface MissedBusInput {
   /** The live record of the vehicle serving the board leg's PLANNED trip —
    * the bus's own geometry, never the rider's stop proximity. */
   boardVehicle?: BoardVehicleEvidence | null
+  /**
+   * The riding fact the off-route clock dropped last (`session.clearedRiding`)
+   * — a boarding the rider made, which `riding` no longer says (75.3).
+   */
+  clearedRiding?: Pick<RidingState, 'legIndex' | 'tripId' | 'vehicleId'> | null
   currentLegIndex: number
   departureOverrideMs: number | null
   legs: Leg[]
@@ -1014,6 +1021,16 @@ export interface MissedBusInput {
     { boardEpoch: number | null; boardRealtime?: boolean; realtime: boolean }
   >
   nowMs: number
+  /**
+   * The tick's progress reading, when it is about the leg at
+   * `currentLegIndex` — its latched stop count and percentage (75.3). Null
+   * when the search was moved past the matcher's leg (an early alight), since
+   * the reading is then about a different leg.
+   */
+  progressOnCurrentLeg?: {
+    currentLegProgress?: number | null
+    stopsRemaining?: number | null
+  } | null
   riderPosition: [number, number] | null
   riderSpeedMps: number | null
   riding: { legIndex: number } | null
@@ -1112,11 +1129,13 @@ export function classifyMissedBus(
 ): MissedBusContext | null {
   const {
     boardVehicle,
+    clearedRiding,
     currentLegIndex,
     departureOverrideMs,
     legs,
     liveLegTimes,
     nowMs,
+    progressOnCurrentLeg,
     riderPosition,
     riderSpeedMps,
     riding,
@@ -1144,6 +1163,42 @@ export function classifyMissedBus(
   // Narrowing this guard would not have helped that ride and would undo the
   // 7/29 behaviour that a held riding fact suppresses downstream boardings.
   if (riding) return null
+
+  // A boarding the rider has already MADE is not one they can miss (75.3).
+  //
+  // `riding` is the only "aboard" fact the guard above has, and it does not
+  // outlive the ride: the off-route clock drops it 90 s after the rider steps
+  // off and walks away. A transit -> transit plan has no access leg between
+  // the two, and shouldTransitionToNextLeg holds the next transit leg back
+  // until its bus is near (or the rider is aboard it), so the matcher stays on
+  // the leg just ridden and findBoardLegIndex hands that leg back as "the
+  // boarding", its departure long gone. Replayed, 2026-10-19 Gold Line
+  // (gold-1631-1019): leg 0 at 100 % from 16:34:40, CLEAR_RIDING 16:37:45,
+  // then "METRO Gold Line missed · next departure" and an auto-applied re-plan
+  // at 16:37:53 for the 16:31:37 boarding the rider had ridden; the same on
+  // the first tick of h5he2i-0952-transit-pace, its Orange Line leg at 100 %.
+  //
+  // Either fact is enough:
+  //  - the leg is finished behind the rider — the same test riderLeftRiddenLeg
+  //    uses (70.3). Its stop count is the latched one, so the off-route
+  //    matcher sliding progress back (100 -> 97 -> 88 at 16:42 on that ride,
+  //    see 64.2) cannot un-finish it;
+  //  - the riding fact the clock dropped named THIS leg's run, with a real
+  //    vehicle behind it: the rider was aboard it, whatever came after (a bus
+  //    on a road detour reads the same way — 47.1).
+  const boardTripId: string | null =
+    boardLeg.trip?.gtfsId || boardLeg.tripId || null
+  const boardLegFinished =
+    boardLegIndex === currentLegIndex &&
+    legFinishedBehindRider(progressOnCurrentLeg)
+  const rodeThisRun =
+    clearedRiding != null &&
+    boardTripId != null &&
+    clearedRiding.tripId === boardTripId &&
+    clearedRiding.legIndex === boardLegIndex &&
+    ridingFactIsEvidenced(clearedRiding)
+  if (boardLegFinished || rodeThisRun) return null
+
   if (
     currentLegIndex === boardLegIndex &&
     (vehicleConfidence === 'confirmed' || vehicleConfidence === 'high')
@@ -1241,8 +1296,8 @@ function legRouteName(leg: Leg | undefined): string {
 
 /**
  * Build the missed-bus notification for a DEFINITIVE miss (once per missed
- * departure — the id is keyed to the departure epoch, so a later miss of the
- * *next* bus re-fires).
+ * RUN — deduped on the trip, so a later miss of the *next* bus, a different
+ * trip, re-fires, and a re-read departure time of the same bus does not).
  *
  * An AMBIGUOUS miss deliberately returns null and says nothing yet. It used to
  * push "…may have left… — checking alternatives…" the instant it was detected,
@@ -1262,14 +1317,40 @@ export function checkMissedBus(
   const boardLeg = legs[ctx.boardLegIndex]
   const routeName = legRouteName(boardLeg)
 
+  // Keyed on the RUN, not on the departure epoch (25.1, 2026-10-29 chaos C3).
+  // The epoch is a reading, and a realtime one moves. Sim session
+  // mid-trip-geo2: "18 missed" went out at 23:46:30.835 on board epoch
+  // 23:52:23 for trip 1:1361969; the 23:47:17 live-times poll moved the same
+  // trip's epoch to 23:51:59, that minted a new key, and "18 missed" went out
+  // again at 23:47:30.116 — one bus, two high-priority pushes. The trip is
+  // what was missed (the key checkBoardVehicleApproach already uses), and a
+  // different trip — the next run, after the re-plan — still re-arms. The
+  // re-plan's own retry schedule is per epoch and untouched
+  // (missed-bus-recovery.ts): only the repeat push goes. The epoch stays in the
+  // id, second from the right, where the ride-watch daemon reads it back (26.7,
+  // `_notification_epoch`); it is just no longer part of the key. A leg with no
+  // trip id keeps the epoch key it always had.
+  const boardTripId: string | null =
+    boardLeg.trip?.gtfsId || boardLeg.tripId || null
+  // Dedup key, not copy: this fallback is never shown, so it stays an
+  // English literal on purpose — localizing it would make the key change
+  // with the locale.
+  const runKey = `${routeName}_${boardLeg.from?.name || 'the stop'}_${
+    boardTripId ?? ctx.effectiveBoardMs
+  }`
+  if (
+    wasRecentlySent(
+      generateNotificationId('MISSED_BUS', runKey),
+      sentNotifications,
+      30 * 60 * 1000
+    )
+  ) {
+    return null
+  }
   const id = generateNotificationId(
     'MISSED_BUS',
-    // Dedup key, not copy: this fallback is never shown, so it stays an
-    // English literal on purpose — localizing it would make the key change
-    // with the locale.
-    `${routeName}_${boardLeg.from?.name || 'the stop'}_${ctx.effectiveBoardMs}`
+    boardTripId ? `${runKey}_${ctx.effectiveBoardMs}` : runKey
   )
-  if (wasRecentlySent(id, sentNotifications, 30 * 60 * 1000)) return null
 
   const intl = notifyIntl()
   return {

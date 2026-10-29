@@ -11946,17 +11946,32 @@ export function handlePositionUpdate(position: GeolocationPosition) {
           )
         }
       : null
+    // The aboard facts as they stand NOW, not as the tick found them (75.5).
+    // `goMode` is the snapshot taken at the top of this function, and since
+    // then this tick's performVehicleMatching has written the vehicle match and
+    // the riding decision may have set or cleared `riding`. Read off the
+    // snapshot, the "strong match on this boarding" guard saw the PREVIOUS
+    // tick's match: replayed 2026-10-20 09:34:30 (transfer-match-1020), the
+    // planned 94 trip's bus 1:2015 was matched `high` at 17 m and "94 missed ·
+    // next departure" plus an auto-applied re-plan followed 22 ms later, with
+    // the riding fact landing on the next tick.
+    const goModeNow = getState().otp?.goMode
     const missedCtx = classifyMissedBus({
       boardVehicle: boardVehicleInfo,
+      // ...and the boarding the rider has already made, which a cleared
+      // `riding` no longer says (75.3).
+      clearedRiding: session.clearedRiding,
       currentLegIndex: boardSearchLegIndex,
       departureOverrideMs: departureOverride,
       legs: itinerary.legs,
       liveLegTimes: goMode.liveLegTimes || {},
       nowMs: currentTime.getTime(),
+      progressOnCurrentLeg:
+        progress.currentLegIndex === boardSearchLegIndex ? progress : null,
       riderPosition: currentPosition,
       riderSpeedMps: position.coords.speed ?? null,
-      riding: goMode.riding,
-      vehicleConfidence: goMode.vehicleMatch?.match?.confidence
+      riding: goModeNow?.riding ?? null,
+      vehicleConfidence: goModeNow?.vehicleMatch?.match?.confidence
     })
     // Carried to the next tick's progress for the current-leg card's hold.
     // The card may only give up a departure it is already showing on evidence,
