@@ -181,3 +181,21 @@ describe('58.2 > one line on top when no row uses the named routes', () => {
     )
   })
 })
+
+describe('75.22a > fare-less cards format no currency', () => {
+  it('mounting the 0921 results logs no FORMAT_ERROR', () => {
+    // FAILS BEFORE: intl.formatNumber(transitFare, {style:'currency'}) ran
+    // before the fareKnown check, with no currency, on every fare-less card.
+    const spy = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    try {
+      const { wrapper } = mountList(settled(lock('1:904')))
+      expect(wrapper.find('li.result').length).toBeGreaterThan(0)
+      const formatErrors = spy.mock.calls.filter((c) =>
+        String(c[0]).includes('Currency code is required')
+      )
+      expect(formatErrors).toHaveLength(0)
+    } finally {
+      spy.mockRestore()
+    }
+  })
+})

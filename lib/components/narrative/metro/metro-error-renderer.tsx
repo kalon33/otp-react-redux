@@ -411,12 +411,19 @@ const ErrorRenderer = ({
             )
           }
 
-          const localizedInputFieldList = Array.from(errors[error])?.map(
-            (inputField) =>
+          // 75.22: an error that names no input field (null/undefined in the
+          // set) used to build the id `inputFields.undefined` -> a
+          // MISSING_TRANSLATION per render. Skip it: the body's plural is
+          // keyed on the count, so it reads without a subject.
+          const localizedInputFieldList = Array.from(errors[error])
+            ?.filter(
+              (inputField) => inputField !== null && inputField !== undefined
+            )
+            .map((inputField) =>
               intl.formatMessage({
                 id: `components.OTP2ErrorRenderer.inputFields.${inputField}`
               })
-          )
+            )
 
           const body = (
             <FormattedMessage
