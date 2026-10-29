@@ -196,7 +196,7 @@ import { createTripSession } from '../util/go-mode/trip-session'
 import {
   pushRiderFix,
   ridingHeldByVehicle,
-  trackVehicleCompany
+  trackRidingCompany
 } from '../util/go-mode/vehicle-company'
 import {
   LIVE_BOARD_TIMER_MS,
@@ -11116,11 +11116,17 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         lon: position.coords.longitude,
         tMs: position.timestamp
       })
-      session.vehicleCompany = trackVehicleCompany(
-        session.vehicleCompany,
-        ridingMatch,
-        session.riderFixRing
-      )
+      // Kept on the bus the FACT names, not whichever bus a `high` match
+      // names this second — a poll the riding bus misses must not hand its
+      // record to another (47.1, 2026-10-29).
+      session.vehicleCompany = trackRidingCompany(session.vehicleCompany, {
+        match: ridingMatch,
+        riding: ridingNow,
+        ring: session.riderFixRing,
+        vehicles: ridingNow?.routeId
+          ? getState().otp?.transitIndex?.routes?.[ridingNow.routeId]?.vehicles
+          : null
+      })
       const heldByVehicle = ridingHeldByVehicle({
         company: session.vehicleCompany,
         match: ridingMatch,
@@ -11210,10 +11216,15 @@ export function handlePositionUpdate(position: GeolocationPosition) {
             distanceFromRouteM: Math.round(routeMatch.distanceFromRoute),
             frameSeconds: session.vehicleCompany?.lastFrameSeconds ?? null,
             legIndex: routeMatch.legIndex,
+            // This tick's match as the hold read it: `confirmed`, `high`, or
+            // `none` in a poll the riding bus missed while its record still
+            // spoke (47.1, 2026-10-29).
+            matchConfidence: ridingMatch?.confidence ?? null,
             on: holdEngaged,
             riding: ridingAfter != null,
             tMs: nowForRiding,
             togetherAtMs: session.vehicleCompany?.lastTogetherAtMs ?? null,
+            togetherFrames: session.vehicleCompany?.togetherFrames ?? null,
             vehicleDistanceM:
               session.vehicleCompany?.lastDistanceM != null
                 ? Math.round(session.vehicleCompany.lastDistanceM)
