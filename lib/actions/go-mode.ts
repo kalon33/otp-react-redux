@@ -445,6 +445,7 @@ import type {
   ProjectedOrigin,
   ReplanOriginPick
 } from '../util/go-mode/replan-origin'
+import { inheritItineraryModes } from '../util/go-mode/replan-modes'
 import { evaluateDepartureDrift } from '../util/go-mode/departure-drift'
 import type { DepartureBaselineState } from '../util/go-mode/departure-drift'
 import type { PacingCardState } from '../util/go-mode/pacing-card'
@@ -4160,7 +4161,13 @@ export function reRouteFromCurrentPosition(
       arriveBy: false,
       date: origin.date,
       from: origin.from,
-      modes,
+      // 75.15: an answer installed without asking keeps the trip's own modes —
+      // a walk trip's missed bus is not a reason to put the rider on a bike.
+      // An ambiguous miss (no autoApply) lists its candidates for the rider to
+      // choose from, so it keeps the search's full set.
+      modes: options.autoApply
+        ? inheritItineraryModes(modes, itinerary)
+        : modes,
       modeSettings,
       numItineraries,
       time: origin.time,
@@ -4951,7 +4958,10 @@ export function quietReplanAccessLeg() {
       arriveBy: false,
       date: fullWhen.date,
       from: originFrom(fullProjection),
-      modes,
+      // 75.15: swapped in without asking, so the trip's own modes only — a
+      // walking rider's fallback must not come back as a bike trip (the
+      // no-transit picker takes the FASTEST access-only answer).
+      modes: inheritItineraryModes(modes, itinerary),
       modeSettings,
       numItineraries,
       routingPreferences,
@@ -7898,6 +7908,13 @@ function optimizeAlightFromTrip(options: {
    */
   limit?: number
   /**
+   * 75.15: the itinerary whose modes an AUTOMATIC swap must keep. Set, the
+   * onward plans drop every vehicle mode it does not use
+   * (inheritItineraryModes); unset, they ask with the search's modes, as the
+   * rider-facing list and the background check always have.
+   */
+  modesFrom?: Itinerary | null
+  /**
    * Handed the run's raw per-stop answers and the downstream stops, before
    * ranking (cycle 25 B4): the aboard faster-route check judges the stops
    * with its own comparator (compareAlightOffer), which needs the answers as
@@ -8031,7 +8048,9 @@ function optimizeAlightFromTrip(options: {
     const riderFacing = options.riderFacing ?? !!updateOnboardState
     const ctx = {
       homeTimezone,
-      modes,
+      modes: options.modesFrom
+        ? inheritItineraryModes(modes, options.modesFrom)
+        : modes,
       modeSettings,
       // A constraint the rider SET outlives the search it was set in — the
       // reason getBasePlanParts carries these at all. The onboard ctx used to
@@ -9446,6 +9465,8 @@ export function replanFromAboard(
             alsoAskStopIds,
             keepRouteId: onwardRouteId,
             limit: 50,
+            // 75.15: applied without asking — the trip's own modes onward.
+            modesFrom: itinerary,
             prefsOverride,
             to,
             trip,
@@ -9499,6 +9520,8 @@ export function replanFromAboard(
             // path may apply — the same reason applyAutoReroute searches
             // collectRerouteCandidates(all, 50) instead of its display list.
             limit: 50,
+            // 75.15: and the same goes for the mode.
+            modesFrom: itinerary,
             prefsOverride,
             to,
             trip,
