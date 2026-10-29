@@ -349,6 +349,7 @@ import {
   syncLiveActivity
 } from '../util/go-mode/live-activity'
 import {
+  isUsableFix,
   POSITION_SOURCE_REPLAY,
   POSITION_SOURCE_SIM,
   TaggedPosition,
@@ -502,6 +503,26 @@ let nativeGpsRestartsSinceLastFix = 0
 // wedge that produced the 2026-08-31 blank screen, short enough that it can
 // never place the rider at a previous trip's position.
 const SEED_PROGRESS_MAX_AGE_MS = 120000
+
+// Fixes handlePositionUpdate has turned away as unusable this page load
+// (75.1). Counted so the day file can say whether any producer ever emits
+// one — no ride has shown it yet — without logging every one of a 1 Hz run.
+let rejectedFixCount = 0
+
+function noteRejectedFix(position: GeolocationPosition) {
+  rejectedFixCount += 1
+  // The first, then one per minute of a 1 Hz stream of them.
+  if (rejectedFixCount !== 1 && rejectedFixCount % 60 !== 0) return
+  const c: any = position?.coords
+  // Stringified: NaN and Infinity become null in the JSON the log ships.
+  recordSessionEvent('position-rejected', {
+    accuracy: String(c?.accuracy),
+    count: rejectedFixCount,
+    latitude: String(c?.latitude),
+    longitude: String(c?.longitude),
+    source: (position as TaggedPosition)?.source ?? null
+  })
+}
 
 function stopGpsWatchdog() {
   if (session.gpsWatchdogIntervalId) {
@@ -3086,25 +3107,21 @@ export function startGoModeTracking(
       }
     }
 
-    // Check geolocation permission — if denied, still allow simulation
-    let geoDenied = false
-    if ('permissions' in navigator) {
-      try {
-        const result = await navigator.permissions.query({
-          name: 'geolocation'
-        })
-        if (result.state === 'denied') {
-          geoDenied = true
-        }
-      } catch {
-        // permissions API not supported, continue anyway
-      }
-    }
-
-    if (!geoDenied) {
-      // Request location permission and start tracking
-      dispatch(startPositionTracking())
-    }
+    // Start tracking whatever the browser's geolocation permission says
+    // (75.10). This used to ask `navigator.permissions` first and, on
+    // 'denied', simply not start: no tracking error, so GoModeScreen sat on
+    // "Starting Trip… / Acquiring GPS signal…" for good with its own
+    // "Location permission denied" card and Retry unreachable, and granting
+    // permission later changed nothing because nothing asked again (chaos
+    // C20: unchanged at +20 s, and 25 s after the grant). Asking anyway fixes
+    // both — a denied browser answers the poll at once with PERMISSION_DENIED,
+    // which is that card, and the same poll picks the trip up on its next
+    // tick once the rider allows location, exactly as it already did for a
+    // rider who refused the prompt itself. Inside the native shell the check
+    // never meant anything: the watcher asks the OS and reports a refusal
+    // (native-gps.ts). Simulation is unaffected — the poll stands aside while
+    // it runs, and its first fix clears the card.
+    dispatch(startPositionTracking())
   }
 }
 
@@ -10671,6 +10688,18 @@ function accessProgressOf(goMode: any, transitionedLegIndex: number) {
 
 export function handlePositionUpdate(position: GeolocationPosition) {
   return function (dispatch: any, getState: any) {
+    // 75.1: a fix with no usable coordinates is not a position. Every source
+    // comes through here — the native watcher, the browser poll, the GPS sim
+    // and trip replay — and one `{latitude: NaN, longitude: NaN}` stored as
+    // tracking.lastPosition took the whole app to its error boundary mid-trip
+    // (MapLibre: `Invalid LngLat object: (NaN, NaN)`). Turned away BEFORE the
+    // heartbeats below on purpose: a watcher delivering only garbage is as
+    // dead as a silent one, so the watchdog may restart it and the live board
+    // timer keeps the board moving.
+    if (!isUsableFix(position)) {
+      noteRejectedFix(position)
+      return
+    }
     // Heartbeat for the native GPS watchdog — wall clock, unconditionally:
     // ANY position arriving proves the stream is alive, and with it that the
     // last restart worked, which is what returns the watchdog to its ordinary

@@ -31,6 +31,7 @@ import {
   FOLLOW_ZOOM_TRANSIT,
   isTransitLegMode
 } from '../../util/go-mode/follow-camera'
+import { hasPlaceableCoords } from '../../util/go-mode/position-source'
 import { installMapRenderGuard } from '../../util/go-mode/map-render-guard'
 import DefaultMap from '../map/default-map'
 import type { MapRenderRecovered } from '../../util/go-mode/map-render-guard'
@@ -333,7 +334,7 @@ export const GoModeMapOverlay = ({
   arrived = false,
   currentLeg,
   currentLegMode,
-  currentPosition,
+  currentPosition: givenPosition,
   distanceToNextTurn,
   followUser,
   nextTurnCue,
@@ -359,6 +360,13 @@ export const GoModeMapOverlay = ({
   onToggleFollow: () => void
   routeGeoJson: GeoJSON.FeatureCollection | null
 }) => {
+  // 75.1: a position MapLibre cannot place is no position — the dot and the
+  // follow camera both hand it to LngLat, which throws during render and takes
+  // the whole app down with it. handlePositionUpdate already turns such fixes
+  // away; this is the map not trusting that every caller did.
+  const currentPosition = hasPlaceableCoords(givenPosition)
+    ? givenPosition
+    : null
   const { current: map } = useMap()
   const hasFitBounds = useRef(false)
   const fitBoundsAt = useRef(0)
@@ -957,7 +965,7 @@ const GoModeMap = ({
     // it ends, and nothing downstream of the map reads this geometry.
     const ridingLegIndex = aboardBeforeLeg ? routeMatch?.legIndex ?? -1 : -1
     const riderPoint: [number, number] | null =
-      currentPosition && ridingLegIndex >= 0
+      hasPlaceableCoords(currentPosition) && ridingLegIndex >= 0
         ? [currentPosition.coords.longitude, currentPosition.coords.latitude]
         : null
     try {

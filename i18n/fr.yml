@@ -504,6 +504,7 @@ components:
     directionSB: "Direction sud"
     directionWB: "Direction ouest"
     errorPermissionDenied: "Accès à la position refusé. Autorisez la localisation dans les réglages de votre navigateur."
+    errorPermissionDeniedApp: "Accès à la position refusé. Autorisez la localisation dans les Réglages."
     errorTimeout: "Signal GPS expiré. Vérifiez que vous êtes dans une zone couverte par le GPS."
     errorUnavailable: "Impossible de déterminer votre position. Vérifiez les réglages de votre appareil."
     fasterRoute:
@@ -626,6 +627,7 @@ components:
     onboardStopPassedSkip: "{count, plural, one {Passer cet arrêt} other {Passer ces arrêts}}"
     onboardStopPassedTitle: "Votre bus a dépassé {stop}"
     onboardTitle: "Dans le bus"
+    openSettings: "Ouvrir les Réglages"
     openTripSheet: "Ouvrir l'aperçu du trajet"
     pickAnotherStop: "Choisir un autre arrêt"
     pickYourBus: "Dans quel bus êtes-vous ? Choisissez-le ci-dessous."
