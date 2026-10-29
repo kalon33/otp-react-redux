@@ -151,6 +151,34 @@ export function calculateCumulativeDistances(
   return distances
 }
 
+// 75.37 (J8): the cumulative-distance array is a pure function of a leg's
+// encoded polyline, yet matchPositionToRoute rebuilt it (a haversine per
+// vertex, 57 % of the fixture replay's CPU) for up to three legs on every GPS
+// fix. Cache it per `legGeometry` object — itineraries keep the same object
+// across ticks — and verify the encoded `points` string is still the one it
+// was built from, so an in-place edit can never serve a stale array. Callers
+// only read the array; it is never handed out for mutation.
+const cumulativeByGeometry = new WeakMap<
+  { points?: string },
+  { cumulative: number[]; points: string }
+>()
+
+function cumulativeDistancesForLeg(
+  leg: Leg,
+  polyline: LatLngArray[]
+): number[] {
+  const geometry = leg.legGeometry as { points?: string } | undefined
+  const points = geometry?.points
+  if (!geometry || typeof points !== 'string') {
+    return calculateCumulativeDistances(polyline)
+  }
+  const hit = cumulativeByGeometry.get(geometry)
+  if (hit && hit.points === points) return hit.cumulative
+  const cumulative = calculateCumulativeDistances(polyline)
+  cumulativeByGeometry.set(geometry, { cumulative, points })
+  return cumulative
+}
+
 export interface RouteMatchResult {
   distanceFromRoute: number
   // 0-1
@@ -714,7 +742,7 @@ export function matchPositionToRoute(
 
     if (polyline.length < 2) continue
 
-    const cumulativeDistances = calculateCumulativeDistances(polyline)
+    const cumulativeDistances = cumulativeDistancesForLeg(leg, polyline)
     const totalLegDistance = cumulativeDistances[cumulativeDistances.length - 1]
 
     for (let i = 0; i < polyline.length - 1; i++) {

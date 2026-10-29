@@ -74,7 +74,7 @@ const fmt = (ms) =>
   ms == null
     ? 'n/a'
     : new Date(ms).toLocaleTimeString('en-US', {
-        hour12: false,
+        hourCycle: 'h23',
         timeZone: 'America/Chicago'
       })
 
@@ -87,8 +87,30 @@ function check(name, pass, detail) {
 }
 
 async function main() {
-  const fixtureJson = fs.readFileSync(FIXTURE_PATH, 'utf8')
-  const fixture = JSON.parse(fixtureJson)
+  const fixture = JSON.parse(fs.readFileSync(FIXTURE_PATH, 'utf8'))
+  // 75.34 (V12): the vehicle records were captured on 2026-08-02, before the
+  // API mapper carried `directionId` (2026-08-27). Without it neither the
+  // heading gate (needs both speeds >= 3 m/s; the rider crept at 0.2-2.2 m/s)
+  // nor the directionId gate (`vehicle-matching.ts`, "only when BOTH sides
+  // declare one") could fire, and the riding fact sat on the opposite-direction
+  // 8232 for 4m37s. A GTFS direction is a fact of the pattern, so derive it from
+  // the recorded patternId ("Pattern:1:904:<direction>:01") the way a live feed
+  // delivers it — the replay then exercises the gate that protects live rides.
+  let stamped = 0
+  for (const snap of fixture.vehicleSnapshots) {
+    const vs = (snap.payload && snap.payload.vehicles) || snap.vehicles || []
+    for (const v of vs) {
+      if (v.directionId != null || !v.patternId) continue
+      const dir = Buffer.from(v.patternId, 'base64').toString().split(':')[3]
+      if (dir === '0' || dir === '1') {
+        v.directionId = dir
+        stamped++
+      }
+    }
+  }
+  console.log(`[setup] stamped directionId on ${stamped} vehicle record(s)`)
+  // What the page replays is the STAMPED fixture, not the file's bytes.
+  const fixtureJson = JSON.stringify(fixture)
   console.log(
     `[setup] fixture ${fixture.meta.label}: ${fixture.gpsTrack.length} fixes ` +
       `${fmt(fixture.meta.startMs)} -> ${fmt(fixture.meta.endMs)}, ` +
@@ -184,8 +206,8 @@ async function main() {
         .map((l) => ({
           endTime: Number(l.endTime),
           from: l.from && l.from.name,
-          intermediates:
-            (l.intermediatePlaces || l.intermediateStops || []).length,
+          intermediates: (l.intermediatePlaces || l.intermediateStops || [])
+            .length,
           routeColor: l.routeColor || (l.route && l.route.color) || null,
           startTime: Number(l.startTime),
           to: l.to && l.to.name,
@@ -298,8 +320,8 @@ async function main() {
       legs: (it.legs || []).map((l) => ({
         endTime: Number(l.endTime),
         from: l.from && l.from.name,
-        intermediates:
-          (l.intermediatePlaces || l.intermediateStops || []).length,
+        intermediates: (l.intermediatePlaces || l.intermediateStops || [])
+          .length,
         mode: l.mode,
         routeColor: l.routeColor || (l.route && l.route.color) || null,
         startTime: Number(l.startTime),
@@ -523,6 +545,27 @@ async function main() {
       ? `${invertedBootstrap.length} in the bootstrap, ` +
           `${invertedSwaps.length} swap(s) with inverted legs`
       : 'every leg ends after it starts'
+  )
+
+  // (f) 75.34 (V12): the riding fact is on the ridden bus — never the
+  // opposite-direction 8232 — every time it holds a trip. The `[aboard]` line
+  // above only names the FIRST change; print them all so a reader sees the ride.
+  console.log(
+    `[riding changes] ${rec.ridingChanges
+      .map((r) => `${fmt(r.t)} ${r.tripId || 'null'}/${r.vehicleId || 'null'}`)
+      .join(' | ')}`
+  )
+  const wrongRiding = rec.ridingChanges.filter(
+    (r) => r.tripId && r.tripId !== RIDDEN_TRIP
+  )
+  check(
+    `f. riding only ever holds the ridden trip ${RIDDEN_TRIP}`,
+    !!firstRiding && wrongRiding.length === 0,
+    wrongRiding.length
+      ? `riding sat on ${wrongRiding
+          .map((r) => `${r.tripId}/${r.vehicleId} from ${fmt(r.t)}`)
+          .join(', ')}`
+      : 'every riding fact names the ridden trip'
   )
 
   // Informational: the ghost trip must never reach the confirmed match.

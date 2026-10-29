@@ -93,7 +93,9 @@ const Vehicle = ({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>
+        {/* 75.37 (J6): IconWithText renders a div, which is invalid inside the
+            <p> CardTitle is by default. */}
+        <CardTitle as="div">
           <IconWithText
             icon={
               <CompanyIcon
