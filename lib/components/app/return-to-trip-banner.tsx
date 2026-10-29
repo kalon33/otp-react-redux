@@ -26,16 +26,20 @@ import type { AutoPreset } from '../../util/go-mode/auto-priority'
 import type { GoModeState } from '../../reducers/go-mode'
 import type { LiveLegTime } from '../../util/go-mode/types'
 
+import { BANNER_HEIGHT_VAR, usePublishedBannerHeight } from './banner-strip'
+
 /**
- * The height the banner is currently taking, published so the fixed-position
- * screens underneath can start below it instead of behind it. Read as
+ * The height the strip under the app bar is currently taking — this banner's
+ * plus, while offline, the network strip's above it (75.16; banner-strip.ts) —
+ * published so the fixed-position screens underneath can start below it
+ * instead of behind it. Read as
  * `calc(50px + var(--return-to-trip-banner-height, 0px))` in mobile.css and in
  * the mobile screens' styled-components, and as the `padding-top` of AppFrame's
  * `main` in app.css (`#otp > main`) for the pages routed outside the
  * mobile-screen tree — /feedback, /settings, saved places. The fallback means
  * nothing moves when no banner is up.
  */
-export const BANNER_HEIGHT_VAR = '--return-to-trip-banner-height'
+export { BANNER_HEIGHT_VAR }
 
 const containerClassname = 'return-to-trip-banner'
 const timeout = 250
@@ -72,7 +76,9 @@ const TransitionStyles = styled.div`
        padding-top — so the strip is vacated rather than covered. */
     position: absolute;
     text-align: center;
-    top: 50px;
+    /* Under the network-lost strip when that is up too (75.16): both used to
+       sit at 50px, one over the other. */
+    top: calc(50px + var(--network-banner-height, 0px));
     width: 100%;
     // When banner is fully loaded, set z-index higher than nav so we're not seeing the nav border.
     z-index: 26;
@@ -247,7 +253,6 @@ const ReturnToTripBanner = ({
 }: Props): JSX.Element => {
   const intl = useIntl()
   const bannerRef = useRef<HTMLButtonElement>(null)
-  const [bannerHeight, setBannerHeight] = useState(0)
   const [armCardOpen, setArmCardOpen] = useState(false)
 
   useActiveTripGuards(visible)
@@ -354,32 +359,9 @@ const ReturnToTripBanner = ({
     })
   }
 
-  // Publish the banner's real height so the screens below can start under it.
-  // Measured rather than assumed: the copy wraps to two lines on a narrow
-  // phone (it did in the 2026-09-08 screenshot), and a hard-coded strip would
-  // be wrong on one of the two.
-  useLayoutEffect(() => {
-    const el = bannerRef.current
-    if (!visible || !el) {
-      setBannerHeight(0)
-      return
-    }
-    const measure = () => setBannerHeight(el.getBoundingClientRect().height)
-    measure()
-    const Observer = (
-      window as unknown as { ResizeObserver?: typeof ResizeObserver }
-    ).ResizeObserver
-    if (!Observer) return
-    const observer = new Observer(measure)
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [visible, message])
-
-  useEffect(() => {
-    const root = document.documentElement
-    root.style.setProperty(BANNER_HEIGHT_VAR, `${bannerHeight}px`)
-    return () => root.style.setProperty(BANNER_HEIGHT_VAR, '0px')
-  }, [bannerHeight])
+  // Publish the banner's real height so the screens below can start under it
+  // (banner-strip.ts: measured, because the copy wraps on a narrow phone).
+  usePublishedBannerHeight('returnToTrip', bannerRef, visible, message)
 
   return (
     <TransitionStyles>

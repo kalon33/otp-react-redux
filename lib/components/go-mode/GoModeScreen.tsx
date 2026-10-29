@@ -432,6 +432,22 @@ const GoModeScreen = ({
           transferFrequency={transferFrequencyEntry}
         />
 
+        {/* Between the card and the map, in the column's flow (75.16, chaos
+            C27). After the map it was the column's last 40px — exactly where
+            the absolute "View trip & other ways" tab sits: in the 2026-10-29
+            stress test elementFromPoint at the strip's centre found the tab's
+            label at 360 and 390 wide, and the rider would have seen an amber
+            edge with "G" and "…". The bottom overlays (the tab, the faster-
+            route and arrival cards) do not reach up here. */}
+        {goMode.tracking.error && (
+          <GpsWarningBanner>
+            {intl.formatMessage({
+              defaultMessage: 'GPS signal lost. Trying to reconnect...',
+              id: 'components.GoMode.gpsError'
+            })}
+          </GpsWarningBanner>
+        )}
+
         <GoModeMap
           /* Aboard the bus this leg belongs to, short of the stop the leg
              starts at (backlog 22.1). The same answer the status and the
@@ -467,15 +483,6 @@ const GoModeScreen = ({
           {/* Auto (65.2): its own connected component, over the map. */}
           {goMode.arrivedAt == null && <AutoToggle />}
         </GoModeMap>
-
-        {goMode.tracking.error && (
-          <GpsWarningBanner>
-            {intl.formatMessage({
-              defaultMessage: 'GPS signal lost. Trying to reconnect...',
-              id: 'components.GoMode.gpsError'
-            })}
-          </GpsWarningBanner>
-        )}
 
         {/* Arrived on a ROUND TRIP: the countdown to the return replaces the
             plain arrival card. Same primitives, same place; see

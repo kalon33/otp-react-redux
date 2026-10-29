@@ -278,7 +278,13 @@ const TransitProgress = ({
         <NavEyebrowRow>
           {onExit && (
             <CardBackButton
-              aria-label={intl.formatMessage({ id: 'common.forms.back' })}
+              // It ENDS the trip — GoModeScreen's handleExit, behind its
+              // "stop tracking this trip?" confirm — so that is its name: a
+              // screen reader announced "Back" (75.16, perf agent P9). The
+              // words are the multi-stop card's own "End trip".
+              aria-label={intl.formatMessage({
+                id: 'components.MultiStop.endTrip'
+              })}
               onClick={onExit}
               type="button"
             >
