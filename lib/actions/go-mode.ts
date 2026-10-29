@@ -684,6 +684,27 @@ const REROUTE_SNAPSHOT_RIDING_INTERVAL_MS = 360000
 // tick fetches immediately.
 const LIVE_LEG_TIMES_INTERVAL_MS = 20000
 
+/**
+ * The live-times / boarding-feed poll's throttle: the clock to stamp the poll
+ * with when one is due, else null.
+ *
+ * Live, the wall clock — shared with the live board timer. In a replay the SIM
+ * clock (75.32): every read the poll makes (the trip queries, the boarding
+ * route's vehicles, the boarding stop's departures) is answered from the
+ * fixture at the sim clock, so 20 s of sim time is the phone's cadence at any
+ * replay speed. In a replay a stamp ahead of the sim clock (a wall-clock
+ * stamp met by the replay of an earlier day) is spent, not a wait; live, the
+ * rule is the one it always was.
+ */
+function liveLegTimesPollDue(tickNowMs: number): number | null {
+  const replaying = isReplayActive()
+  const nowMs = replaying ? tickNowMs : Date.now()
+  const since = nowMs - session.lastLiveLegTimesAt
+  return since > LIVE_LEG_TIMES_INTERVAL_MS || (replaying && since < 0)
+    ? nowMs
+    : null
+}
+
 // Radius base for a picker the RIDER reads — the boarding prompt and the
 // onboard flow's discovery. Deliberately far wider than the matcher's 80/200 m:
 // a picker offers candidates for a person to recognise, so a bus listed in
@@ -1678,7 +1699,7 @@ async function catchHeldRunAtLaterStop(
         name: c.stop.name
       })
       const { error, itineraries, query, response, variables } = await dispatch(
-        fetchOnboardCandidatePlan(combo)
+        fetchOnboardCandidatePlan(combo, { reason: 'quiet-replan-later-stop' })
       )
       recordQuietReplanPlan(dispatch, 'quiet-replan-later-stop', combo, {
         query,
@@ -4673,7 +4694,11 @@ export function quietReplanAccessLeg() {
         const scopedCombo = scopedAt(target)
         const sentAtMs = getCurrentTime().getTime()
         const { error, itineraries, query, response, variables } =
-          await dispatch(fetchOnboardCandidatePlan(scopedCombo))
+          await dispatch(
+            fetchOnboardCandidatePlan(scopedCombo, {
+              reason: 'quiet-replan-scoped'
+            })
+          )
         noteLatency('scoped', sentAtMs)
         recordQuietReplanPlan(dispatch, 'quiet-replan-scoped', scopedCombo, {
           query,
@@ -4853,7 +4878,7 @@ export function quietReplanAccessLeg() {
 
     const fullSentAtMs = getCurrentTime().getTime()
     const { error, itineraries, query, response, variables } = await dispatch(
-      fetchOnboardCandidatePlan(combo)
+      fetchOnboardCandidatePlan(combo, { reason: 'quiet-replan-full' })
     )
     noteLatency('full', fullSentAtMs)
     recordQuietReplanPlan(dispatch, 'quiet-replan-full', combo, {
@@ -7657,7 +7682,7 @@ function fetchCandidatePlan(
         : null)
     }
     const { error, itineraries, query, response, variables } = await dispatch(
-      fetchOnboardCandidatePlan(combo)
+      fetchOnboardCandidatePlan(combo, { candidateStopId: stop.id })
     )
     // Recording only. These five plans are what the optimizer actually ranks,
     // and until now nothing kept them: fetchOnboardCandidatePlan resolves
@@ -10782,11 +10807,10 @@ export function handlePositionUpdate(position: GeolocationPosition) {
             matchTrust.unsettledLegIndexes.join(', ')
         )
       }
-      if (
-        !isReplayActive() &&
-        Date.now() - session.lastLiveLegTimesAt > LIVE_LEG_TIMES_INTERVAL_MS
-      ) {
-        session.lastLiveLegTimesAt = Date.now()
+      // In a replay too (75.32): the trip answers are recorded.
+      const heldPollAtMs = liveLegTimesPollDue(getCurrentTime().getTime())
+      if (heldPollAtMs != null) {
+        session.lastLiveLegTimesAt = heldPollAtMs
         dispatch(refreshLiveLegTimes())
       }
       return
@@ -11561,14 +11585,20 @@ export function handlePositionUpdate(position: GeolocationPosition) {
     }
 
     // Keep the trip-overview transit rows current off GTFS-realtime, throttled
-    // to LIVE_LEG_TIMES_INTERVAL_MS regardless of tick rate. Skipped in replay,
-    // which reproduces recorded data rather than re-polling live feeds.
-    const nowMs = Date.now()
-    if (
-      !isReplayActive() &&
-      nowMs - session.lastLiveLegTimesAt > LIVE_LEG_TIMES_INTERVAL_MS
-    ) {
-      session.lastLiveLegTimesAt = nowMs
+    // to LIVE_LEG_TIMES_INTERVAL_MS regardless of tick rate.
+    //
+    // In a replay too, on the sim clock (75.32). It was skipped there, "which
+    // reproduces recorded data rather than re-polling live feeds" — but every
+    // fixture records what this poll read, the engine answers each read from
+    // that record, and nothing else polls the boarding route's vehicles on the
+    // access leg or runs the anchor below. So no replay could say "Bus coming"
+    // or "departure changed", or put the plan on the earlier bus the rider
+    // caught: ride-1019-0844-aboard-offer re-targeted at 08:48:29 and was aboard
+    // at 08:57:49; its replay kept the 09:14:51 run and went 17 sim-min with no
+    // leg change, no riding fact and no notification.
+    const pollAtMs = liveLegTimesPollDue(currentTime.getTime())
+    if (pollAtMs != null) {
+      session.lastLiveLegTimesAt = pollAtMs
       pollBoardingFeeds(dispatch, getState, {
         itinerary,
         legIndex: routeMatch.legIndex,
@@ -11628,11 +11658,11 @@ export function handlePositionUpdate(position: GeolocationPosition) {
           dispatch(retargetPlanToDeparture(anchor.anchorMs, 'anchor'))
         }
       }
-    } else if (!isReplayActive()) {
+    } else {
       // Between polls the clock keeps walking — flag any non-live epoch that
       // has fallen behind the displayed minute so nothing quotes a wait from
-      // it. Nothing is moved (backlog 17.19). (Replay reproduces recorded state
-      // and is left untouched, same as the poll itself.)
+      // it. Nothing is moved (backlog 17.19). In a replay too, now that the
+      // poll runs there (75.32) — on the tick's clock, as on the phone.
       const staleClamped = markStaleLegTimes(
         getState().otp.goMode?.liveLegTimes,
         currentTime.getTime()

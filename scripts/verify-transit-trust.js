@@ -23,14 +23,16 @@
  * right as the rider boarded, wiping the (not-yet-confirmed) vehicle match and
  * restarting vehicle tracking — which is precisely why matching was still
  * LIVE at 17:28:44 when the stale feed made opposing bus 1:8141 the nearest
- * candidate. The replay engine cannot re-arm that missed-bus on its own:
- * refreshLiveLegTimes and the departure auto-anchor are disabled under replay
- * (`!isReplayActive()` — actions/go-mode.ts, "Skipped in replay"), so
- * liveLegTimes stays empty and the departed-epoch evidence never forms, and
- * the fixture's vehicle feed starts at 17:27:34 (pre-boarding polls were not
- * recorded). Without the reset, the auto-confirm that runs on the very first
- * medium-confidence match (performVehicleMatching -> confirmVehicleSelection)
- * freezes matching on 8140 and hides the flap in BOTH codebases. So once the
+ * candidate. The replay engine cannot re-arm that missed-bus on its own: the
+ * fixture's vehicle feed starts at 17:27:34 (pre-boarding polls were not
+ * recorded). (Until 75.32, 2026-10-29, refreshLiveLegTimes and the departure
+ * auto-anchor were also skipped under replay, so liveLegTimes stayed empty;
+ * they now run on the sim clock off the recorded trip and stop answers, and
+ * the missed-bus update usually names the caught run before boarding — then
+ * (b) passes with no swap aboard.) Without the reset, the auto-confirm that
+ * runs on the very first medium-confidence match (performVehicleMatching ->
+ * confirmVehicleSelection) freezes matching on 8140 and hides the flap in
+ * BOTH codebases. So once the
  * rider is aboard with a confirmed match, this script dispatches the same two
  * state effects the real swap produced — CLEAR_VEHICLE_MATCH and a fresh
  * SET_TRANSIT_LEG_ENTERED — and lets the replay run on. Everything after that
