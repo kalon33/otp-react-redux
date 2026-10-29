@@ -7276,7 +7276,19 @@ export function loadOnboardScheduleAndOptimize(
   } = {}
 ) {
   return async function (dispatch: any, getState: any) {
+    // 75.9: this flow is the bus its caller has just adopted — every caller
+    // dispatches setOnboardVehicle immediately before this — and it is over
+    // once that object is no longer the onboard vehicle: "Not this one" drops
+    // it, another pick replaces it, Back (STOP_GO_MODE) and CLEAR_ONBOARD
+    // reset onboard to defaults. Each await below is a window for one of
+    // those, and what follows it must not write into the flow that replaced
+    // it, nor leave a status on a stopped Go Mode for the next Start Trip to
+    // open on.
+    const flowVehicle = getState().otp?.goMode?.onboard?.vehicle ?? null
+    const flowIsOpen = () =>
+      getState().otp?.goMode?.onboard?.vehicle === flowVehicle
     await dispatch(findTrip({ tripId }))
+    if (!flowIsOpen()) return
     const trip = getState().otp?.transitIndex?.trips?.[tripId]
     if (!trip || !(trip.stopTimes?.length > 0)) {
       dispatch(setOnboardStatus('error'))
@@ -7287,11 +7299,16 @@ export function loadOnboardScheduleAndOptimize(
       getState().otp?.config?.itinerary?.onboardAnchorWaitMs ??
       ONBOARD_ANCHOR_WAIT_MS
     const deadline = Date.now() + waitMs
-    while (!hasOnboardAnchorEvidence(getState) && Date.now() < deadline) {
+    while (
+      !hasOnboardAnchorEvidence(getState) &&
+      Date.now() < deadline &&
+      flowIsOpen()
+    ) {
       await new Promise((resolve) =>
         setTimeout(resolve, ONBOARD_ANCHOR_POLL_MS)
       )
     }
+    if (!flowIsOpen()) return
     // An added stop the bus has already left behind is the rider's call
     // (63.1): ask before any candidate is planned — the answer decides what
     // the candidates are asked. answerOnboardStopChoice resumes from here.
@@ -8147,6 +8164,29 @@ function optimizeAlightFromTrip(options: {
     })
 
     /**
+     * Is the onboard panel still showing THIS run, in `status`? Both of this
+     * run's writes to it ask first: the result when the plans settle
+     * ('optimizing', 75.9) and every late straggler after that ('ready').
+     */
+    const onScreenIsThisRun = (status: 'optimizing' | 'ready') => {
+      const now = getState()
+      const onboard = now.otp?.goMode?.onboard
+      return (
+        // (1) the status this run left it in, and (2) not a fresh run:
+        // candidates is the very array this run dispatched.
+        onboard?.status === status &&
+        onboard?.candidates === candidatePayload &&
+        // (3) same bus, same trip — a re-confirm can swap either.
+        onboard?.trip?.id === trip?.id &&
+        (onboard?.vehicle?.vehicleId ?? null) ===
+          (vehicle?.vehicleId ?? null) &&
+        // (4) the rider is still looking at this list (tapping an option
+        // clears onboard; Back stops Go Mode).
+        !!now.otp?.goMode?.isActive
+      )
+    }
+
+    /**
      * A candidate plan that landed after the deadline. Folding it in is only
      * safe while the answer it would replace is still the one on screen: a
      * re-dispatched SET_ONBOARD_RESULT sets onboard.status back to 'ready',
@@ -8166,23 +8206,8 @@ function optimizeAlightFromTrip(options: {
         results[index] = value
       }
       stillInFlight.delete(index)
-      const now = getState()
-      const onboard = now.otp?.goMode?.onboard
-      if (
-        // (1) still showing an answer, not idle/optimizing/error, and (2) not
-        // a fresh run: candidates is the very array this run dispatched.
-        onboard?.status !== 'ready' ||
-        onboard?.candidates !== candidatePayload ||
-        // (3) same bus, same trip — a re-confirm can swap either.
-        onboard?.trip?.id !== trip?.id ||
-        (onboard?.vehicle?.vehicleId ?? null) !==
-          (vehicle?.vehicleId ?? null) ||
-        // (4) the rider is no longer looking at this list (they tapped an
-        // option, which clears onboard, or Go Mode moved on).
-        !now.otp?.goMode?.isActive
-      ) {
-        return
-      }
+      // Still showing an answer, not idle/optimizing/error.
+      if (!onScreenIsThisRun('ready')) return
       const improved = rankAndDecorate(results, Date.now())
       if (!improved.length) return
       dispatch(
@@ -8269,10 +8294,19 @@ function optimizeAlightFromTrip(options: {
     results = mergeCachedCandidateResults(results, runKey)
     options.onSettled?.(results, downstream, nowMs)
 
-    if (updateOnboardState) retryFailedCandidates(failedIndexes)
+    // 75.9: the same check the late re-rank has always made. The plans take
+    // up to ONBOARD_CANDIDATE_SETTLE_MS to settle, and in that time the rider
+    // can tap "Not this one" (the picker reopens, status 'discovering') or
+    // Back (STOP_GO_MODE resets onboard to idle). Written unconditionally,
+    // this result put the denied bus's get-off list back over the picker, or
+    // left 'ready' on a stopped Go Mode for the next Start Trip to open on.
+    // A run nobody is looking at re-asks nothing either.
+    const stillOnScreen =
+      !!updateOnboardState && onScreenIsThisRun('optimizing')
+    if (stillOnScreen) retryFailedCandidates(failedIndexes)
 
     const decorated = rankAndDecorate(results, nowMs)
-    if (updateOnboardState) {
+    if (stillOnScreen) {
       dispatch(
         decorated.length
           ? setOnboardResult({

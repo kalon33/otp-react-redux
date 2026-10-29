@@ -20,13 +20,20 @@
  *
  * Pure: no redux, no clock of its own.
  */
-import polyline from '@mapbox/polyline'
 import type { Itinerary } from '@opentripplanner/types'
 
 import { builtAlightStop, onwardRouteOfItinerary } from './alight-optimizer'
-import { firstStopAheadOnShape, metersPastOnShape } from './geometry'
+import {
+  decodeTripShape,
+  firstStopAheadOnShape,
+  metersPastOnShape
+} from './geometry'
 import { FIX_ACCURACY_MAX_M } from './transit-trust'
 import { legTripId } from './leg-merge'
+
+// Moved to geometry.ts so the alight optimizer can read the shape too (75.8)
+// without importing this module, which imports it.
+export { decodeTripShape }
 
 /**
  * Past the chosen get-off stop by more than this, along the run, and the stop
@@ -74,18 +81,6 @@ interface FixLike {
 }
 
 const stopIdOf = (stop: any): string | null => stop?.id ?? stop?.gtfsId ?? null
-
-/** Decode a trip's encoded shape; null when it has none or it will not parse. */
-export function decodeTripShape(trip: any): Array<[number, number]> | null {
-  const points = trip?.geometry?.points
-  if (!points) return null
-  try {
-    const decoded = polyline.decode(points) as Array<[number, number]>
-    return decoded.length ? decoded : null
-  } catch {
-    return null
-  }
-}
 
 /**
  * Should this Confirm re-ask before it commits — and if so, from where?

@@ -222,9 +222,22 @@ describe('util > go-mode > boarded earlier: the plan tail (53.1)', () => {
     expect(installed).not.toBeNull()
 
     // The planned stop and the stop that makes the 18:13 are both asked,
-    // whatever the five-stop sample picks, and every stop asked has a plan.
+    // whatever the five-stop sample picks, and every stop asked has a plan —
+    // except three. The slice was cut (10-16) for the sample the re-plan drew
+    // then, which began at 98th St W & Pillsbury Ave S (1:43666): the stop
+    // NEAREST the 18:01:22 fix, and 122 m BEHIND it, eastbound at 14.6 m/s.
+    // Since backlog 75.8 the sample starts at the stop ahead, so it asks
+    // three stops nobody recorded or probed; they answer as failures here.
+    // Their neighbours on the run are in the slice — Pillsbury, Chicago Av,
+    // 16th Ave, Old Cedar & 87th — and arrive 18:39:51 at the earliest, nine
+    // minutes behind 18:30:48.
     expect(asked).toEqual(expect.arrayContaining([PLANNED_STOP, MADE_IT_STOP]))
-    expect(asked.filter((s) => s.startsWith('unrecorded'))).toEqual([])
+    expect(asked).not.toContain('1:43666')
+    expect(asked.filter((s) => s.startsWith('unrecorded')).sort()).toEqual([
+      'unrecorded:98th St W & Nicollet Ave S',
+      'unrecorded:Old Shakopee Rd & 10th Ave S',
+      'unrecorded:Old Shakopee Rd & 17th / Old Cedar Ave S'
+    ])
 
     const [bus, train] = transitLegs(installed)
     expect(tripIdOf(bus)).toBe(RIDDEN_TRIP)

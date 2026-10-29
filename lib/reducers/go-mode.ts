@@ -1573,6 +1573,17 @@ const goMode = handleActions<GoModeState, any>(
               id.startsWith('MISSED_BUS_')
           )
         },
+        // A trip that STARTS starts with no onboard panel (75.9). Only
+        // BEGIN_ONBOARD_FLOW, CLEAR_ONBOARD and STOP_GO_MODE reset it, so a
+        // status left behind by a flow that was backed out of — the get-off
+        // list settling after Back — opened the next Start Trip on "On the
+        // bus" and its stale list instead of the trip, and held off the
+        // faster-route checks (they skip while onboard is open). Kept across
+        // a swap within the trip, the same line `auto` draws: the aboard "Pick
+        // another stop" list stands over a live trip that a quiet re-plan can
+        // swap underneath it.
+        onboard:
+          restart || newTrip ? { ...defaultState.onboard } : state.onboard,
         originalFrom: originalFrom ?? null,
         planStopOffer: null,
         progress: null,

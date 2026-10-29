@@ -285,6 +285,18 @@ export interface ShapePosition {
   segmentIndex: number
 }
 
+/** Decode a trip's encoded shape; null when it has none or it will not parse. */
+export function decodeTripShape(trip: any): Array<[number, number]> | null {
+  const points = trip?.geometry?.points
+  if (!points) return null
+  try {
+    const decoded = polyline.decode(points) as Array<[number, number]>
+    return decoded.length ? decoded : null
+  } catch {
+    return null
+  }
+}
+
 /** Within this, the shape passes "by" the point — see projectForwardOnShape. */
 export const SHAPE_NEAR_M = 60
 
