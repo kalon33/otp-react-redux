@@ -2,9 +2,16 @@ import { connect } from 'react-redux'
 import { CSSTransition, TransitionGroup } from 'react-transition-group'
 import { isMobile } from '@opentripplanner/core-utils/lib/ui'
 import { useIntl } from 'react-intl'
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import React, {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState
+} from 'react'
 import styled, { keyframes } from 'styled-components'
 import type { IntlShape } from 'react-intl'
+import type { Itinerary } from '@opentripplanner/types'
 
 import * as autoArmActions from '../../actions/auto-arm'
 import * as goModeActions from '../../actions/go-mode'
@@ -14,8 +21,10 @@ import { legBoard, liveArrivalMs } from '../../util/go-mode/live-itinerary'
 import { MobileScreens } from '../../actions/ui-constants'
 import AutoArmCard from '../go-mode/AutoArmCard'
 import useActiveTripGuards from '../go-mode/use-active-trip-guards'
+import type { AutoArm } from '../../util/go-mode/auto-arm'
 import type { AutoPreset } from '../../util/go-mode/auto-priority'
 import type { GoModeState } from '../../reducers/go-mode'
+import type { LiveLegTime } from '../../util/go-mode/types'
 
 /**
  * The height the banner is currently taking, published so the fixed-position
@@ -113,17 +122,23 @@ const TransitionStyles = styled.div`
  * `departureMs` is null when the only epoch on offer is a FLOOR (17.6) — the
  * wait is still a fact, the time is not one.
  */
-function platformWait(
-  goMode: GoModeState | undefined
-): { departureMs: number | null; stop: string } | null {
-  const legIndex = goMode?.progress?.currentLegIndex ?? 0
-  const leg = goMode?.activeItinerary?.legs?.[legIndex]
+function platformWait({
+  activeItinerary,
+  currentLegIndex,
+  liveLegTimes,
+  ridingLegIndex
+}: Pick<
+  TripProps,
+  'activeItinerary' | 'currentLegIndex' | 'liveLegTimes' | 'ridingLegIndex'
+>): { departureMs: number | null; stop: string } | null {
+  const legIndex = currentLegIndex ?? 0
+  const leg = activeItinerary?.legs?.[legIndex]
   if (!leg) return null
-  const board = legBoard(legIndex, leg, goMode?.liveLegTimes || {})
+  const board = legBoard(legIndex, leg, liveLegTimes || {})
   const epoch = Number(board.epoch)
   const departureMs = Number.isFinite(epoch) ? epoch : null
   const waiting = isWaitingForDeparture({
-    aboard: goMode?.riding?.legIndex === legIndex,
+    aboard: ridingLegIndex === legIndex,
     departureMs,
     leg,
     nowMs: Date.now()
@@ -169,12 +184,44 @@ function waitingMessage(
   )
 }
 
-interface Props {
+/**
+ * What the banner shows, read from the store field by field — never the whole
+ * `goMode` slice. Every tick replaces `goMode.tracking` and `goMode.progress`,
+ * so a banner handed the slice re-rendered on every dispatch, and each render
+ * deep-cloned the itinerary for the arrival clock even while hidden: 35 ms
+ * self / 106 ms total over 30 ticks of gold-74-1105 at 1x, mounted on every
+ * screen (backlog 66.10, perf agent P7, 2026-10-29). A hidden banner now takes
+ * nothing that moves (`HIDDEN`), so the ticks never reach it.
+ */
+interface TripProps {
+  activeItinerary: Itinerary | null
+  arm: AutoArm | null
+  arrivedAt: number | null
+  currentLegIndex: number | null
+  /** `progress.estimatedArrival` as epoch ms (a fresh Date every tick). */
+  estimatedArrivalMs: number | null
+  liveLegTimes: Record<number, LiveLegTime> | null
+  nextStopName: string | null
+  ridingLegIndex: number | null
+  visible: boolean
+}
+
+interface Props extends TripProps {
   cancelArm: () => void
-  goMode: GoModeState
-  mobileScreen: number
   returnToGoMode: () => void
   setArmPreset: (preset: AutoPreset) => void
+}
+
+const HIDDEN: TripProps = {
+  activeItinerary: null,
+  arm: null,
+  arrivedAt: null,
+  currentLegIndex: null,
+  estimatedArrivalMs: null,
+  liveLegTimes: null,
+  nextStopName: null,
+  ridingLegIndex: null,
+  visible: false
 }
 
 /**
@@ -185,41 +232,25 @@ interface Props {
  * warning) alive while the Go Mode screen is unmounted.
  */
 const ReturnToTripBanner = ({
+  activeItinerary,
+  arm,
+  arrivedAt,
   cancelArm,
-  goMode,
-  mobileScreen,
+  currentLegIndex,
+  estimatedArrivalMs,
+  liveLegTimes,
+  nextStopName,
   returnToGoMode,
-  setArmPreset
+  ridingLegIndex,
+  setArmPreset,
+  visible
 }: Props): JSX.Element => {
   const intl = useIntl()
   const bannerRef = useRef<HTMLButtonElement>(null)
   const [bannerHeight, setBannerHeight] = useState(0)
   const [armCardOpen, setArmCardOpen] = useState(false)
 
-  // `backgrounded` is the deliberate step-out (backgroundGoMode, the app menu,
-  // browseFromCurrentPosition) and stays the primary signal. The second clause
-  // is the safety net: on a phone, ANY screen other than Go Mode while a trip
-  // is running means the rider is looking at something else and needs a way
-  // back, whether or not the code that moved them remembered to arm the flag.
-  // On 2026-09-03 (session mtlutz2c-mfb2nx) a from-location change dropped a
-  // live trip onto the bare search form with the flag unset and no route back.
-  // Desktop is excluded: there the Go Mode screen is chosen by
-  // `isActive && !backgrounded` (responsive-webapp), not by mobileScreen, so
-  // reading mobileScreen there would show the banner over the trip screen.
-  const strandedOnMobile = isMobile() && mobileScreen !== MobileScreens.GO_MODE
-  const tripVisible = Boolean(
-    goMode?.isActive &&
-      goMode.activeItinerary &&
-      (goMode.ui?.backgrounded || strandedOnMobile)
-  )
-  // "Start when I leave" (65.2 B4): with no trip running, an armed one holds
-  // the same strip on every screen, and the same guards — the screen stays on
-  // (foreground arming only) and a stray reload asks first.
-  const arm = !goMode?.isActive ? goMode?.arm ?? null : null
-  const visible = tripVisible || !!arm
   useActiveTripGuards(visible)
-
-  const { activeItinerary, arrivedAt, liveLegTimes, progress } = goMode || {}
 
   // The SAME arrival the trip sheet prints — the end of buildLiveItinerary's
   // last leg — not `progress.estimatedArrival`.
@@ -241,13 +272,19 @@ const ReturnToTripBanner = ({
   // same ride now yields 11:58:26 (backlog 12.22, progress-calculator.ts's
   // `projectTripEndMs`). This still reads the sheet's own figure first,
   // because two ways of saying the same thing must not be allowed to drift.
-  const liveArrival =
-    (activeItinerary
-      ? liveArrivalMs(activeItinerary, liveLegTimes || {})
-      : null) ??
-    (progress?.estimatedArrival
-      ? new Date(progress.estimatedArrival).getTime()
-      : null)
+  //
+  // Folded once per itinerary / live-times change, not per render: the fold
+  // deep-clones the itinerary, and the inputs change every ~30 s at most
+  // while the ticks re-render a shown banner every second (66.10). A hidden
+  // banner has no itinerary (HIDDEN) and folds nothing.
+  const sheetArrival = useMemo(
+    () =>
+      activeItinerary
+        ? liveArrivalMs(activeItinerary, liveLegTimes || {})
+        : null,
+    [activeItinerary, liveLegTimes]
+  )
+  const liveArrival = sheetArrival ?? estimatedArrivalMs
 
   // The platform wait (13.9). The trip steps onto a transit leg before the bus
   // leaves — 13.1 keeps that transition early on purpose, because advanceToLeg
@@ -261,7 +298,15 @@ const ReturnToTripBanner = ({
   // bus's own departure time nobody can be riding it, and past that time the
   // old wording returns, so a rider aboard a bus the feed never confirmed is
   // never told they are waiting.
-  const wait = arrivedAt == null ? platformWait(goMode) : null
+  const wait =
+    visible && arrivedAt == null
+      ? platformWait({
+          activeItinerary,
+          currentLegIndex,
+          liveLegTimes,
+          ridingLegIndex
+        })
+      : null
 
   let message: string
   if (arm) {
@@ -286,7 +331,7 @@ const ReturnToTripBanner = ({
     })
   } else if (wait) {
     message = waitingMessage(intl, wait.stop, wait.departureMs)
-  } else if (progress?.nextStopName && liveArrival != null) {
+  } else if (nextStopName && liveArrival != null) {
     message = intl.formatMessage(
       {
         defaultMessage:
@@ -298,7 +343,7 @@ const ReturnToTripBanner = ({
           hour: 'numeric',
           minute: '2-digit'
         }),
-        stop: progress.nextStopName
+        stop: nextStopName
       }
     )
   } else {
@@ -377,10 +422,47 @@ const ReturnToTripBanner = ({
   )
 }
 
-const mapStateToProps = (state: any) => ({
-  goMode: state.otp.goMode,
-  mobileScreen: state.otp.ui.mobileScreen
-})
+const mapStateToProps = (state: any): TripProps => {
+  const goMode: GoModeState | undefined = state.otp.goMode
+  const mobileScreen: number = state.otp.ui.mobileScreen
+  // `backgrounded` is the deliberate step-out (backgroundGoMode, the app menu,
+  // browseFromCurrentPosition) and stays the primary signal. The second clause
+  // is the safety net: on a phone, ANY screen other than Go Mode while a trip
+  // is running means the rider is looking at something else and needs a way
+  // back, whether or not the code that moved them remembered to arm the flag.
+  // On 2026-09-03 (session mtlutz2c-mfb2nx) a from-location change dropped a
+  // live trip onto the bare search form with the flag unset and no route back.
+  // Desktop is excluded: there the Go Mode screen is chosen by
+  // `isActive && !backgrounded` (responsive-webapp), not by mobileScreen, so
+  // reading mobileScreen there would show the banner over the trip screen.
+  const strandedOnMobile = isMobile() && mobileScreen !== MobileScreens.GO_MODE
+  const tripVisible = Boolean(
+    goMode?.isActive &&
+      goMode.activeItinerary &&
+      (goMode.ui?.backgrounded || strandedOnMobile)
+  )
+  // "Start when I leave" (65.2 B4): with no trip running, an armed one holds
+  // the same strip on every screen, and the same guards — the screen stays on
+  // (foreground arming only) and a stray reload asks first.
+  const arm = !goMode?.isActive ? goMode?.arm ?? null : null
+  // Hidden — foreground Go Mode, i.e. most of every ride: one constant object,
+  // so connect's shallow compare stops every tick here (66.10).
+  if (!tripVisible && !arm) return HIDDEN
+  const progress = goMode?.progress
+  return {
+    activeItinerary: goMode?.activeItinerary ?? null,
+    arm,
+    arrivedAt: goMode?.arrivedAt ?? null,
+    currentLegIndex: progress?.currentLegIndex ?? null,
+    estimatedArrivalMs: progress?.estimatedArrival
+      ? new Date(progress.estimatedArrival).getTime()
+      : null,
+    liveLegTimes: goMode?.liveLegTimes ?? null,
+    nextStopName: progress?.nextStopName ?? null,
+    ridingLegIndex: goMode?.riding?.legIndex ?? null,
+    visible: true
+  }
+}
 
 const mapDispatchToProps = {
   cancelArm: autoArmActions.cancelArm,

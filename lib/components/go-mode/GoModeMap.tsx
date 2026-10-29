@@ -708,12 +708,16 @@ export const GoModeMapOverlay = ({
         accuracyM: coords.accuracy ?? null,
         lat: coords.latitude,
         lng: coords.longitude,
+        speedMps: coords.speed ?? null,
         timestampMs: timestamp
       },
       legMode: currentLegMode,
       prevAccepted: prevAccepted.current,
       prevLegTransit: prevLegTransit.current,
-      prevRejectedSpike: prevRejectedSpike.current
+      prevRejectedSpike: prevRejectedSpike.current,
+      // The pan is judged in pixels at the zoom the rider is looking at
+      // (75.20). Optional so a stand-in map without it (unit tests) mounts.
+      zoom: map.getZoom?.() ?? null
     })
     const acceptFix = () => {
       prevAccepted.current = {
@@ -797,10 +801,13 @@ export const GoModeMapOverlay = ({
     if (decision.move && decision.center) {
       // No `essential: true` — prefers-reduced-motion degrades the ease to a
       // jump, which is the right call for a camera that moves every second.
+      // The duration is what the move needs, not a fixed 800 ms (75.20):
+      // every frame of an ease is a full map render, and a fixed ease on
+      // every ~1 s fix kept the map drawing for the whole ride.
       pendingRecentre.current = false
       map.easeTo({
         center: decision.center,
-        duration: FOLLOW_EASE_MS,
+        duration: decision.durationMs ?? FOLLOW_EASE_MS,
         ...(decision.zoom != null && { zoom: decision.zoom })
       })
       acceptFix()
