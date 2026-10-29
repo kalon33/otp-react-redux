@@ -618,7 +618,10 @@ const WalkingNavigation = ({
         <NavEyebrowRow>
           {onExit && (
             <CardBackButton
-              aria-label={intl.formatMessage({ id: 'common.forms.back' })}
+              // Ends the trip, so it is called that (75.16; TransitProgress).
+              aria-label={intl.formatMessage({
+                id: 'components.MultiStop.endTrip'
+              })}
               onClick={onExit}
               type="button"
             >
