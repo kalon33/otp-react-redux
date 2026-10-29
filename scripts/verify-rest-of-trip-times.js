@@ -39,7 +39,7 @@ const fmt = (ms) =>
   ms == null
     ? 'n/a'
     : new Date(ms).toLocaleTimeString('en-US', {
-        hour12: false,
+        hourCycle: 'h23',
         timeZone: 'America/Chicago'
       })
 
@@ -47,6 +47,13 @@ const fmt = (ms) =>
 // defect". nightly-verify.sh maps it to SKIP; anything else is still a failure.
 // Same convention as verify-onboard-options.js.
 const EXIT_SKIP = 75
+
+// America/Chicago service date (yyyy-mm-dd) `n` days ago, for OTP's
+// stoptimesForDate(serviceDate:).
+const svcDateAgo = (n) =>
+  new Date(Date.now() - n * 86400000).toLocaleDateString('sv-SE', {
+    timeZone: 'America/Chicago'
+  })
 
 function skip(reason) {
   console.log(`SKIP: ${reason}`)
@@ -78,17 +85,25 @@ async function main() {
     )
     for (const v of vehicles) {
       if (!v.stopRelationship?.stop?.gtfsId) continue
-      const tq = await gql(`{ trip(id: "${v.trip.gtfsId}") {
-        stoptimesForDate { scheduledDeparture scheduledArrival serviceDay } } }`)
-      const sts = tq?.data?.trip?.stoptimesForDate || []
-      if (sts.length < 4) continue
-      const first = sts[0].serviceDay + sts[0].scheduledDeparture
-      const lastT =
-        sts[sts.length - 1].serviceDay + sts[sts.length - 1].scheduledArrival
-      // in progress with >=5 min of ride left
-      if (first < nowS && lastT > nowS + 300) {
-        picked = { route, vehicle: v }
-        break outer
+      // 75.34 (V9): a bus still running yesterday's service day after midnight
+      // is answered, by a DATELESS stoptimesForDate, with tomorrow's instance
+      // (first departure hours ahead) — so try the previous service date too,
+      // like the app (apiV2.js stopTimesToday/Yesterday) and the truth query
+      // below do.
+      for (const serviceDate of [undefined, svcDateAgo(1)]) {
+        const arg = serviceDate ? `(serviceDate: "${serviceDate}")` : ''
+        const tq = await gql(`{ trip(id: "${v.trip.gtfsId}") {
+          stoptimesForDate${arg} { scheduledDeparture scheduledArrival serviceDay } } }`)
+        const sts = tq?.data?.trip?.stoptimesForDate || []
+        if (sts.length < 4) continue
+        const first = sts[0].serviceDay + sts[0].scheduledDeparture
+        const lastT =
+          sts[sts.length - 1].serviceDay + sts[sts.length - 1].scheduledArrival
+        // in progress with >=5 min of ride left
+        if (first < nowS && lastT > nowS + 300) {
+          picked = { route, serviceDate, vehicle: v }
+          break outer
+        }
       }
     }
   }
@@ -101,7 +116,9 @@ async function main() {
   )
 
   const tripQ = await gql(`{ trip(id: "${tripId}") {
-    stoptimesForDate { scheduledArrival realtimeArrival realtimeState serviceDay
+    stoptimesForDate${
+      picked.serviceDate ? `(serviceDate: "${picked.serviceDate}")` : ''
+    } { scheduledArrival realtimeArrival realtimeState serviceDay
       stop { gtfsId name lat lon } } } }`)
   const stopTimes = tripQ?.data?.trip?.stoptimesForDate || []
   if (stopTimes.length < 3) throw new Error('too few stop times')

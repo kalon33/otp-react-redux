@@ -26,6 +26,12 @@ const storeMiddleWare = [
  */
 export function getMockInitialState() {
   const mockConfig = {
+    // 75.37 (J5): getOtpFetchOptions (lib/actions/api.js) destructures
+    // `state.otp.config.api`; without one every OTP fetch a component test
+    // triggers died on "reading 'host'" before a request was built, so those
+    // suites exercised the crash path. An unresolvable host keeps a stray
+    // request off any real server (jest's testURL is the :9966 front door).
+    api: { host: 'http://mock-otp.invalid', path: '/otp', port: 80 },
     dateTime: { timeFormat: 'h:mm a' },
     initialQuery: {}
   }

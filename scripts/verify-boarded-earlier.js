@@ -52,7 +52,7 @@ const fmt = (ms) =>
   ms == null
     ? 'n/a'
     : new Date(ms).toLocaleTimeString('en-US', {
-        hour12: false,
+        hourCycle: 'h23',
         timeZone: 'America/Chicago'
       })
 
@@ -275,6 +275,13 @@ async function main() {
     .map((st) => ({
       dep: stEpoch(st, true),
       headsign: st.trip.tripHeadsign,
+      // 75.34 (V9): the candidate's own service date — a run that belongs to
+      // yesterday's service day after midnight must not be re-read, dateless,
+      // as tomorrow's instance (24 h later).
+      serviceDate: new Date((st.serviceDay + 21600) * 1000).toLocaleDateString(
+        'sv-SE',
+        { timeZone: 'America/Chicago' }
+      ),
       tripId: st.trip.gtfsId
     }))
     .filter((c) => c.tripId !== plan.plannedTripId && c.dep > Date.now())
@@ -292,8 +299,8 @@ async function main() {
 
   const alightOf = async (c) => {
     const tq = await gql(`{ trip(id: "${c.tripId}") {
-      stoptimesForDate { scheduledArrival realtimeArrival realtimeState
-        serviceDay stop { gtfsId name } } } }`)
+      stoptimesForDate(serviceDate: "${c.serviceDate}") { scheduledArrival
+        realtimeArrival realtimeState serviceDay stop { gtfsId name } } } }`)
     if (tq?.errors) {
       console.log(
         `[warn] trip ${c.tripId} query failed:`,

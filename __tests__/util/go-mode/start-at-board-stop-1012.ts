@@ -208,7 +208,11 @@ withFixture('util > go-mode > starting at the board stop (47.2)', () => {
       const actions: any[] = []
       const getState = () => ({
         otp: {
-          config: { homeTimezone: 'America/Chicago' },
+          config: {
+            // 75.37 (J5): getOtpFetchOptions needs config.api (see test-utils/mock-data/store.js).
+            api: { host: 'http://mock-otp.invalid', path: '/otp', port: 80 },
+            homeTimezone: 'America/Chicago'
+          },
           currentQuery: {},
           goMode: goModeState,
           location: { currentPosition: { coords: null } },
