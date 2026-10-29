@@ -352,10 +352,10 @@ import {
 import {
   anchorBoardingStopId,
   boardingStopToPoll,
-  currentServiceDate,
   evaluateDepartureAnchor,
   getRouteDepartures,
   legBoardingDirection,
+  legServiceDate,
   overrideDepartureForTick
 } from '../util/go-mode/departure-anchor'
 import {
@@ -577,10 +577,22 @@ function pollBoardingFeeds(
     waitingAtBoardingStop
   )
   if (pollStopId) {
+    // The departures this poll is for are the boarding leg's, so it asks for
+    // that leg's service day, not the clock's (75.2) — between midnight and
+    // 03:30 the clock's is yesterday's, which lists the same trip id at the
+    // same time a day early.
+    const pollLeg = [
+      itinerary.legs[legIndex + 1],
+      itinerary.legs[legIndex]
+    ].find((l: any) => l?.transitLeg && l.from?.stop?.gtfsId === pollStopId)
     try {
       dispatch(
         findStopTimesForStop({
-          date: currentServiceDate(nowMs, getState().otp.config.homeTimezone),
+          date: legServiceDate(
+            pollLeg,
+            nowMs,
+            getState().otp.config.homeTimezone
+          ),
           forceFetch: true,
           stopId: pollStopId
         })
@@ -2895,18 +2907,17 @@ export function startGoModeTracking(
     // until FASTER_ROUTE_SWAP_QUIET_MS has passed.
     session.planInstalledAtMs = getCurrentTime().getTime()
 
-    // Pre-fetch stop times for all transit boarding stops
-    const today = currentServiceDate(
-      getCurrentTime().getTime(),
-      getState().otp.config.homeTimezone
-    )
+    // Pre-fetch stop times for all transit boarding stops — each for the
+    // service day its own leg departs on (75.2), not the clock's.
+    const prefetchNowMs = getCurrentTime().getTime()
+    const { homeTimezone } = getState().otp.config
     for (const leg of resumedArrived ? [] : itinerary.legs) {
       const stopId = (leg as any).from?.stop?.gtfsId
       if (leg.transitLeg && stopId) {
         try {
           dispatch(
             findStopTimesForStop({
-              date: today,
+              date: legServiceDate(leg, prefetchNowMs, homeTimezone),
               stopId
             })
           )
