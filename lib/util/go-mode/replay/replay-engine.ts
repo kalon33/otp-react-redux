@@ -41,8 +41,10 @@ interface ReplayFixture {
   // START_GO_MODE for each (a quiet access re-plan, an applied reroute), so the
   // builder kept only the first until 2026-08-31 and a fixture could not
   // evidence a defect whose symptom IS the replacement sheet. Recorded since;
-  // absent on older fixtures.
-  itinerarySwaps?: Array<{ itinerary: any; tMs: number }>
+  // absent on older fixtures. `by` / `cause` say who made each (75.30):
+  // replayTrip re-applies the rider's (replay-swaps.ts); this engine serves
+  // OTP reads only.
+  itinerarySwaps?: Array<import('./replay-swaps').RecordedSwap>
   meta: { [k: string]: any; endMs: number; startMs: number }
   // The onboard ("I'm already on a bus") flow's own inputs and output.
   onboard?: { result: any; trip: any }

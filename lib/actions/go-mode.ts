@@ -260,6 +260,15 @@ import {
   setReplayClock
 } from '../util/go-mode/replay/replay-engine'
 import {
+  pendingReplaySwaps,
+  replaySwapVerdict,
+  transitPlanKey
+} from '../util/go-mode/replay/replay-swaps'
+import type {
+  RecordedSwap,
+  SwapSkipReason
+} from '../util/go-mode/replay/replay-swaps'
+import {
   acceptAutoReplan,
   accessBoardOverrunMs,
   accessPlanDeadByDeviation,
@@ -805,6 +814,11 @@ let simulationSpeedMultiplier = 1
 // refreshed from this route on each simulated GPS tick (see
 // scheduleNextSimulationPoint) so the series stays aligned to the sim clock.
 let replayTrackedRouteId: string | null = null
+
+// Trip replay: the recorded itinerary swaps still ahead of the sim clock,
+// oldest first (75.30). Set by replayTrip, drained by the GPS scheduler at
+// each swap's own time — see applyReplaySwap.
+let replaySwapQueue: RecordedSwap[] = []
 
 /**
  * Get the current time for Go Mode calculations.
@@ -13604,6 +13618,12 @@ function scheduleNextSimulationPoint(dispatch: any) {
     !session.simulationActive ||
     session.simulationPointIndex >= session.simulationCoords.length
   ) {
+    // Swaps recorded after the track's last fix are never reached (75.30).
+    if (isReplayActive()) {
+      for (const swap of replaySwapQueue.splice(0)) {
+        dispatch(skipReplaySwap(swap, 'after-track'))
+      }
+    }
     session.simulationActive = false
     session.gpsSimulationTimeoutId = null
     dispatch({ type: STOP_GPS_SIMULATION })
@@ -13612,6 +13632,29 @@ function scheduleNextSimulationPoint(dispatch: any) {
   }
 
   const point = session.simulationCoords[session.simulationPointIndex]
+
+  // A recorded swap due before this fix is played at its own time, on the
+  // same clock, and the fix then at its own (75.30): the 2026-10-26 planner
+  // Start at 12:17:00.050 lands between that ride's 1 s fixes, not on one.
+  const swap = replaySwapQueue[0]
+  if (
+    swap &&
+    isReplayActive() &&
+    swap.tMs <= session.simulatedTimeMs + point.delayMs
+  ) {
+    const stepMs = Math.max(0, swap.tMs - session.simulatedTimeMs)
+    session.gpsSimulationTimeoutId = setTimeout(() => {
+      if (!session.simulationActive) return
+      session.simulatedTimeMs += stepMs
+      point.delayMs -= stepMs
+      setReplayClock(session.simulatedTimeMs)
+      replaySwapQueue.shift()
+      dispatch(applyReplaySwap(swap))
+      scheduleNextSimulationPoint(dispatch)
+    }, Math.max(50, stepMs / simulationSpeedMultiplier))
+    return
+  }
+
   const delay = Math.max(50, point.delayMs / simulationSpeedMultiplier)
 
   session.gpsSimulationTimeoutId = setTimeout(() => {
@@ -13834,6 +13877,21 @@ export function startTrackReplay(
       type: START_GPS_SIMULATION
     })
 
+    // Swaps between the trip's start and its first fix, each at its own time
+    // (75.30) — 2026-10-26's 23.3 re-target came 152 ms after its START.
+    while (
+      isReplayActive() &&
+      replaySwapQueue.length &&
+      replaySwapQueue[0].tMs <= played[0].tMs
+    ) {
+      const swap = replaySwapQueue.shift() as RecordedSwap
+      if (swap.tMs > session.simulatedTimeMs) {
+        session.simulatedTimeMs = swap.tMs
+        setReplayClock(session.simulatedTimeMs)
+      }
+      dispatch(applyReplaySwap(swap))
+    }
+
     // The first fix at its own time too: the clock moves from the trip's
     // start to it (on the ride, Go Mode waited for it), and the replay engine
     // serves the vehicles of that moment, as every later tick does.
@@ -13861,11 +13919,100 @@ export function startTrackReplay(
 }
 
 /**
+ * Recording only, like GO_MODE_CONTROL_TAP: no reducer consumes either, so
+ * neither is on create-otp-reducer's goMode delegation list, and the payload
+ * is scalars. One per recorded itinerary swap a replay reaches (75.30):
+ * APPLIED when it was the rider's and the replayed app is not already on that
+ * plan, SKIPPED with `why` (SwapSkipReason) otherwise. A verify reads which of
+ * the ride's plan changes the replay made again from these.
+ */
+export const REPLAY_SWAP_APPLIED = 'REPLAY_SWAP_APPLIED'
+export const REPLAY_SWAP_SKIPPED = 'REPLAY_SWAP_SKIPPED'
+
+/** The scalars both records carry: the swap, and the plan it met. */
+function replaySwapFacts(swap: RecordedSwap, active: Itinerary | null) {
+  return {
+    active: transitPlanKey(active),
+    atMs: swap.tMs,
+    by: swap.by ?? null,
+    cause: swap.cause ?? null,
+    plan: transitPlanKey(swap.itinerary)
+  }
+}
+
+function replaySwapSkipped(
+  swap: RecordedSwap,
+  active: Itinerary | null,
+  why: SwapSkipReason
+) {
+  return {
+    payload: { ...replaySwapFacts(swap, active), why },
+    type: REPLAY_SWAP_SKIPPED
+  }
+}
+
+/** A swap the replay will not reach, recorded as such against the live plan. */
+function skipReplaySwap(swap: RecordedSwap, why: SwapSkipReason) {
+  return function (dispatch: any, getState: any) {
+    dispatch(
+      replaySwapSkipped(
+        swap,
+        getState().otp?.goMode?.activeItinerary ?? null,
+        why
+      )
+    )
+  }
+}
+
+/**
+ * A recorded itinerary swap the replay's clock has reached (75.30). The
+ * rider's is made again through the door their tap went through —
+ * `beginGoMode`, with what that caller passed — unless the replayed app is
+ * already on the plan. The app's is left to the app: what the replayed app
+ * does at that moment IS the test. See replay-swaps.ts.
+ */
+function applyReplaySwap(swap: RecordedSwap) {
+  return async function (dispatch: any, getState: any) {
+    const goMode = getState().otp?.goMode
+    const active: Itinerary | null = goMode?.activeItinerary ?? null
+    const verdict = replaySwapVerdict(swap, goMode)
+    if (!verdict.apply) {
+      dispatch(replaySwapSkipped(swap, active, verdict.why))
+      return
+    }
+    dispatch({
+      payload: replaySwapFacts(swap, active),
+      type: REPLAY_SWAP_APPLIED
+    })
+    // eslint-disable-next-line no-console
+    console.log(
+      `[go-mode] replay: the rider's ${swap.cause ?? 'swap'} at ` +
+        `${new Date(swap.tMs).toISOString()} -> ${transitPlanKey(
+          swap.itinerary
+        )} (75.30)`
+    )
+    // Start Trip says `newTrip` (Auto goes off with the old trip, 65.2); a
+    // departure pick re-targets the plan the rider is already on and keeps
+    // the anchor off their bus afterwards, as retargetPlanToDeparture does.
+    const departurePick = swap.cause === 'departure-pick'
+    await dispatch(
+      beginGoMode(swap.itinerary, {
+        newTrip: swap.newTrip || undefined,
+        originUnchanged: departurePick || undefined
+      })
+    )
+    if (departurePick) session.manualDepartureLock = true
+  }
+}
+
+/**
  * Replay a recorded trip fixture fully offline & deterministically. Loads the
  * recorded itinerary into Go Mode exactly as a live trip would, then plays the
  * recorded GPS track; every OTP read (vehicle positions, stop times, reroute
- * plans) is served from the fixture via the replay-engine interception. Exposed
- * as window.__replayTrip (see main.js). See build-fixture.js for the producer.
+ * plans) is served from the fixture via the replay-engine interception, and
+ * every plan change the RIDER made is made again at its recorded time
+ * (75.30, applyReplaySwap). Exposed as window.__replayTrip (see main.js). See
+ * build-fixture.js for the producer.
  */
 export function replayTrip(
   fixture: any,
@@ -13900,6 +14047,9 @@ export function replayTrip(
     // its first in-trip fix meets the vehicles of its own moment.
     const replayStartMs: number | undefined =
       fixture.meta?.startMs ?? fixture.gpsTrack?.[0]?.tMs
+    replaySwapQueue = replayStartMs
+      ? pendingReplaySwaps(fixture.itinerarySwaps, replayStartMs)
+      : []
     if (replayStartMs && fixture.gpsTrack?.length) {
       session.simulationActive = true
       session.simulatedTimeMs = replayStartMs
@@ -13946,6 +14096,7 @@ export function stopReplay() {
     session.simulationCoords = []
     session.simulatedTimeMs = 0
     replayTrackedRouteId = null
+    replaySwapQueue = []
     dispatch({ type: STOP_GPS_SIMULATION })
     dispatch(endGoMode())
     endReplay()
