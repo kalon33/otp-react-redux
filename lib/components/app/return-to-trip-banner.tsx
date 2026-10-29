@@ -2,13 +2,7 @@ import { connect } from 'react-redux'
 import { CSSTransition, TransitionGroup } from 'react-transition-group'
 import { isMobile } from '@opentripplanner/core-utils/lib/ui'
 import { useIntl } from 'react-intl'
-import React, {
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState
-} from 'react'
+import React, { useMemo, useRef, useState } from 'react'
 import styled, { keyframes } from 'styled-components'
 import type { IntlShape } from 'react-intl'
 import type { Itinerary } from '@opentripplanner/types'
