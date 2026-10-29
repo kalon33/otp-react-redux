@@ -23378,7 +23378,9 @@
           "wheelchair": false
         }
       },
-      "tMs": 1791839836685
+      "tMs": 1791839836685,
+      "by": "app",
+      "cause": "stale-plan-origin"
     },
     {
       "itinerary": {
@@ -23721,7 +23723,9 @@
           "wheelchair": false
         }
       },
-      "tMs": 1791839847176
+      "tMs": 1791839847176,
+      "by": "app",
+      "cause": "boarded-earlier"
     }
   ],
   "meta": {

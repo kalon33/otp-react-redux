@@ -26655,7 +26655,9 @@
         ],
         "walkDistance": 9394.49
       },
-      "tMs": 1790196527337
+      "tMs": 1790196527337,
+      "by": "app",
+      "cause": "quiet-replan-scoped"
     },
     {
       "itinerary": {
@@ -36311,7 +36313,9 @@
         ],
         "walkDistance": 9394.49
       },
-      "tMs": 1790196953438
+      "tMs": 1790196953438,
+      "by": "rider",
+      "cause": "departure-pick"
     },
     {
       "itinerary": {
@@ -45955,7 +45959,9 @@
         ],
         "walkDistance": 8421.17
       },
-      "tMs": 1790196970229
+      "tMs": 1790196970229,
+      "by": "app",
+      "cause": "quiet-replan-scoped"
     }
   ],
   "meta": {
