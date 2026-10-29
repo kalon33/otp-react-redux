@@ -116,7 +116,11 @@ const TransitProgress = ({
   const lastTripVehicle = useRef<{ at: number; v: VehiclePosition } | null>(
     null
   )
-  const nowMs = Date.now()
+  // The tick's clock, which every epoch on this card was measured on (75.29,
+  // as 10.4 did for ReturnCountdownCard): the wall clock on a ride, the
+  // simulated one in a replay — where Date.now() put every board time in the
+  // past, so the platform card never said "waiting".
+  const nowMs = goModeActions.goModeNowMs()
   const tripId = legTripId(leg)
   if (tripVehicle && tripVehicle.tripId === tripId) {
     lastTripVehicle.current = { at: nowMs, v: tripVehicle }
@@ -163,7 +167,7 @@ const TransitProgress = ({
     aboard,
     departureMs,
     leg,
-    nowMs: Date.now()
+    nowMs
   })
 
   // Only an assessed distrust suppresses (stopsTrusted is unset on legacy
@@ -178,7 +182,7 @@ const TransitProgress = ({
   // single-hop), so nothing above could suppress the banner and "GET READY!
   // Next stop is yours!" stayed up the whole way. alightBannerLevel adds the
   // ETA test — the same move checkAlightAlerts already made for notifications.
-  const alertLevel = alightBannerLevel(progress, Date.now())
+  const alertLevel = alightBannerLevel(progress, nowMs)
 
   // The badge is a live claim ("On Bus…"), so it also needs a recent feed
   // sighting — a confirmed match whose vehicle left the feed keeps its
@@ -187,7 +191,7 @@ const TransitProgress = ({
   const isTracking =
     (vehicleMatch?.confidence === 'confirmed' ||
       vehicleMatch?.confidence === 'high') &&
-    Date.now() - (vehicleMatch?.lastSeen ?? 0) < VEHICLE_MATCH_FRESH_MS
+    nowMs - (vehicleMatch?.lastSeen ?? 0) < VEHICLE_MATCH_FRESH_MS
 
   /**
    * On the platform the status line states the TRIP's bus, never the

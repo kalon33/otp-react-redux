@@ -12,6 +12,7 @@ import {
   calculateDistance,
   MATCH_CORRIDOR_TRANSIT_M
 } from './position-matching'
+import { goModeClockMs } from './clock'
 import { hasArrivedAtDestination } from './progress-calculator'
 import { MISSED_BUS_NOTICE_ID } from './native-notify'
 import { notifyIntl } from './notify-i18n'
@@ -117,12 +118,17 @@ export function shouldAutoReroute(
  * actions/go-mode (the state it dedupes against is the store's, not a leg's)
  * but must carry an id of the same shape as everything else in
  * `sentNotifications` — `wasRecentlySent` parses the trailing timestamp.
+ *
+ * The stamp, the dedupe below and the reducer's eviction all read Go Mode's
+ * clock (75.29): wall time on a ride, the simulated clock in a replay or GPS
+ * simulation. On the wall clock every cooldown covered N times the ride's
+ * time at N x, so a replay's push count moved with its speed.
  */
 export function generateNotificationId(
   type: NotificationType,
   context: string
 ): string {
-  return `${type}_${context}_${Date.now()}`
+  return `${type}_${context}_${goModeClockMs()}`
 }
 
 /**
@@ -139,7 +145,7 @@ export function wasRecentlySent(
 
   if (isNaN(timestamp)) return false
 
-  const now = Date.now()
+  const now = goModeClockMs()
 
   // Check if this type/context was sent recently
   const similarNotifications = sentNotifications.filter((id) => {

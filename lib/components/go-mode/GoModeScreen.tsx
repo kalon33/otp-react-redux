@@ -163,7 +163,8 @@ const GoModeScreen = ({
         cache: legFrequency,
         currentLegIndex: goMode.progress?.currentLegIndex,
         legs: goMode.activeItinerary?.legs,
-        nowMs: Date.now(),
+        // The tick's clock, the legs' (75.29).
+        nowMs: goModeActions.goModeNowMs(),
         replay: replaying
       })
     : null
