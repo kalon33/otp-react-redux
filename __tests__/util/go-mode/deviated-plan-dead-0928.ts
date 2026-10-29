@@ -131,7 +131,8 @@ const fromLastSwap = (fx: any) => {
  * 326 m off the plan, and three `quiet-replan-full` answers were refused
  * `arrives-later`. Replayed from the phone's state at that swap, the refusals
  * come back at 17:35:51, 17:36:22 and 17:36:47 (phone: 17:35:53, 17:36:32,
- * 17:36:49), deviated from 17:35:32 (phone 17:35:33).
+ * 17:36:49), deviated from 17:35:33 (phone 17:35:33; it read 17:35:32 until
+ * 75.29 played each fix at its own recorded time).
  *
  * Those refusals were RIGHT, and they must stay: the rider closed on the
  * destination the whole streak (831 -> 734 -> ~680 m in a straight line) and
@@ -157,7 +158,7 @@ const withOnRoute = onRoute ? describe : describe.skip
 withRide('35.2: a rider converging off the line keeps the arrival test', () => {
   it('ride-0928-1651 from the 17:31:08 swap: all three refused arrives-later', async () => {
     const r = await replay(fromLastSwap(ride), 1)
-    expect(r.statuses.find((s) => s.status === 'deviated')?.at).toBe('17:35:32')
+    expect(r.statuses.find((s) => s.status === 'deviated')?.at).toBe('17:35:33')
     const full = r.autoReplans.filter((a) => a.reason === 'quiet-replan-full')
     expect(full).toHaveLength(3)
     for (const a of full) {

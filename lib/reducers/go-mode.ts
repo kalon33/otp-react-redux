@@ -77,6 +77,7 @@ import {
   TurnCueSettings
 } from '../util/go-mode/turn-cue-settings'
 import { FIX_ACCURACY_MAX_M } from '../util/go-mode/transit-trust'
+import { goModeClockMs } from '../util/go-mode/clock'
 import {
   ridingFactIsEvidenced,
   ridingKeptTooLong
@@ -775,12 +776,13 @@ const goMode = handleActions<GoModeState, any>(
       // be wide enough" — but width alone cannot fix an eviction policy that
       // disagrees with the dedup policy.
       //
-      // Every id already ends in its Date.now() (generateNotificationId), and
+      // Every id already ends in its own stamp (generateNotificationId), and
       // wasRecentlySent parses it back out, so age is readable here without
       // any change of shape. Drop only ids older than the longest dedup window
       // in the service (ALIGHT_DEDUP_MS, 30 min), which is exactly the point
-      // past which no caller can still be suppressing on them.
-      const evictBefore = Date.now() - 30 * 60 * 1000
+      // past which no caller can still be suppressing on them. On the clock
+      // the ids are stamped with (75.29).
+      const evictBefore = goModeClockMs() - 30 * 60 * 1000
       let kept = sentNotifications.filter((id) => {
         const stamp = parseInt(id.slice(id.lastIndexOf('_') + 1), 10)
         return Number.isNaN(stamp) || stamp >= evictBefore
@@ -1001,7 +1003,10 @@ const goMode = handleActions<GoModeState, any>(
         ...state.boardingPrompt,
         chooseBus: false,
         chooseBusError: null,
-        lastDismissedAt: Date.now(),
+        // Go Mode's clock, which shouldShowBoardingPrompt ages it on (75.29):
+        // on the wall clock a dismissal in a replay lay weeks in the sim's
+        // future, and the prompt stayed suppressed for the rest of it.
+        lastDismissedAt: goModeClockMs(),
         searching: false,
         shown: false
       }

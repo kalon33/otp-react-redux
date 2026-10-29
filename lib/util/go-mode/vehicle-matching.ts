@@ -639,11 +639,14 @@ export function matchUserToVehicle(
     ridingVehicleId = null
   }: { nowMs?: number; ridingVehicleId?: string | null } = {}
 ): VehicleMatchResult {
+  // `lastSeen` is the caller's clock like every other time here (75.29, the
+  // vehicle-matching half of 55.2): Date.now() made two calls with one
+  // `nowMs` differ in 2.5 % of pairs, and a replay's match read wall time.
   const noMatch: VehicleMatchResult = {
     confidence: 'none',
     distanceMeters: null,
     label: null,
-    lastSeen: Date.now(),
+    lastSeen: nowMs,
     vehicleId: null
   }
 
@@ -872,7 +875,7 @@ export function matchUserToVehicle(
         ? previousMatch?.heading ?? null
         : null,
     label: bestVehicle.label,
-    lastSeen: Date.now(),
+    lastSeen: nowMs,
     nextStopId: bestVehicle.nextStopId ?? null,
     routeId: bestVehicle.routeId ?? null,
     stopStatus: bestVehicle.stopStatus ?? null,

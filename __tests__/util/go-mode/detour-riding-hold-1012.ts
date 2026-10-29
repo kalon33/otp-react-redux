@@ -72,8 +72,15 @@ jest.mock('@opentripplanner/core-utils', () => {
  * tap dispatched at its recorded moment. The replay reproduces the ride on
  * main (`913b86589`): ROUTE_DEVIATION high 16:23:02, CLEAR_RIDING 16:24:31,
  * `deviated` 16:23:01-16:31:43, SET_RIDING 16:31:43 with boardedAt 16:31:44.
+ * Since 75.29 every fix plays at its own recorded time (each used to carry
+ * the gap after it), and the same replay reads: ROUTE_DEVIATION 16:23:01 and
+ * `deviated` from 16:23:00, as the phone; CLEAR_RIDING 16:24:30 and riding
+ * back at 16:31:42, one fix before the phone's 16:24:31 / 16:31:43 — the
+ * phone ran those thresholds on its handling clock (the 90 s off-route clock
+ * from 16:23:00.085, tens of ms after the fix), which a replay of the fixes
+ * alone cannot carry.
  * (The replay's own riding fact is established by the matcher before the
- * tap, so its board time is 16:17:16 — the tap keeps an evidenced board
+ * tap, so its board time is 16:17:15 — the tap keeps an evidenced board
  * time, as on the phone. It read 16:17:17 until 54.6 aged the replay's frames
  * against the sim clock, which lets the matcher age-correct them as it does
  * on a live ride.)
@@ -195,7 +202,7 @@ jest.setTimeout(600000)
   () => {
     it('without the hold reproduces the ride (and keeps the board time)', async () => {
       // Today's riding decision exactly: nothing ever reads as held. Item (7)
-      // is independent of the hold, so the re-established fact keeps 16:17:16
+      // is independent of the hold, so the re-established fact keeps 16:17:15
       // here where main re-stamped it 16:31:44.
       const spy = jest
         .spyOn(vehicleCompany, 'ridingHeldByVehicle')
@@ -203,14 +210,14 @@ jest.setTimeout(600000)
       const r = await replay(fixture)
       spy.mockRestore()
       expect(r.offRoute.map((n) => [hhmmss(n.t), n.priority])).toEqual([
-        ['16:23:02', 'high']
+        ['16:23:01', 'high']
       ])
-      expect(r.clears.map(hhmmss)).toEqual(['16:24:31'])
-      expect(hhmmss(r.deviated[0])).toBe('16:23:01')
+      expect(r.clears.map(hhmmss)).toEqual(['16:24:30'])
+      expect(hhmmss(r.deviated[0])).toBe('16:23:00')
       const back = r.sets.find((e) => e.t > at('16:24:31'))
-      expect(hhmmss(back?.t)).toBe('16:31:43')
+      expect(hhmmss(back?.t)).toBe('16:31:42')
       expect(back?.p.vehicleId).toBe(VEHICLE)
-      expect(hhmmss(back?.p.boardedAt)).toBe('16:17:16')
+      expect(hhmmss(back?.p.boardedAt)).toBe('16:17:15')
       expect(r.holds).toEqual([])
     })
 
@@ -219,28 +226,28 @@ jest.setTimeout(600000)
       // No clear, from boarding to the BICYCLE transition at Lake St.
       expect(r.clears).toEqual([])
       const bike = r.transitions.find((e) => e.p?.legIndex === 2)
-      expect(hhmmss(bike?.t)).toBe('16:45:34')
-      // Every riding fact the trip wrote is 8143, boarded at 16:17:16.
+      expect(hhmmss(bike?.t)).toBe('16:45:33')
+      // Every riding fact the trip wrote is 8143, boarded at 16:17:15.
       for (const s of r.sets) {
         expect(s.p.vehicleId).toBe(VEHICLE)
         expect(s.p.tripId).toBe(TRIP)
-        expect(hhmmss(s.p.boardedAt)).toBe('16:17:16')
+        expect(hhmmss(s.p.boardedAt)).toBe('16:17:15')
       }
       // The hold engages as the bus leaves the shape and lets go as it
       // rejoins, with the bus a few metres from the rider both times.
       expect(r.holds.map((h) => [hhmmss(h.t), h.p.on, h.p.verdict])).toEqual([
-        ['16:23:00', true, 'together'],
-        ['16:31:43', false, 'together']
+        ['16:22:59', true, 'together'],
+        ['16:31:42', false, 'together']
       ])
       expect(r.holds[0].p.vehicleDistanceM).toBeLessThanOrEqual(30)
-      // Not deviated anywhere on the detour (it was 16:23:01-16:31:43).
+      // Not deviated anywhere on the detour (it was 16:23:00-16:31:42).
       expect(
         r.deviated.filter((t) => t >= at('16:22:00') && t <= at('16:45:00'))
       ).toEqual([])
       // The rider's answer (Q1 "C"): the card still goes out, once for the
       // whole excursion, at medium priority.
       expect(r.offRoute.map((n) => [hhmmss(n.t), n.priority])).toEqual([
-        ['16:23:02', 'medium']
+        ['16:23:01', 'medium']
       ])
     })
 
@@ -296,7 +303,7 @@ jest.setTimeout(600000)
       expect(r.clears).toHaveLength(1)
       expect(r.clears[0] - released!.p.tMs).toBeGreaterThanOrEqual(89000)
       expect(r.clears[0] - released!.p.tMs).toBeLessThan(95000)
-      expect(hhmmss(released!.p.tMs)).toBe('16:28:42')
+      expect(hhmmss(released!.p.tMs)).toBe('16:28:43')
       expect(hhmmss(r.clears[0])).toBe('16:30:12')
     })
   }

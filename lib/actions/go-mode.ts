@@ -818,18 +818,27 @@ function getCurrentTime(): Date {
   return new Date()
 }
 
-// The same clock for modules that cannot import this one (apiV2, 70.3).
-registerGoModeClock(() => getCurrentTime().getTime())
-
 /**
  * The tick's clock, for display code that must agree with it. Real ride: the
  * wall clock. GPS simulation / `__advanceSimulatedTime`: the simulated clock,
  * so a countdown rendered from this cannot disagree with the stage the tick
  * stored (backlog 10.4). Read-only; nothing here is dispatched.
+ *
+ * `getCurrentTime()` in milliseconds, with the wall reading taken from
+ * `Date.now()`: the same instant on a ride, and the read the notification
+ * dedupe and the card used before they moved onto this clock (75.29), so a
+ * suite that pins `Date.now` still pins them.
  */
 export function goModeNowMs(): number {
-  return getCurrentTime().getTime()
+  if (session.simulationActive && session.simulatedTimeMs > 0) {
+    return session.simulatedTimeMs
+  }
+  return Date.now()
 }
+
+// The same clock for modules that cannot import this one (apiV2 70.3, the
+// notification ids and dedupe, the reducer's eviction and dismissal — 75.29).
+registerGoModeClock(goModeNowMs)
 
 /**
  * The rider's own measured cycling speed for a plan query, or null when there
@@ -2578,7 +2587,7 @@ export function beginGoMode(
           confidence: 'confirmed' as const,
           distanceMeters: null,
           label: riding.routeShortName || riding.vehicleId,
-          lastSeen: Date.now(),
+          lastSeen: getCurrentTime().getTime(),
           routeId: riding.routeId,
           tripId: riding.tripId,
           vehicleId: riding.vehicleId
@@ -2672,8 +2681,14 @@ export function recoverStaleStartOrigin() {
         // ridden its access leg, and asking then would re-plan a trip that is
         // going fine (the false positive the latch exists to prevent). So a
         // wait past REPLAN_ORIGIN_MAX_AGE_MS spends the latch unanswered.
+        // On the tick's clock, as noteReplanOriginWait stamps `since` (75.29):
+        // at the nightly's ~12x a wall-clock minute held the question open
+        // for twelve sim-minutes.
         const since = session.replanOriginWaitSince['stale-plan-origin']
-        if (since != null && Date.now() - since > REPLAN_ORIGIN_MAX_AGE_MS) {
+        if (
+          since != null &&
+          getCurrentTime().getTime() - since > REPLAN_ORIGIN_MAX_AGE_MS
+        ) {
           session.staleStartOriginPending = null
           noteReplanOriginResume(
             dispatch,
@@ -2708,7 +2723,11 @@ export function recoverStaleStartOrigin() {
     // threw away the bus at the platform (2026-10-12 16:17:15). Keep the plan;
     // the matcher's leg transition moves them onto the transit leg. The latch
     // is already spent above, exactly as on the re-plan path.
-    const nowMs = Date.now()
+    //
+    // On the tick's clock (75.29), the one the plan's board epoch is measured
+    // against in a simulation or replay; the wall clock there is days or
+    // weeks after the recorded board time, so the guard could never hold.
+    const nowMs = getCurrentTime().getTime()
     if (
       riderAtFirstBoardStop({
         accuracyM: coords.accuracy ?? null,
@@ -2821,6 +2840,20 @@ export function startGoModeTracking(
   options: { replay?: boolean } = {}
 ) {
   return async function (dispatch: any, getState: any) {
+    // A replay is a replay through every door, not only the one replayTrip
+    // opens (75.29): a swap mid-replay — a quiet re-plan, a missed-bus or
+    // boarded-earlier auto-update — re-enters here through beginGoMode with
+    // no options, and used to arm the LIVE machinery under the replay: the
+    // live board timer, the 90 s wall-clock background interval (1026-1214:
+    // REROUTE_SNAPSHOT every 9.75 sim-min at 6.5x, every 5.3 at 3.6x;
+    // ride-1020-0907: an aboard check that ran only at speed 4) and the
+    // browser's GPS poll, which took over when the track ended and pushed
+    // "432m from the route" stamped with the wall clock (startPositionTracking
+    // now refuses a replay itself). None is armed under replay, as on the
+    // start path: a check whose cadence is set by the harness's speed is not
+    // a recording of the ride.
+    const replay = !!options.replay || isReplayActive()
+
     // Every door into a live trip passes through here — a fresh start, a
     // replan, a reroute, and the resume from storage — so this is the one
     // place that guarantees the updater is held for the whole of it. A
@@ -2864,7 +2897,7 @@ export function startGoModeTracking(
     // This is every door into a live trip, so it is armed here — replaced,
     // never stacked. Not for a trip that has already arrived (nothing left to
     // board) and not under replay (it reproduces recorded polls).
-    if (resumedArrived || options.replay) stopLiveBoardTimer()
+    if (resumedArrived || replay) stopLiveBoardTimer()
     else startLiveBoardTimer(dispatch, getState)
 
     // A reroute or missed-bus auto-update swaps the itinerary without going
@@ -2980,8 +3013,8 @@ export function startGoModeTracking(
     // a real plan() call with nothing to plan toward. The tick stops the
     // interval on arrival, which bounds the damage at one probe and 90 s; not
     // arming it is the honest version, and it is what the ×4 in the 18:52
-    // session was.
-    if (!resumedArrived) {
+    // session was. Nor under a replay (above).
+    if (!resumedArrived && !replay) {
       startRerouteSnapshotCapture(dispatch)
     }
 
@@ -3681,7 +3714,7 @@ function replanOriginPick(state: any): ReplanOriginPick | null {
  */
 function noteReplanOriginWait(dispatch: any, state: any, reason: string) {
   if (session.replanOriginWaitSince[reason] != null) return
-  const nowMs = Date.now()
+  const nowMs = getCurrentTime().getTime()
   session.replanOriginWaitSince = {
     ...session.replanOriginWaitSince,
     [reason]: nowMs
@@ -3728,7 +3761,7 @@ function noteReplanOriginResume(
       phase: 'resume',
       reason,
       tMs: getCurrentTime().getTime(),
-      waitedMs: Date.now() - since
+      waitedMs: getCurrentTime().getTime() - since
     },
     type: REPLAN_ORIGIN_WAIT
   })
@@ -3756,7 +3789,13 @@ function currentPositionOrigin(
   const { homeTimezone } = state.otp.config
 
   const riding = goMode?.riding
-  const nextStop = riding ? getNextStopOnRide(state) : null
+  // The tick's clock, as stop-origin.ts already passes (75.29): the default is
+  // the wall clock, which in a replay stamped the aboard re-plan with today's
+  // date and, off the corridor, picked the leg's LAST stop as "not yet
+  // reached" because every recorded arrival lies before it.
+  const nextStop = riding
+    ? getNextStopOnRide(state, getCurrentTime().getTime())
+    : null
   if (riding && nextStop) {
     const zoned = utcToZonedTime(nextStop.arrivalEpoch, homeTimezone)
     return {
@@ -3858,7 +3897,9 @@ export function browseFromCurrentPosition(
       ? getRoutingProfile(options.profileId)
       : undefined
     const riding = leftRiddenLeg ? null : goMode?.riding
-    const nextStop = riding ? getNextStopOnRide(state) : null
+    const nextStop = riding
+      ? getNextStopOnRide(state, getCurrentTime().getTime())
+      : null
     const routingPreferences =
       profile?.prefs ??
       options.preferences ??
@@ -4080,7 +4121,9 @@ export function reRouteFromCurrentPosition(
     // nothing to splice from), where a preference is the strongest honest
     // statement available.
     const riding = goMode?.riding
-    const nextStop = riding ? getNextStopOnRide(state) : null
+    const nextStop = riding
+      ? getNextStopOnRide(state, getCurrentTime().getTime())
+      : null
     if (riding && nextStop && riding.routeId) {
       payload.preferred = {
         otherThanPreferredRoutesPenalty: 900,
@@ -4340,7 +4383,7 @@ export function applyAutoReroute(
       }
     )
     const notification: NotificationEvent = {
-      id: `TRIP_UPDATED_auto_${Date.now()}`,
+      id: `TRIP_UPDATED_auto_${getCurrentTime().getTime()}`,
       message,
       priority: 'high',
       timestamp: new Date(),
@@ -6082,8 +6125,13 @@ export function aboardRouteCheck() {
     const windowCtx = () => ({
       boardedAtMs: riding.boardedAt ?? null,
       lastPosition: getState().otp?.goMode?.tracking?.lastPosition ?? null,
-      // The optimizer's own clock (wall time; see optimizeAlightFromTrip).
-      nowMs: Date.now(),
+      // The tick's clock, the one `boardedAtMs` is stamped on (75.29): on the
+      // wall clock "ridden long enough" (ABOARD_MIN_RIDDEN_MS) compared two
+      // clocks, and a sped-up simulation read every boarding as still in the
+      // future. Live ride: the same clock. Replay: the recorded stop times
+      // are on it too. (The optimizer keeps the wall clock for the plans it
+      // fetches — see optimizeAlightFromTrip.)
+      nowMs: getCurrentTime().getTime(),
       to
     })
     // Out of the window on the stop times already held: ask nothing, and do
@@ -6787,7 +6835,7 @@ export function beginOnboardFlow() {
           confidence: 'confirmed' as const,
           distanceMeters: null,
           label: label || vehicleId,
-          lastSeen: Date.now(),
+          lastSeen: getCurrentTime().getTime(),
           routeId: riding.routeId,
           tripId: riding.tripId,
           vehicleId
@@ -8569,7 +8617,7 @@ function reconfirmBoardedVehicle(dispatch: any, vehicle: any) {
         confidence: 'confirmed' as const,
         distanceMeters: null,
         label: vehicle.label || vehicle.vehicleId,
-        lastSeen: Date.now(),
+        lastSeen: getCurrentTime().getTime(),
         routeId: vehicle.routeId ?? null,
         tripId: vehicle.tripId ?? null,
         vehicleId: vehicle.vehicleId
@@ -8997,7 +9045,7 @@ function aboardTripUpdatedNotification(spliced: Itinerary): NotificationEvent {
     }
   )
   return {
-    id: `TRIP_UPDATED_auto_${Date.now()}`,
+    id: `TRIP_UPDATED_auto_${getCurrentTime().getTime()}`,
     message,
     priority: 'high',
     timestamp: new Date(),
@@ -9395,9 +9443,9 @@ export function replanFromAboard(
       // conjunct in shouldReplanBoardedEarlier fixes that specific loop; this
       // guard makes the whole CLASS non-recurring, whatever arms it next.
       // Suppressing here rather than at the notification layer is deliberate:
-      // the TRIP_UPDATED id embeds Date.now(), so the reducer's id-based
-      // dedupe can never catch these, and a notification-level dedupe would
-      // be cleared by START_GO_MODE anyway.
+      // the TRIP_UPDATED id embeds its own millisecond, so the reducer's
+      // id-based dedupe can never catch these, and a notification-level dedupe
+      // would be cleared by START_GO_MODE anyway.
       // Compare against the itinerary that is live NOW, not the one captured
       // before the schedule fetch — that is the one about to be replaced.
       const activeNow = getState().otp?.goMode?.activeItinerary ?? itinerary
@@ -9537,6 +9585,9 @@ export function replanFromAboard(
  */
 export function startPositionTracking() {
   return function (dispatch: any, getState: any) {
+    // A replay plays its recorded track; the device's GPS never feeds it, and
+    // nothing here would stop it when the track ends (75.29).
+    if (isReplayActive()) return
     // The armed trip's watcher (65.2 B4) is let go here whatever path got a
     // trip this far — the armed start and beginGoMode stop it first; this is
     // the backstop (the onboard flow comes straight here). On the native
@@ -12348,11 +12399,14 @@ export function handlePositionUpdate(position: GeolocationPosition) {
         // across the splice, and both change on a genuine re-board, since
         // TRANSITION_LEG clears riding on alight.
         const boardingKey = `${riding.tripId ?? ''}:${riding.boardedAt ?? ''}`
+        // The retry spacing runs on the tick's clock (75.29), like every gate
+        // below: on the wall clock a replay's re-plan count moved with its
+        // speed (28.7: 0 at 1x, 3 at 6x, 0 at 8x, 1 at 25x on one build).
         if (
           session.earlyBoardReplan?.key === boardingKey &&
           (session.earlyBoardReplan.attempts >=
             EARLY_BOARD_REPLAN_MAX_ATTEMPTS ||
-            Date.now() - session.earlyBoardReplan.lastAtMs <
+            currentTime.getTime() - session.earlyBoardReplan.lastAtMs <
               EARLY_BOARD_REPLAN_RETRY_MS)
         ) {
           return false
@@ -12411,7 +12465,7 @@ export function handlePositionUpdate(position: GeolocationPosition) {
               ? session.earlyBoardReplan.attempts + 1
               : 1,
           key: boardingKey,
-          lastAtMs: Date.now()
+          lastAtMs: currentTime.getTime()
         }
         return true
       })()
@@ -12544,7 +12598,9 @@ export function performVehicleMatching(routeId: string) {
         vehicles,
         userPos.coords.latitude,
         userPos.coords.longitude,
-        Date.now()
+        // The tick's clock (75.29): on the wall clock a replayed confirmed
+        // match's lastSeen read weeks stale and a fresh one's read live.
+        getCurrentTime().getTime()
       )
       if (refreshed) {
         dispatch({
@@ -13086,7 +13142,7 @@ export function confirmVehicleSelection(vehicleId: string) {
         confidence: 'confirmed' as const,
         distanceMeters: selected?.distanceMeters || null,
         label: selected?.label || vehicleId,
-        lastSeen: Date.now(),
+        lastSeen: getCurrentTime().getTime(),
         routeId: selected?.routeId ?? null,
         tripId: selected?.tripId ?? null,
         vehicleId
@@ -13109,7 +13165,10 @@ export function confirmVehicleSelection(vehicleId: string) {
         : null
       dispatch(
         setRiding({
-          boardedAt: prevBoardedAt ?? Date.now(),
+          // The tick's clock, which decideRiding stamps the same field with
+          // (75.29): a rider tap in a simulation wrote wall time into a field
+          // faster-route-offer and replan-acceptance age on the sim clock.
+          boardedAt: prevBoardedAt ?? getCurrentTime().getTime(),
           headsign: selected.tripHeadsign ?? null,
           legIndex: goMode?.routeMatch?.legIndex ?? -1,
           offRouteSince: null,
@@ -13407,7 +13466,7 @@ export function confirmOnboardRoute(
           // schedule resolver's headsign is not something a badge can say.
           label:
             chosen?.label || chosen?.vehicleId || routeShortName || routeId,
-          lastSeen: Date.now(),
+          lastSeen: getCurrentTime().getTime(),
           routeId,
           tripId,
           vehicleId
@@ -13418,7 +13477,7 @@ export function confirmOnboardRoute(
       // riding fact described, so its board time is now.
       dispatch(
         setRiding({
-          boardedAt: Date.now(),
+          boardedAt: getCurrentTime().getTime(),
           // With no live bus, `label` is the schedule resolver's headsign.
           headsign: chosen ? chosen.tripHeadsign ?? null : label ?? null,
           legIndex: goMode?.routeMatch?.legIndex ?? -1,
@@ -13448,7 +13507,7 @@ export function confirmOnboardRoute(
         confidence: 'confirmed' as const,
         distanceMeters: chosen?.distanceMeters ?? null,
         label: label || routeId,
-        lastSeen: Date.now(),
+        lastSeen: getCurrentTime().getTime(),
         routeId,
         tripId,
         vehicleId
@@ -13469,7 +13528,7 @@ export function confirmOnboardRoute(
     const prevRiding = goMode?.riding
     dispatch(
       setRiding({
-        boardedAt: prevRiding?.boardedAt ?? Date.now(),
+        boardedAt: prevRiding?.boardedAt ?? getCurrentTime().getTime(),
         headsign: chosen?.tripHeadsign ?? null,
         legIndex: goMode?.routeMatch?.legIndex ?? -1,
         offRouteSince: null,
@@ -13686,13 +13745,22 @@ export function stopGpsSimulation() {
  * Convert a recorded GPS track (from a replay fixture) into timed simulation
  * points. delayMs between fixes is the recorded wall-clock gap, so playback
  * preserves the trip's real pacing (scaled by speedMultiplier at run time).
+ *
+ * It is the gap BEFORE each fix (75.29): scheduleNextSimulationPoint waits
+ * `delayMs` and advances the clock by it on its way TO a point, so once the
+ * clock stands on the first fix every later fix plays at its own recorded
+ * time. It was the gap AFTER (`track[i + 1].tMs - fix.tMs`), floored at
+ * 50 ms: each fix went out stamped with its successor's gap — the fix before
+ * orange-line-0729's 121 s GPS gap 121 s late, bike-false-board-1029's by
+ * 41 min — and orange-line-0729's 181 repeated timestamps drifted the clock
+ * 9 s. Unfloored here (a repeated timestamp is 0 ms of the ride); the
+ * scheduler floors only its wall-clock wait.
  */
 function trackToTimedPoints(track: ReplayGpsFix[]): TimedSimulationPoint[] {
   return track.map((fix, i) => ({
     accuracy: fix.accuracy,
     coord: [fix.lat, fix.lon] as [number, number],
-    delayMs:
-      i < track.length - 1 ? Math.max(50, track[i + 1].tMs - fix.tMs) : 500,
+    delayMs: i > 0 ? Math.max(0, fix.tMs - track[i - 1].tMs) : 0,
     heading: fix.heading,
     speed: fix.speed
   }))
@@ -13702,8 +13770,18 @@ function trackToTimedPoints(track: ReplayGpsFix[]): TimedSimulationPoint[] {
  * Play back an explicit recorded GPS track (trip replay), as opposed to
  * startGpsSimulation which derives points from itinerary geometry. Reuses the
  * same setTimeout chain + handlePositionUpdate funnel; the only difference is the
- * source of the points and that the simulated clock starts at the recorded trip
- * start so progress/delay math lines up with the recorded schedule.
+ * source of the points and that every fix is played at its own recorded time
+ * (75.29) — see trackToTimedPoints.
+ *
+ * `startMs` is when the trip began (replayTrip: the recorded START_GO_MODE).
+ * The clock starts there, and fixes from before it are not played: a trip
+ * entered through the onboard flow is set up before START_GO_MODE, and the
+ * fixture builder keeps those 11-137 s of fixes for the flow's own inputs —
+ * Go Mode never saw them, and the plan they would be run against starts its
+ * first leg at `startMs`. ride-1020-0819: 22 of its 38 fixes predate the
+ * trip; played on their own clock, the trip began 20 s early, its 25 s
+ * deviation settle window ran out five seconds into the ride's real trip,
+ * and the replay pushed "1977m from the route" — the ride pushed nothing.
  */
 export function startTrackReplay(
   track: ReplayGpsFix[],
@@ -13715,6 +13793,14 @@ export function startTrackReplay(
       console.warn('[Go Mode] startTrackReplay: empty track')
       return
     }
+    const fromStart =
+      startMs != null ? track.filter((fix) => fix.tMs >= startMs) : track
+    if (!fromStart.length) {
+      console.warn(
+        '[Go Mode] startTrackReplay: no fix after the trip start; playing all'
+      )
+    }
+    const played = fromStart.length ? fromStart : track
 
     if (session.gpsSimulationTimeoutId) {
       clearTimeout(session.gpsSimulationTimeoutId)
@@ -13728,11 +13814,11 @@ export function startTrackReplay(
     // recorded track as GPS silence.
     stopGpsWatchdog()
 
-    session.simulationCoords = trackToTimedPoints(track)
+    session.simulationCoords = trackToTimedPoints(played)
     session.simulationPointIndex = 0
     simulationSpeedMultiplier = speedMultiplier
     session.simulationActive = true
-    session.simulatedTimeMs = startMs ?? track[0].tMs
+    session.simulatedTimeMs = startMs ?? played[0].tMs
     setReplayClock(session.simulatedTimeMs)
 
     console.info(
@@ -13748,6 +13834,16 @@ export function startTrackReplay(
       type: START_GPS_SIMULATION
     })
 
+    // The first fix at its own time too: the clock moves from the trip's
+    // start to it (on the ride, Go Mode waited for it), and the replay engine
+    // serves the vehicles of that moment, as every later tick does.
+    if (played[0].tMs > session.simulatedTimeMs) {
+      session.simulatedTimeMs = played[0].tMs
+      setReplayClock(session.simulatedTimeMs)
+      if (isReplayActive() && replayTrackedRouteId) {
+        dispatch(getVehiclePositionsForRoute(replayTrackedRouteId))
+      }
+    }
     const first = session.simulationCoords[0]
     dispatch(
       handlePositionUpdate(
@@ -13786,6 +13882,30 @@ export function replayTrip(
     // OTP interception both see replay mode from the first action.
     beginReplay(fixture)
 
+    // ...and start the replay's clock before the trip exists (75.29). It used
+    // to be set only by startTrackReplay, after startGoMode and
+    // startGoModeTracking had run, so everything those stamp read the WALL
+    // clock: SET_TRANSIT_LEG_ENTERED, geometryChangedAtMs, planInstalledAtMs
+    // and the stop-time prefetch's service day. transfer-match-1020 entered
+    // its first transit leg at 2026-10-29 04:38 (wall) on a clock reading
+    // 2026-10-20 09:34:30, which held the boarding prompt shut for the whole
+    // leg and kept the 25 s deviation settle window from ever opening:
+    // ride-1020-0819 pushed "1939m from the route" one second in, a push the
+    // ride itself never sent. It starts where the ride's trip did, the
+    // recorded START_GO_MODE (`meta.startMs`), and from there every fix plays
+    // at its own recorded time (startTrackReplay). Before, each fix was played
+    // at `meta.startMs` plus the track's elapsed time: a fixture whose track
+    // begins at the onboard flow ran 11-137 s ahead of its own fixes, and
+    // ride-1019-0902 first matched the rider's own bus at 851 m — 577 m when
+    // its first in-trip fix meets the vehicles of its own moment.
+    const replayStartMs: number | undefined =
+      fixture.meta?.startMs ?? fixture.gpsTrack?.[0]?.tMs
+    if (replayStartMs && fixture.gpsTrack?.length) {
+      session.simulationActive = true
+      session.simulatedTimeMs = replayStartMs
+      setReplayClock(replayStartMs)
+    }
+
     const originalFrom =
       fixture.itinerary.legs?.[0]?.from ||
       getState().otp?.currentQuery?.from ||
@@ -13796,6 +13916,7 @@ export function replayTrip(
     dispatch(
       startGoMode({
         itinerary: normalizeGoModeItinerary(fixture.itinerary) as Itinerary,
+        nowMs: replayStartMs,
         originalFrom
       })
     )
@@ -13805,9 +13926,7 @@ export function replayTrip(
     // hooks) but skip live GPS — the recorded track drives the trip instead.
     await dispatch(startGoModeTracking(fixture.itinerary, { replay: true }))
 
-    dispatch(
-      startTrackReplay(fixture.gpsTrack, speedMultiplier, fixture.meta?.startMs)
-    )
+    dispatch(startTrackReplay(fixture.gpsTrack, speedMultiplier, replayStartMs))
   }
 }
 

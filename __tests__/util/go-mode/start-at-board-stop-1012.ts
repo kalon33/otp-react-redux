@@ -3,7 +3,11 @@ import path from 'path'
 
 import FakeTimers from '@sinonjs/fake-timers'
 
-import { beginGoMode, endGoMode } from '../../../lib/actions/go-mode'
+import {
+  beginGoMode,
+  endGoMode,
+  startTrackReplay
+} from '../../../lib/actions/go-mode'
 import { fetchOnboardCandidatePlan } from '../../../lib/actions/apiV2'
 import {
   firstBoardStopMeasure,
@@ -265,6 +269,41 @@ withFixture('util > go-mode > starting at the board stop (47.2)', () => {
       expect(store.types()).not.toContain('START_REROUTE')
       expect(mockedFetch).not.toHaveBeenCalled()
       expect(store.tripUpdated()).toHaveLength(0)
+      expect(store.activeItinerary().legs[1].trip.gtfsId).toBe('1:1364433')
+      expect(
+        lines.filter((l) => l.includes('keeping the plan (47.2)'))
+      ).toEqual([
+        '[go-mode] plan origin stale but rider 63m from the first board stop, board in 274s — keeping the plan (47.2)'
+      ])
+    })
+
+    it('on the tick’s clock (75.29): replayed sixteen days later, the plan is kept', async () => {
+      // Every case above fakes the wall clock AT the ride, which is what hid
+      // this guard's Date.now(): a replay runs on the recording's clock while
+      // the wall clock reads the day it is run. Wall: the 10-28 sweep.
+      clock?.uninstall()
+      clock = FakeTimers.install({
+        now: Date.parse('2026-10-28T23:45:00-05:00'),
+        toFake: [
+          'Date',
+          'setTimeout',
+          'clearTimeout',
+          'setInterval',
+          'clearInterval'
+        ]
+      })
+      const log = jest.spyOn(console, 'log').mockImplementation(() => undefined)
+      store = makeStore()
+      // The simulated clock at the tap, 16:17:15 on 10-12: the fix, and one an
+      // hour on that is never reached.
+      store.run(
+        startTrackReplay([g0(), { ...g0(), tMs: NOW() + 3_600_000 }], 1, NOW())
+      )
+      await store.run(beginGoMode(plan()))
+      const lines = log.mock.calls.map((c) => String(c[0]))
+      log.mockRestore()
+      expect(store.recoveries()).toHaveLength(0)
+      expect(mockedFetch).not.toHaveBeenCalled()
       expect(store.activeItinerary().legs[1].trip.gtfsId).toBe('1:1364433')
       expect(
         lines.filter((l) => l.includes('keeping the plan (47.2)'))
