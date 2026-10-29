@@ -10,11 +10,10 @@ import {
 } from '../util/go-mode/round-trip'
 import { epochMs } from '../util/go-mode/time'
 import { itinerarySignature } from '../util/go-mode/reroute-candidates'
+import { storeItem } from '../util/safe-storage'
 
 import { fetchOnboardCandidatePlan, getBasePlanParts } from './apiV2'
 import { setQueryParam } from './form'
-
-const { storeItem } = coreUtils.storage
 
 /**
  * The planner half of the round trip: the two query params the form sets
