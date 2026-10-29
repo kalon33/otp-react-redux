@@ -18,12 +18,15 @@
  *   back to list       button "View all options"   (mobile results header)
  *   other stops        button.same-shape-variants-toggle (metro/same-shape-variants.tsx)
  *   frequency line     .leg-frequency              (line-itin/leg-frequency-footer.tsx)
- *   leg expanders      buttons whose text ends "(Expand details)" (ItineraryBody)
+ *   ride expander      button "Ride {duration} · # stops" with aria-expanded
+ *                      (line-itin/transit-leg-summary.tsx; the overhaul retired
+ *                      its "(Expand details)" text). Alert and walk expanders
+ *                      still end "(Expand details)" (itinerary-body package).
  *   trip sheet         [aria-label="Open trip overview"] / dialog Close (GoModeScreen, TripSheet)
  *   follow toggle      button.go-mode-follow-toggle (GoModeMap)
  *   app menu           button.app-menu-icon; "Share feedback" link (app/app-menu.tsx)
  *   faster-route card  .faster-route-offer — "Switch" / "Keep mine" (FasterRouteCard.tsx)
- *   back to trip       ReturnToTripBanner button ("… tap to return")
+ *   back to trip       ReturnToTripBanner: button.return-to-trip-banner
  */
 
 const FIXTURE_URL = (name) => `/lib/util/go-mode/replay/fixtures/${name}.json`
@@ -105,9 +108,11 @@ async function waitForSearchSettled(
           break
         }
       }
-      if (!s) return { idle: performance.now() - lastT, none: true }
+      const domRows = document.querySelectorAll('div.option.metro-itin').length
+      if (!s) return { domRows, idle: performance.now() - lastT, none: true }
       const tt = Object.values(s.routeRowTimetable || {}).map((e) => e.status)
       return {
+        domRows,
         idle: performance.now() - lastT,
         itineraries: (s.response || []).reduce(
           (n, r) => n + ((r && r.plan && r.plan.itineraries.length) || 0),
@@ -244,6 +249,9 @@ const details = {
         'details-other-stops skipped: it fans out ~12 concurrent plan queries (PERF_ALLOW_FANOUT=1 to include)'
       )
     }
+    // 75.35 (P8a): the ride expander is found by its aria-expanded state, not
+    // by the retired "(Expand details)" / "(Collapse|Hide) details" text.
+    const RIDE = /^Ride\b/
     const steps = [
       ...(fanout
         ? [
@@ -252,19 +260,26 @@ const details = {
           ]
         : []),
       ['details-frequency-line', '.leg-frequency'],
-      ['details-ride-expander', /^Ride .*\(Expand details\)$/],
+      ['details-ride-expander', RIDE, false],
       ['details-alert-expander', /alerts?\(Expand details\)$/],
       ['details-walk-expander', /^\d+ min\(Expand details\)$/],
-      ['details-stop-list-collapse', /^Ride .*\((Collapse|Hide) details\)$/]
+      ['details-stop-list-collapse', RIDE, true]
     ]
-    for (const [label, sel] of steps) {
+    for (const [label, sel, expanded] of steps) {
       // eslint-disable-next-line no-await-in-loop
       const h =
         typeof sel === 'string'
           ? await ctx.page.$(sel)
-          : await ctx.findButton(sel)
+          : await ctx.findButton(sel, null, expanded)
       if (!h) {
-        ctx.note(`${label}: not present on this itinerary`)
+        // 75.35 P8a hid a harness/app selector mismatch behind this note; a
+        // missing ride expander or collapse is that, unless the itinerary has
+        // no transit leg.
+        ctx.note(
+          `${label}: not present on this itinerary${
+            expanded != null ? ' (aria-expanded=' + expanded + ')' : ''
+          }`
+        )
         continue
       }
       // eslint-disable-next-line no-await-in-loop
@@ -454,6 +469,14 @@ function goModeScenario(fixture, { speed = 10 } = {}) {
 }
 
 // ---- reroute: tap the faster-route offer when it appears ----
+// 75.35 (P8g): NO replay can produce the offer today. The replay start path
+// never arms the aboard route check (`aboardRouteCheck`, findings-replay R2:
+// 0 FASTER_ROUTE_OFFER / 0 ABOARD_CHECK_VERDICT in every fixture checked), and
+// a rider swap (itinerarySwaps) is not replayed. So this is, in effect, two
+// more plain replays; its `offer-switch` / `offer-keep` taps are exercised
+// only if a future fixture or engine change makes the offer appear. The
+// summary says so (ctx.info.noOfferPossible) instead of reading as a reroute
+// test.
 function rerouteScenario(fixtures, { speed = 10 } = {}) {
   return {
     fixture: fixtures[0],
@@ -481,16 +504,28 @@ function rerouteScenario(fixtures, { speed = 10 } = {}) {
         })
         ctx.info.offersTapped = offers
         ctx.info.fixturesTried = tried
+        ctx.info.noOfferPossible = offers === 0
         if (offers > 0) return
         // The next fixture's openApp loads a fresh document, so this one's
         // measurements are discarded with it; the note is what survives.
-        ctx.note(`${fixture}: no faster-route offer appeared during the replay`)
+        ctx.note(
+          `${fixture}: no faster-route offer appeared during the replay (none is reachable: the replay start path never arms the aboard route check, findings-replay R2)`
+        )
       }
     }
   }
 }
 
-// ---- back-feedback: step out of Go Mode and back in ----
+// ---- back-feedback: background the trip, then return to it ----
+// 75.35 (P9): the old step 2 tapped button[aria-label="Back"], the Go Mode
+// card's CardBackButton (TransitProgress.tsx, onClick=onExit) -> handleExit
+// (GoModeScreen.tsx) -> window.confirm "stop tracking?". That control ENDS the
+// trip, not backgrounds it: unanswered it froze every CDP call (66.12), and
+// dismissed the next step found no return banner. The real ways out of a
+// running trip are the app menu's links (app-menu.tsx _handleNavigate calls
+// backgroundGoMode) and the way back is the ReturnToTripBanner. Both cycles
+// below use only those. run.js answers any dialog (dismiss) and logs it; this
+// scenario then asserts the trip is still active and no dialog fired.
 const backFeedback = {
   fixture: 'gold-74-1105',
   kind: 'gomode',
@@ -525,26 +560,28 @@ const backFeedback = {
         clearTimeout(timer)
       }
     }
-    const banner = () => ctx.findButton(/tap to (return|finish)/i)
-    // 1. menu -> Share feedback -> back -> banner back to the trip
+    // The banner's copy changed in the overhaul ("On trip · Next stop ..."),
+    // so find it by its class, not by "tap to return" text.
+    const banner = () => ctx.page.$('button.return-to-trip-banner')
+    const goModeActive = () =>
+      ctx.page.evaluate(() => window.store.getState().otp.goMode.isActive)
+    // 1. app menu -> Share feedback (backgrounds the trip) -> the banner back.
     await step('menu-open', () => ctx.page.$('button.app-menu-icon'))
     await step('menu-share-feedback', () => ctx.findLink(/^Share feedback$/))
     // The feedback screen (user/feedback-screen.tsx) sits in AppFrame, which
-    // has NO back control — only the nav's app menu. Its way back is the menu's
-    // "Plan Trip" link, then the return-to-trip banner (or the banner directly,
-    // when the feedback screen shows it).
-    if (await banner()) {
-      await step('return-to-trip-banner-from-feedback', banner)
-    } else {
-      await step('feedback-menu-open', () => ctx.page.$('button.app-menu-icon'))
-      await step('feedback-menu-plan-trip', () =>
-        ctx.page.$('a.app-menu-trip-planner-link')
+    // has NO back control — only the nav's app menu — and shows the banner.
+    await step('return-to-trip-banner-from-feedback', banner)
+    // 2. app menu -> Plan Trip (backgrounds the trip) -> the banner back.
+    await step('planner-menu-open', () => ctx.page.$('button.app-menu-icon'))
+    await step('planner-menu-plan-trip', () =>
+      ctx.page.$('a.app-menu-trip-planner-link')
+    )
+    await step('return-to-trip-banner', banner)
+    if (!(await goModeActive())) {
+      ctx.note(
+        'the trip ended during the scenario: Go Mode is no longer active'
       )
-      await step('return-to-trip-banner', banner)
     }
-    // 2. Go Mode's own back arrow (backgrounds the trip) -> banner
-    await step('gomode-back', () => ctx.page.$('button[aria-label="Back"]'))
-    await step('return-to-trip-banner-2', banner)
     ctx.info.backgroundedActions = await ctx.page.evaluate(
       () =>
         window.__perf.actions.filter((a) =>
@@ -567,7 +604,10 @@ const SCENARIOS = {
     speed: 4
   }),
   'gomode-orange-bike-1008': goModeScenario('1008-0916-orange-bike'),
-  'multistop-28': searchScenario(MULTISTOP),
+  // 75.35 (P8e): was `multistop-28`. The row count is the OTP's, not the
+  // scenario's (15 itineraries on the desktop OTP, 31 on production on
+  // 2026-10-20); the settled count is recorded in the summary instead.
+  multistop: searchScenario(MULTISTOP),
   reroute: rerouteScenario([
     '0921-1646-orange-missedbus',
     'ride-1019-0844-aboard-offer'
@@ -577,7 +617,7 @@ const SCENARIOS = {
 
 // Run order when SCENARIOS is not given: details continues search-1dest's page.
 const ORDER = [
-  'multistop-28',
+  'multistop',
   'search-1dest',
   'details',
   'gomode-orange-bike-1008',
@@ -588,4 +628,15 @@ const ORDER = [
   'back-feedback'
 ]
 
-module.exports = { MULTISTOP, ONE_DEST, ORDER, planDate, SCENARIOS, searchUrl }
+// Old names still accepted on the command line (SCENARIOS=multistop-28).
+const ALIASES = { 'multistop-28': 'multistop' }
+
+module.exports = {
+  ALIASES,
+  MULTISTOP,
+  ONE_DEST,
+  ORDER,
+  planDate,
+  SCENARIOS,
+  searchUrl
+}

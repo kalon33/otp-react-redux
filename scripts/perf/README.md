@@ -12,7 +12,9 @@ fresh browser, which is closed before the next one starts.
 | `scenarios.js` | the scenarios and the app selectors they tap, each one read from `lib/components` |
 | `stats.js` | summaries, the Markdown table, the gate |
 | `compare.js` | prints baseline -> candidate per scenario, with deltas |
-| `profile-dispatch.js` | CPU profiles of single dispatches on a settled results list (see below) |
+| `profile-dispatch.js` | CPU profiles of single dispatches, a results-row tap (`PROFILE_ROWTAP=1`) and Go Mode ticks on a settled list (see below) |
+| `trace-readback.js` | reads a `TRACE=1` Chrome trace for the GPU read-back wait inside each tap |
+| `tools/` | `resolve-top.js` (cpuprofile top-N through source maps to original file:line), `trace-top.py` / `trace-chain.py` (self time per event name and ancestor chains in a Chrome trace) |
 | `budget.json` | the budget the gate enforces |
 | `baselines/<label>/` | committed baselines (`summary.json`; raw files only when small) |
 
@@ -26,11 +28,11 @@ env -u DISPLAY LABEL=main-$(git -C /home/rwt/projects/otprr/otp-react-redux rev-
 ```
 
 - `env -u DISPLAY` is required. Without it puppeteer's `newPage()` hangs forever on this host.
-- `SCENARIOS=multistop-28,search-1dest,...` runs a subset. If you name a scenario twice, the second run is stored as `<name>~2`, which is how run-to-run noise is measured.
+- `SCENARIOS=multistop,search-1dest,...` runs a subset (`multistop-28` still works as an alias for `multistop`). If you name a scenario twice, the second run is stored as `<name>~2`, which is how run-to-run noise is measured.
 - `summary.json` is merged per `LABEL`, so separate invocations add to one table.
 - To re-gate a stored run without starting a browser: `node scripts/perf/run.js --gate scripts/perf/budget.json --summary <summary.json>`.
 - To compare two runs: `node scripts/perf/compare.js <baseline summary.json> <candidate summary.json>`.
-- Other env: `PERF_DATE=YYYY-MM-DD` pins the search date. Without it, searches use the recorded time of day on the next weekday. `GOMODE_MAX_WALL_S` caps a replay (default 900). `SEARCH_SETTLE_MAX_S` caps the wait for a search to finish landing (default 900). `PERF_ALLOW_FANOUT=1` adds the details screen's "Other stops" tap, which is off by default: it sends about 12 plan queries at once. `PERF_DPR` sets the device pixel ratio (default 2). `PERF_QUIET_CONSOLE=0` is covered below.
+- Other env: `PERF_DATE=YYYY-MM-DD` pins the search date. Without it, searches use the recorded time of day on the next weekday. `GOMODE_MAX_WALL_S` caps a replay (default 900). `SEARCH_SETTLE_MAX_S` caps the wait for a search to finish landing (default 900). `PERF_ALLOW_FANOUT=1` adds the details screen's "Other stops" tap, which is off by default: it sends about 12 plan queries at once. `PERF_DPR` sets the device pixel ratio (default 2). `PERF_QUIET_CONSOLE=0` is covered below. `SPEEDY` and `TRACE` are covered under "Numbers the phone never pays".
 
 ## Run against a worktree (a second dev server on :9968)
 
@@ -118,6 +120,43 @@ build's own overhead is still included. These runs plan against the same OTP
 and honour the same prod-idle wait. `PROFILE_QUIET_S` (default 30) is how long
 a list must stay unchanged before it counts as settled.
 
+## Numbers the phone never pays (SPEEDY, TRACE, first mounts)
+
+Two dev-environment costs used to be gated as app latency (75.35). Both are now
+separated out.
+
+**SPEEDY (dev-only CSS re-parse).** The pre-bundled styled-components 5.3.1
+turns "speedy" (CSSOM `insertRule`) OFF in development, so each injected rule
+is a text-node `insertBefore` and Blink re-parses the whole sheet. A cold
+results-row tap at 1x was 521-633 ms for that reason, 183 ms with it off; the
+cold trip-sheet open 646 -> 233 ms. The production bundle never does it. The
+library reads a global `SC_DISABLE_SPEEDY` before its `NODE_ENV` fallback, so
+`run.js` sets `window.SC_DISABLE_SPEEDY = false` with `evaluateOnNewDocument`
+before the app loads, exactly the production behaviour.
+
+- `SPEEDY=1` forces it on, `SPEEDY=0` leaves the dev behaviour.
+- **Default: on whenever there is a served dev tree** (`SERVED_TREE` set, or `APP_URL` on :9967), which is every run against Vite. `summary.json` records `speedy`; `compare.js` warns when the two runs differ.
+- With `SPEEDY=0`, the first tap of each kind of label in a scenario (`results-row-0`, `sheet-open`, ... a "first mount") is flagged `firstMount` and left out of the gated p95.
+- Do not compare a SPEEDY run with a pre-75.35 baseline without reading the warning: the committed baselines were taken with speedy OFF.
+
+**GPU read-back (SwiftShader).** When the list view resizes the map canvas
+(`_resizeCanvas`, maplibre-gl `map.ts`), the commit calls `GLES2::ReadPixels`
+and the main thread blocks in `CommandBufferProxyImpl::WaitForGetOffset` until
+the software GPU drains its command buffer: 808 / 879 ms of the 827 / 895 ms
+long task behind the multistop "View all options" back (2026-10-28). That is
+the same ~0.8 s at 1x and at 4x CPU, and a phone's GPU does not do it.
+`TRACE=1` records a Chrome trace per search scenario (`TRACE_ALL=1` for replays
+too; a 15 min replay trace is GBs and over 450 MB is not parsed), finds every
+`WaitForGetOffset` span on the renderer main thread, and subtracts the part
+inside each tap's touchstart-to-paint window. The summary then carries, per
+tap, `readbackMs`, and per scenario `taps.noReadback` and `taps.gated`
+(minus read-back, and minus first mounts when speedy is off); the table has a
+"gated p95 (basis)" and a "GPU read-back ms" column. **The gate uses
+`taps.gated.p95` when present**, falling back to the raw p95 for older
+summaries. Without `TRACE=1` the raw number includes the read-back, so
+paint-bound taps (results back, sheet open with the map) still read about
+0.8 s too slow; run with `TRACE=1` before reading a budget failure on them.
+
 ## What the numbers mean
 
 - **tap->paint** is measured from the touch's `touchstart` timestamp to the
@@ -187,13 +226,35 @@ a list must stay unchanged before it counts as settled.
 - **One Chrome at a time.** The host is memory-constrained. Never run two
   harnesses at once, and never run bare `yarn jest` next to :9967 (it clobbers
   `tmp/config.yml`; `docker restart otp-frontend-dev` repairs that).
-- **`back-feedback` is unreliable.** On 2026-10-20 it went app menu ->
-  Share feedback -> the return-to-trip banner, then puppeteer's next element
-  lookup got no answer for over 120 s, at both 4x and 1x CPU. The renderer sat
-  at about 80% CPU, and a run left alone hung for 30 min. Driving the same
-  path by `click()` instead of touch, the page stayed responsive. It is not
-  yet known whether this is an app hang or an artefact of the touch input. The
-  scenario now bounds each step (120 s) and every `page.evaluate`
-  (`PERF_EVAL_TIMEOUT_S`, 120 s), so a hang costs one scenario, not the run.
+- **`back-feedback` hung because of a dialog, not the app (75.35 P9).** Its
+  old second step tapped the Go Mode card's "<-" (`button[aria-label="Back"]`,
+  `CardBackButton`, `onClick={onExit}` -> `GoModeScreen.handleExit`), which ENDS
+  the trip behind a `window.confirm`. Nothing answered it, so every later CDP
+  call blocked (the "page unresponsive" of 2026-10-20 at 4x and 1x). `launch()`
+  now dismisses every dialog and logs it (a note and `summary.dialogs`), and
+  the scenario uses only the real ways out of a running trip: app menu ->
+  Share feedback, and app menu -> Plan Trip (both background the trip, via
+  `_handleNavigate`), each followed by the return-to-trip banner. It notes if
+  Go Mode is no longer active at the end. Each step is still bounded (120 s)
+  and so is every `page.evaluate` (`PERF_EVAL_TIMEOUT_S`, 120 s).
+- **A scenario that hangs keeps what it finished (75.35 P8c).** Taps are
+  copied node-side as they complete; if the page cannot be read back, the
+  summary holds those taps and the host load, is marked `partial`, and the gate
+  FAILS it (its long-task and tick columns are unknown, not zero).
+- **`reroute` is two plain replays.** No replay can produce a faster-route
+  offer: the replay start path never arms the aboard route check, and a
+  rider-made swap is not replayed (findings-replay R2). Its `offer-switch` /
+  `offer-keep` taps are only exercised if that changes. `info.noOfferPossible`
+  and a note say so.
+- **`multistop` has no row count in its name.** It was `multistop-28`; the
+  desktop OTP gives 15 itineraries, production gave 31 on 2026-10-20. The
+  settled itinerary and DOM row counts are in the summary
+  (`search.settled`) and in the table's scenario cell.
+- **The committed baselines were taken against PRODUCTION OTP, with speedy OFF
+  and the GPU read-back included.** `before-34a01dc5a`, `after-611685a39` and
+  `after-e40041a54` ran `:9967` / `:9968` / `:9969` whose config points at
+  `api.transit-nav.com`, so their search rows (and the `multistop-28` row
+  counts) are production's, and their tap p95 is the raw figure. A run against
+  an isolated desktop OTP (15 itineraries) is not like-for-like with them.
 - **Never submit feedback.** `back-feedback` only opens the feedback screen
   and backs out. A submitted report goes to the ride-note sink.

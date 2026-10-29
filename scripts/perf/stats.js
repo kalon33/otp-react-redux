@@ -150,6 +150,22 @@ function summariseSearch(raw) {
 function summariseScenario(raw) {
   const { actions, longtasks, taps } = raw
   const tapMs = taps.filter((t) => t.ms != null).map((t) => t.ms)
+  // 75.35: tap->paint as the app owns it. With a trace (TRACE=1) the GPU
+  // read-back the phone never waits for is subtracted per tap; without
+  // SPEEDY the dev-only styled-components re-parse lands on each first mount,
+  // so those taps are left out of the gated figure. `taps.p50/p95/max` stay
+  // the raw numbers (and the committed baselines only have these).
+  const measured = taps.filter((t) => t.ms != null)
+  const gpuKnown = measured.some((t) => t.readbackMs != null)
+  const owned = (t) => t.ms - (t.readbackMs || 0)
+  const gatedTaps = measured.filter((t) => raw.speedy || !t.firstMount)
+  const gatedBasis =
+    [
+      gpuKnown ? 'minus GPU read-back' : null,
+      raw.speedy ? null : 'first mounts excluded'
+    ]
+      .filter(Boolean)
+      .join(', ') || 'raw'
   const sorted = longtasks.slice().sort((a, b) => b.dur - a.dur)
   const out = {
     actions: actions.length,
@@ -171,10 +187,14 @@ function summariseScenario(raw) {
       ...dist(tapMs),
       each: taps.map((t) => ({
         eventTimingMs: t.eventTimingMs != null ? round(t.eventTimingMs) : null,
+        firstMount: !!t.firstMount,
         label: t.label,
         ms: round(t.ms),
+        readbackMs: t.readbackMs != null ? t.readbackMs : null,
         via: t.via || null
       })),
+      gated: { ...dist(gatedTaps.map(owned)), basis: gatedBasis },
+      noReadback: gpuKnown ? dist(measured.map(owned)) : null,
       unmeasured: taps.filter((t) => t.ms == null).map((t) => t.label)
     },
     wallSeconds: raw.wallSeconds
@@ -183,7 +203,17 @@ function summariseScenario(raw) {
     out.goMode = summariseGoMode(raw)
     out.replay = raw.replay
   }
-  if (raw.kind === 'search') out.search = summariseSearch(raw)
+  if (raw.kind === 'search') {
+    out.search = summariseSearch(raw)
+    // 75.35 (P8e): the row count belongs here, not in the scenario's name.
+    const st = raw.info && raw.info.settled
+    out.search.settled = st
+      ? {
+          domRows: st.domRows != null ? st.domRows : null,
+          itineraries: st.itineraries
+        }
+      : null
+  }
   // Long tasks over the any-task cap that the ROUTING_RESPONSE allowance may
   // excuse: one task <= maxLongTaskMs per fresh response whose search holds
   // >= minSearchItineraries rows (budget.json).
@@ -214,9 +244,19 @@ function gate(summary, budget) {
   const fails = []
   for (const [name, s] of Object.entries(summary.scenarios || {})) {
     if (s.skipped) continue
-    if (s.taps && s.taps.p95 != null && s.taps.p95 > budget.tapToPaintP95Ms) {
+    if (s.partial) {
       fails.push(
-        `${name}: tap->paint p95 ${s.taps.p95} ms > ${budget.tapToPaintP95Ms}`
+        `${name}: partial run (${s.partial}); long tasks, ticks and actions were not recorded`
+      )
+    }
+    // 75.35: gate the figure the app owns (gated), not the raw one, when the
+    // run recorded it; older summaries only have taps.p95.
+    const tapP95 =
+      s.taps && s.taps.gated ? s.taps.gated.p95 : s.taps && s.taps.p95
+    const tapBasis = s.taps && s.taps.gated ? s.taps.gated.basis : 'raw'
+    if (tapP95 != null && tapP95 > budget.tapToPaintP95Ms) {
+      fails.push(
+        `${name}: tap->paint p95 ${tapP95} ms (${tapBasis}) > ${budget.tapToPaintP95Ms}`
       )
     }
     if (s.goMode) {
@@ -249,21 +289,28 @@ function markdownTable(summary) {
   )
   lines.push('')
   lines.push(
-    '| scenario | taps | tap->paint p50 / p95 / max ms | long tasks >50 / >200 / >500 | per-tick p50 / p95 / max ms | steady GM >200 | replay |'
+    '| scenario | taps | tap->paint p50 / p95 / max ms | gated p95 ms (basis) | GPU read-back ms | long tasks >50 / >200 / >500 | per-tick p50 / p95 / max ms | steady GM >200 | replay |'
   )
-  lines.push('|---|---|---|---|---|---|---|')
+  lines.push('|---|---|---|---|---|---|---|---|---|')
   for (const [name, s] of Object.entries(summary.scenarios)) {
     if (s.skipped) {
-      lines.push(`| ${name} | skipped: ${s.skipped} | | | | | |`)
+      lines.push(`| ${name} | skipped: ${s.skipped} | | | | | | | |`)
       continue
     }
     const gm = s.goMode
+    const st = s.search && s.search.settled
+    const label = `${name}${s.partial ? ' (PARTIAL)' : ''}${
+      st ? ` (${st.itineraries} itineraries / ${cell(st.domRows)} rows)` : ''
+    }`
+    const rb = s.taps.each.filter((t) => t.readbackMs != null)
     lines.push(
-      `| ${name} | ${s.taps.n} | ${cell(s.taps.p50)} / ${cell(
+      `| ${label} | ${s.taps.n} | ${cell(s.taps.p50)} / ${cell(
         s.taps.p95
-      )} / ${cell(s.taps.max)} | ${s.longTasks.n} / ${s.longTasks.over200} / ${
-        s.longTasks.over500
-      } | ${
+      )} / ${cell(s.taps.max)} | ${
+        s.taps.gated ? `${cell(s.taps.gated.p95)} (${s.taps.gated.basis})` : '–'
+      } | ${rb.length ? rb.reduce((n, t) => n + t.readbackMs, 0) : '–'} | ${
+        s.longTasks.n
+      } / ${s.longTasks.over200} / ${s.longTasks.over500} | ${
         gm
           ? `${cell(gm.perTickMs.p50)} / ${cell(gm.perTickMs.p95)} / ${cell(
               gm.perTickMs.max

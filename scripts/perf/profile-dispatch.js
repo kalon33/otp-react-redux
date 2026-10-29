@@ -15,6 +15,12 @@
  *   env -u DISPLAY PROFILE_SEARCH=short OUT=<dir> node scripts/perf/profile-dispatch.js
  *   env -u DISPLAY PROFILE_GOMODE=gold-74-1105 OUT=<dir> node scripts/perf/profile-dispatch.js
  *   (Go Mode ticks: real-time replay, 30 s window once aboard, no taps.)
+ *   env -u DISPLAY PROFILE_ROWTAP=1 PROFILE_SEARCH=multistop OUT=<dir> node scripts/perf/profile-dispatch.js
+ *   (results-row tap + "View all options" back on a settled list: a cold row-0
+ *   pair and a warm row-2 pair under the CPU profiler, row-1 unprofiled between
+ *   them. TRACE=1 records a Chrome trace of each pair instead of a CPU profile
+ *   (read it with tools/trace-top.py / trace-chain.py); SPEEDY=0|1 as run.js;
+ *   PROFILE_PAYLOADS=1 also times the SET_ACTIVE_* payload stringify.)
  *   (PROFILE_SEARCH: multistop | onedest | short; SERVED_TREE records the sha.
  *   The fill cycle needs single-transit-leg rows, which the 1-dest search has
  *   and the multi-stop one did not on 2026-10-20 — use onedest for it.)
@@ -32,6 +38,7 @@ const path = require('path')
 if (!process.env.CPU_THROTTLE) process.env.CPU_THROTTLE = '1'
 
 const { launch, releaseProdLock, waitForProdIdle } = require('./run')
+const { TRACE_CATEGORIES } = require('./trace-readback')
 const { MULTISTOP, ONE_DEST, searchUrl } = require('./scenarios')
 
 const APP_URL = process.env.APP_URL || 'http://127.0.0.1:9967/'
@@ -379,8 +386,285 @@ async function profileGoMode(fixture) {
   }
 }
 
+// ---- PROFILE_ROWTAP: one results-row tap and its back (75.35 P8b; 66.11) ----
+
+async function rowTapPoint(page, idx) {
+  const rows = await page.$$('div.option.metro-itin')
+  if (idx >= rows.length) return null
+  return rows[idx].evaluate((el) => {
+    el.scrollIntoView({ block: 'center' })
+    const r = el.getBoundingClientRect()
+    for (const dy of [18, 30, 45, 60, 80]) {
+      for (const fx of [0.75, 0.5, 0.9]) {
+        const x = r.left + r.width * fx
+        const y = r.top + dy
+        const hit = document.elementFromPoint(x, y)
+        if (hit && el.contains(hit) && !hit.closest('button,a')) return { x, y }
+      }
+    }
+    return null
+  })
+}
+
+const backPoint = (page) =>
+  page.evaluate(() => {
+    const b = Array.from(
+      document.querySelectorAll('button,[role="button"]')
+    ).find(
+      (x) =>
+        x.getBoundingClientRect().width > 0 &&
+        /^View all options$/.test((x.textContent || '').trim())
+    )
+    if (!b) return null
+    b.scrollIntoView({ block: 'center' })
+    const r = b.getBoundingClientRect()
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+  })
+
+/** One measured tap: arm the probe, touch, wait for paint, then let the tail land. */
+async function tapMeasured(page, label, pt, tailMs) {
+  const t0 = await page.evaluate(() => performance.now())
+  const i = await page.evaluate((l) => window.__perf.arm(l), label)
+  await page.touchscreen.tap(pt.x, pt.y)
+  await page.waitForFunction(
+    (n) => window.__perf.tapState(n).done,
+    {
+      polling: 100,
+      timeout: 120000
+    },
+    i
+  )
+  await page.evaluate(() => window.__perf.disarm())
+  await sleep(tailMs)
+  return page.evaluate(
+    (from, n) => {
+      const p = window.__perf
+      const tap = p.taps[n]
+      const acts = p.actions.filter((a) => a.t >= from)
+      const lts = p.longtasks.filter((l) => l.start + l.dur >= from)
+      return {
+        actions: acts.map((a) => `${Math.round(a.t - tap.start)} ${a.type}`),
+        longTasks: lts.map((l) => ({
+          dur: Math.round(l.dur),
+          inside: acts
+            .filter((a) => a.t >= l.start && a.t <= l.start + l.dur)
+            .map((a) => a.type),
+          start: Math.round(l.start - tap.start)
+        })),
+        ms: Math.round(tap.ms),
+        via: tap.via
+      }
+    },
+    t0,
+    i
+  )
+}
+
+async function profileRowTap() {
+  const trace = process.env.TRACE === '1'
+  const params = { multistop: MULTISTOP, onedest: ONE_DEST }[WHICH]
+  if (!params) throw new Error('PROFILE_SEARCH must be multistop|onedest')
+  await waitForProdIdle(`profile rowtap ${WHICH}`)
+  const { browser, cdp, page } = await launch()
+  const rep = [
+    `# rowtap-${WHICH} — ${new Date().toISOString()} — CPU throttle ${
+      process.env.CPU_THROTTLE
+    }x — ${APP_URL} — served ${servedSha()} — speedy ${
+      process.env.SPEEDY || 'default'
+    }`
+  ]
+  let traceN = 0
+  // A CPU profile of the window, or (TRACE=1) a Chrome trace file instead.
+  const profiled = async (fn) => {
+    if (trace) {
+      await page.tracing.start({
+        categories: TRACE_CATEGORIES,
+        path: path.join(OUT, `trace-rowtap-${WHICH}-${++traceN}.json`)
+      })
+      const result = await fn()
+      await page.tracing.stop()
+      return { profile: null, result }
+    }
+    return profileWindow(cdp, fn)
+  }
+  if (process.env.PROFILE_PAYLOADS === '1') {
+    // Size + stringify cost of every SET_ACTIVE_ITINERARY / SET_ACTIVE_LEG
+    // payload, read from redux-logger's action line (after the collector's hook).
+    await page.evaluateOnNewDocument(() => {
+      window.__payloads = []
+      const prev = console.log
+      console.log = function (...a) {
+        try {
+          const act =
+            typeof a[0] === 'string' && a[0].startsWith('%c action')
+              ? a[2]
+              : null
+          if (
+            act &&
+            /^(SET_ACTIVE_ITINERARY|SET_ACTIVE_LEG|SET_VISIBLE_ITINERARY|LEG_FREQUENCY)$/.test(
+              act.type
+            )
+          ) {
+            const t0 = performance.now()
+            let len
+            try {
+              len = JSON.stringify(act.payload).length
+            } catch (e) {
+              len = 'cyclic'
+            }
+            window.__payloads.push({
+              chars: len,
+              ms: +(performance.now() - t0).toFixed(2),
+              type: act.type
+            })
+          }
+        } catch (e) {
+          // diagnostics only
+        }
+        return prev.apply(this, a)
+      }
+    })
+  }
+  try {
+    await page.goto(searchUrl(APP_URL, params), {
+      timeout: 90000,
+      waitUntil: 'domcontentloaded'
+    })
+    await page.waitForFunction(() => !!window.store && !!window.__perf, {
+      timeout: 60000
+    })
+    const started = Date.now()
+    let last = ''
+    let quietSince = Date.now()
+    let st
+    while (Date.now() - started < 1200000) {
+      // eslint-disable-next-line no-await-in-loop
+      await sleep(2000)
+      // eslint-disable-next-line no-await-in-loop
+      st = await listState(page)
+      const now = JSON.stringify(st)
+      if (now !== last) {
+        console.log(
+          `  [settle +${Math.round((Date.now() - started) / 1000)}s] ${now}`
+        )
+        last = now
+        quietSince = Date.now()
+      }
+      if (
+        st.pending === 0 &&
+        st.ttPending === 0 &&
+        st.domRows >= Math.max(1, MIN_ROWS) &&
+        Date.now() - quietSince > QUIET_MS
+      )
+        break
+    }
+    releaseProdLock()
+    rep.push(
+      `settled list after ${Math.round((Date.now() - started) / 1000)} s: ${fmt(
+        st
+      )}`
+    )
+    const saveProfile = (kind, label, a) => {
+      if (a.profile) {
+        fs.writeFileSync(
+          path.join(OUT, `profile-${kind}-${WHICH}-${label}.cpuprofile`),
+          JSON.stringify(a.profile)
+        )
+      }
+    }
+    const pair = async (label, idx) => {
+      const pt = await rowTapPoint(page, idx)
+      if (!pt) {
+        rep.push(`${label}: no tap point`)
+        return
+      }
+      await sleep(2000)
+      const a = await profiled(() => tapMeasured(page, `row-${idx}`, pt, 1500))
+      saveProfile('rowtap', label, a)
+      rep.push(
+        '',
+        `PROFILED ${label} (row ${idx}): tap->paint ${a.result.ms} ms via ${a.result.via}`,
+        `  long tasks: ${JSON.stringify(a.result.longTasks)}`,
+        '  actions (ms from touchstart):',
+        ...a.result.actions.map((x) => `    ${x}`)
+      )
+      const bp = await backPoint(page)
+      if (!bp) {
+        rep.push('no back button')
+        return
+      }
+      await sleep(2000)
+      const b = await profiled(() => tapMeasured(page, `back-${idx}`, bp, 1500))
+      saveProfile('rowback', label, b)
+      rep.push(
+        '',
+        `PROFILED back of ${label}: tap->paint ${b.result.ms} ms via ${b.result.via}`,
+        `  long tasks: ${JSON.stringify(b.result.longTasks)}`,
+        '  actions (ms from touchstart):',
+        ...b.result.actions.map((x) => `    ${x}`)
+      )
+    }
+    // 1) the session's first details mount (cold), then its back
+    await pair('cold', 0)
+    // 2) row 1 unprofiled, as the harness's second tap
+    {
+      const pt = await rowTapPoint(page, 1)
+      await sleep(1500)
+      const r = await tapMeasured(page, 'row-1', pt, 1500)
+      rep.push(
+        '',
+        `unprofiled row-1: tap->paint ${r.ms} ms via ${
+          r.via
+        }; long tasks ${JSON.stringify(r.longTasks)}`
+      )
+      const bp = await backPoint(page)
+      await sleep(1500)
+      const b = await tapMeasured(page, 'back-1', bp, 1500)
+      rep.push(
+        `unprofiled back-1: tap->paint ${b.ms} ms; long tasks ${JSON.stringify(
+          b.longTasks
+        )}`
+      )
+    }
+    // 3) a warm details mount, for contrast with the cold one
+    await pair('warm', 2)
+    if (process.env.PROFILE_PAYLOADS === '1') {
+      const pl = await page.evaluate(() => window.__payloads)
+      rep.push(
+        '',
+        'payloads (type chars stringify-ms, in order):',
+        ...pl.map((p) => `  ${p.type} ${p.chars} ${p.ms}`)
+      )
+    }
+    const css = await page.evaluate(() => ({
+      cssChars: Array.from(document.querySelectorAll('style')).reduce(
+        (n, x) => n + (x.textContent || '').length,
+        0
+      ),
+      cssomRules: Array.from(document.styleSheets).reduce((n, sh) => {
+        try {
+          return n + sh.cssRules.length
+        } catch (e) {
+          return n
+        }
+      }, 0),
+      styleTags: document.querySelectorAll('style').length
+    }))
+    rep.push(`stylesheets at end: ${JSON.stringify(css)}`)
+    fs.writeFileSync(
+      path.join(OUT, `rowtap-${WHICH}${trace ? '-trace' : ''}.txt`),
+      rep.join('\n')
+    )
+    console.log(rep.join('\n'))
+  } finally {
+    releaseProdLock()
+    await browser.close()
+  }
+}
+
 async function main() {
   fs.mkdirSync(OUT, { recursive: true })
+  if (process.env.PROFILE_ROWTAP) return profileRowTap()
   if (process.env.PROFILE_GOMODE)
     return profileGoMode(process.env.PROFILE_GOMODE)
   const params = { multistop: MULTISTOP, onedest: ONE_DEST, short: SHORT }[

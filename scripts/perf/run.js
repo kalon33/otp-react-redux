@@ -11,6 +11,10 @@
  * (scripts/perf/out), LABEL (required for a run), PERF_QUIET_CONSOLE (1),
  * PERF_DPR (2), GOMODE_MAX_WALL_S (900), SEARCH_SETTLE_MAX_S (900),
  * PERF_ALLOW_FANOUT (0), PERF_DATE (YYYY-MM-DD for searches),
+ * SPEEDY (1|0; default 1 when the served tree is a dev server — 75.35: sets
+ * window.SC_DISABLE_SPEEDY=false before load, as the production bundle runs),
+ * TRACE (1: collect a Chrome trace per scenario and report tap->paint with the
+ * GPU read-back subtracted as its own figure),
  * PERF_WAIT_PROD_IDLE (1), PERF_PROD_BUSY_PATTERN, PERF_PROD_LOCK.
  *
  * One Chrome at a time: every scenario gets its own browser, closed before the
@@ -24,7 +28,12 @@ const path = require('path')
 const puppeteer = require('puppeteer')
 
 const { installCollector } = require('./collector')
-const { ORDER, SCENARIOS } = require('./scenarios')
+const {
+  overlapMs,
+  readbackSpans,
+  TRACE_CATEGORIES
+} = require('./trace-readback')
+const { ALIASES, ORDER, SCENARIOS } = require('./scenarios')
 const { gate, markdownTable, summariseScenario } = require('./stats')
 
 const argv = process.argv.slice(2)
@@ -54,6 +63,8 @@ const IPHONE_UA =
   'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148'
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+const TRACE = process.env.TRACE === '1'
 
 // ---------------------------------------------------------------- prod lock
 
@@ -153,6 +164,23 @@ function servedTree() {
   return { dirty: status, sha: git('rev-parse --short HEAD'), tree }
 }
 
+// 75.35 (P8f/P2b): styled-components 5.3.1 turns "speedy" (CSSOM insertRule)
+// OFF in development, so every injected rule is a text-node insertBefore and
+// Blink re-parses the sheet: ~0.3-1.2 s at 4x on each first mount, work the
+// production bundle never does. It reads a global SC_DISABLE_SPEEDY before its
+// NODE_ENV fallback, so the harness sets it to false before the app loads.
+// Default: on whenever there is a served dev tree (SERVED_TREE, or :9967).
+// SPEEDY=0 restores the old dev behaviour (and then first-mount taps are
+// flagged so the budget can discount them, see stats.js).
+let speedyCache = null
+const speedyEnabled = () => {
+  if (speedyCache == null) {
+    if (process.env.SPEEDY === '1') speedyCache = true
+    else if (process.env.SPEEDY === '0') speedyCache = false
+    else speedyCache = !!servedTree().tree
+  }
+  return speedyCache
+}
 // ---------------------------------------------------------------- browser
 
 async function launch() {
@@ -206,6 +234,22 @@ async function launch() {
         }
       )
     })
+  // 75.35 (P9): the harness answers every dialog. Go Mode's exit "<-" opens a
+  // window.confirm (GoModeScreen.tsx confirmStopTracking); unanswered, every
+  // later CDP call blocks (66.12). Dismiss = "Cancel" = keep the trip, and
+  // log it so a scenario that reaches a dialog says so.
+  const dialogs = []
+  page.on('dialog', (d) => {
+    const rec = { message: d.message().slice(0, 160), type: d.type() }
+    dialogs.push(rec)
+    console.log(`  [dialog] ${rec.type} dismissed: ${rec.message}`)
+    d.dismiss().catch(() => null)
+  })
+  if (speedyEnabled()) {
+    await page.evaluateOnNewDocument(() => {
+      window.SC_DISABLE_SPEEDY = false
+    })
+  }
   const cdp = await page.target().createCDPSession()
   await cdp.send('Emulation.setCPUThrottlingRate', { rate: CPU_THROTTLE })
   // PERF_NO_COLLECTOR=1 is for diagnostics only: it proves a behaviour is
@@ -213,7 +257,7 @@ async function launch() {
   if (process.env.PERF_NO_COLLECTOR !== '1') {
     await page.evaluateOnNewDocument(installCollector, { quietConsole: QUIET })
   }
-  return { browser, cdp, page }
+  return { browser, cdp, dialogs, page }
 }
 
 /** Requests to the OTP API: what went to the server, and how many at once. */
@@ -275,6 +319,7 @@ function watchNetwork(page) {
 function makeCtx({ browser, cdp, page }, scenarioName) {
   const notes = []
   const info = {}
+  const completedTaps = []
   const note = (msg) => {
     notes.push(msg)
     console.log(`  [note] ${msg}`)
@@ -290,14 +335,38 @@ function makeCtx({ browser, cdp, page }, scenarioName) {
       .catch(() => false)
     await page.evaluate(() => window.__perf.disarm())
     if (!ok) note(`tap ${label}: no paint observed within 60 s`)
+    // 75.35 (P8c): keep each finished step node-side, so a scenario that
+    // later hangs the page still reports the steps that completed.
+    const t = await page
+      .evaluate((n) => {
+        const x = window.__perf.taps[n]
+        return (
+          x && {
+            events: x.events,
+            label: x.label,
+            mode: x.mode,
+            ms: x.ms != null ? x.ms : null,
+            paintAt: x.paintAt || null,
+            start: x.start,
+            via: x.via || null
+          }
+        )
+      }, i)
+      .catch(() => null)
+    if (t) completedTaps.push(t)
   }
   const ctx = {
     appUrl: APP_URL,
     browser,
     cdp,
-    async findButton(re, scope) {
+
+    completedTaps,
+    // `expanded` (true|false) additionally requires that aria-expanded value:
+    // the overhauled ride expander ("Ride 18 min · 9 stops") carries its state
+    // there, not in "(Expand details)" text (transit-leg-summary.tsx).
+    async findButton(re, scope, expanded) {
       const h = await page.evaluateHandle(
-        (src, flags, sc) => {
+        (src, flags, sc, ex) => {
           const rx = new RegExp(src, flags)
           const root = sc ? document.querySelector(sc) : document
           if (!root) return null
@@ -305,14 +374,19 @@ function makeCtx({ browser, cdp, page }, scenarioName) {
             Array.from(root.querySelectorAll('button,[role="button"]')).find(
               (b) => {
                 const r = b.getBoundingClientRect()
-                return r.width > 0 && rx.test((b.textContent || '').trim())
+                if (!(r.width > 0 && rx.test((b.textContent || '').trim())))
+                  return false
+                return (
+                  ex == null || b.getAttribute('aria-expanded') === String(ex)
+                )
               }
             ) || null
           )
         },
         re.source,
         re.flags,
-        scope || null
+        scope || null,
+        expanded == null ? null : expanded
       )
       return h.asElement()
     },
@@ -476,21 +550,87 @@ async function runScenario(name, key, session, continued) {
           contention.push({ t: Date.now() - started, who: who[0] })
       }, 5000)
     : null
+  // TRACE=1: a Chrome trace of the scenario, for the GPU read-back figure.
+  // Search scenarios only unless TRACE_ALL=1 (a 15 min replay trace is GBs).
+  let tracePath = null
+  if (TRACE && (scenario.kind === 'search' || process.env.TRACE_ALL === '1')) {
+    tracePath = path.join(OUT_DIR, LABEL, 'traces', `${key}.json`)
+    fs.mkdirSync(path.dirname(tracePath), { recursive: true })
+    await sess.page.tracing.start({
+      categories: TRACE_CATEGORIES,
+      path: tracePath
+    })
+  }
+  const dialogs0 = sess.dialogs.length
+  let scenarioError = null
   try {
     if (!continued) await ctx.startMeasuring().catch(() => null)
     await scenario.run(ctx)
   } catch (e) {
+    scenarioError = e.message
     ctx.note(`scenario threw: ${e.message}`)
   } finally {
     if (poll) clearInterval(poll)
   }
-  const raw = await collect(sess.page).catch((e) => {
+  let readback = null
+  if (tracePath) {
+    try {
+      const nowAtSync = await sess.page.evaluate(() => {
+        console.timeStamp('perf-sync')
+        return performance.now()
+      })
+      await sess.page.tracing.stop()
+      readback = readbackSpans(tracePath, nowAtSync)
+      if (readback.note) ctx.note(readback.note)
+    } catch (e) {
+      ctx.note(`trace read-back unavailable: ${e.message}`)
+      await sess.page.tracing.stop().catch(() => null)
+    }
+  }
+  let collectError = null
+  let raw = await collect(sess.page).catch((e) => {
+    collectError = e.message
     ctx.note(`collect failed: ${e.message}`)
     return null
   })
-  if (!raw) return { raw: null, sess, summary: { skipped: 'collect failed' } }
-  joinEventTiming(raw)
+  if (!raw) {
+    // 75.35 (P8c): a page that hung mid-scenario cannot be read back, but the
+    // steps that finished were recorded node-side (waitTap) and the host load
+    // is ours: keep both rather than dropping the scenario. long tasks, ticks
+    // and actions are NOT known, so the summary says `partial` and the gate
+    // fails it instead of passing a table of zeros.
+    raw = {
+      actions: [],
+      events: [],
+      loafs: [],
+      longtasks: [],
+      marks: [],
+      partial: `collect failed: ${collectError}`,
+      t0: 0,
+      taps: ctx.completedTaps.map((t) => ({ ...t, eventTimingMs: null })),
+      ticks: []
+    }
+  } else {
+    joinEventTiming(raw)
+  }
+  if (readback && readback.spans) {
+    for (const t of raw.taps) {
+      if (t.start != null && t.paintAt != null) {
+        t.readbackMs = Math.round(overlapMs(readback.spans, t.start, t.paintAt))
+      }
+    }
+  }
+  // First mount (75.35 P2b): the first tap of each kind of label ("results-row-0"
+  // and "results-row-4" are one kind). With speedy off these carry the dev-only
+  // CSS re-parse, so the budget discounts them (stats.js).
+  const seenKinds = new Set()
+  for (const t of raw.taps) {
+    const kind = String(t.label).replace(/-?\d+/g, '')
+    t.firstMount = !seenKinds.has(kind)
+    seenKinds.add(kind)
+  }
   Object.assign(raw, {
+    dialogs: sess.dialogs.slice(dialogs0),
     errors,
     host: {
       contention: contention.slice(0, 20),
@@ -515,8 +655,23 @@ async function runScenario(name, key, session, continued) {
     scenario: key,
     wallSeconds: Math.round((Date.now() - started) / 1000)
   })
+  raw.speedy = speedyEnabled()
+  raw.readbackTotalMs =
+    readback && readback.totalMs != null ? readback.totalMs : null
   const summary = summariseScenario(raw)
   summary.host = raw.host
+  summary.speedy = raw.speedy
+  const ownDialogs = sess.dialogs.slice(dialogs0)
+  if (ownDialogs.length) {
+    summary.dialogs = ownDialogs
+    summary.notes.push(
+      `${ownDialogs.length} dialog(s) dismissed by the harness: ${ownDialogs
+        .map((d) => `${d.type} "${d.message.slice(0, 60)}"`)
+        .join('; ')}`
+    )
+  }
+  if (raw.partial) summary.partial = raw.partial
+  if (scenarioError) summary.scenarioError = scenarioError
   if (contention.length) {
     summary.notes.push(
       `another plan-query process was alive during ${contention.length} of the 5 s polls: ${contention[0].who}`
@@ -551,6 +706,7 @@ async function main() {
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean)
+    .map((s) => ALIASES[s] || s)
   for (const n of requested) {
     if (!SCENARIOS[n]) throw new Error(`unknown scenario ${n}`)
   }
@@ -568,6 +724,8 @@ async function main() {
     label: LABEL,
     quietConsole: QUIET,
     served: servedTree(),
+    speedy: speedyEnabled(),
+    trace: TRACE,
     updated: new Date().toISOString()
   })
 

@@ -14,13 +14,28 @@ if (!basePath || !candPath) {
   )
   process.exit(1)
 }
+// 75.35 (P8e): `multistop-28` was renamed `multistop` (the name claimed a row
+// count that is 15 on the desktop OTP and 31 on production). A baseline taken
+// under the old name is read as the new one.
+const ALIASES = {
+  'multistop-28': 'multistop',
+  'multistop-28~2': 'multistop~2'
+}
+const renamed = (o) =>
+  Object.fromEntries(
+    Object.entries(o.scenarios).map(([k, v]) => [ALIASES[k] || k, v])
+  )
+
 const base = JSON.parse(fs.readFileSync(basePath, 'utf8'))
 const cand = JSON.parse(fs.readFileSync(candPath, 'utf8'))
+base.scenarios = renamed(base)
+cand.scenarios = renamed(cand)
 
 const metrics = [
   ['tap p50', (s) => s.taps && s.taps.p50],
   ['tap p95', (s) => s.taps && s.taps.p95],
   ['tap max', (s) => s.taps && s.taps.max],
+  ['tap p95 gated', (s) => s.taps && s.taps.gated && s.taps.gated.p95],
   ['LT >50', (s) => s.longTasks && s.longTasks.n],
   ['LT >200', (s) => s.longTasks && s.longTasks.over200],
   ['LT >500', (s) => s.longTasks && s.longTasks.over500],
@@ -45,10 +60,11 @@ console.log(
 )
 if (
   base.cpuThrottle !== cand.cpuThrottle ||
-  base.quietConsole !== cand.quietConsole
+  base.quietConsole !== cand.quietConsole ||
+  !!base.speedy !== !!cand.speedy
 ) {
   console.log(
-    '**Warning:** the two runs differ in CPU throttle or console silencing; the deltas mix configurations.\n'
+    `**Warning:** the two runs differ in CPU throttle, console silencing or SPEEDY (${!!base.speedy} -> ${!!cand.speedy}); the deltas mix configurations.\n`
   )
 }
 const names = Array.from(
@@ -57,15 +73,36 @@ const names = Array.from(
 for (const name of names) {
   const b = base.scenarios[name]
   const c = cand.scenarios[name]
-  if (!b || !c || b.skipped || c.skipped) {
+  // A scenario is "present" when it has a usable summary. Say which side has
+  // it (or neither/skipped), instead of defaulting to "candidate" when the
+  // candidate lacks it (75.35 P8d).
+  const has = (x) => !!x && !x.skipped
+  if (!has(b) || !has(c)) {
+    const where = has(b) ? 'baseline' : has(c) ? 'candidate' : 'neither'
+    const why = []
+    if (b && b.skipped) why.push(`baseline skipped: ${b.skipped}`)
+    if (c && c.skipped) why.push(`candidate skipped: ${c.skipped}`)
+    if (!b) why.push('absent from baseline')
+    if (!c) why.push('absent from candidate')
     console.log(
-      `- **${name}**: only in ${b && !b.skipped ? 'baseline' : 'candidate'}`
+      `- **${name}**: only in ${where}${
+        why.length ? ` (${why.join('; ')})` : ''
+      }`
     )
     continue
   }
+  const partial = [b.partial && 'baseline', c.partial && 'candidate']
+    .filter(Boolean)
+    .join(' and ')
   const cells = metrics
     .map(([label, get]) => [label, get(b), get(c)])
     .filter(([, x, y]) => x != null || y != null)
     .map(([label, x, y]) => `${label} ${fmt(x, y)}`)
-  console.log(`- **${name}**: ${cells.join(' · ')}`)
+  console.log(
+    `- **${name}**: ${cells.join(' · ')}${
+      partial
+        ? ` · **PARTIAL in ${partial}: long-task columns are not comparable**`
+        : ''
+    }`
+  )
 }
