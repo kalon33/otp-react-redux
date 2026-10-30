@@ -110,6 +110,27 @@ index 0d45537..6e674c7 100644
        })["catch"](function (error) {
          // eslint-disable-next-line no-console
          console.error("Error loading image ".concat(img.id, ":"), error);
+diff --git a/node_modules/@opentripplanner/transitive-overlay/esm/route-layers.js b/node_modules/@opentripplanner/transitive-overlay/esm/route-layers.js
+index 5798b8e..b843684 100644
+--- a/node_modules/@opentripplanner/transitive-overlay/esm/route-layers.js
++++ b/node_modules/@opentripplanner/transitive-overlay/esm/route-layers.js
+@@ -57,10 +57,15 @@ export function getRouteLayerLayout(textField, boldFonts) {
+   }).flat()), ["rect"]);
+ 
+   // TODO: Tweak shape of roundels for perfect circle
++  // Fork patch: a transfer's two route roundels sit near the same point, and
++  // with icon-allow-overlap false the collision detector drops one of them —
++  // and icon-optional false takes its label down with it, so a two-bus
++  // itinerary showed only one route name. Let the roundels overlap.
+   return {
+     "icon-image": iconImage,
+     "icon-optional": false,
+-    "icon-allow-overlap": false,
++    "icon-allow-overlap": true,
++    "icon-ignore-placement": true,
+     "icon-rotation-alignment": "viewport",
+     "icon-text-fit-padding": [11, 10, 11, 10],
+     "icon-text-fit": "both",
 diff --git a/node_modules/@opentripplanner/transitive-overlay/esm/util.js b/node_modules/@opentripplanner/transitive-overlay/esm/util.js
 index 2a7a695..f2e858f 100644
 --- a/node_modules/@opentripplanner/transitive-overlay/esm/util.js
@@ -249,6 +270,27 @@ index 5af2e61..df93d48 100644
        }).catch(error => {
          // eslint-disable-next-line no-console
          console.error(`Error loading image ${img.id}:`, error);
+diff --git a/node_modules/@opentripplanner/transitive-overlay/lib/route-layers.js b/node_modules/@opentripplanner/transitive-overlay/lib/route-layers.js
+index 54f5acf..7243dae 100644
+--- a/node_modules/@opentripplanner/transitive-overlay/lib/route-layers.js
++++ b/node_modules/@opentripplanner/transitive-overlay/lib/route-layers.js
+@@ -58,10 +58,15 @@ function getRouteLayerLayout(textField, boldFonts) {
+   const iconImage = ["case", ...Array(17).fill(0).map((_, i) => generateIcon(i + 1)).flat(), "rect"];
+ 
+   // TODO: Tweak shape of roundels for perfect circle
++  // Fork patch: a transfer's two route roundels sit near the same point, and
++  // with icon-allow-overlap false the collision detector drops one of them —
++  // and icon-optional false takes its label down with it, so a two-bus
++  // itinerary showed only one route name. Let the roundels overlap.
+   return {
+     "icon-image": iconImage,
+     "icon-optional": false,
+-    "icon-allow-overlap": false,
++    "icon-allow-overlap": true,
++    "icon-ignore-placement": true,
+     "icon-rotation-alignment": "viewport",
+     "icon-text-fit-padding": [11, 10, 11, 10],
+     "icon-text-fit": "both",
 diff --git a/node_modules/@opentripplanner/transitive-overlay/lib/util.js b/node_modules/@opentripplanner/transitive-overlay/lib/util.js
 index 89f7cc0..e74d795 100644
 --- a/node_modules/@opentripplanner/transitive-overlay/lib/util.js
@@ -396,6 +438,27 @@ index 5e3e06b..e714474 100644
          })
          .catch(error => {
            // eslint-disable-next-line no-console
+diff --git a/node_modules/@opentripplanner/transitive-overlay/src/route-layers.ts b/node_modules/@opentripplanner/transitive-overlay/src/route-layers.ts
+index 64d642f..6a4a74b 100644
+--- a/node_modules/@opentripplanner/transitive-overlay/src/route-layers.ts
++++ b/node_modules/@opentripplanner/transitive-overlay/src/route-layers.ts
+@@ -73,10 +73,15 @@ export function getRouteLayerLayout(
+   ];
+ 
+   // TODO: Tweak shape of roundels for perfect circle
++  // Fork patch: a transfer's two route roundels sit near the same point, and
++  // with icon-allow-overlap false the collision detector drops one of them —
++  // and icon-optional false takes its label down with it, so a two-bus
++  // itinerary showed only one route name. Let the roundels overlap.
+   return {
+     "icon-image": iconImage as ExpressionSpecification,
+     "icon-optional": false,
+-    "icon-allow-overlap": false,
++    "icon-allow-overlap": true,
++    "icon-ignore-placement": true,
+     "icon-rotation-alignment": "viewport",
+     "icon-text-fit-padding": [11, 10, 11, 10],
+     "icon-text-fit": "both",
 diff --git a/node_modules/@opentripplanner/transitive-overlay/src/util.ts b/node_modules/@opentripplanner/transitive-overlay/src/util.ts
 index c5e2aae..6937001 100644
 --- a/node_modules/@opentripplanner/transitive-overlay/src/util.ts
