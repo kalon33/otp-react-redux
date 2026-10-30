@@ -17705,7 +17705,9 @@
         ],
         "walkDistance": 5754.98
       },
-      "tMs": 1791814458262
+      "tMs": 1791814458262,
+      "by": "app",
+      "cause": "quiet-replan-scoped"
     }
   ],
   "meta": {

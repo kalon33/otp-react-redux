@@ -408,13 +408,13 @@ describe('22.1 — the fresh fact through the approach, full tick', () => {
     // …but no CLEAR_RIDING at all, where the phone cleared at 09:25:52.
     expect(r.clears).toEqual([])
     // What saved it is 47.1's hold: 8228's frames put the bus with the rider,
-    // the hold engaged at 09:25:08 and reset the clock — 47 s into the 90 —
+    // the hold engaged at 09:25:07 and reset the clock — 46 s into the 90 —
     // and let go at 09:26:16, the tick the rider came onto the shape.
     expect(holds).toEqual([
-      ['09:25:08', true, 'together'],
+      ['09:25:07', true, 'together'],
       ['09:26:16', false, 'together']
     ])
-    expect(Date.parse('2026-09-21T09:25:08-05:00')).toBeLessThan(
+    expect(Date.parse('2026-09-21T09:25:07-05:00')).toBeLessThan(
       stamps[0] + 90_000
     )
     // Status read the clock's ahead/behind throughout (the cycle 1
@@ -446,7 +446,9 @@ describe('22.1 — the fresh fact through the approach, full tick', () => {
       expect(r.clears).toHaveLength(1)
       expect(r.clears[0] - stamps[0]).toBeGreaterThan(90_000)
       expect(r.clears[0] - stamps[0]).toBeLessThan(92_000)
-      expect(clockOf(r.clears[0])).toBe('09:25:52')
+      // 09:25:51: the fix that tripped it, at its own time (75.29); the
+      // phone logged the clear as it handled that fix.
+      expect(clockOf(r.clears[0])).toBe('09:25:51')
     } finally {
       spy.mockRestore()
     }

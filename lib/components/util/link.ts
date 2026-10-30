@@ -1,5 +1,5 @@
+import { AnchorHTMLAttributes, ComponentType } from 'react'
 import { connect } from 'react-redux'
-import React, { AnchorHTMLAttributes, ComponentType, FC } from 'react'
 
 import { AppReduxState } from '../../util/state-types'
 import { combineQueryParams } from '../../util/api'
@@ -21,21 +21,7 @@ export function isSubpath(path: string, to: string): boolean {
  * Renders an anchor element <a> with specified path and query params,
  * that preserves other existing query params.
  */
-const LinkComponent: FC<OwnProps> = ({
-  to,
-  toParams,
-  tracking,
-  children,
-  ...rest
-}) => {
-  // These props are handled internally and should not be passed to the <a> element
-  const { className, ...otherProps } = rest
-  return (
-    <a {...otherProps} className={className}>
-      {children}
-    </a>
-  )
-}
+const Link: ComponentType = 'a' as unknown as ComponentType
 
 // connect to the redux store so that the search params get updated in timely fashion.
 
@@ -56,5 +42,18 @@ const mapStateToProps = (state: AppReduxState, ownProps: OwnProps) => {
   }
 }
 
+// 75.37 (J6): drop the passed to, toParams and tracking props from what reaches
+// the <a>. Setting them to `undefined` in mapStateToProps still left the keys
+// on the element, and React warns about an unknown camelCase `toParams` prop.
+const mergeProps = (
+  stateProps: ReturnType<typeof mapStateToProps>,
+  _dispatchProps: unknown,
+  ownProps: OwnProps
+) => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { to, toParams, tracking, ...rest } = ownProps
+  return { ...rest, ...stateProps }
+}
+
 // Pass an empty object as mapDispatchToProps to remove dispatch from the rendered HTML.
-export default connect(mapStateToProps, {})(LinkComponent)
+export default connect(mapStateToProps, {}, mergeProps)(Link)

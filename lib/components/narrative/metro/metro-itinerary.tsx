@@ -812,14 +812,6 @@ export class MetroItinerary extends NarrativeItinerary {
         10
       )
     }
-    const formattedFare = fareCurrency
-      ? intl.formatNumber(transitFare, {
-          currency: fareCurrency,
-          currencyDisplay: 'narrowSymbol',
-          style: 'currency'
-        })
-      : intl.formatNumber(transitFare)
-
     // No fare known: the card says nothing about fares (it used to say "No
     // fare information" on every row of a feed that publishes none).
     const fareKnown = !(
@@ -833,10 +825,18 @@ export class MetroItinerary extends NarrativeItinerary {
       !fareKnown ? (
         <FormattedMessage id="common.itineraryDescriptions.fareUnknown" />
       ) : (
+        // 75.22: formatted only here — formatting before the fareKnown check
+        // threw FORMAT_ERROR (no currency) on every fare-less card.
         // TODO: re-implement TNC fares for metro UI?
         <FormattedMessage
           id="components.MetroUI.fare"
-          values={{ fare: formattedFare }}
+          values={{
+            fare: intl.formatNumber(transitFare, {
+              currency: fareCurrency,
+              currencyDisplay: 'narrowSymbol',
+              style: 'currency'
+            })
+          }}
         />
       )
 

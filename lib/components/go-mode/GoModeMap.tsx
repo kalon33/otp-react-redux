@@ -31,6 +31,7 @@ import {
   FOLLOW_ZOOM_TRANSIT,
   isTransitLegMode
 } from '../../util/go-mode/follow-camera'
+import { hasPlaceableCoords } from '../../util/go-mode/position-source'
 import { installMapRenderGuard } from '../../util/go-mode/map-render-guard'
 import DefaultMap from '../map/default-map'
 import type { MapRenderRecovered } from '../../util/go-mode/map-render-guard'
@@ -333,7 +334,7 @@ export const GoModeMapOverlay = ({
   arrived = false,
   currentLeg,
   currentLegMode,
-  currentPosition,
+  currentPosition: givenPosition,
   distanceToNextTurn,
   followUser,
   nextTurnCue,
@@ -359,6 +360,13 @@ export const GoModeMapOverlay = ({
   onToggleFollow: () => void
   routeGeoJson: GeoJSON.FeatureCollection | null
 }) => {
+  // 75.1: a position MapLibre cannot place is no position — the dot and the
+  // follow camera both hand it to LngLat, which throws during render and takes
+  // the whole app down with it. handlePositionUpdate already turns such fixes
+  // away; this is the map not trusting that every caller did.
+  const currentPosition = hasPlaceableCoords(givenPosition)
+    ? givenPosition
+    : null
   const { current: map } = useMap()
   const hasFitBounds = useRef(false)
   const fitBoundsAt = useRef(0)
@@ -700,12 +708,16 @@ export const GoModeMapOverlay = ({
         accuracyM: coords.accuracy ?? null,
         lat: coords.latitude,
         lng: coords.longitude,
+        speedMps: coords.speed ?? null,
         timestampMs: timestamp
       },
       legMode: currentLegMode,
       prevAccepted: prevAccepted.current,
       prevLegTransit: prevLegTransit.current,
-      prevRejectedSpike: prevRejectedSpike.current
+      prevRejectedSpike: prevRejectedSpike.current,
+      // The pan is judged in pixels at the zoom the rider is looking at
+      // (75.20). Optional so a stand-in map without it (unit tests) mounts.
+      zoom: map.getZoom?.() ?? null
     })
     const acceptFix = () => {
       prevAccepted.current = {
@@ -789,10 +801,13 @@ export const GoModeMapOverlay = ({
     if (decision.move && decision.center) {
       // No `essential: true` — prefers-reduced-motion degrades the ease to a
       // jump, which is the right call for a camera that moves every second.
+      // The duration is what the move needs, not a fixed 800 ms (75.20):
+      // every frame of an ease is a full map render, and a fixed ease on
+      // every ~1 s fix kept the map drawing for the whole ride.
       pendingRecentre.current = false
       map.easeTo({
         center: decision.center,
-        duration: FOLLOW_EASE_MS,
+        duration: decision.durationMs ?? FOLLOW_EASE_MS,
         ...(decision.zoom != null && { zoom: decision.zoom })
       })
       acceptFix()
@@ -958,7 +973,7 @@ const GoModeMap = ({
     // it ends, and nothing downstream of the map reads this geometry.
     const ridingLegIndex = aboardBeforeLeg ? routeMatch?.legIndex ?? -1 : -1
     const riderPoint: [number, number] | null =
-      currentPosition && ridingLegIndex >= 0
+      hasPlaceableCoords(currentPosition) && ridingLegIndex >= 0
         ? [currentPosition.coords.longitude, currentPosition.coords.latitude]
         : null
     try {

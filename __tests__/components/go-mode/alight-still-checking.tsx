@@ -131,3 +131,21 @@ describe('components > go-mode > AlightRecommendation, partial answers', () => {
     expect(wrapper.text()).not.toContain('Still checking')
   })
 })
+
+/**
+ * 75.17. Two buttons shared the id components.GoMode.changeBus; the catalogue
+ * (en-US.yml, "Choose bus") beat the "Change bus" defaultMessage, so the list's
+ * button read "Choose bus". The list button now has its own id.
+ */
+describe('components > go-mode > AlightRecommendation, button copy (75.17)', () => {
+  it('labels the list footer button "Change bus"', () => {
+    // FAILS BEFORE: renders "Choose bus".
+    const { wrapper } = render({
+      answeredCandidates: 5,
+      candidates: 5,
+      pendingCandidates: 0
+    })
+    expect(wrapper.find('button').map((b) => b.text())).toContain('Change bus')
+    expect(wrapper.text()).not.toContain('Choose bus')
+  })
+})

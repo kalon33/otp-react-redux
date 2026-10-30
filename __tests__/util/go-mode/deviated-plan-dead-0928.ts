@@ -68,14 +68,22 @@ async function replay(fx: any, speed: number) {
   const clock = FakeTimers.install({ now: 1790181000000 })
   const autoReplans: Array<{
     accepted: boolean
+    /** An accepted re-plan's installed plan: its arrival and transit runs. */
+    arrivalMs?: number
     at: string
     planLeftByRider: boolean
     reason: string
     refusedBecause: string | null
+    /** The arrival of the plan it replaced. */
+    replacedArrivalMs?: number
+    tripIds?: string[]
   }> = []
   const statuses: Array<{ at: string; status: string }> = []
   let lastSim = 0
-  const recorder = () => (next: any) => (action: any) => {
+  // An accepted AUTO_REPLAN is followed by the START_GO_MODE that installs it;
+  // pair them so the test can compare arrivals.
+  let awaitingInstall: typeof autoReplans[number] | null = null
+  const recorder = (api: any) => (next: any) => (action: any) => {
     if (action?.type === 'AUTO_REPLAN') {
       autoReplans.push({
         accepted: action.payload.accepted,
@@ -84,6 +92,19 @@ async function replay(fx: any, speed: number) {
         reason: action.payload.reason,
         refusedBecause: action.payload.refusedBecause
       })
+      if (action.payload.accepted) {
+        awaitingInstall = autoReplans[autoReplans.length - 1]
+      }
+    }
+    if (action?.type === 'START_GO_MODE' && awaitingInstall) {
+      const replaced = api.getState().otp.goMode?.activeItinerary
+      const installed = action.payload?.itinerary
+      awaitingInstall.replacedArrivalMs = Number(replaced?.endTime)
+      awaitingInstall.arrivalMs = Number(installed?.endTime)
+      awaitingInstall.tripIds = (installed?.legs || [])
+        .filter((l: any) => l.transitLeg)
+        .map((l: any) => l.trip?.gtfsId ?? l.tripId)
+      awaitingInstall = null
     }
     return next(action)
   }
@@ -133,7 +154,8 @@ const fromLastSwap = (fx: any) => {
  * 326 m off the plan, and three `quiet-replan-full` answers were refused
  * `arrives-later`. Replayed from the phone's state at that swap, the refusals
  * come back at 17:35:51, 17:36:22 and 17:36:47 (phone: 17:35:53, 17:36:32,
- * 17:36:49), deviated from 17:35:32 (phone 17:35:33).
+ * 17:36:49), deviated from 17:35:33 (phone 17:35:33; it read 17:35:32 until
+ * 75.29 played each fix at its own recorded time).
  *
  * Those refusals were RIGHT, and they must stay: the rider closed on the
  * destination the whole streak (831 -> 734 -> ~680 m in a straight line) and
@@ -159,7 +181,7 @@ const withOnRoute = onRoute ? describe : describe.skip
 withRide('35.2: a rider converging off the line keeps the arrival test', () => {
   it('ride-0928-1651 from the 17:31:08 swap: all three refused arrives-later', async () => {
     const r = await replay(fromLastSwap(ride), 1)
-    expect(r.statuses.find((s) => s.status === 'deviated')?.at).toBe('17:35:32')
+    expect(r.statuses.find((s) => s.status === 'deviated')?.at).toBe('17:35:33')
     const full = r.autoReplans.filter((a) => a.reason === 'quiet-replan-full')
     expect(full).toHaveLength(3)
     for (const a of full) {
@@ -174,12 +196,53 @@ withRide('35.2: a rider converging off the line keeps the arrival test', () => {
   it('ride-0928-1651 whole ride: no re-plan waived the arrival test', async () => {
     const r = await replay(ride, 1)
     expect(r.autoReplans.length).toBeGreaterThan(0)
+    // 35.2's rule: no re-plan was accepted on a plan the rider had left...
     expect(r.autoReplans.filter((a) => a.planLeftByRider)).toEqual([])
-    expect(
-      r.autoReplans.filter(
-        (a) => a.reason === 'quiet-replan-full' && a.accepted
+    // ...and every accepted one arrives no later than the plan it replaced.
+    const accepted = r.autoReplans.filter((a) => a.accepted)
+    expect(accepted.length).toBeGreaterThan(0)
+    for (const a of accepted) {
+      expect(Number.isFinite(a.arrivalMs)).toBe(true)
+      expect(Number(a.arrivalMs)).toBeLessThanOrEqual(
+        Number(a.replacedArrivalMs)
       )
-    ).toEqual([])
+    }
+    // One accepted quiet-replan-full, at 17:05:15, which the phone never
+    // made. With the fixtures annotated, the replay re-applies the rider's
+    // 16:57:21 departure pick (75.30), so it holds the 17:06:05 run
+    // 1:1273254, as the phone did. At 17:05:15.507 the phone made only a
+    // scoped re-plan, refused access-misses-board, and caught that run
+    // (Orange Line 8220, 17:06:28; debug-2026-09-28 `muls77mv-9u3dsl`).
+    // The replay differs for a replay-only reason (75.48):
+    //  - 51.3 drops the 191 m-accuracy fix the phone asked from, so the ask
+    //    comes from the 17:04:25 fix: 23 m from the station, 238 m from the
+    //    phone's origin;
+    //  - 75.31 finds no recorded twin within 200 m and falls back to the
+    //    17:04:33 reroute snapshot, which plans to the destination, not the
+    //    stop;
+    //  - so the 53.2a rider test measures the way to the stop along a 71-min
+    //    bike ride to the door (ETA 18:00:03) and reports makes:false;
+    //  - the 46.1 full fallback (heldBoardMissed) then accepts the snapshot's
+    //    same-run plan.
+    // It is pinned because it arrives no later (17:38:24 against 17:40:23)
+    // on the run the rider rode, not because it is what the phone did.
+    expect(
+      accepted
+        .filter((a) => a.reason === 'quiet-replan-full')
+        .map((a) => ({
+          arrival: hhmmss(Number(a.arrivalMs)),
+          at: a.at,
+          replaced: hhmmss(Number(a.replacedArrivalMs)),
+          tripIds: a.tripIds
+        }))
+    ).toEqual([
+      {
+        arrival: '17:38:24',
+        at: '17:05:15',
+        replaced: '17:40:23',
+        tripIds: ['1:1273254']
+      }
+    ])
   }, 600000)
 })
 

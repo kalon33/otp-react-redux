@@ -484,6 +484,7 @@ components:
     busNotBroadcasting: Bus not broadcasting yet — scheduled {time}
     busNotBroadcastingWaiting: Bus not broadcasting yet
     changeBus: Choose bus
+    changeBusReady: Change bus
     chooseBus: Choose bus
     chooseBusCancel: Cancel
     chooseBusDistance: "{distance} m"
@@ -506,7 +507,10 @@ components:
     directionNB: Northbound
     directionSB: Southbound
     directionWB: Westbound
-    errorPermissionDenied: Location permission denied. Please enable location access in your browser settings.
+    errorPermissionDenied: >-
+      Location permission denied. Please enable location access in your browser
+      settings.
+    errorPermissionDeniedApp: Location permission denied. Please allow location access in Settings.
     errorTimeout: GPS signal timed out. Please ensure you are in an area with GPS coverage.
     errorUnavailable: Unable to determine your location. Please check your device settings.
     fastest: Fastest
@@ -634,6 +638,7 @@ components:
     onboardStopPassedSkip: "{count, plural, one {Skip it} other {Skip them}}"
     onboardStopPassedTitle: Your bus has passed {stop}
     onboardTitle: On the bus
+    openSettings: Open Settings
     openTripSheet: Open trip overview
     pickAnotherStop: Pick another stop
     pickYourBus: Which bus are you on? Pick it below.

@@ -1,5 +1,7 @@
-/* globals afterEach, describe, expect, it, jest */
+/* globals afterEach, beforeEach, describe, expect, it, jest */
 import '../../test-utils/mock-window-url'
+
+import FakeTimers from '@sinonjs/fake-timers'
 
 import {
   BEGIN_ONBOARD_FLOW,
@@ -471,7 +473,11 @@ describe('64.3 — Confirm through the real reducer', () => {
     const actions: any[] = []
     const getState = () => ({
       otp: {
-        config: { homeTimezone: 'America/Chicago' },
+        config: {
+          // 75.37 (J5): getOtpFetchOptions needs config.api (see test-utils/mock-data/store.js).
+          api: { host: 'http://mock-otp.invalid', path: '/otp', port: 80 },
+          homeTimezone: 'America/Chicago'
+        },
         currentQuery: { to: { lat: 44.97, lon: -93.21, name: 'Home' } },
         goMode: state,
         transitIndex: { routes: {}, trips: { '1:T': TRIP } }
@@ -486,7 +492,16 @@ describe('64.3 — Confirm through the real reducer', () => {
     return { actions, dispatch, getGoMode: () => state }
   }
 
+  // 75.37 (J4): buildOnboardItinerary dates the bus leg from the wall clock
+  // (`getCurrentTime()`), which this store-only test never set — so its tail
+  // was repaired 8.99 days "early" and the gap grew a day every day. Pin Date
+  // (only Date) to the recorded moment.
+  let clock: ReturnType<typeof FakeTimers.install>
+  beforeEach(() => {
+    clock = FakeTimers.install({ now: NOW, toFake: ['Date'] })
+  })
   afterEach(() => {
+    clock.uninstall()
     stopVehicleTracking()(() => undefined)
   })
 

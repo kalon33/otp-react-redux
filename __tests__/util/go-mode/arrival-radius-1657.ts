@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from 'fs'
-import { join } from 'path'
+import path from 'path'
 
 import FakeTimers from '@sinonjs/fake-timers'
 
@@ -15,16 +15,6 @@ import {
   resumeGoModeTrip
 } from '../../../lib/actions/go-mode'
 import goMode from '../../../lib/reducers/go-mode'
-
-// The 10-19 recording is 13 MB and deliberately NOT committed; the suite
-// skips when the fixture is absent.
-const FIXTURE_PATH = join(
-  __dirname,
-  '../../../lib/util/go-mode/replay/fixtures/green-465-1657.json'
-)
-const fixture: any = existsSync(FIXTURE_PATH)
-  ? JSON.parse(readFileSync(FIXTURE_PATH, 'utf8'))
-  : null
 
 jest.mock('../../../lib/actions/apiV2', () => ({
   ...jest.requireActual('../../../lib/actions/apiV2'),
@@ -59,6 +49,39 @@ jest.mock('../../../lib/actions/apiV2', () => ({
  * ride arrives now — and it must arrive with NO further fix, on the wall
  * clock, at 22:50:06.
  */
+
+// 25.5: green-465-1657.json (13.7 MB) is one of the untracked replay fixtures
+// (866 MB in all; never committed). Importing it bare killed this suite at
+// collection on any clean clone. Without it the describe below is replaced by
+// ONE skipped test whose name says why, plus a console warning, so the skip is
+// visible in --verbose and CI logs instead of silent.
+const FIXTURE_FILE = path.join(
+  __dirname,
+  '../../../lib/util/go-mode/replay/fixtures/green-465-1657.json'
+)
+const hasFixture = existsSync(FIXTURE_FILE)
+const fixture: any = hasFixture
+  ? JSON.parse(readFileSync(FIXTURE_FILE, 'utf8'))
+  : null
+const describeRide: typeof describe = hasFixture
+  ? describe
+  : (((label: string) => {
+      const reason =
+        'SKIPPED (25.5): untracked replay fixture green-465-1657.json is not present — ' +
+        'copy it into lib/util/go-mode/replay/fixtures/ from a checkout that has it'
+      // eslint-disable-next-line no-console
+      console.warn(`[${label}] ${reason}`)
+      // eslint-disable-next-line jest/valid-title
+      describe(label, () => {
+        // eslint-disable-next-line jest/no-disabled-tests, jest/valid-title
+        it.skip(reason, () => undefined)
+      })
+    }) as unknown as typeof describe)
+
+// 75.37 (J12): single tests here take 10-18 s of CPU (a whole recorded ride
+// through the real tick). They pass today only because the ticks are
+// synchronous, which jest's default 5 s timeout cannot interrupt — say so.
+jest.setTimeout(120000)
 
 const initial = goMode(undefined, { type: '@@INIT' })
 
@@ -108,13 +131,13 @@ const makeStore = (overrides: any = {}) => {
 }
 
 const track: any[] = fixture
-  ? [...(fixture as any).gpsTrack].sort((a, b) => a.tMs - b.tMs)
+  ? [...fixture.gpsTrack].sort((a, b) => a.tMs - b.tMs)
   : []
 
 const of = (store: ReturnType<typeof makeStore>, type: string) =>
   store.actions().filter(({ a }) => a.type === type)
 
-;(fixture ? describe : describe.skip)(
+describeRide(
   'arrival radius on a bike finish (12.17, 2026-10-19 17:49 ride)',
   () => {
     let clock: FakeTimers.InstalledClock

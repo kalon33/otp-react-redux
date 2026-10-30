@@ -17704,7 +17704,9 @@
           "wheelchair": false
         }
       },
-      "tMs": 1788278889785
+      "tMs": 1788278889785,
+      "by": "unknown",
+      "cause": null
     },
     {
       "itinerary": {
@@ -17859,7 +17861,9 @@
           "wheelchair": false
         }
       },
-      "tMs": 1788278942040
+      "tMs": 1788278942040,
+      "by": "unknown",
+      "cause": null
     },
     {
       "itinerary": {
@@ -18026,7 +18030,9 @@
           "wheelchair": false
         }
       },
-      "tMs": 1788278972280
+      "tMs": 1788278972280,
+      "by": "unknown",
+      "cause": null
     }
   ],
   "meta": {

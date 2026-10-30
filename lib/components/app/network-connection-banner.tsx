@@ -6,6 +6,8 @@ import styled from 'styled-components'
 import { RED_ON_WHITE } from '../util/colors'
 import InvisibleA11yLabel from '../util/invisible-a11y-label'
 
+import { usePublishedBannerHeight } from './banner-strip'
+
 const containerClassname = 'network-connection-banner'
 const timeout = 250
 
@@ -23,6 +25,10 @@ const TransitionStyles = styled.div`
     color: #fff;
     font-weight: 600;
     padding: 5px;
+    /* Absolute in the strip under the app bar, but it does not get to cover
+       what is below it (75.16): it publishes its measured height and every
+       screen below moves down by it (banner-strip.ts). Go Mode, whose bar is
+       44px, places it itself (go-mode/styled.ts FullScreenWrapper). */
     position: absolute;
     text-align: center;
     top: 50px;
@@ -62,6 +68,11 @@ export const NetworkConnectionBanner = ({
   networkConnectionLost: boolean
 }): JSX.Element => {
   const connectionLostBannerRef = useRef<HTMLDivElement>(null)
+  usePublishedBannerHeight(
+    'network',
+    connectionLostBannerRef,
+    networkConnectionLost
+  )
   return (
     <TransitionStyles>
       <InvisibleA11yLabel aria-live="assertive" role="status">

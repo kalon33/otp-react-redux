@@ -1,3 +1,4 @@
+import { readRaw, writeRaw } from './safe-storage'
 import { TN_MOBILE_ROOT_CLASS } from './tn-root-classes'
 
 /**
@@ -47,7 +48,7 @@ function isThemePref(value: unknown): value is TnThemePref {
 export function getTnThemePref(): TnThemePref {
   if (typeof window === 'undefined') return 'system'
   try {
-    const stored = window.localStorage?.getItem(TN_THEME_STORAGE_KEY)
+    const stored = readRaw(TN_THEME_STORAGE_KEY)
     return isThemePref(stored) ? stored : 'system'
   } catch {
     return 'system'
@@ -79,10 +80,7 @@ export function applyTnThemePref(pref: TnThemePref = getTnThemePref()): void {
  * choice still applies for this session; it just will not survive a reload.
  */
 export function setTnThemePref(pref: TnThemePref): void {
-  try {
-    window.localStorage?.setItem(TN_THEME_STORAGE_KEY, pref)
-  } catch {
-    // Not persisted; applied below regardless.
-  }
+  // Never throws; a refused write is held for this session (safe-storage).
+  writeRaw(TN_THEME_STORAGE_KEY, pref)
   applyTnThemePref(pref)
 }

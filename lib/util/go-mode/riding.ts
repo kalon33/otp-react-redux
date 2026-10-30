@@ -455,6 +455,28 @@ export function ridingFactIsCurrent(
  */
 export const RIDDEN_LEG_DONE_PROGRESS = 99.5
 
+/**
+ * The leg a progress reading is on is finished behind the rider: its stop
+ * count has reached 0 (at or past the alight stop) or the rider is at the end
+ * of its shape. `stopsRemaining` here is the tick's LATCHED count
+ * (latchStopsRemaining), so a matcher that slides progress back once the rider
+ * is off the shape cannot un-finish the leg. One definition, read by
+ * riderLeftRiddenLeg (70.3) and by the missed-bus classifier (75.3).
+ */
+export function legFinishedBehindRider(
+  progress:
+    | { currentLegProgress?: number | null; stopsRemaining?: number | null }
+    | null
+    | undefined
+): boolean {
+  if (!progress) return false
+  return (
+    progress.stopsRemaining === 0 ||
+    (typeof progress.currentLegProgress === 'number' &&
+      progress.currentLegProgress >= RIDDEN_LEG_DONE_PROGRESS)
+  )
+}
+
 export function riderLeftRiddenLeg(state: any, nowMs: number): boolean {
   const goMode = state?.otp?.goMode
   const riding: RidingState | null | undefined = goMode?.riding
@@ -467,11 +489,7 @@ export function riderLeftRiddenLeg(state: any, nowMs: number): boolean {
 
   const progress = goMode.progress
   if (!progress || progress.currentLegIndex !== riding.legIndex) return false
-  const finished =
-    progress.stopsRemaining === 0 ||
-    (typeof progress.currentLegProgress === 'number' &&
-      progress.currentLegProgress >= RIDDEN_LEG_DONE_PROGRESS)
-  if (!finished) return false
+  if (!legFinishedBehindRider(progress)) return false
 
   const fix: GeolocationPosition | null = goMode.tracking?.lastPosition ?? null
   const at = Number(fix?.timestamp)

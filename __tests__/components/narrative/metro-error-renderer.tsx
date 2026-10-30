@@ -144,4 +144,24 @@ describe('components > narrative > metro error renderer', () => {
       )
     })
   })
+
+  it('renders an error with no input field without a missing-translation (75.22b)', () => {
+    // FAILS BEFORE: id `inputFields.undefined` -> MISSING_TRANSLATION per render.
+    const spy = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    try {
+      const wrapper = render([], {
+        NO_STOPS_IN_RANGE: new Set([undefined]),
+        OUTSIDE_BOUNDS: new Set([null])
+      })
+      expect(wrapper.text()).toContain('not near any transit stops')
+      expect(spy).not.toHaveBeenCalled()
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('still names a real input field', () => {
+    const wrapper = render([], { NO_STOPS_IN_RANGE: new Set(['FROM']) })
+    expect(wrapper.text()).toContain('Origin')
+  })
 })

@@ -370,7 +370,7 @@ const AlightRecommendation = ({
         <RerouteKeepButton onClick={changeBus} type="button">
           {intl.formatMessage({
             defaultMessage: 'Change bus',
-            id: 'components.GoMode.changeBus'
+            id: 'components.GoMode.changeBusReady'
           })}
         </RerouteKeepButton>
       </RerouteActions>

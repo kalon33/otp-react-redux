@@ -1,3 +1,4 @@
+import { resetSafeStorageForTests } from '../../lib/util/safe-storage'
 import { restoreDateNowBehavior, setDefaultTestTime } from '../test-utils'
 import createUserReducer, {
   getUserInitialState
@@ -539,5 +540,80 @@ describe('lib > reducers > create-user-reducer', () => {
       const next = reducer(state, { type: 'RESTORE_LOCAL_USER_PLACES' })
       expect(next.localUser.routeSets.map((s) => s.name)).toEqual(['Back'])
     })
+  })
+})
+
+/**
+ * Backlog 75.12 (a): with localStorage full, `rememberLocalUserPlace` threw
+ * QuotaExceededError out of the REDUCER (its `storeItem('recent', …)`), which
+ * failed the whole dispatch — in the chaos run (C14) it turned an answered
+ * search into ROUTING_ERROR. A reducer must not throw on a storage write: state
+ * is the rider's copy for this session whether or not the device kept one.
+ */
+describe('lib > reducers > create-user-reducer with localStorage full (75.12)', () => {
+  const config = { persistence: { enabled: true, strategy: 'localStorage' } }
+  const reducer = createUserReducer(config)
+  const DOWNTOWN = {
+    id: 'recent-downtown',
+    lat: 44.9778,
+    lon: -93.2707,
+    name: 'Downtown Minneapolis',
+    timestamp: 1793245839619,
+    type: 'recent'
+  }
+  const GYM = {
+    address: '456 Barbell Ave',
+    icon: 'map-marker',
+    id: 'place-gym1',
+    lat: 44.9,
+    lon: -93.2,
+    name: 'Gym',
+    type: 'custom'
+  }
+  const remember = (location) => ({
+    payload: { location, type: location.type },
+    type: 'REMEMBER_LOCAL_USER_PLACE'
+  })
+  let setItem
+
+  beforeEach(() => {
+    window.localStorage.clear()
+    setItem = jest
+      .spyOn(Storage.prototype, 'setItem')
+      .mockImplementation(() => {
+        throw new DOMException(
+          "Failed to execute 'setItem' on 'Storage': Setting the value of 'otp.recent' exceeded the quota.",
+          'QuotaExceededError'
+        )
+      })
+  })
+
+  afterEach(() => {
+    setItem.mockRestore()
+    window.localStorage.clear()
+    resetSafeStorageForTests()
+  })
+
+  it('remembering a recent place does not throw, and state still updates', () => {
+    const before = getUserInitialState(config)
+    let state
+    expect(() => {
+      state = reducer(before, remember(DOWNTOWN))
+    }).not.toThrow()
+    expect(setItem).toHaveBeenCalledWith('otp.recent', expect.any(String))
+    expect(state.localUser.recentPlaces[0]).toMatchObject({
+      lat: DOWNTOWN.lat,
+      lon: DOWNTOWN.lon
+    })
+  })
+
+  it('a custom saved place and a toggle survive a refused write the same way', () => {
+    let state = getUserInitialState(config)
+    expect(() => {
+      state = reducer(state, remember(GYM))
+      state = reducer(state, { payload: false, type: 'TOGGLE_TRACKING' })
+    }).not.toThrow()
+    expect(state.localUser.savedLocations).toContainEqual(GYM)
+    expect(state.localUser.storeTripHistory).toBe(false)
   })
 })

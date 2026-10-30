@@ -28145,7 +28145,9 @@
         ],
         "walkDistance": 4254.59
       },
-      "tMs": 1790087629191
+      "tMs": 1790087629191,
+      "by": "app",
+      "cause": "quiet-replan-scoped"
     },
     {
       "itinerary": {
@@ -34535,7 +34537,9 @@
         ],
         "walkDistance": 4254.59
       },
-      "tMs": 1790087634195
+      "tMs": 1790087634195,
+      "by": "app",
+      "cause": "reroute:boarded-earlier"
     },
     {
       "itinerary": {
@@ -34690,7 +34694,9 @@
           "wheelchair": false
         }
       },
-      "tMs": 1790088846499
+      "tMs": 1790088846499,
+      "by": "app",
+      "cause": "quiet-replan-full"
     },
     {
       "itinerary": {
@@ -34845,7 +34851,9 @@
           "wheelchair": false
         }
       },
-      "tMs": 1790088892077
+      "tMs": 1790088892077,
+      "by": "app",
+      "cause": "quiet-replan-full"
     }
   ],
   "meta": {

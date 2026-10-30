@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from 'fs'
-import { join } from 'path'
+import path from 'path'
 
 import FakeTimers from '@sinonjs/fake-timers'
 
@@ -12,18 +12,6 @@ import {
 import { endGoMode, handlePositionUpdate } from '../../../lib/actions/go-mode'
 import { getInitialState } from '../../../lib/reducers/create-otp-reducer'
 import goMode from '../../../lib/reducers/go-mode'
-
-/**
- * The 10-19 recordings are deliberately NOT committed; these blocks skip
- * when the fixtures are absent.
- */
-const FIXTURE_DIR = join(__dirname, '../../../lib/util/go-mode/replay/fixtures')
-const load = (name: string): any => {
-  const p = join(FIXTURE_DIR, name)
-  return existsSync(p) ? JSON.parse(readFileSync(p, 'utf8')) : null
-}
-const control = load('green-465-1657.json')
-const fixture = load('gold-1631-1019.json')
 
 jest.mock('../../../lib/actions/apiV2', () => ({
   ...jest.requireActual('../../../lib/actions/apiV2'),
@@ -53,6 +41,41 @@ jest.mock('../../../lib/actions/apiV2', () => ({
  * CONTROL: `green-465-1657.json`, where the rider IS on the bus the whole
  * time — the 465 "3 min late" push still goes out.
  */
+
+// 25.5: both recordings are untracked replay fixtures (21 MB + 13.7 MB of the
+// 866 MB corpus that is never committed); importing them bare killed this suite
+// at collection on a clean clone. Each describe below is replaced, when its
+// fixture is absent, by ONE skipped test naming the file, plus a console
+// warning, so the skip is visible in --verbose and CI logs instead of silent.
+const FIXTURES = path.join(
+  __dirname,
+  '../../../lib/util/go-mode/replay/fixtures'
+)
+const loadFixture = (name: string): any =>
+  existsSync(path.join(FIXTURES, name))
+    ? JSON.parse(readFileSync(path.join(FIXTURES, name), 'utf8'))
+    : null
+const describeWith = (name: string): typeof describe =>
+  existsSync(path.join(FIXTURES, name))
+    ? describe
+    : (((label: string) => {
+        const reason =
+          `SKIPPED (25.5): untracked replay fixture ${name} is not present — ` +
+          'copy it into lib/util/go-mode/replay/fixtures/ from a checkout that has it'
+        // eslint-disable-next-line no-console
+        console.warn(`[${label}] ${reason}`)
+        // eslint-disable-next-line jest/valid-title
+        describe(label, () => {
+          // eslint-disable-next-line jest/no-disabled-tests, jest/valid-title
+          it.skip(reason, () => undefined)
+        })
+      }) as unknown as typeof describe)
+const control = loadFixture('green-465-1657.json')
+const fixture = loadFixture('gold-1631-1019.json')
+
+// 75.37 (J12): the whole-ride replays here take 6-13 s of CPU; they pass only
+// because the ticks are synchronous, which jest's 5 s timeout cannot interrupt.
+jest.setTimeout(120000)
 
 const initial = goMode(undefined, { type: '@@INIT' })
 
@@ -130,7 +153,7 @@ const replayAll = (fx: any) => {
   }
 }
 
-;(fixture ? describe : describe.skip)(
+describeWith('gold-1631-1019.json')(
   'no delay push while off route (64.2, 2026-10-19 Gold Line)',
   () => {
     let result: ReturnType<typeof replayAll>
@@ -151,7 +174,8 @@ const replayAll = (fx: any) => {
     })
   }
 )
-;(control ? describe : describe.skip)(
+
+describeWith('green-465-1657.json')(
   'CONTROL: a rider on the bus still hears it is late (green-465-1657)',
   () => {
     it('"465 · 3 min late" still pushes', () => {
