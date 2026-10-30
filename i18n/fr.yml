@@ -498,7 +498,6 @@ components:
     busLabel: "Bus {label}"
     busNotBroadcasting: "Bus pas encore localisé — prévu à {time}"
     busNotBroadcastingWaiting: "Le bus n'émet pas encore sa position"
-    changeBus: "Choisir le bus"
     changeBusReady: "Changer de bus"
     chooseBusCancel: "Annuler"
     chooseBusDistance: "{distance} m"

@@ -148,7 +148,7 @@ export function storeItem(key: string, object: unknown): boolean {
  * `coreUtils.storage.getItem`, reading through the memory copy. Same contract:
  * a falsy or unparseable value reads as `notFoundValue`.
  */
-export function getItem(key: string, notFoundValue: any = null): any {
+export function getItem<T = any>(key: string, notFoundValue: T | null = null): T | null {
   let itemAsString: string | null = null
   try {
     itemAsString = readRaw(prefixed(key))

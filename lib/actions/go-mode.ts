@@ -11626,14 +11626,14 @@ export function handlePositionUpdate(position: GeolocationPosition) {
       // ...and the evidenced riding fact, which ends the platform wait: a
       // rider the feed has confirmed aboard is riding, not standing (18.6).
       goMode.riding?.legIndex ?? null,
-      // Turn guidance in the rider's own language, when one is loaded.
-      intl,
       // ...and a bus on a road detour with the rider in it is not the rider
       // off route (47.1): the clock decides, as for 22.1.
       session.ridingHeldByVehicle,
       // ...and the rider's smoothed pace, not this fix's speed, once the end
       // anchor has passed (75.7).
-      session.riderPace
+      session.riderPace,
+      // Turn guidance in the rider's own language, when one is loaded.
+      intl
     )
 
     // The rider's MEASURED pace, and the missed-bus classifier's last verdict.

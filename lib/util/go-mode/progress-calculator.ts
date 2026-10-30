@@ -1300,7 +1300,6 @@ export function calculateTripProgress(
    * function had before 18.6.
    */
   ridingLegIndex: number | null = null,
-  intl?: IntlShape,
   /** See {@link determineTripStatus}. Defaults false. */
   ridingHeldByVehicle = false,
   /**
@@ -1308,7 +1307,14 @@ export function calculateTripProgress(
    * once the trip's end anchor has passed (75.7). Omitted, the countdown
    * divides by this fix's own speed as it did before.
    */
-  riderPace?: RiderPace | null
+  riderPace?: RiderPace | null,
+  /**
+   * Turn guidance in the rider's own language, when one is loaded (this
+   * fork's WithIntl variant of the walking instruction). Last, so the
+   * go-mode argument order — which its replay tests call positionally —
+   * is preserved.
+   */
+  intl?: IntlShape
 ): TripProgress {
   const legs = itinerary.legs
   const currentLegIndex = routeMatch?.legIndex || 0

@@ -29,8 +29,8 @@ jest.mock('@opentripplanner/core-utils', () => {
     ...core,
     queryGen: {
       ...core.queryGen,
-      generateOtp2Query: (params: unknown) =>
-        core.queryGen.generateOtp2Query(params, stub)
+      generateOtp2Query: (params: unknown, homeTimezone?: string) =>
+        core.queryGen.generateOtp2Query(params, homeTimezone, stub)
     }
   }
   return { ...actual, __esModule: true, default: patched }

@@ -1,4 +1,4 @@
-import { AnchorHTMLAttributes, ComponentType } from 'react'
+import { AnchorHTMLAttributes, FC } from 'react'
 import { connect } from 'react-redux'
 
 import { AppReduxState } from '../../util/state-types'
@@ -20,8 +20,11 @@ export function isSubpath(path: string, to: string): boolean {
 /**
  * Renders an anchor element <a> with specified path and query params,
  * that preserves other existing query params.
+ * The anchor's own attributes come back through mergeProps, so the element
+ * type is loosely cast here — connect() would reject the intrinsic 'a'
+ * tag's full JSX signature.
  */
-const Link: ComponentType = 'a' as unknown as ComponentType
+const Link = 'a' as unknown as FC<AnchorHTMLAttributes<HTMLAnchorElement>>
 
 // connect to the redux store so that the search params get updated in timely fashion.
 
