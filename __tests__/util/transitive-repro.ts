@@ -57,4 +57,21 @@ describe('transitive-overlay route label layout (fork patch)', () => {
     expect(feature.properties.type).toBe('route')
     expect(feature.geometry.coordinates.length).toBeGreaterThan(1)
   })
+
+  it('never emits a null routeType (style-spec match crash)', () => {
+    // The routes layer reads line-width from
+    // ["match", ["get", "routeType"], 3, 6, 10]. A null routeType (feed with
+    // no route_type on the route) made the style-spec throw 'Expected value
+    // to be of type number, but found null instead' and killed the overlay.
+    const pattern: any = {
+      pattern_id: 'ptn_0',
+      route_id: 'rX',
+      stops: [{ stop_id: 's1', geometry: 'qkjcM}plfF' }]
+    }
+    // No route_type at all on the route.
+    const feature = patternToRouteFeature(pattern, [
+      { route_id: 'rX', route_short_name: 'X' }
+    ])
+    expect(feature.properties.routeType).toBe(0)
+  })
 })
