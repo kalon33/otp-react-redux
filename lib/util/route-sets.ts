@@ -1,9 +1,6 @@
-import coreUtils from '@opentripplanner/core-utils'
-
+import { getItem, storeItem } from './safe-storage'
 import { routeLockIds, routeLockScope } from './route-lock'
 import type { AnyRouteLock, LockedRoute, RouteLockScope } from './route-lock'
-
-const { getItem, storeItem } = coreUtils.storage
 
 /**
  * Saved route sets (backlog 58.2, cycle 27 Q3 = B): "Commute" = the 18, the 21

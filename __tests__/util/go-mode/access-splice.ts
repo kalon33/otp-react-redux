@@ -1,5 +1,5 @@
-import { spliceAccessOntoItinerary } from '../../../lib/util/go-mode/access-splice'
 import { normalizeGoModeItinerary } from '../../../lib/util/go-mode/leg-merge'
+import { spliceAccessOntoItinerary } from '../../../lib/util/go-mode/access-splice'
 
 const T = 1785400000000 // base epoch for readable offsets
 
@@ -125,7 +125,11 @@ describe('spliceAccessOntoItinerary', () => {
     // promise above ("only reroute the bike leg", 7/29) is silently void.
     const spliced = spliceAccessOntoItinerary(
       current,
-      accessItin([{ distance: 2100, mode: 'BICYCLE', transitLeg: false } as any], T + 120000, T + 700000),
+      accessItin(
+        [{ distance: 2100, mode: 'BICYCLE', transitLeg: false } as any],
+        T + 120000,
+        T + 700000
+      ),
       1
     )
     expect(normalizeGoModeItinerary(spliced)).toBe(spliced)

@@ -1,0 +1,148 @@
+{
+  "_provenance": "Backlog 75.8 (verify agent V7, 2026-10-29 00:20:28, sim stack). Orange Line trip 1:1270445 as findTrip stores it, read from the desktop OTP 127.0.0.1:8090: trip(id:\"1:1270445\"){stoptimesForDate(serviceDate:\"20261028\") tripGeometry}. The rider/vehicle 1:8145 was at 44.9648819,-93.2697067 with the feed's next stop I-35W & Lake St (1:17781).",
+  "id": "1:1270445",
+  "route": {
+    "id": "1:904",
+    "shortName": null
+  },
+  "tripHeadsign": "ORANGE Burnsville",
+  "directionId": "1",
+  "stopTimes": [
+    {
+      "scheduledArrival": 87060,
+      "scheduledDeparture": 87060,
+      "serviceDay": 1793163600,
+      "stop": {
+        "id": "1:56800",
+        "lat": 44.978319,
+        "lon": -93.262771,
+        "name": "Gateway Ramp Layover"
+      }
+    },
+    {
+      "scheduledArrival": 87180,
+      "scheduledDeparture": 87180,
+      "serviceDay": 1793163600,
+      "stop": {
+        "id": "1:53297",
+        "lat": 44.9798,
+        "lon": -93.268058,
+        "name": "Marquette Ave & 3rd St - Stop Group C"
+      }
+    },
+    {
+      "scheduledArrival": 87240,
+      "scheduledDeparture": 87240,
+      "serviceDay": 1793163600,
+      "stop": {
+        "id": "1:53298",
+        "lat": 44.977824,
+        "lon": -93.269698,
+        "name": "Marquette Ave & 5th St - Stop Group C"
+      }
+    },
+    {
+      "scheduledArrival": 87300,
+      "scheduledDeparture": 87300,
+      "serviceDay": 1793163600,
+      "stop": {
+        "id": "1:53299",
+        "lat": 44.975929,
+        "lon": -93.271325,
+        "name": "Marquette Ave & 7th St - Stop Group C"
+      }
+    },
+    {
+      "scheduledArrival": 87480,
+      "scheduledDeparture": 87480,
+      "serviceDay": 1793163600,
+      "stop": {
+        "id": "1:53301",
+        "lat": 44.972032,
+        "lon": -93.274496,
+        "name": "Marquette Ave & 11th St - Stop Group C"
+      }
+    },
+    {
+      "scheduledArrival": 87720,
+      "scheduledDeparture": 87720,
+      "serviceDay": 1793163600,
+      "stop": {
+        "id": "1:17781",
+        "lat": 44.948118,
+        "lon": -93.274824,
+        "name": "I-35W & Lake St Station"
+      }
+    },
+    {
+      "scheduledArrival": 87900,
+      "scheduledDeparture": 87900,
+      "serviceDay": 1793163600,
+      "stop": {
+        "id": "1:53543",
+        "lat": 44.919417,
+        "lon": -93.274754,
+        "name": "I-35W & 46th St Station"
+      }
+    },
+    {
+      "scheduledArrival": 88140,
+      "scheduledDeparture": 88140,
+      "serviceDay": 1793163600,
+      "stop": {
+        "id": "1:52719",
+        "lat": 44.883158,
+        "lon": -93.296483,
+        "name": "I-35W & 66th St Station"
+      }
+    },
+    {
+      "scheduledArrival": 88320,
+      "scheduledDeparture": 88320,
+      "serviceDay": 1793163600,
+      "stop": {
+        "id": "1:56832",
+        "lat": 44.86405,
+        "lon": -93.302427,
+        "name": "Knox Ave & 76th St Station"
+      }
+    },
+    {
+      "scheduledArrival": 88440,
+      "scheduledDeparture": 88440,
+      "serviceDay": 1793163600,
+      "stop": {
+        "id": "1:56884",
+        "lat": 44.857921,
+        "lon": -93.301933,
+        "name": "Knox Ave & American Blvd Station"
+      }
+    },
+    {
+      "scheduledArrival": 88800,
+      "scheduledDeparture": 88800,
+      "serviceDay": 1793163600,
+      "stop": {
+        "id": "1:56833",
+        "lat": 44.82517,
+        "lon": -93.290862,
+        "name": "I-35W & 98th St Station"
+      }
+    },
+    {
+      "scheduledArrival": 89160,
+      "scheduledDeparture": 89160,
+      "serviceDay": 1793163600,
+      "stop": {
+        "id": "1:56830",
+        "lat": 44.776176,
+        "lon": -93.278552,
+        "name": "Burnsville Heart of the City Station"
+      }
+    }
+  ],
+  "geometry": {
+    "length": 706,
+    "points": "oyoqGhkfxPDSLs@AcAKSEKOQ]OYL[ZSl@Ov@?^Hf@H`AzAlAsBpGsBjGsBpGrAfA??jBzA`E`DHDpAdA?@dBtA`EbDrAdA??lBzA~DbDbE|CPHtDtCnA`A??pB|AnBmGrBsGFWr@}BDUB[DUDs@@e@BO@IF[R[PO^ITCd@Aj@Ar@Ef@En@EdEGR@nA@Z?`BCT?R?`C?`ECL?pD@~B?vB?xDD~BB|AAdD?V?tA?hC?pA?t@@n@@^B\\DZFv@PrA^RLt@`@~@l@r@d@hDlCxBdBf@`@nB|A~CbCx@p@n@d@^X\\R^RhAj@n@RVJ^H`@Hh@Jj@Ff@Dh@Bd@@`@S~@@T?T?B?H?XP~FAvIAjEAvB?lICbLAfJAvAAxRCrL@lH@pC?`D?zE@tD?vCD`EFr@@bDC~CBxAO|AAlCCdCFpBA`@IRIJCrABj@@D?h@@LBHD^JrCDtC@bCAzBH~ETfOElHCJ?|KDr@?jD@hCBvC@~D@pI?dE?vA@z@?rDIpK?nB?vABd@?hCFvBBrBBbFDzA@l@@pA@v@@d@@Z@^D\\DZFVH\\Jf@Tj@Zd@^XVVV^b@^h@Xh@Xj@Xt@Nb@@BJ`@Jb@Lj@H`@Db@Ht@Fz@Bz@@l@ArA?zDAjGA`FAbDCdL?vE?rC?jAB`DBlE?h@BzC@xA@nA@v@Bf@Bj@Dh@LdALr@Nt@Rt@LZFPRj@Xh@Zl@\\d@f@l@XXf@`@ZRJFRN^NFBb@Nn@Nh@H^@l@Bx@Ar@?xAXj@@rA@nABhA@pCBj@@h@@TA^CTCD?@?`AE~@Eb@Cb@C^@r@D~@L^Br@Hr@Jh@H^FjABvAh@t@ZdEpBv@\\n@XxAd@hAZpAX~@Nz@N~@HrAJxDPxDN`DNxHZnBHrAFdCFpA@P?nATpAFbABj@D\\BXDXD\\Hn@J`ATTDNBN@\\@^?TCAj@?|A@tA@r@D~D@fAX@tBFPANCNCRCRAP?b@?HA|ECH?D@TS~@C|A?J?Z?\\AFCBC@G@IJs@D]F[FYH[JWJYJWLUhAwBJQv@@@vIfG?d@N\\?v@?p@?b@?H?F?T?b@?`@?N?^BRBXFPF`@Rl@\\XLXLD?VFb@DJ?hA?NOVBDm@Bi@@_@?e@?_B@S?aD?aA@iB?g@E_@LCdAWl@[hA]f@Qf@Mh@I\\A^CnAU|E?nD@^?fE@|EBxB@Z?tA?fEDnD@xD?rCBh@?|C@dC@fC@rB?d@@\\?|A?dAEdAKbBWl@MdAUf@OnBu@lAo@dB{@pC{Ap@a@nAo@zBmA`Ai@tAs@p@_@\\SRKVMt@a@b@Uh@[`@Un@[x@c@fAo@x@a@r@_@^QRM|@e@jB{@z@a@fBm@DA~@Eb@In@G\\CTAL@RBRFNDNJPLLLFHDFFLFHJVh@nADJDJDHDFFFFHLHFBF@JDN?d@?^??S?}BCi@@q@@uC?g@?g@?eB?oAAU?qA@]rD?fD??fC?jA{B?M?I?mB?yA@[?@jB?d@?h@Ap@ENALCTAPC`@ATATERCNEJEHGFIFIBG@K?MAGCECECEEGMGMCIAK?IAI@K?IFWHSNWNUPSXULGLIJEHCFCBAHAJABAF?JAdCGbBGzBIXB\\AfAKXC\\Ar@Cp@WX???rB?tA?fB@pAAbB?rA?v@?X@fE?xCAzC@lC?bD?lC?jA?x@?vA?rB?lB@|B?D?~@?`C?|B?jB?xABFAlB?tAChACnBM`AKfDc@`D]dC[dC[|BW`C[~BWjDc@jBUdBUtEm@p@GnEi@fCYhAMdAMxAKpHOp@?`Q]~Y_@bCElUW^?\\AX?rA?~MGnWEX?L?T?R?R?L@|@?dSPhEJr@D|AJ|@FVDRH^\\JPHZDX?^CXGXOVQTSJUD{BAB}G@]?WBuG@M}A?e@H{DlBi@JiDG_Bc@SECC_Ae@{@w@kC}C_@e@i@w@]y@_@mAUkAw@yIsAmOi@aD?a@@IWAICA?AGE]?GGW]_B?KBCbAQDB@FAf@"
+  }
+}

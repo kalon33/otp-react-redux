@@ -4850,8 +4850,10 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                               <div
                                 className="sc-dWrMgH gzRQll"
                               >
-                                <styled.p>
-                                  <p
+                                <styled.p
+                                  as="div"
+                                >
+                                  <div
                                     className="sc-fpiMtx jqvbDb"
                                   >
                                     <IconWithText
@@ -4904,7 +4906,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                         </span>
                                       </div>
                                     </IconWithText>
-                                  </p>
+                                  </div>
                                 </styled.p>
                                 <DistanceDisplay
                                   distance={24}
@@ -5282,8 +5284,10 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                               <div
                                 className="sc-dWrMgH gzRQll"
                               >
-                                <styled.p>
-                                  <p
+                                <styled.p
+                                  as="div"
+                                >
+                                  <div
                                     className="sc-fpiMtx jqvbDb"
                                   >
                                     <IconWithText
@@ -5336,7 +5340,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                         </span>
                                       </div>
                                     </IconWithText>
-                                  </p>
+                                  </div>
                                 </styled.p>
                                 <DistanceDisplay
                                   distance={26}
@@ -5714,8 +5718,10 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                               <div
                                 className="sc-dWrMgH gzRQll"
                               >
-                                <styled.p>
-                                  <p
+                                <styled.p
+                                  as="div"
+                                >
+                                  <div
                                     className="sc-fpiMtx jqvbDb"
                                   >
                                     <IconWithText
@@ -5768,7 +5774,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                         </span>
                                       </div>
                                     </IconWithText>
-                                  </p>
+                                  </div>
                                 </styled.p>
                                 <DistanceDisplay
                                   distance={34}
@@ -21691,8 +21697,10 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                               <div
                                 className="sc-dWrMgH gzRQll"
                               >
-                                <styled.p>
-                                  <p
+                                <styled.p
+                                  as="div"
+                                >
+                                  <div
                                     className="sc-fpiMtx jqvbDb"
                                   >
                                     <IconWithText
@@ -21745,7 +21753,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                         </span>
                                       </div>
                                     </IconWithText>
-                                  </p>
+                                  </div>
                                 </styled.p>
                                 <DistanceDisplay
                                   distance={52}
@@ -22123,8 +22131,10 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                               <div
                                 className="sc-dWrMgH gzRQll"
                               >
-                                <styled.p>
-                                  <p
+                                <styled.p
+                                  as="div"
+                                >
+                                  <div
                                     className="sc-fpiMtx jqvbDb"
                                   >
                                     <IconWithText
@@ -22177,7 +22187,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                         </span>
                                       </div>
                                     </IconWithText>
-                                  </p>
+                                  </div>
                                 </styled.p>
                                 <DistanceDisplay
                                   distance={57}
@@ -22555,8 +22565,10 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                               <div
                                 className="sc-dWrMgH gzRQll"
                               >
-                                <styled.p>
-                                  <p
+                                <styled.p
+                                  as="div"
+                                >
+                                  <div
                                     className="sc-fpiMtx jqvbDb"
                                   >
                                     <IconWithText
@@ -22609,7 +22621,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                         </span>
                                       </div>
                                     </IconWithText>
-                                  </p>
+                                  </div>
                                 </styled.p>
                                 <DistanceDisplay
                                   distance={57}
@@ -33345,8 +33357,10 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                               <div
                                 className="sc-dWrMgH gzRQll"
                               >
-                                <styled.p>
-                                  <p
+                                <styled.p
+                                  as="div"
+                                >
+                                  <div
                                     className="sc-fpiMtx jqvbDb"
                                   >
                                     <IconWithText
@@ -33399,7 +33413,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                         </span>
                                       </div>
                                     </IconWithText>
-                                  </p>
+                                  </div>
                                 </styled.p>
                                 <DistanceDisplay
                                   distance={115}
@@ -33777,8 +33791,10 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                               <div
                                 className="sc-dWrMgH gzRQll"
                               >
-                                <styled.p>
-                                  <p
+                                <styled.p
+                                  as="div"
+                                >
+                                  <div
                                     className="sc-fpiMtx jqvbDb"
                                   >
                                     <IconWithText
@@ -33831,7 +33847,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                         </span>
                                       </div>
                                     </IconWithText>
-                                  </p>
+                                  </div>
                                 </styled.p>
                                 <DistanceDisplay
                                   distance={118}
@@ -34209,8 +34225,10 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                               <div
                                 className="sc-dWrMgH gzRQll"
                               >
-                                <styled.p>
-                                  <p
+                                <styled.p
+                                  as="div"
+                                >
+                                  <div
                                     className="sc-fpiMtx jqvbDb"
                                   >
                                     <IconWithText
@@ -34263,7 +34281,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                         </span>
                                       </div>
                                     </IconWithText>
-                                  </p>
+                                  </div>
                                 </styled.p>
                                 <DistanceDisplay
                                   distance={121}
@@ -34641,8 +34659,10 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                               <div
                                 className="sc-dWrMgH gzRQll"
                               >
-                                <styled.p>
-                                  <p
+                                <styled.p
+                                  as="div"
+                                >
+                                  <div
                                     className="sc-fpiMtx jqvbDb"
                                   >
                                     <IconWithText
@@ -34695,7 +34715,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                         </span>
                                       </div>
                                     </IconWithText>
-                                  </p>
+                                  </div>
                                 </styled.p>
                                 <DistanceDisplay
                                   distance={143}
@@ -35073,8 +35093,10 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                               <div
                                 className="sc-dWrMgH gzRQll"
                               >
-                                <styled.p>
-                                  <p
+                                <styled.p
+                                  as="div"
+                                >
+                                  <div
                                     className="sc-fpiMtx jqvbDb"
                                   >
                                     <IconWithText
@@ -35127,7 +35149,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                         </span>
                                       </div>
                                     </IconWithText>
-                                  </p>
+                                  </div>
                                 </styled.p>
                                 <DistanceDisplay
                                   distance={151}
@@ -41961,8 +41983,10 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                               <div
                                 className="sc-dWrMgH gzRQll"
                               >
-                                <styled.p>
-                                  <p
+                                <styled.p
+                                  as="div"
+                                >
+                                  <div
                                     className="sc-fpiMtx jqvbDb"
                                   >
                                     <IconWithText
@@ -42015,7 +42039,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                         </span>
                                       </div>
                                     </IconWithText>
-                                  </p>
+                                  </div>
                                 </styled.p>
                                 <DistanceDisplay
                                   distance={156}
@@ -61827,8 +61851,10 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                               <div
                                 className="sc-dWrMgH gzRQll"
                               >
-                                <styled.p>
-                                  <p
+                                <styled.p
+                                  as="div"
+                                >
+                                  <div
                                     className="sc-fpiMtx jqvbDb"
                                   >
                                     <IconWithText
@@ -61881,7 +61907,7 @@ exports[`components > viewers > nearby view renders proper scooter dates 1`] = `
                                         </span>
                                       </div>
                                     </IconWithText>
-                                  </p>
+                                  </div>
                                 </styled.p>
                                 <DistanceDisplay
                                   distance={181}

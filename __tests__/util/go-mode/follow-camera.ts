@@ -1,8 +1,12 @@
+import { calculateDistance } from '../../../lib/util/go-mode/position-matching'
 import {
   decideFollowCamera,
+  FOLLOW_EASE_MS,
+  FOLLOW_EASE_MS_PER_PX,
   FOLLOW_GAP_ACCEPT_MS,
   FOLLOW_ZOOM_ACCESS,
-  FOLLOW_ZOOM_TRANSIT
+  FOLLOW_ZOOM_TRANSIT,
+  metresPerPixel
 } from '../../../lib/util/go-mode/follow-camera'
 
 // ~1 deg latitude = ~111.2 km; offsets below are chosen against that scale.
@@ -203,6 +207,145 @@ describe('util > go-mode > follow-camera', () => {
         })
       )
       expect(d.zoom).toBeUndefined()
+    })
+  })
+
+  // 75.20: an 800 ms ease on every ~1 s fix kept the map rendering ~85 % of
+  // a ride. The ease is now sized to the pixels it moves, a move too small to
+  // draw is not made, and a rider the fix's own speed says is standing is not
+  // chased around the GPS wander.
+  describe('frames (75.20)', () => {
+    const STEP_M = calculateDistance(BASE.lat, BASE.lng, STEP_LAT, BASE.lng)
+    const moving = (over: Record<string, unknown> = {}) =>
+      base({
+        fix: fix({ lat: STEP_LAT, speedMps: 20, timestampMs: T0 + 1000 }),
+        legMode: 'BUS',
+        prevAccepted: { ...BASE, timestampMs: T0 },
+        prevLegTransit: true,
+        ...over
+      })
+
+    it('sizes a per-fix ease to the pixels it moves at the current zoom', () => {
+      // FAILS BEFORE: no durationMs — the map always eased FOLLOW_EASE_MS.
+      const d = decideFollowCamera(moving({ zoom: FOLLOW_ZOOM_TRANSIT }))
+      const px = STEP_M / metresPerPixel(STEP_LAT, FOLLOW_ZOOM_TRANSIT)
+      // ~20 m at zoom 14 is ~5.9 CSS px: ~300 ms, not 800.
+      expect(px).toBeGreaterThan(5.5)
+      expect(px).toBeLessThan(6.5)
+      expect(d.move).toBe(true)
+      expect(d.durationMs).toBe(Math.round(px * FOLLOW_EASE_MS_PER_PX))
+      expect(d.durationMs).toBeLessThan(FOLLOW_EASE_MS / 2)
+    })
+
+    it('keeps the full ease for a move big enough to need it', () => {
+      // ~20 m at zoom 17 is ~47 px.
+      const d = decideFollowCamera(moving({ zoom: 17 }))
+      expect(d.durationMs).toBe(FOLLOW_EASE_MS)
+    })
+
+    it('keeps the full ease when the zoom is unknown (a stand-in map)', () => {
+      expect(decideFollowCamera(moving()).durationMs).toBe(FOLLOW_EASE_MS)
+    })
+
+    it('does not move for a pan smaller than a pixel, and does not accept it', () => {
+      // ~20 m at zoom 11 (pinched out) is ~0.74 px.
+      const d = decideFollowCamera(moving({ zoom: 11 }))
+      expect(d.move).toBe(false)
+      expect(d.reason).toBe('subpixel')
+    })
+
+    it('holds for wander past the dead-band when the fix says the rider is standing', () => {
+      // ~6 m, speed 0.2 m/s: a rider at the stop, not travel.
+      const d = decideFollowCamera(
+        moving({
+          fix: fix({
+            lat: BASE.lat + 0.000054,
+            speedMps: 0.2,
+            timestampMs: T0 + 1000
+          }),
+          zoom: FOLLOW_ZOOM_TRANSIT
+        })
+      )
+      expect(d.move).toBe(false)
+      expect(d.reason).toBe('stationary')
+    })
+
+    it('follows a standing fix that has moved farther than the wander radius', () => {
+      // ~20 m at 0.2 m/s: a bus creeping in traffic still gets followed.
+      const d = decideFollowCamera(
+        moving({
+          fix: fix({ lat: STEP_LAT, speedMps: 0.2, timestampMs: T0 + 1000 }),
+          zoom: FOLLOW_ZOOM_TRANSIT
+        })
+      )
+      expect(d.move).toBe(true)
+    })
+
+    it('treats wander inside a coarse fix as wander', () => {
+      // ~20 m at 0 m/s with a 30 m accuracy circle.
+      const d = decideFollowCamera(
+        moving({
+          fix: fix({
+            accuracyM: 30,
+            lat: STEP_LAT,
+            speedMps: 0,
+            timestampMs: T0 + 1000
+          }),
+          zoom: FOLLOW_ZOOM_TRANSIT
+        })
+      )
+      expect(d.reason).toBe('stationary')
+    })
+
+    it('does not read an unknown speed (null, or iOS -1) as standing', () => {
+      for (const speedMps of [null, -1]) {
+        const d = decideFollowCamera(
+          moving({
+            fix: fix({
+              lat: BASE.lat + 0.000054,
+              speedMps,
+              timestampMs: T0 + 1000
+            }),
+            zoom: FOLLOW_ZOOM_TRANSIT
+          })
+        )
+        expect(d.move).toBe(true)
+      }
+    })
+
+    it('still sets the leg-type zoom for a standing rider, with the full ease', () => {
+      // Boarded (access -> transit) while the bus is still at the stop.
+      const d = decideFollowCamera(
+        moving({
+          fix: fix({
+            lat: BASE.lat + 0.000054,
+            speedMps: 0,
+            timestampMs: T0 + 1000
+          }),
+          prevLegTransit: false,
+          zoom: FOLLOW_ZOOM_ACCESS
+        })
+      )
+      expect(d.move).toBe(true)
+      expect(d.zoom).toBe(FOLLOW_ZOOM_TRANSIT)
+      expect(d.durationMs).toBe(FOLLOW_EASE_MS)
+    })
+
+    it('a long wait at a stop is not a GPS gap: no ease for a fix that has not moved', () => {
+      // FAILS BEFORE: 40 s since the last ACCEPTED fix took the gap branch and
+      // eased 800 ms to a fix 2 m away.
+      const d = decideFollowCamera(
+        moving({
+          fix: fix({
+            lat: JITTER_LAT,
+            speedMps: 0,
+            timestampMs: T0 + FOLLOW_GAP_ACCEPT_MS + 10_000
+          }),
+          zoom: FOLLOW_ZOOM_TRANSIT
+        })
+      )
+      expect(d.move).toBe(false)
+      expect(d.reason).toBe('deadband')
     })
   })
 })

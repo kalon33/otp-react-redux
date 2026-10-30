@@ -604,7 +604,7 @@ async function main() {
     window.__p2log = []
     const clock = (ms) =>
       new Date(Number(ms)).toLocaleTimeString('en-US', {
-        hour12: false,
+        hourCycle: 'h23',
         timeZone: 'America/Chicago'
       })
     window.__boardOf = (it) => {
@@ -798,7 +798,7 @@ async function main() {
   const p2log = await page.evaluate(() => window.__p2log)
   for (const e of p2log) {
     const at = new Date(e.t).toLocaleTimeString('en-US', {
-      hour12: false,
+      hourCycle: 'h23',
       timeZone: 'America/Chicago'
     })
     console.log(`[phase2 trail] ${at} ${e.type} ${e.p}`)
@@ -831,7 +831,7 @@ async function main() {
   }
   const fmt = (stop, ms) =>
     `${stop} @ ${new Date(ms).toLocaleTimeString('en-US', {
-      hour12: false,
+      hourCycle: 'h23',
       timeZone: 'America/Chicago'
     })}`
   const boardingMoved =

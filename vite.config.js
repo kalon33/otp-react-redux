@@ -145,7 +145,7 @@ export default defineConfig({
       '/pelias': {
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/pelias/, ''),
-        target: 'http://localhost:4000/v1'
+        target: 'http://localhost:4000'
       }
     },
     strictPort: true

@@ -1,3 +1,6 @@
+/* globals afterEach, beforeEach, describe, expect, it, jest */
+import FakeTimers from '@sinonjs/fake-timers'
+
 import {
   closeOnboardAlightPreview,
   confirmOnboardAlightStop,
@@ -125,7 +128,16 @@ const makeStore = (onboardOverrides: any = {}) => {
   return { actions, dispatch, getGoMode: () => state }
 }
 
+// 75.37 (J4): the commit tests build an onboard itinerary dated from the wall
+// clock; against this fixture's T that repaired a tail 3,742,572,954 ms "early"
+// (43 days) and the gap grew daily. Pin Date (only Date) to T.
+let clock: ReturnType<typeof FakeTimers.install>
+beforeEach(() => {
+  clock = FakeTimers.install({ now: T, toFake: ['Date'] })
+})
+
 afterEach(() => {
+  clock.uninstall()
   // beginGoMode starts the 15 s vehicle-position poll — clear it so jest exits.
   stopVehicleTracking()(() => undefined)
 })

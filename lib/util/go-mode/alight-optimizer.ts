@@ -7,6 +7,7 @@ import {
 } from '../itinerary'
 
 import { calculateDistance } from './position-matching'
+import { decodeTripShape, metersPastOnShape } from './geometry'
 import { getLegRouteId } from './departure-anchor'
 import { legTripId } from './leg-merge'
 
@@ -432,9 +433,71 @@ interface LatLon {
 export const ANCHOR_UNKNOWN = -1
 
 /**
+ * A rider this far past a stop along the run, or less, is still AT it — a bus
+ * dwelling at its stop, a fix a few metres long — and it stays the anchor.
+ * Past it by more, the bus has left it and the anchor is the stop after
+ * (75.8). The onboard Confirm's "first stop still ahead" allows the same 30 m
+ * (geometry.ts firstStopAheadOnShape, 64.1).
+ */
+export const ANCHOR_PAST_STOP_M = 30
+
+/**
+ * Has the rider gone PAST `stopTimes[idx]` along the run (75.8)? Measured on
+ * the trip's own shape when it has one; otherwise on the straight lines
+ * between the stop and its neighbours in stop order — past it toward the next
+ * stop, and not still short of it coming from the previous one, so a sharp
+ * turn at the stop cannot pass for having left it.
+ */
+function isPastStop(
+  stopTimes: TripStopTime[],
+  idx: number,
+  userPos: LatLon,
+  shape: Array<[number, number]> | null
+): boolean {
+  const onShape = metersPastOnShape(shape, {
+    anchorIndex: Math.max(0, idx - 1),
+    point: [userPos.lat, userPos.lon],
+    stopIndex: idx,
+    stops: stopTimes.map((st) => st.stop ?? null)
+  })
+  if (onShape != null) return onShape > ANCHOR_PAST_STOP_M
+
+  const here = stopTimes[idx]?.stop
+  const next = stopTimes[idx + 1]?.stop
+  const prev = idx > 0 ? stopTimes[idx - 1]?.stop : null
+  if (here?.lat == null || here?.lon == null) return false
+  if (next?.lat == null || next?.lon == null) return false
+  // Local equirectangular metres around the stop: ample at stop spacing.
+  const cosLat = Math.cos((here.lat * Math.PI) / 180)
+  const xy = (p: LatLon): [number, number] => [
+    (p.lon - here.lon) * cosLat * 111_320,
+    (p.lat - here.lat) * 111_320
+  ]
+  // Metres `p` lies along the line a→b, measured from a (negative: before a).
+  const along = (a: LatLon, b: LatLon, p: LatLon): number | null => {
+    const [ax, ay] = xy(a)
+    const [bx, by] = xy(b)
+    const [px, py] = xy(p)
+    const len = Math.hypot(bx - ax, by - ay)
+    if (!(len > 0)) return null
+    return ((px - ax) * (bx - ax) + (py - ay) * (by - ay)) / len
+  }
+  const pastTowardNext = along(here, next, userPos)
+  if (pastTowardNext == null || pastTowardNext <= ANCHOR_PAST_STOP_M) {
+    return false
+  }
+  if (prev?.lat == null || prev?.lon == null) return true
+  // `here` is the frame's origin, so this is the length prev→here.
+  const approachLen = Math.hypot(...xy(prev))
+  const approach = along(prev, here, userPos)
+  return approach == null || approach - approachLen > -ANCHOR_PAST_STOP_M
+}
+
+/**
  * Find the index of the stop the bus is currently heading to (its anchor):
  * 1. Prefer the vehicle's reported nextStopId.
- * 2. Otherwise the stop nearest the rider's GPS position.
+ * 2. Otherwise the stop nearest the rider's GPS position — or the stop after
+ *    it, when the rider is already past it along the run (75.8).
  * 3. Otherwise ANCHOR_UNKNOWN — NOT index 0.
  *
  * Clause 3 used to be "otherwise the first stop", and index 0 is a lie that
@@ -456,7 +519,8 @@ export const ANCHOR_UNKNOWN = -1
 function findAnchorIndex(
   stopTimes: TripStopTime[],
   nextStopId: string | null | undefined,
-  userPos: LatLon | null
+  userPos: LatLon | null,
+  shape: Array<[number, number]> | null = null
 ): number {
   if (nextStopId) {
     const idx = stopTimes.findIndex((st) => st.stop?.id === nextStopId)
@@ -477,6 +541,19 @@ function findAnchorIndex(
         bestIdx = i
       }
     })
+    // 75.8: the nearest stop is the one the bus has just LEFT whenever it is
+    // past the midpoint to the next. 2026-10-29 00:20:28, sim stack: Orange
+    // trip 1:1270445, the rider 880 m past Marquette Ave & 11th St and 1907 m
+    // short of I-35W & Lake St (the feed's own next stop) — nearest was 11th
+    // St, so six of 18 options were a 3-minute "ride" back to a stop behind
+    // the bus. On the remembered-vehicle path nextStopId is null on purpose
+    // (beginOnboardFlow), so this clause is the anchor there.
+    if (
+      bestIdx + 1 < stopTimes.length &&
+      isPastStop(stopTimes, bestIdx, userPos, shape)
+    ) {
+      return bestIdx + 1
+    }
     return bestIdx
   }
   return ANCHOR_UNKNOWN
@@ -516,7 +593,12 @@ export function getDownstreamStops(
   const stopTimes = trip?.stopTimes || []
   if (stopTimes.length === 0) return []
 
-  const anchorIdx = findAnchorIndex(stopTimes, vehicle?.nextStopId, userPos)
+  const anchorIdx = findAnchorIndex(
+    stopTimes,
+    vehicle?.nextStopId,
+    userPos,
+    userPos ? decodeTripShape(trip) : null
+  )
   // No nextStopId and no fix: we do not know where on this run the rider is,
   // and every stop below would be measured from the terminus they started
   // from. Empty, not "the whole line from stop 0" — see findAnchorIndex.

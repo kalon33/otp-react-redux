@@ -28,6 +28,13 @@ const CHROME =
 // Orange Line first, then busy local fallbacks.
 const PROBE_ROUTES = ['1:904', '1:5', '1:18', '1:10', '1:2']
 
+// America/Chicago service date (yyyy-mm-dd) `n` days ago, for OTP's
+// stoptimesForDate(serviceDate:).
+const svcDateAgo = (n) =>
+  new Date(Date.now() - n * 86400000).toLocaleDateString('sv-SE', {
+    timeZone: 'America/Chicago'
+  })
+
 async function gql(query) {
   const res = await fetch(API, {
     body: JSON.stringify({ query }),
@@ -92,10 +99,27 @@ async function main() {
     for (const v of vehicles) {
       const nextId = v.stopRelationship?.stop?.gtfsId
       if (!nextId) continue
-      const t = await gql(`{ trip(id: "${v.trip.gtfsId}") {
-        gtfsId stoptimesForDate { scheduledDeparture serviceDay
-          stop { gtfsId name lat lon } } } }`)
-      const sts = t?.data?.trip?.stoptimesForDate || []
+      // 75.34 (V9): a dateless stoptimesForDate flips to the NEW calendar day
+      // at midnight, so a bus still running yesterday's service day reads as
+      // starting hours from now. Take the instance that is in progress now,
+      // trying today's, then yesterday's service date (as the app does).
+      let sts = []
+      for (const serviceDate of [undefined, svcDateAgo(1)]) {
+        const arg = serviceDate ? `(serviceDate: "${serviceDate}")` : ''
+        const t = await gql(`{ trip(id: "${v.trip.gtfsId}") {
+          gtfsId stoptimesForDate${arg} { scheduledDeparture serviceDay
+            stop { gtfsId name lat lon } } } }`)
+        const cand = t?.data?.trip?.stoptimesForDate || []
+        if (!sts.length) sts = cand
+        const nowS = Date.now() / 1000
+        if (
+          cand.length &&
+          cand[0].serviceDay + cand[0].scheduledDeparture <= nowS
+        ) {
+          sts = cand
+          break
+        }
+      }
       const at = sts.findIndex((st) => st.stop.gtfsId === nextId)
       if (at < 0) continue
       const remaining = sts.length - 1 - at
@@ -274,6 +298,10 @@ async function main() {
     }
     return {
       alightOptions: (ob.alightOptions || []).map((o) => ({
+        // The stop a tap guides to, when the built ride runs past the planning
+        // anchor (`stopId`) — decorateAlightOptions re-captions the row and sets
+        // this; absent when the anchor IS the alight.
+        alightStopId: o.alightStopId,
         arrivalEpoch: scoreOf(o),
         arrivalIsFloor: !!o.arrivalIsFloor,
         busArrivalEpoch: o.busArrivalEpoch,
@@ -564,9 +592,14 @@ async function main() {
         `row ${chosen.pick + 1} was tapped, and guidance came back with ` +
         `legs ${after.legs} alighting at ${after.alightStop}`
     )
-  if (after.alightStop === onboard.best)
+  // 75.34 (V2): `onboard.best` is the PLANNING ANCHOR; the best row is
+  // re-captioned to the stop its ride really alights at (`alightStopId`), and
+  // the guidance's alight is that real stop. Compare like with like.
+  const defaultAlightId = opts.find((o) => o.stopId === onboard.best)
+  const defaultReal = defaultAlightId?.alightStopId ?? onboard.best
+  if (after.alightStop === defaultReal)
     throw new Error(
-      `guidance started on the DEFAULT stop ${onboard.best} — the rider's ` +
+      `guidance started on the DEFAULT stop ${defaultReal} — the rider's ` +
         'non-default choice was not honoured'
     )
   if (!after.isActive) throw new Error('go mode not active after confirm')

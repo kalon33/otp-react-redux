@@ -23,6 +23,8 @@
  * fails, and pin the phone to it.
  */
 
+import { readRaw, removeRaw, writeRaw } from './safe-storage'
+
 interface UpdaterBridge {
   addListener?: (
     event: string,
@@ -850,10 +852,7 @@ function stashHashForReload(): void {
   try {
     const hash = window.location?.hash
     if (!hash || hash === '#' || hash === '#/') return
-    window.localStorage.setItem(
-      APPLY_HASH_KEY,
-      JSON.stringify({ at: Date.now(), hash })
-    )
+    writeRaw(APPLY_HASH_KEY, JSON.stringify({ at: Date.now(), hash }))
   } catch {
     // A lost hash is a worse trip, not a broken one.
   }
@@ -871,8 +870,8 @@ export function restoreHashAfterBundleApply(): void {
   if (typeof window === 'undefined') return
   let raw: string | null = null
   try {
-    raw = window.localStorage.getItem(APPLY_HASH_KEY)
-    if (raw != null) window.localStorage.removeItem(APPLY_HASH_KEY)
+    raw = readRaw(APPLY_HASH_KEY)
+    if (raw != null) removeRaw(APPLY_HASH_KEY)
   } catch {
     return
   }

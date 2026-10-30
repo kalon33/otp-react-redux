@@ -1,12 +1,12 @@
-import coreUtils from '@opentripplanner/core-utils'
-
 import type { GoModeState } from '../../reducers/go-mode'
 
 import {
   captureNotificationLatches,
   NotificationLatches
 } from './notification-service'
+import { getItem, isPersisted, removeItem, storeItem } from '../safe-storage'
 import { hasNextSegment } from '../multi-stop'
+
 import type { AutoState } from './auto-switch'
 import type { DepartureOverrideSource } from './types'
 import type { NearDestination } from './arrival-dwell'
@@ -14,8 +14,6 @@ import type { NearDestination } from './arrival-dwell'
 import type { MultiStopPlan } from '../multi-stop'
 
 import type { ReturnCountdownState, RoundTripPlan } from './round-trip'
-
-const { getItem, removeItem, storeItem } = coreUtils.storage
 
 /** Local-storage key holding the in-progress Go Mode trip for resume-on-reload. */
 const GO_MODE_SESSION_KEY = 'goModeSession'
@@ -61,6 +59,31 @@ const ARRIVED_RESUME_GRACE_MS = 5 * 60 * 1000
  * <next stop>", not to an empty planner. Past this they are planning afresh.
  */
 const MULTI_STOP_PAUSE_MAX_MS = 4 * 60 * 60 * 1000
+
+/**
+ * Why `itinerary` cannot be tracked, or null if it can (75.11).
+ *
+ * A trip is its legs: the tick matches the rider against them, progress is
+ * measured along them, and `startGoModeTracking` iterates them. An itinerary
+ * with none — `legs: []`, `legs: null`, a string where the object should be —
+ * resumed as `isActive: true` with nothing to track, so GoModeScreen sat on
+ * "Starting Trip… / Acquiring GPS signal…" waiting for a `progress` that never
+ * comes (null and string shapes also threw `… is not iterable` in
+ * startGoModeTracking), and the same screen came back on every launch for up
+ * to 3 h. Shape only — whether the legs are still worth riding is the
+ * staleness windows' call.
+ */
+export function untrackableItinerary(itinerary: unknown): string | null {
+  if (!itinerary || typeof itinerary !== 'object' || Array.isArray(itinerary))
+    return 'itinerary-not-object'
+  const { legs } = itinerary as { legs?: unknown }
+  if (!Array.isArray(legs) || legs.length === 0) return 'no-legs'
+  if (
+    !legs.every((leg) => leg && typeof leg === 'object' && !Array.isArray(leg))
+  )
+    return 'leg-not-object'
+  return null
+}
 
 /**
  * The durable parts of a Go Mode trip — enough to drop the rider back into live
@@ -186,6 +209,13 @@ let sessionStartedAt: number | null = null
 // and could not tell that from "there was no id".
 let lastLoaded: GoModeSession | null = null
 
+// What loadGoModeSession last refused as malformed (75.11), held for main.js to
+// put in the record: the refusal happens inside createStore, before anything
+// that can report has run. Taken once, and not reset by clearGoModeSession —
+// the store subscriber clears on the first non-active change, which would
+// otherwise erase it before main.js looks.
+let lastRejected: { reason: string; startedAgoMs: number | null } | null = null
+
 // One shared empty list, so a slice with no sent-notifications yet compares
 // equal to itself on the next save instead of minting a fresh `[]` each time.
 const NO_SENT_NOTIFICATIONS: string[] = []
@@ -265,6 +295,9 @@ export function saveGoModeSession(
   lastTransitionedLegIndex?: number | null
 ): void {
   if (!goMode?.isActive || !goMode.activeItinerary) return
+  // Never save a trip that could not be resumed (75.11): a reload would come
+  // back to the stuck "Starting Trip…" screen. The last good save stays.
+  if (untrackableItinerary(goMode.activeItinerary)) return
 
   if (sessionStartedAt == null) {
     const existing = getItem(GO_MODE_SESSION_KEY, null) as GoModeSession | null
@@ -313,7 +346,18 @@ export function saveGoModeSession(
   } catch {
     // Unserialisable latches cannot be compared; fall through and write.
   }
-  if (latchesKey != null && sameAsLastSave(session, latchesKey)) return
+  // Skip only while the stored copy is still there (75.12 (b)). `lastSaved`
+  // is this page's memory of the write, not the store: when the OS evicts
+  // WebView storage mid-trip — the chaos run's `localStorage.clear()` — every
+  // later save compared equal and skipped, the store stayed empty through 30 s
+  // of live ticks, and a reload dropped the trip. A missing key makes this
+  // save write.
+  if (
+    latchesKey != null &&
+    sameAsLastSave(session, latchesKey) &&
+    isPersisted(GO_MODE_SESSION_KEY)
+  )
+    return
   // Persistence is best-effort and runs from the store subscriber mid-dispatch:
   // it must NEVER throw, or it would abort the action that started the trip.
   try {
@@ -321,7 +365,11 @@ export function saveGoModeSession(
     // is unknown, and the next save must not be skipped on its account.
     lastSaved = null
     lastSavedLatchesKey = null
-    storeItem(GO_MODE_SESSION_KEY, stripCycles(session))
+    // A refused write (storage full or blocked) does not throw any more
+    // (util/safe-storage, 75.12) — it reports false and holds the copy in
+    // memory, which a reload cannot see. So it is not a save, and the next
+    // change tries again.
+    if (!storeItem(GO_MODE_SESSION_KEY, stripCycles(session))) return
     lastSaved = session
     lastSavedLatchesKey = latchesKey
   } catch {
@@ -336,9 +384,26 @@ export function saveGoModeSession(
  */
 export function loadGoModeSession(): GoModeSession | null {
   const session = getItem(GO_MODE_SESSION_KEY, null) as GoModeSession | null
-  if (!session || !session.activeItinerary) return null
+  if (!session) return null
 
   const now = Date.now()
+
+  // A saved trip that cannot be tracked is discarded, not resumed (75.11):
+  // resuming it is the stuck "Starting Trip…" screen, and leaving it stored is
+  // that screen again on every launch. The rider lands on the planner.
+  const rejected =
+    typeof session !== 'object'
+      ? 'session-not-object'
+      : untrackableItinerary(session.activeItinerary)
+  if (rejected) {
+    clearGoModeSession()
+    lastRejected = {
+      reason: rejected,
+      startedAgoMs:
+        typeof session?.startedAt === 'number' ? now - session.startedAt : null
+    }
+    return null
+  }
 
   // A ROUND TRIP measures its own life against the RETURN departure, and none
   // of the three windows below.
@@ -399,6 +464,19 @@ export function loadGoModeSession(): GoModeSession | null {
   lastSaved = null
   lastSavedLatchesKey = null
   return session
+}
+
+/**
+ * The saved trip the last load refused as malformed (75.11), or null — once:
+ * reading it hands it over. main.js records it after the store is built.
+ */
+export function takeRejectedGoModeSession(): {
+  reason: string
+  startedAgoMs: number | null
+} | null {
+  const rejected = lastRejected
+  lastRejected = null
+  return rejected
 }
 
 /**

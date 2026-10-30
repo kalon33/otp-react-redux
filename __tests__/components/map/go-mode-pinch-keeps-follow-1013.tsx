@@ -304,9 +304,10 @@ describe('components > go-mode map > a pinch keeps follow (48.1)', () => {
     fire(mapHandlers, 'moveend')
     jest.advanceTimersByTime(1000)
     expect(mockMap.easeTo).toHaveBeenCalledTimes(1)
+    // The follow ease, sized to its pixels since 75.20 (~13 px here).
     expect(mockMap.easeTo).toHaveBeenCalledWith({
       center: [-93.29, 44.9414],
-      duration: FOLLOW_EASE_MS
+      duration: expect.any(Number)
     })
   })
 

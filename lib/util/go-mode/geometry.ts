@@ -14,7 +14,8 @@ import { epochMs } from './time'
 
 /** A single point in a simulated GPS track. */
 export interface TimedSimulationPoint {
-  // ms before advancing to next point (at 1x speed)
+  // ms (at 1x speed) from the previous point to THIS one: what the scheduler
+  // waits, and advances the simulated clock by, before playing it (75.29)
   // Optional recorded fix metadata (trip replay only). When present these are
   // played back verbatim so vehicle-matching heading/speed logic sees the real
   // values instead of the synthetic defaults used for itinerary-derived sims.
@@ -282,6 +283,18 @@ export interface ShapePosition {
   offM: number
   /** Index of the segment's first vertex — the next search starts here. */
   segmentIndex: number
+}
+
+/** Decode a trip's encoded shape; null when it has none or it will not parse. */
+export function decodeTripShape(trip: any): Array<[number, number]> | null {
+  const points = trip?.geometry?.points
+  if (!points) return null
+  try {
+    const decoded = polyline.decode(points) as Array<[number, number]>
+    return decoded.length ? decoded : null
+  } catch {
+    return null
+  }
 }
 
 /** Within this, the shape passes "by" the point — see projectForwardOnShape. */

@@ -38,13 +38,22 @@ const mapStateToProps = (state: AppReduxState, ownProps: OwnProps) => {
         : isActive
         ? 'active'
         : className,
-    href,
-    // Remove the passed to, toParams, and tracking props from the rendered HTML.
-    to: undefined,
-    toParams: undefined,
-    tracking: undefined
+    href
   }
 }
 
+// 75.37 (J6): drop the passed to, toParams and tracking props from what reaches
+// the <a>. Setting them to `undefined` in mapStateToProps still left the keys
+// on the element, and React warns about an unknown camelCase `toParams` prop.
+const mergeProps = (
+  stateProps: ReturnType<typeof mapStateToProps>,
+  _dispatchProps: unknown,
+  ownProps: OwnProps
+) => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { to, toParams, tracking, ...rest } = ownProps
+  return { ...rest, ...stateProps }
+}
+
 // Pass an empty object as mapDispatchToProps to remove dispatch from the rendered HTML.
-export default connect(mapStateToProps, {})(Link)
+export default connect(mapStateToProps, {}, mergeProps)(Link)

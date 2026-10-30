@@ -18570,7 +18570,9 @@
           "wheelchair": false
         }
       },
-      "tMs": 1788215760666
+      "tMs": 1788215760666,
+      "by": "app",
+      "cause": "reroute:boarded-earlier"
     },
     {
       "itinerary": {
@@ -19223,7 +19225,9 @@
           "wheelchair": false
         }
       },
-      "tMs": 1788215831419
+      "tMs": 1788215831419,
+      "by": "app",
+      "cause": "reroute:boarded-earlier"
     },
     {
       "itinerary": {
@@ -19876,7 +19880,9 @@
           "wheelchair": false
         }
       },
-      "tMs": 1788215891563
+      "tMs": 1788215891563,
+      "by": "app",
+      "cause": "reroute:boarded-earlier"
     }
   ],
   "meta": {

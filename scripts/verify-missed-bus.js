@@ -29,7 +29,7 @@ const fmt = (ms) =>
   ms == null
     ? 'n/a'
     : new Date(ms).toLocaleTimeString('en-US', {
-        hour12: false,
+        hourCycle: 'h23',
         timeZone: 'America/Chicago'
       })
 

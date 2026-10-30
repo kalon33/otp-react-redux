@@ -5,6 +5,10 @@ import React, { useEffect, useRef, useState } from 'react'
 import * as goModeActions from '../../actions/go-mode'
 import * as uiActions from '../../actions/ui'
 import { aboardBeforeLegStart } from '../../util/go-mode/riding'
+import {
+  canOpenNativeLocationSettings,
+  openNativeLocationSettings
+} from '../../util/go-mode/native-gps'
 import { fetchLegFrequency } from '../../actions/leg-frequency'
 import { hasNextSegment } from '../../util/multi-stop'
 import { isReplayActive } from '../../util/go-mode/replay/replay-engine'
@@ -28,6 +32,7 @@ import {
   RerouteBar,
   RerouteCard,
   RerouteCardTitle,
+  RerouteKeepButton,
   RerouteSummary,
   RerouteSwitchButton,
   RetryButton,
@@ -163,7 +168,8 @@ const GoModeScreen = ({
         cache: legFrequency,
         currentLegIndex: goMode.progress?.currentLegIndex,
         legs: goMode.activeItinerary?.legs,
-        nowMs: Date.now(),
+        // The tick's clock, the legs' (75.29).
+        nowMs: goModeActions.goModeNowMs(),
         replay: replaying
       })
     : null
@@ -259,8 +265,17 @@ const GoModeScreen = ({
   // GPS error state with specific messages and retry
   if (goMode.tracking.error && !goMode.progress) {
     const error = goMode.tracking.error
+    // Refused location inside the app shell (75.10): the way back is the OS
+    // Settings page, which the shell can open — not the browser's settings.
+    const offerSettings = error.code === 1 && canOpenNativeLocationSettings()
     let errorMessage: string
-    if (error.code === 1) {
+    if (offerSettings) {
+      errorMessage = intl.formatMessage({
+        defaultMessage:
+          'Location permission denied. Please allow location access in Settings.',
+        id: 'components.GoMode.errorPermissionDeniedApp'
+      })
+    } else if (error.code === 1) {
       errorMessage = intl.formatMessage({
         defaultMessage:
           'Location permission denied. Please enable location access in your browser settings.',
@@ -293,12 +308,34 @@ const GoModeScreen = ({
         />
         <LoadingMessage>
           <ErrorMessage>{errorMessage}</ErrorMessage>
-          <RetryButton onClick={handleRetry} type="button">
-            {intl.formatMessage({
-              defaultMessage: 'Retry',
-              id: 'components.GoMode.retry'
-            })}
-          </RetryButton>
+          {offerSettings ? (
+            // The Switch / Keep mine pair: Settings is the way out, Retry
+            // follows it.
+            <RerouteActions>
+              <RerouteSwitchButton
+                onClick={openNativeLocationSettings}
+                type="button"
+              >
+                {intl.formatMessage({
+                  defaultMessage: 'Open Settings',
+                  id: 'components.GoMode.openSettings'
+                })}
+              </RerouteSwitchButton>
+              <RerouteKeepButton onClick={handleRetry} type="button">
+                {intl.formatMessage({
+                  defaultMessage: 'Retry',
+                  id: 'components.GoMode.retry'
+                })}
+              </RerouteKeepButton>
+            </RerouteActions>
+          ) : (
+            <RetryButton onClick={handleRetry} type="button">
+              {intl.formatMessage({
+                defaultMessage: 'Retry',
+                id: 'components.GoMode.retry'
+              })}
+            </RetryButton>
+          )}
         </LoadingMessage>
       </FullScreenWrapper>
     )
@@ -395,6 +432,22 @@ const GoModeScreen = ({
           transferFrequency={transferFrequencyEntry}
         />
 
+        {/* Between the card and the map, in the column's flow (75.16, chaos
+            C27). After the map it was the column's last 40px — exactly where
+            the absolute "View trip & other ways" tab sits: in the 2026-10-29
+            stress test elementFromPoint at the strip's centre found the tab's
+            label at 360 and 390 wide, and the rider would have seen an amber
+            edge with "G" and "…". The bottom overlays (the tab, the faster-
+            route and arrival cards) do not reach up here. */}
+        {goMode.tracking.error && (
+          <GpsWarningBanner>
+            {intl.formatMessage({
+              defaultMessage: 'GPS signal lost. Trying to reconnect...',
+              id: 'components.GoMode.gpsError'
+            })}
+          </GpsWarningBanner>
+        )}
+
         <GoModeMap
           /* Aboard the bus this leg belongs to, short of the stop the leg
              starts at (backlog 22.1). The same answer the status and the
@@ -430,15 +483,6 @@ const GoModeScreen = ({
           {/* Auto (65.2): its own connected component, over the map. */}
           {goMode.arrivedAt == null && <AutoToggle />}
         </GoModeMap>
-
-        {goMode.tracking.error && (
-          <GpsWarningBanner>
-            {intl.formatMessage({
-              defaultMessage: 'GPS signal lost. Trying to reconnect...',
-              id: 'components.GoMode.gpsError'
-            })}
-          </GpsWarningBanner>
-        )}
 
         {/* Arrived on a ROUND TRIP: the countdown to the return replaces the
             plain arrival card. Same primitives, same place; see

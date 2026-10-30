@@ -74,3 +74,67 @@ describe('util > debug-log per-action summarisers', () => {
     expect(source).toContain('const MAX_FULL_PAYLOAD_CHARS = 1000000')
   })
 })
+
+describe('util > debug-log SET_ACTIVE_ITINERARY summariser (17.13 P4)', () => {
+  /** The real shape: a merged itinerary that points back at itself. */
+  function cyclicItinerary() {
+    const legs = Array.from({ length: 4 }, (_, i) => ({
+      geometry: 'g'.repeat(25000),
+      mode: i % 2 ? 'BUS' : 'WALK',
+      routeId: i % 2 ? `1:route${i}` : undefined
+    }))
+    const itinerary = {
+      endTime: 1761750900000,
+      index: 3,
+      key: 'k-abc',
+      legs,
+      startTime: 1761749000000
+    }
+    itinerary.allStartTimes = [{ itinerary }]
+    return itinerary
+  }
+
+  it('records index, key, times, leg count and route ids', () => {
+    expect(PAYLOAD_SUMMARISERS.SET_ACTIVE_ITINERARY(cyclicItinerary())).toEqual(
+      {
+        __summary: true,
+        endTime: 1761750900000,
+        index: 3,
+        key: 'k-abc',
+        legCount: 4,
+        routeIds: ['1:route1', '1:route3'],
+        startTime: 1761749000000
+      }
+    )
+  })
+
+  it('never stringifies the payload', () => {
+    const payload = cyclicItinerary()
+    const spy = jest.spyOn(JSON, 'stringify')
+    let out
+    try {
+      out = PAYLOAD_SUMMARISERS.SET_ACTIVE_ITINERARY(payload)
+    } finally {
+      const calls = spy.mock.calls.length
+      spy.mockRestore()
+      expect(calls).toBe(0)
+    }
+    // Small, and (unlike the payload) serialisable.
+    expect(JSON.stringify(out).length).toBeLessThan(300)
+  })
+
+  it('survives an index-only or empty payload', () => {
+    expect(() =>
+      PAYLOAD_SUMMARISERS.SET_ACTIVE_ITINERARY(undefined)
+    ).not.toThrow()
+    expect(PAYLOAD_SUMMARISERS.SET_ACTIVE_ITINERARY({ index: -1 })).toEqual({
+      __summary: true,
+      endTime: undefined,
+      index: -1,
+      key: undefined,
+      legCount: undefined,
+      routeIds: undefined,
+      startTime: undefined
+    })
+  })
+})

@@ -8,6 +8,7 @@ import {
 } from '../util/routing-profiles'
 import { getDefaultNumItineraries } from '../util/api'
 import { queryIsValid } from '../util/state'
+import { removeItem, storeItem } from '../util/safe-storage'
 import type { LockedRoute } from '../util/route-lock'
 import type { RoutingPreferences, ViaStop } from '../util/routing-profiles'
 
@@ -15,7 +16,7 @@ import { applyRouteLocksFromText, setRouteLock } from './route-lock'
 import { createGraphQLQueryAction } from './apiV2'
 import { setQueryParam } from './form'
 
-const { randId, removeItem, storeItem } = coreUtils.storage
+const { randId } = coreUtils.storage
 
 /** Local-storage key for the rider's last-used routing profile/preferences. */
 const ROUTING_PROFILE_STORAGE_KEY = 'routingProfile'

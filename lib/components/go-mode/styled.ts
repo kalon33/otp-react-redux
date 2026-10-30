@@ -375,11 +375,14 @@ export const CardBackButton = styled.button`
   }
 `
 
-// Row holding the back arrow, the route pill and the headsign on one line.
+// Row holding the back arrow, the route pill and the headsign — on one line
+// when they fit. It wraps so a headsign that does not fit beside a long pill
+// takes a line of its own (75.16; see NavRoutePill), with no gap between lines.
 export const NavEyebrowRow = styled.div`
   align-items: center;
   display: flex;
-  gap: var(--tn-space-2);
+  flex-wrap: wrap;
+  gap: 0 var(--tn-space-2);
   min-height: var(--tn-tap);
   min-width: 0;
 `
@@ -394,7 +397,20 @@ export const NavEyebrow = styled.div`
   white-space: nowrap;
 `
 
-/** The route as the agency paints it, in the card's eyebrow row. */
+/**
+ * The route as the agency paints it, in the card's eyebrow row.
+ *
+ * 75.16 (chaos C24, 2026-10-29): beside "METRO Orange Line" — capped at 60 %
+ * of the row and clipped 188/180 px — the headsign "ORANGE Downtown
+ * Minneapolis" got 72 of its 273 px at 360 wide ("ORAN…"), 94 at 390 and 134
+ * at 430: the card that says which bus to board could not say which way it
+ * goes. The pill now keeps its whole name (only never wider than the row less
+ * the ← target, so it stays on the arrow's line), and the headsign after it
+ * is sized by its text: when all of it does not fit beside the pill the row
+ * wraps it onto a line of its own, where it gets the card's full width. A
+ * short pill ("21 · Uptown") still shares the line. The walk/bike eyebrow with
+ * no pill keeps NavEyebrow's flex: 1 beside the arrow.
+ */
 export const NavRoutePill = styled.span<{ $bg: string; $fg: string }>`
   align-items: center;
   background-color: ${(p) => p.$bg};
@@ -403,12 +419,16 @@ export const NavRoutePill = styled.span<{ $bg: string; $fg: string }>`
   display: inline-flex;
   flex: 0 1 auto;
   font: 700 15px/20px var(--tn-font);
-  max-width: 60%;
+  max-width: calc(100% - var(--tn-tap));
   min-height: 26px;
   overflow: hidden;
   padding: 3px 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
+
+  & + ${NavEyebrow} {
+    flex-basis: auto;
+  }
 `
 
 export const NavHero = styled.div`
@@ -719,6 +739,17 @@ export const FullScreenWrapper = styled.div.attrs({ className: 'tn-gomode' })`
      pill, instead of the tall app bar. */
   > header {
     height: var(--tn-tap) !important;
+    /* Everything below moves down by the network-lost strip while it is up
+       (75.16): it is absolute, and in the 2026-10-29 stress test it lay over
+       the card's ← / route pill / headsign row while the phone was offline.
+       0px when it is not up (banner-strip.ts). */
+    margin-bottom: var(--network-banner-height, 0px);
+  }
+
+  /* ...and the strip sits directly under this 44px bar, not at the planner
+     bar's 50px (network-connection-banner.tsx), which left a 6px seam. */
+  > header .network-connection-banner {
+    top: var(--tn-tap);
   }
 
   .mobile-navbar-container {

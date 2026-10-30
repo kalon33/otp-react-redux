@@ -54,8 +54,9 @@ jest.mock('@opentripplanner/core-utils', () => {
  *    plan in hand still names the 17:08:29 run `1:1171228` — the bus the rider
  *    MISSED — while the rider is verifiably on `1:1173133` / `1:8140`
  *    (`riding.boardedAt` 17:27:50). Every gate yes is the `tripMismatch`
- *    disjunct; `aboardBeforePlanned` never fires (liveLegTimes is empty under
- *    replay, so it reads 17:08:29).
+ *    disjunct; `aboardBeforePlanned` never fires (liveLegTimes was empty under
+ *    replay, so it read 17:08:29; since 75.32 it reads the feed's 17:11:30,
+ *    still 16 min before the rider boarded).
  *  - Each re-plan built the splice onto the ridden trip and `acceptAutoReplan`
  *    refused it `arrives-later` against the plan's 17:40:00 — an arrival on a
  *    bus that left 19 minutes before the rider boarded. Three is
@@ -67,6 +68,42 @@ jest.mock('@opentripplanner/core-utils', () => {
  *    names `1:1173133` before boarding and nothing fires aboard. At 6x and 25x
  *    it does not, and the rider boards on the dead plan.
  *    Before the fix: 1x 0, 6x 3 refused, 8x 0, 25x 1 refused.
+ *
+ * 75.32 (2026-10-29): the boarding-feed poll now runs under replay, on the sim
+ * clock, as it does on the phone — live leg times from the recorded trip
+ * answers, the boarding stop's departures, the anchor. The missed-bus
+ * classifier reads the planned run's live 17:11:30 instead of its 17:08:29
+ * timetable, so its first search is 17:14:47 (was 17:11:48) and the retry
+ * spacing shifts with it: on 75.32's own tree the update naming `1:1173133`
+ * lands at 17:24:42 at 1x and 8x and now at 6x too (17:26:50), so only 25x
+ * still boards on the dead plan (the merged times are below). There the
+ * splice dates the ridden bus from its own trip record at the sim clock —
+ * 17:58:34, the feed's figure at 17:28 (the 17:27:56 reroute snapshot says
+ * the same) — where it read the record's first answer (17:59:13) before. The
+ * 6x update takes the 17:26:26 snapshot's plan, which adds a 546 leg after
+ * the Orange Line; this file pins only that the plan names the ridden bus
+ * before boarding, not that tail.
+ *
+ * 75.29 with 75.32 (measured on the merged tree, 2026-10-29): every fix now
+ * plays at its own recorded time. Each used to be stamped with the gap AFTER
+ * it, so the last fix before the recording's 121 s GPS hole (17:22:40) was
+ * ticked at 17:24:4x with the rider still where they had been two minutes
+ * earlier — the phantom tick the 17:24:42 update answered. On the real fixes,
+ * with the live leg times:
+ *  - the first miss is 17:14:45 (17:14:47 on the old stamps), and 74.1's
+ *    retry, still on `Date.now()` and not moved here, carries the 2 s: the
+ *    6x update lands at 17:26:48.
+ *  - 1x: the 17:20:25 update moves the plan to the 17:21:13 run `1:1172878`,
+ *    which also left before the rider boarded. The first tick after the hole
+ *    (17:24:41) has the rider at the stop and says that run is missed too, and
+ *    the 17:24:43 update names `1:1173133`, 7 s before boarding, with reRoute
+ *    idle again. On 75.29's own tree, without 75.32's feed reads, that search
+ *    went to `found` ("likely missed · next in 52 min") and the choices card
+ *    was still up when the rider boarded; it does not happen here.
+ *  - 8x: no stop-over on the 17:21:13 run; the update lands on the first tick
+ *    after the hole, 17:24:43.
+ *  - 25x: riding at 17:27:50, the ride's own `boardedAt` (17:27:49 on the old
+ *    stamps), and the one boarded-earlier swap at 17:28:06 (was 17:28:05).
  *
  * 28.6: `replanFromAboard` now passes `currentPlanIsDead` when the plan leg the
  * splice replaces boarded (live board time, else `startTime`) more than
@@ -184,12 +221,14 @@ async function replay(speed: number) {
   }> = []
   let lastSim = 0
   let firstRidingMs: number | null = null
+  /** goMode.reRoute.status when the rider is first aboard. */
+  let reRouteAtBoarding: string | null = null
   let pendingArrivals: { candidate: number | null; current: number | null } = {
     candidate: null,
     current: null
   }
 
-  const recorder = () => (next: any) => (action: any) => {
+  const recorder = (api: any) => (next: any) => (action: any) => {
     if (action && typeof action === 'object') {
       if (action.type === 'START_REROUTE' && action.payload?.autoApply) {
         searches.push({
@@ -232,7 +271,11 @@ async function replay(speed: number) {
         })
       }
       if (action.type === 'SET_RIDING' && action.payload?.tripId) {
-        if (firstRidingMs == null) firstRidingMs = lastSim
+        if (firstRidingMs == null) {
+          firstRidingMs = lastSim
+          reRouteAtBoarding =
+            api.getState().otp.goMode?.reRoute?.status || 'idle'
+        }
         ridingFacts.push({
           tripId: action.payload.tripId,
           vehicleId: action.payload.vehicleId
@@ -403,6 +446,7 @@ async function replay(speed: number) {
     notifications,
     progress,
     replans,
+    reRouteAtBoarding,
     ridingFacts,
     searches,
     shadow
@@ -450,39 +494,53 @@ function expectTrustHeld(r: Run) {
   }
 }
 
-/** The run where the missed-bus update lands before boarding (1x, 8x). */
-function expectPlanCaughtUpBeforeBoarding(r: Run) {
-  const beforeBoard = r.itineraries.filter(
-    (i) =>
-      i.simMs <= r.firstRidingMs &&
-      i.tripIds.length &&
-      i.tripIds[0] === BOARDED.tripId
-  )
-  expect(beforeBoard.length).toBeGreaterThan(0)
-  expect(hhmmss(beforeBoard[0].simMs)).toBe('17:24:43')
+/**
+ * The run where the missed-bus update lands before boarding (1x, 6x, 8x).
+ * `path` is every plan the missed-bus updates installed before the rider
+ * boarded, as [sim time, first transit trip]; the last names the ridden bus.
+ */
+function expectPlanCaughtUpBeforeBoarding(
+  r: Run,
+  path: Array<[string, string]>
+) {
+  expect(hhmmss(r.firstRidingMs)).toBe('17:27:50')
+  expect(
+    r.itineraries
+      .slice(1)
+      .filter((i) => i.simMs <= r.firstRidingMs)
+      .map((i) => [hhmmss(i.simMs), i.tripIds[0]])
+  ).toEqual(path)
+  expect(path[path.length - 1][1]).toBe(BOARDED.tripId)
+  // No choices card left up as the rider boards (75.29's own tree had one at
+  // 1x; see the header)...
+  expect(r.reRouteAtBoarding).toBe('idle')
   // ...so there is nothing for the boarded-earlier gate to see.
   expect(r.gateYes).toEqual([])
   expect(r.boardedEarlier).toEqual([])
   expect(r.itineraries.filter((i) => i.simMs > r.firstRidingMs)).toEqual([])
 }
 
-/** The run where the rider boards on the dead plan (6x, 25x). */
+/** The run where the rider boards on the dead plan (25x). */
 function expectOneSwapOntoRiddenBus(r: Run) {
   // ...on a plan that still names the run they missed.
   const atBoarding = r.itineraries.filter((i) => i.simMs <= r.firstRidingMs)
   expect(atBoarding[atBoarding.length - 1].tripIds).toEqual([PLANNED_TRIP])
-  expect(hhmmss(r.firstRidingMs)).toBe('17:27:49')
+  // The ride's own boardedAt, now that each fix plays at its own time (75.29;
+  // 17:27:49 on the old stamps).
+  expect(hhmmss(r.firstRidingMs)).toBe('17:27:50')
 
-  // One search, heard yes once, for the standing mismatch. 17:28:05, not the
+  // One search, heard yes once, for the standing mismatch. 17:28:06, not the
   // 17:27:52 it was before 2026-09-30: the trip-mismatch trigger now also needs
   // RIDING_REBIND_MIN_FRAMES distinct feed frames of the matched bus, not just
-  // eight 1 s ticks (35.1), and the third 8140 frame lands 13 s later.
-  expect(r.boardedEarlier.map((s) => hhmmss(s.simMs))).toEqual(['17:28:05'])
+  // eight 1 s ticks (35.1), and the third 8140 frame lands 13 s later (and
+  // 17:28:05 until 75.29 played each fix at its own time).
+  expect(r.boardedEarlier.map((s) => hhmmss(s.simMs))).toEqual(['17:28:06'])
   expect(r.gateYes).toHaveLength(1)
   const g = r.gateYes[0]
   expect(g.plannedTripId).toBe(PLANNED_TRIP)
   expect(hhmmss(g.legStartMs)).toBe('17:08:29')
-  expect(g.liveBoardEpochMs).toBeNull()
+  // The planned run's live board time, from its recorded trip answers (75.32).
+  expect(hhmmss(g.liveBoardEpochMs)).toBe('17:11:30')
   expect(g.ridingTripId).toBe(BOARDED.tripId)
   expect(g.ridingVehicleId).toBe(BOARDED.vehicleId)
   expect(g.matchTripId).toBe(BOARDED.tripId)
@@ -490,22 +548,22 @@ function expectOneSwapOntoRiddenBus(r: Run) {
   expect(g.tripMismatch).toBe(true)
 
   // Judged against a dead plan now, so accepted — 17:40:00 is an arrival on a
-  // bus that left 19 min before the rider boarded; the splice's 17:59:13 is
+  // bus that left 19 min before the rider boarded; the splice's 17:58:34 is
   // the ridden bus's own.
   expect(r.replans).toHaveLength(1)
   expect(r.replans[0].refusedBecause).toBeNull()
   expect(hhmmss(r.replans[0].arrivalCurrentMs)).toBe('17:40:00')
-  expect(hhmmss(r.replans[0].arrivalCandidateMs)).toBe('17:59:13')
+  expect(hhmmss(r.replans[0].arrivalCandidateMs)).toBe('17:58:34')
 
   // The plan's bus leg becomes the ridden trip, from where the rider boarded
   // to the stop the plan already alighted at.
   const aboard = r.itineraries.filter((i) => i.simMs > r.firstRidingMs)
   expect(aboard).toHaveLength(1)
-  expect(hhmmss(aboard[0].simMs)).toBe('17:28:05')
+  expect(hhmmss(aboard[0].simMs)).toBe('17:28:06')
   expect(aboard[0].tripIds).toEqual([BOARDED.tripId])
   expect(aboard[0].boardStop).toBe('I-35W & 46th St Station')
   expect(aboard[0].alightStop).toBe('I-35W & 98th St Station')
-  expect(hhmmss(aboard[0].arrivalMs)).toBe('17:59:13')
+  expect(hhmmss(aboard[0].arrivalMs)).toBe('17:58:34')
 
   // One push for it, TRIP_UPDATED, and nothing else from the swap.
   const pushedAfterSwap = r.notifications.filter(
@@ -513,7 +571,7 @@ function expectOneSwapOntoRiddenBus(r: Run) {
   )
   expect(pushedAfterSwap.map((n) => n.type)).toEqual(['TRIP_UPDATED'])
   expect(pushedAfterSwap[0].message).toBe(
-    'METRO Orange Line · off at I-35W & 98th St Station · arriving in 31 min'
+    'METRO Orange Line · off at I-35W & 98th St Station · arriving in 30 min'
   )
 
   // With the plan naming the ridden bus, the gate has nothing left to see:
@@ -534,19 +592,30 @@ describe('util > go-mode > 28.6/28.7: the 0729 boarded-earlier re-plan at fixed 
   it('1x (the phone): the missed-bus update lands first and nothing fires aboard', async () => {
     const r = await replay(1)
     expectTrustHeld(r)
-    expectPlanCaughtUpBeforeBoarding(r)
+    // Via the 17:21:13 run the 17:20:25 update chose, then the first tick
+    // after the GPS hole (75.29: 17:24:43 on the real fixes, not the phantom
+    // 17:24:42).
+    expectPlanCaughtUpBeforeBoarding(r, [
+      ['17:20:25', '1:1172878'],
+      ['17:24:43', BOARDED.tripId]
+    ])
   })
 
-  it('6x (what the nightly browser keeps up with): one boarded-earlier swap onto the ridden bus', async () => {
+  it('6x (what the nightly browser keeps up with): the update lands before boarding too, since 75.32', async () => {
     const r = await replay(6)
     expectTrustHeld(r)
-    expectOneSwapOntoRiddenBus(r)
+    // 17:26:48: 74.1's wall-clock retry, six minutes of sim time per minute,
+    // counted from 75.29's 17:14:45 first miss (17:26:50 from 17:14:47).
+    expectPlanCaughtUpBeforeBoarding(r, [['17:26:48', BOARDED.tripId]])
   })
 
-  it('8x: same as the phone', async () => {
+  it('8x: the plan names the caught bus before boarding, as at 1x', async () => {
     const r = await replay(8)
     expectTrustHeld(r)
-    expectPlanCaughtUpBeforeBoarding(r)
+    // Straight onto the caught bus on the first tick after the GPS hole
+    // (75.29: 17:24:43); 75.29's own tree, without 75.32, boarded on the
+    // 17:21:13 run and made one boarded-earlier swap instead.
+    expectPlanCaughtUpBeforeBoarding(r, [['17:24:43', BOARDED.tripId]])
   })
 
   it('25x (what the script asks for): one boarded-earlier swap onto the ridden bus', async () => {

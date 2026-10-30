@@ -533,6 +533,13 @@ describe('riding vehicle hold (35.1, 12.11 — 2026-09-28)', () => {
     expect(a).toEqual(run([riddenFrame, stopped], null))
   })
 
+  it('stamps lastSeen with the clock it was handed, match or none (75.29)', () => {
+    // nowMs is 2026-09-28; the wall clock this runs on is not. Date.now() here
+    // is what made the call above differ from its twin 2.5 % of the time.
+    expect(run([riddenFrame, stopped], '1:8220').lastSeen).toBe(nowMs)
+    expect(run([], null).lastSeen).toBe(nowMs)
+  })
+
   it('names the feed frame each tick was scored against', () => {
     expect(vehicleFrameKey(riddenFrame)).toBe(`t${NOW_S - 46}`)
     expect(run([riddenFrame, stopped], '1:8220').frameKey).toBe(

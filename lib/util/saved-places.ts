@@ -1,8 +1,8 @@
-import coreUtils from '@opentripplanner/core-utils'
-
 import { UserSavedLocation } from '../components/user/types'
 
-const { getItem, storeItem } = coreUtils.storage
+// Not coreUtils.storage: persistCustomPlaces runs inside the user reducer, and
+// a write that throws there fails the dispatch (75.12).
+import { getItem, storeItem } from './safe-storage'
 
 /**
  * The single localStorage key (under the "otp." prefix applied by

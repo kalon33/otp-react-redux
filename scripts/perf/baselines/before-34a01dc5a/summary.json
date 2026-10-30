@@ -1,0 +1,3608 @@
+{
+  "scenarios": {
+    "multistop-28": {
+      "actions": 114,
+      "errors": [],
+      "longTasks": {
+        "n": 101,
+        "over200": 66,
+        "over500": 65,
+        "sumMs": 277201,
+        "top5": [
+          {
+            "dur": 27743,
+            "t": 67371,
+            "inside": [
+              "ROUTING_RESPONSE",
+              "ITINERARY_VARIANT_ROWS",
+              "ROUTING_EXTRA_REQUEST"
+            ],
+            "precededBy": "POSITION_RESPONSE",
+            "precededByMsBefore": 2051
+          },
+          {
+            "dur": 11699,
+            "t": 119791,
+            "inside": [
+              "LEG_FREQUENCYx4",
+              "SET_VISIBLE_ITINERARY",
+              "SET_ACTIVE_ITINERARY",
+              "SET_ACTIVE_LEG"
+            ],
+            "precededBy": "ROUTING_SILENT_ERROR",
+            "precededByMsBefore": 357
+          },
+          {
+            "dur": 7530,
+            "t": 225482,
+            "inside": [
+              "LEG_FREQUENCYx4",
+              "SET_ACTIVE_ITINERARY",
+              "SET_ACTIVE_LEG"
+            ],
+            "precededBy": "POSITION_RESPONSE",
+            "precededByMsBefore": 1826
+          },
+          {
+            "dur": 7406,
+            "t": 315978,
+            "inside": [
+              "SET_ACTIVE_ITINERARY",
+              "SET_ACTIVE_LEG",
+              "LEG_FREQUENCY"
+            ],
+            "precededBy": "POSITION_RESPONSE",
+            "precededByMsBefore": 1955
+          },
+          {
+            "dur": 7372,
+            "t": 174350,
+            "inside": [
+              "LEG_FREQUENCYx4",
+              "SET_ACTIVE_ITINERARY",
+              "SET_ACTIVE_LEG"
+            ],
+            "precededBy": "@@router/LOCATION_CHANGE",
+            "precededByMsBefore": 2163
+          }
+        ],
+        "over500Unexcused": 65,
+        "maxMs": 27743
+      },
+      "network": {
+        "appApi": [
+          "/api/places?deviceId=dev-mvh147mx-p1zczgqj",
+          "/api/places?deviceId=dev-mvh147mx-p1zczgqj"
+        ],
+        "maxConcurrentPlans": 3,
+        "otpRequests": 27,
+        "planRequests": 7
+      },
+      "notes": [],
+      "taps": {
+        "max": 15356,
+        "n": 10,
+        "p50": 10906,
+        "p95": 15356,
+        "each": [
+          {
+            "eventTimingMs": 11808,
+            "label": "results-row-0",
+            "ms": 15356,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 3448,
+            "label": "results-back-0",
+            "ms": 15301,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 7464,
+            "label": "results-row-1",
+            "ms": 10948,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 4232,
+            "label": "results-back-1",
+            "ms": 8367,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 7632,
+            "label": "results-row-2",
+            "ms": 11113,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 4216,
+            "label": "results-back-2",
+            "ms": 8091,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 7424,
+            "label": "results-row-4",
+            "ms": 10906,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 4192,
+            "label": "results-back-4",
+            "ms": 8368,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 7496,
+            "label": "results-row-6",
+            "ms": 11007,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 4824,
+            "label": "results-back-6",
+            "ms": 8838,
+            "via": "click"
+          }
+        ],
+        "unmeasured": []
+      },
+      "wallSeconds": 351,
+      "search": {
+        "responses": [
+          {
+            "index": 1,
+            "itineraries": 1,
+            "longTaskMaxMs": 2756,
+            "longTaskSumMs": 3318,
+            "searchItineraries": 1,
+            "t": 5525
+          },
+          {
+            "index": 0,
+            "itineraries": 17,
+            "longTaskMaxMs": 2756,
+            "longTaskSumMs": 2874,
+            "searchItineraries": 18,
+            "t": 8715
+          },
+          {
+            "index": 3,
+            "itineraries": 17,
+            "longTaskMaxMs": 5496,
+            "longTaskSumMs": 5496,
+            "searchItineraries": 35,
+            "t": 15456
+          },
+          {
+            "index": 4,
+            "itineraries": 40,
+            "longTaskMaxMs": 27743,
+            "longTaskSumMs": 27743,
+            "searchItineraries": 75,
+            "t": 87305
+          }
+        ],
+        "routeRowTimetableFills": [],
+        "variantRows": [
+          {
+            "gapMs": 0,
+            "prevType": "ROUTING_RESPONSE",
+            "rows": 1,
+            "t": 5525,
+            "variants": 0
+          },
+          {
+            "gapMs": 0,
+            "prevType": "ROUTING_RESPONSE",
+            "rows": 13,
+            "t": 8715,
+            "variants": 10
+          },
+          {
+            "gapMs": 0,
+            "prevType": "ROUTING_RESPONSE",
+            "rows": 13,
+            "t": 15456,
+            "variants": 34
+          },
+          {
+            "gapMs": 0,
+            "prevType": "ROUTING_RESPONSE",
+            "rows": 31,
+            "t": 87305,
+            "variants": 64
+          }
+        ]
+      },
+      "host": {
+        "contention": [],
+        "loadavgEnd": 4.76,
+        "loadavgStart": 3.59
+      }
+    },
+    "search-1dest": {
+      "actions": 106,
+      "errors": [],
+      "longTasks": {
+        "n": 75,
+        "over200": 53,
+        "over500": 51,
+        "sumMs": 172149,
+        "top5": [
+          {
+            "dur": 17176,
+            "t": 78726,
+            "inside": [
+              "ROUTING_RESPONSE_EXTRA",
+              "ITINERARY_VARIANT_ROWS"
+            ],
+            "precededBy": "POSITION_RESPONSE",
+            "precededByMsBefore": 42
+          },
+          {
+            "dur": 15038,
+            "t": 57706,
+            "inside": [
+              "ROUTING_RESPONSE",
+              "ITINERARY_VARIANT_ROWS"
+            ],
+            "precededBy": "ROUTE_ROW_TIMETABLE",
+            "precededByMsBefore": 58
+          },
+          {
+            "dur": 11304,
+            "t": 46345,
+            "inside": [
+              "ROUTING_RESPONSE_EXTRA",
+              "ITINERARY_VARIANT_ROWS",
+              "ROUTE_ROW_TIMETABLE"
+            ],
+            "precededBy": "POSITION_RESPONSE",
+            "precededByMsBefore": 56
+          },
+          {
+            "dur": 10688,
+            "t": 32608,
+            "inside": [
+              "ROUTE_ROW_TIMETABLEx3",
+              "ROUTING_RESPONSE",
+              "ITINERARY_VARIANT_ROWS",
+              "ROUTING_EXTRA_REQUEST"
+            ],
+            "precededBy": "ROUTE_ROW_TIMETABLE",
+            "precededByMsBefore": 35
+          },
+          {
+            "dur": 7626,
+            "t": 24946,
+            "inside": [
+              "ROUTING_RESPONSE_EXTRA",
+              "ITINERARY_VARIANT_ROWS"
+            ],
+            "precededBy": "ROUTE_ROW_TIMETABLE",
+            "precededByMsBefore": 65
+          }
+        ],
+        "over500Unexcused": 51,
+        "maxMs": 17176
+      },
+      "network": {
+        "appApi": [
+          "/api/places?deviceId=dev-mvh1bqob-1dy4qpb7",
+          "/api/places?deviceId=dev-mvh1bqob-1dy4qpb7"
+        ],
+        "maxConcurrentPlans": 3,
+        "otpRequests": 22,
+        "planRequests": 6
+      },
+      "notes": [],
+      "taps": {
+        "max": 8044,
+        "n": 10,
+        "p50": 4559,
+        "p95": 8044,
+        "each": [
+          {
+            "eventTimingMs": 6256,
+            "label": "results-row-0",
+            "ms": 8044,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 2448,
+            "label": "results-back-0",
+            "ms": 4559,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 3968,
+            "label": "results-row-1",
+            "ms": 5744,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 2192,
+            "label": "results-back-1",
+            "ms": 4319,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 2136,
+            "label": "results-row-2",
+            "ms": 3983,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 2712,
+            "label": "results-back-2",
+            "ms": 4679,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 4144,
+            "label": "results-row-4",
+            "ms": 5910,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 2448,
+            "label": "results-back-4",
+            "ms": 4432,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 4024,
+            "label": "results-row-6",
+            "ms": 5900,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 2168,
+            "label": "results-back-6",
+            "ms": 4186,
+            "via": "click"
+          }
+        ],
+        "unmeasured": []
+      },
+      "wallSeconds": 193,
+      "search": {
+        "responses": [
+          {
+            "index": 1,
+            "itineraries": 1,
+            "longTaskMaxMs": 3969,
+            "longTaskSumMs": 5439,
+            "searchItineraries": 1,
+            "t": 4708
+          },
+          {
+            "index": 0,
+            "itineraries": 15,
+            "longTaskMaxMs": 3969,
+            "longTaskSumMs": 5157,
+            "searchItineraries": 16,
+            "t": 5944
+          },
+          {
+            "index": 2,
+            "itineraries": 30,
+            "longTaskMaxMs": 6376,
+            "longTaskSumMs": 10403,
+            "searchItineraries": 46,
+            "t": 9753
+          },
+          {
+            "index": 3,
+            "itineraries": 15,
+            "longTaskMaxMs": 6376,
+            "longTaskSumMs": 6376,
+            "searchItineraries": 61,
+            "t": 15460
+          },
+          {
+            "index": 4,
+            "itineraries": 11,
+            "longTaskMaxMs": 10688,
+            "longTaskSumMs": 10688,
+            "searchItineraries": 79,
+            "t": 40417
+          },
+          {
+            "index": 5,
+            "itineraries": 18,
+            "longTaskMaxMs": 15038,
+            "longTaskSumMs": 17000,
+            "searchItineraries": 99,
+            "t": 70796
+          }
+        ],
+        "routeRowTimetableFills": [
+          {
+            "key": "1:57417|1:54|1:41258|BICYCLE",
+            "longTaskMaxMs": 7626,
+            "longTaskSumMs": 14698,
+            "status": "done",
+            "t": 24882
+          },
+          {
+            "key": "2:52097|2:480|2:30672|BICYCLE",
+            "longTaskMaxMs": 10688,
+            "longTaskSumMs": 18314,
+            "status": "done",
+            "t": 32573
+          },
+          {
+            "key": "2:41248|2:465|2:51825|BICYCLE",
+            "longTaskMaxMs": 15038,
+            "longTaskSumMs": 26342,
+            "status": "done",
+            "t": 57648
+          },
+          {
+            "key": "1:43732|1:539|1:1616|BICYCLE",
+            "longTaskMaxMs": 1928,
+            "longTaskSumMs": 3841,
+            "status": "failed",
+            "t": 76721
+          },
+          {
+            "key": "1:2053|1:534|1:57518|BICYCLE",
+            "longTaskMaxMs": 17176,
+            "longTaskSumMs": 21050,
+            "status": "done",
+            "t": 95902
+          }
+        ],
+        "variantRows": [
+          {
+            "gapMs": 0,
+            "prevType": "ROUTING_RESPONSE",
+            "rows": 1,
+            "t": 4708,
+            "variants": 0
+          },
+          {
+            "gapMs": 0,
+            "prevType": "ROUTING_RESPONSE",
+            "rows": 7,
+            "t": 5944,
+            "variants": 12
+          },
+          {
+            "gapMs": 0,
+            "prevType": "ROUTING_RESPONSE",
+            "rows": 12,
+            "t": 9753,
+            "variants": 43
+          },
+          {
+            "gapMs": 0,
+            "prevType": "ROUTING_RESPONSE",
+            "rows": 12,
+            "t": 15460,
+            "variants": 61
+          },
+          {
+            "gapMs": 0,
+            "prevType": "ROUTING_RESPONSE_EXTRA",
+            "rows": 12,
+            "t": 23139,
+            "variants": 67
+          },
+          {
+            "gapMs": 0,
+            "prevType": "ROUTING_RESPONSE_EXTRA",
+            "rows": 12,
+            "t": 30773,
+            "variants": 68
+          },
+          {
+            "gapMs": 0,
+            "prevType": "ROUTING_RESPONSE",
+            "rows": 15,
+            "t": 40417,
+            "variants": 79
+          },
+          {
+            "gapMs": 0,
+            "prevType": "ROUTING_RESPONSE_EXTRA",
+            "rows": 15,
+            "t": 54854,
+            "variants": 81
+          },
+          {
+            "gapMs": 0,
+            "prevType": "ROUTING_RESPONSE",
+            "rows": 17,
+            "t": 70796,
+            "variants": 97
+          },
+          {
+            "gapMs": 0,
+            "prevType": "ROUTING_RESPONSE_EXTRA",
+            "rows": 17,
+            "t": 91995,
+            "variants": 99
+          }
+        ]
+      },
+      "host": {
+        "contention": [],
+        "loadavgEnd": 7.25,
+        "loadavgStart": 4.76
+      }
+    },
+    "details": {
+      "actions": 7,
+      "errors": [],
+      "longTasks": {
+        "n": 6,
+        "over200": 4,
+        "over500": 4,
+        "sumMs": 8300,
+        "top5": [
+          {
+            "dur": 2176,
+            "t": 14159,
+            "inside": [
+              "SET_ACTIVE_ITINERARY",
+              "SET_ACTIVE_LEG"
+            ],
+            "precededBy": "@@router/LOCATION_CHANGE",
+            "precededByMsBefore": 10021
+          },
+          {
+            "dur": 2139,
+            "t": 12,
+            "inside": [
+              "SET_ACTIVE_ITINERARY",
+              "SET_ACTIVE_LEG"
+            ],
+            "precededBy": null,
+            "precededByMsBefore": null
+          },
+          {
+            "dur": 1934,
+            "t": 16399,
+            "inside": [
+              "@@router/LOCATION_CHANGE"
+            ],
+            "precededBy": "SET_ACTIVE_LEG",
+            "precededByMsBefore": 2234
+          },
+          {
+            "dur": 1929,
+            "t": 2219,
+            "inside": [
+              "@@router/LOCATION_CHANGE"
+            ],
+            "precededBy": "SET_ACTIVE_LEG",
+            "precededByMsBefore": 2183
+          },
+          {
+            "dur": 66,
+            "t": 2152,
+            "inside": [],
+            "precededBy": "SET_ACTIVE_LEG",
+            "precededByMsBefore": 2116
+          }
+        ],
+        "over500Unexcused": 4,
+        "maxMs": 2176
+      },
+      "network": {
+        "appApi": [],
+        "maxConcurrentPlans": 0,
+        "otpRequests": 0,
+        "planRequests": 0
+      },
+      "notes": [
+        "details-other-stops skipped: it fans out ~12 concurrent plan queries (PERF_ALLOW_FANOUT=1 to include)",
+        "details-stop-list-collapse: not present on this itinerary"
+      ],
+      "taps": {
+        "max": 4191,
+        "n": 6,
+        "p50": 51,
+        "p95": 4191,
+        "each": [
+          {
+            "eventTimingMs": 2208,
+            "label": "details-open-row-0",
+            "ms": 4146,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 32,
+            "label": "details-frequency-line",
+            "ms": 46,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 48,
+            "label": "details-ride-expander",
+            "ms": 48,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 56,
+            "label": "details-alert-expander",
+            "ms": 56,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 32,
+            "label": "details-walk-expander",
+            "ms": 51,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 2248,
+            "label": "details-back",
+            "ms": 4191,
+            "via": "click"
+          }
+        ],
+        "unmeasured": []
+      },
+      "wallSeconds": 22,
+      "search": {
+        "responses": [],
+        "routeRowTimetableFills": [],
+        "variantRows": []
+      },
+      "host": {
+        "contention": [],
+        "loadavgEnd": 6.93,
+        "loadavgStart": 7.25
+      }
+    },
+    "multistop-28~2": {
+      "actions": 114,
+      "errors": [],
+      "longTasks": {
+        "n": 96,
+        "over200": 65,
+        "over500": 65,
+        "sumMs": 274736,
+        "top5": [
+          {
+            "dur": 27963,
+            "t": 65105,
+            "inside": [
+              "ROUTING_RESPONSE",
+              "ITINERARY_VARIANT_ROWS",
+              "ROUTING_EXTRA_REQUEST"
+            ],
+            "precededBy": "POSITION_RESPONSE",
+            "precededByMsBefore": 28
+          },
+          {
+            "dur": 11573,
+            "t": 117427,
+            "inside": [
+              "LEG_FREQUENCYx4",
+              "SET_VISIBLE_ITINERARY",
+              "SET_ACTIVE_ITINERARY",
+              "SET_ACTIVE_LEG"
+            ],
+            "precededBy": "ROUTING_SILENT_ERROR",
+            "precededByMsBefore": 348
+          },
+          {
+            "dur": 7482,
+            "t": 311350,
+            "inside": [
+              "SET_ACTIVE_ITINERARY",
+              "SET_ACTIVE_LEG",
+              "LEG_FREQUENCY"
+            ],
+            "precededBy": "POSITION_RESPONSE",
+            "precededByMsBefore": 366
+          },
+          {
+            "dur": 7314,
+            "t": 223368,
+            "inside": [
+              "LEG_FREQUENCYx4",
+              "SET_ACTIVE_ITINERARY",
+              "SET_ACTIVE_LEG"
+            ],
+            "precededBy": "POSITION_RESPONSE",
+            "precededByMsBefore": 1827
+          },
+          {
+            "dur": 7244,
+            "t": 172934,
+            "inside": [
+              "LEG_FREQUENCYx4",
+              "SET_ACTIVE_ITINERARY",
+              "SET_ACTIVE_LEG"
+            ],
+            "precededBy": "POSITION_RESPONSE",
+            "precededByMsBefore": 1876
+          }
+        ],
+        "over500Unexcused": 65,
+        "maxMs": 27963
+      },
+      "network": {
+        "appApi": [
+          "/api/places?deviceId=dev-mvh1gd26-iso5co8q",
+          "/api/places?deviceId=dev-mvh1gd26-iso5co8q"
+        ],
+        "maxConcurrentPlans": 3,
+        "otpRequests": 27,
+        "planRequests": 7
+      },
+      "notes": [],
+      "taps": {
+        "max": 15360,
+        "n": 10,
+        "p50": 10696,
+        "p95": 15360,
+        "each": [
+          {
+            "eventTimingMs": 11696,
+            "label": "results-row-0",
+            "ms": 15360,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 4176,
+            "label": "results-back-0",
+            "ms": 8033,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 7336,
+            "label": "results-row-1",
+            "ms": 10796,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 4424,
+            "label": "results-back-1",
+            "ms": 8293,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 7400,
+            "label": "results-row-2",
+            "ms": 10792,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 7552,
+            "label": "results-back-2",
+            "ms": 11527,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 7248,
+            "label": "results-row-4",
+            "ms": 10696,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 4384,
+            "label": "results-back-4",
+            "ms": 8233,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 7560,
+            "label": "results-row-6",
+            "ms": 11024,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 4720,
+            "label": "results-back-6",
+            "ms": 8808,
+            "via": "click"
+          }
+        ],
+        "unmeasured": []
+      },
+      "wallSeconds": 346,
+      "search": {
+        "responses": [
+          {
+            "index": 1,
+            "itineraries": 1,
+            "longTaskMaxMs": 2573,
+            "longTaskSumMs": 2710,
+            "searchItineraries": 1,
+            "t": 5919
+          },
+          {
+            "index": 0,
+            "itineraries": 17,
+            "longTaskMaxMs": 2573,
+            "longTaskSumMs": 2675,
+            "searchItineraries": 18,
+            "t": 8128
+          },
+          {
+            "index": 3,
+            "itineraries": 17,
+            "longTaskMaxMs": 5445,
+            "longTaskSumMs": 5445,
+            "searchItineraries": 35,
+            "t": 14754
+          },
+          {
+            "index": 4,
+            "itineraries": 40,
+            "longTaskMaxMs": 27963,
+            "longTaskSumMs": 27963,
+            "searchItineraries": 75,
+            "t": 85133
+          }
+        ],
+        "routeRowTimetableFills": [],
+        "variantRows": [
+          {
+            "gapMs": 0,
+            "prevType": "ROUTING_RESPONSE",
+            "rows": 1,
+            "t": 5919,
+            "variants": 0
+          },
+          {
+            "gapMs": 0,
+            "prevType": "ROUTING_RESPONSE",
+            "rows": 13,
+            "t": 8128,
+            "variants": 10
+          },
+          {
+            "gapMs": 0,
+            "prevType": "ROUTING_RESPONSE",
+            "rows": 13,
+            "t": 14754,
+            "variants": 34
+          },
+          {
+            "gapMs": 0,
+            "prevType": "ROUTING_RESPONSE",
+            "rows": 31,
+            "t": 85133,
+            "variants": 64
+          }
+        ]
+      },
+      "host": {
+        "contention": [],
+        "loadavgEnd": 4.76,
+        "loadavgStart": 6.93
+      }
+    },
+    "gomode-orange-bike-1008": {
+      "actions": 11106,
+      "errors": [],
+      "longTasks": {
+        "n": 5736,
+        "over200": 164,
+        "over500": 1,
+        "sumMs": 517842,
+        "top5": [
+          {
+            "dur": 503,
+            "t": 0,
+            "inside": [
+              "START_GO_MODE",
+              "SET_MOBILE_SCREEN",
+              "FINDING_ROUTE",
+              "FIND_ROUTE_RESPONSE"
+            ],
+            "precededBy": null,
+            "precededByMsBefore": null
+          },
+          {
+            "dur": 492,
+            "t": 235671,
+            "inside": [
+              "REALTIME_VEHICLE_POSITIONS_RESPONSE",
+              "UPDATE_POSITION",
+              "UPDATE_ROUTE_MATCH",
+              "UPDATE_PROGRESS"
+            ],
+            "precededBy": "UPDATE_SIMULATION_PROGRESS",
+            "precededByMsBefore": 107
+          },
+          {
+            "dur": 489,
+            "t": 233021,
+            "inside": [
+              "REALTIME_VEHICLE_POSITIONS_RESPONSE",
+              "UPDATE_POSITION",
+              "UPDATE_ROUTE_MATCH",
+              "UPDATE_PROGRESS"
+            ],
+            "precededBy": "UPDATE_SIMULATION_PROGRESS",
+            "precededByMsBefore": 259
+          },
+          {
+            "dur": 482,
+            "t": 234483,
+            "inside": [
+              "REALTIME_VEHICLE_POSITIONS_RESPONSE",
+              "UPDATE_POSITION",
+              "UPDATE_ROUTE_MATCH",
+              "UPDATE_PROGRESS"
+            ],
+            "precededBy": "SET_MAP_FOLLOW",
+            "precededByMsBefore": 10
+          },
+          {
+            "dur": 458,
+            "t": 232304,
+            "inside": [
+              "REALTIME_VEHICLE_POSITIONS_RESPONSE",
+              "UPDATE_POSITION",
+              "UPDATE_ROUTE_MATCH",
+              "UPDATE_PROGRESS"
+            ],
+            "precededBy": "UPDATE_SIMULATION_PROGRESS",
+            "precededByMsBefore": 269
+          }
+        ],
+        "over500Unexcused": 1,
+        "maxMs": 503
+      },
+      "network": {
+        "appApi": [
+          "/api/places?deviceId=dev-mvh1ns6x-7klnmr5r"
+        ],
+        "maxConcurrentPlans": 0,
+        "otpRequests": 2,
+        "planRequests": 0
+      },
+      "notes": [],
+      "taps": {
+        "max": 1956,
+        "n": 119,
+        "p50": 454,
+        "p95": 1202,
+        "each": [
+          {
+            "eventTimingMs": 864,
+            "label": "sheet-open",
+            "ms": 1506,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 432,
+            "label": "sheet-close",
+            "ms": 842,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 272,
+            "label": "map-pan",
+            "ms": 428,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 152,
+            "label": "follow-toggle",
+            "ms": 161,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 424,
+            "label": "menu-open",
+            "ms": 800,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 72,
+            "label": "menu-close",
+            "ms": 214,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 608,
+            "label": "sheet-open",
+            "ms": 895,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 56,
+            "label": "sheet-close",
+            "ms": 74,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 208,
+            "label": "map-pan",
+            "ms": 347,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 112,
+            "label": "follow-toggle",
+            "ms": 112,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 424,
+            "label": "menu-open",
+            "ms": 741,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 392,
+            "label": "menu-close",
+            "ms": 635,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 368,
+            "label": "sheet-open",
+            "ms": 833,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 344,
+            "label": "sheet-close",
+            "ms": 673,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 192,
+            "label": "map-pan",
+            "ms": 302,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 112,
+            "label": "follow-toggle",
+            "ms": 121,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 280,
+            "label": "menu-open",
+            "ms": 542,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 304,
+            "label": "menu-close",
+            "ms": 531,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 344,
+            "label": "sheet-open",
+            "ms": 741,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 352,
+            "label": "sheet-close",
+            "ms": 625,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 176,
+            "label": "map-pan",
+            "ms": 299,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 112,
+            "label": "follow-toggle",
+            "ms": 116,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 48,
+            "label": "menu-open",
+            "ms": 51,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 512,
+            "label": "menu-close",
+            "ms": 809,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 304,
+            "label": "sheet-open",
+            "ms": 584,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 464,
+            "label": "sheet-close",
+            "ms": 800,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 208,
+            "label": "map-pan",
+            "ms": 326,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 112,
+            "label": "follow-toggle",
+            "ms": 129,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 408,
+            "label": "menu-open",
+            "ms": 674,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 472,
+            "label": "menu-close",
+            "ms": 795,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 416,
+            "label": "sheet-open",
+            "ms": 657,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 368,
+            "label": "sheet-close",
+            "ms": 703,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 200,
+            "label": "map-pan",
+            "ms": 332,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 160,
+            "label": "follow-toggle",
+            "ms": 191,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 472,
+            "label": "menu-open",
+            "ms": 817,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 48,
+            "label": "menu-close",
+            "ms": 60,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 416,
+            "label": "sheet-open",
+            "ms": 666,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 328,
+            "label": "sheet-close",
+            "ms": 465,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 160,
+            "label": "map-pan",
+            "ms": 279,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 128,
+            "label": "follow-toggle",
+            "ms": 136,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 392,
+            "label": "menu-open",
+            "ms": 663,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 56,
+            "label": "menu-close",
+            "ms": 197,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 112,
+            "label": "sheet-open",
+            "ms": 111,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 48,
+            "label": "sheet-close",
+            "ms": 63,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 928,
+            "label": "map-pan",
+            "ms": 1379,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 248,
+            "label": "follow-toggle",
+            "ms": 283,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 984,
+            "label": "menu-open",
+            "ms": 1956,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 432,
+            "label": "menu-close",
+            "ms": 739,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 440,
+            "label": "sheet-open",
+            "ms": 654,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 360,
+            "label": "sheet-close",
+            "ms": 653,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 160,
+            "label": "map-pan",
+            "ms": 280,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 96,
+            "label": "follow-toggle",
+            "ms": 103,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 400,
+            "label": "menu-open",
+            "ms": 799,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 320,
+            "label": "menu-close",
+            "ms": 650,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 512,
+            "label": "sheet-open",
+            "ms": 796,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 432,
+            "label": "sheet-close",
+            "ms": 753,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 328,
+            "label": "map-pan",
+            "ms": 326,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 112,
+            "label": "follow-toggle",
+            "ms": 116,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 80,
+            "label": "menu-open",
+            "ms": 105,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 32,
+            "label": "menu-close",
+            "ms": 158,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 480,
+            "label": "sheet-open",
+            "ms": 727,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 424,
+            "label": "sheet-close",
+            "ms": 711,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 352,
+            "label": "map-pan",
+            "ms": 339,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 112,
+            "label": "follow-toggle",
+            "ms": 109,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 264,
+            "label": "menu-open",
+            "ms": 463,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 40,
+            "label": "menu-close",
+            "ms": 126,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 184,
+            "label": "sheet-open",
+            "ms": 192,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 72,
+            "label": "sheet-close",
+            "ms": 76,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 280,
+            "label": "map-pan",
+            "ms": 284,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 208,
+            "label": "follow-toggle",
+            "ms": 232,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 840,
+            "label": "menu-open",
+            "ms": 1782,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 360,
+            "label": "menu-close",
+            "ms": 428,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 208,
+            "label": "sheet-open",
+            "ms": 219,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 864,
+            "label": "sheet-close",
+            "ms": 1340,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 944,
+            "label": "map-pan",
+            "ms": 1202,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 256,
+            "label": "follow-toggle",
+            "ms": 261,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 96,
+            "label": "menu-open",
+            "ms": 107,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 472,
+            "label": "menu-close",
+            "ms": 812,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 408,
+            "label": "sheet-open",
+            "ms": 665,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 384,
+            "label": "sheet-close",
+            "ms": 648,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 32,
+            "label": "map-pan",
+            "ms": 49,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 384,
+            "label": "follow-toggle",
+            "ms": 733,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 96,
+            "label": "menu-open",
+            "ms": 132,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 40,
+            "label": "menu-close",
+            "ms": 152,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 192,
+            "label": "sheet-open",
+            "ms": 223,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 64,
+            "label": "sheet-close",
+            "ms": 76,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 296,
+            "label": "map-pan",
+            "ms": 300,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 128,
+            "label": "follow-toggle",
+            "ms": 127,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 432,
+            "label": "menu-open",
+            "ms": 699,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 408,
+            "label": "menu-close",
+            "ms": 651,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 496,
+            "label": "sheet-open",
+            "ms": 756,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 352,
+            "label": "sheet-close",
+            "ms": 586,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 264,
+            "label": "map-pan",
+            "ms": 274,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 112,
+            "label": "follow-toggle",
+            "ms": 127,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 384,
+            "label": "menu-open",
+            "ms": 620,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 352,
+            "label": "menu-close",
+            "ms": 578,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 392,
+            "label": "sheet-open",
+            "ms": 601,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 272,
+            "label": "sheet-close",
+            "ms": 579,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 192,
+            "label": "map-pan",
+            "ms": 287,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 104,
+            "label": "follow-toggle",
+            "ms": 112,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 352,
+            "label": "menu-open",
+            "ms": 575,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 296,
+            "label": "menu-close",
+            "ms": 506,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 336,
+            "label": "sheet-open",
+            "ms": 712,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 296,
+            "label": "sheet-close",
+            "ms": 629,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 352,
+            "label": "map-pan",
+            "ms": 454,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 104,
+            "label": "follow-toggle",
+            "ms": 121,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 272,
+            "label": "menu-open",
+            "ms": 406,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 248,
+            "label": "menu-close",
+            "ms": 481,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 416,
+            "label": "sheet-open",
+            "ms": 644,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 320,
+            "label": "sheet-close",
+            "ms": 615,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 184,
+            "label": "map-pan",
+            "ms": 281,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 120,
+            "label": "follow-toggle",
+            "ms": 127,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 328,
+            "label": "menu-open",
+            "ms": 461,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 280,
+            "label": "menu-close",
+            "ms": 390,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 408,
+            "label": "sheet-open",
+            "ms": 653,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 136,
+            "label": "sheet-close",
+            "ms": 235,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 168,
+            "label": "map-pan",
+            "ms": 171,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 112,
+            "label": "follow-toggle",
+            "ms": 142,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 72,
+            "label": "menu-open",
+            "ms": 91,
+            "via": "click"
+          }
+        ],
+        "unmeasured": []
+      },
+      "wallSeconds": 614,
+      "goMode": {
+        "perTickMs": {
+          "max": 492,
+          "n": 1947,
+          "p50": 127,
+          "p95": 227
+        },
+        "perTickSyncMs": {
+          "max": 492,
+          "n": 1947,
+          "p50": 127,
+          "p95": 226
+        },
+        "steadyLongTasks": {
+          "max": 492,
+          "n": 1360,
+          "over200": 104
+        },
+        "ticks": 1947,
+        "ticksPerWallSecond": 3.21
+      },
+      "replay": {
+        "finalStatus": "finished",
+        "fixture": "1008-0916-orange-bike",
+        "pointIndex": 1948,
+        "speed": 10,
+        "totalPoints": 1948,
+        "wallSeconds": 606
+      },
+      "host": {
+        "contention": [],
+        "loadavgEnd": 9.78,
+        "loadavgStart": 4.76
+      }
+    },
+    "gomode-gold-74-1105": {
+      "actions": 2839,
+      "errors": [],
+      "longTasks": {
+        "n": 1095,
+        "over200": 10,
+        "over500": 1,
+        "sumMs": 101018,
+        "top5": [
+          {
+            "dur": 520,
+            "t": 6410,
+            "inside": [],
+            "precededBy": "UPDATE_SIMULATION_PROGRESS",
+            "precededByMsBefore": 190
+          },
+          {
+            "dur": 496,
+            "t": 0,
+            "inside": [
+              "FINDING_ROUTEx2",
+              "FIND_ROUTE_RESPONSEx2",
+              "FIND_ROUTE_ERRORx2",
+              "FETCHING_STOP_TIMES_FOR_STOPx2"
+            ],
+            "precededBy": null,
+            "precededByMsBefore": null
+          },
+          {
+            "dur": 253,
+            "t": 57616,
+            "inside": [
+              "REALTIME_VEHICLE_POSITIONS_RESPONSE",
+              "UPDATE_POSITION",
+              "UPDATE_ROUTE_MATCH",
+              "UPDATE_PROGRESS"
+            ],
+            "precededBy": "UPDATE_SIMULATION_PROGRESS",
+            "precededByMsBefore": 158
+          },
+          {
+            "dur": 244,
+            "t": 2110,
+            "inside": [],
+            "precededBy": "UPDATE_SIMULATION_PROGRESS",
+            "precededByMsBefore": 98
+          },
+          {
+            "dur": 219,
+            "t": 6930,
+            "inside": [
+              "REALTIME_VEHICLE_POSITIONS_RESPONSE",
+              "UPDATE_POSITION",
+              "UPDATE_ROUTE_MATCH",
+              "UPDATE_PROGRESS"
+            ],
+            "precededBy": "UPDATE_SIMULATION_PROGRESS",
+            "precededByMsBefore": 710
+          }
+        ],
+        "over500Unexcused": 1,
+        "maxMs": 520
+      },
+      "network": {
+        "appApi": [
+          "/api/places?deviceId=dev-mvh20y54-vauw3oh1"
+        ],
+        "maxConcurrentPlans": 0,
+        "otpRequests": 2,
+        "planRequests": 0
+      },
+      "notes": [],
+      "taps": {
+        "max": 1209,
+        "n": 24,
+        "p50": 604,
+        "p95": 889,
+        "each": [
+          {
+            "eventTimingMs": 664,
+            "label": "sheet-open",
+            "ms": 1209,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 368,
+            "label": "sheet-close",
+            "ms": 721,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 64,
+            "label": "map-pan",
+            "ms": 65,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 128,
+            "label": "follow-toggle",
+            "ms": 157,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 320,
+            "label": "menu-open",
+            "ms": 604,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 392,
+            "label": "menu-close",
+            "ms": 657,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 528,
+            "label": "sheet-open",
+            "ms": 781,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 352,
+            "label": "sheet-close",
+            "ms": 621,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 176,
+            "label": "map-pan",
+            "ms": 289,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 128,
+            "label": "follow-toggle",
+            "ms": 134,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 408,
+            "label": "menu-open",
+            "ms": 889,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 56,
+            "label": "menu-close",
+            "ms": 65,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 280,
+            "label": "sheet-open",
+            "ms": 299,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 56,
+            "label": "sheet-close",
+            "ms": 57,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 208,
+            "label": "map-pan",
+            "ms": 329,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 112,
+            "label": "follow-toggle",
+            "ms": 119,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 560,
+            "label": "menu-open",
+            "ms": 666,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 376,
+            "label": "menu-close",
+            "ms": 626,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 448,
+            "label": "sheet-open",
+            "ms": 728,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 336,
+            "label": "sheet-close",
+            "ms": 611,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 152,
+            "label": "map-pan",
+            "ms": 282,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 104,
+            "label": "follow-toggle",
+            "ms": 116,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 352,
+            "label": "menu-open",
+            "ms": 633,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 384,
+            "label": "menu-close",
+            "ms": 686,
+            "via": "click"
+          }
+        ],
+        "unmeasured": []
+      },
+      "wallSeconds": 129,
+      "goMode": {
+        "perTickMs": {
+          "max": 253,
+          "n": 398,
+          "p50": 143,
+          "p95": 180
+        },
+        "perTickSyncMs": {
+          "max": 219,
+          "n": 398,
+          "p50": 142,
+          "p95": 180
+        },
+        "steadyLongTasks": {
+          "max": 213,
+          "n": 277,
+          "over200": 3
+        },
+        "ticks": 398,
+        "ticksPerWallSecond": 3.3
+      },
+      "replay": {
+        "finalStatus": "finished",
+        "fixture": "gold-74-1105",
+        "pointIndex": 399,
+        "speed": 10,
+        "totalPoints": 399,
+        "wallSeconds": 121
+      },
+      "host": {
+        "contention": [],
+        "loadavgEnd": 12.49,
+        "loadavgStart": 9.78
+      }
+    },
+    "gomode-465-wrongdir-0921": {
+      "actions": 10609,
+      "errors": [],
+      "longTasks": {
+        "n": 5322,
+        "over200": 57,
+        "over500": 3,
+        "sumMs": 456843,
+        "top5": [
+          {
+            "dur": 532,
+            "t": 362277,
+            "inside": [
+              "REALTIME_VEHICLE_POSITIONS_RESPONSE",
+              "UPDATE_POSITION",
+              "UPDATE_ROUTE_MATCH",
+              "UPDATE_PROGRESS"
+            ],
+            "precededBy": "UPDATE_SIMULATION_PROGRESS",
+            "precededByMsBefore": 141
+          },
+          {
+            "dur": 520,
+            "t": 363800,
+            "inside": [
+              "REALTIME_VEHICLE_POSITIONS_RESPONSE",
+              "UPDATE_POSITION",
+              "UPDATE_ROUTE_MATCH",
+              "UPDATE_PROGRESS"
+            ],
+            "precededBy": "UPDATE_SIMULATION_PROGRESS",
+            "precededByMsBefore": 275
+          },
+          {
+            "dur": 511,
+            "t": 1,
+            "inside": [
+              "START_GO_MODE",
+              "SET_MOBILE_SCREEN",
+              "FINDING_ROUTE",
+              "FIND_ROUTE_RESPONSE"
+            ],
+            "precededBy": null,
+            "precededByMsBefore": null
+          },
+          {
+            "dur": 483,
+            "t": 5975,
+            "inside": [],
+            "precededBy": "UPDATE_SIMULATION_PROGRESS",
+            "precededByMsBefore": 105
+          },
+          {
+            "dur": 464,
+            "t": 369452,
+            "inside": [
+              "REALTIME_VEHICLE_POSITIONS_RESPONSE",
+              "UPDATE_POSITION",
+              "UPDATE_ROUTE_MATCH",
+              "UPDATE_PROGRESS"
+            ],
+            "precededBy": "UPDATE_SIMULATION_PROGRESS",
+            "precededByMsBefore": 311
+          }
+        ],
+        "over500Unexcused": 3,
+        "maxMs": 532
+      },
+      "network": {
+        "appApi": [
+          "/api/places?deviceId=dev-mvh23pik-qlzj18zg"
+        ],
+        "maxConcurrentPlans": 0,
+        "otpRequests": 2,
+        "planRequests": 0
+      },
+      "notes": [],
+      "taps": {
+        "max": 2117,
+        "n": 126,
+        "p50": 434,
+        "p95": 757,
+        "each": [
+          {
+            "eventTimingMs": 536,
+            "label": "sheet-open",
+            "ms": 562,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 96,
+            "label": "sheet-close",
+            "ms": 123,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 264,
+            "label": "map-pan",
+            "ms": 268,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 152,
+            "label": "follow-toggle",
+            "ms": 154,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 80,
+            "label": "menu-open",
+            "ms": 103,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 168,
+            "label": "menu-close",
+            "ms": 182,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 168,
+            "label": "sheet-open",
+            "ms": 164,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 64,
+            "label": "sheet-close",
+            "ms": 73,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 256,
+            "label": "map-pan",
+            "ms": 269,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 144,
+            "label": "follow-toggle",
+            "ms": 161,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 344,
+            "label": "menu-open",
+            "ms": 542,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 328,
+            "label": "menu-close",
+            "ms": 544,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 416,
+            "label": "sheet-open",
+            "ms": 613,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 312,
+            "label": "sheet-close",
+            "ms": 597,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 264,
+            "label": "map-pan",
+            "ms": 276,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 136,
+            "label": "follow-toggle",
+            "ms": 159,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 360,
+            "label": "menu-open",
+            "ms": 597,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 376,
+            "label": "menu-close",
+            "ms": 616,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 336,
+            "label": "sheet-open",
+            "ms": 644,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 416,
+            "label": "sheet-close",
+            "ms": 599,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 224,
+            "label": "map-pan",
+            "ms": 229,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 120,
+            "label": "follow-toggle",
+            "ms": 130,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 368,
+            "label": "menu-open",
+            "ms": 584,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 304,
+            "label": "menu-close",
+            "ms": 538,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 344,
+            "label": "sheet-open",
+            "ms": 662,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 264,
+            "label": "sheet-close",
+            "ms": 504,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 248,
+            "label": "map-pan",
+            "ms": 337,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 104,
+            "label": "follow-toggle",
+            "ms": 188,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 296,
+            "label": "menu-open",
+            "ms": 517,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 344,
+            "label": "menu-close",
+            "ms": 635,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 400,
+            "label": "sheet-open",
+            "ms": 508,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 272,
+            "label": "sheet-close",
+            "ms": 525,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 224,
+            "label": "map-pan",
+            "ms": 227,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 128,
+            "label": "follow-toggle",
+            "ms": 191,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 208,
+            "label": "menu-open",
+            "ms": 367,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 88,
+            "label": "menu-close",
+            "ms": 198,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 128,
+            "label": "sheet-open",
+            "ms": 137,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 72,
+            "label": "sheet-close",
+            "ms": 76,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 136,
+            "label": "map-pan",
+            "ms": 241,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 112,
+            "label": "follow-toggle",
+            "ms": 113,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 48,
+            "label": "menu-open",
+            "ms": 62,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 48,
+            "label": "menu-close",
+            "ms": 52,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 160,
+            "label": "sheet-open",
+            "ms": 164,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 184,
+            "label": "sheet-close",
+            "ms": 211,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 240,
+            "label": "map-pan",
+            "ms": 344,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 112,
+            "label": "follow-toggle",
+            "ms": 115,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 168,
+            "label": "menu-open",
+            "ms": 177,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 272,
+            "label": "menu-close",
+            "ms": 426,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 152,
+            "label": "sheet-open",
+            "ms": 157,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 64,
+            "label": "sheet-close",
+            "ms": 76,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 240,
+            "label": "map-pan",
+            "ms": 332,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 96,
+            "label": "follow-toggle",
+            "ms": 104,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 184,
+            "label": "menu-open",
+            "ms": 201,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 104,
+            "label": "menu-close",
+            "ms": 147,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 144,
+            "label": "sheet-open",
+            "ms": 135,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 64,
+            "label": "sheet-close",
+            "ms": 79,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 256,
+            "label": "map-pan",
+            "ms": 261,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 112,
+            "label": "follow-toggle",
+            "ms": 125,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 352,
+            "label": "menu-open",
+            "ms": 584,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 272,
+            "label": "menu-close",
+            "ms": 628,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 304,
+            "label": "sheet-open",
+            "ms": 683,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 344,
+            "label": "sheet-close",
+            "ms": 429,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 296,
+            "label": "map-pan",
+            "ms": 428,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 120,
+            "label": "follow-toggle",
+            "ms": 106,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 352,
+            "label": "menu-open",
+            "ms": 581,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 352,
+            "label": "menu-close",
+            "ms": 598,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 416,
+            "label": "sheet-open",
+            "ms": 825,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 304,
+            "label": "sheet-close",
+            "ms": 602,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 288,
+            "label": "map-pan",
+            "ms": 434,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 96,
+            "label": "follow-toggle",
+            "ms": 103,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 344,
+            "label": "menu-open",
+            "ms": 572,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 336,
+            "label": "menu-close",
+            "ms": 447,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 472,
+            "label": "sheet-open",
+            "ms": 751,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 360,
+            "label": "sheet-close",
+            "ms": 646,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 328,
+            "label": "map-pan",
+            "ms": 462,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 112,
+            "label": "follow-toggle",
+            "ms": 122,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 424,
+            "label": "menu-open",
+            "ms": 757,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 456,
+            "label": "menu-close",
+            "ms": 730,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 488,
+            "label": "sheet-open",
+            "ms": 726,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 1024,
+            "label": "sheet-close",
+            "ms": 2117,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 744,
+            "label": "map-pan",
+            "ms": 1084,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 160,
+            "label": "follow-toggle",
+            "ms": 165,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 312,
+            "label": "menu-open",
+            "ms": 572,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 288,
+            "label": "menu-close",
+            "ms": 587,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 488,
+            "label": "sheet-open",
+            "ms": 934,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 360,
+            "label": "sheet-close",
+            "ms": 718,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 328,
+            "label": "map-pan",
+            "ms": 309,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 160,
+            "label": "follow-toggle",
+            "ms": 252,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 360,
+            "label": "menu-open",
+            "ms": 628,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 336,
+            "label": "menu-close",
+            "ms": 618,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 328,
+            "label": "sheet-open",
+            "ms": 726,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 392,
+            "label": "sheet-close",
+            "ms": 681,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 328,
+            "label": "map-pan",
+            "ms": 322,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 144,
+            "label": "follow-toggle",
+            "ms": 169,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 360,
+            "label": "menu-open",
+            "ms": 599,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 400,
+            "label": "menu-close",
+            "ms": 688,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 448,
+            "label": "sheet-open",
+            "ms": 637,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 552,
+            "label": "sheet-close",
+            "ms": 687,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 272,
+            "label": "map-pan",
+            "ms": 284,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 128,
+            "label": "follow-toggle",
+            "ms": 159,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 56,
+            "label": "menu-open",
+            "ms": 68,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 304,
+            "label": "menu-close",
+            "ms": 554,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 440,
+            "label": "sheet-open",
+            "ms": 707,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 296,
+            "label": "sheet-close",
+            "ms": 557,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 304,
+            "label": "map-pan",
+            "ms": 394,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 120,
+            "label": "follow-toggle",
+            "ms": 125,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 336,
+            "label": "menu-open",
+            "ms": 491,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 312,
+            "label": "menu-close",
+            "ms": 527,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 552,
+            "label": "sheet-open",
+            "ms": 815,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 384,
+            "label": "sheet-close",
+            "ms": 652,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 288,
+            "label": "map-pan",
+            "ms": 377,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 120,
+            "label": "follow-toggle",
+            "ms": 145,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 392,
+            "label": "menu-open",
+            "ms": 688,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 264,
+            "label": "menu-close",
+            "ms": 458,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 392,
+            "label": "sheet-open",
+            "ms": 648,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 352,
+            "label": "sheet-close",
+            "ms": 582,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 344,
+            "label": "map-pan",
+            "ms": 354,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 120,
+            "label": "follow-toggle",
+            "ms": 125,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 312,
+            "label": "menu-open",
+            "ms": 536,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 392,
+            "label": "menu-close",
+            "ms": 642,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 360,
+            "label": "sheet-open",
+            "ms": 785,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 352,
+            "label": "sheet-close",
+            "ms": 624,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 208,
+            "label": "map-pan",
+            "ms": 302,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 120,
+            "label": "follow-toggle",
+            "ms": 121,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 392,
+            "label": "menu-open",
+            "ms": 561,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 280,
+            "label": "menu-close",
+            "ms": 489,
+            "via": "click"
+          }
+        ],
+        "unmeasured": []
+      },
+      "wallSeconds": 613,
+      "goMode": {
+        "perTickMs": {
+          "max": 532,
+          "n": 2133,
+          "p50": 108,
+          "p95": 167
+        },
+        "perTickSyncMs": {
+          "max": 531,
+          "n": 2133,
+          "p50": 107,
+          "p95": 166
+        },
+        "steadyLongTasks": {
+          "max": 532,
+          "n": 1473,
+          "over200": 39
+        },
+        "ticks": 2133,
+        "ticksPerWallSecond": 3.52
+      },
+      "replay": {
+        "finalStatus": "finished",
+        "fixture": "0921-1605-465-wrongdir",
+        "pointIndex": 2134,
+        "speed": 10,
+        "totalPoints": 2134,
+        "wallSeconds": 606
+      },
+      "host": {
+        "contention": [],
+        "loadavgEnd": 10.42,
+        "loadavgStart": 12.49
+      }
+    },
+    "gomode-green-onboard-1135": {
+      "actions": 499,
+      "errors": [],
+      "longTasks": {
+        "n": 374,
+        "over200": 5,
+        "over500": 1,
+        "sumMs": 31133,
+        "top5": [
+          {
+            "dur": 606,
+            "t": 6933,
+            "inside": [],
+            "precededBy": "UPDATE_SIMULATION_PROGRESS",
+            "precededByMsBefore": 139
+          },
+          {
+            "dur": 468,
+            "t": 1,
+            "inside": [
+              "START_GO_MODE",
+              "SET_MOBILE_SCREEN",
+              "FINDING_ROUTE",
+              "FIND_ROUTE_ERROR"
+            ],
+            "precededBy": null,
+            "precededByMsBefore": null
+          },
+          {
+            "dur": 241,
+            "t": 24649,
+            "inside": [
+              "UPDATE_POSITION",
+              "UPDATE_ROUTE_MATCH",
+              "UPDATE_PROGRESS",
+              "UPDATE_SIMULATION_PROGRESS"
+            ],
+            "precededBy": "UPDATE_SIMULATION_PROGRESS",
+            "precededByMsBefore": 464
+          },
+          {
+            "dur": 219,
+            "t": 23966,
+            "inside": [
+              "UPDATE_POSITION",
+              "UPDATE_ROUTE_MATCH",
+              "UPDATE_PROGRESS"
+            ],
+            "precededBy": "UPDATE_SIMULATION_PROGRESS",
+            "precededByMsBefore": 445
+          },
+          {
+            "dur": 201,
+            "t": 7609,
+            "inside": [
+              "UPDATE_POSITION",
+              "UPDATE_ROUTE_MATCH",
+              "UPDATE_PROGRESS",
+              "UPDATE_VEHICLE_MATCH"
+            ],
+            "precededBy": "UPDATE_SIMULATION_PROGRESS",
+            "precededByMsBefore": 815
+          }
+        ],
+        "over500Unexcused": 1,
+        "maxMs": 606
+      },
+      "network": {
+        "appApi": [
+          "/api/places?deviceId=dev-mvh2gv16-3q07aznb"
+        ],
+        "maxConcurrentPlans": 0,
+        "otpRequests": 2,
+        "planRequests": 0
+      },
+      "notes": [],
+      "taps": {
+        "max": 1094,
+        "n": 10,
+        "p50": 161,
+        "p95": 1094,
+        "each": [
+          {
+            "eventTimingMs": 888,
+            "label": "sheet-open",
+            "ms": 1094,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 392,
+            "label": "sheet-close",
+            "ms": 510,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 280,
+            "label": "map-pan",
+            "ms": 285,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 144,
+            "label": "follow-toggle",
+            "ms": 161,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 432,
+            "label": "menu-open",
+            "ms": 575,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 64,
+            "label": "menu-close",
+            "ms": 87,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 168,
+            "label": "sheet-open",
+            "ms": 175,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 64,
+            "label": "sheet-close",
+            "ms": 77,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 144,
+            "label": "map-pan",
+            "ms": 152,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 104,
+            "label": "follow-toggle",
+            "ms": 110,
+            "via": "click"
+          }
+        ],
+        "unmeasured": []
+      },
+      "wallSeconds": 53,
+      "goMode": {
+        "perTickMs": {
+          "max": 241,
+          "n": 106,
+          "p50": 122,
+          "p95": 173
+        },
+        "perTickSyncMs": {
+          "max": 241,
+          "n": 106,
+          "p50": 121,
+          "p95": 173
+        },
+        "steadyLongTasks": {
+          "max": 241,
+          "n": 75,
+          "over200": 2
+        },
+        "ticks": 106,
+        "ticksPerWallSecond": 2.35
+      },
+      "replay": {
+        "finalStatus": "finished",
+        "fixture": "green-line-onboard-1135",
+        "pointIndex": 107,
+        "speed": 4,
+        "totalPoints": 107,
+        "wallSeconds": 46
+      },
+      "host": {
+        "contention": [],
+        "loadavgEnd": 8.01,
+        "loadavgStart": 10.42
+      }
+    },
+    "reroute": {
+      "actions": 4332,
+      "errors": [],
+      "longTasks": {
+        "n": 2872,
+        "over200": 383,
+        "over500": 2,
+        "sumMs": 330951,
+        "top5": [
+          {
+            "dur": 838,
+            "t": 0,
+            "inside": [
+              "FINDING_ROUTEx2",
+              "FIND_ROUTE_ERRORx2",
+              "FETCHING_STOP_TIMES_FOR_STOPx2",
+              "FIND_STOP_TIMES_FOR_STOP_RESPONSEx2"
+            ],
+            "precededBy": null,
+            "precededByMsBefore": null
+          },
+          {
+            "dur": 516,
+            "t": 7483,
+            "inside": [],
+            "precededBy": "UPDATE_SIMULATION_PROGRESS",
+            "precededByMsBefore": 90
+          },
+          {
+            "dur": 382,
+            "t": 331371,
+            "inside": [
+              "UPDATE_POSITION",
+              "UPDATE_ROUTE_MATCH",
+              "UPDATE_PROGRESS",
+              "UPDATE_VEHICLE_MATCH"
+            ],
+            "precededBy": "UPDATE_SIMULATION_PROGRESS",
+            "precededByMsBefore": 177
+          },
+          {
+            "dur": 382,
+            "t": 367354,
+            "inside": [
+              "UPDATE_POSITION",
+              "UPDATE_ROUTE_MATCH",
+              "UPDATE_PROGRESS",
+              "UPDATE_VEHICLE_MATCH"
+            ],
+            "precededBy": "UPDATE_SIMULATION_PROGRESS",
+            "precededByMsBefore": 186
+          },
+          {
+            "dur": 381,
+            "t": 331946,
+            "inside": [
+              "UPDATE_POSITION",
+              "UPDATE_ROUTE_MATCH",
+              "UPDATE_PROGRESS",
+              "UPDATE_VEHICLE_MATCH"
+            ],
+            "precededBy": "UPDATE_SIMULATION_PROGRESS",
+            "precededByMsBefore": 193
+          }
+        ],
+        "over500Unexcused": 2,
+        "maxMs": 838
+      },
+      "network": {
+        "appApi": [
+          "/api/places?deviceId=dev-mvh2hzxp-ensq380c",
+          "/api/places?deviceId=dev-mvh2hzxp-ensq380c"
+        ],
+        "maxConcurrentPlans": 0,
+        "otpRequests": 3,
+        "planRequests": 0
+      },
+      "notes": [
+        "0921-1646-orange-missedbus: no faster-route offer appeared during the replay",
+        "ride-1019-0844-aboard-offer: no faster-route offer appeared during the replay"
+      ],
+      "taps": {
+        "max": 1221,
+        "n": 70,
+        "p50": 399,
+        "p95": 1088,
+        "each": [
+          {
+            "eventTimingMs": 568,
+            "label": "sheet-open",
+            "ms": 888,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 96,
+            "label": "sheet-close",
+            "ms": 98,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 392,
+            "label": "map-pan",
+            "ms": 399,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 144,
+            "label": "follow-toggle",
+            "ms": 172,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 400,
+            "label": "menu-open",
+            "ms": 869,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 416,
+            "label": "menu-close",
+            "ms": 725,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 416,
+            "label": "sheet-open",
+            "ms": 1043,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 600,
+            "label": "sheet-close",
+            "ms": 1077,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 184,
+            "label": "map-pan",
+            "ms": 384,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 144,
+            "label": "follow-toggle",
+            "ms": 153,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 456,
+            "label": "menu-open",
+            "ms": 795,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 432,
+            "label": "menu-close",
+            "ms": 763,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 592,
+            "label": "sheet-open",
+            "ms": 925,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 608,
+            "label": "sheet-close",
+            "ms": 1221,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 192,
+            "label": "map-pan",
+            "ms": 368,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 168,
+            "label": "follow-toggle",
+            "ms": 173,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 56,
+            "label": "menu-open",
+            "ms": 62,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 440,
+            "label": "menu-close",
+            "ms": 775,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 432,
+            "label": "sheet-open",
+            "ms": 1023,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 464,
+            "label": "sheet-close",
+            "ms": 899,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 392,
+            "label": "map-pan",
+            "ms": 389,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 128,
+            "label": "follow-toggle",
+            "ms": 131,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 504,
+            "label": "menu-open",
+            "ms": 796,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 400,
+            "label": "menu-close",
+            "ms": 738,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 696,
+            "label": "sheet-open",
+            "ms": 1033,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 584,
+            "label": "sheet-close",
+            "ms": 1013,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 368,
+            "label": "map-pan",
+            "ms": 371,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 152,
+            "label": "follow-toggle",
+            "ms": 149,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 480,
+            "label": "menu-open",
+            "ms": 786,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 376,
+            "label": "menu-close",
+            "ms": 765,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 472,
+            "label": "sheet-open",
+            "ms": 1163,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 520,
+            "label": "sheet-close",
+            "ms": 951,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 336,
+            "label": "map-pan",
+            "ms": 346,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 128,
+            "label": "follow-toggle",
+            "ms": 129,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 184,
+            "label": "menu-open",
+            "ms": 276,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 56,
+            "label": "menu-close",
+            "ms": 63,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 264,
+            "label": "sheet-open",
+            "ms": 450,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 112,
+            "label": "sheet-close",
+            "ms": 139,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 392,
+            "label": "map-pan",
+            "ms": 590,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 128,
+            "label": "follow-toggle",
+            "ms": 126,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 56,
+            "label": "menu-open",
+            "ms": 73,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 48,
+            "label": "menu-close",
+            "ms": 56,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 264,
+            "label": "sheet-open",
+            "ms": 276,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 112,
+            "label": "sheet-close",
+            "ms": 135,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 360,
+            "label": "map-pan",
+            "ms": 550,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 128,
+            "label": "follow-toggle",
+            "ms": 127,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 64,
+            "label": "menu-open",
+            "ms": 88,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 40,
+            "label": "menu-close",
+            "ms": 56,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 200,
+            "label": "sheet-open",
+            "ms": 200,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 80,
+            "label": "sheet-close",
+            "ms": 92,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 344,
+            "label": "map-pan",
+            "ms": 354,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 128,
+            "label": "follow-toggle",
+            "ms": 128,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 432,
+            "label": "menu-open",
+            "ms": 749,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 296,
+            "label": "menu-close",
+            "ms": 317,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 248,
+            "label": "sheet-open",
+            "ms": 445,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 80,
+            "label": "sheet-close",
+            "ms": 84,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 344,
+            "label": "map-pan",
+            "ms": 352,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 136,
+            "label": "follow-toggle",
+            "ms": 122,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 376,
+            "label": "menu-open",
+            "ms": 788,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 408,
+            "label": "menu-close",
+            "ms": 733,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 648,
+            "label": "sheet-open",
+            "ms": 998,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 568,
+            "label": "sheet-close",
+            "ms": 1020,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 440,
+            "label": "map-pan",
+            "ms": 445,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 128,
+            "label": "follow-toggle",
+            "ms": 142,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 496,
+            "label": "menu-open",
+            "ms": 840,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 488,
+            "label": "menu-close",
+            "ms": 1071,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 424,
+            "label": "sheet-open",
+            "ms": 1159,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 584,
+            "label": "sheet-close",
+            "ms": 1088,
+            "via": "click"
+          },
+          {
+            "eventTimingMs": 464,
+            "label": "map-pan",
+            "ms": 467,
+            "via": "touchend"
+          },
+          {
+            "eventTimingMs": 184,
+            "label": "follow-toggle",
+            "ms": 194,
+            "via": "click"
+          }
+        ],
+        "unmeasured": []
+      },
+      "wallSeconds": 1197,
+      "goMode": {
+        "perTickMs": {
+          "max": 383,
+          "n": 1023,
+          "p50": 193,
+          "p95": 315
+        },
+        "perTickSyncMs": {
+          "max": 383,
+          "n": 1023,
+          "p50": 193,
+          "p95": 315
+        },
+        "steadyLongTasks": {
+          "max": 382,
+          "n": 718,
+          "over200": 257
+        },
+        "ticks": 1023,
+        "ticksPerWallSecond": 2.68
+      },
+      "replay": {
+        "finalStatus": "finished",
+        "fixture": "ride-1019-0844-aboard-offer",
+        "pointIndex": 1024,
+        "speed": 10,
+        "totalPoints": 1024,
+        "wallSeconds": 382
+      },
+      "host": {
+        "contention": [],
+        "loadavgEnd": 9.61,
+        "loadavgStart": 8.01
+      }
+    },
+    "back-feedback": {
+      "skipped": "page stopped answering CDP for >120 s after menu -> Share feedback -> return-to-trip banner (4x and 1x); see README caveats"
+    }
+  },
+  "appUrl": "http://127.0.0.1:9968/",
+  "chrome": "/opt/google/chrome/chrome",
+  "cpuThrottle": 4,
+  "dpr": 2,
+  "label": "before-34a01dc5a",
+  "quietConsole": true,
+  "served": {
+    "dirty": [],
+    "sha": "34a01dc5a",
+    "tree": "/home/rwt/projects/otprr/worktrees/perf-before"
+  },
+  "updated": "2026-10-20T18:41:02.400Z"
+}

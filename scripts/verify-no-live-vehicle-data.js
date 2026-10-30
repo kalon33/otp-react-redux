@@ -150,11 +150,22 @@ async function main() {
   // beginGoMode so the app's own 15s poller never sees a real vehicle.
   // Everything else (plans, stop times) passes through untouched.
   await page.setRequestInterception(true)
+  let fakedEmptyFeeds = 0
+  const corsBlocks = []
+  page.on('console', (m) => {
+    if (/CORS|Failed to fetch/i.test(m.text())) corsBlocks.push(m.text())
+  })
   page.on('request', (req) => {
     if ((req.postData() || '').includes('vehiclePositions')) {
+      fakedEmptyFeeds++
       req.respond({
         body: JSON.stringify({ data: { route: { patterns: [] } } }),
         contentType: 'application/json',
+        // 75.34 (V4): the OTP host is cross-origin from the app in every
+        // environment, and a respond() without this header is blocked as CORS —
+        // the app then sees a FAILED poll, not an empty feed, and the script
+        // passed by exercising the wrong path.
+        headers: { 'Access-Control-Allow-Origin': '*' },
         status: 200
       })
     } else {
@@ -306,6 +317,20 @@ async function main() {
   console.log('emptyPolls after a successful poll:', afterReset)
   if (afterReset !== 0) {
     problems.push(`a successful poll must reset emptyPolls, got ${afterReset}`)
+  }
+
+  // 75.34 (V4): prove the script exercised "the feed is empty", not "the poll
+  // failed": at least one empty feed was delivered and the browser refused none.
+  console.log(
+    `faked empty feeds delivered: ${fakedEmptyFeeds}; CORS/fetch failures: ${corsBlocks.length}`
+  )
+  if (fakedEmptyFeeds === 0) {
+    problems.push('no vehiclePositions request was intercepted — vacuous run')
+  }
+  if (corsBlocks.length) {
+    problems.push(
+      `the faked feed was blocked, the app saw a failed poll: ${corsBlocks[0]}`
+    )
   }
 
   await browser.close()

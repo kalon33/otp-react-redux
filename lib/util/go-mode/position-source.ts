@@ -62,3 +62,39 @@ export function tagBrowserPosition(
     timestamp: position.timestamp
   } as TaggedPosition
 }
+
+/**
+ * Coordinates MapLibre can place: latitude and longitude finite and inside
+ * WGS84's range (backlog 75.1). One `{latitude: NaN, longitude: NaN}` fix
+ * reached the Go Mode user-position `<Marker>`, MapLibre threw
+ * `Invalid LngLat object: (NaN, NaN)` during render, and the whole app fell to
+ * its error boundary mid-trip; a latitude past ±90 throws the same way.
+ */
+export function hasPlaceableCoords(
+  position: GeolocationPosition | null | undefined
+): position is GeolocationPosition {
+  const c = position?.coords
+  return (
+    c != null &&
+    Number.isFinite(c.latitude) &&
+    Number.isFinite(c.longitude) &&
+    Math.abs(c.latitude) <= 90 &&
+    Math.abs(c.longitude) <= 180
+  )
+}
+
+/**
+ * A fix the pipeline can use (backlog 75.1): placeable coordinates and a
+ * finite, non-negative accuracy. NaN compares false against every distance and
+ * accuracy gate downstream, so a fix that fails this would pass them all as if
+ * it were a good one. Every producer defaults a MISSING accuracy to a number
+ * (`?? 10` in native-gps.ts and createMockPosition; the browser always reports
+ * one), so this only ever turns away a value that is present and broken.
+ */
+export function isUsableFix(
+  position: GeolocationPosition | null | undefined
+): position is GeolocationPosition {
+  if (!hasPlaceableCoords(position)) return false
+  const { accuracy } = position.coords
+  return Number.isFinite(accuracy) && accuracy >= 0
+}

@@ -3,9 +3,14 @@ import {
   getLegRouteId,
   getRouteDepartures,
   getSoonestCatchableMs,
+  legBoardingDirection,
+  legServiceDate,
+  resolveCardDeparture,
   RouteDeparture,
   shouldAdoptAnchor
 } from '../../../lib/util/go-mode/departure-anchor'
+import { tripIdsMatch } from '../../../lib/util/go-mode/trip-id'
+import night from '../../test-utils/mock-data/service-day-night-1029.json'
 
 // serviceDay chosen so epochs are easy to eyeball: depMs = (DAY + secs) * 1000
 const DAY = 1_700_000_000
@@ -185,5 +190,104 @@ describe('currentServiceDate', () => {
     // 03:29 CDT -> yesterday; 03:30 CDT -> today
     expect(currentServiceDate(utc(2026, 7, 22, 8, 29), TZ)).toBe('2026-07-21')
     expect(currentServiceDate(utc(2026, 7, 22, 8, 30), TZ)).toBe('2026-07-22')
+  })
+})
+
+/**
+ * 75.2 (chaos C21, 2026-10-29): planned at 00:39 for the 18 at 04:26, Go Mode
+ * fetched Nicollet & 44th for date "2026-10-28" — the clock's service day —
+ * and the card seeded on that answer's 04:26 of the 28th, the same trip id a
+ * day early. `service-day-night-1029.json` is the desktop OTP's answer for
+ * both dates (see its .py).
+ */
+describe('75.2 — the boarding leg names the service day, and its run', () => {
+  const TZ = 'America/Chicago'
+  /** 2026-10-29 in CDT (UTC-5). */
+  const at = (h: number, m: number) => Date.UTC(2026, 9, 29, h + 5, m)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const f: any = night
+  const busLeg = f.itinerary.legs[1]
+  const TRIP = '1:1361322'
+  const departuresOn = (date: string) =>
+    getRouteDepartures(
+      f.stopTimes[date].stop,
+      '1:18',
+      legBoardingDirection(busLeg)
+    )
+
+  describe('legServiceDate', () => {
+    it('01:30 for a bus at 04:26: the bus’s service day, not the clock’s', () => {
+      expect(currentServiceDate(at(1, 30), TZ)).toBe('2026-10-28')
+      expect(legServiceDate(busLeg, at(1, 30), TZ)).toBe('2026-10-29')
+    })
+
+    it('an owl run before the break still belongs to yesterday', () => {
+      expect(
+        legServiceDate({ startTime: at(2, 10) } as any, at(1, 30), TZ)
+      ).toBe('2026-10-28')
+    })
+
+    it('in the daytime it is the date it always was', () => {
+      const leg = { startTime: at(17, 5) } as any
+      expect(legServiceDate(leg, at(16, 40), TZ)).toBe(
+        currentServiceDate(at(16, 40), TZ)
+      )
+    })
+
+    it('a leg with no board time falls back to the clock', () => {
+      expect(legServiceDate({} as any, at(1, 30), TZ)).toBe('2026-10-28')
+      expect(legServiceDate(null, at(1, 30), TZ)).toBe('2026-10-28')
+    })
+  })
+
+  describe('resolveCardDeparture on the other day’s answer', () => {
+    const base = {
+      boardingMiss: null,
+      held: null,
+      nowMs: at(1, 30),
+      plannedDepartureMs: Number(busLeg.startTime),
+      tickTripId: TRIP
+    }
+
+    it('does not seed on the same trip id a day early', () => {
+      const departures = departuresOn('2026-10-28')
+      const yesterday = departures.find((d) => tripIdsMatch(d.tripId, TRIP))
+      expect(yesterday?.depMs).toBe(at(4, 26) - 86400000)
+      const candidateMs = getSoonestCatchableMs(departures, at(1, 30), 109)
+      expect(candidateMs).toBeNull()
+      const decision = resolveCardDeparture({
+        ...base,
+        candidateMs,
+        departures
+      })
+      // Was 1793179560000 (10-28 04:26), C21's cardDepartureMs.
+      expect(decision.departureMs).toBe(at(4, 26))
+      expect(decision.reason).toBe('seeded')
+      expect(decision.held?.tripId ?? null).toBeNull()
+    })
+
+    it('a hold on the run does not follow it onto another day', () => {
+      const decision = resolveCardDeparture({
+        ...base,
+        candidateMs: null,
+        departures: departuresOn('2026-10-28'),
+        held: { departureMs: at(4, 26), tripId: null }
+      })
+      expect(decision.departureMs).toBe(at(4, 26))
+      expect(decision.reason).toBe('held')
+      // ...and does not adopt the 28th's run as its own.
+      expect(decision.held?.tripId ?? null).toBeNull()
+    })
+
+    it('on its own day’s answer it seeds on the run, as 38.1 does', () => {
+      const departures = departuresOn('2026-10-29')
+      const decision = resolveCardDeparture({
+        ...base,
+        candidateMs: getSoonestCatchableMs(departures, at(1, 30), 109),
+        departures
+      })
+      expect(decision.departureMs).toBe(at(4, 26))
+      expect(tripIdsMatch(decision.held?.tripId, TRIP)).toBe(true)
+    })
   })
 })

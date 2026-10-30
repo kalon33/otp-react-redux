@@ -13,8 +13,33 @@ import { FIX_ACCURACY_MAX_M } from './transit-trust'
 // Google-style bearing-up mode later is just one more field in the decision.
 
 // Fits inside the ~1 s fix cadence: motion reads continuous, never
-// queues/teleports.
+// queues/teleports. Since 75.20 this is the CEILING of a per-fix ease, and
+// the ease for the camera's big moves (engage, a leg-type zoom change, a
+// confirmed spike) — see FOLLOW_EASE_MS_PER_PX.
 export const FOLLOW_EASE_MS = 800
+// What a per-fix ease actually needs (75.20): about one device pixel of
+// motion per 60 Hz frame on a 3x phone — three frames, 50 ms, for every CSS
+// pixel the map moves. Every frame of an ease is a full map render, and an
+// 800 ms ease on each ~1 s fix kept MapLibre drawing ~85 % of the ride:
+// gold-74-1105 replayed at 1x drew 162 frames in 5 s, 135 of them mid-ease,
+// to move the map a median 3.6 px per fix (bus, zoom 14). Those 3.6 px now
+// take 180 ms — the same per-frame step a phone can show, without the frames
+// that move the picture less than a device pixel. A move of 16 px or more
+// (a fast leg, a zoomed-in map) still gets the full FOLLOW_EASE_MS.
+export const FOLLOW_EASE_MS_PER_PX = 50
+// A move smaller than this many CSS pixels at the current zoom draws the
+// same picture: the camera does not move, and the fix is not accepted, so the
+// drift adds up until it is worth a frame (75.20). The rider's dot is a DOM
+// marker and moves on every fix regardless.
+export const FOLLOW_MIN_MOVE_PX = 1
+// Standing still (75.20): the fix's own speed below this — under even a slow
+// walk — means GPS wander, not travel, so the camera holds...
+export const FOLLOW_STATIONARY_MPS = 0.5
+// ...for wander within this radius of the last accepted fix, or within the
+// fix's own accuracy if that is wider. Farther than that it is a real
+// displacement whatever the speed says (a bus creeping in traffic), and the
+// camera catches up.
+export const FOLLOW_STATIONARY_RADIUS_M = 10
 // Walk/bike: matches tap-to-zoom's existing maxZoom 16 — street names visible.
 export const FOLLOW_ZOOM_ACCESS = 16
 // On the bus/train: more route ahead at vehicle speed.
@@ -26,16 +51,64 @@ export const FOLLOW_DEADBAND_M = 4
 // >252 km/h implied speed = garbage jump, not travel.
 export const FOLLOW_SPIKE_MPS = 70
 // After a GPS gap this long (tunnel, backgrounded), spike math is meaningless
-// — accept the re-acquisition unconditionally.
+// — the re-acquisition skips the spike gate (and only that, 75.20).
 export const FOLLOW_GAP_ACCEPT_MS = 30_000
 // Let the initial itinerary fitBounds animation land before following.
 export const FOLLOW_ENGAGE_DELAY_MS = 1500
 
 export interface FollowDecision {
   center?: [number, number]
+  /** The ease to run for a move (75.20); absent when move is false. */
+  durationMs?: number
   move: boolean
   reason: string
   zoom?: number
+}
+
+/**
+ * Metres one CSS pixel spans at this latitude and zoom on a MapLibre map
+ * (512 px world at zoom 0).
+ */
+export function metresPerPixel(lat: number, zoom: number): number {
+  return (
+    (40075016.686 * Math.cos((lat * Math.PI) / 180)) / (512 * Math.pow(2, zoom))
+  )
+}
+
+/**
+ * The per-fix ease for a move of `px` CSS pixels (75.20): FOLLOW_EASE_MS_PER_PX
+ * per pixel, at most FOLLOW_EASE_MS. Unknown size → the full ease.
+ */
+export function followEaseMs(px: number | null): number {
+  if (px == null || !Number.isFinite(px)) return FOLLOW_EASE_MS
+  return Math.min(FOLLOW_EASE_MS, Math.round(px * FOLLOW_EASE_MS_PER_PX))
+}
+
+/** CSS pixels a pan of `distanceM` moves the map; null when the zoom is unknown. */
+function panPixels(
+  distanceM: number,
+  lat: number,
+  zoom: number | null | undefined
+): number | null {
+  if (zoom == null || !Number.isFinite(zoom)) return null
+  return distanceM / metresPerPixel(lat, zoom)
+}
+
+/**
+ * The fix's own speed says the rider is standing — known (a browser poll has
+ * none, iOS sends -1 for invalid) and under FOLLOW_STATIONARY_MPS — and it
+ * has only wandered: within FOLLOW_STATIONARY_RADIUS_M, or its own accuracy.
+ */
+function isStandingWander(
+  fix: { accuracyM: number | null; speedMps?: number | null },
+  distanceM: number
+): boolean {
+  const speed = fix.speedMps
+  if (speed == null || !Number.isFinite(speed) || speed < 0) return false
+  return (
+    speed < FOLLOW_STATIONARY_MPS &&
+    distanceM <= Math.max(FOLLOW_STATIONARY_RADIUS_M, fix.accuracyM ?? 0)
+  )
 }
 
 /** Transit legs get the wider zoom; walk/bike (and unknown) the closer one. */
@@ -60,15 +133,25 @@ export function decideFollowCamera(input: {
     accuracyM: number | null
     lat: number
     lng: number
+    /** The fix's own speed, m/s; null/negative = unknown (browser poll). */
+    speedMps?: number | null
     timestampMs: number
   }
   legMode: string | null
   prevAccepted: { lat: number; lng: number; timestampMs: number } | null
   prevLegTransit: boolean | null
   prevRejectedSpike: { lat: number; lng: number } | null
+  /** The map's zoom now, for the pixel tests; null = unknown (none run). */
+  zoom?: number | null
 }): FollowDecision {
-  const { fix, legMode, prevAccepted, prevLegTransit, prevRejectedSpike } =
-    input
+  const {
+    fix,
+    legMode,
+    prevAccepted,
+    prevLegTransit,
+    prevRejectedSpike,
+    zoom
+  } = input
 
   // Accuracy gate: the raw blue dot still renders (deliberately raw), the
   // camera just doesn't chase it — a pinned garbage dot never fights the
@@ -84,6 +167,7 @@ export function decideFollowCamera(input: {
   if (!prevAccepted) {
     return {
       center: [fix.lng, fix.lat],
+      durationMs: FOLLOW_EASE_MS,
       move: true,
       reason: 'engage',
       zoom: legZoom
@@ -92,23 +176,16 @@ export function decideFollowCamera(input: {
 
   // Zoom is otherwise emitted only when the leg type flips access<->transit;
   // per-fix eases omit it so a rider's pinch level survives while following.
-  const zoomChange =
-    prevLegTransit != null && prevLegTransit !== legTransit
-      ? { zoom: legZoom }
-      : {}
+  const zoomPending = prevLegTransit != null && prevLegTransit !== legTransit
+  const zoomChange = zoomPending ? { zoom: legZoom } : {}
 
   const dtMs = fix.timestampMs - prevAccepted.timestampMs
-
   // Gap acceptance: across a tunnel/backgrounded gap the implied-speed math is
-  // meaningless — take the re-acquisition as truth.
-  if (dtMs > FOLLOW_GAP_ACCEPT_MS) {
-    return {
-      center: [fix.lng, fix.lat],
-      move: true,
-      reason: 'gap-accept',
-      ...zoomChange
-    }
-  }
+  // meaningless — take the re-acquisition as truth. It skips the spike gate
+  // only: `dtMs` runs from the last ACCEPTED fix, so a rider standing at a
+  // stop (every fix in the dead-band) reached it every 30 s and got an 800 ms
+  // ease of a fix that had not moved (75.20).
+  const gap = dtMs > FOLLOW_GAP_ACCEPT_MS
 
   const distanceM = calculateDistance(
     prevAccepted.lat,
@@ -122,7 +199,7 @@ export function decideFollowCamera(input: {
   // teleport once, but if the next fix lands near the rejected point the jump
   // was a genuine re-acquisition — accept it rather than freezing forever.
   const impliedMps = distanceM / (Math.max(dtMs, 500) / 1000)
-  if (impliedMps > FOLLOW_SPIKE_MPS) {
+  if (!gap && impliedMps > FOLLOW_SPIKE_MPS) {
     if (
       prevRejectedSpike &&
       calculateDistance(
@@ -134,6 +211,7 @@ export function decideFollowCamera(input: {
     ) {
       return {
         center: [fix.lng, fix.lat],
+        durationMs: FOLLOW_EASE_MS,
         move: true,
         reason: 'spike-confirmed',
         ...zoomChange
@@ -147,10 +225,25 @@ export function decideFollowCamera(input: {
     return { move: false, reason: 'deadband' }
   }
 
+  // Standing still (75.20): wander past the dead-band with the fix's own
+  // speed saying the rider is not moving is still wander. A leg-type change
+  // still sets its zoom now — these two checks only hold back a pan.
+  if (!zoomPending && isStandingWander(fix, distanceM)) {
+    return { move: false, reason: 'stationary' }
+  }
+
+  // Too small to draw at this zoom (75.20).
+  const px = panPixels(distanceM, fix.lat, zoom)
+  if (!zoomPending && px != null && px < FOLLOW_MIN_MOVE_PX) {
+    return { move: false, reason: 'subpixel' }
+  }
+
   return {
     center: [fix.lng, fix.lat],
+    // A zoom change animates the whole picture, not a pan: the full ease.
+    durationMs: zoomPending ? FOLLOW_EASE_MS : followEaseMs(px),
     move: true,
-    reason: 'follow',
+    reason: gap ? 'gap-accept' : 'follow',
     ...zoomChange
   }
 }

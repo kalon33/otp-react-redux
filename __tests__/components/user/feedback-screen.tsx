@@ -1,3 +1,5 @@
+import { act } from 'react-dom/test-utils'
+
 import '../../test-utils/mock-window-matchMedia'
 import '../../test-utils/mock-window-url'
 
@@ -92,8 +94,13 @@ function type(wrapper: any, value: string) {
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function settle(wrapper: any) {
-  for (let i = 0; i < 8; i++)
-    await new Promise((resolve) => setTimeout(resolve, 0))
+  // 75.37 (J3): drain inside act(), so the continuations' state updates are
+  // flushed by React instead of landing after the assertions (25 "not wrapped
+  // in act(...)" warnings, and assertions that ran before the screen settled).
+  await act(async () => {
+    for (let i = 0; i < 8; i++)
+      await new Promise((resolve) => setTimeout(resolve, 0))
+  })
   wrapper.update()
 }
 

@@ -1,5 +1,6 @@
-import coreUtils from '@opentripplanner/core-utils'
 import type { Itinerary } from '@opentripplanner/types'
+
+import { getItem, storeItem } from '../safe-storage'
 
 import { AUTO_PRESETS } from './auto-priority'
 import {
@@ -275,7 +276,7 @@ export const autoUndoLive = (
 /** The last-picked preset on this device (Fastest on first use). */
 export function loadAutoPreset(): AutoPreset {
   try {
-    const p = coreUtils.storage.getItem(AUTO_PRESET_STORAGE_KEY, null)
+    const p = getItem(AUTO_PRESET_STORAGE_KEY, null)
     return isAutoPreset(p) ? p : 'fastest'
   } catch {
     return 'fastest'
@@ -284,7 +285,7 @@ export function loadAutoPreset(): AutoPreset {
 
 export function saveAutoPreset(preset: AutoPreset): void {
   try {
-    coreUtils.storage.storeItem(AUTO_PRESET_STORAGE_KEY, preset)
+    storeItem(AUTO_PRESET_STORAGE_KEY, preset)
   } catch {
     // best-effort: the trip still carries it
   }

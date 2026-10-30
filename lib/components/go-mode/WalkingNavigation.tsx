@@ -162,6 +162,10 @@ const WalkingNavigation = ({
    * One later-departure line, in the copy the rider already reads — the same
    * `nextDeparture` message whether it is the collapsed summary or a row of
    * the open list, so collapsing never changes the wording of a time.
+   *
+   * Never a negative count (75.2): "Next: 4:51 AM (-1189 min away)" on
+   * 2026-10-29 was a run from the service day before. A later run whose time
+   * has passed behind a late bus reads 0, not minus.
    */
   const departureLine = (alt?: { departureMs: number; realtime: boolean }) =>
     alt
@@ -171,7 +175,7 @@ const WalkingNavigation = ({
             id: 'components.GoMode.nextDeparture'
           },
           {
-            mins: Math.round((alt.departureMs - nowMs) / 60000),
+            mins: Math.max(0, Math.round((alt.departureMs - nowMs) / 60000)),
             time: (
               <RealtimeTime live={alt.realtime}>
                 {formatClockTime(alt.departureMs)}
@@ -618,7 +622,10 @@ const WalkingNavigation = ({
         <NavEyebrowRow>
           {onExit && (
             <CardBackButton
-              aria-label={intl.formatMessage({ id: 'common.forms.back' })}
+              // Ends the trip, so it is called that (75.16; TransitProgress).
+              aria-label={intl.formatMessage({
+                id: 'components.MultiStop.endTrip'
+              })}
               onClick={onExit}
               type="button"
             >

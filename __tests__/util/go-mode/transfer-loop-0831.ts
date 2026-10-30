@@ -1,3 +1,6 @@
+/* globals afterEach, beforeEach, describe, expect, it, jest */
+import FakeTimers from '@sinonjs/fake-timers'
+
 import {
   BOARD_STOP_DWELL_MIN_MS,
   decideRiding,
@@ -302,6 +305,17 @@ describe('util > go-mode > the 8/31 transfer reroute loop', () => {
   })
 
   describe('defect 2 — the auto-replan threw away the rider 539', () => {
+    // 75.37 (J4): replanFromAboard builds an onboard itinerary dated from the
+    // wall clock; against this 08-31 fixture that repaired a tail 5,032,679,410
+    // ms "early" (58 days), growing daily. Pin Date (only Date) to the transfer.
+    let clock: ReturnType<typeof FakeTimers.install>
+    beforeEach(() => {
+      clock = FakeTimers.install({ now: TRANSFER_MS, toFake: ['Date'] })
+    })
+    afterEach(() => {
+      clock.uninstall()
+    })
+
     it('anchored on the leg the matcher named, there is nothing to keep', () => {
       // riding.legIndex was 2. Everything after leg 2 is a bike leg, so the
       // rule "an auto-update keeps the rider route" had nothing to hold: this

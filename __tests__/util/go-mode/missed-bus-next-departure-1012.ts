@@ -152,7 +152,11 @@ withFixture('46.1: a missed-bus refusal is not a dead end (2026-10-12)', () => {
     const actions: any[] = []
     const getState = () => ({
       otp: {
-        config: { homeTimezone: 'America/Chicago' },
+        config: {
+          // 75.37 (J5): getOtpFetchOptions needs config.api (see test-utils/mock-data/store.js).
+          api: { host: 'http://mock-otp.invalid', path: '/otp', port: 80 },
+          homeTimezone: 'America/Chicago'
+        },
         currentQuery: {},
         goMode: goModeState,
         transitIndex: { routes: {}, stops: {} }

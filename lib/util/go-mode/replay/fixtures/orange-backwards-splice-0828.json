@@ -33127,7 +33127,9 @@
         ],
         "walkDistance": 12514.42
       },
-      "tMs": 1787969423242
+      "tMs": 1787969423242,
+      "by": "unknown",
+      "cause": null
     },
     {
       "itinerary": {
@@ -40072,7 +40074,9 @@
         ],
         "walkDistance": 6099.8099999999995
       },
-      "tMs": 1787970552184
+      "tMs": 1787970552184,
+      "by": "unknown",
+      "cause": null
     },
     {
       "itinerary": {
@@ -46981,7 +46985,9 @@
         ],
         "walkDistance": 5059.73
       },
-      "tMs": 1787970718220
+      "tMs": 1787970718220,
+      "by": "unknown",
+      "cause": null
     }
   ],
   "onboard": {

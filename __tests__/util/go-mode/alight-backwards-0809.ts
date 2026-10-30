@@ -43,9 +43,19 @@ const POISONED_EPOCH = 1786321200000
 const RIDER_POS = { lat: 44.972562895142005, lon: -93.27211496712584 }
 /** The ride's real destination, off the fixture's own itinerary. */
 const DEST = { lat: 45.033549, lon: -93.311991 }
+/** Stop 8, 2nd Ave S & 11th St — the stop before the poisoned one. */
+const STOP_8 = '1:53311'
 
+/**
+ * Anchored at stop 8 by name. These cases are about the inversion guard on a
+ * stop DOWNSTREAM of the anchor, and they used to get that anchor from the
+ * fix as "the nearest stop". That fix is 112 m PAST stop 8 along the run,
+ * toward 1:53313 — the nearest stop was the one just passed, which is backlog
+ * 75.8 — so by position the anchor is now 1:53313 itself and the guard would
+ * only be tested against the clock.
+ */
 const downstream = (nowMs = TRIP_READ_MS) =>
-  getDownstreamStops(trip, null, RIDER_POS, DEST, nowMs)
+  getDownstreamStops(trip, { nextStopId: STOP_8 }, RIDER_POS, DEST, nowMs)
 
 const byStopId = (stops: any[], id: string) =>
   stops.find((s) => s.stop.id === id)
@@ -75,8 +85,8 @@ describe('util > go-mode > the 8/9 backwards itinerary', () => {
 
   it('resolves the poisoned stop from the schedule, not nine minutes into the past (8/9)', () => {
     const stop = byStopId(downstream(), '1:53313')
-    // Anchored at stop 8 (the nearest, 112 m away), 1:53313 is 120 s further
-    // along the schedule — 19:31:13.857, not the 19:20:00 the feed claimed.
+    // Anchored at stop 8, 1:53313 is 120 s further along the schedule —
+    // 19:31:13.857, not the 19:20:00 the feed claimed.
     expect(stop.busArrivalEpoch).toBe(TRIP_READ_MS + 120000)
     expect(stop.busArrivalEpoch).toBeGreaterThan(TRIP_READ_MS)
   })

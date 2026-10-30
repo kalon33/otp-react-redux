@@ -1,6 +1,8 @@
 import { calculateDistance } from './position-matching'
+import { hasUsablePosition } from './vehicle-matching'
+import { RIDING_REBIND_MIN_FRAMES } from './transit-trust'
 import type { RidingState } from './types'
-import type { VehicleMatchResult } from './vehicle-matching'
+import type { VehicleMatchResult, VehiclePosition } from './vehicle-matching'
 
 /**
  * ─── Is the rider still WITH the bus they are riding? (backlog 47.1) ────────
@@ -56,6 +58,20 @@ export const COMPANY_APART_FRAMES = 2
  * clock runs exactly as before.
  */
 export const COMPANY_SILENCE_CAP_MS = 600000
+
+/**
+ * Together frames a `high` match must rest on before it may hold the fact
+ * (47.1, 2026-10-29). A `confirmed` match is the rider's own word (or the
+ * onboard flow's, or a swap relock's) and holds on its first together frame;
+ * `high` is the matcher's inference — two same-vehicle ticks — and on the
+ * ordinary boarding it is all there ever is: 745 / 1,142 / 1,206 `high`
+ * ticks and no `CONFIRM_VEHICLE` on the 10-19, 10-17 and 10-12 rides. So it
+ * holds once the bus has read together on as many DISTINCT feed frames as
+ * moving the sticky fact to another bus needs (`RIDING_REBIND_MIN_FRAMES`,
+ * 35.1): ~30-60 s at this feed's cadence, longer than any stale-frame flap
+ * recorded. Keeping a fact takes no less evidence than rebinding one.
+ */
+export const COMPANY_HIGH_SUSTAIN_FRAMES = RIDING_REBIND_MIN_FRAMES
 
 /** How much of the rider's own track is kept to align frames against. */
 export const RIDER_FIX_RING_MS = 120000
@@ -139,6 +155,18 @@ export interface VehicleCompany {
   lastFrameSeconds: number | null
   /** Epoch ms of the last frame that read together. */
   lastTogetherAtMs: number | null
+  /**
+   * The matcher has named this bus `high` (or `confirmed`) since the record
+   * began — the only confidence a non-confirmed hold may rest on (47.1).
+   */
+  matchedHigh: boolean
+  /**
+   * Frames read together since this record began or company last broke —
+   * how much evidence the together verdict rests on. A grey frame, or one
+   * apart frame short of {@link COMPANY_APART_FRAMES}, proves nothing and
+   * leaves it; company breaking starts it again.
+   */
+  togetherFrames: number
   vehicleId: string
   verdict: CompanyVerdict
 }
@@ -151,22 +179,30 @@ export interface VehicleCompany {
  */
 export function trackVehicleCompany(
   prev: VehicleCompany | null | undefined,
-  match: Pick<
-    VehicleMatchResult,
-    'frameLat' | 'frameLon' | 'frameSeconds' | 'vehicleId'
-  > | null,
+  match:
+    | (Pick<
+        VehicleMatchResult,
+        'frameLat' | 'frameLon' | 'frameSeconds' | 'vehicleId'
+      > & { confidence?: VehicleMatchResult['confidence'] })
+    | null,
   ring: RiderFix[] | null | undefined
 ): VehicleCompany | null {
   const vehicleId = match?.vehicleId
   if (!vehicleId) return null
+  const calledHigh =
+    match?.confidence === 'high' || match?.confidence === 'confirmed'
   const base: VehicleCompany =
     prev && prev.vehicleId === vehicleId
-      ? prev
+      ? calledHigh && !prev.matchedHigh
+        ? { ...prev, matchedHigh: true }
+        : prev
       : {
           apartFrames: 0,
           lastDistanceM: null,
           lastFrameSeconds: null,
           lastTogetherAtMs: null,
+          matchedHigh: calledHigh,
+          togetherFrames: 0,
           vehicleId,
           verdict: 'unknown'
         }
@@ -198,21 +234,79 @@ export function trackVehicleCompany(
       lastDistanceM: d,
       lastFrameSeconds: seconds,
       lastTogetherAtMs: frameMs,
+      togetherFrames: base.togetherFrames + 1,
       verdict: 'together'
     }
   }
   if (d > COMPANY_APART_M) {
     const apartFrames = base.apartFrames + 1
+    const broken = apartFrames >= COMPANY_APART_FRAMES
     return {
       ...base,
       apartFrames,
       lastDistanceM: d,
       lastFrameSeconds: seconds,
-      verdict: apartFrames >= COMPANY_APART_FRAMES ? 'apart' : base.verdict
+      togetherFrames: broken ? 0 : base.togetherFrames,
+      verdict: broken ? 'apart' : base.verdict
     }
   }
   // The grey band proves nothing: keep the verdict and the apart count.
   return { ...base, lastDistanceM: d, lastFrameSeconds: seconds }
+}
+
+/**
+ * {@link trackVehicleCompany} for the bus the RIDING FACT names, whichever bus
+ * the matcher names this tick (47.1, 2026-10-29).
+ *
+ * A confirmed match is never re-matched, so it always names the riding bus. A
+ * `high` one is re-scored every second, and the moment that bus misses a poll
+ * it goes to nothing or to another bus: 8143 was absent from the feed
+ * 16:28:32-16:32:48 in the middle of the 10-12 detour, and the matcher named
+ * nothing, then 8121 at 755 m. Neither says anything about 8143, so the
+ * record is not handed over: while the fact names a real bus and the record
+ * is that bus's, its own frames are still read straight from the feed, and
+ * when it is absent the record stands and {@link COMPANY_SILENCE_CAP_MS} ages
+ * it. Everywhere else — no fact, a `route:` id, a match taken away (null),
+ * the matcher naming the riding bus — this is trackVehicleCompany exactly.
+ */
+export function trackRidingCompany(
+  prev: VehicleCompany | null | undefined,
+  input: {
+    match: VehicleMatchResult | null | undefined
+    riding: RidingState | null | undefined
+    ring: RiderFix[] | null | undefined
+    vehicles: VehiclePosition[] | null | undefined
+  }
+): VehicleCompany | null {
+  const { match, riding, ring, vehicles } = input
+  const bus = riding?.vehicleId
+  if (
+    !match ||
+    !bus ||
+    bus.startsWith('route:') ||
+    match.vehicleId === bus ||
+    prev?.vehicleId !== bus
+  ) {
+    return trackVehicleCompany(prev, match ?? null, ring)
+  }
+  const own = (vehicles ?? []).filter(
+    (v) => v.vehicleId === bus && hasUsablePosition(v)
+  )
+  const frame = own.find((v) => v.tripId === riding?.tripId) ?? own[0]
+  if (!frame) return prev
+  return trackVehicleCompany(
+    prev,
+    {
+      frameLat: frame.lat,
+      frameLon: frame.lon,
+      frameSeconds:
+        typeof frame.seconds === 'number' && Number.isFinite(frame.seconds)
+          ? frame.seconds
+          : null,
+      vehicleId: bus
+    },
+    ring
+  )
 }
 
 /**
@@ -221,10 +315,24 @@ export function trackVehicleCompany(
  *
  * All of it has to hold together:
  *  - the fact names a trip and a REAL bus (a `route:` id is in no feed);
- *  - the vehicle match is `confirmed` and names that same bus;
  *  - that bus's last judged frame read together, no
  *    {@link COMPANY_APART_FRAMES} apart frames since, and it is not older than
- *    {@link COMPANY_SILENCE_CAP_MS}.
+ *    {@link COMPANY_SILENCE_CAP_MS};
+ *  - and the bus is vouched for: a `confirmed` match naming it, as before —
+ *    or, since 2026-10-29, a bus the matcher has called `high` that has read
+ *    together on {@link COMPANY_HIGH_SUSTAIN_FRAMES} frames. Ordinary
+ *    boardings are never confirmed (shouldShowBoardingPrompt refuses `high`,
+ *    so the auto-confirm never runs), and a confirmed-only hold left every one
+ *    of them to the shape clock: replayed without the rider's tap, the 10-12
+ *    detour still cleared riding at 16:24:31 and sent "Missed bus" and "Leave
+ *    in 1 min" to the rider on the bus (47.1). That half reads the company
+ *    record ({@link trackRidingCompany}), not this tick's match, which a poll
+ *    the bus missed hands to nothing or to another bus.
+ *  A match taken away (null) or a `confirmed` one on another bus holds
+ *  nothing, as before.
+ *
+ * This keeps a fact that already names a bus; it never makes one. A riding
+ * fact is established only on the evidence riding.ts asks for (6.1).
  */
 export function ridingHeldByVehicle(input: {
   company: VehicleCompany | null | undefined
@@ -237,12 +345,16 @@ export function ridingHeldByVehicle(input: {
   if (!riding?.tripId || !vehicleId || vehicleId.startsWith('route:')) {
     return false
   }
-  if (match?.confidence !== 'confirmed' || match.vehicleId !== vehicleId) {
-    return false
-  }
+  if (!match) return false
+  const named = match.vehicleId === vehicleId
+  if (match.confidence === 'confirmed' && !named) return false
   if (!company || company.vehicleId !== vehicleId) return false
   if (company.verdict !== 'together' || company.lastTogetherAtMs == null) {
     return false
   }
-  return nowMs - company.lastTogetherAtMs <= COMPANY_SILENCE_CAP_MS
+  if (nowMs - company.lastTogetherAtMs > COMPANY_SILENCE_CAP_MS) return false
+  if (named && match.confidence === 'confirmed') return true
+  return (
+    company.matchedHigh && company.togetherFrames >= COMPANY_HIGH_SUSTAIN_FRAMES
+  )
 }

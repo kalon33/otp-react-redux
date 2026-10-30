@@ -77,6 +77,7 @@ import {
   TurnCueSettings
 } from '../util/go-mode/turn-cue-settings'
 import { FIX_ACCURACY_MAX_M } from '../util/go-mode/transit-trust'
+import { goModeClockMs } from '../util/go-mode/clock'
 import {
   ridingFactIsEvidenced,
   ridingKeptTooLong
@@ -775,12 +776,13 @@ const goMode = handleActions<GoModeState, any>(
       // be wide enough" — but width alone cannot fix an eviction policy that
       // disagrees with the dedup policy.
       //
-      // Every id already ends in its Date.now() (generateNotificationId), and
+      // Every id already ends in its own stamp (generateNotificationId), and
       // wasRecentlySent parses it back out, so age is readable here without
       // any change of shape. Drop only ids older than the longest dedup window
       // in the service (ALIGHT_DEDUP_MS, 30 min), which is exactly the point
-      // past which no caller can still be suppressing on them.
-      const evictBefore = Date.now() - 30 * 60 * 1000
+      // past which no caller can still be suppressing on them. On the clock
+      // the ids are stamped with (75.29).
+      const evictBefore = goModeClockMs() - 30 * 60 * 1000
       let kept = sentNotifications.filter((id) => {
         const stamp = parseInt(id.slice(id.lastIndexOf('_') + 1), 10)
         return Number.isNaN(stamp) || stamp >= evictBefore
@@ -1001,7 +1003,10 @@ const goMode = handleActions<GoModeState, any>(
         ...state.boardingPrompt,
         chooseBus: false,
         chooseBusError: null,
-        lastDismissedAt: Date.now(),
+        // Go Mode's clock, which shouldShowBoardingPrompt ages it on (75.29):
+        // on the wall clock a dismissal in a replay lay weeks in the sim's
+        // future, and the prompt stayed suppressed for the rest of it.
+        lastDismissedAt: goModeClockMs(),
         searching: false,
         shown: false
       }
@@ -1568,6 +1573,17 @@ const goMode = handleActions<GoModeState, any>(
               id.startsWith('MISSED_BUS_')
           )
         },
+        // A trip that STARTS starts with no onboard panel (75.9). Only
+        // BEGIN_ONBOARD_FLOW, CLEAR_ONBOARD and STOP_GO_MODE reset it, so a
+        // status left behind by a flow that was backed out of — the get-off
+        // list settling after Back — opened the next Start Trip on "On the
+        // bus" and its stale list instead of the trip, and held off the
+        // faster-route checks (they skip while onboard is open). Kept across
+        // a swap within the trip, the same line `auto` draws: the aboard "Pick
+        // another stop" list stands over a live trip that a quiet re-plan can
+        // swap underneath it.
+        onboard:
+          restart || newTrip ? { ...defaultState.onboard } : state.onboard,
         originalFrom: originalFrom ?? null,
         planStopOffer: null,
         progress: null,
@@ -1808,7 +1824,19 @@ const goMode = handleActions<GoModeState, any>(
               // until the next GPS tick recomputed honestly.
               progressAlongLeg: 0,
               progressAlongSegment: 0,
-              segmentIndex: 0
+              segmentIndex: 0,
+              // 12.17 (2026-10-29 replay R11): and the ground the OLD leg
+              // still owed goes with it. It is owed along that leg's
+              // polyline; carried over, it licensed jumps on this one. On
+              // orange-0917-2053 an `unaccountedFromFix` set at 21:07:12 on leg
+              // 0 survived two leg changes, and at 21:39:19 the rider's
+              // 14,455 m displacement from it released 0.06 -> 0.985 on the
+              // closing bike leg with the rider 528 m off it (ride-1015-2130
+              // carried the tram leg's 2,302 m the same way). Cleared, the
+              // matcher starts the owed ground afresh from the next fix, as
+              // after START_GO_MODE.
+              unaccountedFromFix: undefined,
+              unaccountedPathM: undefined
             }
           : null
       }

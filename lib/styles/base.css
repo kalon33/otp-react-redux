@@ -570,6 +570,25 @@
   background-color: var(--tn-surface-2);
 }
 
+/* ---------- Map controls (MapLibre) ----------
+   MapLibre sizes `.maplibregl-ctrl-group button` at 29px. The two controls a
+   rider reaches for while moving get the 44px minimum target: the planner
+   map's "Find my location" crosshair (default-map.tsx's GeolocateControl) and
+   Go Mode's follow toggle (GoModeMap.tsx's FollowButtonControl) — this rule
+   reaches into the Go Mode layer on purpose. Both measured 29x29 at 360-430px
+   in the 2026-10-29 stress test (75.16, chaos C25). The crosshair is a
+   centred background image and keeps its size; the follow arrow is a 29px
+   svg, centred here. Zoom and compass keep MapLibre's 29px, as 73.2 left
+   them. */
+html.tn-mobile .maplibregl-ctrl-group button.maplibregl-ctrl-geolocate,
+html.tn-mobile .maplibregl-ctrl-group button.go-mode-follow-toggle {
+  height: var(--tn-tap);
+  width: var(--tn-tap);
+}
+html.tn-mobile .maplibregl-ctrl-group button.go-mode-follow-toggle svg {
+  margin: 0 auto;
+}
+
 /* ---------- Shared recipes as classes (mirror tn-styled.ts) ---------- */
 
 .tn-tabular {

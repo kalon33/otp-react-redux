@@ -1,7 +1,6 @@
-import coreUtils from '@opentripplanner/core-utils'
-
 import { UserSavedLocation } from '../components/user/types'
 
+import { getItem, isPersisted } from './safe-storage'
 import {
   isCustomPlace,
   loadCustomPlaces,
@@ -9,8 +8,6 @@ import {
 } from './saved-places'
 import { isSameRecentPlace, MAX_RECENT_STORAGE } from './recent-places'
 import { loadRouteSets, parseRouteSets, RouteSet } from './route-sets'
-
-const { getItem } = coreUtils.storage
 
 /**
  * Backlog 28.1 — what the phone holds, and how a server copy merges back in.
@@ -56,8 +53,10 @@ export function readPlacesState(): PlacesState {
     return {
       dropped: Math.max(0, rawLength(SAVED_PLACES_KEY) - saved),
       home: !!getItem('home'),
-      keys: PLACES_STORAGE_KEYS.map((k) => `otp.${k}`).filter(
-        (k) => window.localStorage.getItem(k) !== null
+      // What storage holds, not safe-storage's memory copy (75.12): a key a
+      // full store refused this session is not on the phone.
+      keys: PLACES_STORAGE_KEYS.filter((k) => isPersisted(k)).map(
+        (k) => `otp.${k}`
       ),
       recent: rawLength('recent'),
       saved,

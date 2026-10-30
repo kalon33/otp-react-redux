@@ -41610,7 +41610,9 @@
           }
         ]
       },
-      "tMs": 1788276575798
+      "tMs": 1788276575798,
+      "by": "unknown",
+      "cause": null
     },
     {
       "itinerary": {
@@ -48898,7 +48900,9 @@
         ],
         "walkDistance": 5706.67
       },
-      "tMs": 1788276809178
+      "tMs": 1788276809178,
+      "by": "unknown",
+      "cause": null
     },
     {
       "itinerary": {
@@ -56234,7 +56238,9 @@
         ],
         "walkDistance": 5993.4
       },
-      "tMs": 1788276859254
+      "tMs": 1788276859254,
+      "by": "unknown",
+      "cause": null
     },
     {
       "itinerary": {
@@ -63534,7 +63540,9 @@
         ],
         "walkDistance": 6142.59
       },
-      "tMs": 1788276914352
+      "tMs": 1788276914352,
+      "by": "unknown",
+      "cause": null
     }
   ],
   "meta": {

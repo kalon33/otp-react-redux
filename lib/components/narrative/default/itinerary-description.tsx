@@ -1,5 +1,5 @@
 import { FormattedMessage, IntlShape } from 'react-intl'
-import { Itinerary } from '@opentripplanner/types'
+import { Itinerary, Leg } from '@opentripplanner/types'
 import coreUtils from '@opentripplanner/core-utils'
 import React, { useContext } from 'react'
 
@@ -18,6 +18,25 @@ type Props = {
 }
 
 /**
+ * Whether this leg names the transit half of the description: the longest
+ * transit leg, and failing that the first. Only a leg LONGER than the best so
+ * far used to qualify, starting from 0 s, so a bus ride the GTFS times at
+ * 0 seconds (two consecutive stops in the same minute) never did — the card
+ * read "Walk" or "Bike" and was filed under that heading, not "+ Transit"
+ * (75.14: the 22 and 48 on a 50 m search, 191 itineraries in 52 searches).
+ */
+function isPrimaryTransitLeg(
+  leg: Leg,
+  transitModeSoFar: unknown,
+  primaryTransitDuration: number
+): boolean {
+  return (
+    isTransitLeg(leg) &&
+    (transitModeSoFar === undefined || leg.duration > primaryTransitDuration)
+  )
+}
+
+/**
  * Obtains the description of an itinerary in the given locale.
  */
 export function getMainItineraryModes({
@@ -29,10 +48,10 @@ export function getMainItineraryModes({
   transitMode?: string
 } {
   let primaryTransitDuration = 0
-  let transitMode
+  let transitMode: string | undefined
   itinerary.legs.forEach((leg) => {
     const { duration, mode } = leg
-    if (isTransitLeg(leg) && duration > primaryTransitDuration) {
+    if (isPrimaryTransitLeg(leg, transitMode, primaryTransitDuration)) {
       primaryTransitDuration = duration
       transitMode = getFormattedMode(
         combineTransitModes ? 'transit' : mode.toLowerCase(),
@@ -62,10 +81,10 @@ export function ItineraryDescription({ itinerary }: Props): JSX.Element {
 
   let primaryTransitDuration = 0
   let accessModeId = 'walk'
-  let transitMode
+  let transitMode: JSX.Element | undefined
   itinerary.legs.forEach((leg) => {
     const { duration, mode, rentedBike, rentedVehicle } = leg
-    if (isTransitLeg(leg) && duration > primaryTransitDuration) {
+    if (isPrimaryTransitLeg(leg, transitMode, primaryTransitDuration)) {
       primaryTransitDuration = duration
 
       // If custom TransitModes have been defined for the given mode/leg, attempt to use them,

@@ -151,6 +151,34 @@ export function calculateCumulativeDistances(
   return distances
 }
 
+// 75.37 (J8): the cumulative-distance array is a pure function of a leg's
+// encoded polyline, yet matchPositionToRoute rebuilt it (a haversine per
+// vertex, 57 % of the fixture replay's CPU) for up to three legs on every GPS
+// fix. Cache it per `legGeometry` object — itineraries keep the same object
+// across ticks — and verify the encoded `points` string is still the one it
+// was built from, so an in-place edit can never serve a stale array. Callers
+// only read the array; it is never handed out for mutation.
+const cumulativeByGeometry = new WeakMap<
+  { points?: string },
+  { cumulative: number[]; points: string }
+>()
+
+function cumulativeDistancesForLeg(
+  leg: Leg,
+  polyline: LatLngArray[]
+): number[] {
+  const geometry = leg.legGeometry as { points?: string } | undefined
+  const points = geometry?.points
+  if (!geometry || typeof points !== 'string') {
+    return calculateCumulativeDistances(polyline)
+  }
+  const hit = cumulativeByGeometry.get(geometry)
+  if (hit && hit.points === points) return hit.cumulative
+  const cumulative = calculateCumulativeDistances(polyline)
+  cumulativeByGeometry.set(geometry, { cumulative, points })
+  return cumulative
+}
+
 export interface RouteMatchResult {
   distanceFromRoute: number
   // 0-1
@@ -714,7 +742,7 @@ export function matchPositionToRoute(
 
     if (polyline.length < 2) continue
 
-    const cumulativeDistances = calculateCumulativeDistances(polyline)
+    const cumulativeDistances = cumulativeDistancesForLeg(leg, polyline)
     const totalLegDistance = cumulativeDistances[cumulativeDistances.length - 1]
 
     for (let i = 0; i < polyline.length - 1; i++) {
@@ -895,8 +923,19 @@ export function matchPositionToRoute(
   // at zero; one that is accepted every tick but barely moves keeps the
   // remainder, which is what stops a stuck-but-locally-best projection from
   // resetting its own evidence and pinning the rider for good.
+  //
+  // Except across a leg boundary (12.17, 2026-10-29 replay R11). Owed ground is
+  // owed along ONE polyline: once the winner is on another leg it has been
+  // placed on that leg's geometry where the rider now is, and what the old leg
+  // still owed says nothing about progress along the new one. Carried over,
+  // the off-corridor check measured the rider's displacement from a start legs
+  // behind: orange-0917-2053 released 0.06 -> 0.985 on its closing bike leg,
+  // 528 m off it, on 14,455 m of displacement from a leg-0 fix. TRANSITION_LEG
+  // clears the same two fields for the re-anchor it makes.
   const accountedM =
-    unaccountedM == null || previousMatch == null
+    unaccountedM == null ||
+    previousMatch == null ||
+    winner.legIndex !== previousMatch.legIndex
       ? 0
       : Math.max(
           0,

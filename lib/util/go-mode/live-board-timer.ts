@@ -49,7 +49,9 @@ export interface LiveBoardTimerInput {
 /** True when the timer should run the boarding-feed poll now. */
 export function shouldTimerPollLiveBoard(input: LiveBoardTimerInput): boolean {
   if (!input.isActive || input.arrived) return false
-  // Replay reproduces recorded data; simulation drives its own ticks.
+  // Simulation and replay drive their own ticks, and a replay's clock moves
+  // only on them: the tick polls on that clock (75.32), and between two
+  // fixes there is no sim time for this wall-clock timer to poll at.
   if (input.replay || input.simulation) return false
   if (input.nowMs - input.lastPollAtMs <= input.pollIntervalMs) return false
   // Fixes are flowing: the tick will take the poll within a second.

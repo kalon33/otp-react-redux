@@ -1,7 +1,6 @@
-import coreUtils from '@opentripplanner/core-utils'
-
 import { apiUrl } from '../util/api-base'
 import { getDeviceId } from '../util/debug-log-boot'
+import { getItem, removeItem, storeItem } from '../util/safe-storage'
 import { getNativeDeviceId, getRunningBundle } from '../util/native-updates'
 import { getPlacesKey } from '../util/places-key'
 import {
@@ -15,8 +14,6 @@ import {
 import { persistCustomPlaces, PLACES_API_PATH } from '../util/saved-places'
 import { persistRouteSets } from '../util/route-sets'
 import { recordSessionEvent } from '../util/debug-log'
-
-const { getItem, removeItem, storeItem } = coreUtils.storage
 
 /**
  * Backlog 28.1 — "My places keep disappearing!" (2026-09-22 21:28).
