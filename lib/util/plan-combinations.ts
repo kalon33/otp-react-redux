@@ -51,13 +51,13 @@ export const SIMPLIFICATIONS: Record<string, string> = {
   FLEX: 'SHARED',
   FUNICULAR: 'TRANSIT',
   GONDOLA: 'TRANSIT',
-  RAIL: 'TRANSIT',
   MONORAIL: 'TRANSIT',
+  RAIL: 'TRANSIT',
   SCOOTER: 'PERSONAL',
   SUBWAY: 'TRANSIT',
-  TROLLEYBUS: 'TRANSIT',
   TRAM: 'TRANSIT',
   TRANSIT: 'TRANSIT',
+  TROLLEYBUS: 'TRANSIT',
   WALK: 'WALK'
 }
 
@@ -88,13 +88,18 @@ function isCombinationValid(
 
   // All current qualifiers currently simplify to "SHARED"
   const simplifiedModes = Array.from(
-    new Set(combo.map((c) => (c.qualifier ? 'SHARED' : SIMPLIFICATIONS[c.mode])))
+    new Set(
+      combo.map((c) => (c.qualifier ? 'SHARED' : SIMPLIFICATIONS[c.mode]))
+    )
   )
 
   // Ensure that if we have one transit mode, then we include ALL transit modes
   if (simplifiedModes.includes('TRANSIT')) {
     // Don't allow TRANSIT along with any other submodes
-    if (queryTransitSubmodes.length && combo.find((c) => c.mode === 'TRANSIT')) {
+    if (
+      queryTransitSubmodes.length &&
+      combo.find((c) => c.mode === 'TRANSIT')
+    ) {
       return false
     }
 
@@ -112,7 +117,9 @@ function isCombinationValid(
   }
 
   // OTP doesn't support multiple non-walk modes
-  if (BANNED_TOGETHER.filter((m) => combo.find((c) => c.mode === m)).length > 1) {
+  if (
+    BANNED_TOGETHER.filter((m) => combo.find((c) => c.mode === m)).length > 1
+  ) {
     return false
   }
 
@@ -217,9 +224,7 @@ export function toPlanModesInput(
   // Already a PlanModesInput (e.g. a stored search replaying one).
   if (!Array.isArray(modes)) return modes
 
-  const streetModes = modes.filter(
-    (m) => SIMPLIFICATIONS[m.mode] !== 'TRANSIT'
-  )
+  const streetModes = modes.filter((m) => SIMPLIFICATIONS[m.mode] !== 'TRANSIT')
   const hasTransit = modes.some((m) => SIMPLIFICATIONS[m.mode] === 'TRANSIT')
 
   if (!hasTransit) {
@@ -267,5 +272,79 @@ export function toPlanModesInput(
       }
     }),
     transitOnly: true
+  }
+}
+
+/**
+ * A transit-mode toggle as the settings panel carries it: a SUBMODE setting
+ * the config's transitModes list generates (Bus, Tram, Metro...), whose
+ * addTransportMode names the GTFS modes the toggle admits (e.g. the "Bus"
+ * toggle carries BUS and TROLLEYBUS). `value === false` is the rider's
+ * explicit off; unset means the default (on).
+ */
+interface TransitSubmodeSetting {
+  addTransportMode?: { mode: string } | { mode: string }[]
+  applicableMode?: string
+  type?: string
+  value?: unknown
+}
+
+/**
+ * The planConnection transit-mode preference list the rider's toggles imply:
+ * the modes of every transit SUBMODE still enabled, when at least one has
+ * been switched off. Undefined when there is no restriction to send — either
+ * no transit toggles exist, or none was deselected, in which case the server
+ * default (every transit mode) is exactly what the rider asked for.
+ *
+ * OTP's only handle for "no bus, thanks" is planConnection's
+ * modes.transit.transit preference list, so a deselected toggle must become
+ * an explicit list of the remaining modes. (A deselected SUBMODE also used to
+ * reach getBannedRoutesFromSubmodes — that path needs per-route overrides and
+ * does nothing without them.) Verified against the production Paris server
+ * 2026-11-02: modes {transit: {transit: [{mode: 'SUBWAY'}]}, transitOnly:
+ * true} answers with subway-only itineraries and no BUS legs.
+ */
+export function toPlanTransitModePreferences(
+  modeSettings: unknown
+): { mode: string }[] | undefined {
+  if (!Array.isArray(modeSettings)) return undefined
+  const submodes = modeSettings.filter(
+    (s): s is TransitSubmodeSetting =>
+      !!s &&
+      typeof s === 'object' &&
+      (s as TransitSubmodeSetting).type === 'SUBMODE' &&
+      (s as TransitSubmodeSetting).applicableMode === 'TRANSIT'
+  )
+  if (submodes.length === 0) return undefined
+  // Nothing explicitly excluded: leave the server default in place.
+  if (!submodes.some((s) => s.value === false)) return undefined
+  const enabled = submodes
+    .filter((s) => s.value !== false)
+    .flatMap((s) => {
+      const add = s.addTransportMode
+      return add ? (Array.isArray(add) ? add : [add]) : []
+    })
+    .map((m) => m?.mode)
+    .filter((mode): mode is string => !!mode)
+  return enabled.length > 0
+    ? Array.from(new Set(enabled)).map((mode) => ({ mode }))
+    : undefined
+}
+
+/**
+ * toPlanModesInput, plus the transit-mode restriction the rider's toggles
+ * imply. The preference list only rides on transit plans: a street-only
+ * (directOnly) plan has no transit block to restrict.
+ */
+export function toPlanModesInputWithTransitFilter(
+  modes: LegacyTransportMode[] | PlanModesInput,
+  modeSettings?: unknown
+): PlanModesInput {
+  const planModes = toPlanModesInput(modes)
+  const preferences = toPlanTransitModePreferences(modeSettings)
+  if (!preferences || !planModes.transitOnly) return planModes
+  return {
+    ...planModes,
+    transit: { ...(planModes.transit || {}), transit: preferences }
   }
 }

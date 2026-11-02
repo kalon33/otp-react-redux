@@ -1,7 +1,9 @@
 /* globals describe, expect, it */
 import {
   generateModeSubsets,
-  toPlanModesInput
+  toPlanModesInput,
+  toPlanModesInputWithTransitFilter,
+  toPlanTransitModePreferences
 } from '../../lib/util/plan-combinations'
 
 /**
@@ -18,10 +20,7 @@ describe('util > plan-combinations > toPlanModesInput', () => {
     // also requires a WALK next to it in the same leg's mode list
     // ("For the time being, FLEXIBLE needs to be combined with WALK mode
     // for the same leg.").
-    const input = toPlanModesInput([
-      { mode: 'TRANSIT' },
-      { mode: 'FLEX' }
-    ])
+    const input = toPlanModesInput([{ mode: 'TRANSIT' }, { mode: 'FLEX' }])
     expect(input).toEqual({
       transit: {
         access: ['FLEX', 'WALK'],
@@ -64,9 +63,7 @@ describe('util > plan-combinations > toPlanModesInput', () => {
   })
 
   it('walks egress out of a car park-and-ride', () => {
-    expect(
-      toPlanModesInput([{ mode: 'TRANSIT' }, { mode: 'CAR' }])
-    ).toEqual({
+    expect(toPlanModesInput([{ mode: 'TRANSIT' }, { mode: 'CAR' }])).toEqual({
       transit: {
         access: ['CAR_PARKING'],
         egress: ['WALK'],
@@ -156,11 +153,16 @@ describe('util > plan-combinations > toPlanModesInput', () => {
 describe('util > plan-combinations > generateModeSubsets', () => {
   it('fans transit + bicycle out into the valid subsets', () => {
     const combos = generateModeSubsets({
-      modeSettings: [],
-      modes: [{ mode: 'TRANSIT' }, { mode: 'BICYCLE' }]
+      modes: [{ mode: 'TRANSIT' }, { mode: 'BICYCLE' }],
+      modeSettings: []
     })
     const modeSets = combos
-      .map((c) => c.modes.map((m) => m.mode).sort().join('+'))
+      .map((c) =>
+        c.modes
+          .map((m) => m.mode)
+          .sort()
+          .join('+')
+      )
       .sort()
     expect(modeSets).toEqual(['BICYCLE', 'BICYCLE+TRANSIT', 'TRANSIT'])
   })
@@ -170,11 +172,16 @@ describe('util > plan-combinations > generateModeSubsets', () => {
     // provided; the "all 3 flex modes or none" bundling filter is applied in
     // routingQuery (apiV2), over these subsets.
     const combos = generateModeSubsets({
-      modeSettings: [],
-      modes: [{ mode: 'TRANSIT' }, { mode: 'FLEX' }]
+      modes: [{ mode: 'TRANSIT' }, { mode: 'FLEX' }],
+      modeSettings: []
     })
     const modeSets = combos
-      .map((c) => c.modes.map((m) => m.mode).sort().join('+'))
+      .map((c) =>
+        c.modes
+          .map((m) => m.mode)
+          .sort()
+          .join('+')
+      )
       .sort()
     expect(modeSets).toEqual(['FLEX+TRANSIT', 'TRANSIT'])
   })
@@ -185,14 +192,86 @@ describe('util > plan-combinations > wire shape', () => {
     // modes must not be empty."); an omitted slot keeps the server default.
     // JSON.stringify drops undefined, so the FLEX transit block rides as
     // access + egress with no transfer key at all.
-    const flex = toPlanModesInput([
-      { mode: 'TRANSIT' },
-      { mode: 'FLEX' }
-    ])
+    const flex = toPlanModesInput([{ mode: 'TRANSIT' }, { mode: 'FLEX' }])
     expect(JSON.stringify(flex)).not.toContain('"transfer"')
     expect(JSON.parse(JSON.stringify(flex))).toEqual({
       transit: { access: ['FLEX', 'WALK'], egress: ['FLEX', 'WALK'] },
       transitOnly: true
     })
+  })
+})
+/**
+ * Rider report (2026-11-02, Paris): the Bus/Tram/Metro toggles did nothing —
+ * a deselected bus still came back in the results. core-utils'
+ * generateCombinations used to inject the enabled transit submodes as
+ * planConnection's modes.transit.transit preference list; the fork's subset
+ * fan-out had lost that, so every transit plan went out with no restriction
+ * and the server answered with every mode.
+ */
+describe('util > plan-combinations > transit-mode preferences', () => {
+  // The settings the panel builds from config.modes.transitModes (the Paris
+  // deployment's five toggles, bus carrying both BUS and TROLLEYBUS).
+  const parisSettings = [
+    {
+      addTransportMode: [{ mode: 'TROLLEYBUS' }, { mode: 'BUS' }],
+      applicableMode: 'TRANSIT',
+      key: 'bus',
+      type: 'SUBMODE',
+      value: true
+    },
+    {
+      addTransportMode: { mode: 'TRAM' },
+      applicableMode: 'TRANSIT',
+      key: 'tram',
+      type: 'SUBMODE',
+      value: true
+    },
+    {
+      addTransportMode: { mode: 'SUBWAY' },
+      applicableMode: 'TRANSIT',
+      key: 'metro',
+      type: 'SUBMODE',
+      value: true
+    },
+    {
+      applicableMode: 'TRANSIT',
+      key: 'wheelchair',
+      type: 'CHECKBOX',
+      value: false
+    }
+  ]
+
+  it('sends nothing while every transit toggle is on', () => {
+    // No exclusion: the server default (all modes) is what the rider asked
+    // for, and an explicit list would also drop modes their config omits.
+    expect(toPlanTransitModePreferences(parisSettings)).toBeUndefined()
+  })
+
+  it('restricts to the enabled modes once the rider deselects one', () => {
+    const busOff = parisSettings.map((s) =>
+      s.key === 'bus' ? { ...s, value: false } : s
+    )
+    expect(toPlanTransitModePreferences(busOff)).toEqual([
+      { mode: 'TRAM' },
+      { mode: 'SUBWAY' }
+    ])
+  })
+
+  it('rides the restriction on transit plans and leaves street plans alone', () => {
+    const busOff = parisSettings.map((s) =>
+      s.key === 'bus' ? { ...s, value: false } : s
+    )
+    // Generic transit button, no street modes alongside: the restriction is
+    // the only transit content, and the block is created when absent.
+    expect(
+      toPlanModesInputWithTransitFilter([{ mode: 'TRANSIT' }], busOff)
+    ).toEqual({
+      transit: { transit: [{ mode: 'TRAM' }, { mode: 'SUBWAY' }] },
+      transitOnly: true
+    })
+    // Bike-only plan: nothing to restrict.
+    expect(
+      toPlanModesInputWithTransitFilter([{ mode: 'BICYCLE' }], busOff)
+    ).toEqual({ direct: ['BICYCLE'], directOnly: true })
   })
 })
