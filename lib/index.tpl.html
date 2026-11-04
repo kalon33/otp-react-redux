@@ -19,6 +19,18 @@
       the browser build keeps normal two-way pinch zoom.
     -->
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <!--
+      The page is theme-aware: the phone layout (html.tn-mobile) follows the
+      OS light/dark scheme through the TransitNav tokens (lib/styles/
+      tokens.css), the desktop layout pins light (index.css). Declaring both
+      schemes here is what stops the Android WebView's own heuristic
+      darkening pass — the one that re-applies when the app resumes from the
+      background and inverts text while leaving translucent backgrounds (the
+      layer selector's rgba(255,255,255,.95)) untouched, i.e. white text on a
+      white card. A page that declares color-scheme is skipped by that
+      algorithm entirely; the CSS then decides light vs dark per layout.
+    -->
+    <meta name="color-scheme" content="light dark">
 
     <!-- PWA Manifest -->
     <link rel="manifest" href="/manifest.webmanifest">

@@ -198,6 +198,22 @@ function getLayerName(overlay, config, intl) {
   }
 }
 
+/**
+ * How long a lost WebGL context is given to come back on its own before the
+ * map is rebuilt with a fresh one (ms).
+ *
+ * MapLibre 5.6.1 handles context loss by design (`Map._contextLost` calls
+ * `preventDefault()` and stops the render loop, `Map._contextRestored` —
+ * `_setupPainter` + `resize` + `_update` — takes over if the browser fires
+ * `webglcontextrestored`). The gap is the Android WebView: backgrounded
+ * among other applications, the OS reclaims the surface and the WebView
+ * frequently never fires the restore, so the canvas stays black for the
+ * life of the page. The grace covers the case where the restore DOES come
+ * (the WebView kept the context alive and re-delivers it a moment after the
+ * rider returns); a rebuild in that window would throw away a healthy map.
+ */
+export const CONTEXT_LOSS_RECOVERY_GRACE_MS = 5000
+
 interface DefaultMapProps {
   bikeRentalQuery: () => void
   bikeRentalStations: VehicleRentalStation[]
@@ -238,13 +254,20 @@ export class DefaultMap extends Component<DefaultMapProps> {
       initZoom: zoom = 13
     } = props.mapConfig || {}
     this.state = {
+      contextLost: false,
       lat,
       lon,
+      mapGeneration: 0,
       mapLoad: false,
       zoom
     }
     this.geolocateControlRef = React.createRef<maplibregl.GeolocateControl>()
     this.baseMapRef = React.createRef<maplibregl.Map>()
+    // WebGL context-loss recovery (Android backgrounding) — see
+    // _onContextLost. Plain fields, not state: they drive the recovery
+    // timers and never the render.
+    this._contextLost = false
+    this._contextRecoveryTimer = null
   }
 
   getNearbyViewFilteredOverlays = () => {
@@ -390,6 +413,86 @@ export class DefaultMap extends Component<DefaultMapProps> {
     this.props.findFeeds()
     // Load closed stops into state for usage throughout UI (map popup, timetable, itinerary, etc.)
     this.props.getStopClosures()
+
+    // A context lost while backgrounded is only recoverable once the rider is
+    // back: see _onContextLost.
+    document.addEventListener(
+      'visibilitychange',
+      this._onVisibilityChangeForContextRecovery
+    )
+  }
+
+  componentWillUnmount() {
+    document.removeEventListener(
+      'visibilitychange',
+      this._onVisibilityChangeForContextRecovery
+    )
+    if (this._contextRecoveryTimer) {
+      clearTimeout(this._contextRecoveryTimer)
+      this._contextRecoveryTimer = null
+    }
+  }
+
+  /**
+   * The Android backgrounding recovery, half one: the rider's map went black
+   * because the WebView reclaimed its WebGL context while the app sat behind
+   * other applications, and maplibre's own restore never ran (the WebView
+   * never fired `webglcontextrestored`).
+   *
+   * Half two is the rebuild in _scheduleContextRecovery. Both hang off the
+   * map's own `webglcontextlost`/`webglcontextrestored` events (fired by
+   * maplibre on the Map, not just the canvas), attached in onLoad below.
+   *
+   * A rebuild cannot be a plain remount: `reuseMaps: true` is what keeps the
+   * planner's camera and Go Mode's overlays cheap across screen changes, but
+   * it also parks the dead map instance in react-map-gl's pool
+   * (`Maplibre.recycle()` → `Maplibre.savedMaps`) and hands that same dead
+   * instance back to the next mount — the same trap the render guard's
+   * STOP/START note describes (map-render-guard.ts). So the rebuild mounts
+   * the replacement with `reuseMaps: false` (a fresh Maplibre wrapper and a
+   * fresh canvas, without draining a pool other mounted maps may rely on)
+   * and only returns to pooling once that map has loaded healthy.
+   */
+  _onContextLost = () => {
+    this._contextLost = true
+    this._scheduleContextRecovery()
+  }
+
+  _onContextRestored = () => {
+    // MapLibre re-set up its painter itself; nothing to rebuild.
+    this._contextLost = false
+    if (this._contextRecoveryTimer) {
+      clearTimeout(this._contextRecoveryTimer)
+      this._contextRecoveryTimer = null
+    }
+  }
+
+  _onVisibilityChangeForContextRecovery = () => {
+    if (
+      document.visibilityState === 'visible' &&
+      this._contextLost &&
+      !this._contextRecoveryTimer
+    ) {
+      this._scheduleContextRecovery()
+    }
+  }
+
+  _scheduleContextRecovery = () => {
+    // Hidden: the rider is in another app and the WebView is paused — a
+    // rebuild now would race the resume. visibilitychange picks it up.
+    if (document.visibilityState !== 'visible') return
+    if (this._contextRecoveryTimer) return
+    this._contextRecoveryTimer = setTimeout(() => {
+      this._contextRecoveryTimer = null
+      if (!this._contextLost) return
+      // Still dead after the grace: rebuild. contextLost stays true until the
+      // replacement's onLoad, so the replacement mounts with reuseMaps off
+      // and never pops the dead map out of the pool.
+      this.setState(({ mapGeneration }) => ({
+        contextLost: true,
+        mapGeneration: mapGeneration + 1
+      }))
+    }, CONTEXT_LOSS_RECOVERY_GRACE_MS)
   }
 
   componentDidUpdate(prevProps) {
@@ -487,16 +590,29 @@ export class DefaultMap extends Component<DefaultMapProps> {
           baseLayer={
             baseLayerUrls?.length > 1 ? baseLayerUrls : baseLayerUrls?.[0]
           }
+          /* Remounts (fresh canvas + WebGL context) when the old one died
+             unrecovered — see _onContextLost. */
           baseLayerNames={baseLayerNames}
           center={[lat, lon]}
           innerRef={this.baseMapRef}
+          key={this.state.mapGeneration}
           mapLibreProps={{
             onLoad: () => {
+              // The Android context-loss watchers (see _onContextLost) hang
+              // off the map's own events; react-map-gl proxies neither.
+              const map = this.baseMapRef.current?.getMap?.()
+              map?.on('webglcontextlost', this._onContextLost)
+              map?.on('webglcontextrestored', this._onContextRestored)
+              // A rebuilt map is healthy from here: back to instance pooling.
+              if (this.state.contextLost) this.setState({ contextLost: false })
               // Once this map has loaded, we subtly trigger the geolocate control to update its state.
               return this.setState({ mapLoad: true })
             },
             onStyleImageMissing: handleStyleImageMissing,
-            reuseMaps: true
+            // Off only for the recovery remount, so the dead map is neither
+            // popped from react-map-gl's pool nor handed back. See
+            // _onContextLost.
+            reuseMaps: !this.state.contextLost
           }}
           maxZoom={maxZoom}
           onClickLayerSelector={onClickLayerSelector}

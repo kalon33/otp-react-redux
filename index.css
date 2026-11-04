@@ -19,6 +19,18 @@
 /* TransitNav base styles: LAST, so they win over everything above. */
 @import url(lib/styles/base.css);
 
+/* The desktop layout is light-only (bootstrap panels, sidebar — not dark-mode
+   ready, per tokens.css), so pin its color-scheme here. The phone layout is
+   excluded: html.tn-mobile carries `color-scheme: light dark` from base.css
+   and follows the OS theme, and this rule must not touch it. Declaring a
+   color-scheme at all is also what stops the Android WebView's heuristic
+   darkening pass — the one that re-applies when the app resumes from the
+   background and inverts text while leaving translucent backgrounds (the
+   layer selector's rgba(255,255,255,.95)) untouched. */
+:root:not(.tn-mobile) {
+  color-scheme: light;
+}
+
 /* Hide IE/Edge clear button in text input fields. */
 input[type="text"]::-ms-clear {
   display: none;
