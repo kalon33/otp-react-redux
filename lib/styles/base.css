@@ -589,6 +589,63 @@ html.tn-mobile .maplibregl-ctrl-group button.go-mode-follow-toggle svg {
   margin: 0 auto;
 }
 
+/* ---------- Map controls, themed ----------
+   MapLibre's own chrome is hardcoded light: .maplibregl-ctrl-group is #fff,
+   the control glyphs are dark SVG background images, the attribution bar and
+   the popups are #fff, and base-map's layer selector is
+   rgba(255,255,255,.95) — none of it reads the TransitNav tokens. In the dark
+   theme the surrounding text goes light (--tn-text) and the tiles go dark
+   (tnBaseLayerUrl swaps Positron for Dark Matter), so those surfaces stayed
+   white under light text: the layer list, the attribution and the popups
+   read as blank cards. Theme them with the tokens — in the light theme the
+   tokens are these very values, so nothing changes there. */
+html.tn-mobile .maplibregl-ctrl-group,
+html.tn-mobile .maplibregl-ctrl-attrib,
+html.tn-mobile .maplibregl-map .layers-list {
+  background: var(--tn-surface);
+  color: var(--tn-text);
+}
+html.tn-mobile .maplibregl-ctrl-group button + button {
+  border-top: 1px solid var(--tn-border);
+}
+html.tn-mobile .maplibregl-ctrl-attrib a {
+  color: var(--tn-text-2);
+}
+html.tn-mobile .maplibregl-popup-content {
+  color: var(--tn-text);
+  background: var(--tn-surface);
+}
+/* The tip is a border triangle; every anchor paints one of these two. */
+html.tn-mobile .maplibregl-popup-tip {
+  border-top-color: var(--tn-surface);
+  border-bottom-color: var(--tn-surface);
+}
+html.tn-mobile .maplibregl-popup-close-button {
+  color: var(--tn-text-2);
+}
+/* The elevation leg diagram (map.css) is a white card too. */
+html.tn-mobile .otp .leg-diagram {
+  background-color: var(--tn-surface);
+}
+
+/* The zoom/compass/geolocate and attribution glyphs are dark SVG background
+   images: on the dark surface they would be near-invisible. Invert them in
+   the dark theme only — the two guards mirror tokens.css (OS dark, unless
+   data-theme pins light; or data-theme forcing dark on any layout). */
+@media (prefers-color-scheme: dark) {
+  html.tn-mobile:not([data-theme='light'])
+    .maplibregl-ctrl-group
+    button
+    .maplibregl-ctrl-icon,
+  html.tn-mobile:not([data-theme='light']) .maplibregl-ctrl-attrib-button {
+    filter: invert(0.92);
+  }
+}
+html[data-theme='dark'] .maplibregl-ctrl-group button .maplibregl-ctrl-icon,
+html[data-theme='dark'] .maplibregl-ctrl-attrib-button {
+  filter: invert(0.92);
+}
+
 /* ---------- Shared recipes as classes (mirror tn-styled.ts) ---------- */
 
 .tn-tabular {
