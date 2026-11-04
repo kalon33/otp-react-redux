@@ -63,19 +63,28 @@ describe('map render guard (59.1)', () => {
   })
 
   describe('the maplibre-gl private shape it relies on', () => {
-    it('is maplibre-gl 5.6.1, or this test and the guard need re-reading', () => {
+    it('is maplibre-gl 6.16.0, or this test and the guard need re-reading', () => {
+      // Re-read for the 5 -> 6 upgrade (the 59.1 lock-up fix, upstream since
+      // 6.8.0, is now IN the installed TaskQueue — see the next test).
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       const { version } = require('maplibre-gl/package.json')
-      expect(version).toBe('5.6.1')
+      expect(version).toBe('6.16.0')
     })
 
-    it('TaskQueue still has the unguarded run() the guard wraps', () => {
+    it('TaskQueue runs each task in its own try/catch and releases the lock', () => {
+      // The upstream half of 59.1's fix (maplibre-gl-js b9f5d8e8d, #7031,
+      // first released in 6.8.0): a throwing frame no longer leaves
+      // _currentlyRunning set, and the first error is rethrown AFTER the
+      // lock is released. The guard stays for the other half — asking for a
+      // repaint after the throw, which _render skips when run() rethrows.
       const src = readSrc('util/task_queue.ts')
       expect(src).toMatch(
         /if \(this\._currentlyRunning\) throw new Error\('Attempting to run\(\), but is already running\.'\);/
       )
-      // No try/finally upstream yet — when one appears the guard is spare.
-      expect(src).not.toMatch(/finally/)
+      expect(src).toMatch(/} catch \(error\) \{[\s\S]{0,120}failed = true;/)
+      expect(src).toMatch(
+        /this\._currentlyRunning = false;\s*\n\s*if \(failed\) throw firstError;/
+      )
       const q = new TaskQueue()
       expect(Array.isArray(q._queue)).toBe(true)
       expect(q._cleared).toBe(false)
@@ -86,7 +95,7 @@ describe('map render guard (59.1)', () => {
 
     it('Map keeps its frames on _renderTaskQueue and runs it from _render', () => {
       const src = readSrc('ui/map.ts')
-      expect(src).toMatch(/_renderTaskQueue = new TaskQueue\(\)/)
+      expect(src).toMatch(/_renderTaskQueue: TaskQueue = new TaskQueue\(\)/)
       expect(src).toMatch(/return this\._renderTaskQueue\.add\(callback\)/)
       expect(src).toMatch(/this\._renderTaskQueue\.run\(paintStartTimeStamp\)/)
       expect(src).toMatch(/triggerRepaint\(\)/)
@@ -95,7 +104,7 @@ describe('map render guard (59.1)', () => {
     it('the camera ease frame still calls _onEaseFrame unguarded (the trigger)', () => {
       const src = readSrc('ui/camera.ts')
       expect(src).toMatch(
-        /_renderFrameCallback = \(\) => \{[\s\S]{0,200}this\._onEaseFrame\(this\._easeOptions\.easing\(t\)\)/
+        /_renderFrameCallback = \(\): void => \{[\s\S]{0,200}this\._onEaseFrame\(this\._easeOptions\.easing\(t\)\)/
       )
       expect(src).toMatch(/delete this\._onEaseFrame;/)
     })
@@ -112,18 +121,24 @@ describe('map render guard (59.1)', () => {
     })
   })
 
-  it('without the guard, one throwing frame locks the queue for good (the bug)', () => {
+  it('upstream (6.8+) no longer locks the queue on a throwing frame — but the frame is still lost without the guard', () => {
+    // The 59.1 lock-up half is fixed in the installed TaskQueue: the throw
+    // no longer poisons later frames. What remains unfixed upstream, and what
+    // the guard still covers: the rethrown error escapes _render, so the
+    // frame's own draw is skipped and nothing asks for a repaint.
     const map = makeMap()
     map._renderTaskQueue.add(() => {
       throw new TypeError('this._onEaseFrame is not a function')
     })
     expect(() => map._render()).toThrow('this._onEaseFrame is not a function')
-    for (let i = 0; i < 3; i++) {
-      expect(() => map._render()).toThrow(
-        'Attempting to run(), but is already running.'
-      )
-    }
-    expect(map.draws).toBe(0)
+    expect(map.draws).toBe(0) // the frame after run() never ran
+    expect(map.triggerRepaint).not.toHaveBeenCalled()
+    // Later frames are NOT locked...
+    const later = jest.fn()
+    map._renderTaskQueue.add(later)
+    expect(() => map._render(16)).not.toThrow()
+    expect(later).toHaveBeenCalledWith(16)
+    expect(map.draws).toBe(1)
   })
 
   it('with the guard, an injected throwing frame is dropped and the map draws again', () => {
@@ -168,11 +183,13 @@ describe('map render guard (59.1)', () => {
   })
 
   it('revives a queue that was already locked when the guard went on', () => {
+    // Upstream no longer leaves a stale lock itself, but an interrupted run
+    // (a task throwing into _render's caller mid-frame) still can; the
+    // guard's run wrapper must reset it.
     const map = makeMap()
-    map._renderTaskQueue.add(() => {
-      throw new TypeError('this._onEaseFrame is not a function')
-    })
-    expect(() => map._render()).toThrow()
+    map._renderTaskQueue.add(() => undefined)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(map._renderTaskQueue as any)._currentlyRunning = []
     const report = jest.fn()
     installMapRenderGuard(map, report, clock)
     // The first run hits the stale lock, resets it; the next one draws.

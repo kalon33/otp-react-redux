@@ -315,7 +315,7 @@ index bb1b2ce..a759b6d 100644
      return /*#__PURE__*/React.createElement(S.RouteName, {
        key: "route-".concat(name)
 diff --git a/node_modules/@opentripplanner/location-field/lib/index.js b/node_modules/@opentripplanner/location-field/lib/index.js
-index cdf0eae..e60404a 100644
+index cdf0eae..0facb75 100644
 --- a/node_modules/@opentripplanner/location-field/lib/index.js
 +++ b/node_modules/@opentripplanner/location-field/lib/index.js
 @@ -55,6 +55,10 @@ function filter(list, layers, include, limit) {
@@ -356,7 +356,38 @@ index cdf0eae..e60404a 100644
  }) => {
    var _indexedOptionLookup$7;
    /**
-@@ -299,6 +308,8 @@ const LocationField = ({
+@@ -289,6 +298,30 @@ const LocationField = ({
+     }));
+     const newController = new AbortController();
+     setAbortController([...abortControllers, newController]);
++
++    // TransitNav fork (backlog 20.1): a stalled geocoder fetch never settles, so
++    // the row under the field used to spin "Fetching suggestions…" forever. Give
++    // each autocomplete request a 10 s deadline: on expiry, abort it, stop the
++    // spinner and say so in the same row (the exclamation-icon row the failed-
++    // search message already uses; the text has no "AbortError" in it, so it is
++    // not hidden). A request a keystroke already aborted is left alone: its
++    // successor owns the row, and that abort stays silent as before.
++    let timedOut = false;
++    const deadline = setTimeout(() => {
++      if (newController.signal.aborted) return;
++      timedOut = true;
++      newController.abort();
++      setGeocodedFeatures([]);
++      setMessage(
++        intl.formatMessage({
++          defaultMessage: "Can't reach the server",
++          description:
++            'Shown when geocoder suggestions have not arrived after 10 seconds',
++          id: 'otpUi.LocationField.geocoderTimeout'
++        })
++      );
++      setFetching(false);
++    }, GEOCODER_DEADLINE_MS);
+     (0, _geocoder.default)(geocoderConfig)
+     // Other options such as headers will also be included in the autocomplete call.
+     .autocomplete({
+@@ -299,6 +332,8 @@ const LocationField = ({
      })
      // TODO: Better type?
      .then(result => {
@@ -365,7 +396,7 @@ index cdf0eae..e60404a 100644
        let message;
        // If no features found in response, default to empty array.
        let geocodedFeatures = result === null || result === void 0 ? void 0 : result.features;
-@@ -372,9 +383,12 @@ const LocationField = ({
+@@ -372,9 +407,12 @@ const LocationField = ({
        setMessage(message);
        setFetching(false);
      }).catch(err => {
@@ -378,7 +409,7 @@ index cdf0eae..e60404a 100644
      });
    }, {
      wait: 300
-@@ -586,13 +600,37 @@ const LocationField = ({
+@@ -586,13 +624,37 @@ const LocationField = ({
    // array of menu item ids and associated locationSelected handlers for onKeyDown
    // (does not include non-selectable items e.g. dividers/headings)
    const indexedOptionLookup = [];
@@ -417,7 +448,7 @@ index cdf0eae..e60404a 100644
  
    /* 0) Include user saved locations if the typed text contains those locations name. */
    if (showUserSettings) {
-@@ -736,15 +774,45 @@ const LocationField = ({
+@@ -736,15 +798,45 @@ const LocationField = ({
        // Create and return the option menu item
        return /*#__PURE__*/_react.default.createElement(_options.TransitStopOption, {
          id: stopId,
@@ -463,7 +494,7 @@ index cdf0eae..e60404a 100644
    /* 3) Process recent search history options */
    if (sessionSearches.length > 0) {
      // Add the menu sub-heading (not a selectable item)
-@@ -785,7 +853,7 @@ const LocationField = ({
+@@ -785,7 +877,7 @@ const LocationField = ({
    }
  
    /* 3b) Process stored user locations */
@@ -472,7 +503,7 @@ index cdf0eae..e60404a 100644
      // Add the menu sub-heading (not a selectable item)
      menuItems.push(/*#__PURE__*/_react.default.createElement(S.MenuGroupHeader, {
        as: headingType,
-@@ -828,12 +896,17 @@ const LocationField = ({
+@@ -828,12 +920,17 @@ const LocationField = ({
    }
    const optionId = `current-position`;
  
@@ -493,7 +524,7 @@ index cdf0eae..e60404a 100644
        disabled: positionUnavailable,
        icon: optionIcon,
        id: optionId,
-@@ -843,6 +916,20 @@ const LocationField = ({
+@@ -843,6 +940,20 @@ const LocationField = ({
        title: optionTitle
      }));
    }
@@ -514,7 +545,7 @@ index cdf0eae..e60404a 100644
    if (message && !message.includes("AbortError")) {
      if (geocodedFeatures.length === 0) {
        const icon = isFetching ? /*#__PURE__*/_react.default.createElement(S.Spinner, {
-@@ -860,6 +947,12 @@ const LocationField = ({
+@@ -860,6 +971,12 @@ const LocationField = ({
      statusMessages.push(message);
    }
  

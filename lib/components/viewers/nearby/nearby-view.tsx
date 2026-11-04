@@ -245,22 +245,30 @@ function NearbyView({
   }, [location, setHighlightedLocation])
 
   useEffect(() => {
-    const moveListener = (e: ViewStateChangeEvent) => {
-      // @ts-expect-error TODO: What is this condition supposed to capture?
-      if (e.geolocateSource) {
+    // react-map-gl's own camera listener enriches the shared event object
+    // with viewState before this listener runs (and the geolocate control
+    // with geolocateSource), but maplibre 6's own listener types no longer
+    // admit the ViewStateChangeEvent shape — read it through a cast.
+    const moveListener = (e: unknown) => {
+      const { geolocateSource, viewState } = e as ViewStateChangeEvent & {
+        // TODO: What is this condition supposed to capture?
+        geolocateSource?: boolean
+      }
+      if (geolocateSource) {
         const coords = {
-          lat: e.viewState.latitude,
-          lon: e.viewState.longitude
+          lat: viewState.latitude,
+          lon: viewState.longitude
         }
         setViewedNearbyCoords(coords)
         reverseCoords(coords)
       }
     }
 
-    const dragListener = (e: ViewStateChangeEvent) => {
+    const dragListener = (e: unknown) => {
+      const { viewState } = e as ViewStateChangeEvent
       const coords = {
-        lat: e.viewState.latitude,
-        lon: e.viewState.longitude
+        lat: viewState.latitude,
+        lon: viewState.longitude
       }
       setViewedNearbyCoords(coords)
       reverseCoords(coords)

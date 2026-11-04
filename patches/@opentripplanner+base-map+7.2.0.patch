@@ -1,0 +1,46 @@
+diff --git a/node_modules/@opentripplanner/base-map/esm/index.js b/node_modules/@opentripplanner/base-map/esm/index.js
+index bb00c6a..b8b47bb 100644
+--- a/node_modules/@opentripplanner/base-map/esm/index.js
++++ b/node_modules/@opentripplanner/base-map/esm/index.js
+@@ -2,7 +2,7 @@ import _extends from "@babel/runtime/helpers/extends";
+ import _toConsumableArray from "@babel/runtime/helpers/toConsumableArray";
+ import _typeof from "@babel/runtime/helpers/typeof";
+ import _slicedToArray from "@babel/runtime/helpers/slicedToArray";
+-import maplibregl from "maplibre-gl";
++import * as maplibregl from "maplibre-gl";
+ import React, { useCallback, useState } from "react";
+ import { Map } from "react-map-gl/maplibre";
+ import { useIntl } from "react-intl";
+diff --git a/node_modules/@opentripplanner/base-map/lib/index.js b/node_modules/@opentripplanner/base-map/lib/index.js
+index 159f432..c3419df 100644
+--- a/node_modules/@opentripplanner/base-map/lib/index.js
++++ b/node_modules/@opentripplanner/base-map/lib/index.js
+@@ -13,7 +13,7 @@ Object.defineProperty(exports, "MarkerWithPopup", {
+ });
+ exports.util = exports.default = exports.Styled = exports.Popup = void 0;
+ var _extends2 = _interopRequireDefault(require("@babel/runtime/helpers/extends"));
+-var _maplibreGl = _interopRequireDefault(require("maplibre-gl"));
++var _maplibreGl = require("maplibre-gl");
+ var _react = _interopRequireWildcard(require("react"));
+ var _maplibre = require("react-map-gl/maplibre");
+ var _reactIntl = require("react-intl");
+@@ -115,7 +115,7 @@ const BaseMap = ({
+       zoom: initZoom
+     },
+     locale: (0, _mapControlLocale.default)(intl),
+-    mapLib: _maplibreGl.default,
++    mapLib: _maplibreGl,
+     mapStyle: activeBaseLayer,
+     maxZoom: maxZoom,
+     onClick: onClick,
+diff --git a/node_modules/@opentripplanner/base-map/src/index.tsx b/node_modules/@opentripplanner/base-map/src/index.tsx
+index ad6bb47..fd30a5a 100644
+--- a/node_modules/@opentripplanner/base-map/src/index.tsx
++++ b/node_modules/@opentripplanner/base-map/src/index.tsx
+@@ -1,4 +1,5 @@
+-import maplibregl, {
++import * as maplibregl from "maplibre-gl";
++import {
+   MapLayerMouseEvent,
+   MapLayerTouchEvent
+ } from "maplibre-gl";
