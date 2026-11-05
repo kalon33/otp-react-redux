@@ -44,6 +44,7 @@ try {
     resetPackage("@opentripplanner/trip-details");
     resetPackage("@opentripplanner/trip-form");
     resetPackage("@opentripplanner/transitive-overlay");
+    resetPackage("@opentripplanner/base-map");
     const patchOutput2 = execSync("patch-package", { cwd: projectRoot, encoding: "utf-8", stdio: ["pipe", "pipe", "inherit"], env: { PATH: process.env.PATH + ':' + path.join(nodeModulesPath, '.bin') } });
     console.log(patchOutput2);
     console.log("✓ Patches applied successfully after recovery");
@@ -305,6 +306,19 @@ function resetStalePatchedPackages() {
       isCurrent: (c) => c.includes("index > 0\n                ? intl.formatMessage(") && c.includes("fare?.amount === undefined\n                ? intl.formatMessage({")
     },
     {
+      // The maplibre 6 patch (default import -> namespace import) is what
+      // keeps the build alive; a base-map left pristine or half-patched by
+      // an interrupted run makes `vite build` fail with '"default" is not
+      // exported by maplibre-gl'. A MISSING file is equally fatal and,
+      // worse, silent: yarn does not re-extract a package removed from
+      // node_modules when the lockfile is unchanged, so reinstall it here.
+      name: "@opentripplanner/base-map",
+      file: path.join(nodeModulesPath, "@opentripplanner/base-map/esm/index.js"),
+      isPristine: (c) => c.includes('import maplibregl from "maplibre-gl";'),
+      isCurrent: (c) =>
+        c.includes('import * as maplibregl from "maplibre-gl";')
+    },
+    {
       name: "@opentripplanner/transitive-overlay",
       file: path.join(nodeModulesPath, "@opentripplanner/transitive-overlay", "src/index.tsx"),
       // Pristine source calls addImage directly after loadImage resolves, with
@@ -315,7 +329,18 @@ function resetStalePatchedPackages() {
     }
   ];
   for (const { name, file, isPristine, isCurrent } of checks) {
-    if (!fs.existsSync(file)) continue;
+    if (!fs.existsSync(file)) {
+      // A check file that is gone means the package is missing or
+      // half-installed, and yarn does not re-extract it on an unchanged
+      // lockfile. base-map is the one whose absence breaks the build, so
+      // reinstall it; the others ship their check file in every state seen
+      // so far, and patch-package would fail loudly anyway.
+      if (name === "@opentripplanner/base-map") {
+        console.log(`  ↻ ${name} is missing or half-installed; reinstalling...`);
+        resetPackage(name);
+      }
+      continue;
+    }
     const content = fs.readFileSync(file, "utf-8");
     if (isCurrent(content)) continue;       // already at the current patched state
     if (isPristine(content)) continue;       // pristine, patch will apply cleanly
