@@ -64,6 +64,24 @@ customFile(
 
 export default defineConfig({
   base: '/',
+  resolve: {
+    // Array form: an object's keys go through Object.entries, which turns a
+    // regex key back into a string. maplibre-gl 6 has no default export;
+    // compiled deps written for maplibre 5 still
+    // `import maplibregl from 'maplibre-gl'` and rollup fails the build on
+    // them unless a patch-package patch rewrote the file — a state yarn does
+    // not keep across installs. The ANCHORED regex routes only the bare
+    // specifier through the compat shim (lib/maplibre-gl-compat.js), so the
+    // build never depends on node_modules' patch state; the shim itself
+    // imports maplibre-gl/dist/maplibre-gl.mjs by path, which a string
+    // (prefix) alias would have rewritten too.
+    alias: [
+      {
+        find: /^maplibre-gl$/,
+        replacement: path.resolve(process.cwd(), 'lib/maplibre-gl-compat.js')
+      }
+    ]
+  },
   build: {
     // Flatten the output for mastarm deploy (mastarm doesn't support uploading subfolders).
     assetsDir: ''
