@@ -2455,14 +2455,15 @@
     "@opentripplanner/location-icon" "^2.0.0"
     flat "^5.0.2"
 
-"@opentripplanner/geocoder@3.1.2", "@opentripplanner/geocoder@^3.1.2", "@opentripplanner/geocoder@^3.1.3":
-  version "3.1.2"
-  resolved "https://registry.yarnpkg.com/@opentripplanner/geocoder/-/geocoder-3.1.2.tgz#d5ce4baea674df980f568e65eeab971ec863c0e7"
-  integrity sha512-yxNxDNx4pTn8jH6NpGdU5cv7SMdDB1/Ey1zZB021AGyVFouKcFvBSV6F8ULp3sWAr+nI+AWo8lYz08UG3c8/SA==
+"@opentripplanner/geocoder@3.1.3", "@opentripplanner/geocoder@^3.1.2", "@opentripplanner/geocoder@^3.1.3":
+  version "3.1.3"
+  resolved "https://registry.yarnpkg.com/@opentripplanner/geocoder/-/geocoder-3.1.3.tgz#5b2291a7200dd9167940e796caa879342db75a90"
+  integrity sha512-RSiEfGHjaks/lwmH0wZzoxgXH/Twxli3wvTHhr7Ww80D7hF516fPHxxXPT8zPb5eldM3UM6cI8iBFOjoA0JOxw==
   dependencies:
     "@conveyal/geocoder-arcgis-geojson" "^0.0.3"
     "@conveyal/lonlat" "^1.4.1"
     "@leeoniya/ufuzzy" "^1.0.14"
+    "@types/geojson" "^7946.0.16"
     isomorphic-mapzen-search "^1.6.1"
     lodash.memoize "^4.1.2"
 
