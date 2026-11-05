@@ -78,6 +78,17 @@ try {
 // node_modules/.vite after the files were fixed, reproducing runtime warnings.
 clearViteDepCache();
 
+// Final gate: the base-map patch is the one the BUILD cannot survive
+// without ('"default" is not exported by maplibre-gl'), and a yarn
+// install re-extracts every package patch-package has modified, so the
+// patched state is only restored by THIS script. If anything above left
+// base-map unpatched — patch file missing from the tree, a patch-package
+// failure swallowed by the recovery path, a half-installed package —
+// fail the install LOUDLY here instead of letting vite build fail
+// obscurely later. One repair attempt first: reinstall the package and
+// re-run patch-package, then check again.
+verifyBaseMapPatched();
+
 console.log("\n✓ Postinstall patch-compile completed!");
 console.log("All patched packages have been updated in both source and compiled files.");
 
@@ -414,4 +425,60 @@ function patchTripFormCompiled() {
       console.log(`  ✓ ${path.basename(file)} patched`);
     }
   });
+}
+
+/**
+ * The markers the base-map patch leaves behind: the namespace import in the
+ * ESM build and the mapLib line in the CJS build.
+ */
+function isBaseMapPatched() {
+  const esm = path.join(
+    nodeModulesPath,
+    "@opentripplanner/base-map/esm/index.js"
+  );
+  const lib = path.join(
+    nodeModulesPath,
+    "@opentripplanner/base-map/lib/index.js"
+  );
+  if (!fs.existsSync(esm) || !fs.existsSync(lib)) return false;
+  return (
+    fs
+      .readFileSync(esm, "utf-8")
+      .includes('import * as maplibregl from "maplibre-gl";') &&
+    fs.readFileSync(lib, "utf-8").includes("mapLib: _maplibreGl,")
+  );
+}
+
+function verifyBaseMapPatched() {
+  if (isBaseMapPatched()) return;
+  console.error(
+    "\n✗ base-map is NOT patched (maplibre 6 default import still present)."
+  );
+  console.error("  Attempting one repair: reinstall + re-patch...");
+  resetPackage("@opentripplanner/base-map");
+  try {
+    execSync("patch-package", {
+      cwd: projectRoot,
+      encoding: "utf-8",
+      stdio: "inherit",
+      env: {
+        PATH: process.env.PATH + ":" + path.join(nodeModulesPath, ".bin")
+      }
+    });
+  } catch (e) {
+    // fall through to the final check below
+  }
+  if (!isBaseMapPatched()) {
+    console.error(
+      "\n✗ base-map is still unpatched. `vite build` will fail with"
+    );
+    console.error('  \'"default" is not exported by "maplibre-gl"\'.');
+    console.error(
+      "  Check that patches/@opentripplanner+base-map+7.2.0.patch exists in" +
+        " your tree (git status patches/), then run:"
+    );
+    console.error("    yarn install --force");
+    process.exit(1);
+  }
+  console.log("  ✓ base-map repaired and patched.");
 }
