@@ -77,8 +77,15 @@ export default defineConfig({
       },
       plugins: [yamlPlugin()]
     },
-    // Exclude @auth0/auth0-react from optimization to avoid using source TSX files
-    exclude: ['@auth0/auth0-react']
+    // Exclude @auth0/auth0-react from optimization to avoid using source TSX files.
+    // Exclude maplibre-gl as well: it is ESM-only and computes its worker URL
+    // from import.meta.url (new URL('./maplibre-gl-worker.mjs', ...)). Through
+    // the dep optimizer that URL lands in node_modules/.vite/deps/, where the
+    // worker file does not exist — the dev server answers it with corrupted
+    // content and no MIME type, the Worker fails to load and the map stays
+    // blank. Unoptimized, import.meta.url is the real file in node_modules
+    // and the worker URL is served as-is.
+    exclude: ['@auth0/auth0-react', 'maplibre-gl']
   },
   plugins: [
     VitePWA({
@@ -126,7 +133,10 @@ export default defineConfig({
         // background on the next online visit.
         globDirectory: 'dist/',
         globPatterns: [
-          '**/*.{js,css,html,png,svg,woff2,ttf,woff}'
+          // mjs: the maplibre worker files the copy-maplibre-workers plugin
+          // emits at the dist root — without them in the precache, an offline
+          // start has a map with no worker.
+          '**/*.{js,mjs,css,html,png,svg,woff2,ttf,woff}'
         ],
         // Keep the precache size sane; icons/fonts are a few hundred KB total.
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
@@ -146,6 +156,31 @@ export default defineConfig({
         ]
       }
     }),
+    {
+      // maplibre-gl 6 loads its worker with a RUNTIME-computed
+      // new URL('./maplibre-gl-worker.mjs', import.meta.url), which rollup
+      // cannot see and does not emit — the built bundle would point at a
+      // worker file that does not exist (a blank map in production, the same
+      // failure the dev server had before optimizeDeps.exclude). Emit the
+      // worker files at the dist ROOT, which is exactly where that URL
+      // resolves for a root-level chunk (build.assetsDir is '').
+      name: 'copy-maplibre-workers',
+      apply: 'build',
+      generateBundle() {
+        for (const file of [
+          'maplibre-gl-worker.mjs',
+          'maplibre-gl-worker-dev.mjs'
+        ]) {
+          this.emitFile({
+            fileName: file,
+            source: fs.readFileSync(
+              path.resolve(process.cwd(), 'node_modules/maplibre-gl/dist', file)
+            ),
+            type: 'asset'
+          })
+        }
+      }
+    },
     {
       name: 'inject-main-script-to-html',
       transformIndexHtml: {
