@@ -2,13 +2,6 @@ _id: zh
 _name: Chinese (Simplified)
 
 actions:
-  callTaker:
-    callQuerySaveError: '存储通话查询时出现错误: {err}'
-    callSaveError: '无法保存通话: {err}'
-    checkSessionError: '建立授权使用时出现错误: {err}'
-    couldNotFindCallError: 找不到通话.取消保存查询请求.
-    fetchCallsError: '获取通话时出现错误: {err}'
-    queryFetchError: '获取查询时出现错误: {err}'
   location:
     deniedAccessAlert: "访问您的位置被阻止。\n若要使用当前位置，请从浏览器启用位置权限，然后重新加载页面。 \n"
     geolocationNotSupportedError: 您的浏览器不支持地理定位
@@ -132,20 +125,11 @@ common:
       plural, =0 {} other {#秒}}'
   currentlySelected: ' (Currently selected)'
 components:
-  AddPlaceButton:
-    addPlace: 添加地点
-    needOriginDestination: 定义出发地或目的地以增加中途地点
-    tooManyPlaces: 已达到最多中途地点
-  AdvancedOptions:
-    bannedRoutes: 选择禁行路线…
-    preferredRoutes: 选择首选路线…
   AfterSignInScreen:
     mainTitle: 重新定向…
     message: 如果几秒钟后页面没有加载, 请 <redirectLink>点击这里</redirectLink>.
   AppMenu:
-    callHistory: 呼叫历史
     closeMenu: 关闭菜单
-    mailables: 准备发布
     networkConnectionLost: 网络连接中断
     networkConnectionRestored: 网络连接已恢复
     openMenu: 打开菜单
@@ -185,10 +169,6 @@ components:
     message: '为了访问这个页面 你将需要登录。我们会将您重新定向到登录页面，请稍等。
 
       '
-  CallTakerPanel:
-    advancedOptions: 进阶选项
-    groupSize: '团体规模:'
-    intermediateDestination: 输入中间目的地
   CompanionsPane:
     addNewCompanion: 添加新的出行伙伴
     companionAlreadyAdded: 您已添加一位电子邮箱为 {email} 的出行伙伴

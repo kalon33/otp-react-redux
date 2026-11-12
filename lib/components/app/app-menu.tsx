@@ -4,22 +4,19 @@ import { Bus } from '@styled-icons/fa-solid/Bus'
 import { ChevronRight } from '@styled-icons/fa-solid/ChevronRight'
 import { Comment } from '@styled-icons/fa-regular/Comment'
 import { connect } from 'react-redux'
-import { Envelope } from '@styled-icons/fa-regular/Envelope'
 import { ExternalLinkSquareAlt } from '@styled-icons/fa-solid/ExternalLinkSquareAlt'
 import { FormattedMessage, injectIntl } from 'react-intl'
 import { GlobeAmericas } from '@styled-icons/fa-solid/GlobeAmericas'
 import { GraduationCap } from '@styled-icons/fa-solid/GraduationCap'
-import { History } from '@styled-icons/fa-solid/History'
 import { MapMarked } from '@styled-icons/fa-solid/MapMarked'
 import { MapMarkerAlt } from '@styled-icons/fa-solid/MapMarkerAlt'
 import { MapPin } from '@styled-icons/fa-solid/MapPin'
 import { Sliders } from '@styled-icons/fa-solid/Sliders'
 import { Undo } from '@styled-icons/fa-solid/Undo'
-import React, { Component, Fragment, useContext } from 'react'
+import React, { Component, lazy, useContext } from 'react'
 import SlidingPane from 'react-sliding-pane'
 import type { WrappedComponentProps } from 'react-intl'
 
-import * as callTakerActions from '../../actions/call-taker'
 import * as fieldTripActions from '../../actions/field-trip'
 import * as goModeActions from '../../actions/go-mode'
 import * as uiActions from '../../actions/ui'
@@ -41,6 +38,7 @@ import {
 } from '../../util/debug-log'
 import { getRunningBundle } from '../../util/native-updates'
 import { isModuleEnabled, Modules } from '../../util/config'
+import withSuspense from '../util/with-suspense'
 
 import AppMenuItem from './app-menu-item'
 import PopupTriggerText from './popup-trigger-text'
@@ -69,16 +67,13 @@ type AppMenuProps = {
   fieldTripEnabled?: boolean
   language?: LanguageConfig
   languageOptions: Record<string, any> | null
-  mailablesEnabled?: boolean
   popupTarget?: string
-  resetAndToggleCallHistory?: () => void
   resetAndToggleFieldTrips?: () => void
   rideConsoleDeviceIds?: string[]
   rideConsoleUrl?: string
   setLocale: (locale: string) => void
   setPopupContent: (url: string) => void
   startOverFromInitialUrl: () => void
-  toggleMailables: () => void
   translateExternalLinks?: boolean
   tripInForeground?: boolean
 }
@@ -88,6 +83,10 @@ type AppMenuState = {
   /** The live-update bundle + native build actually running, native only. */
   runningBundle: { native: string | null; version: string | null } | null
 }
+
+const CallTakerMenu = withSuspense(
+  lazy(() => import('../admin/call-taker-menu'))
+)
 
 /**
  * Sidebar which appears to show user list of options and links
@@ -216,14 +215,11 @@ class AppMenu extends Component<
       fieldTripEnabled,
       intl,
       languageOptions,
-      mailablesEnabled,
       popupTarget,
-      resetAndToggleCallHistory,
       resetAndToggleFieldTrips,
       rideConsoleDeviceIds,
       rideConsoleUrl,
       setLocale,
-      toggleMailables,
       translateExternalLinks
     } = this.props
     const languageMenuItems: MenuItem[] | null = languageOptions && [
@@ -384,30 +380,13 @@ class AppMenu extends Component<
                 text={<PopupTriggerText popupTarget={popupTarget} />}
               />
             )}
-            {callTakerEnabled && (
-              <AppMenuItem
-                icon={<History />}
-                onClick={resetAndToggleCallHistory}
-                text={intl.formatMessage({
-                  id: 'components.AppMenu.callHistory'
-                })}
-              />
-            )}
+            {callTakerEnabled && <CallTakerMenu />}
             {fieldTripEnabled && (
               <AppMenuItem
                 icon={<GraduationCap />}
                 onClick={resetAndToggleFieldTrips}
                 text={intl.formatMessage({
                   id: 'components.AppMenu.fieldTrip'
-                })}
-              />
-            )}
-            {mailablesEnabled && (
-              <AppMenuItem
-                icon={<Envelope />}
-                onClick={toggleMailables}
-                text={intl.formatMessage({
-                  id: 'components.AppMenu.mailables'
                 })}
               />
             )}
@@ -496,7 +475,6 @@ const mapStateToProps = (state: AppReduxState) => {
     fieldTripEnabled: isModuleEnabled(state, Modules.FIELD_TRIP),
     language,
     languageOptions: getLanguageOptions(language),
-    mailablesEnabled: isModuleEnabled(state, Modules.MAILABLES),
     popupTarget: popups?.launchers?.sidebarLink,
     rideConsoleDeviceIds,
     rideConsoleUrl,
@@ -509,12 +487,10 @@ const mapStateToProps = (state: AppReduxState) => {
 
 const mapDispatchToProps = {
   backgroundGoMode: goModeActions.backgroundGoMode,
-  resetAndToggleCallHistory: callTakerActions.resetAndToggleCallHistory,
   resetAndToggleFieldTrips: fieldTripActions.resetAndToggleFieldTrips,
   setLocale: uiActions.setLocale,
   setPopupContent: uiActions.setPopupContent,
-  startOverFromInitialUrl: uiActions.startOverFromInitialUrl,
-  toggleMailables: callTakerActions.toggleMailables
+  startOverFromInitialUrl: uiActions.startOverFromInitialUrl
 }
 
 export default injectIntl(connect(mapStateToProps, mapDispatchToProps)(AppMenu))

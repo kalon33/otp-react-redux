@@ -1,15 +1,6 @@
 _id: fr
 _name: "Exemple de traduction pour OTP-react-redux en fran\xE7ais"
 actions:
-  callTaker:
-    callQuerySaveError: "Erreur lors de l'enregistrement des requ\xEAtes pour l'appel\
-      \ : {err}"
-    callSaveError: 'Impossible d''enregistrer l''appel : {err}'
-    checkSessionError: 'Erreur durant la session d''authentification : {err}'
-    couldNotFindCallError: "Impossible de trouver l'appel. Tentative de sauvegarde\
-      \ des requ\xEAtes annul\xE9e."
-    fetchCallsError: 'Erreur lors du chargement des appels : {err}'
-    queryFetchError: "Erreur lors du chargement des requ\xEAtes : {err}"
   fieldTrip:
     addNoteError: 'Erreur lors de l''ajout d''une note sur le groupe :'
     confirmOverwriteItineraries: "Cette action replacera un trajet {outbound, select,\n\
@@ -179,23 +170,13 @@ components:
   AccountSetupFinishPane:
     message: "Vos changements ont \xE9t\xE9 enregistr\xE9s. Vous pouvez maintenant\
       \ planifier vos trajets. Cliquez sur Terminer pour retourner au planificateur."
-  AddPlaceButton:
-    addPlace: "Ajouter un point interm\xE9diaire"
-    needOriginDestination: "Choisissez le d\xE9part et l'arriv\xE9e avant d'ajouter\
-      \ les points interm\xE9diaires"
-    tooManyPlaces: "Nombre max. de points interm\xE9diaires atteint"
-  AdvancedOptions:
-    bannedRoutes: "Choisissez les lignes \xE0 \xE9viter\u2026"
-    preferredRoutes: "Choisissez les lignes pr\xE9fer\xE9es"
   AfterSignInScreen:
     mainTitle: Redirection...
     message: "Si la page ne s'affiche pas apr\xE8s quelques secondes, <redirectLink>cliquez\
       \ ici</redirectLink>."
   AppMenu:
-    callHistory: Historique des appels
     closeMenu: Fermer le menu
     fieldTrip: Groupes scolaires
-    mailables: "Pr\xEAt-\xE0-poster"
     myPlaces: Mes lieux
     networkConnectionLost: "Erreur de connexion r\xE9seau"
     networkConnectionRestored: "Connexion r\xE9seau restaur\xE9e"
@@ -350,9 +331,6 @@ components:
     mainTitle: Connexion en cours
     message: "Pour acc\xE9der \xE0 cette page, vous devez vous connecter. Veuillez\
       \ patienter pendant que nous vous redirigeons vers la page de connexion...\n"
-  CallTakerPanel:
-    advancedOptions: "Options avanc\xE9es"
-    intermediateDestination: "Entrez la destination interm\xE9diaire"
   CompanionsPane:
     addNewCompanion: Ajouter un accompagnateur
     companionAlreadyAdded: "Vous avez d\xE9j\xE0 un accompagnateur utilisant {email}."

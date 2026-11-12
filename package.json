@@ -18,6 +18,8 @@
     "percy-preview": "vite preview",
     "percy-har-express": "har-express",
     "percy-combined-mock-server": "node ./percy/mock-server.js",
+    "percy-otp-download": "curl -O https://otp-repo.ibi-transit.com/otp-latest-upstream-merge-2026-11-03.jar",
+    "percy-otp-server": "java -jar otp-latest-upstream-merge-2026-11-03.jar --load .",
     "postinstall": "node scripts/postinstall-patch-compile.js"
   },
   "engines": {

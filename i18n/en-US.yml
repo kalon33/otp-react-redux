@@ -1,13 +1,6 @@
 _id: en-US
 _name: English
 actions:
-  callTaker:
-    callQuerySaveError: 'Error storing call queries: {err}'
-    callSaveError: 'Could not save call: {err}'
-    checkSessionError: 'Error establishing auth session: {err}'
-    couldNotFindCallError: Could not find call. Cancelling save queries request.
-    fetchCallsError: 'Error fetching calls: {err}'
-    queryFetchError: 'Error fetching queries: {err}'
   fieldTrip:
     addNoteError: 'Error adding field trip note:'
     confirmOverwriteItineraries: |
@@ -191,21 +184,12 @@ components:
     slowerBiking: slower biking
     viaStop: Via {stop}
     walkSpeedChip: Walk {speed}
-  AddPlaceButton:
-    addPlace: Add place
-    needOriginDestination: Define origin/destination to add intermediate places
-    tooManyPlaces: Maximum intermediate places reached
-  AdvancedOptions:
-    bannedRoutes: Select banned routes…
-    preferredRoutes: Select preferred routes...
   AfterSignInScreen:
     mainTitle: Redirecting...
     message: If the page doesn't load after a few seconds, <redirectLink>click here</redirectLink>.
   AppMenu:
-    callHistory: Call History
     closeMenu: Close Menu
     fieldTrip: Field Trip
-    mailables: Mailables
     myPlaces: My places
     networkConnectionLost: Network connection lost
     networkConnectionRestored: Network connection restored
@@ -343,9 +327,6 @@ components:
     mainTitle: Signing you in
     message: |
       In order to access this page you will need to log in. Please wait while we redirect you to the login page...
-  CallTakerPanel:
-    advancedOptions: Advanced options
-    intermediateDestination: Enter intermediate destination
   CompanionsPane:
     addNewCompanion: Add a new travel companion
     companionAlreadyAdded: You already have a companion with email {email}
