@@ -682,6 +682,8 @@ components:
     returnPlanNow: Plan return now
     returnRouteDeparts: "{route} departs {time}"
     returnStart: Start return trip
+    rideStyleShortFastest: Short on time — taking the fastest way
+    rideStyleShortPartial: Short on time — taking a faster way
     rideToStop: "{emoji} {time} ride to {stop}"
     selectVehicle: This one
     sheetHandleLabel: View trip & other ways
