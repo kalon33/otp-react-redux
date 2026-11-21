@@ -1,0 +1,4772 @@
+{
+ "note": "Real answers of the RunScout bike engine (runscout feat/bike-explore 27304c0, region msp-bike, POST http://127.0.0.1:8787/api/bike/access) captured 2026-11-21 for backlog 76.2. Requests built by lib/util/bike-explore-variants explorePlanFor + buildExploreRequest from real fixtures: access = other-stops-0923-1537.json (Bloomington -> Orange Line 98th St, trip 1:1346795, nowMs = the 15:37 search); bikeOnly = 0921-0912-search-responses.json response 1 (Powderhorn -> 2345 Old Shakopee Rd W, the 09:00 search).",
+ "access": {
+  "nowMs": 1790195820000,
+  "calm": {
+   "status": "ok",
+   "region": "msp-bike",
+   "modes": [
+    "direct",
+    "calm",
+    "wander"
+   ],
+   "mode": "calm",
+   "speed": 5.0,
+   "margin": {
+    "fixed_s": 180.0,
+    "frac": 0.1
+   },
+   "candidates": [
+    {
+     "id": "1:56831",
+     "name": "I-35W & 98th St Station",
+     "feasible": true,
+     "duration_s": 434,
+     "distance_m": 2172,
+     "margin_s": 223,
+     "leave_in_s": 660,
+     "direct": {
+      "duration_s": 412,
+      "distance_m": 2062,
+      "calm": 0.04,
+      "leave_in_s": 684
+     },
+     "preference": 1.0,
+     "calm": 1.0,
+     "stress": {
+      "lts3": 0.0,
+      "lts4": 0.0,
+      "walk": 0.0
+     },
+     "scenic": -0.118,
+     "composition": {
+      "trail": 0.995,
+      "quiet": 0.005,
+      "road": 0.0,
+      "busy": 0.0,
+      "green": 0.437,
+      "water": 0.131,
+      "traffic": 1.0
+     },
+     "stress_profile": [
+      [
+       2172,
+       1
+      ]
+     ],
+     "via": null,
+     "places": [
+      "Harrison Picnic Grounds"
+     ],
+     "summary": "100% calm \u00b7 100% trails \u00b7 44% parks",
+     "stop": {
+      "score": 0.51,
+      "shelter": true,
+      "bench": true,
+      "lit": false,
+      "station": false,
+      "traffic": 1.0,
+      "nature": 0.1,
+      "mapped": true
+     },
+     "score": 76,
+     "leg": {
+      "mode": "BICYCLE",
+      "distance": 2171.6,
+      "duration": 434,
+      "legGeometry": {
+       "points": "}ippGxtoxPIVGGoAsAa@e@GGGA[_@}@cAgAqAICEEEG@EUWQMAMg@m@ME{@oAAEMQe@q@e@q@Ya@aB_CQWCIqC{Dm@{@mBoCaCgDGA?GDMJYDI?CAE?ECCEGIKEIEEq@aAm@y@[a@a@k@Yc@OMEEYi@gBqCU]EGEE_@s@IOMOcAoBu@_BIi@Qc@Oe@Ia@Ko@Gs@Ai@Am@E}@Cq@?yFDiABo@?O?eDCESA_@?I?KA@G?K?I?}BCCEECCCCDO@GRmD@W?kDAKC]ACBMB@J@HBF?FALADAb@Ap@@NDVB",
+       "length": 110
+      },
+      "steps": [
+       {
+        "relativeDirection": "DEPART",
+        "absoluteDirection": "NORTHWEST",
+        "streetName": "Queen Avenue South",
+        "bogusName": false,
+        "distance": 10.8,
+        "lat": 44.817113,
+        "lon": -93.310374,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "NORTHEAST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 855.9,
+        "lat": 44.817162,
+        "lon": -93.310491,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_RIGHT",
+        "absoluteDirection": "EAST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 28.6,
+        "lat": 44.82293,
+        "lon": -93.30343,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_LEFT",
+        "absoluteDirection": "EAST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 5.3,
+        "lat": 44.822807,
+        "lon": -93.303118,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_LEFT",
+        "absoluteDirection": "NORTHEAST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 864.2,
+        "lat": 44.82282,
+        "lon": -93.303056,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_LEFT",
+        "absoluteDirection": "NORTHEAST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 3.1,
+        "lat": 44.826107,
+        "lon": -93.293926,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_LEFT",
+        "absoluteDirection": "NORTH",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 41.3,
+        "lat": 44.826126,
+        "lon": -93.293896,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "EAST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 65.0,
+        "lat": 44.826496,
+        "lon": -93.293881,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_LEFT",
+        "absoluteDirection": "NORTHEAST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 6.2,
+        "lat": 44.826514,
+        "lon": -93.293076,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "EAST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 185.6,
+        "lat": 44.82656,
+        "lon": -93.293032,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 105.7,
+        "lat": 44.82645,
+        "lon": -93.290741,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       }
+      ]
+     }
+    },
+    {
+     "id": "1:56830",
+     "name": "Burnsville Heart of the City Station",
+     "feasible": false,
+     "reason": "cannot reach the stop in time with the margin",
+     "duration_s": 1805,
+     "distance_m": 8826,
+     "margin_s": 361,
+     "leave_in_s": -1268,
+     "direct": {
+      "duration_s": 1805,
+      "distance_m": 8826,
+      "calm": 0.71,
+      "leave_in_s": -1268
+     },
+     "preference": 0.0,
+     "calm": 0.71,
+     "stress": {
+      "lts3": 0.221,
+      "lts4": 0.07,
+      "walk": 0.007
+     },
+     "scenic": 0.904,
+     "composition": {
+      "trail": 0.355,
+      "quiet": 0.238,
+      "road": 0.347,
+      "busy": 0.06,
+      "green": 0.535,
+      "water": 0.603,
+      "traffic": 0.565
+     },
+     "stress_profile": [
+      [
+       311,
+       4
+      ],
+      [
+       669,
+       1
+      ],
+      [
+       773,
+       2
+      ],
+      [
+       516,
+       3
+      ],
+      [
+       199,
+       2
+      ],
+      [
+       4444,
+       1
+      ],
+      [
+       466,
+       3
+      ],
+      [
+       98,
+       4
+      ],
+      [
+       719,
+       3
+      ],
+      [
+       104,
+       1
+      ],
+      [
+       107,
+       3
+      ],
+      [
+       220,
+       4
+      ],
+      [
+       184,
+       3
+      ],
+      [
+       17,
+       0
+      ]
+     ],
+     "via": null,
+     "places": [
+      "Moir Park Bridge",
+      "I-35W Minnesota River bridge"
+     ],
+     "summary": "71% calm \u00b7 36% trails \u00b7 60% by water \u00b7 54% parks \u00b7 7% on busy roads",
+     "stop": {
+      "score": 0.5,
+      "shelter": true,
+      "bench": true,
+      "lit": false,
+      "station": false,
+      "traffic": 1.0,
+      "nature": 0.0,
+      "mapped": true
+     },
+     "score": 68,
+     "leg": {
+      "mode": "BICYCLE",
+      "distance": 8826.2,
+      "duration": 1805,
+      "legGeometry": {
+       "points": "}ippGxtoxP|BtClB|CpBbDJPf@x@NANANEPE^M^U@}E?a@?m@BmG?cE|EJ~BDTETIROjAq@PM@}Q?mH?kACwCAu@G{DE_E?OBoI@c@?QFwC?iC@eJ?qE?oA?wA?iE@[?a@@q@?SBiEFQ?}B?uAN?^??wChB??m@?[pC@j@?F?J?nJ@zE@`OBxBBnB@lBBNFRZXVJBEJMJM@aATcAJq@Lg@Fm@FI@CDBBHB`En@H@FFH@NAhBW|ASzDc@vJkAd@I^Ej@IhDYdG]LCHADAFEFCDGFIDM@U@SAUGUISGEGEIAIAG?G?E?IBKB[JIBWF}NtDAIEOCc@VEz@[l@St@SfFqAjC{@HCLCPAVCT@`@J`@XZT^\\^ZXR^VTJ^HVB`@?XBhABfBBpB?zDE|CExAChCE`BAz@Ab@AvCGbEE`@C\\GLG`AE`AQd@O`@QZWVMAMLMjAs@f@W|@i@FE^[PMNGLCL@zCGHAJCTKG]ESIc@S}@CWA_@?WBa@DWFUFWHQx@yAh@aANa@Lc@Je@Fe@Dg@@c@?g@A_@PCr@EhAM^GVCX?Z?XDXFVHZVjCdDVTRP\\JXDX@PCLANGZM\\SzAyARWNWRa@Ty@j@qCJe@N{@BOSUKMIOEUEWEu@C[EWGWGQS]Z]AGEWEWCOK{AAQCYzC}@HCPGb@KVGf@Kj@IZCRAHA`@A`A?xA??PA|@?~@?d@i@A}@@W@[XSb@AHEEIIIIBsA",
+       "length": 283
+      },
+      "steps": [
+       {
+        "relativeDirection": "DEPART",
+        "absoluteDirection": "SOUTHWEST",
+        "streetName": "West Old Shakopee Road",
+        "bogusName": false,
+        "distance": 310.9,
+        "lat": 44.817113,
+        "lon": -93.310374,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_LEFT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "Sheridan Avenue South",
+        "bogusName": false,
+        "distance": 76.2,
+        "lat": 44.815103,
+        "lon": -93.31311,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "EAST",
+        "streetName": "West 105th Street",
+        "bogusName": false,
+        "distance": 302.8,
+        "lat": 44.814449,
+        "lon": -93.312851,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "Penn Avenue South",
+        "bogusName": false,
+        "distance": 290.3,
+        "lat": 44.814415,
+        "lon": -93.309013,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "EAST",
+        "streetName": "West 106th Street",
+        "bogusName": false,
+        "distance": 1488.5,
+        "lat": 44.811878,
+        "lon": -93.308624,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "service road",
+        "bogusName": true,
+        "distance": 26.5,
+        "lat": 44.81181,
+        "lon": -93.289779,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "EAST",
+        "streetName": "service road",
+        "bogusName": true,
+        "distance": 118.4,
+        "lat": 44.811571,
+        "lon": -93.289778,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "EAST",
+        "streetName": "service road",
+        "bogusName": true,
+        "distance": 28.9,
+        "lat": 44.811043,
+        "lon": -93.289016,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "Lyndale Avenue South",
+        "bogusName": false,
+        "distance": 969.7,
+        "lat": 44.81104,
+        "lon": -93.28865,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "NORTHWEST",
+        "streetName": "bike path",
+        "bogusName": true,
+        "distance": 14.1,
+        "lat": 44.802395,
+        "lon": -93.289074,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_RIGHT",
+        "absoluteDirection": "NORTH",
+        "streetName": "bike path",
+        "bogusName": true,
+        "distance": 288.3,
+        "lat": 44.802487,
+        "lon": -93.289188,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "CONTINUE",
+        "absoluteDirection": "SOUTH",
+        "streetName": "35W Bicycle & Pedestrian Crossing",
+        "bogusName": false,
+        "distance": 1247.7,
+        "lat": 44.802937,
+        "lon": -93.289842,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "bike path",
+        "bogusName": true,
+        "distance": 1568.4,
+        "lat": 44.799241,
+        "lon": -93.288604,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "CONTINUE",
+        "absoluteDirection": "SOUTHEAST",
+        "streetName": "Cliff Road",
+        "bogusName": false,
+        "distance": 294.0,
+        "lat": 44.785538,
+        "lon": -93.287603,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "EAST",
+        "streetName": "River Ridge Boulevard",
+        "bogusName": false,
+        "distance": 354.1,
+        "lat": 44.783068,
+        "lon": -93.286518,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "River Ridge Boulevard",
+        "bogusName": false,
+        "distance": 686.8,
+        "lat": 44.782355,
+        "lon": -93.282517,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "NORTHEAST",
+        "streetName": "River Ridge Lane",
+        "bogusName": false,
+        "distance": 129.6,
+        "lat": 44.777475,
+        "lon": -93.281023,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "SOUTHEAST",
+        "streetName": "service road",
+        "bogusName": true,
+        "distance": 19.3,
+        "lat": 44.778013,
+        "lon": -93.279637,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "EAST",
+        "streetName": "service road",
+        "bogusName": true,
+        "distance": 84.6,
+        "lat": 44.777873,
+        "lon": -93.279493,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "Nicollet Avenue South",
+        "bogusName": false,
+        "distance": 127.2,
+        "lat": 44.778051,
+        "lon": -93.278455,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "CONTINUE",
+        "absoluteDirection": "SOUTH",
+        "streetName": "Nicollet Avenue",
+        "bogusName": false,
+        "distance": 199.0,
+        "lat": 44.77695,
+        "lon": -93.278018,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "WEST",
+        "streetName": "Travelers Trail West",
+        "bogusName": false,
+        "distance": 72.4,
+        "lat": 44.775172,
+        "lon": -93.277817,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "NORTH",
+        "streetName": "Travelers Trail West",
+        "bogusName": false,
+        "distance": 111.4,
+        "lat": 44.775182,
+        "lon": -93.278733,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "NORTHEAST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 17.3,
+        "lat": 44.77607,
+        "lon": -93.279098,
+        "walkingBike": true,
+        "stayOn": false,
+        "area": false
+       }
+      ]
+     }
+    },
+    {
+     "id": "1:56829",
+     "name": "I-35W & Burnsville Pkwy Station",
+     "feasible": false,
+     "reason": "cannot reach the stop in time with the margin",
+     "duration_s": 1984,
+     "distance_m": 9753,
+     "margin_s": 378,
+     "leave_in_s": -1344,
+     "direct": {
+      "duration_s": 1984,
+      "distance_m": 9753,
+      "calm": 0.721,
+      "leave_in_s": -1344
+     },
+     "preference": 0.0,
+     "calm": 0.721,
+     "stress": {
+      "lts3": 0.182,
+      "lts4": 0.097,
+      "walk": 0.002
+     },
+     "scenic": 0.887,
+     "composition": {
+      "trail": 0.401,
+      "quiet": 0.215,
+      "road": 0.295,
+      "busy": 0.088,
+      "green": 0.534,
+      "water": 0.546,
+      "traffic": 0.543
+     },
+     "stress_profile": [
+      [
+       311,
+       4
+      ],
+      [
+       669,
+       1
+      ],
+      [
+       773,
+       2
+      ],
+      [
+       516,
+       3
+      ],
+      [
+       199,
+       2
+      ],
+      [
+       4444,
+       1
+      ],
+      [
+       466,
+       3
+      ],
+      [
+       98,
+       4
+      ],
+      [
+       719,
+       3
+      ],
+      [
+       104,
+       1
+      ],
+      [
+       107,
+       3
+      ],
+      [
+       552,
+       4
+      ],
+      [
+       790,
+       1
+      ],
+      [
+       5,
+       0
+      ]
+     ],
+     "via": null,
+     "places": [
+      "Moir Park Bridge",
+      "I-35W Minnesota River bridge",
+      "Nicollet Commons",
+      "Public Courtyard"
+     ],
+     "summary": "72% calm \u00b7 40% trails \u00b7 55% by water \u00b7 53% parks \u00b7 10% on busy roads",
+     "stop": {
+      "score": 0.0,
+      "shelter": false,
+      "bench": false,
+      "lit": false,
+      "station": false,
+      "traffic": 1.0,
+      "nature": 0.0,
+      "mapped": true
+     },
+     "score": 59,
+     "leg": {
+      "mode": "BICYCLE",
+      "distance": 9752.9,
+      "duration": 1984,
+      "legGeometry": {
+       "points": "}ippGxtoxP|BtClB|CpBbDJPf@x@NANANEPE^M^U@}E?a@?m@BmG?cE|EJ~BDTETIROjAq@PM@}Q?mH?kACwCAu@G{DE_E?OBoI@c@?QFwC?iC@eJ?qE?oA?wA?iE@[?a@@q@?SBiEFQ?}B?uAN?^??wChB??m@?[pC@j@?F?J?nJ@zE@`OBxBBnB@lBBNFRZXVJBEJMJM@aATcAJq@Lg@Fm@FI@CDBBHB`En@H@FFH@NAhBW|ASzDc@vJkAd@I^Ej@IhDYdG]LCHADAFEFCDGFIDM@U@SAUGUISGEGEIAIAG?G?E?IBKB[JIBWF}NtDAIEOCc@VEz@[l@St@SfFqAjC{@HCLCPAVCT@`@J`@XZT^\\^ZXR^VTJ^HVB`@?XBhABfBBpB?zDE|CExAChCE`BAz@Ab@AvCGbEE`@C\\GLG`AE`AQd@O`@QZWVMAMLMjAs@f@W|@i@FE^[PMNGLCL@zCGHAJCTKG]ESIc@S}@CWA_@?WBa@DWFUFWHQx@yAh@aANa@Lc@Je@Fe@Dg@@c@?g@A_@PCr@EhAM^GVCX?Z?XDXFVHZVjCdDVTRP\\JXDX@PCLANGZM\\SzAyARWNWRa@Ty@j@qCJe@N{@BOSUKMIOEUEWEu@C[EWGWGQS]Z]AGEWEWCOK{AAQCYzC}@HCPGb@KVGf@Kj@IZCRAHA`@A`A?xA?T?bA?xE@|G?@??VB|C?BBh@Bp@Fz@Hn@Jp@Lx@Lh@Ph@Nb@jDpIBFJVHTN^v@lBPj@Nl@Lj@Jr@Dh@Dr@FtAAZ?VEhF?P@L?Le@C",
+       "length": 306
+      },
+      "steps": [
+       {
+        "relativeDirection": "DEPART",
+        "absoluteDirection": "SOUTHWEST",
+        "streetName": "West Old Shakopee Road",
+        "bogusName": false,
+        "distance": 310.9,
+        "lat": 44.817113,
+        "lon": -93.310374,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_LEFT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "Sheridan Avenue South",
+        "bogusName": false,
+        "distance": 76.2,
+        "lat": 44.815103,
+        "lon": -93.31311,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "EAST",
+        "streetName": "West 105th Street",
+        "bogusName": false,
+        "distance": 302.8,
+        "lat": 44.814449,
+        "lon": -93.312851,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "Penn Avenue South",
+        "bogusName": false,
+        "distance": 290.3,
+        "lat": 44.814415,
+        "lon": -93.309013,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "EAST",
+        "streetName": "West 106th Street",
+        "bogusName": false,
+        "distance": 1488.5,
+        "lat": 44.811878,
+        "lon": -93.308624,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "service road",
+        "bogusName": true,
+        "distance": 26.5,
+        "lat": 44.81181,
+        "lon": -93.289779,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "EAST",
+        "streetName": "service road",
+        "bogusName": true,
+        "distance": 118.4,
+        "lat": 44.811571,
+        "lon": -93.289778,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "EAST",
+        "streetName": "service road",
+        "bogusName": true,
+        "distance": 28.9,
+        "lat": 44.811043,
+        "lon": -93.289016,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "Lyndale Avenue South",
+        "bogusName": false,
+        "distance": 969.7,
+        "lat": 44.81104,
+        "lon": -93.28865,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "NORTHWEST",
+        "streetName": "bike path",
+        "bogusName": true,
+        "distance": 14.1,
+        "lat": 44.802395,
+        "lon": -93.289074,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_RIGHT",
+        "absoluteDirection": "NORTH",
+        "streetName": "bike path",
+        "bogusName": true,
+        "distance": 288.3,
+        "lat": 44.802487,
+        "lon": -93.289188,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "CONTINUE",
+        "absoluteDirection": "SOUTH",
+        "streetName": "35W Bicycle & Pedestrian Crossing",
+        "bogusName": false,
+        "distance": 1247.7,
+        "lat": 44.802937,
+        "lon": -93.289842,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "bike path",
+        "bogusName": true,
+        "distance": 1568.4,
+        "lat": 44.799241,
+        "lon": -93.288604,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "CONTINUE",
+        "absoluteDirection": "SOUTHEAST",
+        "streetName": "Cliff Road",
+        "bogusName": false,
+        "distance": 294.0,
+        "lat": 44.785538,
+        "lon": -93.287603,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "EAST",
+        "streetName": "River Ridge Boulevard",
+        "bogusName": false,
+        "distance": 354.1,
+        "lat": 44.783068,
+        "lon": -93.286518,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "River Ridge Boulevard",
+        "bogusName": false,
+        "distance": 686.8,
+        "lat": 44.782355,
+        "lon": -93.282517,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "NORTHEAST",
+        "streetName": "River Ridge Lane",
+        "bogusName": false,
+        "distance": 129.6,
+        "lat": 44.777475,
+        "lon": -93.281023,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "SOUTHEAST",
+        "streetName": "service road",
+        "bogusName": true,
+        "distance": 19.3,
+        "lat": 44.778013,
+        "lon": -93.279637,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "EAST",
+        "streetName": "service road",
+        "bogusName": true,
+        "distance": 84.6,
+        "lat": 44.777873,
+        "lon": -93.279493,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "Nicollet Avenue South",
+        "bogusName": false,
+        "distance": 127.2,
+        "lat": 44.778051,
+        "lon": -93.278455,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "CONTINUE",
+        "absoluteDirection": "SOUTH",
+        "streetName": "Nicollet Avenue",
+        "bogusName": false,
+        "distance": 530.9,
+        "lat": 44.77695,
+        "lon": -93.278018,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "WEST",
+        "streetName": "bike path",
+        "bogusName": true,
+        "distance": 790.4,
+        "lat": 44.772187,
+        "lon": -93.277835,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "CONTINUE",
+        "absoluteDirection": "WEST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 5.4,
+        "lat": 44.769954,
+        "lon": -93.286995,
+        "walkingBike": true,
+        "stayOn": false,
+        "area": false
+       }
+      ]
+     }
+    },
+    {
+     "id": "1:51110",
+     "name": "Knox Ave & American Blvd Station",
+     "feasible": true,
+     "duration_s": 1050,
+     "distance_m": 5248,
+     "margin_s": 285,
+     "leave_in_s": 283,
+     "direct": {
+      "duration_s": 1033,
+      "distance_m": 5167,
+      "calm": 0.245,
+      "leave_in_s": 301
+     },
+     "preference": 1.0,
+     "calm": 1.0,
+     "stress": {
+      "lts3": 0.0,
+      "lts4": 0.0,
+      "walk": 0.0
+     },
+     "scenic": -0.041,
+     "composition": {
+      "trail": 0.813,
+      "quiet": 0.187,
+      "road": 0.0,
+      "busy": 0.0,
+      "green": 0.388,
+      "water": 0.089,
+      "traffic": 0.731
+     },
+     "stress_profile": [
+      [
+       5204,
+       1
+      ],
+      [
+       45,
+       2
+      ]
+     ],
+     "via": null,
+     "places": [
+      "Penn Lake",
+      "Lower Penn Lake Park",
+      "Haeg Park"
+     ],
+     "summary": "100% calm \u00b7 81% trails \u00b7 39% parks",
+     "stop": {
+      "score": 0.622,
+      "shelter": true,
+      "bench": true,
+      "lit": true,
+      "station": false,
+      "traffic": 0.89,
+      "nature": 0.0,
+      "mapped": true
+     },
+     "score": 79,
+     "leg": {
+      "mode": "BICYCLE",
+      "distance": 5248.5,
+      "duration": 1050,
+      "legGeometry": {
+       "points": "}ippGxtoxPIVGGoAsAa@e@GGGA[_@}@cAgAqAICEEEGACA?E?E@WREBADCBABEBE@G@G?C?Q?S?E@?AACCCCAGAe@?mA?W?kB@GBGDy@@CGECkB?W?yE?_H@Y@K?O??@CCC?iD?_@?w@?u@??@ADQ?O?CCAAeBAeKAU?eDA]?}D?oDAM?mB?oEAC?A@EBG@MDM?uB@GCIGCAu@?uB?A?M?S@eI@M?uG@cABOBOBgD@C@M?]?Q?CCM?i@@G?M?C?CBU?Y?GHIHGEEEEAGAU?Q?U?w@?MEGE[?g@AqAAyHGc@?M?O?qEAuGA}D?E?A@CBABM?OACGCAE??W?UQO@A@SCWQu@IaAGcAG}@IiAAcA@i@Fa@Hk@Ly@iCuB[W[K]G]CgA?O?@aJmGAk@?WAYIWOUUW[SSWM[Gm@?IBIDuA@KBKBkIAE?BYOAWAKAEWCGEIGFGHIFMBO@S@OASCOEGAMEWKQKg@a@QKKEYKMEQEEAMCIAIACGCDEDGBK?}A?M?I?cBAG?ECA?C@KBYFG@C?C@C??FAFK@QLo@A",
+       "length": 236
+      },
+      "steps": [
+       {
+        "relativeDirection": "DEPART",
+        "absoluteDirection": "NORTHWEST",
+        "streetName": "Queen Avenue South",
+        "bogusName": false,
+        "distance": 10.8,
+        "lat": 44.817113,
+        "lon": -93.310374,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "NORTHEAST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 224.5,
+        "lat": 44.817162,
+        "lon": -93.310491,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "NORTH",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 78.9,
+        "lat": 44.818769,
+        "lon": -93.308788,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "EAST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 1.0,
+        "lat": 44.819422,
+        "lon": -93.309024,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "NORTH",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 762.5,
+        "lat": 44.819424,
+        "lon": -93.309011,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "WEST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 3.0,
+        "lat": 44.826227,
+        "lon": -93.308973,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "NORTH",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 19.7,
+        "lat": 44.826237,
+        "lon": -93.309007,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_RIGHT",
+        "absoluteDirection": "NORTHEAST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 2.3,
+        "lat": 44.826414,
+        "lon": -93.30901,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_LEFT",
+        "absoluteDirection": "NORTH",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 1614.3,
+        "lat": 44.826426,
+        "lon": -93.308987,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_LEFT",
+        "absoluteDirection": "NORTHWEST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 12.9,
+        "lat": 44.840907,
+        "lon": -93.309061,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_RIGHT",
+        "absoluteDirection": "NORTH",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 803.3,
+        "lat": 44.840997,
+        "lon": -93.309163,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "EAST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 18.0,
+        "lat": 44.84817,
+        "lon": -93.308929,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_LEFT",
+        "absoluteDirection": "NORTHEAST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 11.4,
+        "lat": 44.848174,
+        "lon": -93.308701,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_RIGHT",
+        "absoluteDirection": "EAST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 250.5,
+        "lat": 44.848261,
+        "lon": -93.308624,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "NORTHEAST",
+        "streetName": "Haeg Drive",
+        "bogusName": false,
+        "distance": 207.1,
+        "lat": 44.848368,
+        "lon": -93.305544,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "EAST",
+        "streetName": "West 84th Street",
+        "bogusName": false,
+        "distance": 139.1,
+        "lat": 44.850079,
+        "lon": -93.30471,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "NORTH",
+        "streetName": "Knox Avenue South",
+        "bogusName": false,
+        "distance": 579.9,
+        "lat": 44.850073,
+        "lon": -93.302945,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "EAST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 10.1,
+        "lat": 44.855166,
+        "lon": -93.30242,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "NORTH",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 29.1,
+        "lat": 44.855155,
+        "lon": -93.302293,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "EAST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 18.4,
+        "lat": 44.855415,
+        "lon": -93.302256,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "NORTH",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 400.6,
+        "lat": 44.855489,
+        "lon": -93.302055,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "WEST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 6.5,
+        "lat": 44.858942,
+        "lon": -93.301672,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "NORTH",
+        "streetName": "Knox Avenue South",
+        "bogusName": false,
+        "distance": 44.8,
+        "lat": 44.858945,
+        "lon": -93.301754,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       }
+      ]
+     }
+    },
+    {
+     "id": "1:56828",
+     "name": "Knox Ave & 76th St Station",
+     "feasible": true,
+     "duration_s": 1216,
+     "distance_m": 6078,
+     "margin_s": 302,
+     "leave_in_s": 221,
+     "direct": {
+      "duration_s": 1197,
+      "distance_m": 5987,
+      "calm": 0.013,
+      "leave_in_s": 241
+     },
+     "preference": 1.0,
+     "calm": 1.0,
+     "stress": {
+      "lts3": 0.0,
+      "lts4": 0.0,
+      "walk": 0.0
+     },
+     "scenic": -0.072,
+     "composition": {
+      "trail": 0.702,
+      "quiet": 0.261,
+      "road": 0.037,
+      "busy": 0.0,
+      "green": 0.335,
+      "water": 0.076,
+      "traffic": 0.718
+     },
+     "stress_profile": [
+      [
+       5204,
+       1
+      ],
+      [
+       288,
+       2
+      ],
+      [
+       363,
+       1
+      ],
+      [
+       223,
+       2
+      ]
+     ],
+     "via": null,
+     "places": [
+      "Penn Lake",
+      "Lower Penn Lake Park",
+      "Haeg Park"
+     ],
+     "summary": "100% calm \u00b7 70% trails \u00b7 34% parks",
+     "stop": {
+      "score": 0.2,
+      "shelter": false,
+      "bench": false,
+      "lit": false,
+      "station": false,
+      "traffic": 0.0,
+      "nature": 0.0,
+      "mapped": true
+     },
+     "score": 70,
+     "leg": {
+      "mode": "BICYCLE",
+      "distance": 6078.0,
+      "duration": 1216,
+      "legGeometry": {
+       "points": "}ippGxtoxPIVGGoAsAa@e@GGGA[_@}@cAgAqAICEEEGACA?E?E@WREBADCBABEBE@G@G?C?Q?S?E@?AACCCCAGAe@?mA?W?kB@GBGDy@@CGECkB?W?yE?_H@Y@K?O??@CCC?iD?_@?w@?u@??@ADQ?O?CCAAeBAeKAU?eDA]?}D?oDAM?mB?oEAC?A@EBG@MDM?uB@GCIGCAu@?uB?A?M?S@eI@M?uG@cABOBOBgD@C@M?]?Q?CCM?i@@G?M?C?CBU?Y?GHIHGEEEEAGAU?Q?U?w@?MEGE[?g@AqAAyHGc@?M?O?qEAuGA}D?E?A@CBABM?OACGCAE??W?UQO@A@SCWQu@IaAGcAG}@IiAAcA@i@Fa@Hk@Ly@iCuB[W[K]G]CgA?O?@aJmGAk@?WAYIWOUUW[SSWM[Gm@?IBIDuA@KBKBkIAE?BYOAWAKAEWCGEIGFGHIFMBO@S@OASCOEGAMEWKQKg@a@QKKEYKMEQEEAMCIAIACGCDEDGBK?}A?M?I?cBAG?ECA?C@KBYFG@C?C@C??FAFK@QLo@A{@?s@?u@A]?@yHCOCEK?IAG@I@C@KBQJOLKPMXIb@Ij@Kp@Md@K^_@v@KNIJOLMH_@VOH[ROD[DW?O?OAQAk@A]?q@@sB@M?K?g@?WKW?U@WDYDQ@x@a@",
+       "length": 286
+      },
+      "steps": [
+       {
+        "relativeDirection": "DEPART",
+        "absoluteDirection": "NORTHWEST",
+        "streetName": "Queen Avenue South",
+        "bogusName": false,
+        "distance": 10.8,
+        "lat": 44.817113,
+        "lon": -93.310374,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "NORTHEAST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 224.5,
+        "lat": 44.817162,
+        "lon": -93.310491,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "NORTH",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 78.9,
+        "lat": 44.818769,
+        "lon": -93.308788,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "EAST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 1.0,
+        "lat": 44.819422,
+        "lon": -93.309024,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "NORTH",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 762.5,
+        "lat": 44.819424,
+        "lon": -93.309011,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "WEST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 3.0,
+        "lat": 44.826227,
+        "lon": -93.308973,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "NORTH",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 19.7,
+        "lat": 44.826237,
+        "lon": -93.309007,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_RIGHT",
+        "absoluteDirection": "NORTHEAST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 2.3,
+        "lat": 44.826414,
+        "lon": -93.30901,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_LEFT",
+        "absoluteDirection": "NORTH",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 1614.3,
+        "lat": 44.826426,
+        "lon": -93.308987,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_LEFT",
+        "absoluteDirection": "NORTHWEST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 12.9,
+        "lat": 44.840907,
+        "lon": -93.309061,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_RIGHT",
+        "absoluteDirection": "NORTH",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 803.3,
+        "lat": 44.840997,
+        "lon": -93.309163,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "EAST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 18.0,
+        "lat": 44.84817,
+        "lon": -93.308929,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_LEFT",
+        "absoluteDirection": "NORTHEAST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 11.4,
+        "lat": 44.848174,
+        "lon": -93.308701,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_RIGHT",
+        "absoluteDirection": "EAST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 250.5,
+        "lat": 44.848261,
+        "lon": -93.308624,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "NORTHEAST",
+        "streetName": "Haeg Drive",
+        "bogusName": false,
+        "distance": 207.1,
+        "lat": 44.848368,
+        "lon": -93.305544,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "EAST",
+        "streetName": "West 84th Street",
+        "bogusName": false,
+        "distance": 139.1,
+        "lat": 44.850079,
+        "lon": -93.30471,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "NORTH",
+        "streetName": "Knox Avenue South",
+        "bogusName": false,
+        "distance": 579.9,
+        "lat": 44.850073,
+        "lon": -93.302945,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "EAST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 10.1,
+        "lat": 44.855166,
+        "lon": -93.30242,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "NORTH",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 29.1,
+        "lat": 44.855155,
+        "lon": -93.302293,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "EAST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 18.4,
+        "lat": 44.855415,
+        "lon": -93.302256,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "NORTH",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 400.6,
+        "lat": 44.855489,
+        "lon": -93.302055,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "WEST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 6.5,
+        "lat": 44.858942,
+        "lon": -93.301672,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "NORTH",
+        "streetName": "Knox Avenue South",
+        "bogusName": false,
+        "distance": 153.9,
+        "lat": 44.858945,
+        "lon": -93.301754,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "EAST",
+        "streetName": "road",
+        "bogusName": true,
+        "distance": 133.9,
+        "lat": 44.860317,
+        "lon": -93.301812,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "NORTH",
+        "streetName": "Knox Avenue Transitway",
+        "bogusName": false,
+        "distance": 363.0,
+        "lat": 44.86035,
+        "lon": -93.300128,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "CONTINUE",
+        "absoluteDirection": "NORTH",
+        "streetName": "Knox Avenue South",
+        "bogusName": false,
+        "distance": 223.5,
+        "lat": 44.862831,
+        "lon": -93.302359,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       }
+      ]
+     }
+    }
+   ],
+   "elapsed_ms": 121
+  },
+  "wander": {
+   "status": "ok",
+   "region": "msp-bike",
+   "modes": [
+    "direct",
+    "calm",
+    "wander"
+   ],
+   "mode": "wander",
+   "speed": 5.0,
+   "margin": {
+    "fixed_s": 180.0,
+    "frac": 0.1
+   },
+   "candidates": [
+    {
+     "id": "1:56831",
+     "name": "I-35W & 98th St Station",
+     "feasible": true,
+     "duration_s": 807,
+     "distance_m": 4011,
+     "margin_s": 261,
+     "leave_in_s": 251,
+     "direct": {
+      "duration_s": 412,
+      "distance_m": 2062,
+      "calm": 0.04,
+      "leave_in_s": 684
+     },
+     "preference": 1.0,
+     "calm": 0.996,
+     "stress": {
+      "lts3": 0.0,
+      "lts4": 0.004,
+      "walk": 0.007
+     },
+     "scenic": 0.724,
+     "composition": {
+      "trail": 0.669,
+      "quiet": 0.243,
+      "road": 0.083,
+      "busy": 0.004,
+      "green": 0.664,
+      "water": 0.192,
+      "traffic": 0.55
+     },
+     "stress_profile": [
+      [
+       348,
+       1
+      ],
+      [
+       18,
+       4
+      ],
+      [
+       1164,
+       1
+      ],
+      [
+       334,
+       2
+      ],
+      [
+       8,
+       0
+      ],
+      [
+       2140,
+       1
+      ]
+     ],
+     "via": null,
+     "places": [
+      "Moir Park Bridge",
+      "Bloomington Cemetery"
+     ],
+     "summary": "100% calm \u00b7 67% trails \u00b7 19% by water \u00b7 66% parks",
+     "stop": {
+      "score": 0.51,
+      "shelter": true,
+      "bench": true,
+      "lit": false,
+      "station": false,
+      "traffic": 1.0,
+      "nature": 0.1,
+      "mapped": true
+     },
+     "score": 79,
+     "leg": {
+      "mode": "BICYCLE",
+      "distance": 4011.2,
+      "duration": 807,
+      "legGeometry": {
+       "points": "}ippGxtoxPIVRVdDvE|BvDdBzCPUSa@NANANEPE^M^U@}E?a@?m@BmG?cEF{TpHHj@?N@tBBP?L?AQ?kA@}B?wC?_@?cB@]SBAu@G{DE_E?OBoI@c@Q??S@[DaCEaB?_@@eC?_F?sB?mD?wA?wC?cA?S@iAASBYB_D?YAKAEI@Q@uABcBDmAFg@@e@?iA?[A{@?kA@aB?yA?kBAcB?{A?wA?cB?aB?i@?{DCkBAeL?gA?mE@u@?GCCGE?I?K?G?KDC?MB[?EAgA?m@B?O",
+       "length": 101
+      },
+      "steps": [
+       {
+        "relativeDirection": "DEPART",
+        "absoluteDirection": "NORTHWEST",
+        "streetName": "Queen Avenue South",
+        "bogusName": false,
+        "distance": 10.8,
+        "lat": 44.817113,
+        "lon": -93.310374,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "SOUTHWEST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 324.7,
+        "lat": 44.817162,
+        "lon": -93.310491,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "SOUTHEAST",
+        "streetName": "service road",
+        "bogusName": true,
+        "distance": 12.7,
+        "lat": 44.815089,
+        "lon": -93.313386,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "NORTHEAST",
+        "streetName": "West Old Shakopee Road",
+        "bogusName": false,
+        "distance": 17.6,
+        "lat": 44.815002,
+        "lon": -93.313282,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "HARD_RIGHT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "Sheridan Avenue South",
+        "bogusName": false,
+        "distance": 76.2,
+        "lat": 44.815103,
+        "lon": -93.31311,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "EAST",
+        "streetName": "West 105th Street",
+        "bogusName": false,
+        "distance": 579.0,
+        "lat": 44.814449,
+        "lon": -93.312851,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "Morgan Avenue South",
+        "bogusName": false,
+        "distance": 286.9,
+        "lat": 44.814383,
+        "lon": -93.305511,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "EAST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 210.7,
+        "lat": 44.811804,
+        "lon": -93.30559,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "NORTH",
+        "streetName": "service road",
+        "bogusName": true,
+        "distance": 11.0,
+        "lat": 44.811788,
+        "lon": -93.30292,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "EAST",
+        "streetName": "West 106th Street",
+        "bogusName": false,
+        "distance": 324.0,
+        "lat": 44.811886,
+        "lon": -93.302935,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "NORTH",
+        "streetName": "Humboldt Avenue South",
+        "bogusName": false,
+        "distance": 9.8,
+        "lat": 44.811943,
+        "lon": -93.298831,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "EAST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 7.6,
+        "lat": 44.812032,
+        "lon": -93.29883,
+        "walkingBike": true,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "CONTINUE",
+        "absoluteDirection": "EAST",
+        "streetName": "bike path",
+        "bogusName": true,
+        "distance": 627.8,
+        "lat": 44.812025,
+        "lon": -93.298734,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "NORTH",
+        "streetName": "bike path",
+        "bogusName": true,
+        "distance": 1512.5,
+        "lat": 44.811988,
+        "lon": -93.290786,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       }
+      ]
+     }
+    },
+    {
+     "id": "1:56830",
+     "name": "Burnsville Heart of the City Station",
+     "feasible": false,
+     "reason": "cannot reach the stop in time with the margin",
+     "duration_s": 1805,
+     "distance_m": 8826,
+     "margin_s": 361,
+     "leave_in_s": -1268,
+     "direct": {
+      "duration_s": 1805,
+      "distance_m": 8826,
+      "calm": 0.71,
+      "leave_in_s": -1268
+     },
+     "preference": 0.0,
+     "calm": 0.71,
+     "stress": {
+      "lts3": 0.221,
+      "lts4": 0.07,
+      "walk": 0.007
+     },
+     "scenic": 0.904,
+     "composition": {
+      "trail": 0.355,
+      "quiet": 0.238,
+      "road": 0.347,
+      "busy": 0.06,
+      "green": 0.535,
+      "water": 0.603,
+      "traffic": 0.565
+     },
+     "stress_profile": [
+      [
+       311,
+       4
+      ],
+      [
+       669,
+       1
+      ],
+      [
+       773,
+       2
+      ],
+      [
+       516,
+       3
+      ],
+      [
+       199,
+       2
+      ],
+      [
+       4444,
+       1
+      ],
+      [
+       466,
+       3
+      ],
+      [
+       98,
+       4
+      ],
+      [
+       719,
+       3
+      ],
+      [
+       104,
+       1
+      ],
+      [
+       107,
+       3
+      ],
+      [
+       220,
+       4
+      ],
+      [
+       184,
+       3
+      ],
+      [
+       17,
+       0
+      ]
+     ],
+     "via": null,
+     "places": [
+      "Moir Park Bridge",
+      "I-35W Minnesota River bridge"
+     ],
+     "summary": "71% calm \u00b7 36% trails \u00b7 60% by water \u00b7 54% parks \u00b7 7% on busy roads",
+     "stop": {
+      "score": 0.5,
+      "shelter": true,
+      "bench": true,
+      "lit": false,
+      "station": false,
+      "traffic": 1.0,
+      "nature": 0.0,
+      "mapped": true
+     },
+     "score": 70,
+     "leg": {
+      "mode": "BICYCLE",
+      "distance": 8826.2,
+      "duration": 1805,
+      "legGeometry": {
+       "points": "}ippGxtoxP|BtClB|CpBbDJPf@x@NANANEPE^M^U@}E?a@?m@BmG?cE|EJ~BDTETIROjAq@PM@}Q?mH?kACwCAu@G{DE_E?OBoI@c@?QFwC?iC@eJ?qE?oA?wA?iE@[?a@@q@?SBiEFQ?}B?uAN?^??wChB??m@?[pC@j@?F?J?nJ@zE@`OBxBBnB@lBBNFRZXVJBEJMJM@aATcAJq@Lg@Fm@FI@CDBBHB`En@H@FFH@NAhBW|ASzDc@vJkAd@I^Ej@IhDYdG]LCHADAFEFCDGFIDM@U@SAUGUISGEGEIAIAG?G?E?IBKB[JIBWF}NtDAIEOCc@VEz@[l@St@SfFqAjC{@HCLCPAVCT@`@J`@XZT^\\^ZXR^VTJ^HVB`@?XBhABfBBpB?zDE|CExAChCE`BAz@Ab@AvCGbEE`@C\\GLG`AE`AQd@O`@QZWVMAMLMjAs@f@W|@i@FE^[PMNGLCL@zCGHAJCTKG]ESIc@S}@CWA_@?WBa@DWFUFWHQx@yAh@aANa@Lc@Je@Fe@Dg@@c@?g@A_@PCr@EhAM^GVCX?Z?XDXFVHZVjCdDVTRP\\JXDX@PCLANGZM\\SzAyARWNWRa@Ty@j@qCJe@N{@BOSUKMIOEUEWEu@C[EWGWGQS]Z]AGEWEWCOK{AAQCYzC}@HCPGb@KVGf@Kj@IZCRAHA`@A`A?xA??PA|@?~@?d@i@A}@@W@[XSb@AHEEIIIIBsA",
+       "length": 283
+      },
+      "steps": [
+       {
+        "relativeDirection": "DEPART",
+        "absoluteDirection": "SOUTHWEST",
+        "streetName": "West Old Shakopee Road",
+        "bogusName": false,
+        "distance": 310.9,
+        "lat": 44.817113,
+        "lon": -93.310374,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_LEFT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "Sheridan Avenue South",
+        "bogusName": false,
+        "distance": 76.2,
+        "lat": 44.815103,
+        "lon": -93.31311,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "EAST",
+        "streetName": "West 105th Street",
+        "bogusName": false,
+        "distance": 302.8,
+        "lat": 44.814449,
+        "lon": -93.312851,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "Penn Avenue South",
+        "bogusName": false,
+        "distance": 290.3,
+        "lat": 44.814415,
+        "lon": -93.309013,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "EAST",
+        "streetName": "West 106th Street",
+        "bogusName": false,
+        "distance": 1488.5,
+        "lat": 44.811878,
+        "lon": -93.308624,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "service road",
+        "bogusName": true,
+        "distance": 26.5,
+        "lat": 44.81181,
+        "lon": -93.289779,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "EAST",
+        "streetName": "service road",
+        "bogusName": true,
+        "distance": 118.4,
+        "lat": 44.811571,
+        "lon": -93.289778,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "EAST",
+        "streetName": "service road",
+        "bogusName": true,
+        "distance": 28.9,
+        "lat": 44.811043,
+        "lon": -93.289016,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "Lyndale Avenue South",
+        "bogusName": false,
+        "distance": 969.7,
+        "lat": 44.81104,
+        "lon": -93.28865,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "NORTHWEST",
+        "streetName": "bike path",
+        "bogusName": true,
+        "distance": 14.1,
+        "lat": 44.802395,
+        "lon": -93.289074,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_RIGHT",
+        "absoluteDirection": "NORTH",
+        "streetName": "bike path",
+        "bogusName": true,
+        "distance": 288.3,
+        "lat": 44.802487,
+        "lon": -93.289188,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "CONTINUE",
+        "absoluteDirection": "SOUTH",
+        "streetName": "35W Bicycle & Pedestrian Crossing",
+        "bogusName": false,
+        "distance": 1247.7,
+        "lat": 44.802937,
+        "lon": -93.289842,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "bike path",
+        "bogusName": true,
+        "distance": 1568.4,
+        "lat": 44.799241,
+        "lon": -93.288604,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "CONTINUE",
+        "absoluteDirection": "SOUTHEAST",
+        "streetName": "Cliff Road",
+        "bogusName": false,
+        "distance": 294.0,
+        "lat": 44.785538,
+        "lon": -93.287603,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "EAST",
+        "streetName": "River Ridge Boulevard",
+        "bogusName": false,
+        "distance": 354.1,
+        "lat": 44.783068,
+        "lon": -93.286518,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "River Ridge Boulevard",
+        "bogusName": false,
+        "distance": 686.8,
+        "lat": 44.782355,
+        "lon": -93.282517,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "NORTHEAST",
+        "streetName": "River Ridge Lane",
+        "bogusName": false,
+        "distance": 129.6,
+        "lat": 44.777475,
+        "lon": -93.281023,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "SOUTHEAST",
+        "streetName": "service road",
+        "bogusName": true,
+        "distance": 19.3,
+        "lat": 44.778013,
+        "lon": -93.279637,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "EAST",
+        "streetName": "service road",
+        "bogusName": true,
+        "distance": 84.6,
+        "lat": 44.777873,
+        "lon": -93.279493,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "Nicollet Avenue South",
+        "bogusName": false,
+        "distance": 127.2,
+        "lat": 44.778051,
+        "lon": -93.278455,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "CONTINUE",
+        "absoluteDirection": "SOUTH",
+        "streetName": "Nicollet Avenue",
+        "bogusName": false,
+        "distance": 199.0,
+        "lat": 44.77695,
+        "lon": -93.278018,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "WEST",
+        "streetName": "Travelers Trail West",
+        "bogusName": false,
+        "distance": 72.4,
+        "lat": 44.775172,
+        "lon": -93.277817,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "NORTH",
+        "streetName": "Travelers Trail West",
+        "bogusName": false,
+        "distance": 111.4,
+        "lat": 44.775182,
+        "lon": -93.278733,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "NORTHEAST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 17.3,
+        "lat": 44.77607,
+        "lon": -93.279098,
+        "walkingBike": true,
+        "stayOn": false,
+        "area": false
+       }
+      ]
+     }
+    },
+    {
+     "id": "1:56829",
+     "name": "I-35W & Burnsville Pkwy Station",
+     "feasible": false,
+     "reason": "cannot reach the stop in time with the margin",
+     "duration_s": 1984,
+     "distance_m": 9753,
+     "margin_s": 378,
+     "leave_in_s": -1344,
+     "direct": {
+      "duration_s": 1984,
+      "distance_m": 9753,
+      "calm": 0.721,
+      "leave_in_s": -1344
+     },
+     "preference": 0.0,
+     "calm": 0.721,
+     "stress": {
+      "lts3": 0.182,
+      "lts4": 0.097,
+      "walk": 0.002
+     },
+     "scenic": 0.887,
+     "composition": {
+      "trail": 0.401,
+      "quiet": 0.215,
+      "road": 0.295,
+      "busy": 0.088,
+      "green": 0.534,
+      "water": 0.546,
+      "traffic": 0.543
+     },
+     "stress_profile": [
+      [
+       311,
+       4
+      ],
+      [
+       669,
+       1
+      ],
+      [
+       773,
+       2
+      ],
+      [
+       516,
+       3
+      ],
+      [
+       199,
+       2
+      ],
+      [
+       4444,
+       1
+      ],
+      [
+       466,
+       3
+      ],
+      [
+       98,
+       4
+      ],
+      [
+       719,
+       3
+      ],
+      [
+       104,
+       1
+      ],
+      [
+       107,
+       3
+      ],
+      [
+       552,
+       4
+      ],
+      [
+       790,
+       1
+      ],
+      [
+       5,
+       0
+      ]
+     ],
+     "via": null,
+     "places": [
+      "Moir Park Bridge",
+      "I-35W Minnesota River bridge",
+      "Nicollet Commons",
+      "Public Courtyard"
+     ],
+     "summary": "72% calm \u00b7 40% trails \u00b7 55% by water \u00b7 53% parks \u00b7 10% on busy roads",
+     "stop": {
+      "score": 0.0,
+      "shelter": false,
+      "bench": false,
+      "lit": false,
+      "station": false,
+      "traffic": 1.0,
+      "nature": 0.0,
+      "mapped": true
+     },
+     "score": 60,
+     "leg": {
+      "mode": "BICYCLE",
+      "distance": 9752.9,
+      "duration": 1984,
+      "legGeometry": {
+       "points": "}ippGxtoxP|BtClB|CpBbDJPf@x@NANANEPE^M^U@}E?a@?m@BmG?cE|EJ~BDTETIROjAq@PM@}Q?mH?kACwCAu@G{DE_E?OBoI@c@?QFwC?iC@eJ?qE?oA?wA?iE@[?a@@q@?SBiEFQ?}B?uAN?^??wChB??m@?[pC@j@?F?J?nJ@zE@`OBxBBnB@lBBNFRZXVJBEJMJM@aATcAJq@Lg@Fm@FI@CDBBHB`En@H@FFH@NAhBW|ASzDc@vJkAd@I^Ej@IhDYdG]LCHADAFEFCDGFIDM@U@SAUGUISGEGEIAIAG?G?E?IBKB[JIBWF}NtDAIEOCc@VEz@[l@St@SfFqAjC{@HCLCPAVCT@`@J`@XZT^\\^ZXR^VTJ^HVB`@?XBhABfBBpB?zDE|CExAChCE`BAz@Ab@AvCGbEE`@C\\GLG`AE`AQd@O`@QZWVMAMLMjAs@f@W|@i@FE^[PMNGLCL@zCGHAJCTKG]ESIc@S}@CWA_@?WBa@DWFUFWHQx@yAh@aANa@Lc@Je@Fe@Dg@@c@?g@A_@PCr@EhAM^GVCX?Z?XDXFVHZVjCdDVTRP\\JXDX@PCLANGZM\\SzAyARWNWRa@Ty@j@qCJe@N{@BOSUKMIOEUEWEu@C[EWGWGQS]Z]AGEWEWCOK{AAQCYzC}@HCPGb@KVGf@Kj@IZCRAHA`@A`A?xA?T?bA?xE@|G?@??VB|C?BBh@Bp@Fz@Hn@Jp@Lx@Lh@Ph@Nb@jDpIBFJVHTN^v@lBPj@Nl@Lj@Jr@Dh@Dr@FtAAZ?VEhF?P@L?Le@C",
+       "length": 306
+      },
+      "steps": [
+       {
+        "relativeDirection": "DEPART",
+        "absoluteDirection": "SOUTHWEST",
+        "streetName": "West Old Shakopee Road",
+        "bogusName": false,
+        "distance": 310.9,
+        "lat": 44.817113,
+        "lon": -93.310374,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_LEFT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "Sheridan Avenue South",
+        "bogusName": false,
+        "distance": 76.2,
+        "lat": 44.815103,
+        "lon": -93.31311,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "EAST",
+        "streetName": "West 105th Street",
+        "bogusName": false,
+        "distance": 302.8,
+        "lat": 44.814449,
+        "lon": -93.312851,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "Penn Avenue South",
+        "bogusName": false,
+        "distance": 290.3,
+        "lat": 44.814415,
+        "lon": -93.309013,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "EAST",
+        "streetName": "West 106th Street",
+        "bogusName": false,
+        "distance": 1488.5,
+        "lat": 44.811878,
+        "lon": -93.308624,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "service road",
+        "bogusName": true,
+        "distance": 26.5,
+        "lat": 44.81181,
+        "lon": -93.289779,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "EAST",
+        "streetName": "service road",
+        "bogusName": true,
+        "distance": 118.4,
+        "lat": 44.811571,
+        "lon": -93.289778,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "EAST",
+        "streetName": "service road",
+        "bogusName": true,
+        "distance": 28.9,
+        "lat": 44.811043,
+        "lon": -93.289016,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "Lyndale Avenue South",
+        "bogusName": false,
+        "distance": 969.7,
+        "lat": 44.81104,
+        "lon": -93.28865,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "NORTHWEST",
+        "streetName": "bike path",
+        "bogusName": true,
+        "distance": 14.1,
+        "lat": 44.802395,
+        "lon": -93.289074,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_RIGHT",
+        "absoluteDirection": "NORTH",
+        "streetName": "bike path",
+        "bogusName": true,
+        "distance": 288.3,
+        "lat": 44.802487,
+        "lon": -93.289188,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "CONTINUE",
+        "absoluteDirection": "SOUTH",
+        "streetName": "35W Bicycle & Pedestrian Crossing",
+        "bogusName": false,
+        "distance": 1247.7,
+        "lat": 44.802937,
+        "lon": -93.289842,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "bike path",
+        "bogusName": true,
+        "distance": 1568.4,
+        "lat": 44.799241,
+        "lon": -93.288604,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "CONTINUE",
+        "absoluteDirection": "SOUTHEAST",
+        "streetName": "Cliff Road",
+        "bogusName": false,
+        "distance": 294.0,
+        "lat": 44.785538,
+        "lon": -93.287603,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "EAST",
+        "streetName": "River Ridge Boulevard",
+        "bogusName": false,
+        "distance": 354.1,
+        "lat": 44.783068,
+        "lon": -93.286518,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "River Ridge Boulevard",
+        "bogusName": false,
+        "distance": 686.8,
+        "lat": 44.782355,
+        "lon": -93.282517,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "NORTHEAST",
+        "streetName": "River Ridge Lane",
+        "bogusName": false,
+        "distance": 129.6,
+        "lat": 44.777475,
+        "lon": -93.281023,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "SOUTHEAST",
+        "streetName": "service road",
+        "bogusName": true,
+        "distance": 19.3,
+        "lat": 44.778013,
+        "lon": -93.279637,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "EAST",
+        "streetName": "service road",
+        "bogusName": true,
+        "distance": 84.6,
+        "lat": 44.777873,
+        "lon": -93.279493,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "Nicollet Avenue South",
+        "bogusName": false,
+        "distance": 127.2,
+        "lat": 44.778051,
+        "lon": -93.278455,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "CONTINUE",
+        "absoluteDirection": "SOUTH",
+        "streetName": "Nicollet Avenue",
+        "bogusName": false,
+        "distance": 530.9,
+        "lat": 44.77695,
+        "lon": -93.278018,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "WEST",
+        "streetName": "bike path",
+        "bogusName": true,
+        "distance": 790.4,
+        "lat": 44.772187,
+        "lon": -93.277835,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "CONTINUE",
+        "absoluteDirection": "WEST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 5.4,
+        "lat": 44.769954,
+        "lon": -93.286995,
+        "walkingBike": true,
+        "stayOn": false,
+        "area": false
+       }
+      ]
+     }
+    },
+    {
+     "id": "1:51110",
+     "name": "Knox Ave & American Blvd Station",
+     "feasible": true,
+     "duration_s": 1269,
+     "distance_m": 6327,
+     "margin_s": 307,
+     "leave_in_s": 42,
+     "direct": {
+      "duration_s": 1033,
+      "distance_m": 5167,
+      "calm": 0.245,
+      "leave_in_s": 301
+     },
+     "preference": 1.0,
+     "calm": 0.998,
+     "stress": {
+      "lts3": 0.002,
+      "lts4": 0.0,
+      "walk": 0.004
+     },
+     "scenic": 0.798,
+     "composition": {
+      "trail": 0.297,
+      "quiet": 0.664,
+      "road": 0.038,
+      "busy": 0.0,
+      "green": 0.654,
+      "water": 0.481,
+      "traffic": 0.211
+     },
+     "stress_profile": [
+      [
+       232,
+       1
+      ],
+      [
+       48,
+       2
+      ],
+      [
+       1398,
+       1
+      ],
+      [
+       15,
+       3
+      ],
+      [
+       2626,
+       1
+      ],
+      [
+       7,
+       0
+      ],
+      [
+       321,
+       1
+      ],
+      [
+       178,
+       2
+      ],
+      [
+       1457,
+       1
+      ],
+      [
+       45,
+       2
+      ]
+     ],
+     "via": "Penn Lake",
+     "places": [
+      "Lincoln Stadium",
+      "Penn Lake",
+      "Lower Penn Lake Park",
+      "Haeg Park"
+     ],
+     "summary": "100% calm \u00b7 via Penn Lake \u00b7 48% by water \u00b7 65% parks",
+     "stop": {
+      "score": 0.622,
+      "shelter": true,
+      "bench": true,
+      "lit": true,
+      "station": false,
+      "traffic": 0.89,
+      "nature": 0.0,
+      "mapped": true
+     },
+     "score": 83,
+     "leg": {
+      "mode": "BICYCLE",
+      "distance": 6327.2,
+      "duration": 1269,
+      "legGeometry": {
+       "points": "}ippGxtoxPIVOXMDcFGm@?o@AS?GAI?@xBW?AzABPAnF?vEmFAyAAQ?}AhA}BbBuEhD_BAcKEmCA?cG@M?]C{F?oB?_D?K?GQ??g@M?yFAg@C_@E]Gm@OWEYE[?W?UBSBgBNe@H]C}JCSDSJQNILwFAO?C?iDAqDCI?iJBoADw@?g@?qB@_A?E?_A?U@WDSJSN_@ZGUKUMOQMQGS?kAA?QBmD@I?M@G?MU?]?S?qA??M?Yu@?MQ?gAAoA?Q?_@?OqB?A?kA@U?u@B_B?cC?uMCyFCC?A?GAA?Ka@Oe@I[K_@Km@?E@?B@RDLDN@tAWTIRw@Sv@UHuAVOAMESECAA?IBK}AKyACk@Ak@Bm@Di@@GFa@Je@KKiCuB[W[K]G]CgA?O?W@i@Fe@Lg@PSJ_A`@]N]H]B_@@qA?YAWKUOSUOYK_@Ea@Ae@?e@?sJIDuA@KBKBkIAE?BYOAWAKAEWCGEIGFGHIFMBO@S@OASCOEGAMEWKQKg@a@QKKEYKMEQEEAMCIAIACGCDEDGBK?}A?M?I?cBAG?ECA?C@KBYFG@C?C@C??FAFK@QLo@A",
+       "length": 234
+      },
+      "steps": [
+       {
+        "relativeDirection": "DEPART",
+        "absoluteDirection": "NORTHWEST",
+        "streetName": "Queen Avenue South",
+        "bogusName": false,
+        "distance": 10.8,
+        "lat": 44.817113,
+        "lon": -93.310374,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_RIGHT",
+        "absoluteDirection": "NORTH",
+        "streetName": "Queen Avenue South",
+        "bogusName": false,
+        "distance": 221.6,
+        "lat": 44.817162,
+        "lon": -93.310491,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "WEST",
+        "streetName": "West 102nd Street",
+        "bogusName": false,
+        "distance": 47.9,
+        "lat": 44.81911,
+        "lon": -93.310592,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "NORTH",
+        "streetName": "service road",
+        "bogusName": true,
+        "distance": 13.2,
+        "lat": 44.819104,
+        "lon": -93.3112,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "WEST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 223.8,
+        "lat": 44.819223,
+        "lon": -93.311198,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "NORTH",
+        "streetName": "Brookside Avenue South",
+        "bogusName": false,
+        "distance": 816.6,
+        "lat": 44.819222,
+        "lon": -93.314033,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "EAST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 334.2,
+        "lat": 44.826247,
+        "lon": -93.315676,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "NORTH",
+        "streetName": "service road",
+        "bogusName": true,
+        "distance": 10.0,
+        "lat": 44.826259,
+        "lon": -93.311441,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "EAST",
+        "streetName": "West 98th Street",
+        "bogusName": false,
+        "distance": 15.4,
+        "lat": 44.826349,
+        "lon": -93.31144,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "NORTH",
+        "streetName": "Russell Avenue South",
+        "bogusName": false,
+        "distance": 662.4,
+        "lat": 44.826353,
+        "lon": -93.311245,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_RIGHT",
+        "absoluteDirection": "NORTH",
+        "streetName": "Russell Avenue South",
+        "bogusName": false,
+        "distance": 856.5,
+        "lat": 44.832237,
+        "lon": -93.311371,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "NORTHEAST",
+        "streetName": "Russell Avenue South",
+        "bogusName": false,
+        "distance": 106.2,
+        "lat": 44.839886,
+        "lon": -93.311707,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "EAST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 93.9,
+        "lat": 44.840722,
+        "lon": -93.311288,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "NORTH",
+        "streetName": "service road",
+        "bogusName": true,
+        "distance": 11.8,
+        "lat": 44.840684,
+        "lon": -93.3101,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "CONTINUE",
+        "absoluteDirection": "NORTH",
+        "streetName": "Queen Avenue South",
+        "bogusName": false,
+        "distance": 73.7,
+        "lat": 44.84079,
+        "lon": -93.310104,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "EAST",
+        "streetName": "service road",
+        "bogusName": true,
+        "distance": 15.8,
+        "lat": 44.841453,
+        "lon": -93.310103,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "NORTH",
+        "streetName": "service road",
+        "bogusName": true,
+        "distance": 126.7,
+        "lat": 44.841453,
+        "lon": -93.309902,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "NORTH",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 678.8,
+        "lat": 44.841795,
+        "lon": -93.308717,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "CONTINUE",
+        "absoluteDirection": "NORTH",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 6.7,
+        "lat": 44.847899,
+        "lon": -93.308712,
+        "walkingBike": true,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_RIGHT",
+        "absoluteDirection": "NORTHEAST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 80.1,
+        "lat": 44.847957,
+        "lon": -93.308696,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "HARD_RIGHT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "service road",
+        "bogusName": true,
+        "distance": 93.4,
+        "lat": 44.84827,
+        "lon": -93.307783,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_LEFT",
+        "absoluteDirection": "SOUTHEAST",
+        "streetName": "service road",
+        "bogusName": true,
+        "distance": 24.6,
+        "lat": 44.847452,
+        "lon": -93.307687,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "UTURN_LEFT",
+        "absoluteDirection": "NORTHWEST",
+        "streetName": "service road",
+        "bogusName": true,
+        "distance": 24.6,
+        "lat": 44.847347,
+        "lon": -93.307412,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_RIGHT",
+        "absoluteDirection": "NORTH",
+        "streetName": "service road",
+        "bogusName": true,
+        "distance": 98.8,
+        "lat": 44.847452,
+        "lon": -93.307687,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "EAST",
+        "streetName": "West 86th Street",
+        "bogusName": false,
+        "distance": 178.2,
+        "lat": 44.848317,
+        "lon": -93.307801,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "NORTHEAST",
+        "streetName": "Haeg Drive",
+        "bogusName": false,
+        "distance": 736.7,
+        "lat": 44.848309,
+        "lon": -93.305595,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "NORTH",
+        "streetName": "Knox Avenue South",
+        "bogusName": false,
+        "distance": 255.4,
+        "lat": 44.852875,
+        "lon": -93.302353,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "EAST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 10.1,
+        "lat": 44.855166,
+        "lon": -93.30242,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "NORTH",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 29.1,
+        "lat": 44.855155,
+        "lon": -93.302293,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "EAST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 18.4,
+        "lat": 44.855415,
+        "lon": -93.302256,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "NORTH",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 400.6,
+        "lat": 44.855489,
+        "lon": -93.302055,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "WEST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 6.5,
+        "lat": 44.858942,
+        "lon": -93.301672,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "NORTH",
+        "streetName": "Knox Avenue South",
+        "bogusName": false,
+        "distance": 44.8,
+        "lat": 44.858945,
+        "lon": -93.301754,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       }
+      ]
+     }
+    },
+    {
+     "id": "1:56828",
+     "name": "Knox Ave & 76th St Station",
+     "feasible": true,
+     "duration_s": 1414,
+     "distance_m": 7051,
+     "margin_s": 321,
+     "leave_in_s": 3,
+     "direct": {
+      "duration_s": 1197,
+      "distance_m": 5987,
+      "calm": 0.013,
+      "leave_in_s": 241
+     },
+     "preference": 1.0,
+     "calm": 0.992,
+     "stress": {
+      "lts3": 0.008,
+      "lts4": 0.0,
+      "walk": 0.004
+     },
+     "scenic": 0.635,
+     "composition": {
+      "trail": 0.274,
+      "quiet": 0.655,
+      "road": 0.072,
+      "busy": 0.0,
+      "green": 0.554,
+      "water": 0.399,
+      "traffic": 0.259
+     },
+     "stress_profile": [
+      [
+       232,
+       1
+      ],
+      [
+       48,
+       2
+      ],
+      [
+       1398,
+       1
+      ],
+      [
+       15,
+       3
+      ],
+      [
+       1633,
+       1
+      ],
+      [
+       40,
+       3
+      ],
+      [
+       1083,
+       1
+      ],
+      [
+       7,
+       0
+      ],
+      [
+       86,
+       1
+      ],
+      [
+       178,
+       2
+      ],
+      [
+       1457,
+       1
+      ],
+      [
+       288,
+       2
+      ],
+      [
+       363,
+       1
+      ],
+      [
+       223,
+       2
+      ]
+     ],
+     "via": "Lincoln Stadium",
+     "places": [
+      "Lincoln Stadium",
+      "Penn Lake",
+      "Lower Penn Lake Park",
+      "Haeg Park"
+     ],
+     "summary": "99% calm \u00b7 via Lincoln Stadium \u00b7 40% by water \u00b7 55% parks",
+     "stop": {
+      "score": 0.2,
+      "shelter": false,
+      "bench": false,
+      "lit": false,
+      "station": false,
+      "traffic": 0.0,
+      "nature": 0.0,
+      "mapped": true
+     },
+     "score": 70,
+     "leg": {
+      "mode": "BICYCLE",
+      "distance": 7050.6,
+      "duration": 1414,
+      "legGeometry": {
+       "points": "}ippGxtoxPIVOXMDcFGm@?o@AS?GAI?@xBW?AzABPAnF?vEmFAyAAQ?}AhA}BbBuEhD_BAcKEmCA?cG@M?]C{F?oB?_D?K?GQ??g@M?yFAg@C_@E]Gm@OWEYE[?W?UBSBgBNe@H]C}JCSDSJQNILwFAO?C?iDAqDCI?iJBoADw@?g@?qB@_A?E?_A?U@WDSJSN_@ZGUKUMOQMQGS?kAAM?AbB_@TQJOJNKPK?UFe@AE@gGC]S?qA??M?Yu@?MQ?gAAoA?Q?_@?OqB?A?kA@U?u@B_B?cC?uMCyFCC?A?GAA?Ka@Oe@I[K_@Km@?EIBK}AKyACk@Ak@Bm@Di@@GFa@Je@KKiCuB[W[K]G]CgA?O?W@i@Fe@Lg@PSJ_A`@]N]H]B_@@qA?YAWKUOSUOYK_@Ea@Ae@?e@?sJIDuA@KBKBkIAE?BYOAWAKAEWCGEIGFGHIFMBO@S@OASCOEGAMEWKQKg@a@QKKEYKMEQEEAMCIAIACGCDEDGBK?}A?M?I?cBAG?ECA?C@KBYFG@C?C@C??FAFK@QLo@A{@?s@?u@A]?@yHCOCEK?IAG@I@C@KBQJOLKPMXIb@Ij@Kp@Md@K^_@v@KNIJOLMH_@VOH[ROD[DW?O?OAQAk@A]?q@@sB@M?K?g@?WKW?U@WDYDQ@x@a@",
+       "length": 272
+      },
+      "steps": [
+       {
+        "relativeDirection": "DEPART",
+        "absoluteDirection": "NORTHWEST",
+        "streetName": "Queen Avenue South",
+        "bogusName": false,
+        "distance": 10.8,
+        "lat": 44.817113,
+        "lon": -93.310374,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_RIGHT",
+        "absoluteDirection": "NORTH",
+        "streetName": "Queen Avenue South",
+        "bogusName": false,
+        "distance": 221.6,
+        "lat": 44.817162,
+        "lon": -93.310491,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "WEST",
+        "streetName": "West 102nd Street",
+        "bogusName": false,
+        "distance": 47.9,
+        "lat": 44.81911,
+        "lon": -93.310592,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "NORTH",
+        "streetName": "service road",
+        "bogusName": true,
+        "distance": 13.2,
+        "lat": 44.819104,
+        "lon": -93.3112,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "WEST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 223.8,
+        "lat": 44.819223,
+        "lon": -93.311198,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "NORTH",
+        "streetName": "Brookside Avenue South",
+        "bogusName": false,
+        "distance": 816.6,
+        "lat": 44.819222,
+        "lon": -93.314033,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "EAST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 334.2,
+        "lat": 44.826247,
+        "lon": -93.315676,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "NORTH",
+        "streetName": "service road",
+        "bogusName": true,
+        "distance": 10.0,
+        "lat": 44.826259,
+        "lon": -93.311441,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "EAST",
+        "streetName": "West 98th Street",
+        "bogusName": false,
+        "distance": 15.4,
+        "lat": 44.826349,
+        "lon": -93.31144,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "NORTH",
+        "streetName": "Russell Avenue South",
+        "bogusName": false,
+        "distance": 662.4,
+        "lat": 44.826353,
+        "lon": -93.311245,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_RIGHT",
+        "absoluteDirection": "NORTH",
+        "streetName": "Russell Avenue South",
+        "bogusName": false,
+        "distance": 856.5,
+        "lat": 44.832237,
+        "lon": -93.311371,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "NORTHEAST",
+        "streetName": "Russell Avenue South",
+        "bogusName": false,
+        "distance": 114.2,
+        "lat": 44.839886,
+        "lon": -93.311707,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "WEST",
+        "streetName": "West 90th Street",
+        "bogusName": false,
+        "distance": 40.0,
+        "lat": 44.840794,
+        "lon": -93.311287,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "NORTHWEST",
+        "streetName": "service road",
+        "bogusName": true,
+        "distance": 40.7,
+        "lat": 44.840796,
+        "lon": -93.311795,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "UTURN_LEFT",
+        "absoluteDirection": "SOUTHEAST",
+        "streetName": "service road",
+        "bogusName": true,
+        "distance": 21.1,
+        "lat": 44.841126,
+        "lon": -93.312021,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_LEFT",
+        "absoluteDirection": "EAST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 142.0,
+        "lat": 44.840958,
+        "lon": -93.311896,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "NORTH",
+        "streetName": "Queen Avenue South",
+        "bogusName": false,
+        "distance": 57.4,
+        "lat": 44.840937,
+        "lon": -93.310104,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "EAST",
+        "streetName": "service road",
+        "bogusName": true,
+        "distance": 15.8,
+        "lat": 44.841453,
+        "lon": -93.310103,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "NORTH",
+        "streetName": "service road",
+        "bogusName": true,
+        "distance": 126.7,
+        "lat": 44.841453,
+        "lon": -93.309902,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "NORTH",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 678.8,
+        "lat": 44.841795,
+        "lon": -93.308717,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "CONTINUE",
+        "absoluteDirection": "NORTH",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 6.7,
+        "lat": 44.847899,
+        "lon": -93.308712,
+        "walkingBike": true,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_RIGHT",
+        "absoluteDirection": "NORTHEAST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 80.1,
+        "lat": 44.847957,
+        "lon": -93.308696,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "NORTH",
+        "streetName": "service road",
+        "bogusName": true,
+        "distance": 5.4,
+        "lat": 44.84827,
+        "lon": -93.307783,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "EAST",
+        "streetName": "West 86th Street",
+        "bogusName": false,
+        "distance": 178.2,
+        "lat": 44.848317,
+        "lon": -93.307801,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "NORTHEAST",
+        "streetName": "Haeg Drive",
+        "bogusName": false,
+        "distance": 736.7,
+        "lat": 44.848309,
+        "lon": -93.305595,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "NORTH",
+        "streetName": "Knox Avenue South",
+        "bogusName": false,
+        "distance": 255.4,
+        "lat": 44.852875,
+        "lon": -93.302353,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "EAST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 10.1,
+        "lat": 44.855166,
+        "lon": -93.30242,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "NORTH",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 29.1,
+        "lat": 44.855155,
+        "lon": -93.302293,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "EAST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 18.4,
+        "lat": 44.855415,
+        "lon": -93.302256,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "NORTH",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 400.6,
+        "lat": 44.855489,
+        "lon": -93.302055,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "WEST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 6.5,
+        "lat": 44.858942,
+        "lon": -93.301672,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "NORTH",
+        "streetName": "Knox Avenue South",
+        "bogusName": false,
+        "distance": 153.9,
+        "lat": 44.858945,
+        "lon": -93.301754,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "EAST",
+        "streetName": "road",
+        "bogusName": true,
+        "distance": 133.9,
+        "lat": 44.860317,
+        "lon": -93.301812,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "NORTH",
+        "streetName": "Knox Avenue Transitway",
+        "bogusName": false,
+        "distance": 363.0,
+        "lat": 44.86035,
+        "lon": -93.300128,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "CONTINUE",
+        "absoluteDirection": "NORTH",
+        "streetName": "Knox Avenue South",
+        "bogusName": false,
+        "distance": 223.5,
+        "lat": 44.862831,
+        "lon": -93.302359,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       }
+      ]
+     }
+    }
+   ],
+   "elapsed_ms": 218
+  }
+ },
+ "bikeOnly": {
+  "nowMs": 1789999200000,
+  "calm": {
+   "status": "ok",
+   "region": "msp-bike",
+   "modes": [
+    "direct",
+    "calm",
+    "wander"
+   ],
+   "mode": "calm",
+   "speed": 5.0,
+   "margin": {
+    "fixed_s": 180.0,
+    "frac": 0.1
+   },
+   "candidates": [
+    {
+     "id": "destination",
+     "name": "2345 Old Shakopee Road West, Bloomington, MN",
+     "feasible": true,
+     "duration_s": 3466,
+     "distance_m": 17306,
+     "margin_s": 527,
+     "leave_in_s": null,
+     "direct": {
+      "duration_s": 3320,
+      "distance_m": 16580,
+      "calm": 0.538,
+      "leave_in_s": null
+     },
+     "preference": 1.0,
+     "calm": 0.998,
+     "stress": {
+      "lts3": 0.002,
+      "lts4": 0.0,
+      "walk": 0.002
+     },
+     "scenic": 0.324,
+     "composition": {
+      "trail": 0.477,
+      "quiet": 0.465,
+      "road": 0.005,
+      "busy": 0.053,
+      "green": 0.411,
+      "water": 0.215,
+      "traffic": 0.65
+     },
+     "stress_profile": [
+      [
+       8,
+       0
+      ],
+      [
+       3620,
+       1
+      ],
+      [
+       86,
+       2
+      ],
+      [
+       843,
+       1
+      ],
+      [
+       4,
+       2
+      ],
+      [
+       7,
+       3
+      ],
+      [
+       1370,
+       1
+      ],
+      [
+       889,
+       2
+      ],
+      [
+       26,
+       3
+      ],
+      [
+       10454,
+       1
+      ]
+     ],
+     "via": null,
+     "places": [
+      "Sister's Camelot Garden",
+      "Memorial Pond",
+      "Say Their Names Cemetery",
+      "Park Avenue Ponds"
+     ],
+     "summary": "100% calm \u00b7 48% trails \u00b7 22% by water \u00b7 41% parks",
+     "stop": {
+      "score": 0.1,
+      "shelter": false,
+      "bench": false,
+      "lit": false,
+      "station": false,
+      "traffic": 1.0,
+      "nature": 1.0,
+      "mapped": false
+     },
+     "score": 73,
+     "leg": {
+      "mode": "BICYCLE",
+      "distance": 17305.6,
+      "duration": 3466,
+      "legGeometry": {
+       "points": "czhqGxrfxPiB?AA?OjIALAD?J?dIEF?L?J?F?zHCF?N?J?F?vDCtBAB?FFTpA@T?hB?D?Z?Z?H?`BN?jIGL?N?jI?JB?bB?NJ?jI?B?L?J@D?hI?J?J?jIA@?L?N?lIFJ??N?B?bBL?jIDN?J?jIFN?L?jIBL?L?lIFJAL@lIBL?L@lIBJ?L?`FB?fBAZdA@H?B?f@?@?J?N?@R?DB^D~ABz@FfAAZADCNCJPFNNJHFFDDFBDDJFHHFFFDJFNJJHHBJBJ@H@H?JAJAH?H?F@NBZFHBNBPHJFHFFDFJDHDJBFBLBNBN@N@J?P@LAX?^@z@@N@NBTBRBPBP@TBR@PD^DZBVD\\DZFPDLJNFNFNFPJ\\DJFRHPJRLPLNfCzDJTJFBEHMH?H@bB@xA@lA@tB?\\ArE?hC??V?d@?n@tBCBNBFLBNBN?xKAJ??lB?HJ?@?lIDD?J?J?B?hIBB?L??R@zA?xB?TN?j@?bAAfB?p@?t@?b@?p@@N?JAN?~B@p@?|@@N?L?jAAH?R?tAAH?^?Z?D?jAA@?R?B?hGBT?b@?h@?|B?l@?AX?HI|DDXNBtC@hJAfF@HRBBB??z@?nBAl@@XBb@D^H^HTLXPXPd@DZHT@J?fD?J?H?R?F?N?L?N?bB?fB@N?R?D?jA?h@?n@?p@Mj@GXMRDLHNFRFIFAPNJTp@pB`@jA|@fCVz@DXH\\Fv@@NB^?h@?FCf@Cf@SpAELAN@LHJPJnAd@JDJDrAb@HFBBEj@i@jDKn@CRERCPCLEd@Cn@Af@?T@xA?vA?L?L?R?`@@r@AHCJ@F?H?R?lD@L?H@RBP?@@T@pA?\\A~D?^N?R?L?bIAdJAfJ?rEApCn@j@DnBNrBJtAFhG\\|ATfDJ~DHJ@rBJ^@V@jAF`DFxBD|@DbAJd@HH@?xL?tD?jC?P?TAlAA`AAhB?|@?xD@fB?b@?|A?T?vA?B?p@?B?dAH??BBDBBB@B?t@?bC?n@Aj@EJCTC\\EH?FABCBEBIDDLFJBf@?nAAl@@`@?HAHIL@T?T@`DTNHJ?LAPCHIBBDDDF`@@l@?R@J?ZAL?L@d@?VAHGFGB@BBFDJ@X@jAEx@CHAN@NAXA?KBMBGHFRJNBz@J`@@PEHEHKBB?@DF@@F@D?`@@D?D?@ADCBCFGFFDBH@f@?lA@H?D?F?R?lCB@?DFJ?P?@?PMHGFAHApB@b@^F?P?N?LFt@?d@?d@?DGF?nA@lADLBJ?H?DHtC@fC?xB?j@?lJ?pG@HEDKPN?T?VD?B@BFN@L?@CBC@AD?|D?tG@pE@N?L?b@?xHFpA@f@@Z?FDLDv@?T?P?T?F@D@DDFDHIFIX?T?BCB?L?F?h@AL?BBP?\\?L?BAfDANCNCbACtGAL?dIARAL?@?tB?t@?B@HFFBtBAL?LEFADC@AB?nE@lB?L?nD@|D?\\?dD@T?dK@dB@@@BBN?P?@E?At@?v@?^?hD?B?BB?AN?J?XA~GAxE?V?jB?DBBFx@AFEFCjBAV?lA?d@?F@B@BB@B?@DAR?P?B?F?FADADC@CBC@EDCVSDAD?@?@BDFDDHBfApA|@bAZ^F@FF`@d@nArAFFHWnBeB",
+       "length": 672
+      },
+      "steps": [
+       {
+        "relativeDirection": "DEPART",
+        "absoluteDirection": "NORTHEAST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 1.6,
+        "lat": 44.943115,
+        "lon": -93.263973,
+        "walkingBike": true,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_RIGHT",
+        "absoluteDirection": "EAST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 6.3,
+        "lat": 44.943124,
+        "lon": -93.263957,
+        "walkingBike": true,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "Columbus Avenue",
+        "bogusName": false,
+        "distance": 777.3,
+        "lat": 44.943125,
+        "lon": -93.263878,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "SOUTHWEST",
+        "streetName": "East 37th Street",
+        "bogusName": false,
+        "distance": 157.7,
+        "lat": 44.936135,
+        "lon": -93.263781,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "service road",
+        "bogusName": true,
+        "distance": 401.4,
+        "lat": 44.935968,
+        "lon": -93.265718,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "WEST",
+        "streetName": "East 39th Street",
+        "bogusName": false,
+        "distance": 45.4,
+        "lat": 44.932361,
+        "lon": -93.265701,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "Oakland Avenue",
+        "bogusName": false,
+        "distance": 803.1,
+        "lat": 44.93236,
+        "lon": -93.266277,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "WEST",
+        "streetName": "East 43rd Street",
+        "bogusName": false,
+        "distance": 46.8,
+        "lat": 44.925138,
+        "lon": -93.266323,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "service road",
+        "bogusName": true,
+        "distance": 1335.9,
+        "lat": 44.925137,
+        "lon": -93.266917,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "WEST",
+        "streetName": "service road",
+        "bogusName": true,
+        "distance": 52.2,
+        "lat": 44.913124,
+        "lon": -93.267116,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "Portland Avenue",
+        "bogusName": false,
+        "distance": 85.5,
+        "lat": 44.913125,
+        "lon": -93.267778,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "WEST",
+        "streetName": "Minnehaha Parkway Regional Trail",
+        "bogusName": false,
+        "distance": 139.3,
+        "lat": 44.912356,
+        "lon": -93.267788,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "SOUTHWEST",
+        "streetName": "Minnehaha Parkway Regional Trail",
+        "bogusName": false,
+        "distance": 703.5,
+        "lat": 44.912301,
+        "lon": -93.269534,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "SOUTHEAST",
+        "streetName": "Stevens Avenue South",
+        "bogusName": false,
+        "distance": 11.5,
+        "lat": 44.908504,
+        "lon": -93.275584,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_RIGHT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "Stevens Avenue",
+        "bogusName": false,
+        "distance": 436.9,
+        "lat": 44.908429,
+        "lon": -93.275482,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "WEST",
+        "streetName": "service road",
+        "bogusName": true,
+        "distance": 43.4,
+        "lat": 44.904501,
+        "lon": -93.275514,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "service road",
+        "bogusName": true,
+        "distance": 64.7,
+        "lat": 44.904496,
+        "lon": -93.276065,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_RIGHT",
+        "absoluteDirection": "SOUTHWEST",
+        "streetName": "service road",
+        "bogusName": true,
+        "distance": 270.8,
+        "lat": 44.903914,
+        "lon": -93.276043,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "WEST",
+        "streetName": "East 56th Street",
+        "bogusName": false,
+        "distance": 47.8,
+        "lat": 44.901531,
+        "lon": -93.276187,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "1st Avenue South",
+        "bogusName": false,
+        "distance": 405.7,
+        "lat": 44.901527,
+        "lon": -93.276794,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "WEST",
+        "streetName": "East 58th Street",
+        "bogusName": false,
+        "distance": 100.7,
+        "lat": 44.897879,
+        "lon": -93.27684,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "Nicollet Avenue",
+        "bogusName": false,
+        "distance": 818.6,
+        "lat": 44.897874,
+        "lon": -93.278118,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "CONTINUE",
+        "absoluteDirection": "SOUTH",
+        "streetName": "Nicollet Avenue South",
+        "bogusName": false,
+        "distance": 95.6,
+        "lat": 44.890512,
+        "lon": -93.278122,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "WEST",
+        "streetName": "West 62nd Street",
+        "bogusName": false,
+        "distance": 99.5,
+        "lat": 44.889653,
+        "lon": -93.278121,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "Blaisdell Avenue South",
+        "bogusName": false,
+        "distance": 423.1,
+        "lat": 44.889684,
+        "lon": -93.279377,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_RIGHT",
+        "absoluteDirection": "SOUTHWEST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 10.1,
+        "lat": 44.88588,
+        "lon": -93.279407,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_LEFT",
+        "absoluteDirection": "SOUTHWEST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 5.0,
+        "lat": 44.885829,
+        "lon": -93.279512,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "WEST",
+        "streetName": "bike path",
+        "bogusName": true,
+        "distance": 546.2,
+        "lat": 44.88579,
+        "lon": -93.279534,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "SOUTHWEST",
+        "streetName": "bike path",
+        "bogusName": true,
+        "distance": 24.2,
+        "lat": 44.885473,
+        "lon": -93.286197,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_LEFT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "bike path",
+        "bogusName": true,
+        "distance": 22.2,
+        "lat": 44.885351,
+        "lon": -93.286449,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_RIGHT",
+        "absoluteDirection": "SOUTHWEST",
+        "streetName": "bike path",
+        "bogusName": true,
+        "distance": 341.2,
+        "lat": 44.885179,
+        "lon": -93.286466,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_LEFT",
+        "absoluteDirection": "SOUTHWEST",
+        "streetName": "bike path",
+        "bogusName": true,
+        "distance": 36.7,
+        "lat": 44.884264,
+        "lon": -93.290366,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_LEFT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "bike path",
+        "bogusName": true,
+        "distance": 119.2,
+        "lat": 44.884149,
+        "lon": -93.290712,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "WEST",
+        "streetName": "bike path",
+        "bogusName": true,
+        "distance": 580.9,
+        "lat": 44.883137,
+        "lon": -93.291202,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "Humboldt Avenue South",
+        "bogusName": false,
+        "distance": 807.7,
+        "lat": 44.883537,
+        "lon": -93.298463,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "CONTINUE",
+        "absoluteDirection": "SOUTH",
+        "streetName": "Lakeshore Drive",
+        "bogusName": false,
+        "distance": 401.2,
+        "lat": 44.876293,
+        "lon": -93.298665,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "CONTINUE",
+        "absoluteDirection": "SOUTH",
+        "streetName": "Humboldt Avenue South",
+        "bogusName": false,
+        "distance": 603.7,
+        "lat": 44.872702,
+        "lon": -93.299138,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "WEST",
+        "streetName": "West 75th Street",
+        "bogusName": false,
+        "distance": 699.3,
+        "lat": 44.867286,
+        "lon": -93.2996,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 217.4,
+        "lat": 44.86731,
+        "lon": -93.308472,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_LEFT",
+        "absoluteDirection": "SOUTHEAST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 11.3,
+        "lat": 44.865385,
+        "lon": -93.308431,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 309.7,
+        "lat": 44.865319,
+        "lon": -93.308325,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_RIGHT",
+        "absoluteDirection": "SOUTHWEST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 8.5,
+        "lat": 44.862587,
+        "lon": -93.308484,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_LEFT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 140.0,
+        "lat": 44.862527,
+        "lon": -93.308551,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_RIGHT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 128.8,
+        "lat": 44.861286,
+        "lon": -93.308481,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_LEFT",
+        "absoluteDirection": "SOUTHEAST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 26.1,
+        "lat": 44.860141,
+        "lon": -93.308505,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_RIGHT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 106.8,
+        "lat": 44.859987,
+        "lon": -93.308357,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_RIGHT",
+        "absoluteDirection": "SOUTHWEST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 9.4,
+        "lat": 44.85908,
+        "lon": -93.308391,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_LEFT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 46.1,
+        "lat": 44.859019,
+        "lon": -93.308474,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_RIGHT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 185.1,
+        "lat": 44.858622,
+        "lon": -93.308403,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_RIGHT",
+        "absoluteDirection": "SOUTHWEST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 4.3,
+        "lat": 44.856971,
+        "lon": -93.308503,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_LEFT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 978.3,
+        "lat": 44.856943,
+        "lon": -93.30854,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_RIGHT",
+        "absoluteDirection": "SOUTHWEST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 11.4,
+        "lat": 44.848261,
+        "lon": -93.308624,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_RIGHT",
+        "absoluteDirection": "WEST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 18.0,
+        "lat": 44.848174,
+        "lon": -93.308701,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 803.3,
+        "lat": 44.84817,
+        "lon": -93.308929,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_LEFT",
+        "absoluteDirection": "SOUTHEAST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 12.9,
+        "lat": 44.840997,
+        "lon": -93.309163,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_RIGHT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 1614.3,
+        "lat": 44.840907,
+        "lon": -93.309061,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_RIGHT",
+        "absoluteDirection": "SOUTHWEST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 2.3,
+        "lat": 44.826426,
+        "lon": -93.308987,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "SLIGHTLY_LEFT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 19.7,
+        "lat": 44.826414,
+        "lon": -93.30901,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "EAST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 3.0,
+        "lat": 44.826237,
+        "lon": -93.309007,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 762.5,
+        "lat": 44.826227,
+        "lon": -93.308973,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "WEST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 1.0,
+        "lat": 44.819424,
+        "lon": -93.309011,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "SOUTH",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 78.9,
+        "lat": 44.819422,
+        "lon": -93.309024,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "RIGHT",
+        "absoluteDirection": "SOUTHWEST",
+        "streetName": "footpath",
+        "bogusName": true,
+        "distance": 224.5,
+        "lat": 44.818769,
+        "lon": -93.308788,
+        "walkingBike": false,
+        "stayOn": true,
+        "area": false
+       },
+       {
+        "relativeDirection": "LEFT",
+        "absoluteDirection": "SOUTHEAST",
+        "streetName": "Queen Avenue South",
+        "bogusName": false,
+        "distance": 10.8,
+        "lat": 44.817162,
+        "lon": -93.310491,
+        "walkingBike": false,
+        "stayOn": false,
+        "area": false
+       }
+      ]
+     }
+    }
+   ],
+   "elapsed_ms": 1198
+  }
+ }
+}

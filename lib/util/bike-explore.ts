@@ -329,6 +329,235 @@ export function exploreRideOf(
 }
 
 /**
+ * What an itinerary offers the engine: `access` when its FIRST leg is the
+ * rider's own bike straight into a transit leg (the ride before the bus),
+ * `bike-only` for one bike leg to the destination, else null. A rented bike
+ * is never re-routed: the engine assumes the rider's own bike, and a dock is
+ * where the ride has to start.
+ */
+export type ExploreTarget = 'access' | 'bike-only'
+
+export function exploreTargetOf(
+  itinerary: Itinerary | null | undefined
+): ExploreTarget | null {
+  const legs: any[] = (itinerary?.legs as any[]) || []
+  const first = legs[0]
+  if (!first || first.mode !== 'BICYCLE' || first.rentedBike) return null
+  if (first.transitLeg) return null
+  if (legs.length === 1) return 'bike-only'
+  return legs[1]?.transitLeg ? 'access' : null
+}
+
+/**
+ * A name for one itinerary of a search that does not depend on where it sits
+ * in the list: every leg's mode, trip, times and ends. Explore variants are
+ * stored under it, so a response that arrives late (and moves positions while
+ * the search is still pending) cannot hand one itinerary's ride to another.
+ */
+export function exploreItineraryKey(
+  itinerary: Itinerary | null | undefined
+): string {
+  const place = (p: any) =>
+    p?.stopId ||
+    p?.stop?.gtfsId ||
+    (Number.isFinite(p?.lat) ? `${p.lat.toFixed(5)},${p.lon.toFixed(5)}` : '')
+  return ((itinerary?.legs as any[]) || [])
+    .map(
+      (leg) =>
+        `${leg.mode}:${leg.trip?.gtfsId || ''}:${leg.startTime}:${
+          leg.endTime
+        }:${place(leg.from)}>${place(leg.to)}`
+    )
+    .join('|')
+}
+
+/** Where one itinerary's explore lookup stands, for one search and mode. */
+export interface ExploreEntry {
+  /**
+   * `pending` while asked; `done` with a `variant` when the engine's ride
+   * replaces OTP's; `none` when it does not (engine unreachable, nothing
+   * feasible, could not be spliced) — that itinerary keeps OTP's leg.
+   */
+  status: 'pending' | 'done' | 'none'
+  variant?: Itinerary
+}
+
+export type ExploreEntries = Record<string, ExploreEntry>
+
+/**
+ * The list as the rider sees it with a mode on: each itinerary that has an
+ * explore variant replaced by it, AT THE SAME POSITION (index kept — 23.5's
+ * positional indexes, the URL's ui_activeItinerary and the merge all key on
+ * it). Direct, or nothing to substitute, returns the SAME array: the old
+ * version, untouched.
+ *
+ * `finish` re-derives what the list adds to each itinerary (sorting costs)
+ * for a substituted one.
+ */
+export function applyExploreVariants<T extends Itinerary & { index?: number }>(
+  itineraries: T[],
+  mode: ExploreMode,
+  entries: ExploreEntries | null | undefined,
+  finish: (itinerary: any) => any = (itinerary) => itinerary
+): T[] {
+  if (mode === 'direct' || !entries || !itineraries?.length) {
+    return itineraries
+  }
+  let changed = false
+  const out = itineraries.map((itinerary) => {
+    const variant = entries[exploreItineraryKey(itinerary)]?.variant
+    if (!variant) return itinerary
+    changed = true
+    return finish({ ...variant, index: itinerary.index })
+  })
+  return changed ? out : itineraries
+}
+
+/**
+ * A result row (as the list renders it) with every explore ride in it put
+ * back to OTP's itinerary at the same index — for the lookups that BUILD new
+ * itineraries from a row ("Other stops", the route-row timetable). They
+ * append what they build to the search's OTP responses, and a template with
+ * an explore leg in it would put that leg into OTP's answer, where Direct
+ * would then show it. A row with no explore ride comes back as the same
+ * object.
+ */
+export function otpRowOf<T extends Record<string, any>>(
+  row: T,
+  otpItineraries: Array<Itinerary & { index?: number }> | null | undefined
+): T {
+  if (!row || !otpItineraries?.length) return row
+  const back = (run: any) =>
+    run && exploreRideOf(run) && typeof run.index === 'number'
+      ? otpItineraries[run.index] || run
+      : run
+  const hasExplore =
+    !!exploreRideOf(row as any) ||
+    (row.sameShapeVariants || []).some((v: any) => exploreRideOf(v)) ||
+    (row.allStartTimes || []).some((t: any) => exploreRideOf(t?.itinerary))
+  if (!hasExplore) return row
+  const out: any = { ...back(row) }
+  if (row.allStartTimes) {
+    out.allStartTimes = row.allStartTimes.map((t: any) => {
+      const itinerary = back(t?.itinerary)
+      return itinerary === t?.itinerary
+        ? t
+        : { ...t, itinerary, legs: itinerary.legs }
+    })
+  }
+  if (row.sameShapeVariants) {
+    out.sameShapeVariants = row.sameShapeVariants.map(back)
+  }
+  return out as T
+}
+
+/**
+ * Rider's decision 3 (2026-11-21), "other routes too": among the options that
+ * arrive no later than the earliest one (same minute, 0 min tolerance), the
+ * explore ride the engine scores highest. Returns its `index`, or null when
+ * fewer than two options arrive that early or none of them is an explore
+ * ride — with one option there is nothing to prefer it over.
+ */
+export function nicestExploreIndex(
+  itineraries: Array<Itinerary & { index?: number }> | null | undefined
+): number | null {
+  const list = (itineraries || []).filter(
+    (itin) => itin && Number.isFinite(Number(itin.endTime))
+  )
+  if (list.length < 2) return null
+  const minute = (itin: Itinerary) => Math.floor(Number(itin.endTime) / 60000)
+  const earliest = Math.min(...list.map(minute))
+  const contenders = list.filter((itin) => minute(itin) <= earliest)
+  if (contenders.length < 2) return null
+  let bestIndex: number | null = null
+  let bestScore = -Infinity
+  contenders.forEach((itin) => {
+    const ride = exploreRideOf(itin)
+    if (!ride || typeof itin.index !== 'number') return
+    if (ride.score > bestScore) {
+      bestIndex = itin.index
+      bestScore = ride.score
+    }
+  })
+  return bestIndex
+}
+
+/** How a stretch of the ride reads in the stress strip. */
+export type StressCategory = 'calm' | 'busy' | 'heavy' | 'walk'
+
+/** Engine level → strip category: 1-2 calm, 3 busy, 4 heavy, 0 walk the bike. */
+export function stressCategory(level: number): StressCategory {
+  if (level === 0) return 'walk'
+  if (level >= 4) return 'heavy'
+  if (level === 3) return 'busy'
+  return 'calm'
+}
+
+export interface StressSegment {
+  category: StressCategory
+  metres: number
+  /** 0-1 of the whole ride. */
+  share: number
+}
+
+/**
+ * The stress profile as strip segments: neighbours in the same category
+ * joined (a profile has dozens of 4-16 m stretches that would each be a
+ * sliver), each with its share of the ride's length.
+ */
+export function stressStripSegments(
+  profile: Array<[number, number]> | null | undefined
+): StressSegment[] {
+  const merged: Array<{ category: StressCategory; metres: number }> = []
+  ;(profile || []).forEach((entry) => {
+    const metres = Number(entry?.[0])
+    if (!Number.isFinite(metres) || metres <= 0) return
+    const category = stressCategory(Number(entry[1]))
+    const last = merged[merged.length - 1]
+    if (last && last.category === category) last.metres += metres
+    else merged.push({ category, metres })
+  })
+  const total = merged.reduce((sum, s) => sum + s.metres, 0)
+  if (!total) return []
+  return merged.map((s) => ({ ...s, share: s.metres / total }))
+}
+
+/** Share of the ride's length in each category, 0-1. */
+export function stressShares(
+  segments: StressSegment[]
+): Record<StressCategory, number> {
+  const out: Record<StressCategory, number> = {
+    busy: 0,
+    calm: 0,
+    heavy: 0,
+    walk: 0
+  }
+  segments.forEach((s) => {
+    out[s.category] += s.share
+  })
+  return out
+}
+
+/**
+ * When the DIRECT ride would leave, by the same margin rule: the bus's time
+ * at the stop, less 3 min + 10 % of the direct ride, less the ride. Null for
+ * a trip with no bus (bike-only: both rides leave together) or no direct
+ * time.
+ */
+export function exploreDirectLeaveMs(
+  itinerary: Itinerary | null | undefined
+): number | null {
+  const ride = exploreRideOf(itinerary)
+  const directS = ride?.directDurationS
+  if (ride == null || directS == null || !Number.isFinite(directS)) return null
+  const bus: any = (itinerary?.legs || []).find((l: any) => l.transitLeg)
+  const busEpoch = Number(bus?.startTime)
+  if (!Number.isFinite(busEpoch)) return null
+  const directMs = directS * 1000
+  return busEpoch - exploreMarginMs(directMs) - directMs
+}
+
+/**
  * Ask the engine. Resolves to the answer, or null on ANY failure — offline,
  * timeout, a 4xx/5xx (503 = no bike map covers here), a malformed body. The
  * caller keeps the OTP leg it already has.

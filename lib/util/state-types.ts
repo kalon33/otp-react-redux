@@ -7,6 +7,7 @@ import {
 } from '../components/user/types'
 import { Leg, Location, ModeSetting } from '@opentripplanner/types'
 
+import type { BikeExploreState } from '../reducers/bike-explore'
 import type { GoModeState } from '../reducers/go-mode'
 import type { RoundTripState } from '../actions/round-trip'
 
@@ -24,6 +25,8 @@ export type LatLonObj = { lat: number; lon: number }
 export interface OtpState {
   // TODO: Add other OTP states
   activeSearchId?: string
+  /** Direct / Calm / Wander and the variants per search (backlog 76.2). */
+  bikeExplore?: BikeExploreState
   config: AppConfig
   currentQuery: any
   filter: FilterType

@@ -296,7 +296,10 @@ export function getOnCandidates(
   return [...earlier, ...later]
 }
 
-function placeOf(stop: TripStop, extra: Record<string, unknown> = {}): any {
+export function placeOf(
+  stop: TripStop,
+  extra: Record<string, unknown> = {}
+): any {
   return {
     lat: stop.lat,
     lon: stop.lon,
