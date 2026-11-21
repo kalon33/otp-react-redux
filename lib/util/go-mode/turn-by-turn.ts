@@ -176,21 +176,33 @@ export function formatCueDistance(meters: number): string {
 }
 
 /**
- * Offset in metres along `polyline` of the point nearest to `point`.
+ * Offset in metres along `polyline` of the point nearest to `point`, on a
+ * segment that does not end before `fromOffset`.
  *
  * Steps sit ON the leg geometry in principle, but OTP rounds step coordinates
  * to fewer decimal places than the encoded polyline, so an exact vertex match
  * can't be assumed — project and take the best segment.
+ *
+ * ...among the segments at or after the previous turn (76.3). Steps come in
+ * the order they are ridden, and a ride that passes the same corner twice —
+ * the Calm / Wander engine's rides do, out along a parkway and back (the
+ * 2026-11-21 Wander ride to 46th St Station: `LEFT East Minnehaha Parkway`,
+ * `UTURN_LEFT`, back, `LEFT Minnehaha Parkway Regional Trail`) — put the
+ * second turn on the FIRST pass when every segment was a candidate: offset
+ * 3575 m after a turn at 3591 m, behind the rider by the time it was due, so
+ * it was never announced.
  */
 function offsetAlongPolyline(
   polyline: LatLngArray[],
   cumulative: number[],
-  point: LatLngArray
+  point: LatLngArray,
+  fromOffset = 0
 ): number {
   let bestOffset = 0
   let bestPerp = Infinity
 
   for (let i = 0; i < polyline.length - 1; i++) {
+    if (cumulative[i + 1] < fromOffset) continue
     const projection = projectPointOntoSegment(
       point,
       polyline[i],
@@ -255,6 +267,7 @@ function buildLegCues(leg: Leg): LegCues {
   const legLength = cumulative[cumulative.length - 1] || 0
 
   const raw: StepCue[] = []
+  let lastOffset = 0
   steps.forEach((step) => {
     const isTurn =
       !NON_TURN_DIRECTIONS.has(step.relativeDirection) && !step.stayOn
@@ -267,16 +280,20 @@ function buildLegCues(leg: Leg): LegCues {
       return
     }
 
+    const offsetMeters = offsetAlongPolyline(
+      polyline,
+      cumulative,
+      [step.lat, step.lon],
+      lastOffset
+    )
+    lastOffset = offsetMeters
     raw.push({
       distanceMeters: step.distance || 0,
       index: raw.length,
       instruction: phraseInstruction(step),
       lat: step.lat,
       lon: step.lon,
-      offsetMeters: offsetAlongPolyline(polyline, cumulative, [
-        step.lat,
-        step.lon
-      ]),
+      offsetMeters,
       relativeDirection: step.relativeDirection,
       significant: false,
       streetName: step.streetName
