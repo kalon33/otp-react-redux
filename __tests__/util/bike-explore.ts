@@ -208,6 +208,80 @@ describe('util > bike-explore', () => {
     ).toBeNull()
     expect(await fetchBikeExplore('/x', null)).toBeNull()
   })
+
+  it('inflates a compact answer to the flat shape, sharing the heavy fields', async () => {
+    const ride = {
+      calm: 0.9,
+      direct: { calm: 0.5, distance_m: 900, duration_s: 200 },
+      duration_s: 240,
+      leg: { distance: 1000 },
+      stress_profile: [[10, 1]]
+    }
+    const compact = {
+      candidates: [
+        {
+          direct_leave_in_s: 77,
+          feasible: true,
+          id: 'a',
+          leave_in_s: 5,
+          ride: 0
+        },
+        { feasible: true, id: 'b', leave_in_s: 9, ride: 0 },
+        { feasible: false, id: 'c', reason: 'unroutable' },
+        { feasible: true, id: 'd', reason: 'at the stop' }
+      ],
+      mode: 'calm',
+      rides: [ride],
+      status: 'ok'
+    }
+    const answer = await fetchBikeExplore(
+      '/x',
+      { a: 1 },
+      {
+        fetchImpl: (async () => ({
+          json: async () => compact,
+          ok: true
+        })) as any
+      }
+    )
+    const [a, b, c, d] = answer?.candidates as any[]
+    expect(a).toEqual({
+      ...ride,
+      direct: { ...ride.direct, leave_in_s: 77 },
+      feasible: true,
+      id: 'a',
+      leave_in_s: 5
+    })
+    expect(a.ride).toBeUndefined()
+    expect(a.direct_leave_in_s).toBeUndefined()
+    expect(b.direct.leave_in_s).toBeNull()
+    expect(a.leg).toBe(ride.leg)
+    expect(b.leg).toBe(ride.leg)
+    expect(c).toBe(compact.candidates[2])
+    expect(d).toBe(compact.candidates[3])
+  })
+
+  it('asks for a compact answer, up to 2000 candidates', () => {
+    const candidates = Array.from({ length: 2100 }, (_, i) => ({
+      busEpoch: NOW,
+      id: `c${i}`,
+      lat: 44.9,
+      lon: -93.2
+    }))
+    const body = buildExploreRequest({
+      candidates,
+      compact: true,
+      mode: 'calm',
+      nowMs: NOW,
+      origin
+    })
+    expect(body.compact).toBe(true)
+    expect(body.candidates).toHaveLength(2000)
+    expect(
+      buildExploreRequest({ candidates, mode: 'calm', nowMs: NOW, origin })
+        .compact
+    ).toBeUndefined()
+  })
 })
 
 /*

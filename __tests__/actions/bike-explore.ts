@@ -1,7 +1,8 @@
 /**
  * Direct / Calm / Wander as a thunk and a store (backlog 76.2): the mode is
  * stored on the device and restored at boot; Calm or Wander asks the engine
- * ONE request per explore-shaped itinerary, once per (search, mode); the
+ * ONE request per lookup (every explore-shaped itinerary of the search at
+ * once), once per (search, mode); the
  * results list reads the variants through getActiveItineraries at the same
  * positions; Direct asks nothing and shows OTP's answer, the same array.
  *
@@ -44,6 +45,7 @@ import {
   exploreItineraryKey,
   exploreRideOf
 } from '../../lib/util/bike-explore'
+import { exploreNowMs } from '../../lib/util/bike-explore-variants'
 import {
   getActiveItineraries,
   getActiveItinerary,
@@ -134,8 +136,40 @@ function makeStore({
   return store
 }
 
-function answerWith(json: any) {
-  return jest.fn(async () => ({ json: async () => json, ok: true }))
+/**
+ * The engine, as the live one answers a batch: the recorded flat answer for a
+ * stop is turned into the compact shape (rides once, candidates pointing at
+ * them) for whatever candidates the request names, `n|id` and all. A stop the
+ * recording has no answer for could not be routed.
+ */
+function compactFrom(flat: any, body: any) {
+  const rides: any[] = []
+  const candidates = body.candidates.map((c: any) => {
+    const original = c.id.slice(c.id.indexOf('|') + 1)
+    const r = flat.candidates.find((x: any) => x.id === original)
+    if (!r) {
+      return { feasible: false, id: c.id, name: c.name, reason: 'unroutable' }
+    }
+    const { direct, feasible, id, leave_in_s: leave, name, ...ride } = r
+    const { leave_in_s: directLeave, ...directRest } = direct
+    rides.push({ ...ride, direct: directRest })
+    return {
+      direct_leave_in_s: directLeave,
+      feasible,
+      id: c.id,
+      leave_in_s: leave,
+      name,
+      ride: rides.length - 1
+    }
+  })
+  return { candidates, mode: flat.mode, rides, status: 'ok' }
+}
+
+function answerWith(flat: any) {
+  return jest.fn(async (_url: string, init: any) => ({
+    json: async () => compactFrom(flat, JSON.parse(init.body)),
+    ok: true
+  }))
 }
 
 beforeEach(() => {
@@ -193,28 +227,29 @@ describe('76.2 > Direct is the old version', () => {
 })
 
 describe('76.2 > Calm and Wander', () => {
-  it('one engine request per itinerary, the variants shown at the same positions', async () => {
+  it('one engine request for the whole search, the variants shown at the same positions', async () => {
     g.fetch = answerWith(eng.access.calm)
     const store = makeStore()
     const direct = JSON.stringify(getActiveItineraries(store.getState()))
     store.dispatch(setBikeExploreMode('calm'))
     await store.dispatch(ensureBikeExploreVariants())
 
-    // Two itineraries, two requests, to the app's own path.
-    expect(g.fetch).toHaveBeenCalledTimes(2)
+    // Two itineraries, one request, to the app's own path.
+    expect(g.fetch).toHaveBeenCalledTimes(1)
     const [url, init] = g.fetch.mock.calls[0]
     expect(url).toBe('/api/bike/access')
     const body = JSON.parse(init.body)
     expect(body.mode).toBe('calm')
+    expect(body.compact).toBe(true)
+    const ids = ['1:56831', '1:56830', '1:56829', '1:51110', '1:56828']
     expect(body.candidates.map((c: any) => c.id)).toEqual([
-      '1:56831',
-      '1:56830',
-      '1:56829',
-      '1:51110',
-      '1:56828'
+      ...ids.map((id) => `0|${id}`),
+      ...ids.map((id) => `1|${id}`)
     ])
-    // The search's own 15:37 departure, 98th St at 15:58:58.
+    // The search's own 15:37 departure, 98th St at 15:58:58; the second
+    // itinerary is the same run fifteen minutes later.
     expect(body.candidates[0].depart_s).toBe(1318)
+    expect(body.candidates[5].depart_s).toBe(1318 + 900)
     // The run was in the transit index already: no trip fetch.
     expect(g.__tripCalls).toEqual([])
 
@@ -235,12 +270,12 @@ describe('76.2 > Calm and Wander', () => {
     const back = store.getState()
     expect(getActiveItineraries(back)).toBe(getActiveOtpItineraries(back))
     expect(JSON.stringify(getActiveItineraries(back))).toBe(direct)
-    expect(g.fetch).toHaveBeenCalledTimes(2)
+    expect(g.fetch).toHaveBeenCalledTimes(1)
 
     // ...and Calm again is a view over what is stored.
     store.dispatch(setBikeExploreMode('calm'))
     await store.dispatch(ensureBikeExploreVariants())
-    expect(g.fetch).toHaveBeenCalledTimes(2)
+    expect(g.fetch).toHaveBeenCalledTimes(1)
     expect(exploreRideOf(getActiveItineraries(store.getState())[0])).not.toBe(
       null
     )
@@ -251,9 +286,12 @@ describe('76.2 > Calm and Wander', () => {
     const gate = new Promise<void>((resolve) => {
       release = resolve
     })
-    g.fetch = jest.fn(async () => {
+    g.fetch = jest.fn(async (_url: string, init: any) => {
       await gate
-      return { json: async () => eng.access.wander, ok: true }
+      return {
+        json: async () => compactFrom(eng.access.wander, JSON.parse(init.body)),
+        ok: true
+      }
     })
     const store = makeStore()
     store.dispatch(setBikeExploreMode('wander'))
@@ -267,7 +305,7 @@ describe('76.2 > Calm and Wander', () => {
     await store.dispatch(ensureBikeExploreVariants())
     release()
     await first
-    expect(g.fetch).toHaveBeenCalledTimes(2)
+    expect(g.fetch).toHaveBeenCalledTimes(1)
     const done = store.getState().otp.bikeExplore.searches.s1.wander
     expect(Object.values(done).map((e: any) => e.status)).toEqual([
       'done',
@@ -287,6 +325,11 @@ describe('76.2 > Calm and Wander', () => {
     expect(state.otp.bikeExplore.searches.s1.calm[key]).toEqual({
       status: 'none'
     })
+    expect(
+      Object.values(state.otp.bikeExplore.searches.s1.calm).map(
+        (e: any) => e.status
+      )
+    ).toEqual(['none', 'none'])
     expect(getActiveItineraries(state)).toBe(getActiveOtpItineraries(state))
   })
 
@@ -322,7 +365,7 @@ describe('76.2 > Calm and Wander', () => {
     expect(g.fetch).not.toHaveBeenCalled()
   })
 
-  it('one request answers itineraries that differ only after the bus', async () => {
+  it('itineraries that differ only after the bus share the stops they were asked', async () => {
     g.fetch = answerWith(eng.access.calm)
     // The same ride and bus, another ride home (a stop's worth longer).
     const otherEgress = JSON.parse(JSON.stringify(rec.representative))
@@ -345,29 +388,88 @@ describe('76.2 > Calm and Wander', () => {
     expect(shown[1].endTime).toBe(otherEgress.endTime)
   })
 
-  it('stores answers a few at a time, soonest departures first', async () => {
+  it('seven itineraries, one request, pending then the answers with the counts', async () => {
     g.fetch = answerWith(eng.access.wander)
     const runs = [6, 5, 4, 3, 2, 1, 0].map((k) => later(k * 900000))
     const store = makeStore({ itineraries: runs })
     store.dispatch(setBikeExploreMode('wander'))
     await store.dispatch(ensureBikeExploreVariants())
-    expect(g.fetch).toHaveBeenCalledTimes(7)
-    const sent = g.fetch.mock.calls.map(
-      (call: any) => JSON.parse(call[1].body).candidates[0].depart_s
-    )
+    expect(g.fetch).toHaveBeenCalledTimes(1)
+    const body = JSON.parse(g.fetch.mock.calls[0][1].body)
+    // Soonest departures first; ids unique within the request.
+    const sent = body.candidates
+      .filter((c: any) => c.id.endsWith('|1:56831'))
+      .map((c: any) => c.depart_s)
     expect([...sent].sort((a, b) => a - b)).toEqual(sent)
+    expect(new Set(body.candidates.map((c: any) => c.id)).size).toBe(35)
+    expect(g.fetch.mock.calls[0][1].signal).toBeDefined()
     const stored = store.actions.filter(
       (a: any) => a.type === 'BIKE_EXPLORE_VARIANTS'
     )
-    // Pending, the first six answers, then the last one with the counts.
     expect(
       stored.map((a: any) => Object.keys(a.payload.entries).length)
-    ).toEqual([7, 6, 1])
-    expect(stored[2].payload.counts).toEqual({
+    ).toEqual([7, 7])
+    expect(stored[1].payload.counts).toEqual({
       asked: 7,
       found: 7,
-      requests: 7
+      requests: 1
     })
+  })
+
+  it("shifts a differently-timed itinerary onto the request's one now", async () => {
+    g.fetch = answerWith(eng.access.calm)
+    const second = later()
+    // A planned search set for 16:37: its own now is later than the lookup's.
+    second.otp2QueryParams = {
+      arriveBy: false,
+      date: '2026-09-23',
+      time: '16:37'
+    }
+    const store = makeStore({
+      itineraries: [JSON.parse(JSON.stringify(rec.representative)), second]
+    })
+    store.dispatch(setBikeExploreMode('calm'))
+    await store.dispatch(ensureBikeExploreVariants())
+    expect(g.fetch).toHaveBeenCalledTimes(1)
+    const body = JSON.parse(g.fetch.mock.calls[0][1].body)
+    const own = exploreNowMs(second, NOW, TZ, undefined)
+    expect(own).toBeGreaterThan(NOW)
+    const busEpoch = second.legs[1].startTime
+    // depart_s is relative to the request's now (the lookup's), yet equals
+    // bus time minus the itinerary's own now.
+    const mine = body.candidates.find((c: any) => c.id === '1|1:56831')
+    expect(mine.depart_s).toBe(Math.round((busEpoch - own) / 1000))
+    expect(
+      body.candidates.find((c: any) => c.id === '0|1:56831').depart_s
+    ).toBe(1318)
+  })
+
+  it('splits more than 2000 candidates between whole itineraries', async () => {
+    g.fetch = answerWith(eng.access.calm)
+    const base = JSON.parse(JSON.stringify(rec.representative))
+    // 5 candidates each; 401 itineraries is 2005 candidates.
+    const runs = Array.from({ length: 401 }, (_, k) => {
+      const itin = JSON.parse(JSON.stringify(base))
+      const shift = k * 60000
+      itin.startTime += shift
+      itin.endTime += shift
+      itin.legs.forEach((leg: any) => {
+        leg.startTime += shift
+        leg.endTime += shift
+      })
+      return itin
+    })
+    const store = makeStore({ itineraries: runs })
+    store.dispatch(setBikeExploreMode('calm'))
+    await store.dispatch(ensureBikeExploreVariants())
+    expect(g.fetch).toHaveBeenCalledTimes(2)
+    const sizes = g.fetch.mock.calls.map(
+      (c: any) => JSON.parse(c[1].body).candidates.length
+    )
+    expect(sizes).toEqual([2000, 5])
+    const last = store.actions[store.actions.length - 1]
+    expect(last.payload.counts.requests).toBe(2)
+    expect(last.payload.counts.asked).toBe(401)
   })
 
   it('records counts, not routes, on the debug stream', async () => {
@@ -386,7 +488,7 @@ describe('76.2 > Calm and Wander', () => {
       mode: 'calm',
       none: 0,
       pending: 0,
-      requests: 2
+      requests: 1
     })
     expect(JSON.stringify(summary).length).toBeLessThan(200)
   })

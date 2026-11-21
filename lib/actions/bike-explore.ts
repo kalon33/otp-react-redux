@@ -17,12 +17,16 @@ import { createAction } from 'redux-actions'
 import { apiUrl } from '../util/api-base'
 import {
   BIKE_EXPLORE_API_PATH,
+  BIKE_EXPLORE_BATCH_TIMEOUT_MS,
+  BIKE_EXPLORE_MAX_CANDIDATES,
   buildExploreRequest,
   EXPLORE_MODE_STORAGE_KEY,
+  ExploreCandidate,
   ExploreEntries,
   exploreItineraryKey,
   ExploreMode,
   ExploreResponse,
+  ExploreResult,
   exploreTargetOf,
   fetchBikeExplore,
   normalizeExploreMode
@@ -34,6 +38,7 @@ import {
 import {
   buildExploreVariant,
   exploreNowMs,
+  ExplorePlan,
   explorePlanFor
 } from '../util/bike-explore-variants'
 import { getActiveOtpItineraries, getBikeExploreMode } from '../util/state'
@@ -70,10 +75,6 @@ export function setBikeExploreMode(mode: ExploreMode) {
   }
 }
 
-/** Engine requests in flight at once: it is one local process. */
-const ENGINE_CONCURRENCY = 3
-/** Answers stored per dispatch while a lookup is still running. */
-const EXPLORE_FLUSH_EVERY = 6
 /** Trip fetches in flight at once (OTP GraphQL, shared with the rider). */
 const TRIP_CONCURRENCY = 4
 
@@ -163,65 +164,112 @@ export function ensureBikeExploreVariants() {
     const homeTimezone: string = config.homeTimezone
     const speed = Number(query?.routingPreferences?.bikeSpeed)
 
-    let requests = 0
-    let found = 0
-    let answered: ExploreEntries = {}
-    // Answers go to the store a few at a time, so the cards fill in while the
-    // rest are out rather than all at once at the end; soonest departures are
-    // asked first (a row's representative is its earliest departure).
-    const flush = () => {
-      if (!Object.keys(answered).length) return
-      dispatch(bikeExploreVariants({ entries: answered, mode, searchId }))
-      answered = {}
-    }
-    // Itineraries that differ only after the bus (another ride home, the
-    // same bus and ride to it) ask the engine the same question: one request
-    // answers them all. "Now" is fixed for the whole lookup so they match.
+    // One "now" for the whole lookup: the engine takes one per request.
     const lookupNow = Date.now()
-    const asked = new Map<string, Promise<ExploreResponse | null>>()
     const ordered = [...todo].sort(
       (a, b) => Number(a.startTime) - Number(b.startTime)
     )
-    await mapLimited(ordered, ENGINE_CONCURRENCY, async (itin) => {
-      const key = exploreItineraryKey(itin)
+
+    // Each itinerary's question, its candidates renamed to be unique within a
+    // request (`n|id`) and re-timed to the lookup's "now".
+    interface Asked {
+      itin: any
+      key: string
+      nowMs: number
+      plan: ExplorePlan | null
+      trip: TripSchedule | null
+      wire: ExploreCandidate[]
+    }
+    const asks: Asked[] = ordered.map((itin, n) => {
       const trip =
         exploreTargetOf(itin) === 'access'
           ? trips.get(legTripGtfsId(itin.legs[1]) as string) || null
           : null
       const plan = explorePlanFor(itin, trip, origin)
       const nowMs = exploreNowMs(itin, lookupNow, homeTimezone, query)
-      const body = plan
-        ? buildExploreRequest({
-            candidates: plan.candidates,
-            mode,
-            nowMs,
-            origin,
-            speed: Number.isFinite(speed) && speed > 0 ? speed : undefined
-          })
-        : null
-      let response: ExploreResponse | null = null
-      if (body) {
-        const question = JSON.stringify(body)
-        let answer = asked.get(question)
-        if (!answer) {
-          requests += 1
-          answer = fetchBikeExplore(url, body)
-          asked.set(question, answer)
-        }
-        response = await answer
+      const shift = lookupNow - nowMs
+      const wire = (plan?.candidates || []).map((c) => ({
+        ...c,
+        busEpoch: c.busEpoch == null ? null : c.busEpoch + shift,
+        id: `${n}|${c.id}`
+      }))
+      return { itin, key: exploreItineraryKey(itin), nowMs, plan, trip, wire }
+    })
+
+    // Whole itineraries per request, at most the engine's limit each.
+    const batches: Asked[][] = []
+    let size = 0
+    asks.forEach((ask) => {
+      if (!ask.wire.length) return
+      if (
+        !batches.length ||
+        size + ask.wire.length > BIKE_EXPLORE_MAX_CANDIDATES
+      ) {
+        batches.push([])
+        size = 0
       }
+      batches[batches.length - 1].push(ask)
+      size += ask.wire.length
+    })
+
+    let requests = 0
+    let found = 0
+    let answered: ExploreEntries = {}
+    const settle = (ask: Asked, results: ExploreResult[] | undefined) => {
       const variant = buildExploreVariant({
-        itinerary: itin,
+        itinerary: ask.itin,
         mode,
-        nowMs,
-        plan,
-        results: response?.candidates,
-        trip
+        nowMs: ask.nowMs,
+        plan: ask.plan,
+        results,
+        trip: ask.trip
       })
       if (variant) found += 1
-      answered[key] = variant ? { status: 'done', variant } : { status: 'none' }
-      if (Object.keys(answered).length >= EXPLORE_FLUSH_EVERY) flush()
-    })
+      answered[ask.key] = variant
+        ? { status: 'done', variant }
+        : { status: 'none' }
+    }
+    // Not explore-shaped (no plan, nothing to ask): OTP's leg stays.
+    asks
+      .filter((ask) => !ask.wire.length)
+      .forEach((ask) => settle(ask, undefined))
+
+    for (const batch of batches) {
+      const body = buildExploreRequest({
+        candidates: batch.flatMap((ask) => ask.wire),
+        compact: true,
+        mode,
+        nowMs: lookupNow,
+        origin,
+        speed: Number.isFinite(speed) && speed > 0 ? speed : undefined
+      })
+      requests += 1
+      const response: ExploreResponse | null = body
+        ? await fetchBikeExplore(url, body, {
+            timeoutMs: BIKE_EXPLORE_BATCH_TIMEOUT_MS
+          })
+        : null
+      const byItinerary = new Map<number, ExploreResult[]>()
+      ;(response?.candidates || []).forEach((r) => {
+        const bar = typeof r?.id === 'string' ? r.id.indexOf('|') : -1
+        if (bar < 0) return
+        const n = Number(r.id.slice(0, bar))
+        const list = byItinerary.get(n) || []
+        list.push({ ...r, id: r.id.slice(bar + 1) })
+        byItinerary.set(n, list)
+      })
+      batch.forEach((ask) => {
+        settle(
+          ask,
+          response ? byItinerary.get(asks.indexOf(ask)) || [] : undefined
+        )
+      })
+      // Each request's answers go to the store as they arrive.
+      if (batches.length > 1 && batch !== batches[batches.length - 1]) {
+        dispatch(bikeExploreVariants({ entries: answered, mode, searchId }))
+        answered = {}
+      }
+    }
 
     // The last answers, with the lookup's counts for the debug stream.
     dispatch(

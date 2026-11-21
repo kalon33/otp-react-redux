@@ -49,6 +49,16 @@ export const BIKE_EXPLORE_API_PATH = '/api/bike/access'
 /** The engine answers in well under a second; past this, use OTP's leg. */
 export const BIKE_EXPLORE_TIMEOUT_MS = 6000
 
+/**
+ * A whole search's candidates in one request: the engine shares work per stop
+ * (about 1 s calm, 5-10 s wander for 1,200 candidates), so the batch gets
+ * more time than a single question.
+ */
+export const BIKE_EXPLORE_BATCH_TIMEOUT_MS = 30000
+
+/** The most candidates the engine takes in one request. */
+export const BIKE_EXPLORE_MAX_CANDIDATES = 2000
+
 /** The engine's margin rule, mirrored for display: 3 min + 10 % of the ride. */
 export const EXPLORE_MARGIN_FIXED_MS = 180000
 export const EXPLORE_MARGIN_FRACTION = 0.1
@@ -81,6 +91,8 @@ export interface ExploreCandidate extends LatLon {
 
 export interface ExploreRequestInput {
   candidates: ExploreCandidate[]
+  /** Ask for the compact answer: rides once, candidates pointing at them. */
+  compact?: boolean
   /** Cap, in seconds, on time spent beyond the fastest ride. */
   maxExtraS?: number
   mode: ExploreMode
@@ -96,14 +108,14 @@ export interface ExploreRequestInput {
 
 /** Body of POST /api/bike/access. Null when there is nothing valid to ask. */
 export function buildExploreRequest(input: ExploreRequestInput): any | null {
-  const { candidates, maxExtraS, mode, nowMs, origin, speed } = input
+  const { candidates, compact, maxExtraS, mode, nowMs, origin, speed } = input
   if (mode === 'direct') return null
   if (!Number.isFinite(origin?.lat) || !Number.isFinite(origin?.lon)) {
     return null
   }
   const stops = (candidates || [])
     .filter((c) => c?.id && Number.isFinite(c.lat) && Number.isFinite(c.lon))
-    .slice(0, 40)
+    .slice(0, BIKE_EXPLORE_MAX_CANDIDATES)
     .map((c) => ({
       depart_s:
         c.busEpoch != null && Number.isFinite(c.busEpoch)
@@ -121,6 +133,7 @@ export function buildExploreRequest(input: ExploreRequestInput): any | null {
     lon: origin.lon,
     mode
   }
+  if (compact) body.compact = true
   if (Number.isFinite(speed as number)) {
     body.speed = Math.min(12, Math.max(1, speed as number))
   }
@@ -187,6 +200,32 @@ export interface ExploreResult {
   summary?: string
   /** The park or lake the ride detours through, when it does. */
   via?: string | null
+}
+
+/** One candidate of a compact answer: a pointer into `rides`. */
+interface CompactCandidate {
+  [key: string]: any
+  direct_leave_in_s?: number | null
+  id: string
+  ride?: number
+}
+
+/**
+ * A compact answer's candidates as the flat shape every caller reads: the
+ * ride's fields under the candidate's own, `direct.leave_in_s` put back. The
+ * rides' heavy fields (leg, profile) are shared by reference, not copied.
+ */
+function inflateCompact(rides: any[], candidates: CompactCandidate[]) {
+  return candidates.map((c) => {
+    const ride = Number.isInteger(c?.ride) ? rides[c.ride as number] : null
+    if (!ride || typeof ride !== 'object') return c
+    const { direct_leave_in_s: directLeave, ride: _index, ...rest } = c
+    const out: any = { ...ride, ...rest }
+    if (ride.direct) {
+      out.direct = { ...ride.direct, leave_in_s: directLeave ?? null }
+    }
+    return out as ExploreResult
+  })
 }
 
 export interface ExploreResponse {
@@ -587,6 +626,12 @@ export async function fetchBikeExplore(
     if (!res.ok) return null
     const json = await res.json()
     if (json?.status !== 'ok' || !Array.isArray(json.candidates)) return null
+    if (Array.isArray(json.rides)) {
+      return {
+        ...json,
+        candidates: inflateCompact(json.rides, json.candidates)
+      } as ExploreResponse
+    }
     return json as ExploreResponse
   } catch (e) {
     return null
