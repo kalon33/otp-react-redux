@@ -31,7 +31,7 @@ import {
 import { ComponentContext } from '../../../util/contexts'
 import { firstTransitLegIsRealtime } from '../../../util/viewer'
 import { FlexIndicator } from '../default/flex-indicator'
-import { getActiveSearch } from '../../../util/state'
+import { getActiveSearch, getNicestExploreIndex } from '../../../util/state'
 import { getFare } from '../../../util/itinerary'
 import { IconWithText } from '../../util/styledIcon'
 import { ItineraryDescription } from '../default/itinerary-description'
@@ -60,6 +60,7 @@ import DepartureTimesList, {
   rowDepartureTime,
   SetActiveItineraryHandler
 } from './departure-times-list'
+import ExploreRideDetails from './explore-ride-details'
 import MetroItineraryRoutes from './metro-itinerary-routes'
 import ReturnTripPanel from './return-trip-panel'
 import RouteBlock from './route-block'
@@ -528,6 +529,8 @@ type Props = {
    * Mode's onboard list renders this component too, with rows that are in no
    * search, and leaves it off.
    */
+  /** This card is the best-scored Calm / Wander ride arriving earliest (76.2). */
+  nicestRide?: boolean
   otherStopsLookup?: boolean
   /** Where this row's lookup stands on the active search. */
   otherStopsLookupStatus?: LookupStatus
@@ -1062,6 +1065,11 @@ export class MetroItinerary extends NarrativeItinerary {
                     </TripFacts>
                   )
                 })()}
+                {/* Calm / Wander (76.2): nothing on a Direct card. */}
+                <ExploreRideDetails
+                  itinerary={itinerary}
+                  nicest={this.props.nicestRide}
+                />
                 {isFlexItinerary && (
                   <FlexLine className="flex">
                     <FlexIndicator
@@ -1200,6 +1208,11 @@ const mapStateToProps = (state: AppReduxState, ownProps: Props) => {
     configCosts: state.otp.config.itinerary?.costs,
     defaultFareType: state.otp.config.itinerary?.defaultFareType,
     enableDot: !state.otp.config.itinerary?.disableMetroSeperatorDot,
+    nicestRide:
+      // @ts-expect-error the list hands rows an index
+      ownProps.itinerary?.index != null &&
+      // @ts-expect-error the list hands rows an index
+      ownProps.itinerary.index === getNicestExploreIndex(state),
     otherStopsLookupStatus: ownProps.otherStopsLookup
       ? // @ts-expect-error TODO: type activeSearch
         activeSearch?.otherStopsLookup?.[

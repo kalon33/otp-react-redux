@@ -340,6 +340,26 @@ components:
     message: >
       In order to access this page you will need to log in. Please wait while we
       redirect you to the login page...
+  BikeExplore:
+    bench: bench
+    calm: Calm
+    calmShare: "{percent}% calm"
+    direct: Direct
+    directLeave: "direct: leave {time} · {duration}"
+    directOnly: "direct: {duration}"
+    groupLabel: Bike route
+    lit: lit
+    loadingCalm: Finding calmer rides…
+    loadingWander: Finding scenic rides…
+    nicest: Nicest ride
+    past: past {place}
+    shelter: shelter
+    stopHas: "stop: {amenities}"
+    strip: >-
+      Street stress along the ride: {calm}% calm streets, {busy}% busier
+      streets, {heavy}% heavy traffic, {walk}% walking the bike
+    via: via {place}
+    wander: Wander
   CallTakerPanel:
     advancedOptions: Advanced options
     groupSize: "Group size:"
