@@ -4598,7 +4598,8 @@ async function exploreReplanFirst(
     departS,
     directDurationS: answer.result.direct?.duration_s,
     mode,
-    preference: answer.result.preference
+    preference: answer.result.preference,
+    timeLimited: (answer.result as any).time_limited
   })
   const spliced = spliceAccessOntoItinerary(
     itinerary,

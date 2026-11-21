@@ -230,12 +230,19 @@ export function exploreShortOnTime(input: {
   directDurationS: number | null | undefined
   mode: ExploreMode
   preference: number | null | undefined
+  /**
+   * The engine's own word on it (`time_limited`, engine ec090c0 and later):
+   * the bus, not the mode's allowance, held the ride back. When present it
+   * decides; the arithmetic below is for an engine that does not say.
+   */
+  timeLimited?: boolean | null
 }): boolean {
-  const { departS, directDurationS, mode, preference } = input
+  const { departS, directDurationS, mode, preference, timeLimited } = input
   if (mode === 'direct') return false
   if (preference == null || !Number.isFinite(preference) || preference >= 1) {
     return false
   }
+  if (typeof timeLimited === 'boolean') return timeLimited
   if (
     departS == null ||
     !Number.isFinite(departS) ||

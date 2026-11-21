@@ -239,6 +239,22 @@ describe('76.3 explore-replan', () => {
   })
 
   describe('exploreShortOnTime', () => {
+    it('takes the engine at its word when it says which limit bit', () => {
+      const asked = {
+        departS: 900,
+        directDurationS: 543,
+        mode: 'calm' as const,
+        preference: 0.6
+      }
+      expect(exploreShortOnTime({ ...asked, timeLimited: false })).toBe(false)
+      expect(
+        exploreShortOnTime({ ...asked, departS: 5000, timeLimited: true })
+      ).toBe(true)
+      expect(
+        exploreShortOnTime({ ...asked, preference: 1, timeLimited: true })
+      ).toBe(false)
+    })
+
     // Calm, a 543 s fastest ride: the mode allows up to 543 + 168.6 s.
     const calm = { directDurationS: 543, mode: 'calm' as const }
 
