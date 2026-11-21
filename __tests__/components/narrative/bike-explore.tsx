@@ -305,6 +305,21 @@ describe('76.2 > the card', () => {
   })
 
   it('says nothing about a stop OpenStreetMap does not map', () => {
+    const variant = wanderVariant()
+    variant.legs[0].exploreRide.stop = {
+      ...variant.legs[0].exploreRide.stop,
+      bench: false,
+      lit: false,
+      mapped: false,
+      shelter: false
+    }
+    const text = mountDetails(variant).text()
+    expect(text).toContain('direct: leave')
+    expect(text).not.toContain('stop:')
+    expect(text).not.toMatch(/shelter|bench|lit|no /)
+  })
+
+  it('a bike-only ride: no stop to describe, the direct ride by length', () => {
     const itinerary = clone(search['1'].itineraries[0])
     const variant = buildExploreVariant({
       itinerary,
@@ -320,6 +335,10 @@ describe('76.2 > the card', () => {
     // No bus to leave for: the direct ride's length only.
     expect(text).toMatch(/direct: 5\d min/)
     expect(text).not.toContain('leave')
+    // Even were the destination a mapped stop, there is no wait there.
+    const mapped: any = clone(variant)
+    mapped.legs[0].exploreRide.stop = { mapped: true, shelter: true }
+    expect(mountDetails(mapped).text()).not.toContain('stop:')
   })
 
   it('renders nothing for an itinerary OTP planned', () => {

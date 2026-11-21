@@ -22,6 +22,7 @@ import {
   ExploreEntries,
   exploreItineraryKey,
   ExploreMode,
+  ExploreResponse,
   exploreTargetOf,
   fetchBikeExplore,
   normalizeExploreMode
@@ -71,6 +72,8 @@ export function setBikeExploreMode(mode: ExploreMode) {
 
 /** Engine requests in flight at once: it is one local process. */
 const ENGINE_CONCURRENCY = 3
+/** Answers stored per dispatch while a lookup is still running. */
+const EXPLORE_FLUSH_EVERY = 6
 /** Trip fetches in flight at once (OTP GraphQL, shared with the rider). */
 const TRIP_CONCURRENCY = 4
 
@@ -162,15 +165,31 @@ export function ensureBikeExploreVariants() {
 
     let requests = 0
     let found = 0
-    const answered: ExploreEntries = {}
-    await mapLimited(todo, ENGINE_CONCURRENCY, async (itin) => {
+    let answered: ExploreEntries = {}
+    // Answers go to the store a few at a time, so the cards fill in while the
+    // rest are out rather than all at once at the end; soonest departures are
+    // asked first (a row's representative is its earliest departure).
+    const flush = () => {
+      if (!Object.keys(answered).length) return
+      dispatch(bikeExploreVariants({ entries: answered, mode, searchId }))
+      answered = {}
+    }
+    // Itineraries that differ only after the bus (another ride home, the
+    // same bus and ride to it) ask the engine the same question: one request
+    // answers them all. "Now" is fixed for the whole lookup so they match.
+    const lookupNow = Date.now()
+    const asked = new Map<string, Promise<ExploreResponse | null>>()
+    const ordered = [...todo].sort(
+      (a, b) => Number(a.startTime) - Number(b.startTime)
+    )
+    await mapLimited(ordered, ENGINE_CONCURRENCY, async (itin) => {
       const key = exploreItineraryKey(itin)
       const trip =
         exploreTargetOf(itin) === 'access'
           ? trips.get(legTripGtfsId(itin.legs[1]) as string) || null
           : null
       const plan = explorePlanFor(itin, trip, origin)
-      const nowMs = exploreNowMs(itin, Date.now(), homeTimezone, query)
+      const nowMs = exploreNowMs(itin, lookupNow, homeTimezone, query)
       const body = plan
         ? buildExploreRequest({
             candidates: plan.candidates,
@@ -180,8 +199,17 @@ export function ensureBikeExploreVariants() {
             speed: Number.isFinite(speed) && speed > 0 ? speed : undefined
           })
         : null
-      if (body) requests += 1
-      const response = body ? await fetchBikeExplore(url, body) : null
+      let response: ExploreResponse | null = null
+      if (body) {
+        const question = JSON.stringify(body)
+        let answer = asked.get(question)
+        if (!answer) {
+          requests += 1
+          answer = fetchBikeExplore(url, body)
+          asked.set(question, answer)
+        }
+        response = await answer
+      }
       const variant = buildExploreVariant({
         itinerary: itin,
         mode,
@@ -192,8 +220,10 @@ export function ensureBikeExploreVariants() {
       })
       if (variant) found += 1
       answered[key] = variant ? { status: 'done', variant } : { status: 'none' }
+      if (Object.keys(answered).length >= EXPLORE_FLUSH_EVERY) flush()
     })
 
+    // The last answers, with the lookup's counts for the debug stream.
     dispatch(
       bikeExploreVariants({
         counts: { asked: todo.length, found, requests },

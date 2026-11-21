@@ -109,7 +109,9 @@ export const ExploreRideDetails = ({
   const place = ride.via || ride.places?.[0] || null
   const directLeave = exploreDirectLeaveMs(itinerary)
   const directS = ride.directDurationS
-  const stop = ride.stop
+  // A bike-only ride's "stop" is the destination: no wait there to describe.
+  const boards = (itinerary.legs || []).some((leg) => leg.transitLeg)
+  const stop = boards ? ride.stop : null
   const amenities = stop?.mapped
     ? [
         stop.shelter &&

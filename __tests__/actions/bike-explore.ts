@@ -67,9 +67,8 @@ const NOW = eng.access.nowMs as number
 const TZ = 'America/Chicago'
 
 /** The representative and the same run fifteen minutes later. */
-const later = () => {
+const later = (shift = 900000) => {
   const itin = JSON.parse(JSON.stringify(rec.representative))
-  const shift = 900000
   itin.startTime += shift
   itin.endTime += shift
   itin.legs.forEach((leg: any) => {
@@ -81,8 +80,9 @@ const later = () => {
 
 function makeStore({
   cachedTrip = true,
-  extraConfig = {}
-}: { cachedTrip?: boolean; extraConfig?: any } = {}) {
+  extraConfig = {},
+  itineraries
+}: { cachedTrip?: boolean; extraConfig?: any; itineraries?: any[] } = {}) {
   const reducer = createOtpReducer({ homeTimezone: TZ } as any)
   const initial = reducer(undefined, { type: '@@INIT' })
   const store: any = {
@@ -106,7 +106,7 @@ function makeStore({
             response: [
               {
                 plan: {
-                  itineraries: [
+                  itineraries: itineraries || [
                     JSON.parse(JSON.stringify(rec.representative)),
                     later()
                   ]
@@ -320,6 +320,54 @@ describe('76.2 > Calm and Wander', () => {
     store.dispatch(setBikeExploreMode('calm'))
     await store.dispatch(ensureBikeExploreVariants())
     expect(g.fetch).not.toHaveBeenCalled()
+  })
+
+  it('one request answers itineraries that differ only after the bus', async () => {
+    g.fetch = answerWith(eng.access.calm)
+    // The same ride and bus, another ride home (a stop's worth longer).
+    const otherEgress = JSON.parse(JSON.stringify(rec.representative))
+    const last = otherEgress.legs[2]
+    last.distance += 300
+    last.endTime += 60000
+    otherEgress.endTime += 60000
+    const store = makeStore({
+      itineraries: [JSON.parse(JSON.stringify(rec.representative)), otherEgress]
+    })
+    store.dispatch(setBikeExploreMode('calm'))
+    await store.dispatch(ensureBikeExploreVariants())
+    expect(g.fetch).toHaveBeenCalledTimes(1)
+    const shown = getActiveItineraries(store.getState())
+    expect(shown.map((i: any) => exploreRideOf(i)?.stopId)).toEqual([
+      '1:51110',
+      '1:51110'
+    ])
+    // Each keeps its own ride home.
+    expect(shown[1].endTime).toBe(otherEgress.endTime)
+  })
+
+  it('stores answers a few at a time, soonest departures first', async () => {
+    g.fetch = answerWith(eng.access.wander)
+    const runs = [6, 5, 4, 3, 2, 1, 0].map((k) => later(k * 900000))
+    const store = makeStore({ itineraries: runs })
+    store.dispatch(setBikeExploreMode('wander'))
+    await store.dispatch(ensureBikeExploreVariants())
+    expect(g.fetch).toHaveBeenCalledTimes(7)
+    const sent = g.fetch.mock.calls.map(
+      (call: any) => JSON.parse(call[1].body).candidates[0].depart_s
+    )
+    expect([...sent].sort((a, b) => a - b)).toEqual(sent)
+    const stored = store.actions.filter(
+      (a: any) => a.type === 'BIKE_EXPLORE_VARIANTS'
+    )
+    // Pending, the first six answers, then the last one with the counts.
+    expect(
+      stored.map((a: any) => Object.keys(a.payload.entries).length)
+    ).toEqual([7, 6, 1])
+    expect(stored[2].payload.counts).toEqual({
+      asked: 7,
+      found: 7,
+      requests: 7
+    })
   })
 
   it('records counts, not routes, on the debug stream', async () => {
