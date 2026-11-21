@@ -43,6 +43,16 @@ export const SET_GO_MODE_EXPLORE_MODE = 'SET_GO_MODE_EXPLORE_MODE'
  */
 export const GO_MODE_EXPLORE_REPLAN = 'GO_MODE_EXPLORE_REPLAN'
 
+/**
+ * How long a moving rider's re-plan waits for the engine before asking OTP.
+ * The question is one candidate: 86 ms (Calm) and 129 ms (Wander) on the live
+ * engine, 2026-11-21; 651 ms for a four-stop Wander. The scoped OTP question
+ * that follows is projected for its own ~0.2 s latency, so every second spent
+ * here is road the rider covers before OTP is even asked — the general
+ * timeout (BIKE_EXPLORE_TIMEOUT_MS, 6 s) is a results-list number.
+ */
+export const EXPLORE_REPLAN_TIMEOUT_MS = 1500
+
 /** The AUTO_REPLAN reason the engine's candidate is judged under. */
 export const EXPLORE_REPLAN_REASON = 'quiet-replan-explore'
 

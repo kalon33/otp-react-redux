@@ -201,8 +201,10 @@ describe('76.3: Go Mode re-plans a Calm / Wander ride with the engine first', ()
     await replan(store)
 
     expect(mockedEngine).toHaveBeenCalledTimes(1)
-    const [url, body] = mockedEngine.mock.calls[0]
+    const [url, body, options] = mockedEngine.mock.calls[0]
     expect(url).toBe('/api/bike/access')
+    // A moving rider waits 1.5 s for the engine, not the list's 6 s.
+    expect(options).toEqual({ timeoutMs: 1500 })
     expect(body).toEqual({
       candidates: [
         {

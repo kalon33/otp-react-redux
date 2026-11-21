@@ -299,6 +299,7 @@ import {
 } from '../util/bike-explore'
 import {
   EXPLORE_REPLAN_REASON,
+  EXPLORE_REPLAN_TIMEOUT_MS,
   exploreBoardEpochMs,
   exploreReplanAccess,
   ExploreReplanAnswer,
@@ -4574,7 +4575,8 @@ async function exploreReplanFirst(
   const config = state.otp?.config || {}
   const response = await fetchBikeExplore(
     config.bikeExploreApiUrl || apiUrl(BIKE_EXPLORE_API_PATH),
-    body
+    body,
+    { timeoutMs: EXPLORE_REPLAN_TIMEOUT_MS }
   )
   const answer = exploreReplanAccess({
     boardPlace,
