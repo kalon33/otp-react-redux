@@ -291,6 +291,25 @@ import type {
   HeldRunVerdict
 } from '../util/go-mode/replan-acceptance'
 import { accessArriveByTarget } from '../util/go-mode/arrive-on-time'
+import { apiUrl } from '../util/api-base'
+import {
+  BIKE_EXPLORE_API_PATH,
+  ExploreMode,
+  fetchBikeExplore
+} from '../util/bike-explore'
+import {
+  EXPLORE_REPLAN_REASON,
+  exploreBoardEpochMs,
+  exploreReplanAccess,
+  ExploreReplanAnswer,
+  exploreReplanRecord,
+  exploreReplanRequest,
+  exploreShortOnTime,
+  GO_MODE_EXPLORE_REPLAN,
+  goModeExploreMode,
+  isExploreAccessLeg,
+  withExploreShortfall
+} from '../util/go-mode/explore-replan'
 import { notifyIntl } from '../util/go-mode/notify-i18n'
 import {
   boardingDenialHolds,
@@ -4475,6 +4494,140 @@ export function applyAutoReroute(
 }
 
 /**
+ * 76.3: a Calm / Wander trip's bike leg is re-planned by the engine that
+ * planned it, before OTP is asked. One candidate — the boarding stop, the bus
+ * time the gate trusts — from the same projected origin the scoped OTP query
+ * uses, at the speed that query is sent. The answer becomes an access
+ * itinerary for the SAME splice and the SAME acceptance gate as OTP's.
+ *
+ * Returns the spliced plan to install, `'gone'` when Go Mode stopped or a
+ * reroute started while the engine was out (the caller returns, exactly as
+ * the OTP path does), or null to ask OTP exactly as before: engine
+ * unreachable, nothing feasible, no leg, or refused by the gate.
+ */
+async function exploreReplanFirst(
+  dispatch: any,
+  getState: any,
+  input: {
+    boardLegIndex: number
+    from: any
+    itinerary: Itinerary
+    mode: ExploreMode
+    projected: ProjectedOrigin
+    riderAsked: boolean
+    speed: number | null
+    stillReplannable: () => boolean
+  }
+): Promise<Itinerary | 'gone' | null> {
+  const {
+    boardLegIndex,
+    from,
+    itinerary,
+    mode,
+    projected,
+    riderAsked,
+    speed,
+    stillReplannable
+  } = input
+  const state = getState()
+  const boardLeg = (itinerary.legs || [])[boardLegIndex] as Leg
+  const boardPlace = boardLeg?.from
+  // The ride starts where and when the projected origin says: the OTP
+  // depart-now question is anchored to the same instant (24.3, 18.4).
+  const startMs = projected.atMs
+  const body = exploreReplanRequest({
+    boardEpochMs: exploreBoardEpochMs(
+      boardLeg,
+      state.otp?.goMode?.liveLegTimes?.[boardLegIndex]
+    ),
+    boardPlace,
+    mode,
+    nowMs: startMs,
+    origin: { lat: projected.lat, lon: projected.lon },
+    speed
+  })
+  const departS: number | null = body?.candidates?.[0]?.depart_s ?? null
+  const sentAtMs = getCurrentTime().getTime()
+  const record = (
+    outcome: Parameters<typeof exploreReplanRecord>[0]['outcome'],
+    answer: ExploreReplanAnswer | null,
+    extra: { refusedBecause?: string | null; shortOnTime?: boolean } = {}
+  ) =>
+    dispatch({
+      payload: exploreReplanRecord({
+        answer,
+        departS,
+        elapsedMs: getCurrentTime().getTime() - sentAtMs,
+        mode,
+        outcome,
+        riderAsked,
+        speed,
+        tMs: getCurrentTime().getTime(),
+        ...extra
+      }),
+      type: GO_MODE_EXPLORE_REPLAN
+    })
+  if (!body) {
+    record('not-asked', null)
+    return null
+  }
+  const config = state.otp?.config || {}
+  const response = await fetchBikeExplore(
+    config.bikeExploreApiUrl || apiUrl(BIKE_EXPLORE_API_PATH),
+    body
+  )
+  const answer = exploreReplanAccess({
+    boardPlace,
+    from,
+    mode,
+    response,
+    startMs,
+    stopId: body.candidates[0].id
+  })
+  if (!stillReplannable()) {
+    record('gone', answer)
+    return 'gone'
+  }
+  if (!answer.itinerary) {
+    record(answer.miss, answer)
+    return null
+  }
+  const shortOnTime = exploreShortOnTime({
+    departS,
+    directDurationS: answer.result.direct?.duration_s,
+    mode,
+    preference: answer.result.preference
+  })
+  const spliced = spliceAccessOntoItinerary(
+    itinerary,
+    withExploreShortfall(
+      answer.itinerary,
+      shortOnTime,
+      answer.result.preference
+    ),
+    boardLegIndex
+  )
+  // A refusal falls through to OTP, which must then run exactly as it does
+  // today. The gate's wrapper arms the ignored-re-plan backoff on an origin
+  // refusal; the OTP candidate is judged right after and arms it itself if it
+  // deserves to, so this one verdict must not arm it a second time.
+  const ignoredStreak = session.quietReplanIgnoredStreak
+  const appliedAt = session.lastQuietReplanAppliedAt
+  const refusedBecause = autoReplanRefusal(dispatch, getState(), spliced, {
+    projected,
+    reason: EXPLORE_REPLAN_REASON
+  })
+  if (refusedBecause != null) {
+    session.quietReplanIgnoredStreak = ignoredStreak
+    session.lastQuietReplanAppliedAt = appliedAt
+    record('refused', answer, { refusedBecause })
+    return null
+  }
+  record('applied', answer, { shortOnTime })
+  return spliced
+}
+
+/**
  * Quietly re-plan the current WALK/BICYCLE access leg when the rider has
  * drifted off it (chosen their own way, car-GPS style). With a transit
  * boarding still ahead the replan is SCOPED to the access chain: plan current
@@ -4490,7 +4643,19 @@ export function applyAutoReroute(
  * qualifies the trip is left untouched — the explicit reroute button remains
  * the rider's escape hatch.
  */
-export function quietReplanAccessLeg() {
+export function quietReplanAccessLeg(
+  options: {
+    /**
+     * The rider asked for this re-plan (the in-ride Direct / Calm / Wander
+     * switch, 76.3): it is not held off by the deviation cooldown, which
+     * paces re-plans the app starts on its own. Every other guard — aboard,
+     * transit pace, the stalled destination, the fix, a reroute in flight —
+     * still applies.
+     */
+    riderAsked?: boolean
+  } = {}
+) {
+  const riderAsked = !!options.riderAsked
   return async function (dispatch: any, getState: any) {
     const state = getState()
     const goMode = state.otp?.goMode
@@ -4599,27 +4764,33 @@ export function quietReplanAccessLeg() {
     }
     const originFix = originPick.position
 
+    // 76.3: a re-plan the rider asked for (the in-ride switch) is not paced by
+    // the deviation cooldown; only a reroute in flight holds it, the same
+    // status test quietReplanAdmitted starts with.
+    const reRouteStatusNow = goMode.reRoute?.status || 'idle'
     if (
-      !quietReplanAdmitted({
-        // A re-plan the rider rode away from buys a long silence — see
-        // ignoredReplanBackoffMs. This is the brake the 16:38 loop needed: its
-        // scaled cooldown was 25-38 s because each swap made the leg shorter,
-        // and three in five minutes is exactly QUIET_REPLAN_BURST_MAX.
-        ignoredStreak: session.quietReplanIgnoredStreak,
-        lastReplanAtMs: session.lastQuietReplanAt,
-        nowMs,
-        recentReplanAtMs: session.quietReplanHistory,
-        // How much access leg is actually left. A rider two blocks from the
-        // boarding stop should not wait the same minute as one with 3 km to go
-        // — 8/28's 670 m leg went 122 m wrong within 55 s and got no retry for
-        // nearly three minutes.
-        remainingAccessMeters: remainingAccessDistanceM(
-          legs,
-          currentLegIndex,
-          goMode.routeMatch?.progressAlongLeg
-        ),
-        reRouteStatus: goMode.reRoute?.status || 'idle'
-      })
+      riderAsked
+        ? reRouteStatusNow !== 'idle' && reRouteStatusNow !== 'none'
+        : !quietReplanAdmitted({
+            // A re-plan the rider rode away from buys a long silence — see
+            // ignoredReplanBackoffMs. This is the brake the 16:38 loop needed: its
+            // scaled cooldown was 25-38 s because each swap made the leg shorter,
+            // and three in five minutes is exactly QUIET_REPLAN_BURST_MAX.
+            ignoredStreak: session.quietReplanIgnoredStreak,
+            lastReplanAtMs: session.lastQuietReplanAt,
+            nowMs,
+            recentReplanAtMs: session.quietReplanHistory,
+            // How much access leg is actually left. A rider two blocks from the
+            // boarding stop should not wait the same minute as one with 3 km to go
+            // — 8/28's 670 m leg went 122 m wrong within 55 s and got no retry for
+            // nearly three minutes.
+            remainingAccessMeters: remainingAccessDistanceM(
+              legs,
+              currentLegIndex,
+              goMode.routeMatch?.progressAlongLeg
+            ),
+            reRouteStatus: goMode.reRoute?.status || 'idle'
+          })
     ) {
       return
     }
@@ -4814,6 +4985,35 @@ export function quietReplanAccessLeg() {
         // (46.1): what it proves depends on whether it reaches the bus.
         if (!pick) recordReplanAttempt(!error)
         return pick
+      }
+      // 76.3: a Calm / Wander trip asks the engine that planned its ride
+      // first. Direct (the old version) never reaches this: nothing new runs.
+      const exploreMode = goModeExploreMode(goMode)
+      if (
+        exploreMode !== 'direct' &&
+        isExploreAccessLeg(legs, currentLegIndex, boardLegIndex)
+      ) {
+        const explored = await exploreReplanFirst(dispatch, getState, {
+          boardLegIndex,
+          from: originFrom(scopedProjection),
+          itinerary,
+          mode: exploreMode,
+          projected: scopedProjection,
+          riderAsked,
+          speed: routingPreferences?.bikeSpeed ?? null,
+          stillReplannable
+        })
+        if (explored === 'gone') {
+          recordReplanAttempt(false)
+          return
+        }
+        if (explored) {
+          recordReplanAttempt(true)
+          session.quietReplanMissStreak = 0
+          session.lastQuietReplanAppliedAt = getCurrentTime().getTime()
+          dispatch(beginGoMode(explored))
+          return
+        }
       }
       let best = await runScoped(arriveTarget)
       if (best === undefined) return
