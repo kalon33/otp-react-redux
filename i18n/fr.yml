@@ -674,6 +674,8 @@ components:
     returnPlanNow: "Planifier le retour"
     returnRouteDeparts: "{route} part à {time}"
     returnStart: "Commencer le retour"
+    rideStyleShortFastest: "Peu de temps — on prend le plus rapide"
+    rideStyleShortPartial: "Peu de temps — on prend plus court"
     rideToStop: "{emoji} {time} de trajet jusqu'à {stop}"
     selectVehicle: "Celui-ci"
     showLaterDepartures: "Plus"
