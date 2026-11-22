@@ -19,6 +19,23 @@
   height: 100%;
 }
 
+/* Desktop fix (2026-11, "fiche horaire" truncated): the stop/schedule viewer
+   itself must fill the fixed-height main panel (.main-row is position:fixed
+   in example.css, so content overflowing <main> is unreachable and no page
+   scrollbar ever appears). Upstream carried .otp .stop-viewer in the rule
+   above until Sep 2025 (upstream 1c81534e dropped it), which left
+   .stop-viewer-body's bounded overflow-y with no bounded parent to scroll in
+   and cut the schedule list off at the fold with no scrollbar. Restored here,
+   scoped with :not(.mobile): on the phone the whole .viewer-container
+   scrolls (see the phone scope in this file), so the panel itself must stay
+   free-height there. */
+.otp:not(.mobile) .stop-viewer {
+  display: flex;
+  flex-direction: column;
+  flex-flow: column;
+  height: 100%;
+}
+
 @keyframes yellowfade {
   from {
     background: yellow;
