@@ -329,8 +329,34 @@ components:
       \ votre trajet : {issues}"
   BeforeSignInScreen:
     mainTitle: Connexion en cours
-    message: "Pour acc\xE9der \xE0 cette page, vous devez vous connecter. Veuillez\
-      \ patienter pendant que nous vous redirigeons vers la page de connexion...\n"
+    message: >
+      Pour accéder à cette page, vous devez vous connecter. Veuillez patienter
+      pendant que nous vous redirigeons vers la page de connexion...
+  BikeExplore:
+    bench: banc
+    calm: Calme
+    calmShare: "{percent} % calme"
+    direct: Direct
+    directLeave: "direct : départ {time} · {duration}"
+    directOnly: "direct : {duration}"
+    groupLabel: Itinéraire vélo
+    lit: éclairé
+    loadingCalm: Recherche de trajets plus calmes…
+    loadingWander: Recherche de trajets agréables…
+    nicest: Le plus agréable
+    past: près de {place}
+    shelter: abri
+    stopHas: "arrêt : {amenities}"
+    strip: >-
+      Stress de circulation le long du trajet : {calm} % rues calmes, {busy} %
+      rues plus fréquentées, {heavy} % circulation dense, {walk} % vélo à la
+      main
+    via: par {place}
+    wander: Balade
+  CallTakerPanel:
+    advancedOptions: Options avancées
+    groupSize: "Taille du groupe :"
+    intermediateDestination: Entrez la destination intermédiaire
   CompanionsPane:
     addNewCompanion: Ajouter un accompagnateur
     companionAlreadyAdded: "Vous avez d\xE9j\xE0 un accompagnateur utilisant {email}."
@@ -644,6 +670,8 @@ components:
     returnPlanNow: "Planifier le retour"
     returnRouteDeparts: "{route} part à {time}"
     returnStart: "Commencer le retour"
+    rideStyleShortFastest: "Peu de temps — on prend le plus rapide"
+    rideStyleShortPartial: "Peu de temps — on prend plus court"
     rideToStop: "{emoji} {time} de trajet jusqu'à {stop}"
     selectVehicle: "Celui-ci"
     showLaterDepartures: "Plus"

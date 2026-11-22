@@ -256,6 +256,12 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 9967,
     proxy: {
+      // Calm / Wander bike engine (RunScout `runscout serve`, backlog 76.2),
+      // mirroring the nginx /api/bike/ proxy production gets in 76.1.
+      '/api/bike': {
+        target: 'http://127.0.0.1:8787'
+      },
+
       // Onboard-discovery sidecar (transitnav prefs-api on the host; the dev
       // container runs host-network). Same-origin in dev, mirroring nginx's
       // /api/onboard proxy in prod.

@@ -325,8 +325,33 @@ components:
     validationMessage: 'Please define the following fields to plan a trip: {issues}'
   BeforeSignInScreen:
     mainTitle: Signing you in
-    message: |
-      In order to access this page you will need to log in. Please wait while we redirect you to the login page...
+    message: >
+      In order to access this page you will need to log in. Please wait while we
+      redirect you to the login page...
+  BikeExplore:
+    bench: bench
+    calm: Calm
+    calmShare: "{percent}% calm"
+    direct: Direct
+    directLeave: "direct: leave {time} · {duration}"
+    directOnly: "direct: {duration}"
+    groupLabel: Bike route
+    lit: lit
+    loadingCalm: Finding calmer rides…
+    loadingWander: Finding scenic rides…
+    nicest: Nicest ride
+    past: past {place}
+    shelter: shelter
+    stopHas: "stop: {amenities}"
+    strip: >-
+      Street stress along the ride: {calm}% calm streets, {busy}% busier
+      streets, {heavy}% heavy traffic, {walk}% walking the bike
+    via: via {place}
+    wander: Wander
+  CallTakerPanel:
+    advancedOptions: Advanced options
+    groupSize: "Group size:"
+    intermediateDestination: Enter intermediate destination
   CompanionsPane:
     addNewCompanion: Add a new travel companion
     companionAlreadyAdded: You already have a companion with email {email}
@@ -644,7 +669,9 @@ components:
     returnPlanNow: Plan return now
     returnRouteDeparts: '{route} departs {time}'
     returnStart: Start return trip
-    rideToStop: '{emoji} {time} ride to {stop}'
+    rideStyleShortFastest: Short on time — taking the fastest way
+    rideStyleShortPartial: Short on time — taking a faster way
+    rideToStop: "{emoji} {time} ride to {stop}"
     selectVehicle: This one
     sheetHandleLabel: View trip & other ways
     showLaterDepartures: More

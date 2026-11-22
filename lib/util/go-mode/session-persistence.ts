@@ -146,6 +146,12 @@ export interface GoModeSession {
   // ...and which RUN it names (29.3), so a restored pick keeps following that
   // bus. Absent on a session saved before 29.3: the bare epoch is the fallback.
   departureOverrideTripId?: string | null
+  /**
+   * The trip's Calm / Wander mode (76.3), so a reload after OTP had to answer
+   * for one re-plan keeps asking the engine. Saved only when it is not Direct:
+   * a Direct trip's session is the bytes it always was.
+   */
+  exploreMode?: 'calm' | 'wander'
   // The leg the trip has actually TRANSITIONED onto — `advanceToLeg`'s guard,
   // which lives on the module-level trip session and so is rebuilt as null by
   // a page load. Without it a re-mount reads `previousLegIndex` as 0
@@ -323,6 +329,9 @@ export function saveGoModeSession(
     departureOverride: goMode.departureOverride ?? null,
     departureOverrideSource: goMode.departureOverrideSource ?? null,
     departureOverrideTripId: goMode.departureOverrideTripId ?? null,
+    ...(goMode.exploreMode === 'calm' || goMode.exploreMode === 'wander'
+      ? { exploreMode: goMode.exploreMode }
+      : {}),
     lastTransitionedLegIndex: savedTransitionedLegIndex,
     multiStop: goMode.multiStop ?? null,
     nearDestination: goMode.nearDestination ?? null,

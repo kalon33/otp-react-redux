@@ -3,6 +3,11 @@
 exports[`lib > reducers > create-otp-reducer should be able to create the initial state 1`] = `
 Object {
   "activeSearchId": 0,
+  "bikeExplore": Object {
+    "mode": "direct",
+    "order": Array [],
+    "searches": Object {},
+  },
   "config": Object {
     "autoPlan": Object {
       "default": "ONE_LOCATION_CHANGED",
@@ -65,6 +70,7 @@ Object {
     "departureOverrideSource": null,
     "departureOverrideTripId": null,
     "earlyAlight": null,
+    "exploreMode": "direct",
     "fasterRoute": null,
     "isActive": false,
     "liveLegTimes": Object {},
