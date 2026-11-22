@@ -1,0 +1,670 @@
+{
+ "_about": "RunScout POST /api/bike/access, live engine 127.0.0.1:8787 (runscout feat/bike-explore a09f5af), 2026-11-21. Origin 44.9145,-93.299 (Lynnhurst) to I-35W & 46th St Station 44.919409,-93.274746, depart_s 1500, speed 5. Captured for backlog 76.3.",
+ "request": {
+  "lat": 44.9145,
+  "lon": -93.299,
+  "speed": 5,
+  "candidates": [
+   {
+    "id": "1:56041",
+    "lat": 44.919409,
+    "lon": -93.274746,
+    "depart_s": 1500,
+    "name": "46th St Station"
+   }
+  ]
+ },
+ "calm": {
+  "status": "ok",
+  "region": "msp-bike",
+  "modes": [
+   "direct",
+   "calm",
+   "wander"
+  ],
+  "mode": "calm",
+  "speed": 5.0,
+  "margin": {
+   "fixed_s": 180.0,
+   "frac": 0.1
+  },
+  "candidates": [
+   {
+    "id": "1:56041",
+    "name": "46th St Station",
+    "feasible": true,
+    "leave_in_s": 716,
+    "duration_s": 549,
+    "distance_m": 2485,
+    "margin_s": 235,
+    "direct": {
+     "duration_s": 543,
+     "distance_m": 2560,
+     "calm": 0.931,
+     "leave_in_s": 723
+    },
+    "preference": 1.0,
+    "calm": 0.977,
+    "stress": {
+     "lts3": 0.023,
+     "lts4": 0.0,
+     "walk": 0.129
+    },
+    "scenic": 0.118,
+    "composition": {
+     "trail": 0.041,
+     "quiet": 0.931,
+     "road": 0.003,
+     "busy": 0.025,
+     "green": 0.165,
+     "water": 0.0,
+     "traffic": 0.386
+    },
+    "stress_profile": [
+     [
+      61,
+      1
+     ],
+     [
+      37,
+      0
+     ],
+     [
+      7,
+      2
+     ],
+     [
+      2263,
+      1
+     ],
+     [
+      62,
+      3
+     ],
+     [
+      55,
+      0
+     ]
+    ],
+    "via": null,
+    "places": [
+     "Rustic Lodge Triangle"
+    ],
+    "summary": "98% calm \u00b7 13% walking the bike",
+    "stop": {
+     "score": 0.35,
+     "shelter": true,
+     "bench": false,
+     "lit": false,
+     "station": false,
+     "traffic": 1.0,
+     "nature": 0.0,
+     "mapped": true
+    },
+    "score": 74,
+    "leg": {
+     "mode": "BICYCLE",
+     "distance": 2485.2,
+     "duration": 549,
+     "legGeometry": {
+      "points": "sjcqGvmmxPdAX?oBCI?ADIJA?Q?i@?S?OM??Q?yB?K?M?aF?Q?M@}E?O?O?{E?M?Q?qB?qB?K?Q?wE?C?Q?M?E?C@uE?S?QAcE?I?]?[?G?mE?QAK?oB?qB?M?SAmF?_CAmB?UI@_AAKS[g@a@_AQo@Mo@Iu@Cu@@s@?WC[EUMWKOq@OkAAM??Q?CAiB?_CA}B?Q?Y@_A?[AU?[Ak@?a@A{BM?C?aICE?K??QAoBM?mIAMAAkB?UR??WA{AH?F?",
+      "length": 103
+     },
+     "steps": [
+      {
+       "relativeDirection": "DEPART",
+       "absoluteDirection": "EAST",
+       "streetName": "West 49th Street",
+       "bogusName": false,
+       "distance": 49.5,
+       "lat": 44.914148,
+       "lon": -93.299127,
+       "walkingBike": false,
+       "stayOn": false,
+       "area": false
+      },
+      {
+       "relativeDirection": "RIGHT",
+       "absoluteDirection": "SOUTHEAST",
+       "streetName": "bike path",
+       "bogusName": true,
+       "distance": 4.8,
+       "lat": 44.914171,
+       "lon": -93.298506,
+       "walkingBike": false,
+       "stayOn": false,
+       "area": false
+      },
+      {
+       "relativeDirection": "CONTINUE",
+       "absoluteDirection": "SOUTH",
+       "streetName": "Minnehaha Parkway Regional Trail",
+       "bogusName": false,
+       "distance": 6.3,
+       "lat": 44.914138,
+       "lon": -93.298465,
+       "walkingBike": false,
+       "stayOn": false,
+       "area": false
+      },
+      {
+       "relativeDirection": "LEFT",
+       "absoluteDirection": "EAST",
+       "streetName": "footpath",
+       "bogusName": true,
+       "distance": 37.4,
+       "lat": 44.914083,
+       "lon": -93.29845,
+       "walkingBike": true,
+       "stayOn": false,
+       "area": false
+      },
+      {
+       "relativeDirection": "LEFT",
+       "absoluteDirection": "NORTH",
+       "streetName": "West Minnehaha Parkway",
+       "bogusName": false,
+       "distance": 6.9,
+       "lat": 44.914084,
+       "lon": -93.297975,
+       "walkingBike": false,
+       "stayOn": false,
+       "area": false
+      },
+      {
+       "relativeDirection": "RIGHT",
+       "absoluteDirection": "EAST",
+       "streetName": "West 49th Street",
+       "bogusName": false,
+       "distance": 1168.6,
+       "lat": 44.914146,
+       "lon": -93.297974,
+       "walkingBike": false,
+       "stayOn": false,
+       "area": false
+      },
+      {
+       "relativeDirection": "LEFT",
+       "absoluteDirection": "NORTH",
+       "streetName": "Pleasant Avenue",
+       "bogusName": false,
+       "distance": 40.6,
+       "lat": 44.914175,
+       "lon": -93.283134,
+       "walkingBike": false,
+       "stayOn": false,
+       "area": false
+      },
+      {
+       "relativeDirection": "SLIGHTLY_RIGHT",
+       "absoluteDirection": "NORTHEAST",
+       "streetName": "Rustic Lodge Avenue West",
+       "bogusName": false,
+       "distance": 220.6,
+       "lat": 44.91454,
+       "lon": -93.28313,
+       "walkingBike": false,
+       "stayOn": false,
+       "area": false
+      },
+      {
+       "relativeDirection": "SLIGHTLY_LEFT",
+       "absoluteDirection": "NORTH",
+       "streetName": "Wentworth Avenue South",
+       "bogusName": false,
+       "distance": 78.7,
+       "lat": 44.91531,
+       "lon": -93.280665,
+       "walkingBike": false,
+       "stayOn": false,
+       "area": false
+      },
+      {
+       "relativeDirection": "RIGHT",
+       "absoluteDirection": "EAST",
+       "streetName": "West 48th Street",
+       "bogusName": false,
+       "distance": 203.7,
+       "lat": 44.916011,
+       "lon": -93.280572,
+       "walkingBike": false,
+       "stayOn": false,
+       "area": false
+      },
+      {
+       "relativeDirection": "CONTINUE",
+       "absoluteDirection": "EAST",
+       "streetName": "East 48th Street",
+       "bogusName": false,
+       "distance": 99.7,
+       "lat": 44.916023,
+       "lon": -93.277985,
+       "walkingBike": false,
+       "stayOn": false,
+       "area": false
+      },
+      {
+       "relativeDirection": "LEFT",
+       "absoluteDirection": "NORTH",
+       "streetName": "1st Avenue South",
+       "bogusName": false,
+       "distance": 199.4,
+       "lat": 44.916046,
+       "lon": -93.276719,
+       "walkingBike": false,
+       "stayOn": false,
+       "area": false
+      },
+      {
+       "relativeDirection": "RIGHT",
+       "absoluteDirection": "EAST",
+       "streetName": "East 47th Street",
+       "bogusName": false,
+       "distance": 50.5,
+       "lat": 44.917839,
+       "lon": -93.276695,
+       "walkingBike": false,
+       "stayOn": false,
+       "area": false
+      },
+      {
+       "relativeDirection": "LEFT",
+       "absoluteDirection": "NORTH",
+       "streetName": "service road",
+       "bogusName": true,
+       "distance": 201.5,
+       "lat": 44.917847,
+       "lon": -93.276054,
+       "walkingBike": false,
+       "stayOn": false,
+       "area": false
+      },
+      {
+       "relativeDirection": "RIGHT",
+       "absoluteDirection": "EAST",
+       "streetName": "East 46th Street",
+       "bogusName": false,
+       "distance": 51.7,
+       "lat": 44.919659,
+       "lon": -93.276034,
+       "walkingBike": false,
+       "stayOn": false,
+       "area": false
+      },
+      {
+       "relativeDirection": "RIGHT",
+       "absoluteDirection": "SOUTH",
+       "streetName": "Stevens Avenue South",
+       "bogusName": false,
+       "distance": 10.7,
+       "lat": 44.919667,
+       "lon": -93.275378,
+       "walkingBike": false,
+       "stayOn": false,
+       "area": false
+      },
+      {
+       "relativeDirection": "LEFT",
+       "absoluteDirection": "EAST",
+       "streetName": "footpath",
+       "bogusName": true,
+       "distance": 45.4,
+       "lat": 44.919571,
+       "lon": -93.275378,
+       "walkingBike": true,
+       "stayOn": false,
+       "area": false
+      },
+      {
+       "relativeDirection": "RIGHT",
+       "absoluteDirection": "SOUTH",
+       "streetName": "footpath",
+       "bogusName": true,
+       "distance": 9.1,
+       "lat": 44.919576,
+       "lon": -93.274801,
+       "walkingBike": true,
+       "stayOn": true,
+       "area": false
+      }
+     ]
+    }
+   }
+  ],
+  "elapsed_ms": 85
+ },
+ "wander": {
+  "status": "ok",
+  "region": "msp-bike",
+  "modes": [
+   "direct",
+   "calm",
+   "wander"
+  ],
+  "mode": "wander",
+  "speed": 5.0,
+  "margin": {
+   "fixed_s": 180.0,
+   "frac": 0.1
+  },
+  "candidates": [
+   {
+    "id": "1:56041",
+    "name": "46th St Station",
+    "feasible": true,
+    "leave_in_s": 132,
+    "duration_s": 1080,
+    "distance_m": 5171,
+    "margin_s": 288,
+    "direct": {
+     "duration_s": 543,
+     "distance_m": 2560,
+     "calm": 0.931,
+     "leave_in_s": 723
+    },
+    "preference": 1.0,
+    "calm": 1.0,
+    "stress": {
+     "lts3": 0.0,
+     "lts4": 0.0,
+     "walk": 0.058
+    },
+    "scenic": 1.781,
+    "composition": {
+     "trail": 0.714,
+     "quiet": 0.245,
+     "road": 0.022,
+     "busy": 0.018,
+     "green": 0.796,
+     "water": 0.736,
+     "traffic": 0.222
+    },
+    "stress_profile": [
+     [
+      3528,
+      1
+     ],
+     [
+      16,
+      2
+     ],
+     [
+      215,
+      1
+     ],
+     [
+      16,
+      2
+     ],
+     [
+      133,
+      1
+     ],
+     [
+      82,
+      2
+     ],
+     [
+      1004,
+      1
+     ],
+     [
+      94,
+      2
+     ],
+     [
+      81,
+      0
+     ]
+    ],
+    "via": "Minnehaha Creek Park",
+    "places": [
+     "Lynnhurst Park",
+     "The Crash of Flight 307",
+     "Minnehaha Creek",
+     "Minnehaha Creek Park"
+    ],
+    "summary": "100% calm \u00b7 via Minnehaha Creek Park \u00b7 71% trails \u00b7 74% by water \u00b7 80% parks \u00b7 6% walking the bike",
+    "stop": {
+     "score": 0.35,
+     "shelter": true,
+     "bench": false,
+     "lit": false,
+     "station": false,
+     "traffic": 1.0,
+     "nature": 0.0,
+     "mapped": true
+    },
+    "score": 87,
+    "leg": {
+     "mode": "BICYCLE",
+     "distance": 5171.3,
+     "duration": 1080,
+     "legGeometry": {
+      "points": "sjcqGvmmxPdAX?oBCI?ADIJAJC|@A|B?F?FERWR[n@KZ?P?L?PLf@?J?JATKB?NCJAH?NAJ?RAF?F?HAFAFEJCJCDAFCJEBADCBA@?DABAHARANEFADCDEHINQBIBKDOBI@C@CBA@CDCNOLMLOJKDEFGFETMDCDCDE@EBGDMBGBIDGDEXQ`@O^Yb@a@HGZIDIBK@K?SAa@Ec@Ak@E[Ku@GsA?O?QBU@E?I?IAM@G@KBU@SBWDST_AFYBOBK?I?s@@W@W@U?W?Q?AAOS_AAK?K?M@Q?K@M?SB[BUD[BQ@Q?O?OCUE]CUCOAI?IA]AQAGAGAKESCQESEOEQEMEQAGAE?G?U@U?E?C@u@FuBFw@FSFONo@FOXy@Xq@Nk@Rw@Lc@@ITgAJm@@Cb@qBNm@F[Ly@JODGXg@LYLWNONORGL?N@PBJ?L?HCDAFCNGFEHEHMFQBYAS@SJWBW?c@?WASASCMACAQ?G?K@g@Fq@@OBMDOBQBO?M?SCUCSQw@U{@Sq@EMGMCGEIIIGICCIGIECAECC?CCCACACACAC?C?C@C@E@IDIDE@GBC@E@I@GAEAG?E?E?G@E?C?CAGAEAEACCECCCEEAEGMCGAICQMs@EYOaAIc@Ki@I_@Mk@Mc@Oa@Oa@Qa@MYQYIMIGKGKUgC{DMOMQKSIQGSEKK]GQGOGOKOEMGQE[E]CWE[E_@AQCSAUCQCQCSCUAOAOA{@?_@@YAM?QAKAOCOCOCMCGEKEIGKGEIGKGQIOCIC[GOCGAI?I?K@K@I?IAKAKCICKIOKKGGEGGIIKGEEGCEEGGKIOOQGBKBO@E@[GgAC{@E_BC_@?EAS\\??Q@i@@k@Bs@Ny@H_@DQEPI^Ox@Cr@Aj@Ah@?P]?@R?DB^D~ABz@FfAAZADCNOE?LAJGt@CRCXGv@M?C?qAAwF@M?@P?D@dB?lB?P?P@lB?`B?F?RK?mIAO?MAmICK?M?gGE}@?G?MA@V?n@?z@@jBN??V@\\?fBH?F?",
+      "length": 451
+     },
+     "steps": [
+      {
+       "relativeDirection": "DEPART",
+       "absoluteDirection": "EAST",
+       "streetName": "West 49th Street",
+       "bogusName": false,
+       "distance": 49.5,
+       "lat": 44.914148,
+       "lon": -93.299127,
+       "walkingBike": false,
+       "stayOn": false,
+       "area": false
+      },
+      {
+       "relativeDirection": "RIGHT",
+       "absoluteDirection": "SOUTHEAST",
+       "streetName": "bike path",
+       "bogusName": true,
+       "distance": 4.8,
+       "lat": 44.914171,
+       "lon": -93.298506,
+       "walkingBike": false,
+       "stayOn": false,
+       "area": false
+      },
+      {
+       "relativeDirection": "CONTINUE",
+       "absoluteDirection": "SOUTH",
+       "streetName": "Minnehaha Parkway Regional Trail",
+       "bogusName": false,
+       "distance": 3334.9,
+       "lat": 44.914138,
+       "lon": -93.298465,
+       "walkingBike": false,
+       "stayOn": false,
+       "area": false
+      },
+      {
+       "relativeDirection": "RIGHT",
+       "absoluteDirection": "SOUTHEAST",
+       "streetName": "Minnehaha Parkway Regional Trail",
+       "bogusName": false,
+       "distance": 139.3,
+       "lat": 44.912301,
+       "lon": -93.269534,
+       "walkingBike": false,
+       "stayOn": true,
+       "area": false
+      },
+      {
+       "relativeDirection": "RIGHT",
+       "absoluteDirection": "SOUTH",
+       "streetName": "Portland Avenue",
+       "bogusName": false,
+       "distance": 16.2,
+       "lat": 44.912356,
+       "lon": -93.267788,
+       "walkingBike": false,
+       "stayOn": false,
+       "area": false
+      },
+      {
+       "relativeDirection": "LEFT",
+       "absoluteDirection": "EAST",
+       "streetName": "East Minnehaha Parkway",
+       "bogusName": false,
+       "distance": 107.7,
+       "lat": 44.91221,
+       "lon": -93.267786,
+       "walkingBike": false,
+       "stayOn": false,
+       "area": false
+      },
+      {
+       "relativeDirection": "UTURN_LEFT",
+       "absoluteDirection": "NORTHWEST",
+       "streetName": "East Minnehaha Parkway",
+       "bogusName": false,
+       "distance": 107.7,
+       "lat": 44.912007,
+       "lon": -93.266467,
+       "walkingBike": false,
+       "stayOn": true,
+       "area": false
+      },
+      {
+       "relativeDirection": "RIGHT",
+       "absoluteDirection": "NORTH",
+       "streetName": "Portland Avenue",
+       "bogusName": false,
+       "distance": 16.2,
+       "lat": 44.91221,
+       "lon": -93.267786,
+       "walkingBike": false,
+       "stayOn": false,
+       "area": false
+      },
+      {
+       "relativeDirection": "LEFT",
+       "absoluteDirection": "WEST",
+       "streetName": "Minnehaha Parkway Regional Trail",
+       "bogusName": false,
+       "distance": 133.5,
+       "lat": 44.912356,
+       "lon": -93.267788,
+       "walkingBike": false,
+       "stayOn": false,
+       "area": false
+      },
+      {
+       "relativeDirection": "RIGHT",
+       "absoluteDirection": "NORTH",
+       "streetName": "East Minnehaha Parkway",
+       "bogusName": false,
+       "distance": 9.0,
+       "lat": 44.912278,
+       "lon": -93.269468,
+       "walkingBike": false,
+       "stayOn": false,
+       "area": false
+      },
+      {
+       "relativeDirection": "LEFT",
+       "absoluteDirection": "WEST",
+       "streetName": "East 50th Street",
+       "bogusName": false,
+       "distance": 73.4,
+       "lat": 44.912355,
+       "lon": -93.269438,
+       "walkingBike": false,
+       "stayOn": false,
+       "area": false
+      },
+      {
+       "relativeDirection": "RIGHT",
+       "absoluteDirection": "NORTH",
+       "streetName": "4th Avenue South",
+       "bogusName": false,
+       "distance": 200.8,
+       "lat": 44.912492,
+       "lon": -93.270349,
+       "walkingBike": false,
+       "stayOn": false,
+       "area": false
+      },
+      {
+       "relativeDirection": "LEFT",
+       "absoluteDirection": "WEST",
+       "streetName": "East 49th Street",
+       "bogusName": false,
+       "distance": 200.8,
+       "lat": 44.914298,
+       "lon": -93.270345,
+       "walkingBike": false,
+       "stayOn": false,
+       "area": false
+      },
+      {
+       "relativeDirection": "RIGHT",
+       "absoluteDirection": "NORTH",
+       "streetName": "3rd Avenue South",
+       "bogusName": false,
+       "distance": 602.6,
+       "lat": 44.914267,
+       "lon": -93.272894,
+       "walkingBike": false,
+       "stayOn": false,
+       "area": false
+      },
+      {
+       "relativeDirection": "LEFT",
+       "absoluteDirection": "WEST",
+       "streetName": "East 46th Street",
+       "bogusName": false,
+       "distance": 94.1,
+       "lat": 44.919686,
+       "lon": -93.272815,
+       "walkingBike": false,
+       "stayOn": false,
+       "area": false
+      },
+      {
+       "relativeDirection": "LEFT",
+       "absoluteDirection": "SOUTH",
+       "streetName": "footpath",
+       "bogusName": true,
+       "distance": 9.4,
+       "lat": 44.919674,
+       "lon": -93.27401,
+       "walkingBike": true,
+       "stayOn": false,
+       "area": false
+      },
+      {
+       "relativeDirection": "RIGHT",
+       "absoluteDirection": "WEST",
+       "streetName": "footpath",
+       "bogusName": true,
+       "distance": 62.5,
+       "lat": 44.91959,
+       "lon": -93.274008,
+       "walkingBike": true,
+       "stayOn": true,
+       "area": false
+      },
+      {
+       "relativeDirection": "LEFT",
+       "absoluteDirection": "SOUTH",
+       "streetName": "footpath",
+       "bogusName": true,
+       "distance": 9.1,
+       "lat": 44.919576,
+       "lon": -93.274801,
+       "walkingBike": true,
+       "stayOn": true,
+       "area": false
+      }
+     ]
+    }
+   }
+  ],
+  "elapsed_ms": 127
+ }
+}

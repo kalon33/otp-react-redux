@@ -11,6 +11,7 @@ import { format, utcToZonedTime } from 'date-fns-tz'
 import coreUtils from '@opentripplanner/core-utils'
 import type { Itinerary } from '@opentripplanner/types'
 
+import { getActiveOtpItineraries } from '../util/state'
 import {
   getOffCandidates,
   getOnCandidates,
@@ -27,6 +28,7 @@ import {
   settleCandidatePlans,
   TripSchedule
 } from '../util/go-mode/alight-optimizer'
+import { otpRowOf } from '../util/bike-explore'
 import {
   stopPairOf,
   VariantItinerary
@@ -100,7 +102,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
 }
 
 /** The trip's stop list and shape, through the app's own findTrip. */
-async function fetchTripSchedule(
+export async function fetchTripSchedule(
   dispatch: any,
   getState: any,
   tripId: string
@@ -126,13 +128,20 @@ async function fetchTripSchedule(
  * it stops being the active one while the plans are out.
  */
 export function lookupOtherStops(
-  representative: Itinerary & {
+  listedRepresentative: Itinerary & {
     index?: number
     sameShapeVariants?: VariantItinerary[]
   }
 ) {
   return async function (dispatch: any, getState: any): Promise<void> {
     const state = getState()
+    // With Calm / Wander on, the row carries explore rides: look up from
+    // OTP's own runs, so what is appended to OTP's answer is OTP-shaped and
+    // Direct never shows an explore leg (backlog 76.2).
+    const representative = otpRowOf(
+      listedRepresentative,
+      getActiveOtpItineraries(state)
+    )
     const searchId: string | undefined = state.otp?.activeSearchId
     const search = searchId ? state.otp.searches?.[searchId] : null
     const index = representative?.index
