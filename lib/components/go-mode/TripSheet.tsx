@@ -12,6 +12,7 @@ import {
   resolveBoardingOffer
 } from '../../util/go-mode/boarding-confirmation'
 import { buildLiveItinerary } from '../../util/go-mode/live-itinerary'
+import { chooseGoModeExploreMode } from '../../actions/go-mode-explore'
 import {
   DEFAULT_TURN_CUE_SETTINGS,
   isTurnCueLeg,
@@ -19,8 +20,14 @@ import {
 } from '../../util/go-mode/turn-cue-settings'
 import { formatPlaceName } from '../../util/format-place-name'
 import { getModeIcon } from '../../util/go-mode/mode-icon'
+import {
+  goModeExploreMode,
+  isExploreAccessLeg,
+  legExploreShortfall
+} from '../../util/go-mode/explore-replan'
 import { IconWithText } from '../util/styledIcon'
 import ItineraryBody from '../narrative/line-itin/connected-itinerary-body'
+import type { ExploreMode } from '../../util/bike-explore'
 import type { LiveLegTime, RidingState } from '../../util/go-mode/types'
 import type { TripProgress } from '../../util/go-mode/progress-calculator'
 import type { TurnCueSettings } from '../../util/go-mode/turn-cue-settings'
@@ -51,6 +58,7 @@ import {
   VehicleTrackingBadge,
   WaitNote
 } from './styled'
+import RideStyleSwitch from './RideStyleSwitch'
 
 // Quick mid-trip re-route options; each maps to a pre-built routing profile.
 const REROUTE_CHIPS = [
@@ -76,8 +84,10 @@ interface Props {
     preferences?: any
     profileId?: string
   }) => void
+  chooseExploreMode: (mode: ExploreMode) => void
   confirmBoardingByRider: () => void
   denyBoardingByRider: () => void
+  exploreMode: ExploreMode
   fetchPreferencesFromText: (text: string) => Promise<any>
   liveLegTimes: Record<number, LiveLegTime>
   matchedVehicleId: string | null
@@ -134,8 +144,10 @@ const TripSheet = ({
   activeItinerary,
   activeLeg,
   browseFromCurrentPosition,
+  chooseExploreMode,
   confirmBoardingByRider,
   denyBoardingByRider,
+  exploreMode,
   fetchPreferencesFromText,
   liveLegTimes,
   matchedVehicleId,
@@ -399,6 +411,27 @@ const TripSheet = ({
   }
 
   /**
+   * Direct | Calm | Wander for the bike ride the rider is on (76.3): only
+   * while the current leg is their own bike straight into a bus, and not once
+   * a bus has them (the re-plan it triggers would refuse anyway).
+   */
+  const renderRideStyle = () => {
+    if (riding?.tripId) return null
+    if (!isExploreAccessLeg(legs, currentLegIndex, currentLegIndex + 1)) {
+      return null
+    }
+    return (
+      <RideStyleSwitch
+        mode={exploreMode}
+        onChange={chooseExploreMode}
+        shortfall={
+          exploreMode === 'direct' ? null : legExploreShortfall(currentLeg)
+        }
+      />
+    )
+  }
+
+  /**
    * The rider's own say on being aboard (6.10c). One chip, never a question:
    * the app already knows which bus is in the itinerary, and
    * `feedback_no_redundant_prompts` says it must not ask. Which chip — and
@@ -559,6 +592,7 @@ const TripSheet = ({
         </SheetSectionTitle>
         {renderCurrentLegCard()}
         {renderTurnCueChip()}
+        {renderRideStyle()}
         {renderBoardingChip()}
         {liveItinerary && (
           <ItineraryBody
@@ -645,6 +679,7 @@ const mapStateToProps = (state: any) => {
   return {
     activeItinerary: goMode?.activeItinerary || null,
     activeLeg: goMode?.ui?.activeLeg ?? null,
+    exploreMode: goModeExploreMode(goMode),
     liveLegTimes: goMode?.liveLegTimes || {},
     matchedVehicleId: goMode?.vehicleMatch?.match?.vehicleId || null,
     progress: goMode?.progress || null,
@@ -655,6 +690,7 @@ const mapStateToProps = (state: any) => {
 
 const mapDispatchToProps = {
   browseFromCurrentPosition: goModeActions.browseFromCurrentPosition,
+  chooseExploreMode: chooseGoModeExploreMode,
   confirmBoardingByRider: goModeActions.confirmBoardingByRider,
   denyBoardingByRider: goModeActions.denyBoardingByRider,
   fetchPreferencesFromText: routingProfileActions.fetchPreferencesFromText,

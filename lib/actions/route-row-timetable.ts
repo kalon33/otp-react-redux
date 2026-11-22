@@ -27,6 +27,8 @@ import {
   TimetableAnswer,
   timetableRowQuestion
 } from '../util/route-row-timetable'
+import { getActiveOtpItineraries } from '../util/state'
+import { otpRowOf } from '../util/bike-explore'
 
 import { createGraphQLQueryAction } from './apiV2'
 import { routingResponseExtra } from './other-stops-lookup'
@@ -129,6 +131,9 @@ export function fillRouteRowTimetables(rows: TimetableRow[]) {
       return now?.activeSearchId === searchId && !!now?.searches?.[searchId]
     }
     const asked = new Set<string>(Object.keys(search.routeRowTimetable || {}))
+    // With Calm / Wander on, the rows carry explore rides; the fill builds
+    // from OTP's own runs so its departures are OTP-shaped (backlog 76.2).
+    const otpItineraries = getActiveOtpItineraries(state)
 
     // Claim every row first, so a second call made while the first request
     // is out (the next render) finds them all taken and asks nothing.
@@ -137,7 +142,8 @@ export function fillRouteRowTimetables(rows: TimetableRow[]) {
       row: TimetableRow
       window: NonNullable<ReturnType<typeof searchWindowOf>>
     }> = []
-    for (const row of rows || []) {
+    for (const listedRow of rows || []) {
+      const row = otpRowOf(listedRow, otpItineraries)
       const question = timetableRowQuestion(row)
       if (!question || asked.has(question.key)) continue
       const window = searchWindowOf(row, homeTimezone, fallbackWindow)

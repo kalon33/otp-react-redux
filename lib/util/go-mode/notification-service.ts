@@ -928,7 +928,16 @@ export function checkLeaveSoon(
   if (!onAccessLeg || !nextLeg || !isTransitMode(nextLeg.mode)) return null
   if (progress.waitTimeAtStop === undefined) return null
 
-  const leaveInSeconds = progress.waitTimeAtStop
+  // 76.3: a Calm / Wander ride keeps a wait at the stop ON PURPOSE — 3 min +
+  // 10 % of the ride, the rider's own rule (2026-11-21) — so the time to
+  // leave is what is left once that wait is kept. Measured against the bus
+  // alone, "Leave in 2 min" for an 18-min Wander ride (margin 4m48s) came at
+  // bus − 20:00, 2m48s after the planned start, and a rider who obeyed it
+  // reached the stop as the bus left. An OTP leg carries no exploreRide: 0.
+  const keptMarginS = Number((currentLeg as any).exploreRide?.marginS)
+  const leaveInSeconds =
+    progress.waitTimeAtStop -
+    (Number.isFinite(keptMarginS) && keptMarginS > 0 ? keptMarginS : 0)
   if (
     leaveInSeconds > LEAVE_SOON_THRESHOLD_SECONDS ||
     leaveInSeconds <= LEAVE_SOON_FLOOR_SECONDS

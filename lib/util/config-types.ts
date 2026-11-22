@@ -508,6 +508,11 @@ export interface AppConfig {
   api: ApiConfig
   // Optional on declaration, populated with defaults in reducer if not configured.
   autoPlan?: boolean | AutoPlanConfig
+  /**
+   * Where the Calm / Wander bike engine answers (backlog 76.2). Unset: the
+   * app's own `/api/bike/access` (util/api-base apiUrl), proxied by nginx.
+   */
+  bikeExploreApiUrl?: string
   /** Whether the header brand should be clickable, and if so, reset the UI. */
   brandClickable?: boolean
   branding?: string

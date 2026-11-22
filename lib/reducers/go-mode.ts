@@ -78,11 +78,16 @@ import {
 } from '../util/go-mode/turn-cue-settings'
 import { FIX_ACCURACY_MAX_M } from '../util/go-mode/transit-trust'
 import { goModeClockMs } from '../util/go-mode/clock'
+import { normalizeExploreMode } from '../util/bike-explore'
 import {
   ridingFactIsEvidenced,
   ridingKeptTooLong
 } from '../util/go-mode/riding'
 import { sameOnboardStop } from '../util/go-mode/onboard-stops'
+import {
+  SET_GO_MODE_EXPLORE_MODE,
+  tripStartExploreMode
+} from '../util/go-mode/explore-replan'
 import type { AutoArm } from '../util/go-mode/auto-arm'
 import type { AutoState } from '../util/go-mode/auto-switch'
 import type {
@@ -91,6 +96,7 @@ import type {
   RidingState
 } from '../util/go-mode/types'
 import type { EarlyAlightRecord } from '../util/go-mode/riding'
+import type { ExploreMode } from '../util/bike-explore'
 import type { FasterRouteOffer } from '../util/go-mode/faster-route-offer'
 import type { MultiStopPlan } from '../util/multi-stop'
 import type {
@@ -396,6 +402,16 @@ export interface GoModeState {
   earlyAlight: EarlyAlightRecord | null
 
   /**
+   * Direct / Calm / Wander for THIS trip (76.3): how its bike leg is
+   * re-planned when the rider leaves it. Set when a trip STARTS (Go Mode was
+   * off, or Start Trip on another route) from the ride it starts with —
+   * Direct unless its bike leg is the engine's — and kept across every swap
+   * within the trip, so one bike leg OTP had to answer for does not turn the
+   * rest of the ride Direct. Changed only by the in-ride switch.
+   */
+  exploreMode: ExploreMode
+
+  /**
    * A trip through the rider's stops (backlog 43.1), guided one segment at a
    * time: `activeItinerary` is `segments[index]`, and arriving at the end of
    * any segment but the last is a pause at a stop, not the end of the trip —
@@ -614,6 +630,8 @@ const defaultState: GoModeState = {
   departureOverrideTripId: null,
 
   earlyAlight: null,
+
+  exploreMode: 'direct',
 
   fasterRoute: null,
 
@@ -1246,6 +1264,11 @@ const goMode = handleActions<GoModeState, any>(
       }
     }),
 
+    [SET_GO_MODE_EXPLORE_MODE]: (state, action: any) => ({
+      ...state,
+      exploreMode: normalizeExploreMode(action.payload)
+    }),
+
     [SET_LEG_TURN_CUES]: (state, action) => ({
       ...state,
       turnCues: {
@@ -1531,6 +1554,13 @@ const goMode = handleActions<GoModeState, any>(
         departureOverrideSource: null,
 
         departureOverrideTripId: null,
+
+        // 76.3: per trip, like `auto` — the ride a trip starts with names its
+        // mode; a swap within the trip keeps it.
+        exploreMode:
+          restart || newTrip
+            ? tripStartExploreMode(itinerary)
+            : state.exploreMode ?? 'direct',
 
         // Compared with the plan that has just been replaced (56.1).
         fasterRoute: null,
