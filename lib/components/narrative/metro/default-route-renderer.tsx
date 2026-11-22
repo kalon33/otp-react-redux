@@ -72,6 +72,7 @@ const DefaultRouteRenderer = ({
         color,
         proposedText ? `#${proposedText}` : '#ffffff'
       )}
+      className="route-block"
       isOnColoredBackground={leg.onColoredBackground}
       style={style}
       title={routeTitle}

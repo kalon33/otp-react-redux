@@ -957,9 +957,11 @@ components:
       Your trip results have been adjusted based on real-time information. Under normal conditions, this trip would take {normalDuration} using the following routes: {routes}.
     serviceUpdate: Service update
   RealtimeStatusLabel:
-    early: '{minutes} early'
-    late: '{minutes} late'
-    onTime: on time
+    added: added
+    canceled: canceled
+    early: "{minutes} early"
+    late: "{minutes} late"
+    on_time: on time
     scheduled: scheduled
   ResultsError:
     backToSearch: Back to Search
@@ -1131,11 +1133,11 @@ components:
     errorLoadingStopClosures: Error loading stop closures
     errorLoadingTimetable: Error loading timetable
     routeInformation: Route Information
-    showAllStops: Show All Stops
     showTimepointsOnly: Show Timepoints Only
     switchDirection: Switch Direction
     timetable: Timetable
     timetableDate: Select Date
+    timetableHeader: Timetable Tool
   TransitLegSummary:
     rideAndStops: "Ride {duration}{numStops, plural, =1 {} other { · # stops}}"
 

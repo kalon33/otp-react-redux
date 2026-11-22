@@ -101,6 +101,14 @@
       "turnRight",
       "uTurn"
     ],
+    "components.RealtimeStatusLabel.*": [
+      "added",
+      "canceled",
+      "early",
+      "late",
+      "on_time",
+      "scheduled"
+    ],
     "components.TransitVehicleOverlay.*": [
       "in_transit_to",
       "incoming_at",

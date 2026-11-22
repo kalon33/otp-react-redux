@@ -987,9 +987,11 @@ components:
       \ en empruntant les lignes\u202F: {routes}.\n"
     serviceUpdate: Information sur le service
   RealtimeStatusLabel:
+    added: ajouté
+    canceled: supprimé
     early: avance de {minutes}
     late: retard {minutes}
-    onTime: "\xE0 l'heure"
+    on_time: à l'heure
     scheduled: horaire
   ResultsError:
     backToSearch: "Retour \xE0 la recherche"
@@ -1167,11 +1169,11 @@ components:
     errorLoadingStopClosures: "Erreur lors du chargement des arrêts fermés"
     errorLoadingTimetable: Erreur lors du chargement des horaires
     routeInformation: Informations sur la ligne
-    showAllStops: "Afficher tous les arrêts"
     showTimepointsOnly: "Afficher uniquement les points d'arrêt"
     switchDirection: Changer de direction
     timetable: Horaires
     timetableDate: "Sélectionner la date"
+    timetableHeader: Grille horaire
   TransitLegSummary:
     rideAndStops: "Trajet : {duration}{numStops, plural, =1 {} other { · # arrêts}}"
   TransitVehicleOverlay:

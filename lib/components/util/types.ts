@@ -60,7 +60,7 @@ export interface Time {
   realtime: boolean
   realtimeArrival: number
   realtimeDeparture: number
-  realtimeState: string
+  realtimeState: 'SCHEDULED' | 'UPDATED' | 'CANCELED' | 'ADDED'
   scheduledArrival: number
   scheduledDeparture: number
   serviceAreaRadius: number
@@ -92,7 +92,7 @@ interface AgencyWithGtfsId extends Agency {
 }
 
 // FIXME: add to OTP-UI types
-interface RouteWithAgencyGtfsId extends Route {
+export interface RouteWithAgencyGtfsId extends Route {
   agency: AgencyWithGtfsId
 }
 

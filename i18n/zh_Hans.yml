@@ -432,9 +432,11 @@ components:
       '
     serviceUpdate: 服务更新
   RealtimeStatusLabel:
+    added: 额外
+    canceled: 取消
     early: 提前 {minutes}
     late: 迟到 {minutes}
-    onTime: 准时
+    on_time: 准时
     scheduled: 预定的
   ResultsError:
     backToSearch: 返回搜索

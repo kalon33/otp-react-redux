@@ -187,6 +187,7 @@ Object {
     "rideEstimates": Object {},
   },
   "transitIndex": Object {
+    "areaStops": Object {},
     "feeds": Array [],
     "routes": Object {},
     "routesFetchStatus": 0,

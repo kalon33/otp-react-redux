@@ -92,6 +92,7 @@ export type NearbyViewConfig = {
   alwaysShowLongName?: boolean
   filters?: Array<NearbyFilterConfig>
   hideEmptyStops?: boolean
+  omitCanceledTrips?: boolean
   radius?: number
   showShadowDotOnMapDrag?: boolean
   useArrivalTime?: boolean
