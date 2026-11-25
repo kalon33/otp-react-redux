@@ -1209,6 +1209,7 @@ components:
   Timetable:
     errorLoadingStopClosures: Errore nel caricamento delle fermate chiuse
     errorLoadingTimetable: Errore nel caricamento degli orari
+    jumpToToday: Vai a oggi
     showAllStops: Mostra tutte le fermate
     showTimepointsOnly: Mostra solo le fermate principali
     switchDirection: Cambia direzione

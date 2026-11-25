@@ -342,11 +342,15 @@ const TimeTableWrapper = (props: TimeTableWrapperProps): JSX.Element => {
                   )
                 // eslint-disable-next-line react/jsx-curly-newline
               }
+              locale={intl.locale}
               onChange={handleDateChange}
               value={date}
             />
             <TodayButton onClick={() => setDate(new Date())}>
-              Jump to today
+              <FormattedMessage
+                defaultMessage="Jump to today"
+                id="components.Timetable.jumpToToday"
+              />
             </TodayButton>
             <label htmlFor="timepoints-checkbox">
               <input

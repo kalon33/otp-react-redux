@@ -28,6 +28,7 @@ components:
   Timetable:
     errorLoadingStopClosures: Erreur de chargement des arrêts fermés
     errorLoadingTimetable: Erreur de chargement des horaires
+    jumpToToday: "Revenir à aujourd'hui"
     routeInformation: Informations sur la ligne
     showTimepointsOnly: Montrer les arrêts de référence uniquement
     switchDirection: Changer de direction

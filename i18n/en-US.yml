@@ -1155,6 +1155,7 @@ components:
   Timetable:
     errorLoadingStopClosures: Error loading stop closures
     errorLoadingTimetable: Error loading timetable
+    jumpToToday: Jump to today
     routeInformation: Route Information
     showTimepointsOnly: Show Timepoints Only
     switchDirection: Switch Direction
