@@ -1,0 +1,60 @@
+diff --git a/node_modules/@opentripplanner/building-blocks/esm/dropdown/index.js b/node_modules/@opentripplanner/building-blocks/esm/dropdown/index.js
+index aa4af85..13c2ba5 100644
+--- a/node_modules/@opentripplanner/building-blocks/esm/dropdown/index.js
++++ b/node_modules/@opentripplanner/building-blocks/esm/dropdown/index.js
+@@ -97,13 +97,13 @@ var Dropdown = function Dropdown(_ref) {
+     className: "caret",
+     role: "presentation"
+   })), open && /*#__PURE__*/React.createElement(DropdownMenu, {
+-    as: isList && "ul",
++    as: isList ? "ul" : undefined,
+     "aria-label": listLabel,
+     "aria-labelledby": listLabel ? undefined : "".concat(id, "-label"),
+     id: id,
+     onClick: toggleOpen,
+     alignLeft: alignMenuLeft,
+-    role: isList && "listbox",
++    role: isList ? "listbox" : undefined,
+     tabIndex: -1
+   }, children));
+ };
+diff --git a/node_modules/@opentripplanner/building-blocks/lib/dropdown/index.js b/node_modules/@opentripplanner/building-blocks/lib/dropdown/index.js
+index 208d6e0..f0af0fd 100644
+--- a/node_modules/@opentripplanner/building-blocks/lib/dropdown/index.js
++++ b/node_modules/@opentripplanner/building-blocks/lib/dropdown/index.js
+@@ -97,13 +97,13 @@ const Dropdown = ({
+     className: "caret",
+     role: "presentation"
+   })), open && /*#__PURE__*/_react.default.createElement(_styled.DropdownMenu, {
+-    as: isList && "ul",
++    as: isList ? "ul" : undefined,
+     "aria-label": listLabel,
+     "aria-labelledby": listLabel ? undefined : `${id}-label`,
+     id: id,
+     onClick: toggleOpen,
+     alignLeft: alignMenuLeft,
+-    role: isList && "listbox",
++    role: isList ? "listbox" : undefined,
+     tabIndex: -1
+   }, children));
+ };
+diff --git a/node_modules/@opentripplanner/building-blocks/src/dropdown/index.tsx b/node_modules/@opentripplanner/building-blocks/src/dropdown/index.tsx
+index d312232..28cf65e 100644
+--- a/node_modules/@opentripplanner/building-blocks/src/dropdown/index.tsx
++++ b/node_modules/@opentripplanner/building-blocks/src/dropdown/index.tsx
+@@ -124,13 +124,13 @@ const Dropdown = ({
+       </DropdownButton>
+       {open && (
+         <DropdownMenu
+-          as={isList && "ul"}
++          as={isList ? "ul" : undefined}
+           aria-label={listLabel}
+           aria-labelledby={listLabel ? undefined : `${id}-label`}
+           id={id}
+           onClick={toggleOpen}
+           alignLeft={alignMenuLeft}
+-          role={isList && "listbox"}
++          role={isList ? "listbox" : undefined}
+           tabIndex={-1}
+         >
+           {children}
