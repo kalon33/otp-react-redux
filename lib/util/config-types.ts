@@ -375,6 +375,12 @@ export interface ItineraryConfig {
    * SEARCH_WINDOW_RANGE; omit to take the default in util/routing-profiles.
    */
   searchWindowSeconds?: number
+  /**
+   * UPSTREAM (increment-plan-by): minutes. If set to a non-zero value, the
+   * plan time shifts by this amount on the "Next/Previous" buttons
+   * (useful for call takers) instead of the default 90-second increment.
+   */
+  shiftPlanTime?: number
   showAllWalkLegs?: boolean
   showApproximatePrefixAccessLegs?: boolean
   showFirstResultByDefault?: boolean
