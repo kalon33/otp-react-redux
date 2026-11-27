@@ -42,8 +42,14 @@ import {
   SettingsPage,
   SettingsSection,
   SettingsSectionTitle,
+  TextFieldRow,
   ToggleRow
 } from './settings-list'
+import {
+  readCheckinSettings,
+  writeCheckinSettings
+} from '../../util/checkin-settings'
+import type { CheckinSettings, ServiceSettings } from '../../util/checkin'
 
 /**
  * Granularity of the two speed sliders. Bike in quarter-metres (0.25 m/s is a
@@ -170,9 +176,114 @@ const AppearanceSection = ({ intl }: { intl: IntlShape }): JSX.Element => {
   )
 }
 
+/**
+ * Journey check-in: Träwelling and travelynx, usable together. Both live on
+ * the device (util/checkin-settings) — there is no server account to ask —
+ * so every change writes straight through to storage, where both the
+ * itinerary Check in button and Go Mode's automatic check-in read it on
+ * their next render.
+ */
+const CheckinSection = ({ intl }: { intl: IntlShape }): JSX.Element => {
+  const [settings, setSettings] = useState<CheckinSettings>(readCheckinSettings)
+
+  const update = (
+    service: 'trawelling' | 'travelynx',
+    patch: Partial<ServiceSettings>
+  ) => {
+    const next: CheckinSettings = {
+      ...settings,
+      [service]: { ...settings[service], ...patch }
+    }
+    writeCheckinSettings(next)
+    setSettings(next)
+  }
+
+  const serviceBlock = (
+    service: 'trawelling' | 'travelynx',
+    label: string,
+    checkboxName: string
+  ) => {
+    const conf = settings[service]
+    return (
+      <>
+        <ToggleRow>
+          <SettingCheckbox
+            label={label}
+            name={checkboxName}
+            onChange={(evt: QueryParamChangeEvent) =>
+              update(service, { enabled: !!evt[checkboxName] })
+            }
+            value={conf.enabled}
+          />
+        </ToggleRow>
+        {conf.enabled && (
+          <>
+            <TextFieldRow>
+              <label htmlFor={`${checkboxName}Token`}>
+                {intl.formatMessage(
+                  {
+                    defaultMessage: '{service} API token',
+                    id: 'components.SettingsScreen.checkinTokenLabel'
+                  },
+                  { service }
+                )}
+              </label>
+              <input
+                autoComplete="off"
+                id={`${checkboxName}Token`}
+                onChange={(evt) => update(service, { token: evt.target.value })}
+                placeholder={intl.formatMessage({
+                  defaultMessage: 'Paste the token from your profile settings',
+                  id: 'components.SettingsScreen.checkinTokenPlaceholder'
+                })}
+                type="password"
+                value={conf.token}
+              />
+            </TextFieldRow>
+          </>
+        )}
+      </>
+    )
+  }
+
+  return (
+    <SettingsSection>
+      <SettingsSectionTitle>
+        {intl.formatMessage({
+          defaultMessage: 'Journey check-in',
+          id: 'components.SettingsScreen.checkinHeader'
+        })}
+      </SettingsSectionTitle>
+      <SettingsCard>
+        {serviceBlock(
+          'trawelling',
+          intl.formatMessage({
+            defaultMessage: 'Check into Träwelling',
+            id: 'components.SettingsScreen.checkinTrawelling'
+          }),
+          'trawellingCheckin'
+        )}
+        {serviceBlock(
+          'travelynx',
+          intl.formatMessage({
+            defaultMessage: 'Check into travelynx',
+            id: 'components.SettingsScreen.checkinTravelynx'
+          }),
+          'travelynxCheckin'
+        )}
+      </SettingsCard>
+      <SettingsFootnote>
+        {intl.formatMessage({
+          defaultMessage:
+            'With a token stored, a Check in button appears in your trip’s tools, and Go Mode offers a per-trip check-in switch and manual buttons. Both services can run side by side. The token stays on this device.',
+          id: 'components.SettingsScreen.checkinHelp'
+        })}
+      </SettingsFootnote>
+    </SettingsSection>
+  )
+}
+
 interface Props {
-  /** The app's unit system (otpConfig.units): metric speeds read km/h. */
-  units: Units
   bikeSpeed?: number
   bikeWillingness: number
   routingPreferences: RoutingPreferences
@@ -183,6 +294,8 @@ interface Props {
   ) => void
   setTurnCueDefault: (enabled: boolean) => void
   turnCuesEnabledByDefault: boolean
+  /** The app's unit system (otpConfig.units): metric speeds read km/h. */
+  units: Units
   walkSpeed?: number
 }
 
@@ -496,6 +609,8 @@ const SettingsScreen = ({
             })}
           </SettingsFootnote>
         </SettingsSection>
+
+        <CheckinSection intl={intl} />
       </SettingsPage>
     </AppFrame>
   )
@@ -508,13 +623,13 @@ const mapStateToProps = (state: any) => {
   const routingPreferences: RoutingPreferences =
     currentQuery.routingPreferences || {}
   return {
-    units: (state.otp.config?.units as Units) || 'imperial',
     bikeSpeed: routingPreferences.bikeSpeed,
     bikeWillingness: bikeReluctanceToWillingness(
       routingPreferences.bikeReluctance
     ),
     routingPreferences,
     turnCuesEnabledByDefault: !!state.otp.goMode?.turnCues?.enabledByDefault,
+    units: (state.otp.config?.units as Units) || 'imperial',
     walkSpeed: routingPreferences.walkSpeed
   }
 }

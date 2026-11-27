@@ -540,6 +540,47 @@ export const GoModeLiveBanner = styled.div`
   ${liveDot}
 `
 
+/** The Träwelling/travelynx card between the leg panel and the map. */
+export const CheckinCardBanner = styled.section`
+  align-items: center;
+  background-color: var(--tn-bg);
+  border: 1px solid var(--tn-border);
+  border-radius: var(--tn-radius);
+  color: var(--tn-text);
+  display: flex;
+  flex-wrap: wrap;
+  font: var(--tn-type-sm);
+  gap: var(--tn-space-2) var(--tn-space-3);
+  margin: var(--tn-space-2) var(--tn-space-4) 0;
+  padding: var(--tn-space-2) var(--tn-space-3);
+
+  > button {
+    appearance: none;
+    background-color: var(--tn-accent-soft);
+    border: 0;
+    border-radius: var(--tn-radius-pill);
+    color: var(--tn-accent);
+    cursor: pointer;
+    font: var(--tn-type-sm);
+    padding: var(--tn-space-1) var(--tn-space-3);
+  }
+  > button:disabled {
+    cursor: default;
+    opacity: 0.6;
+  }
+  > label {
+    align-items: center;
+    cursor: pointer;
+    display: inline-flex;
+    gap: var(--tn-space-2);
+  }
+  input[type='checkbox'] {
+    accent-color: var(--tn-accent);
+    height: var(--tn-tap);
+    margin: 0;
+  }
+`
+
 // Scroll container for the onboard results list (ScreenMain clips overflow).
 export const OnboardResultsScroll = styled.div`
   -webkit-overflow-scrolling: touch;

@@ -29,6 +29,7 @@ import { ReportIssueConfig } from '../../util/config-types'
 import InvisibleA11yLabel from '../util/invisible-a11y-label'
 import PopupTriggerText from '../app/popup-trigger-text'
 
+import CheckinButton from './checkin-button'
 import CopyItineraryTextButton from './copy-text-itin-button'
 
 // Copy URL Button
@@ -191,6 +192,8 @@ class LinkButton extends Component<LinkButtonProps> {
 interface TripToolsProps {
   buttonTypes?: string[]
   copyItineraryUrl?: string
+  /** The itinerary whose transit legs a CHECKIN button checks in. */
+  itinerary?: any
   popupTarget?: string
   reportConfig?: ReportIssueConfig
   setPopupContent: (target: string) => void
@@ -210,11 +213,13 @@ const TripTools = ({
     'COPY_URL',
     'PRINT',
     'REPORT_ISSUE',
+    'CHECKIN',
     'START_OVER',
     'POPUP_LINK',
     'COPY_TEXT_ITIN'
   ],
   copyItineraryUrl,
+  itinerary,
   popupTarget,
   reportConfig,
   setPopupContent,
@@ -254,6 +259,9 @@ const TripTools = ({
             text={<FormattedMessage id="common.forms.startOver" />}
           />
         )
+        break
+      case 'CHECKIN':
+        buttonComponents.push(<CheckinButton itinerary={itinerary} />)
         break
       case 'COPY_TEXT_ITIN':
         buttonComponents.push(<CopyItineraryTextButton />)
