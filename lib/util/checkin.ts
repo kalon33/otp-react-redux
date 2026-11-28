@@ -16,11 +16,15 @@
  * that match the leg's from/to stops become the checkin's origin and
  * destination, with the trip's own planned times.
  *
- * travelynx accepts a checkin by train type/number and station names in one
- * call (`POST /api/v1/travel`). Names must match what its backend knows, so
- * the same resolution caveat applies, but there is nothing to look up first.
- * Its API sends no CORS headers, so from a browser the check-in is sent as a
- * simple `no-cors` request whose answer cannot be read (see travelynxCheckin).
+ * travelynx accepts two check-in modes via `POST /api/v1/travel`. MOTIS is
+ * preferred: with the journey id resolved above and the boarding stop's
+ * transitous stop id (same data as Träwelling's, from api.transitous.org),
+ * travelynx resolves the run through MOTIS itself — which covers buses, trams
+ * and S-Bahn that DB's IRIS backend does not know. Without that resolution
+ * travelynx falls back to an IRIS checkin by train type/number and station
+ * names. Its API sends no CORS headers, so from a browser the check-in is
+ * sent as a simple `no-cors` request whose answer cannot be read (see
+ * travelynxCheckin).
  *
  * Both requests carry the rider's token, so they never go through the OTP
  * backend; they are sent straight to the service from the browser.
@@ -183,19 +187,31 @@ async function trawellingStationId(
   return typeof id === 'number' ? id : null
 }
 
+/** The Träwelling trip a leg resolved to, for the checkin POST. */
+export interface TrawellingTrip {
+  arrival: string
+  departure: string
+  destination: number
+  /** The trip's internal id — transitous/MOTIS journey id, one and the same. */
+  journeyId: string
+  lineName: string
+  start: number
+}
+
+export type TrawellingResolution =
+  | { error: string; ok: false }
+  | { ok: true; trip: TrawellingTrip }
+
 /**
- * Check a leg into Träwelling, following the current v1 flow documented at
- * https://traewelling.de/docs?api-docs.json: station autocomplete →
- * departures → trip → checkin, against its MOTIS backend. The checkin body
- * needs the trip's INTERNAL trip id, the two STATION ids and the exact
- * planned stopover times — all taken from the trip resource, so the server's
- * stopover lookup (`train_station_id` + `departure_planned`/`arrival_planned`)
- * matches.
+ * Resolve a leg against Träwelling: station autocomplete → departures →
+ * trip, against its MOTIS backend. Everything the checkin POST needs comes
+ * from the trip resource; the journeyId it returns doubles as the
+ * transitous/MOTIS journey id of the same run.
  */
-export async function trawellingCheckin(
+export async function resolveTrawellingTrip(
   settings: ServiceSettings,
   leg: LegForCheckin
-): Promise<CheckinResult> {
+): Promise<TrawellingResolution> {
   const base = (settings.baseUrl || DEFAULT_TRAEWELLING_BASE).replace(
     /\/+$/,
     ''
@@ -238,8 +254,9 @@ export async function trawellingCheckin(
   const candidates: any[] = departures.json?.data ?? []
   const departure = candidates.find((d: any) => {
     if (!d?.tripId || d?.cancelled) return false
-    if (line && String(d?.line?.name ?? d?.line?.id ?? '') !== line)
+    if (line && String(d?.line?.name ?? d?.line?.id ?? '') !== line) {
       return false
+    }
     const when = Date.parse(d.when ?? d.plannedWhen ?? '')
     if (Number.isNaN(when)) return false
     return Math.abs(when - start) <= DEPARTURE_MATCH_TOLERANCE_MS
@@ -293,16 +310,47 @@ export async function trawellingCheckin(
     }
   }
 
-  // 4. The checkin itself: internal trip id, the two station ids, and the
-  // trip's own planned stopover times, verbatim.
-  const checkin = await readJson(`${base}/v1/trains/checkin`, {
-    body: JSON.stringify({
+  return {
+    ok: true,
+    trip: {
       arrival: destStopover.arrivalPlanned,
       departure: startStopover.departurePlanned,
       destination: destStopover.station.id,
+      journeyId: String(tripData?.tripId ?? departure.tripId),
       lineName: String(tripData?.lineName ?? departureLineName),
-      start: startStopover.station.id,
-      tripId: tripData?.tripId
+      start: startStopover.station.id
+    }
+  }
+}
+
+/**
+ * Check a leg into Träwelling: the documented autocomplete → departures →
+ * trip → checkin flow. The checkin body carries the trip's INTERNAL id, the
+ * two STATION ids and the trip's own planned stopover times, so the server's
+ * stopover lookup (`train_station_id` + `departure_planned`/`arrival_planned`)
+ * matches.
+ */
+export async function trawellingCheckin(
+  settings: ServiceSettings,
+  leg: LegForCheckin,
+  resolved?: TrawellingResolution
+): Promise<CheckinResult> {
+  const base = (settings.baseUrl || DEFAULT_TRAEWELLING_BASE).replace(
+    /\/+$/,
+    ''
+  )
+  const resolution = resolved ?? (await resolveTrawellingTrip(settings, leg))
+  if (!resolution.ok) {
+    return { error: resolution.error, ok: false }
+  }
+  const checkin = await readJson(`${base}/v1/trains/checkin`, {
+    body: JSON.stringify({
+      arrival: resolution.trip.arrival,
+      departure: resolution.trip.departure,
+      destination: resolution.trip.destination,
+      lineName: resolution.trip.lineName,
+      start: resolution.trip.start,
+      tripId: resolution.trip.journeyId
     }),
     headers: bearer(settings.token),
     method: 'POST'
@@ -315,31 +363,48 @@ export async function trawellingCheckin(
 }
 
 /**
- * Check a leg into travelynx with a single POST /api/v1/travel call.
- *
- * travelynx's API sends no CORS headers, so a browser cannot read the answer
- * — often the request itself is refused when the JSON content type triggers
- * a preflight. When that happens, the check-in is re-sent as a simple
- * `no-cors` request: travelynx executes it, but the result comes back opaque,
- * which the caller reports as "sent" rather than "checked in".
+ * The transitous/MOTIS leg ref for a travelynx MOTIS checkin: the journey id
+ * (Träwelling's trip id, transitous' tripId — one and the same) and the
+ * EXACT MOTIS stop id of the boarding stopover, which transitous' trip
+ * response lists per stop (verified live: travelynx matches
+ * stopover.stop.id against this).
  */
-export async function travelynxCheckin(
-  settings: ServiceSettings,
-  leg: LegForCheckin
+export interface MotisRef {
+  journeyId: string
+  stopId: string
+}
+
+/** The public transitous MOTIS instance, travelynx's MOTIS backend too. */
+export const DEFAULT_MOTIS_BASE = 'https://api.transitous.org'
+
+/**
+ * The boarding stop's MOTIS stop id, from transitous' own trip response for
+ * the resolved journey. No token: transitous' public API asks for an
+ * identifying User-Agent instead, which every browser sets by itself.
+ */
+export async function resolveMotisStopId(
+  journeyId: string,
+  stopName?: string,
+  baseUrl?: string
+): Promise<string | null> {
+  if (!stopName) return null
+  const base = (baseUrl || DEFAULT_MOTIS_BASE).replace(/\/+$/, '')
+  const trip = await readJson(
+    `${base}/api/v6/trip?tripId=${encodeURIComponent(journeyId)}`
+  )
+  const leg = trip.json?.legs?.[0]
+  const stops: any[] = leg
+    ? [leg.from, ...(leg.intermediateStops ?? []), leg.to]
+    : []
+  const stop = stops.find((s: any) => s?.name === stopName)
+  return stop?.stopId ?? null
+}
+
+/** POST travelynx one checkin body, with the browser-CORS workaround. */
+async function sendTravelynx(
+  base: string,
+  body: string
 ): Promise<CheckinResult> {
-  const base = (settings.baseUrl || DEFAULT_TRAVELYNX_BASE).replace(/\/+$/, '')
-  const fromName = leg.from?.name
-  const toName = leg.to?.name
-  if (!fromName || !toName) {
-    return { error: 'The leg has no stop names to check in with.', ok: false }
-  }
-  const body = JSON.stringify({
-    action: 'checkin',
-    fromStation: fromName,
-    token: settings.token,
-    toStation: toName,
-    train: travelynxTrainRef(leg)
-  })
   try {
     const response = await readJson(`${base}/api/v1/travel`, {
       body,
@@ -374,20 +439,129 @@ export async function travelynxCheckin(
   }
 }
 
+/**
+ * Check a leg into travelynx.
+ *
+ * MOTIS is preferred over IRIS: given a resolved MOTIS ref (journey id + the
+ * boarding stop's transitous stop id), travelynx resolves the run through
+ * the same MOTIS data the trip planner sees — which works for buses, trams
+ * and S-Bahn that DB's IRIS does not know, and does not depend on the train
+ * being on the departures board right now (both verified against the live
+ * API). Without a ref — Träwelling unlinked, or the resolution failed —
+ * travelynx falls back to an IRIS checkin by train type/number and station
+ * names.
+ *
+ * travelynx's API sends no CORS headers, so a browser cannot read the answer
+ * — often the request itself is refused when the JSON content type triggers
+ * a preflight. When that happens, the check-in is re-sent as a simple
+ * `no-cors` request: travelynx executes it, but the result comes back
+ * opaque, which the caller reports as "sent" rather than "checked in".
+ */
+export async function travelynxCheckin(
+  settings: ServiceSettings,
+  leg: LegForCheckin,
+  motisRef?: MotisRef | null
+): Promise<CheckinResult> {
+  const base = (settings.baseUrl || DEFAULT_TRAVELYNX_BASE).replace(/\/+$/, '')
+  const fromName = leg.from?.name
+  const toName = leg.to?.name
+  if (!fromName || !toName) {
+    return { error: 'The leg has no stop names to check in with.', ok: false }
+  }
+
+  if (motisRef) {
+    const motisBody = JSON.stringify({
+      action: 'checkin',
+      fromStation: motisRef.stopId,
+      motis: 'transitous',
+      token: settings.token,
+      toStation: toName,
+      train: { journeyID: motisRef.journeyId }
+    })
+    const motisResult = await sendTravelynx(base, motisBody)
+    if (motisResult.ok) return motisResult
+    // The IRIS fallback below gets its own chance; its error wins if it
+    // fails too, as the rider can act on a type/number mismatch.
+  }
+
+  const body = JSON.stringify({
+    action: 'checkin',
+    fromStation: fromName,
+    token: settings.token,
+    toStation: toName,
+    train: travelynxTrainRef(leg)
+  })
+  return sendTravelynx(base, body)
+}
+
+/**
+ * travelynx check-in for the rider's whole settings: prefer MOTIS (resolved
+ * through Träwelling, which shares transitous journey ids) when Träwelling
+ * is linked, and fall back to IRIS otherwise.
+ */
+export async function travelynxCheckinPreferMotis(
+  settings: CheckinSettings,
+  leg: LegForCheckin
+): Promise<CheckinResult> {
+  let motisRef: MotisRef | null = null
+  if (settings.trawelling.enabled && settings.trawelling.token) {
+    try {
+      const resolved = await resolveTrawellingTrip(settings.trawelling, leg)
+      if (resolved.ok) {
+        const stopId = await resolveMotisStopId(
+          resolved.trip.journeyId,
+          leg.from?.name
+        )
+        if (stopId) {
+          motisRef = { journeyId: resolved.trip.journeyId, stopId }
+        }
+      }
+    } catch {
+      // IRIS fallback below.
+    }
+  }
+  return travelynxCheckin(settings.travelynx, leg, motisRef)
+}
+
 /** Check one leg into every enabled service, in parallel. */
 export async function checkinLeg(
   settings: CheckinSettings,
   leg: LegForCheckin
 ): Promise<Partial<Record<CheckinService, CheckinResult>>> {
-  const jobs: Promise<[CheckinService, CheckinResult]>[] = []
+  // Träwelling's resolution is shared: its trip is BOTH the Träwelling
+  // checkin's payload and travelynx's MOTIS journey.
+  let resolution: Promise<TrawellingResolution> | null = null
   if (settings.trawelling.enabled && settings.trawelling.token) {
+    resolution = resolveTrawellingTrip(settings.trawelling, leg)
+  }
+
+  const jobs: Promise<[CheckinService, CheckinResult]>[] = []
+  if (resolution) {
     jobs.push(
-      trawellingCheckin(settings.trawelling, leg).then((r) => ['trawelling', r])
+      resolution
+        .then((r) => trawellingCheckin(settings.trawelling, leg, r))
+        .then((r) => ['trawelling', r] as [CheckinService, CheckinResult])
     )
   }
   if (settings.travelynx.enabled && settings.travelynx.token) {
+    const motisRef = resolution
+      ? resolution
+          .then(async (r) => {
+            if (!r.ok) return null
+            const stopId = await resolveMotisStopId(
+              r.trip.journeyId,
+              leg.from?.name
+            )
+            return stopId
+              ? ({ journeyId: r.trip.journeyId, stopId } as MotisRef)
+              : null
+          })
+          .catch(() => null)
+      : Promise.resolve(null)
     jobs.push(
-      travelynxCheckin(settings.travelynx, leg).then((r) => ['travelynx', r])
+      motisRef
+        .then((ref) => travelynxCheckin(settings.travelynx, leg, ref))
+        .then((r) => ['travelynx', r] as [CheckinService, CheckinResult])
     )
   }
   const entries = await Promise.all(jobs)

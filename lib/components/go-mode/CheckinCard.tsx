@@ -5,7 +5,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import {
   checkinLeg,
   isTransitLeg,
-  travelynxCheckin,
+  travelynxCheckinPreferMotis,
   trawellingCheckin
 } from '../../util/checkin'
 import { readCheckinSettings } from '../../util/checkin-settings'
@@ -119,8 +119,8 @@ const CheckinCard = ({
         manualLeg as LegForCheckin
       ).catch(() => ({ ok: false } as CheckinResult))
     } else {
-      result = await travelynxCheckin(
-        settings.travelynx,
+      result = await travelynxCheckinPreferMotis(
+        settings,
         manualLeg as LegForCheckin
       ).catch(() => ({ ok: false } as CheckinResult))
     }

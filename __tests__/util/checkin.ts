@@ -359,9 +359,10 @@ describe('util > checkin > checkinLeg', () => {
     expect(urls.every((u) => u.includes('travelynx.de'))).toBe(true)
   })
 
-  it('checks into both enabled services in parallel', async () => {
+  it('prefers MOTIS for travelynx when Träwelling resolved the trip', async () => {
     const urls: string[] = []
-    global.fetch = jest.fn((url: string) => {
+    const bodies: any[] = []
+    global.fetch = jest.fn((url: string, init?: RequestInit) => {
       urls.push(String(url))
       if (String(url).includes('traewelling')) {
         if (String(url).includes('autocomplete')) {
@@ -397,13 +398,31 @@ describe('util > checkin > checkinLeg', () => {
                     station: { id: 2, name: 'Bochum Hbf' }
                   }
                 ],
-                tripId: 'internal-trip-uuid'
+                tripId: 'motis-journey-id'
               }
             })
           )
         }
         return Promise.resolve(json({ data: { status: { id: 7 } } }))
       }
+      if (String(url).includes('api.transitous.org')) {
+        // transitous' own trip: the boarding stop's exact MOTIS stop id.
+        return Promise.resolve(
+          json({
+            legs: [
+              {
+                from: {
+                  name: 'Essen Hbf',
+                  stopId: 'de-DELFI_de:05113:9289:97:11'
+                },
+                intermediateStops: [],
+                to: { name: 'Bochum Hbf', stopId: 'de-DELFI_de:05111:2' }
+              }
+            ]
+          })
+        )
+      }
+      bodies.push(JSON.parse(String(init?.body)))
       return Promise.resolve(json({ success: true }))
     })
     const results = await checkinLeg(
@@ -416,5 +435,97 @@ describe('util > checkin > checkinLeg', () => {
     expect(Object.keys(results).sort()).toEqual(['travelynx', 'trawelling'])
     expect(results.trawelling?.ok).toBe(true)
     expect(results.travelynx?.ok).toBe(true)
+    // transitous resolved the boarding stop's MOTIS id for the same journey.
+    expect(urls.some((u) => u.includes('api.transitous.org/api/v6/trip'))).toBe(
+      true
+    )
+    // The travelynx body carries the MOTIS ref, not the IRIS type/no.
+    expect(bodies[0]).toEqual({
+      action: 'checkin',
+      fromStation: 'de-DELFI_de:05113:9289:97:11',
+      motis: 'transitous',
+      token: '12-abc',
+      toStation: 'Bochum Hbf',
+      train: { journeyID: 'motis-journey-id' }
+    })
+  })
+
+  it('falls back to IRIS when the MOTIS ref cannot be resolved', async () => {
+    const bodies: any[] = []
+    global.fetch = jest.fn((url: string, init?: RequestInit) => {
+      if (String(url).includes('traewelling')) {
+        if (String(url).includes('autocomplete')) {
+          return Promise.resolve(json({ data: [{ id: 1 }] }))
+        }
+        if (String(url).includes('/v1/station/')) {
+          return Promise.resolve(
+            json({
+              data: [
+                {
+                  line: { name: 'RE 1' },
+                  plannedWhen: new Date(1734000000000).toISOString(),
+                  tripId: 'motis-trip'
+                }
+              ]
+            })
+          )
+        }
+        if (String(url).includes('/v1/trains/trip')) {
+          return Promise.resolve(
+            json({
+              data: {
+                lineName: 'RE 1',
+                stopovers: [
+                  {
+                    arrivalPlanned: '2024-12-12T09:00:00+00:00',
+                    departurePlanned: '2024-12-12T09:05:00+00:00',
+                    station: { id: 1, name: 'Essen Hbf' }
+                  },
+                  {
+                    arrivalPlanned: '2024-12-12T09:20:00+00:00',
+                    departurePlanned: '2024-12-12T09:22:00+00:00',
+                    station: { id: 2, name: 'Bochum Hbf' }
+                  }
+                ],
+                tripId: 'motis-journey-id'
+              }
+            })
+          )
+        }
+        return Promise.resolve(json({ data: { status: { id: 7 } } }))
+      }
+      if (String(url).includes('api.transitous.org')) {
+        // No matching stop: the MOTIS ref stays null.
+        return Promise.resolve(
+          json({
+            legs: [
+              {
+                from: { name: 'Somewhere Else', stopId: 'x' },
+                intermediateStops: [],
+                to: { name: 'Nowhere', stopId: 'y' }
+              }
+            ]
+          })
+        )
+      }
+      bodies.push(JSON.parse(String(init?.body)))
+      return Promise.resolve(json({ success: true }))
+    })
+    const results = await checkinLeg(
+      {
+        travelynx: TRAVELYNX,
+        trawelling: TRAWELLING
+      } as any,
+      leg as any
+    )
+    expect(results.travelynx?.ok).toBe(true)
+    // IRIS body: type/number and station names, no MOTIS fields.
+    expect(bodies[0]).toEqual({
+      action: 'checkin',
+      fromStation: 'Essen Hbf',
+      token: '12-abc',
+      toStation: 'Bochum Hbf',
+      train: { no: '1', type: 'RE' }
+    })
   })
 })
