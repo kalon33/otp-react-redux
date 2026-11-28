@@ -4,8 +4,10 @@ import React, { useEffect, useRef, useState } from 'react'
 
 import {
   checkinLeg,
+  deleteTrawellingStatus,
   isTransitLeg,
   travelynxCheckinPreferMotis,
+  travelynxUndo,
   trawellingCheckin
 } from '../../util/checkin'
 import { readCheckinSettings } from '../../util/checkin-settings'
@@ -40,6 +42,8 @@ interface Props {
 
 interface ManualResult {
   ok: boolean
+  /** The Träwelling status created, kept so it can be taken back. */
+  statusId?: string
   text: string
 }
 
@@ -101,10 +105,31 @@ const CheckinCard = ({
     if (!autoOn || !ridingKey || !manualLeg) return
     if (autoDoneRef.current === ridingKey) return
     autoDoneRef.current = ridingKey
-    checkinLeg(settings, manualLeg).catch(() => {
-      // A failed automatic check-in must never disturb the ride; the manual
-      // buttons are right there.
-    })
+    checkinLeg(settings, manualLeg)
+      .then((results) => {
+        setManualResults((previous) => ({
+          ...previous,
+          ...Object.fromEntries(
+            Object.entries(results).map(([service, result]) => [
+              service,
+              {
+                ok: result.ok,
+                statusId: result.statusId,
+                text: result.ok
+                  ? intl.formatMessage({ id: 'components.GoMode.checkinOk' })
+                  : result.error ||
+                    intl.formatMessage({
+                      id: 'components.CheckinButton.failed'
+                    })
+              }
+            ])
+          )
+        }))
+      })
+      .catch(() => {
+        // A failed automatic check-in must never disturb the ride; the manual
+        // buttons are right there.
+      })
     // The riding fact is the request; the leg is read at that moment.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoOn, ridingKey])
@@ -128,10 +153,38 @@ const CheckinCard = ({
       ...manualResults,
       [service]: {
         ok: result.ok,
+        statusId: result.statusId,
         text: result.ok
           ? result.sent
             ? intl.formatMessage({ id: 'components.CheckinButton.sent' })
             : intl.formatMessage({ id: 'components.GoMode.checkinOk' })
+          : result.error ||
+            intl.formatMessage({ id: 'components.CheckinButton.failed' })
+      }
+    })
+    setManualBusy(null)
+  }
+
+  // Take one service's check-in back: the Träwelling status this trip
+  // created (past or still to come), or travelynx' current journey.
+  const onUndo = async (service: string) => {
+    if (manualBusy) return
+    setManualBusy(service)
+    const result: CheckinResult =
+      service === 'trawelling'
+        ? await deleteTrawellingStatus(
+            settings.trawelling,
+            String(manualResults.trawelling?.statusId)
+          ).catch(() => ({ ok: false } as CheckinResult))
+        : await travelynxUndo(settings.travelynx).catch(
+            () => ({ ok: false } as CheckinResult)
+          )
+    setManualResults({
+      ...manualResults,
+      [service]: {
+        ok: false,
+        text: result.ok
+          ? intl.formatMessage({ id: 'components.CheckinButton.undone' })
           : result.error ||
             intl.formatMessage({ id: 'components.CheckinButton.failed' })
       }
@@ -158,26 +211,36 @@ const CheckinCard = ({
       {services.map((service) => {
         const result = manualResults[service]
         return (
-          <button
-            disabled={!manualLeg || manualBusy === service}
-            key={service}
-            onClick={() => onManual(service)}
-            type="button"
-          >
-            {manualBusy === service ? (
-              <FormattedMessage id="components.GoMode.checkinBusy" />
-            ) : result ? (
-              result.text
-            ) : (
-              intl.formatMessage(
-                {
-                  defaultMessage: '{service}: check in now',
-                  id: 'components.GoMode.checkinManual'
-                },
-                { service }
-              )
+          <span key={service}>
+            <button
+              disabled={!manualLeg || manualBusy === service}
+              onClick={() => onManual(service)}
+              type="button"
+            >
+              {manualBusy === service ? (
+                <FormattedMessage id="components.GoMode.checkinBusy" />
+              ) : result ? (
+                result.text
+              ) : (
+                intl.formatMessage(
+                  {
+                    defaultMessage: '{service}: check in now',
+                    id: 'components.GoMode.checkinManual'
+                  },
+                  { service }
+                )
+              )}
+            </button>{' '}
+            {result?.ok && (service !== 'trawelling' || result.statusId) && (
+              <button
+                disabled={manualBusy !== null}
+                onClick={() => onUndo(service)}
+                type="button"
+              >
+                <FormattedMessage id="components.CheckinButton.undo" />
+              </button>
             )}
-          </button>
+          </span>
         )
       })}
     </CheckinCardBanner>

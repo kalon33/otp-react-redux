@@ -1,7 +1,10 @@
 import {
   checkinLeg,
+  deleteTrawellingStatus,
   travelynxCheckin,
-  trawellingCheckin
+  travelynxUndo,
+  trawellingCheckin,
+  undoCheckins
 } from '../../lib/util/checkin'
 
 /**
@@ -527,5 +530,57 @@ describe('util > checkin > checkinLeg', () => {
       toStation: 'Bochum Hbf',
       train: { no: '1', type: 'RE' }
     })
+  })
+})
+
+describe('util > checkin > undo', () => {
+  it('deletes the Träwelling status by id with the Bearer token', async () => {
+    const calls: { init?: RequestInit; url: string }[] = []
+    global.fetch = jest.fn((url: string, init?: RequestInit) => {
+      calls.push({ init, url })
+      return Promise.resolve({ ok: true, status: 204 } as any)
+    })
+    const result = await deleteTrawellingStatus(TRAWELLING as any, '9779028')
+    expect(result.ok).toBe(true)
+    expect(calls[0].url).toBe('https://traewelling.de/api/v1/status/9779028')
+    expect(calls[0].init?.method).toBe('DELETE')
+    expect((calls[0].init?.headers as any).Authorization).toBe(
+      `Bearer ${TOKEN}`
+    )
+  })
+
+  it('sends travelynx an undo action', async () => {
+    const calls: { init?: RequestInit; url: string }[] = []
+    global.fetch = jest.fn((url: string, init?: RequestInit) => {
+      calls.push({ init, url })
+      return Promise.resolve(json({ success: true }))
+    })
+    const result = await travelynxUndo(TRAVELYNX as any)
+    expect(result.ok).toBe(true)
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({
+      action: 'undo',
+      token: '12-abc'
+    })
+  })
+
+  it('takes a whole round back, both services', async () => {
+    const urls: string[] = []
+    global.fetch = jest.fn((url: string) => {
+      urls.push(String(url))
+      if (String(url).includes('status')) {
+        return Promise.resolve({ ok: true, status: 204 } as any)
+      }
+      return Promise.resolve(json({ success: true }))
+    })
+    const results = await undoCheckins(
+      { travelynx: TRAVELYNX, trawelling: TRAWELLING } as any,
+      { travelynx: true, trawellingStatusId: '42' }
+    )
+    expect(results.trawelling?.ok).toBe(true)
+    expect(results.travelynx?.ok).toBe(true)
+    expect(urls.some((u) => u.endsWith('/v1/status/42'))).toBe(true)
+    expect(urls.some((u) => u.includes('travelynx.de/api/v1/travel'))).toBe(
+      true
+    )
   })
 })

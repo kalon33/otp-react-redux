@@ -523,6 +523,87 @@ export async function travelynxCheckinPreferMotis(
   return travelynxCheckin(settings.travelynx, leg, motisRef)
 }
 
+/**
+ * Delete one Träwelling status — how a check-in is taken back, be it the
+ * trip in progress or one still to come. The status id is the one the
+ * checkin response returned and the UI kept.
+ */
+export async function deleteTrawellingStatus(
+  settings: ServiceSettings,
+  statusId: string
+): Promise<CheckinResult> {
+  const base = (settings.baseUrl || DEFAULT_TRAEWELLING_BASE).replace(
+    /\/+$/,
+    ''
+  )
+  const response = await fetch(
+    `${base}/v1/status/${encodeURIComponent(statusId)}`,
+    { headers: bearer(settings.token), method: 'DELETE' }
+  )
+  if (!response.ok) {
+    return {
+      error: `Träwelling API error (HTTP ${response.status})`,
+      ok: false
+    }
+  }
+  return { ok: true }
+}
+
+/** Undo travelynx' latest check-in (only while the journey is current). */
+export async function travelynxUndo(
+  settings: ServiceSettings
+): Promise<CheckinResult> {
+  const base = (settings.baseUrl || DEFAULT_TRAVELYNX_BASE).replace(/\/+$/, '')
+  return sendTravelynx(
+    base,
+    JSON.stringify({ action: 'undo', token: settings.token })
+  )
+}
+
+/**
+ * Take back a whole check-in round, from the results checkinLeg returned:
+ * every Träwelling status the round created is deleted (past or future
+ * alike), and travelynx' journey is undone.
+ */
+export interface UndoRequest {
+  /** Undo travelynx' current journey. */
+  travelynx?: boolean
+  /** The Träwelling status to delete (the checkin response's id). */
+  trawellingStatusId?: string
+}
+
+export async function undoCheckins(
+  settings: CheckinSettings,
+  request: UndoRequest
+): Promise<Partial<Record<CheckinService, CheckinResult>>> {
+  const jobs: Promise<[CheckinService, CheckinResult]>[] = []
+  if (
+    request.trawellingStatusId &&
+    settings.trawelling.enabled &&
+    settings.trawelling.token
+  ) {
+    jobs.push(
+      deleteTrawellingStatus(
+        settings.trawelling,
+        request.trawellingStatusId
+      ).then((r) => ['trawelling', r] as [CheckinService, CheckinResult])
+    )
+  }
+  if (
+    request.travelynx &&
+    settings.travelynx.enabled &&
+    settings.travelynx.token
+  ) {
+    jobs.push(
+      travelynxUndo(settings.travelynx).then(
+        (r) => ['travelynx', r] as [CheckinService, CheckinResult]
+      )
+    )
+  }
+  const entries = await Promise.all(jobs)
+  return Object.fromEntries(entries)
+}
+
 /** Check one leg into every enabled service, in parallel. */
 export async function checkinLeg(
   settings: CheckinSettings,

@@ -5,7 +5,7 @@ import { FormattedMessage, useIntl } from 'react-intl'
 import { Train } from '@styled-icons/fa-solid/Train'
 import React, { useMemo, useState } from 'react'
 
-import { checkinLeg, isTransitLeg } from '../../util/checkin'
+import { checkinLeg, isTransitLeg, undoCheckins } from '../../util/checkin'
 import { IconWithText } from '../util/styledIcon'
 import { readCheckinSettings } from '../../util/checkin-settings'
 
@@ -17,6 +17,8 @@ interface CheckinButtonProps {
 interface CheckinOutcome {
   ok: boolean
   service: string
+  /** The Träwelling status created, kept so it can be taken back. */
+  statusId?: string
   text: string
 }
 
@@ -59,6 +61,7 @@ export default function CheckinButton({
         outcomes.push({
           ok: result.ok,
           service,
+          statusId: result.statusId,
           text: result.ok
             ? result.sent
               ? intl.formatMessage({ id: 'components.CheckinButton.sent' })
@@ -69,6 +72,24 @@ export default function CheckinButton({
       }
     }
     setResults(outcomes)
+    setBusy(false)
+  }
+
+  // Take the round back: every Träwelling status it created is deleted —
+  // the trip in progress or one still to come alike — and travelynx'
+  // current journey is undone.
+  const onUndo = async () => {
+    if (busy) return
+    setBusy(true)
+    await undoCheckins(settings, {
+      travelynx: results.some((r) => r.service === 'travelynx' && r.ok),
+      trawellingStatusId: results.find(
+        (r) => r.service === 'trawelling' && r.ok && r.statusId
+      )?.statusId
+    }).catch(() => {
+      // The round stays as it is; the rider can retry.
+    })
+    setResults([])
     setBusy(false)
   }
 
@@ -98,7 +119,12 @@ export default function CheckinButton({
             )}
           </IconWithText>
         )}
-      </Button>
+      </Button>{' '}
+      {allOk && (
+        <Button className="tool-button" disabled={busy} onClick={onUndo}>
+          <FormattedMessage id="components.CheckinButton.undo" />
+        </Button>
+      )}
     </div>
   )
 }

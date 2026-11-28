@@ -356,6 +356,8 @@ components:
     sent: >-
       Sent — travelynx does not answer browser requests, so check the result
       there
+    undo: Undo check-in
+    undone: Check-in undone
   CompanionsPane:
     addNewCompanion: Add a new travel companion
     companionAlreadyAdded: You already have a companion with email {email}
