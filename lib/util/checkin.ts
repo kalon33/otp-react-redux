@@ -7,16 +7,20 @@
  * or neither can be configured in Settings, and each keeps its own token on
  * the device (util/checkin-settings).
  *
- * Träwelling has no "check in by name" endpoint — its documented flow is
- * departures → trip → checkin, all against its own HAFAS backend. So a leg is
- * resolved first: the departures board of the leg's boarding stop is searched
- * for the leg's line around the leg's departure, the matching departure's
- * trip is fetched, and the two stopovers that match the leg's from/to stops
- * become the checkin's origin and destination.
+ * Träwelling has no "check in by name" endpoint — its current documented
+ * flow (https://traewelling.de/docs?api-docs.json) is station autocomplete →
+ * departures → trip → checkin, against its MOTIS backend. So a leg is resolved
+ * first: the boarding stop's station id comes from the autocomplete, the
+ * departures board is searched for the leg's line around the leg's
+ * departure, the matching departure's trip is fetched, and the two stopovers
+ * that match the leg's from/to stops become the checkin's origin and
+ * destination, with the trip's own planned times.
  *
  * travelynx accepts a checkin by train type/number and station names in one
  * call (`POST /api/v1/travel`). Names must match what its backend knows, so
  * the same resolution caveat applies, but there is nothing to look up first.
+ * Its API sends no CORS headers, so from a browser the check-in is sent as a
+ * simple `no-cors` request whose answer cannot be read (see travelynxCheckin).
  *
  * Both requests carry the rider's token, so they never go through the OTP
  * backend; they are sent straight to the service from the browser.
@@ -43,6 +47,8 @@ export interface CheckinResult {
   /** The service's own error text, shown to the rider as-is. */
   error?: string
   ok: boolean
+  /** True when the check-in was sent but its answer could not be read. */
+  sent?: boolean
   /** The id of the created status/journey, when the service returns one. */
   statusId?: string
 }
@@ -141,14 +147,34 @@ function trawellingError(json: any, status: number): string {
   )
 }
 
-/** ISO datetime in Träwelling's format, from a stopover or an epoch ms. */
-function trawellingWhen(epochMs: number): string {
-  return new Date(epochMs).toISOString().replace('T', ' ').slice(0, 19)
+/**
+ * Resolve a stop name to Träwelling's station id with its autocomplete
+ * endpoint. Slashes are forbidden in the path segment, so they become spaces
+ * (the documented workaround).
+ */
+async function trawellingStationId(
+  base: string,
+  token: string,
+  name: string
+): Promise<number | null> {
+  const query = encodeURIComponent(name).replace(/%2F/gi, '%20')
+  const response = await readJson(
+    `${base}/v1/trains/station/autocomplete/${query}`,
+    { headers: bearer(token) }
+  )
+  if (!response.ok) return null
+  const id = response.json?.data?.[0]?.id
+  return typeof id === 'number' ? id : null
 }
 
 /**
- * Resolve and check a leg into Träwelling, following its documented
- * departures → trip → checkin flow.
+ * Check a leg into Träwelling, following the current v1 flow documented at
+ * https://traewelling.de/docs?api-docs.json: station autocomplete →
+ * departures → trip → checkin, against its MOTIS backend. The checkin body
+ * needs the trip's INTERNAL trip id, the two STATION ids and the exact
+ * planned stopover times — all taken from the trip resource, so the server's
+ * stopover lookup (`train_station_id` + `departure_planned`/`arrival_planned`)
+ * matches.
  */
 export async function trawellingCheckin(
   settings: ServiceSettings,
@@ -166,11 +192,24 @@ export async function trawellingCheckin(
     return { error: 'The leg has no stop names to check in with.', ok: false }
   }
 
-  // 1. The departures board of the boarding stop, around the departure.
+  // 1. The boarding stop's station id.
+  let fromStationId: number | null = null
+  try {
+    fromStationId = await trawellingStationId(base, settings.token, fromName)
+  } catch {
+    // The lookup below reports the failure.
+  }
+  if (fromStationId == null) {
+    return {
+      error: `Träwelling does not know a station "${fromName}".`,
+      ok: false
+    }
+  }
+
+  // 2. The departures board of that station, around the leg's departure.
   const departuresUrl =
-    `${base}/v1/trains/departures` +
-    `?station=${encodeURIComponent(fromName)}` +
-    `&when=${encodeURIComponent(trawellingWhen(start))}`
+    `${base}/v1/station/${fromStationId}/departures` +
+    `?when=${encodeURIComponent(new Date(start).toISOString())}`
   const departures = await readJson(departuresUrl, {
     headers: bearer(settings.token)
   })
@@ -182,8 +221,9 @@ export async function trawellingCheckin(
   }
   const candidates: any[] = departures.json?.data ?? []
   const departure = candidates.find((d: any) => {
-    if (!d?.tripId) return false
-    if (line && String(d.line ?? '') !== line) return false
+    if (!d?.tripId || d?.cancelled) return false
+    if (line && String(d?.line?.name ?? d?.line?.id ?? '') !== line)
+      return false
     const when = Date.parse(d.when ?? d.plannedWhen ?? '')
     if (Number.isNaN(when)) return false
     return Math.abs(when - start) <= DEPARTURE_MATCH_TOLERANCE_MS
@@ -196,24 +236,29 @@ export async function trawellingCheckin(
       ok: false
     }
   }
+  const departureLineName = String(
+    departure.line?.name ?? departure.line?.id ?? line
+  )
 
-  // 2. The trip behind that departure, to resolve the two stopovers.
+  // 3. The trip behind that departure, for its internal id and stopovers.
   const tripUrl =
     `${base}/v1/trains/trip` +
-    `?tripId=${encodeURIComponent(departure.tripId)}` +
-    `&line=${encodeURIComponent(String(departure.line ?? line))}` +
-    `&start=${encodeURIComponent(String(departure.stop?.id ?? ''))}`
+    `?hafasTripId=${encodeURIComponent(departure.tripId)}` +
+    `&lineName=${encodeURIComponent(departureLineName)}`
   const trip = await readJson(tripUrl, { headers: bearer(settings.token) })
   if (!trip.ok) {
     return { error: trawellingError(trip.json, trip.status), ok: false }
   }
-  const stopovers: any[] = trip.json?.data?.stopover ?? []
-  const startStopover = stopovers.find(
+  const tripData = trip.json?.data
+  const stopovers: any[] = tripData?.stopovers ?? []
+  const startIndex = stopovers.findIndex(
     (s: any) =>
-      String(s?.id) === String(departure.stop?.id) || s?.name === fromName
+      s?.station?.id === fromStationId || s?.station?.name === fromName
   )
-  const destStopover = stopovers.find((s: any) => s?.name === toName)
-  if (!startStopover || !destStopover) {
+  const destIndex = stopovers.findIndex(
+    (s: any, i: number) => i > startIndex && s?.station?.name === toName
+  )
+  if (startIndex < 0 || destIndex < 0) {
     return {
       error: `${fromName} → ${toName} is not part of the ${
         line || 'trip'
@@ -221,16 +266,27 @@ export async function trawellingCheckin(
       ok: false
     }
   }
+  const startStopover = stopovers[startIndex]
+  const destStopover = stopovers[destIndex]
+  if (!startStopover.departurePlanned || !destStopover.arrivalPlanned) {
+    return {
+      error: `The ${
+        line || 'trip'
+      } journey found has no times for ${fromName} → ${toName}.`,
+      ok: false
+    }
+  }
 
-  // 3. The checkin itself.
+  // 4. The checkin itself: internal trip id, the two station ids, and the
+  // trip's own planned stopover times, verbatim.
   const checkin = await readJson(`${base}/v1/trains/checkin`, {
     body: JSON.stringify({
-      arrival: destStopover.arrival ?? destStopover.arrival_planned,
-      departure: startStopover.departure ?? startStopover.departure_planned,
-      destination: destStopover.id,
-      line: String(departure.line ?? line),
-      start: startStopover.id,
-      tripId: departure.tripId
+      arrival: destStopover.arrivalPlanned,
+      departure: startStopover.departurePlanned,
+      destination: destStopover.station.id,
+      lineName: String(tripData?.lineName ?? departureLineName),
+      start: startStopover.station.id,
+      tripId: tripData?.tripId
     }),
     headers: bearer(settings.token),
     method: 'POST'
@@ -238,15 +294,19 @@ export async function trawellingCheckin(
   if (!checkin.ok) {
     return { error: trawellingError(checkin.json, checkin.status), ok: false }
   }
-  return {
-    ok: true,
-    statusId: checkin.json?.data?.status?.id
-      ? String(checkin.json.data.status.id)
-      : undefined
-  }
+  const statusId = checkin.json?.data?.status?.id ?? checkin.json?.data?.id
+  return { ok: true, statusId: statusId != null ? String(statusId) : undefined }
 }
 
-/** Check a leg into travelynx with a single POST /api/v1/travel call. */
+/**
+ * Check a leg into travelynx with a single POST /api/v1/travel call.
+ *
+ * travelynx's API sends no CORS headers, so a browser cannot read the answer
+ * — often the request itself is refused when the JSON content type triggers
+ * a preflight. When that happens, the check-in is re-sent as a simple
+ * `no-cors` request: travelynx executes it, but the result comes back opaque,
+ * which the caller reports as "sent" rather than "checked in".
+ */
 export async function travelynxCheckin(
   settings: ServiceSettings,
   leg: LegForCheckin
@@ -258,29 +318,48 @@ export async function travelynxCheckin(
   if (!fromName || !toName) {
     return { error: 'The leg has no stop names to check in with.', ok: false }
   }
-  const response = await readJson(`${base}/api/v1/travel`, {
-    body: JSON.stringify({
-      action: 'checkin',
-      comment: undefined,
-      fromStation: fromName,
-      token: settings.token,
-      toStation: toName,
-      train: {
-        no: line || undefined,
-        type: travelynxTrainType(leg.mode ?? 'BUS')
-      }
-    }),
-    headers: { 'Content-Type': 'application/json' },
-    method: 'POST'
+  const body = JSON.stringify({
+    action: 'checkin',
+    fromStation: fromName,
+    token: settings.token,
+    toStation: toName,
+    train: {
+      no: line || undefined,
+      type: travelynxTrainType(leg.mode ?? 'BUS')
+    }
   })
-  const json = response.json
-  if (!json?.success) {
-    return {
-      error: json?.error || `travelynx API error (HTTP ${response.status})`,
-      ok: false
+  try {
+    const response = await readJson(`${base}/api/v1/travel`, {
+      body,
+      headers: { 'Content-Type': 'application/json' },
+      method: 'POST'
+    })
+    const json = response.json
+    if (!json?.success) {
+      return {
+        error: json?.error || `travelynx API error (HTTP ${response.status})`,
+        ok: false
+      }
+    }
+    return { ok: true }
+  } catch {
+    // A refused preflight never reached travelynx; a simple request does.
+    try {
+      await fetch(`${base}/api/v1/travel`, {
+        body,
+        headers: { 'Content-Type': 'text/plain' },
+        method: 'POST',
+        mode: 'no-cors'
+      })
+      return { ok: true, sent: true }
+    } catch {
+      return {
+        error:
+          'travelynx is unreachable from the browser (its API sends no CORS headers).',
+        ok: false
+      }
     }
   }
-  return { ok: true }
 }
 
 /** Check one leg into every enabled service, in parallel. */

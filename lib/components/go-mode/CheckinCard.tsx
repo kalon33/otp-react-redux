@@ -129,7 +129,9 @@ const CheckinCard = ({
       [service]: {
         ok: result.ok,
         text: result.ok
-          ? intl.formatMessage({ id: 'components.GoMode.checkinOk' })
+          ? result.sent
+            ? intl.formatMessage({ id: 'components.CheckinButton.sent' })
+            : intl.formatMessage({ id: 'components.GoMode.checkinOk' })
           : result.error ||
             intl.formatMessage({ id: 'components.CheckinButton.failed' })
       }

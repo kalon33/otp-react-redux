@@ -358,6 +358,7 @@ components:
     checkedIn: "Enregistré"
     checkingIn: "Enregistrement…"
     failed: "Échec de l'enregistrement"
+    sent: "Envoyé — travelynx ne répond pas aux navigateurs, vérifiez le résultat sur leur site"
   CompanionsPane:
     addNewCompanion: Ajouter un accompagnateur
     companionAlreadyAdded: "Vous avez d\xE9j\xE0 un accompagnateur utilisant {email}."

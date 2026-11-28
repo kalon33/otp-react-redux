@@ -60,7 +60,9 @@ export default function CheckinButton({
           ok: result.ok,
           service,
           text: result.ok
-            ? intl.formatMessage({ id: 'components.CheckinButton.checkedIn' })
+            ? result.sent
+              ? intl.formatMessage({ id: 'components.CheckinButton.sent' })
+              : intl.formatMessage({ id: 'components.CheckinButton.checkedIn' })
             : result.error ||
               intl.formatMessage({ id: 'components.CheckinButton.failed' })
         })

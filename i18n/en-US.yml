@@ -353,6 +353,9 @@ components:
     checkedIn: Checked In
     checkingIn: Checking In…
     failed: Check-in failed
+    sent: >-
+      Sent — travelynx does not answer browser requests, so check the result
+      there
   CompanionsPane:
     addNewCompanion: Add a new travel companion
     companionAlreadyAdded: You already have a companion with email {email}
