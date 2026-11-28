@@ -90,6 +90,22 @@ function travelynxTrainType(mode: string): string {
   }
 }
 
+/**
+ * travelynx's IRIS backend identifies a run by its TYPE and NUMBER — "ICE
+ * 547" is type "ICE", no "547" (verified against the live API). Split a
+ * "TYPE number" line name accordingly; otherwise the number is the line and
+ * the type falls back to the OTP mode's travelynx name.
+ */
+function travelynxTrainRef(leg: LegForCheckin): { no?: string; type: string } {
+  const line = lineName(leg)
+  const match = line.match(/^([A-Za-z]+)\s*(\d+)$/)
+  if (match) return { no: match[2], type: match[1].toUpperCase() }
+  return {
+    no: line || undefined,
+    type: travelynxTrainType(leg.mode ?? 'BUS')
+  }
+}
+
 /** The line name a checkin service expects, e.g. "S 6" or "ICE 471". */
 function lineName(leg: LegForCheckin): string {
   const short = leg.routeShortName || (leg.route as any)?.shortName
@@ -312,7 +328,6 @@ export async function travelynxCheckin(
   leg: LegForCheckin
 ): Promise<CheckinResult> {
   const base = (settings.baseUrl || DEFAULT_TRAVELYNX_BASE).replace(/\/+$/, '')
-  const line = lineName(leg)
   const fromName = leg.from?.name
   const toName = leg.to?.name
   if (!fromName || !toName) {
@@ -323,10 +338,7 @@ export async function travelynxCheckin(
     fromStation: fromName,
     token: settings.token,
     toStation: toName,
-    train: {
-      no: line || undefined,
-      type: travelynxTrainType(leg.mode ?? 'BUS')
-    }
+    train: travelynxTrainRef(leg)
   })
   try {
     const response = await readJson(`${base}/api/v1/travel`, {

@@ -289,7 +289,28 @@ describe('util > checkin > travelynx', () => {
       fromStation: 'Essen Hbf',
       token: '12-abc',
       toStation: 'Bochum Hbf',
-      train: { no: 'RE 1', type: 'RE' }
+      train: { no: '1', type: 'RE' }
+    })
+  })
+
+  it('splits a "TYPE number" line into travelynx type and number', async () => {
+    const calls: { init?: RequestInit; url: string }[] = []
+    global.fetch = jest.fn((url: string, init?: RequestInit) => {
+      calls.push({ init, url })
+      return Promise.resolve(json({ success: true }))
+    })
+    // Verified against the live IRIS backend: "ICE 547" checks in as
+    // type "ICE", no "547".
+    await travelynxCheckin(
+      TRAVELYNX as any,
+      {
+        ...leg,
+        routeShortName: 'ICE 547'
+      } as any
+    )
+    expect(JSON.parse(String(calls[0].init?.body)).train).toEqual({
+      no: '547',
+      type: 'ICE'
     })
   })
 
