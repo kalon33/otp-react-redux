@@ -353,6 +353,14 @@ components:
       main
     via: par {place}
     wander: Balade
+  CheckinButton:
+    checkIn: "S'enregistrer"
+    checkedIn: "Enregistré"
+    checkingIn: "Enregistrement…"
+    failed: "Échec de l'enregistrement"
+    sent: "Envoyé — travelynx ne répond pas aux navigateurs, vérifiez le résultat sur leur site"
+    undo: "Annuler l'enregistrement"
+    undone: "Enregistrement annulé"
   CompanionsPane:
     addNewCompanion: Ajouter un accompagnateur
     companionAlreadyAdded: "Vous avez d\xE9j\xE0 un accompagnateur utilisant {email}."
@@ -452,6 +460,11 @@ components:
     ariaLabel: Navigation du formulaire
   GoMode:
     arrivedDone: "Terminé"
+    checkinAutoLabel: "Enregistrement automatique pour ce trajet"
+    checkinBusy: "Enregistrement…"
+    checkinManual: "{service} : s'enregistrer"
+    checkinOk: "Enregistré ✓"
+    checkinTitle: "Enregistrement de trajet"
     arrivedTitle: "🎉 Vous êtes arrivé !"
     arrivesIn: "arrive dans {time}"
     auto:
@@ -1114,6 +1127,12 @@ components:
     bikeSpeedHelp: "Le temps que l'application attribue à vos étapes à vélo. Une fois réglée, cette vitesse est utilisée par tous les itinéraires, y compris avant que vous ayez roulé assez longtemps pour que l'application mesure votre allure."
     bikeSpeedLabel: "Votre vitesse à vélo : {speed}"
     bikeSpeedSlider: "Vitesse à vélo"
+    checkinHeader: "Enregistrement de trajet"
+    checkinHelp: "Avec un jeton enregistré, un bouton S'enregistrer apparaît dans les outils de votre itinéraire, et le Go Mode propose une bascule d'enregistrement par trajet ainsi que des boutons manuels. Les deux services peuvent fonctionner en parallèle. Le jeton reste sur cet appareil."
+    checkinTokenLabel: "Jeton d'API {service}"
+    checkinTokenPlaceholder: "Collez le jeton depuis les paramètres de votre profil"
+    checkinTravelynx: "S'enregistrer sur travelynx"
+    checkinTrawelling: "S'enregistrer sur Träwelling"
     gettingAroundHeader: "Vos déplacements"
     heading: "Paramètres"
     routingHelp: "Ces réglages s'appliquent à tous les itinéraires que vous planifiez, ainsi qu'à tout trajet recalculé en cours de route."

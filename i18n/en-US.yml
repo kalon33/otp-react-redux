@@ -348,6 +348,16 @@ components:
       streets, {heavy}% heavy traffic, {walk}% walking the bike
     via: via {place}
     wander: Wander
+  CheckinButton:
+    checkIn: Check In
+    checkedIn: Checked In
+    checkingIn: Checking In…
+    failed: Check-in failed
+    sent: >-
+      Sent — travelynx does not answer browser requests, so check the result
+      there
+    undo: Undo check-in
+    undone: Check-in undone
   CompanionsPane:
     addNewCompanion: Add a new travel companion
     companionAlreadyAdded: You already have a companion with email {email}
@@ -436,6 +446,11 @@ components:
   GoMode:
     accessible: Accessible
     arrivedDone: Done
+    checkinAutoLabel: Automatic check-in for this trip
+    checkinBusy: Checking In…
+    checkinManual: "{service}: check in now"
+    checkinOk: Checked In ✓
+    checkinTitle: Journey check-in
     arrivedTitle: 🎉 You've arrived!
     arrivesIn: arrives in {time}
     auto:
@@ -1084,6 +1099,15 @@ components:
     bikeSpeedLabel: "Your biking speed: {speed}"
 
     bikeSpeedSlider: Biking speed
+    checkinHeader: Journey check-in
+    checkinHelp: >-
+      With a token stored, a Check in button appears in your trip's tools, and
+      Go Mode offers a per-trip check-in switch and manual buttons. Both
+      services can run side by side. The token stays on this device.
+    checkinTokenLabel: "{service} API token"
+    checkinTokenPlaceholder: Paste the token from your profile settings
+    checkinTravelynx: Check into travelynx
+    checkinTrawelling: Check into Träwelling
     gettingAroundHeader: Getting around
     heading: Settings
     routingHelp: These apply to every trip you plan, and to any route the app rebuilds while you ride.

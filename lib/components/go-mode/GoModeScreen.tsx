@@ -50,6 +50,7 @@ import AlightRecommendation from './AlightRecommendation'
 import AutoSwitchCard from './AutoSwitchCard'
 import AutoToggle from './AutoToggle'
 import BoardingPrompt from './BoardingPrompt'
+import CheckinCard from './CheckinCard'
 import CurrentLegPanel from './CurrentLegPanel'
 import FasterRouteCard from './FasterRouteCard'
 import GoModeMap from './GoModeMap'
@@ -435,6 +436,11 @@ const GoModeScreen = ({
           transferFrequency={transferFrequencyEntry}
           units={units}
         />
+
+        {/* Träwelling/travelynx, when a service is enabled in Settings: the
+            per-trip automatic check-in switch, and a manual check-in button
+            per service for the leg the rider is on. */}
+        <CheckinCard />
 
         {/* Between the card and the map, in the column's flow (75.16, chaos
             C27). After the map it was the column's last 40px — exactly where

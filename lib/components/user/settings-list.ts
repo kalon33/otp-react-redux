@@ -211,6 +211,38 @@ export const ToggleRow = styled.div`
 `
 
 /**
+ * A row that holds a text input (the check-in services' API tokens): a label
+ * above a full-width field, inside the card, on the tokens only.
+ */
+export const TextFieldRow = styled.div`
+  ${hairline}
+  padding: var(--tn-space-3) var(--tn-space-4);
+
+  > label {
+    color: var(--tn-text);
+    display: block;
+    font: var(--tn-type-body);
+    margin: 0 0 var(--tn-space-2);
+  }
+
+  input {
+    background-color: transparent;
+    border: 1px solid var(--tn-border);
+    border-radius: var(--tn-radius);
+    color: var(--tn-text);
+    font: var(--tn-type-body);
+    min-height: var(--tn-tap);
+    padding: 0 var(--tn-space-2);
+    width: 100%;
+
+    &:focus-visible {
+      outline: 2px solid var(--tn-accent);
+      outline-offset: 1px;
+    }
+  }
+`
+
+/**
  * A segmented control that fills its card (Appearance: System / Light /
  * Dark): a `role="radiogroup"` row of equal-width 44px segments, inset 4px so
  * the selected one (--tn-accent-soft, --tn-accent text) follows the card's
